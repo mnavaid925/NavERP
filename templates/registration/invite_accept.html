@@ -1,0 +1,44 @@
+{% extends "base_auth.html" %}
+{% block title %}Accept invitation{% endblock %}
+{% block content %}
+  {% if valid %}
+    <h1 class="auth-title">Join {{ invite.tenant.name }}</h1>
+    <p class="auth-sub">You were invited as <strong>{{ invite.email }}</strong>. Create your account to continue.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.first_name.id_for_label }}">First name</label>
+          {{ form.first_name }}
+          {% for e in form.first_name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.last_name.id_for_label }}">Last name</label>
+          {{ form.last_name }}
+          {% for e in form.last_name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+        {{ form.username }}
+        {% for e in form.username.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.password1.id_for_label }}">Password</label>
+        {{ form.password1 }}
+        {% for e in form.password1.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.password2.id_for_label }}">Confirm password</label>
+        {{ form.password2 }}
+        {% for e in form.password2.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit" style="width:100%; justify-content:center;">Accept &amp; join</button>
+    </form>
+  {% else %}
+    <h1 class="auth-title">Invitation unavailable</h1>
+    <p class="auth-sub">This invitation is invalid, revoked, or has expired.</p>
+    <a class="btn btn-outline" href="{% url 'accounts:login' %}">Go to sign in</a>
+  {% endif %}
+{% endblock %}
