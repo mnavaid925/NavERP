@@ -1,0 +1,11 @@
+# NavERP — Python dependencies
+# Install:  venv\Scripts\python.exe -m pip install -r requirements.txt
+Django==5.1.15
+PyMySQL==1.2.0
+python-dotenv==1.2.2
+stripe==15.2.1
+Pillow==12.2.0
+
+# Dev / test
+pytest==9.1.1
+pytest-django==4.12.0
