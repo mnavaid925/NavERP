@@ -1,3 +1,7 @@
+# Supply Chain Management
+
+---
+
 ### Module 1: Procurement Management
 Manages the purchasing of goods and services to ensure cost-effectiveness and timely delivery.
 1.  **Purchase Requisition:** Internal requests for goods, approval workflows, and budget checking.
