@@ -1,4 +1,6 @@
-Here is a comprehensive breakdown of 21 modules and their sub-modules for a robust, modern Inventory Management System (IMS), covering the entire lifecycle from multi-tenant administration and procurement through reporting and system security.
+# Inventory Management System (IMS)
+
+---
 
 ### 1. Multi-Tenant Administration
 
