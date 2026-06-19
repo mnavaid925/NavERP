@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# NavERP — local scratch / code dumps (see .claude dump-module skill)
+temp/
