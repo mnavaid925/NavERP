@@ -1,0 +1,69 @@
+{% comment %} Layout customizer — options are applied & persisted by static/js/layout.js. {% endcomment %}
+<div class="customizer-backdrop" id="customizer-backdrop"></div>
+<aside class="customizer" id="customizer" aria-label="Layout settings">
+  <div class="card-header">
+    <h3>Customize</h3>
+    <div class="flex items-center gap-2">
+      <button class="btn btn-sm btn-outline" id="customizer-reset">Reset</button>
+      <button class="icon-btn" id="customizer-close" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+  </div>
+  <div class="customizer-body">
+    <h4>Layout</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="layout" data-opt-val="vertical">Vertical</button>
+      <button class="opt" data-opt-key="layout" data-opt-val="horizontal">Horizontal</button>
+      <button class="opt" data-opt-key="layout" data-opt-val="detached">Detached</button>
+    </div>
+
+    <h4>Color Scheme</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="mode" data-opt-val="light">Light</button>
+      <button class="opt" data-opt-key="mode" data-opt-val="dark">Dark</button>
+    </div>
+
+    <h4>Width</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="width" data-opt-val="fluid">Fluid</button>
+      <button class="opt" data-opt-key="width" data-opt-val="boxed">Boxed</button>
+    </div>
+
+    <h4>Sidebar Size</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="sidebar" data-opt-val="default">Default</button>
+      <button class="opt" data-opt-key="sidebar" data-opt-val="compact">Compact</button>
+      <button class="opt" data-opt-key="sidebar" data-opt-val="small-icon">Small Icon</button>
+      <button class="opt" data-opt-key="sidebar" data-opt-val="icon-hovered">Icon Hover</button>
+    </div>
+
+    <h4>Sidebar Color</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="sidebarColor" data-opt-val="light">Light</button>
+      <button class="opt" data-opt-key="sidebarColor" data-opt-val="colored">Colored</button>
+    </div>
+
+    <h4>Topbar</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="topbar" data-opt-val="light">Light</button>
+      <button class="opt" data-opt-key="topbar" data-opt-val="dark">Dark</button>
+    </div>
+
+    <h4>Topbar Position</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="position" data-opt-val="fixed">Fixed</button>
+      <button class="opt" data-opt-key="position" data-opt-val="scrollable">Scrollable</button>
+    </div>
+
+    <h4>Direction</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="direction" data-opt-val="ltr">LTR</button>
+      <button class="opt" data-opt-key="direction" data-opt-val="rtl">RTL</button>
+    </div>
+
+    <h4>Preloader</h4>
+    <div class="opt-row">
+      <button class="opt" data-opt-key="preloader" data-opt-val="on">On</button>
+      <button class="opt" data-opt-key="preloader" data-opt-val="off">Off</button>
+    </div>
+  </div>
+</aside>
