@@ -219,3 +219,7 @@ __marimo__/
 
 # NavERP — local scratch / code dumps (see .claude dump-module skill)
 temp/
+
+# NavERP — uploaded media & collected static
+media/
+staticfiles/
