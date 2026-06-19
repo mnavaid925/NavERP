@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Dashboard</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:onboarding' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Setup</a>
+      <a href="{% url 'accounts:user_create' %}" class="btn btn-primary"><i data-lucide="user-plus"></i> Add user</a>
+    </div>
+  </div>
+
+  {% if not request.tenant %}
+    <div class="card"><div class="card-body text-muted">
+      You're signed in as a superuser with no tenant, so module data is empty by design.
+      Sign in as a tenant admin (e.g. <strong>admin_acme / password</strong>) to explore the data.
+    </div></div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.users_count }}</div><div class="stat-label">Total Users</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user-check"></i></div><div class="stat-value">{{ stats.active_users }}</div><div class="stat-label">Active Users</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="contact"></i></div><div class="stat-value">{{ stats.parties_count }}</div><div class="stat-label">Parties</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="receipt"></i></div><div class="stat-value">{{ stats.open_invoices }}</div><div class="stat-label">Open Invoices</div></div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header"><h3>Activities by status</h3></div>
+        <div class="card-body"><canvas id="activityChart" height="120"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Recent audit activity</h3>
+          <a href="{% url 'core:auditlog_list' %}" class="btn btn-sm btn-outline">View all</a>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Action</th><th>Target</th><th>User</th><th>When</th></tr></thead>
+            <tbody>
+              {% for log in recent_audit %}
+                <tr>
+                  <td><span class="badge badge-{% if log.action == 'create' %}green{% elif log.action == 'delete' %}red{% else %}info{% endif %}">{{ log.get_action_display }}</span></td>
+                  <td>{{ log.target|default:"—" }}</td>
+                  <td>{% if log.user %}{{ log.user.get_full_name }}{% else %}—{% endif %}</td>
+                  <td class="text-muted">{{ log.at|date:"M d, H:i" }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><i data-lucide="inbox"></i><p>No activity yet.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h3>Subscription</h3></div>
+        <div class="card-body">
+          {% if stats.subscription %}
+            <div class="stat-value" style="font-size:1.3rem;">{{ stats.subscription.get_plan_display }}</div>
+            <span class="badge badge-{% if stats.subscription.status == 'active' %}green{% elif stats.subscription.status == 'past_due' %}amber{% elif stats.subscription.status == 'canceled' %}red{% else %}info{% endif %}">{{ stats.subscription.get_status_display }}</span>
+            <p class="text-muted" style="margin:.6rem 0;">Renews {{ stats.subscription.renews_on|default:"—" }}</p>
+            <a href="{% url 'tenants:subscription_detail' stats.subscription.pk %}" class="btn btn-outline btn-sm">Manage</a>
+          {% else %}
+            <p class="text-muted">No subscription yet.</p>
+            <a href="{% url 'tenants:onboarding' %}" class="btn btn-primary btn-sm">Choose a plan</a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Party roles</h3></div>
+        <div class="card-body"><canvas id="rolesChart" height="180"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Tenant health</h3></div>
+        <div class="card-body">
+          {% for h in health %}
+            <div class="flex items-center" style="justify-content:space-between; margin-bottom:.55rem;">
+              <span>{{ h.get_metric_display }}</span>
+              <span class="badge badge-{% if h.status == 'ok' %}green{% elif h.status == 'warning' %}amber{% else %}red{% endif %}">{{ h.value }}</span>
+            </div>
+          {% empty %}
+            <p class="text-muted">No metrics recorded.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{ chart_roles_labels|json_script:"roles-labels" }}
+  {{ chart_roles_data|json_script:"roles-data" }}
+  {{ chart_activity_labels|json_script:"activity-labels" }}
+  {{ chart_activity_data|json_script:"activity-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777"];
+    var rl = J("roles-labels"), rd = J("roles-data");
+    if (document.getElementById("rolesChart") && rl.length) {
+      new Chart(document.getElementById("rolesChart"), {
+        type: "doughnut",
+        data: { labels: rl, datasets: [{ data: rd, backgroundColor: palette }] },
+        options: { plugins: { legend: { position: "bottom" } } }
+      });
+    }
+    var al = J("activity-labels"), ad = J("activity-data");
+    if (document.getElementById("activityChart") && al.length) {
+      new Chart(document.getElementById("activityChart"), {
+        type: "bar",
+        data: { labels: al, datasets: [{ label: "Activities", data: ad, backgroundColor: blue, borderRadius: 6 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+  })();
+</script>
+{% endblock %}
