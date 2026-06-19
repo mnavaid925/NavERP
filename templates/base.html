@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard{% endblock %} · NavERP</title>
+
+  {% comment %} Apply saved UI preferences before paint to avoid a flash of the default theme. {% endcomment %}
+  <script>
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem("naverp.ui")) || {};
+        var r = document.documentElement;
+        var map = { layout: "data-layout", width: "data-width", sidebar: "data-sidebar",
+                    sidebarColor: "data-sidebar-color", topbar: "data-topbar",
+                    position: "data-position", direction: "dir", preloader: "data-preloader" };
+        var def = { layout: "vertical", width: "fluid", sidebar: "default", sidebarColor: "light",
+                    topbar: "light", position: "fixed", direction: "ltr", preloader: "off" };
+        Object.keys(map).forEach(function (k) { r.setAttribute(map[k], s[k] != null ? s[k] : def[k]); });
+        if (s.mode === "dark") r.classList.add("dark");
+      } catch (e) {}
+    })();
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: "class" };</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=1">
+  <link rel="icon" href="{% static 'img/logo.svg' %}" type="image/svg+xml">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div id="preloader"><div class="spinner"></div></div>
+
+  <div class="app-shell">
+    {% include "partials/sidebar.html" %}
+
+    <div class="main">
+      {% include "partials/topbar.html" %}
+
+      <div class="content">
+        <div class="content-inner">
+          {% include "partials/messages.html" %}
+          {% block content %}{% endblock %}
+        </div>
+      </div>
+
+      {% include "partials/footer.html" %}
+    </div>
+  </div>
+
+  {% include "partials/customizer.html" %}
+
+  <script src="{% static 'js/layout.js' %}?v=1"></script>
+  <script src="{% static 'js/app.js' %}?v=1"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
