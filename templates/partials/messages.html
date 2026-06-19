@@ -1,0 +1,10 @@
+{% if messages %}
+  <div class="toast-wrap">
+    {% for m in messages %}
+      <div class="toast {{ m.tags }}">
+        <i data-lucide="info"></i>
+        <div>{{ m }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
