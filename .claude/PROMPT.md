@@ -42,17 +42,33 @@ Browser Compatibility:
 -    Microsoft Edge
 -    And other WebKit browsers
 
+## Design Reference (the attached image)
+
+The UI mirrors the **"Tailwick"** admin theme in the reference image — clean, airy, blue-and-white — re-branded to **NavERP**. Build the design system in `static/css/theme.css` to match:
+
+- **Palette:** primary accent medium blue (~Tailwind `blue-500/600`); white cards on a very light gray page (`~#f6f7f9`); muted gray secondary text; soft `rounded-xl` corners, hairline borders + subtle shadows; roomy padding. Status colors: green = active/ok, red = inactive/critical, amber = warning, purple/indigo = info.
+- **Left sidebar (~250px, fixed, collapsible):** white; brand logo + "NavERP" wordmark on top; grouped nav with small uppercase section labels. Active item = light-blue pill with blue icon/text; Lucide line icons. The sidebar mirrors the **NavERP module catalog** (Dashboard + Modules 0–13 and their sub-modules from `NavERP.md`) — NOT the Tailwick demo apps. Support the layout variants in §Dashboard Requirements (default / compact / small-icon / icon-hovered; light/colored; vertical/horizontal/detached).
+- **Topbar:** sidebar-collapse toggle, large search ("Search… ⌘K"), language/flag, dark-mode toggle, notifications bell (with dot), settings, user avatar.
+- **Page header:** page title (left) + breadcrumb (right, e.g. `NavERP › Dashboards › Analytics`).
+- **Content blocks (provide as reusable components):**
+  - **Stat cards** — soft-tinted icon tile (green/orange/purple/blue) + big metric + label + faint sparkline.
+  - **Charts (Chart.js):** treemap-style category tiles, smooth line/area, vertical bars with value labels, radar, half-doughnut gauge with center %, floating-bar/"candlestick" comparison, dual-line trend, donut distribution with legend, and horizontal progress bars.
+  - **Data table** — card with title + search + Export button; sortable columns; row checkbox; **status pill badges** (green "Active" / red "Inactive" with a leading dot); footer "Showing X of Y" + numbered pagination (active page = blue).
+  - **List widgets** — icon + label + value + colored % delta rows (e.g. campaign status, traffic source bars).
+- **Footer:** `© <year> NavERP` left; build credit right.
+- **theme.css component classes** to expose (so every module + the frontend-reviewer agent stay consistent): `.page-header/.page-title/.breadcrumb`, `.card/.card-header/.card-body`, `.stat-card`, `.btn/.btn-primary/.btn-outline/.btn-danger/.btn-icon`, `.badge` (+ green/red/amber/muted/slate variants), `.table-wrap/.table/.table-actions`, `.form-group/.form-label/.form-input/.form-select/.form-textarea/.form-error`, `.empty-state`, `.pagination`, `.avatar-initial`, `.progress/.progress-bar`.
+
 ## NavERP module catalog (see `NavERP.md` for full sub-modules)
 
 The first module to implement is **Module 0 — System Admin & Security** (the foundation above). Its 0.1 sub-module:
 
-## 0.1 Tenant & Subscription Management
-| Sub-Module | Description |
-|------------|-------------|
-| Tenant Onboarding | Self-service registration, domain provisioning, and initial configuration wizard |
-| Subscription & Billing | Plan management, usage metering, invoicing, and payment gateway integration |
-| Tenant Isolation & Security | Database/schema isolation, encryption keys, and cross-tenant data leak prevention |
-| Custom Branding | White-labeling, custom logos, themes, and email templates per tenant |
-| Tenant Health Monitoring | Resource usage tracking, audit logs, and tenant-level system performance alerts |
+## 0. System Admin & Security
+
+### 0.1 Tenant & Subscription Management
+- **Tenant Onboarding** — Self-service registration, domain provisioning, and initial configuration wizard.
+- **Subscription & Billing** — Plan management, usage metering, invoicing, and payment gateway integration.
+- **Tenant Isolation & Security** — Database/schema isolation, encryption keys, and cross-tenant data leak prevention.
+- **Custom Branding** — White-labeling, custom logos, themes, and email templates per tenant.
+- **Tenant Health Monitoring** — Resource usage tracking, audit logs, and tenant-level system performance alerts.
 
 After Module 0, build modules 1–13 (CRM, Accounting & Finance, HRM, SCM, Inventory, Procurement, Project Management, Sales, eCommerce, BI, Asset Management, Quality, Document Management) one at a time with the `/next-module` skill — each as a Django app under `apps/<slug>` reusing the unified core.
