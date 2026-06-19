@@ -2,8 +2,6 @@
 
 ---
 
-## **Core Application Architecture**
-
 ### **1. Dashboard & Analytics Module**
 **Purpose:** Central command center for financial overview
 
@@ -251,29 +249,3 @@
 
 ---
 
-## **Technical Architecture Considerations**
-
-| Layer | Technology Stack Options |
-|-------|------------------------|
-| **Frontend** | React/Vue.js/Angular, TypeScript, Tailwind |
-| **Backend** | Node.js/Python/Java, GraphQL/REST |
-| **Database** | PostgreSQL (ACID compliance essential) |
-| **Cache** | Redis for session and performance |
-| **Message Queue** | Kafka/RabbitMQ for async processing |
-| **Search** | Elasticsearch for document retrieval |
-| **Storage** | S3/Azure Blob for documents |
-| **Security** | OAuth 2.0, JWT, encryption at rest/transit |
-| **Compliance** | SOC 2, ISO 27001, PCI-DSS (if handling payments) |
-
----
-
-## **Critical Design Principles**
-
-1. **Double-Entry Integrity:** Every transaction must balance (debits = credits)
-2. **Immutability:** Posted transactions cannot be deleted, only reversed
-3. **Period Control:** Prevent posting to closed periods
-4. **Audit Trail:** Every change logged with user, timestamp, before/after values
-5. **Scalability:** Support from startup to enterprise (10 transactions to 10M/month)
-6. **Multi-tenancy:** Secure data isolation between customers
-
-Would you like me to deep-dive into any specific module, discuss database schema design, or explore specific accounting workflows (like the month-end close process)?
