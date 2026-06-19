@@ -473,28 +473,3 @@
 ---
 
 
-## 📱 Platform Requirements
-
-| Platform | Features |
-|----------|----------|
-| **Web Application** | Admin panel, HR dashboards, reports |
-| **Mobile App (iOS/Android)** | Employee self-service, attendance, leave |
-| **Progressive Web App** | Offline support, push notifications |
-| **API Gateway** | Third-party integrations |
-
----
-
-## 🔗 Key Integrations
-
-| Integration Type | Examples |
-|-----------------|----------|
-| **Biometric Devices** | Finger print, face recognition |
-| **Communication** | Email (SMTP), SMS gateway, Slack |
-| **Video Conferencing** | Zoom, MS Teams, Google Meet |
-| **Banking** | Bank file formats, payment gateways |
-| **Background Check** | Verification vendors |
-| **Job Portals** | LinkedIn, Indeed, Naukri |
-| **Accounting** | QuickBooks, Tally, SAP |
-
----
-
