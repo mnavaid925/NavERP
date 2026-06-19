@@ -1,0 +1,22 @@
+{% load static %}
+<header class="topbar">
+  <button class="icon-btn" id="sidebar-toggle" aria-label="Toggle sidebar"><i data-lucide="menu"></i></button>
+  <div class="search">
+    <i data-lucide="search"></i>
+    <input id="global-search" type="text" placeholder="Search…  ⌘K" aria-label="Search">
+  </div>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:.25rem;">
+    <button class="icon-btn" id="dark-toggle" aria-label="Toggle dark mode"><i data-lucide="moon"></i></button>
+    <button class="icon-btn" aria-label="Notifications"><i data-lucide="bell"></i><span class="dot"></span></button>
+    <button class="icon-btn" id="customizer-open" aria-label="Customize layout"><i data-lucide="settings"></i></button>
+    {% if user.is_authenticated %}
+      <div class="flex items-center gap-2" style="margin-left:.5rem;">
+        <a href="{% url 'accounts:profile' %}" class="avatar-initial" title="{{ user.get_full_name }}">{{ user.initials }}</a>
+        <form method="post" action="{% url 'accounts:logout' %}">
+          {% csrf_token %}
+          <button class="icon-btn" type="submit" title="Sign out"><i data-lucide="log-out"></i></button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+</header>
