@@ -1,0 +1,44 @@
+{% extends "base_auth.html" %}
+{% block title %}Create a workspace{% endblock %}
+{% block content %}
+  <h1 class="auth-title">Create your workspace</h1>
+  <p class="auth-sub">Set up your company and admin account. It's free to start.</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    <div class="form-group">
+      <label class="form-label" for="{{ form.company_name.id_for_label }}">Company name</label>
+      {{ form.company_name }}
+      {% for e in form.company_name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label" for="{{ form.first_name.id_for_label }}">First name</label>
+        {{ form.first_name }}
+        {% for e in form.first_name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.last_name.id_for_label }}">Last name</label>
+        {{ form.last_name }}
+        {% for e in form.last_name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="{{ form.email.id_for_label }}">Work email</label>
+      {{ form.email }}
+      {% for e in form.email.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="{{ form.password1.id_for_label }}">Password</label>
+      {{ form.password1 }}
+      {% for e in form.password1.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="{{ form.password2.id_for_label }}">Confirm password</label>
+      {{ form.password2 }}
+      {% for e in form.password2.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <button class="btn btn-primary" type="submit" style="width:100%; justify-content:center;">Create workspace</button>
+  </form>
+  <div class="auth-foot">Already have an account? <a href="{% url 'accounts:login' %}">Sign in</a></div>
+{% endblock %}
