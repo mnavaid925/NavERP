@@ -1,0 +1,23 @@
+{% extends "base_auth.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+  <h1 class="auth-title">Welcome back</h1>
+  <p class="auth-sub">Sign in to your NavERP workspace.</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    <div class="form-group">
+      <label class="form-label" for="{{ form.identifier.id_for_label }}">Email or username</label>
+      {{ form.identifier }}
+      {% for e in form.identifier.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+      {{ form.password }}
+      {% for e in form.password.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <button class="btn btn-primary" type="submit" style="width:100%; justify-content:center;">Sign in</button>
+  </form>
+  <div class="auth-foot"><a href="{% url 'accounts:forgot_password' %}">Forgot your password?</a></div>
+  <div class="auth-foot">No account yet? <a href="{% url 'accounts:register' %}">Create a workspace</a></div>
+{% endblock %}
