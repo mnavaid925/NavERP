@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:crm_po_list' %}">Purchase Orders</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    {% if obj.status != 'received' %}
+    <form method="post" action="{% url 'crm:crm_po_receive' obj.pk %}" onsubmit="return confirm('Mark received and update stock?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-primary"><i data-lucide="package-check"></i> Receive</button>
+    </form>
+    {% endif %}
+    <a href="{% url 'crm:crm_po_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:crm_po_delete' obj.pk %}" onsubmit="return confirm('Delete this purchase order?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Vendor</dt><dd>{% if obj.vendor %}<a href="{% url 'crm:account_detail' obj.vendor.pk %}">{{ obj.vendor.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'received' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Order date</dt><dd>{{ obj.order_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Expected date</dt><dd>{{ obj.expected_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Total</dt><dd>{{ obj.total_amount }}</dd></div>
+      <div class="detail-item"><dt>Received at</dt><dd>{{ obj.received_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Line items</h2>
+  </div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Unit price</th>
+            <th>Line total</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in lines %}
+          <tr>
+            <td>{{ l.item_name }}</td>
+            <td>{% if l.product %}<a href="{% url 'crm:productstock_detail' l.product.pk %}">{{ l.product.name }}</a>{% else %}—{% endif %}</td>
+            <td>{{ l.quantity }}</td>
+            <td>{{ l.unit_price }}</td>
+            <td>{{ l.line_total }}</td>
+            <td>
+              <div class="table-actions">
+                <form method="post" action="{% url 'crm:crm_po_remove_line' obj.pk l.pk %}" onsubmit="return confirm('Remove this line?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Remove"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="list"></i>
+                <h3>No line items</h3>
+                <p>Add a line item below.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">Add line</h3>
+    <form method="post" action="{% url 'crm:crm_po_add_line' obj.pk %}">
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in line_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> Add line</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<a href="{% url 'crm:crm_po_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
