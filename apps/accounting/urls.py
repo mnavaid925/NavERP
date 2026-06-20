@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views
+from . import views_advanced as adv
 
 app_name = "accounting"
 
@@ -122,4 +123,103 @@ urlpatterns = [
     path("reconciliation/<int:pk>/edit/", views.reconciliation_edit, name="reconciliation_edit"),
     path("reconciliation/<int:pk>/delete/", views.reconciliation_delete, name="reconciliation_delete"),
     path("reconciliation/<int:pk>/confirm/", views.reconciliation_confirm, name="reconciliation_confirm"),
+
+    # ===================== Advanced sub-modules 2.6–2.15 =====================
+    # 2.6 Fixed Assets
+    path("fixed-assets/", adv.fixed_asset_list, name="fixed_asset_list"),
+    path("fixed-assets/add/", adv.fixed_asset_create, name="fixed_asset_create"),
+    path("fixed-assets/<int:pk>/", adv.fixed_asset_detail, name="fixed_asset_detail"),
+    path("fixed-assets/<int:pk>/edit/", adv.fixed_asset_edit, name="fixed_asset_edit"),
+    path("fixed-assets/<int:pk>/delete/", adv.fixed_asset_delete, name="fixed_asset_delete"),
+    path("fixed-assets/<int:pk>/depreciate/", adv.fixed_asset_depreciate, name="fixed_asset_depreciate"),
+    path("asset-disposals/", adv.asset_disposal_list, name="asset_disposal_list"),
+    path("asset-disposals/add/", adv.asset_disposal_create, name="asset_disposal_create"),
+    path("asset-disposals/<int:pk>/", adv.asset_disposal_detail, name="asset_disposal_detail"),
+    path("asset-disposals/<int:pk>/edit/", adv.asset_disposal_edit, name="asset_disposal_edit"),
+    path("asset-disposals/<int:pk>/delete/", adv.asset_disposal_delete, name="asset_disposal_delete"),
+    path("asset-disposals/<int:pk>/post/", adv.asset_disposal_post, name="asset_disposal_post"),
+
+    # 2.7 Cost allocation
+    path("cost-allocations/", adv.cost_allocation_list, name="cost_allocation_list"),
+    path("cost-allocations/add/", adv.cost_allocation_create, name="cost_allocation_create"),
+    path("cost-allocations/<int:pk>/", adv.cost_allocation_detail, name="cost_allocation_detail"),
+    path("cost-allocations/<int:pk>/edit/", adv.cost_allocation_edit, name="cost_allocation_edit"),
+    path("cost-allocations/<int:pk>/delete/", adv.cost_allocation_delete, name="cost_allocation_delete"),
+    path("cost-allocations/<int:pk>/post/", adv.cost_allocation_post, name="cost_allocation_post"),
+
+    # 2.8 Payroll
+    path("payroll-runs/", adv.payroll_run_list, name="payroll_run_list"),
+    path("payroll-runs/add/", adv.payroll_run_create, name="payroll_run_create"),
+    path("payroll-runs/<int:pk>/", adv.payroll_run_detail, name="payroll_run_detail"),
+    path("payroll-runs/<int:pk>/edit/", adv.payroll_run_edit, name="payroll_run_edit"),
+    path("payroll-runs/<int:pk>/delete/", adv.payroll_run_delete, name="payroll_run_delete"),
+    path("payroll-runs/<int:pk>/post/", adv.payroll_run_post, name="payroll_run_post"),
+
+    # 2.9 Project / Job costing
+    path("projects/", adv.project_list, name="project_list"),
+    path("projects/add/", adv.project_create, name="project_create"),
+    path("projects/<int:pk>/", adv.project_detail, name="project_detail"),
+    path("projects/<int:pk>/edit/", adv.project_edit, name="project_edit"),
+    path("projects/<int:pk>/delete/", adv.project_delete, name="project_delete"),
+    path("job-cost-entries/", adv.job_cost_entry_list, name="job_cost_entry_list"),
+    path("job-cost-entries/add/", adv.job_cost_entry_create, name="job_cost_entry_create"),
+    path("job-cost-entries/<int:pk>/", adv.job_cost_entry_detail, name="job_cost_entry_detail"),
+    path("job-cost-entries/<int:pk>/edit/", adv.job_cost_entry_edit, name="job_cost_entry_edit"),
+    path("job-cost-entries/<int:pk>/delete/", adv.job_cost_entry_delete, name="job_cost_entry_delete"),
+    path("job-cost-entries/<int:pk>/post/", adv.job_cost_entry_post, name="job_cost_entry_post"),
+
+    # 2.10 Multi-entity / Intercompany
+    path("intercompany/", adv.intercompany_list, name="intercompany_list"),
+    path("intercompany/add/", adv.intercompany_create, name="intercompany_create"),
+    path("intercompany/<int:pk>/", adv.intercompany_detail, name="intercompany_detail"),
+    path("intercompany/<int:pk>/edit/", adv.intercompany_edit, name="intercompany_edit"),
+    path("intercompany/<int:pk>/delete/", adv.intercompany_delete, name="intercompany_delete"),
+    path("intercompany/<int:pk>/post/", adv.intercompany_post, name="intercompany_post"),
+
+    # 2.11 Tax
+    path("tax-codes/", adv.tax_code_list, name="tax_code_list"),
+    path("tax-codes/add/", adv.tax_code_create, name="tax_code_create"),
+    path("tax-codes/<int:pk>/", adv.tax_code_detail, name="tax_code_detail"),
+    path("tax-codes/<int:pk>/edit/", adv.tax_code_edit, name="tax_code_edit"),
+    path("tax-codes/<int:pk>/delete/", adv.tax_code_delete, name="tax_code_delete"),
+    path("tax-returns/", adv.tax_return_list, name="tax_return_list"),
+    path("tax-returns/add/", adv.tax_return_create, name="tax_return_create"),
+    path("tax-returns/<int:pk>/", adv.tax_return_detail, name="tax_return_detail"),
+    path("tax-returns/<int:pk>/edit/", adv.tax_return_edit, name="tax_return_edit"),
+    path("tax-returns/<int:pk>/delete/", adv.tax_return_delete, name="tax_return_delete"),
+
+    # 2.12 Reporting & compliance
+    path("reports/balance-sheet/", adv.balance_sheet, name="balance_sheet"),
+    path("reports/profit-and-loss/", adv.profit_and_loss, name="profit_and_loss"),
+    path("scheduled-reports/", adv.scheduled_report_list, name="scheduled_report_list"),
+    path("scheduled-reports/add/", adv.scheduled_report_create, name="scheduled_report_create"),
+    path("scheduled-reports/<int:pk>/", adv.scheduled_report_detail, name="scheduled_report_detail"),
+    path("scheduled-reports/<int:pk>/edit/", adv.scheduled_report_edit, name="scheduled_report_edit"),
+    path("scheduled-reports/<int:pk>/delete/", adv.scheduled_report_delete, name="scheduled_report_delete"),
+
+    # 2.13 Budgeting & planning
+    path("budgets/", adv.budget_list, name="budget_list"),
+    path("budgets/add/", adv.budget_create, name="budget_create"),
+    path("budgets/<int:pk>/", adv.budget_detail, name="budget_detail"),
+    path("budgets/<int:pk>/edit/", adv.budget_edit, name="budget_edit"),
+    path("budgets/<int:pk>/delete/", adv.budget_delete, name="budget_delete"),
+    path("budget-lines/add/", adv.budget_line_create, name="budget_line_create"),
+    path("budget-lines/<int:pk>/edit/", adv.budget_line_edit, name="budget_line_edit"),
+    path("budget-lines/<int:pk>/delete/", adv.budget_line_delete, name="budget_line_delete"),
+    path("reports/budget-variance/", adv.budget_variance, name="budget_variance"),
+
+    # 2.14 Audit & controls
+    path("controls/", adv.internal_control_list, name="internal_control_list"),
+    path("controls/add/", adv.internal_control_create, name="internal_control_create"),
+    path("controls/<int:pk>/", adv.internal_control_detail, name="internal_control_detail"),
+    path("controls/<int:pk>/edit/", adv.internal_control_edit, name="internal_control_edit"),
+    path("controls/<int:pk>/delete/", adv.internal_control_delete, name="internal_control_delete"),
+
+    # 2.15 Integration & API
+    path("integrations/", adv.integration_list, name="integration_list"),
+    path("integrations/add/", adv.integration_create, name="integration_create"),
+    path("integrations/<int:pk>/", adv.integration_detail, name="integration_detail"),
+    path("integrations/<int:pk>/edit/", adv.integration_edit, name="integration_edit"),
+    path("integrations/<int:pk>/delete/", adv.integration_delete, name="integration_delete"),
+    path("integrations/<int:pk>/rotate-key/", adv.integration_rotate_key, name="integration_rotate_key"),
 ]
