@@ -8,14 +8,18 @@
     </div>
     <div class="page-actions">
       {% if obj.status == 'open' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'accounting:fiscal_period_close' obj.pk %}" onsubmit="return confirm('Close this period? Posting will be blocked once closed.');">
           {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Close Period</button>
         </form>
+        {% endif %}
         <a href="{% url 'accounting:fiscal_period_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       {% endif %}
+      {% if obj.status == 'open' %}
       <form method="post" action="{% url 'accounting:fiscal_period_delete' obj.pk %}" onsubmit="return confirm('Delete this period?');">
         {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
       </form>
+      {% endif %}
     </div>
   </div>
 
