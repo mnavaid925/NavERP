@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
@@ -95,6 +96,13 @@ def _first_account(tenant, account_type, code_prefix=None):
 
 def _open_period(tenant):
     return FiscalPeriod.objects.filter(tenant=tenant, status="open").order_by("-start_date").first()
+
+
+def _recompute_doc_status(*docs):
+    """Refresh the payment-derived status (partial/paid) of any Invoice/Bill passed (skips None)."""
+    for doc in docs:
+        if doc is not None:
+            doc.recompute_payment_status()
 
 
 def _reverse_journal_entry(tenant, user, original):
@@ -251,7 +259,8 @@ def ar_aging(request):
     if tenant is not None:
         docs = list(Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES)
                     .select_related("party")
-                    .annotate(paid_agg=Sum("allocations__allocated_amount")))
+                    .annotate(paid_agg=Sum("allocations__allocated_amount",
+                                           filter=Q(allocations__payment__status="confirmed"))))
         party_rows, totals = _aging(docs, "due_date", timezone.localdate())
     return render(request, "accounting/ar_aging.html", {"party_rows": party_rows, "totals": totals})
 
@@ -263,7 +272,8 @@ def ap_aging(request):
     if tenant is not None:
         docs = list(Bill.objects.filter(tenant=tenant, status__in=Bill.OPEN_STATUSES)
                     .select_related("party")
-                    .annotate(paid_agg=Sum("allocations__allocated_amount")))
+                    .annotate(paid_agg=Sum("allocations__allocated_amount",
+                                           filter=Q(allocations__payment__status="confirmed"))))
         party_rows, totals = _aging(docs, "due_date", timezone.localdate())
     return render(request, "accounting/ap_aging.html", {"party_rows": party_rows, "totals": totals})
 
@@ -518,7 +528,7 @@ def currency_list(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def currency_create(request):
     if request.method == "POST":
         form = CurrencyForm(request.POST)
@@ -538,7 +548,7 @@ def currency_detail(request, pk):
     return render(request, "accounting/currency_detail.html", {"obj": obj})
 
 
-@login_required
+@tenant_admin_required
 def currency_edit(request, pk):
     obj = get_object_or_404(Currency, pk=pk)
     if request.method == "POST":
@@ -553,7 +563,7 @@ def currency_edit(request, pk):
     return render(request, "accounting/currency_form.html", {"form": form, "obj": obj, "is_edit": True})
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def currency_delete(request, pk):
     obj = get_object_or_404(Currency, pk=pk)
@@ -905,7 +915,7 @@ def invoice_delete(request, pk):
     return crud_delete(request, model=Invoice, pk=pk, success_url="accounting:invoice_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def invoice_post(request, pk):
     inv = get_object_or_404(Invoice, pk=pk, tenant=request.tenant)
@@ -1032,6 +1042,9 @@ def payment_confirm(request, pk):
     else:
         payment.status = "confirmed"
         payment.save(update_fields=["status", "updated_at"])
+    # Now that the payment is confirmed, the docs it pays move to partial/paid.
+    for alloc in payment.allocations.select_related("invoice", "bill"):
+        _recompute_doc_status(alloc.invoice, alloc.bill)
     write_audit_log(request.user, payment, "update", {"action": "confirm", "journal_entry": je.number if je else None})
     messages.success(request, f"Payment {payment.number} confirmed.")
     return redirect("accounting:payment_detail", pk=pk)
@@ -1051,6 +1064,9 @@ def payment_void(request, pk):
             reversal = _reverse_journal_entry(request.tenant, request.user, payment.journal_entry)
         payment.status = "void"
         payment.save(update_fields=["status", "updated_at"])
+    # The voided payment no longer counts — docs it had paid revert toward sent/approved.
+    for alloc in payment.allocations.select_related("invoice", "bill"):
+        _recompute_doc_status(alloc.invoice, alloc.bill)
     write_audit_log(request.user, payment, "update",
                     {"action": "void", "reversal": reversal.number if reversal else None})
     messages.success(request, f"Payment {payment.number} voided{' — GL reversal posted' if reversal else ''}.")
@@ -1078,6 +1094,7 @@ def allocation_create(request):
         form = PaymentAllocationForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             obj = form.save()
+            _recompute_doc_status(obj.invoice, obj.bill)
             write_audit_log(request.user, obj, "create")
             messages.success(request, "Allocation created.")
             return redirect("accounting:allocation_list")
@@ -1102,6 +1119,7 @@ def allocation_edit(request, pk):
         form = PaymentAllocationForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
             form.save()
+            _recompute_doc_status(obj.invoice, obj.bill)
             write_audit_log(request.user, obj, "update")
             messages.success(request, "Allocation updated.")
             return redirect("accounting:allocation_list")
@@ -1114,8 +1132,10 @@ def allocation_edit(request, pk):
 @require_POST
 def allocation_delete(request, pk):
     obj = get_object_or_404(PaymentAllocation, pk=pk, payment__tenant=request.tenant)
+    invoice, bill = obj.invoice, obj.bill
     write_audit_log(request.user, obj, "delete")
     obj.delete()
+    _recompute_doc_status(invoice, bill)
     messages.success(request, "Deleted successfully.")
     return redirect("accounting:allocation_list")
 
@@ -1213,6 +1233,10 @@ def bank_transaction_import_csv(request):
         form = CsvImportForm(request.POST, request.FILES, tenant=request.tenant)
         if form.is_valid():
             bank_account = form.cleaned_data["bank_account"]
+            # Defense-in-depth: the form already scopes the choices to the tenant, but re-assert
+            # ownership of the resolved account before writing (security review M2).
+            if bank_account.tenant_id != request.tenant.pk:
+                raise PermissionDenied
             upload = form.cleaned_data["csv_file"]
             created = skipped = 0
             try:
