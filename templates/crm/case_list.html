@@ -56,7 +56,7 @@
               <td>{{ obj.subject }}</td>
               <td>{% if obj.account %}{{ obj.account.name }}{% else %}—{% endif %}</td>
               <td><span class="badge badge-{% if obj.priority == 'critical' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></td>
-              <td><span class="badge badge-{% if obj.status == 'resolved' %}green{% elif obj.status == 'closed' %}slate{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'open' or obj.status == 'waiting' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'resolved' %}green{% elif obj.status == 'closed' %}slate{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'new' or obj.status == 'open' or obj.status == 'waiting' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>{% if obj.due_at %}<span class="{% if obj.is_overdue %}text-danger{% endif %}">{{ obj.due_at|date:"M d, H:i" }}</span>{% else %}—{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
               <td>
