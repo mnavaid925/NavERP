@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list
+from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list, paginate
 from apps.core.decorators import tenant_admin_required
 from apps.core.models import ContactMethod, Party, PartyRole
 from apps.core.utils import write_audit_log
@@ -832,7 +832,7 @@ def timesheet_delete(request, pk):
 def doctemplate_list(request):
     return crud_list(
         request,
-        DocTemplate.objects.filter(tenant=request.tenant).select_related("owner"),
+        DocTemplate.objects.filter(tenant=request.tenant).select_related("owner").defer("body"),
         "crm/doctemplate_list.html",
         search_fields=["number", "name"],
         filters=[("template_type", "template_type", False), ("is_active", "is_active", False)],
@@ -873,12 +873,12 @@ def contractdocument_list(request):
     return crud_list(
         request,
         ContractDocument.objects.filter(tenant=request.tenant).select_related(
-            "template", "opportunity", "account", "owner"),
+            "template", "opportunity", "account", "owner").defer("body_snapshot"),
         "crm/contractdocument_list.html",
         search_fields=["number", "name", "account__name"],
         filters=[("status", "status", False), ("opportunity", "opportunity_id", True)],
         extra_context={"status_choices": ContractDocument.STATUS_CHOICES,
-                       "opportunities": Opportunity.objects.filter(tenant=request.tenant).order_by("-created_at")[:200]},
+                       "opportunities": Opportunity.objects.filter(tenant=request.tenant).only("id", "number", "name").order_by("-created_at")[:200]},
     )
 
 
@@ -1026,12 +1026,12 @@ def workflowrule_delete(request, pk):
 def workflowlog_list(request):
     return crud_list(
         request,
-        WorkflowLog.objects.filter(tenant=request.tenant).select_related("rule"),
+        WorkflowLog.objects.filter(tenant=request.tenant).select_related("rule").defer("error_msg"),
         "crm/workflowlog_list.html",
         search_fields=["record_label", "error_msg"],
         filters=[("status", "status", False), ("rule", "rule_id", True)],
         extra_context={"status_choices": WorkflowLog.STATUS_CHOICES,
-                       "rules": WorkflowRule.objects.filter(tenant=request.tenant).order_by("name")},
+                       "rules": WorkflowRule.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")},
     )
 
 
@@ -1115,7 +1115,7 @@ def approvalrequest_reject(request, pk):
 def onboardingplan_list(request):
     return crud_list(
         request,
-        OnboardingPlan.objects.filter(tenant=request.tenant).select_related("account", "owner"),
+        OnboardingPlan.objects.filter(tenant=request.tenant).select_related("account", "owner").prefetch_related("steps"),
         "crm/onboardingplan_list.html",
         search_fields=["number", "name", "account__name"],
         filters=[("status", "status", False), ("account", "account_id", True)],
@@ -1134,9 +1134,12 @@ def onboardingplan_create(request):
 def onboardingplan_detail(request, pk):
     obj = get_object_or_404(OnboardingPlan.objects.select_related("account", "owner"),
                             pk=pk, tenant=request.tenant)
+    steps = list(obj.steps.select_related("assignee").all())
+    done = sum(1 for s in steps if s.completed_at is not None)
     return render(request, "crm/onboardingplan_detail.html", {
         "obj": obj,
-        "steps": obj.steps.select_related("assignee").all(),
+        "steps": steps,
+        "progress_pct": round(done / len(steps) * 100) if steps else 0,  # from the already-fetched steps
         "step_form": OnboardingStepForm(tenant=request.tenant),
     })
 
@@ -1529,7 +1532,9 @@ def portal_po_list(request):
     orders = (PurchaseOrder.objects
               .filter(tenant=request.tenant, vendor=access.partner_party)
               .order_by("-created_at"))
-    return render(request, "crm/portal_po_list.html", {"access": access, "orders": orders})
+    page_obj = paginate(request, orders)
+    return render(request, "crm/portal_po_list.html",
+                  {"access": access, "object_list": page_obj.object_list, "page_obj": page_obj})
 
 
 @login_required
@@ -1539,4 +1544,6 @@ def portal_stock(request):
         messages.error(request, "You don't have access to stock levels.")
         return redirect("crm:portal_dashboard" if access else "dashboard:home")
     products = ProductStock.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
-    return render(request, "crm/portal_stock.html", {"access": access, "products": products})
+    page_obj = paginate(request, products)
+    return render(request, "crm/portal_stock.html",
+                  {"access": access, "object_list": page_obj.object_list, "page_obj": page_obj})
