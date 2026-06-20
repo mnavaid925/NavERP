@@ -609,6 +609,17 @@ def intercompany_post(request, pk):
     return redirect("accounting:intercompany_detail", pk=pk)
 
 
+@tenant_admin_required
+@require_POST
+def intercompany_toggle_eliminated(request, pk):
+    ict = get_object_or_404(IntercompanyTransaction, pk=pk, tenant=request.tenant)
+    ict.eliminated = not ict.eliminated
+    ict.save(update_fields=["eliminated", "updated_at"])
+    write_audit_log(request.user, ict, "update", {"action": "toggle_eliminated", "eliminated": ict.eliminated})
+    messages.success(request, f"Marked {'eliminated' if ict.eliminated else 'not eliminated'} for consolidation.")
+    return redirect("accounting:intercompany_detail", pk=pk)
+
+
 # ============================================================================ 2.11 Tax
 @login_required
 def tax_code_list(request):
@@ -669,13 +680,13 @@ def tax_return_detail(request, pk):
     return render(request, "accounting/tax_return_detail.html", {"obj": obj})
 
 
-@login_required
+@tenant_admin_required
 def tax_return_edit(request, pk):
     return crud_edit(request, model=TaxReturn, pk=pk, form_class=TaxReturnForm,
                      template="accounting/tax_return_form.html", success_url="accounting:tax_return_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def tax_return_delete(request, pk):
     return crud_delete(request, model=TaxReturn, pk=pk, success_url="accounting:tax_return_list")
@@ -961,13 +972,13 @@ def integration_detail(request, pk):
     return render(request, "accounting/integration_detail.html", {"obj": obj, "plaintext_once": plaintext_once})
 
 
-@login_required
+@tenant_admin_required
 def integration_edit(request, pk):
     return crud_edit(request, model=IntegrationConfig, pk=pk, form_class=IntegrationConfigForm,
                      template="accounting/integration_form.html", success_url="accounting:integration_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def integration_delete(request, pk):
     return crud_delete(request, model=IntegrationConfig, pk=pk, success_url="accounting:integration_list")
