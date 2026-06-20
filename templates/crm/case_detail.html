@@ -16,7 +16,7 @@
   </div>
 
   {% if obj.is_overdue %}
-    <div class="card" style="border-left:3px solid #dc2626;"><div class="card-body text-danger"><i data-lucide="alert-triangle"></i> This case is past its SLA deadline.</div></div>
+    <div class="card" style="border-inline-start:3px solid var(--bad);"><div class="card-body text-danger"><i data-lucide="alert-triangle"></i> This case is past its SLA deadline.</div></div>
   {% endif %}
 
   <div class="card"><div class="card-body">
@@ -27,7 +27,7 @@
       <div class="detail-item"><dt>Contact</dt><dd>{% if obj.contact %}<a href="{% url 'crm:contact_detail' obj.contact.pk %}">{{ obj.contact.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_type_display }}</dd></div>
       <div class="detail-item"><dt>Priority</dt><dd><span class="badge badge-{% if obj.priority == 'critical' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></dd></div>
-      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'resolved' %}green{% elif obj.status == 'closed' %}slate{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'open' or obj.status == 'waiting' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'resolved' %}green{% elif obj.status == 'closed' %}slate{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'new' or obj.status == 'open' or obj.status == 'waiting' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Origin</dt><dd>{{ obj.get_origin_display }}</dd></div>
       <div class="detail-item"><dt>Due (SLA)</dt><dd>{% if obj.due_at %}{{ obj.due_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Resolved at</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
