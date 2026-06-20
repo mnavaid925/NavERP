@@ -64,17 +64,21 @@
                 <div class="table-actions">
                   <a href="{% url 'accounting:payment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% if obj.status == 'draft' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'accounting:payment_confirm' obj.pk %}" onsubmit="return confirm('Confirm this payment?');">
                       {% csrf_token %}<button class="btn-icon" type="submit" title="Confirm"><i data-lucide="check"></i></button>
                     </form>
+                    {% endif %}
                     <a href="{% url 'accounting:payment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                     <form method="post" action="{% url 'accounting:payment_delete' obj.pk %}" onsubmit="return confirm('Delete this payment?');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
                   {% elif obj.status == 'confirmed' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'accounting:payment_void' obj.pk %}" onsubmit="return confirm('Void this payment?');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Void"><i data-lucide="x"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
