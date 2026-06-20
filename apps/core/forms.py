@@ -3,7 +3,17 @@ it scopes every FK dropdown to the active tenant (no cross-tenant leakage in sel
 applies the theme widget classes, and gives date/datetime fields correct HTML5
 widgets that round-trip cleanly (L22). ``tenant`` is excluded everywhere (set in the view).
 """
+import os
+
 from django import forms
+
+# Document upload safety: allowlist extensions + cap size (defense-in-depth; also keep
+# MEDIA_ROOT outside the web root in production — see README).
+ALLOWED_DOC_EXTENSIONS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip",
+}
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 class TenantModelForm(forms.ModelForm):
@@ -104,3 +114,13 @@ class DocumentForm(TenantModelForm):
     class Meta:
         model = Document
         fields = ["file", "name", "classification", "version"]
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_DOC_EXTENSIONS:
+                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+            if getattr(f, "size", 0) and f.size > MAX_UPLOAD_BYTES:
+                raise forms.ValidationError("File exceeds the 20 MB limit.")
+        return f
