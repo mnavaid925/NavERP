@@ -78,8 +78,11 @@ class JobCostEntryForm(TenantModelForm):
 class IntercompanyTransactionForm(TenantModelForm):
     class Meta:
         model = IntercompanyTransaction
+        # `eliminated` (the consolidation-elimination marker) is NOT user-editable here — it is
+        # toggled only via the @tenant_admin_required `intercompany_toggle_eliminated` action so a
+        # member can't silently change the consolidated picture (security review).
         fields = ["description", "transaction_date", "amount", "from_org_unit", "to_org_unit",
-                  "due_from_account", "due_to_account", "eliminated"]
+                  "due_from_account", "due_to_account"]
 
 
 class TaxCodeForm(TenantModelForm):
