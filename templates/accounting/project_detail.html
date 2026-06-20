@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:project_list' %}">Projects</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:project_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounting:project_delete' obj.pk %}" onsubmit="return confirm('Delete this project?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {# Derived actuals vs. budget #}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="target"></i></div>
+      <div><div class="text-muted">Budget</div><div class="page-title">{{ obj.budget_amount|floatformat:2 }}</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
+      <div><div class="text-muted">Actual Cost</div><div class="page-title">{{ actual_cost|floatformat:2 }}</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="trending-up"></i></div>
+      <div><div class="text-muted">Actual Revenue</div><div class="page-title">{{ actual_revenue|floatformat:2 }}</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="percent"></i></div>
+      <div><div class="text-muted">Margin</div><div class="page-title {% if margin < 0 %}text-danger{% endif %}">{{ margin|floatformat:2 }}</div></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Client</dt><dd>{% if obj.client %}{{ obj.client.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Org Unit</dt><dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Billing Method</dt><dd>{{ obj.get_billing_method_display }}</dd></div>
+      <div class="detail-item"><dt>Budget</dt><dd>{{ obj.budget_amount|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Budget Variance</dt><dd class="{% if variance < 0 %}text-danger{% endif %}">{{ variance|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Start Date</dt><dd>{% if obj.start_date %}{{ obj.start_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>End Date</dt><dd>{% if obj.end_date %}{{ obj.end_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'closed' %}slate{% else %}info{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+    </dl>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Cost Entries</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Date</th><th>Kind</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for line in cost_entries %}
+            <tr>
+              <td><a href="{% url 'accounting:job_cost_entry_detail' line.pk %}" class="fw-600">{{ line.number }}</a></td>
+              <td>{{ line.entry_date|date:"M d, Y" }}</td>
+              <td><span class="badge badge-{% if line.kind == 'cost' %}amber{% else %}green{% endif %}">{{ line.get_kind_display }}</span></td>
+              <td>{{ line.amount|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if line.status == 'posted' %}green{% else %}info{% endif %}">{{ line.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="receipt"></i><p>No cost entries on this project.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:project_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
