@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.get_plan_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_plan_display }}</h1>
+      <div class="breadcrumb"><a href="{% url 'tenants:subscription_list' %}">Subscriptions</a><span class="sep">›</span><span>{{ obj.get_plan_display }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:subscription_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'tenants:subscription_delete' obj.pk %}" onsubmit="return confirm('Delete this subscription?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Plan</dt><dd>{{ obj.get_plan_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'trialing' %}info{% elif obj.status == 'past_due' %}amber{% elif obj.status == 'canceled' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Billing cycle</dt><dd>{{ obj.get_billing_cycle_display }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }}</dd></div>
+      <div class="detail-item"><dt>Seats</dt><dd>{{ obj.seats }}</dd></div>
+      <div class="detail-item"><dt>Started</dt><dd>{% if obj.started_on %}{{ obj.started_on|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Renews</dt><dd>{% if obj.renews_on %}{{ obj.renews_on|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Billing</h2></div>
+    <div class="card-body">
+      {% if stripe_enabled %}
+        <form method="post" action="{% url 'tenants:subscription_checkout' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="credit-card"></i> Subscribe via Stripe</button>
+        </form>
+      {% else %}
+        <p class="text-muted">Stripe is not configured. Record payment manually.</p>
+      {% endif %}
+      <form method="post" action="{% url 'tenants:subscription_mark_paid' obj.pk %}" onsubmit="return confirm('Mark this subscription as paid?');" style="margin-top:.75rem;">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="check-circle"></i> Mark as paid</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Invoices</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Status</th><th>Amount</th><th>Issued</th></tr></thead>
+        <tbody>
+          {% for inv in invoices %}
+            <tr>
+              <td><a href="{% url 'tenants:subscriptioninvoice_detail' inv.pk %}" class="fw-600">{{ inv.number }}</a></td>
+              <td><span class="badge badge-{% if inv.status == 'paid' %}green{% elif inv.status == 'open' %}info{% elif inv.status == 'draft' %}muted{% elif inv.status == 'void' %}slate{% elif inv.status == 'uncollectible' %}red{% else %}muted{% endif %}">{{ inv.get_status_display }}</span></td>
+              <td>{{ inv.amount }}</td>
+              <td>{{ inv.issued_on|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="file-text"></i><h3>No invoices yet</h3><p>Invoices will appear here once billing runs.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'tenants:subscription_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
