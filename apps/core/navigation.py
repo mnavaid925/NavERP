@@ -187,6 +187,66 @@ LIVE_LINKS = {
         "Reconciliation Engine": "accounting:reconciliation_list",  # bullet
         "Cash Positioning": "accounting:accounting_dashboard",   # bullet (live cash position)
     },
+    # 2.6 Fixed Assets
+    "2.6": {
+        "Asset Register": "accounting:fixed_asset_list",         # bullet
+        "Depreciation Engine": "accounting:fixed_asset_list",    # bullet (per-asset run action)
+        "Disposals & Retirements": "accounting:asset_disposal_list",  # bullet
+    },
+    # 2.7 Inventory & Cost Management (the accounting slice — Item master arrives with Inventory)
+    "2.7": {
+        "Cost of Goods Sold": "accounting:cost_allocation_list",  # bullet (cost allocation/posting)
+        "Cost Allocation": "accounting:cost_allocation_list",     # extra
+    },
+    # 2.8 Payroll Integration
+    "2.8": {
+        "Payroll Journal": "accounting:payroll_run_list",        # bullet
+        "Payroll Reconciliation": "accounting:payroll_run_list",  # bullet
+    },
+    # 2.9 Project/Job Costing
+    "2.9": {
+        "Project Setup": "accounting:project_list",              # bullet
+        "Profitability Analysis": "accounting:project_list",     # bullet (budget vs actual on detail)
+        "Job Cost Entries": "accounting:job_cost_entry_list",    # extra
+    },
+    # 2.10 Multi-Entity & Consolidation
+    "2.10": {
+        "Entity Management": "core:orgunit_list",                # bullet (entities = OrgUnits)
+        "Inter-company Transactions": "accounting:intercompany_list",  # bullet
+        "Consolidation Engine": "accounting:intercompany_list",  # bullet (eliminations)
+    },
+    # 2.11 Tax
+    "2.11": {
+        "Sales Tax Engine": "accounting:tax_code_list",          # bullet
+        "Tax Returns": "accounting:tax_return_list",             # bullet
+        "Tax Calendar": "accounting:tax_return_list",            # bullet (filing due dates)
+    },
+    # 2.12 Reporting & Compliance
+    "2.12": {
+        "Financial Statements": "accounting:balance_sheet",      # bullet
+        "Scheduled Reports": "accounting:scheduled_report_list",  # bullet
+        "Dashboards": "accounting:accounting_dashboard",         # bullet
+        "Profit & Loss": "accounting:profit_and_loss",           # extra
+    },
+    # 2.13 Budgeting & Planning
+    "2.13": {
+        "Budget Creation": "accounting:budget_list",             # bullet
+        "Version Control": "accounting:budget_list",             # bullet (budget versions)
+        "Variance Analysis": "accounting:budget_variance",       # bullet
+    },
+    # 2.14 Audit & Controls
+    "2.14": {
+        "SOX Controls": "accounting:internal_control_list",      # bullet
+        "Audit Trail": "core:auditlog_list",                     # bullet (immutable log)
+        "Access Controls": "accounts:role_list",                 # bullet (RBAC)
+        "Document Management": "core:document_list",              # bullet
+    },
+    # 2.15 Integration & API
+    "2.15": {
+        "Banking APIs": "accounting:integration_list",           # bullet
+        "Payment Gateways": "accounting:integration_list",       # bullet
+        "Custom API": "accounting:integration_list",             # bullet
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
