@@ -369,3 +369,90 @@ class CrmTask(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.subject}"
+
+
+# ============================ Accounts & Contacts — CRM profile extensions (1.1) =============
+# Accounts and Contacts ARE the shared ``core.Party`` (one identity, many roles). These CRM-owned
+# one-to-one extensions add the rich CRM attributes (firmographics, contact details, hierarchy)
+# WITHOUT polluting the spine. The Party holds name/tax_id/kind; the profile holds everything else.
+# Contact info is stored flat here for a single-form CRM UX; the normalized core.Address /
+# core.ContactMethod remain available for advanced multi-value needs.
+
+INDUSTRY_CHOICES = [
+    ("technology", "Technology"),
+    ("finance", "Finance & Banking"),
+    ("healthcare", "Healthcare"),
+    ("manufacturing", "Manufacturing"),
+    ("retail", "Retail & E-commerce"),
+    ("education", "Education"),
+    ("real_estate", "Real Estate"),
+    ("energy", "Energy & Utilities"),
+    ("media", "Media & Entertainment"),
+    ("professional_services", "Professional Services"),
+    ("construction", "Construction"),
+    ("transportation", "Transportation & Logistics"),
+    ("hospitality", "Hospitality"),
+    ("nonprofit", "Non-Profit"),
+    ("government", "Government"),
+    ("other", "Other"),
+]
+
+
+class AccountProfile(models.Model):
+    """CRM firmographic + contact-detail extension for an organization ``core.Party``."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    party = models.OneToOneField("core.Party", on_delete=models.CASCADE, related_name="crm_account_profile")
+    industry = models.CharField(max_length=40, choices=INDUSTRY_CHOICES, blank=True)
+    website = models.URLField(blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    email = models.EmailField(blank=True)
+    annual_revenue = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    employee_count = models.PositiveIntegerField(default=0)
+    parent_account = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_child_account_profiles")
+    address_line = models.CharField(max_length=255, blank=True)
+    address_city = models.CharField(max_length=120, blank=True)
+    address_state = models.CharField(max_length=120, blank=True)
+    address_postal = models.CharField(max_length=20, blank=True)
+    address_country = models.CharField(max_length=120, blank=True)
+    source = models.CharField(max_length=20, choices=Lead.SOURCE_CHOICES, blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_account_profiles")
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["party__name"]
+
+    def __str__(self):
+        return f"Account · {self.party.name}"
+
+
+class ContactProfile(models.Model):
+    """CRM contact-detail extension for a person ``core.Party`` (job, phone, address, employer)."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    party = models.OneToOneField("core.Party", on_delete=models.CASCADE, related_name="crm_contact_profile")
+    job_title = models.CharField(max_length=120, blank=True)
+    department = models.CharField(max_length=120, blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    mobile = models.CharField(max_length=40, blank=True)
+    account = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_account_contacts")
+    address_line = models.CharField(max_length=255, blank=True)
+    address_city = models.CharField(max_length=120, blank=True)
+    address_state = models.CharField(max_length=120, blank=True)
+    address_postal = models.CharField(max_length=20, blank=True)
+    address_country = models.CharField(max_length=120, blank=True)
+    linkedin = models.URLField(blank=True)
+    source = models.CharField(max_length=20, choices=Lead.SOURCE_CHOICES, blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_contact_profiles")
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["party__name"]
+
+    def __str__(self):
+        return f"Contact · {self.party.name}"
