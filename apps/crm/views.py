@@ -621,8 +621,24 @@ def expense_list(request):
 
 @login_required
 def expense_create(request):
-    return crud_create(request, form_class=ExpenseForm, template="crm/expense_form.html",
-                       success_url="crm:expense_list")
+    # Custom create (not crud_create) so submitted_by is system-set to the current user and
+    # status stays the model default "draft" — neither is accepted from the form.
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = ExpenseForm(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.submitted_by = request.user
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Created successfully.")
+            return redirect("crm:expense_list")
+    else:
+        form = ExpenseForm(tenant=request.tenant)
+    return render(request, "crm/expense_form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -643,6 +659,19 @@ def expense_edit(request, pk):
 @require_POST
 def expense_delete(request, pk):
     return crud_delete(request, model=Expense, pk=pk, success_url="crm:expense_list")
+
+
+@login_required
+@require_POST
+def expense_submit(request, pk):
+    # The owner submits their own draft expense for approval (draft -> submitted).
+    obj = get_object_or_404(Expense, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "submitted"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Expense {obj.number} submitted for approval.")
+    return redirect("crm:expense_detail", pk=obj.pk)
 
 
 @tenant_admin_required  # approving is a privileged action — a manager/admin, not the submitter
@@ -948,6 +977,13 @@ def sign_document(request, token):
     token is the bearer credential; an unguessable token gates access to one signer row."""
     signer = get_object_or_404(SignerRecord.objects.select_related("contract"), token=token)
     contract = signer.contract
+    # Refuse any action on an expired contract (legal/state-machine integrity).
+    if contract.expires_at and contract.expires_at < timezone.now():
+        if contract.status not in ("signed", "declined", "expired"):
+            contract.status = "expired"
+            contract.save(update_fields=["status", "updated_at"])
+        return render(request, "crm/sign_document.html",
+                      {"signer": signer, "contract": contract, "already": True, "expired": True})
     already = signer.signed_at is not None or signer.declined_at is not None
     if request.method == "POST" and not already:
         with transaction.atomic():
@@ -1245,7 +1281,7 @@ def recompute_health_score(request, pk):
     return redirect("crm:healthscore_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # health-scoring weights are a tenant-wide privileged setting
 def health_config_edit(request):
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before configuring health scoring.")
@@ -1311,7 +1347,8 @@ def survey_respond(request, token):
         raw = request.POST.get("score", "")
         # Clamp to the model's 0–10 range — this is a public endpoint, never trust the POST.
         survey.score = max(0, min(10, int(raw))) if raw.isdigit() else None
-        survey.feedback_text = request.POST.get("feedback_text", "").strip()
+        # Public endpoint — cap feedback length to prevent unbounded-storage abuse.
+        survey.feedback_text = request.POST.get("feedback_text", "").strip()[:4000]
         survey.responded_at = timezone.now()
         survey.save()  # save() auto-classifies NPS
         return redirect("crm:survey_respond", token=token)
@@ -1442,7 +1479,7 @@ def crm_po_remove_line(request, pk, line_pk):
     return redirect("crm:crm_po_detail", pk=po.pk)
 
 
-@login_required
+@tenant_admin_required  # receiving mutates inventory (irreversible) — privileged action
 @require_POST
 def crm_po_receive(request, pk):
     """1.12: mark a PO received and add its quantities to linked ProductStock on-hand."""
