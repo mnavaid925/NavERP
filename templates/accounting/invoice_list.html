@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Invoices{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Invoices</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Invoices</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:invoice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Invoice</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search invoices…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" class="form-select">
+            <option value="">All kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="party" class="form-select">
+            <option value="">All customers</option>
+            {% for p in parties %}
+              <option value="{{ p.pk }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounting:invoice_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Kind</th><th>Customer</th><th>Issue</th><th>Due</th><th>Status</th><th>Total</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounting:invoice_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><span class="badge badge-{% if obj.kind == 'credit_note' %}amber{% else %}info{% endif %}">{{ obj.get_kind_display }}</span></td>
+              <td>{{ obj.party.name }}</td>
+              <td>{{ obj.issue_date|date:"M d, Y" }}</td>
+              <td>{% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if obj.status == 'paid' %}green{% elif obj.status == 'partial' %}amber{% elif obj.status == 'sent' %}info{% elif obj.status == 'void' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.total|floatformat:2 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounting:invoice_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'accounting:invoice_post' obj.pk %}" onsubmit="return confirm('Post and send this invoice?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Post / Send"><i data-lucide="check"></i></button>
+                    </form>
+                    <a href="{% url 'accounting:invoice_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'accounting:invoice_delete' obj.pk %}" onsubmit="return confirm('Delete this invoice?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-text"></i><h3>No invoices found</h3><p>Create your first customer invoice to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
