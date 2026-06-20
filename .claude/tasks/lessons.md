@@ -278,3 +278,14 @@ CRM 1.7–1.12 because accounting didn't exist yet). Still UNBUILT spine masters
 `SalesOrder` (Sales, Module 8). Two deliberate accounting shortcuts to migrate later: the auto-posting heuristic
 picks the first `1100`/`2000`-prefixed GL account (should be per-tenant configurable control accounts), and there is
 no invoice/bill **void** action yet (only JE/payment void).
+
+**Update (2026-06-21): Module 2 is now FULLY built, 2.1–2.15.** The advanced pass added accounting-OWNED *financial*
+models in `apps/accounting/models_advanced.py` that post balanced JEs and reuse `core.OrgUnit` as the entity/
+cost-centre dimension: `FixedAsset`/`AssetDisposal` (depreciation/disposal), `PayrollRun` (payroll journal),
+`Project`/`JobCostEntry` (job costing), `IntercompanyTransaction`, `CostAllocation`, `TaxCode`/`TaxReturn`, `Budget`/
+`BudgetLine`, `InternalControl`, `IntegrationConfig`, plus Balance Sheet / P&L / budget-variance report views.
+**Coordination rule for future modules:** these are the *financial/GL* views — when **Module 11 (Assets)** builds the
+operational asset register, **Module 3 (HRM)** builds payroll/employee masters, or **Module 7 (Projects)** builds the
+operational project/WBS, those modules own the operational lifecycle and should FK to (or be FK'd by) the accounting
+financial model rather than duplicating the depreciation/payroll-journal/job-cost posting — keep the *posting* in
+accounting (it owns the ledger). Do NOT build a second FixedAsset/Payroll/Project posting path.
