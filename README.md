@@ -149,7 +149,7 @@ Three design ideas hold the whole platform together:
   > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
   > the spine when those modules land.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite (924 project-wide).
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite (1024 project-wide).
 
 ### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.5
 
@@ -170,7 +170,18 @@ reversal), account balances are always *derived* from posted lines, and posting 
 - **2.5 Cash Management** — **Bank Accounts** (last-4 only) with a live balance, **Bank Transactions** (manual +
   CSV import, deduped on external ref), **Reconciliation** matching.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_accounting`, and a **74-test** accounting suite.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_accounting`, and a **174-test** accounting suite.
+
+**Advanced sub-modules 2.6–2.15** (extension pass, 14 accounting-owned models, migrations `0002`/`0003`) — every
+workflow action posts a balanced `JournalEntry`:
+- **2.6 Fixed Assets** (`FA-`) with a depreciation-run action (straight-line / declining-balance, capped at the
+  depreciable base) and **Disposals** (`DISP-`) booking the gain/loss; **2.7 Cost Allocation** (`CALLOC-`);
+  **2.8 Payroll** runs (`PRUN-`, multi-leg wage/tax/benefit JE, derived net pay); **2.9 Project/Job Costing**
+  (`PRJ-`/`JCE-`) with budget-vs-actual; **2.10 Intercompany** (`ICT-`) due-to/due-from with an elimination flag.
+- **2.11 Tax** codes + returns; **2.12 Reporting** — **Balance Sheet**, **Profit & Loss**, and Scheduled-report
+  config; **2.13 Budgeting** (`BUD-`) with a budget-variance report; **2.14 Internal Controls** (SOX); **2.15
+  Integrations** (Plaid/Stripe/Avalara/… config with a write-once, reveal-once hashed API key).
+All posting/approval actions are `@tenant_admin_required`; the GL stays balanced (Σdebits == Σcredits).
 
 ---
 
@@ -549,7 +560,7 @@ Before deploying:
 |---|--------|----------|--------|
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
-| 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.5 built (dashboard/analytics; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP: vendor profiles, bills, payments, AP aging; AR: customer profiles, invoices, cash application, AR aging; Cash: bank accounts, transactions + CSV import, reconciliation) |
+| 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, payments + cash application, aging; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
 | 3 | Human Resource Management (HRM) | `hrm` | Roadmap |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
