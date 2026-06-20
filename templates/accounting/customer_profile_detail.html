@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.party.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:customer_profile_list' %}">Customer Profiles</a><span class="sep">›</span><span>{{ obj.party.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:customer_profile_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounting:customer_profile_delete' obj.pk %}" onsubmit="return confirm('Delete this customer profile?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {# Credit-limit warning banner when the customer is over their limit #}
+  {% if over_limit %}
+    <div class="card"><div class="card-body text-danger fw-600">
+      <i data-lucide="alert-triangle"></i> Credit limit exceeded — outstanding {{ outstanding|floatformat:2 }} exceeds the limit of {{ obj.credit_limit|floatformat:2 }}.
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Customer</dt><dd>{{ obj.party.name }}</dd></div>
+      <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Credit Limit</dt><dd>{{ obj.credit_limit|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Outstanding</dt><dd class="{% if over_limit %}text-danger fw-600{% endif %}">{{ outstanding|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>AR Account</dt><dd>{% if obj.ar_account %}{{ obj.ar_account.code }} · {{ obj.ar_account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Credit On Hold</dt><dd>{% if obj.credit_on_hold %}<span class="badge badge-red">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent invoices</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Issue Date</th><th>Due Date</th><th>Status</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for inv in invoices %}
+            <tr>
+              <td><a href="{% url 'accounting:invoice_detail' inv.pk %}" class="fw-600">{{ inv.number }}</a></td>
+              <td>{{ inv.issue_date|date:"M d, Y" }}</td>
+              <td>{% if inv.due_date %}{{ inv.due_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if inv.status == 'paid' %}green{% elif inv.status == 'partial' %}amber{% elif inv.status == 'sent' %}info{% elif inv.status == 'void' %}red{% else %}muted{% endif %}">{{ inv.get_status_display }}</span></td>
+              <td>{{ inv.total|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="file-text"></i><p>No invoices yet for this customer.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:customer_profile_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
