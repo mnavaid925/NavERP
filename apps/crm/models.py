@@ -1021,40 +1021,41 @@ def compute_health_score(party, tenant):
     The Accounting ledger (invoice/payment punctuality) is not built yet, so payments is
     intentionally absent — wire it in when Module 2 lands.
     """
-    config, _ = HealthScoreConfig.objects.get_or_create(tenant=tenant)
+    with transaction.atomic():
+        config, _ = HealthScoreConfig.objects.get_or_create(tenant=tenant)
 
-    open_cases = Case.objects.filter(tenant=tenant, account=party, status__in=Case.OPEN_STATUSES).count()
-    tickets_score = max(0, 100 - open_cases * 20)
+        open_cases = Case.objects.filter(tenant=tenant, account=party, status__in=Case.OPEN_STATUSES).count()
+        tickets_score = max(0, 100 - open_cases * 20)
 
-    latest = (Survey.objects.filter(tenant=tenant, account=party, survey_type="nps")
-              .exclude(score=None).order_by("-sent_at", "-created_at").first())
-    nps_map = {"promoter": 100, "passive": 60, "detractor": 20}
-    nps_score = nps_map.get(latest.classification, 50) if latest else 50
+        latest = (Survey.objects.filter(tenant=tenant, account=party, survey_type="nps")
+                  .exclude(score=None).order_by("-sent_at", "-created_at").first())
+        nps_map = {"promoter": 100, "passive": 60, "detractor": 20}
+        nps_score = nps_map.get(latest.classification, 50) if latest else 50
 
-    tasks = CrmTask.objects.filter(tenant=tenant, party=party)
-    total_t = tasks.count()
-    tasks_score = round(tasks.filter(status="done").count() / total_t * 100) if total_t else 60
+        tasks = CrmTask.objects.filter(tenant=tenant, party=party)
+        total_t = tasks.count()
+        tasks_score = round(tasks.filter(status="done").count() / total_t * 100) if total_t else 60
 
-    has_open_opp = Opportunity.objects.filter(
-        tenant=tenant, account=party, stage__in=Opportunity.OPEN_STAGES).exists()
-    engagement_score = 100 if has_open_opp else 40
+        has_open_opp = Opportunity.objects.filter(
+            tenant=tenant, account=party, stage__in=Opportunity.OPEN_STAGES).exists()
+        engagement_score = 100 if has_open_opp else 40
 
-    signals = [
-        (tickets_score, config.weight_tickets),
-        (nps_score, config.weight_nps),
-        (tasks_score, config.weight_tasks),
-        (engagement_score, config.weight_engagement),
-    ]
-    total_w = sum(float(w) for _, w in signals) or 1
-    score = max(0, min(100, round(sum(s * float(w) for s, w in signals) / total_w)))
-    tier = ("red" if score < config.red_threshold
-            else "yellow" if score < config.yellow_threshold else "green")
-    obj, _ = HealthScore.objects.update_or_create(
-        tenant=tenant, account=party,
-        defaults={"score": score, "tier": tier, "computed_at": timezone.now(),
-                  "breakdown": {"tickets": tickets_score, "nps": nps_score,
-                                "tasks": tasks_score, "engagement": engagement_score}},
-    )
+        signals = [
+            (tickets_score, config.weight_tickets),
+            (nps_score, config.weight_nps),
+            (tasks_score, config.weight_tasks),
+            (engagement_score, config.weight_engagement),
+        ]
+        total_w = sum(float(w) for _, w in signals) or 1
+        score = max(0, min(100, round(sum(s * float(w) for s, w in signals) / total_w)))
+        tier = ("red" if score < config.red_threshold
+                else "yellow" if score < config.yellow_threshold else "green")
+        obj, _ = HealthScore.objects.update_or_create(
+            tenant=tenant, account=party,
+            defaults={"score": score, "tier": tier, "computed_at": timezone.now(),
+                      "breakdown": {"tickets": tickets_score, "nps": nps_score,
+                                    "tasks": tasks_score, "engagement": engagement_score}},
+        )
     return obj
 
 
