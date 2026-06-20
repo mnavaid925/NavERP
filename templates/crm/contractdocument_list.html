@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Contracts{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Contracts</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <span>Contracts</span>
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:contractdocument_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Contract</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search contracts…">
+      <select name="status" class="form-select">
+        <option value="">All statuses</option>
+        {% for val,label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <select name="opportunity" class="form-select">
+        <option value="">All opportunities</option>
+        {% for o in opportunities %}<option value="{{ o.pk }}" {% if request.GET.opportunity == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.number }} · {{ o.name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:contractdocument_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Name</th>
+            <th>Account</th>
+            <th>Status</th>
+            <th>Version</th>
+            <th>Opportunity</th>
+            <th>Owner</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'crm:contractdocument_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.account.name|default:"—" }}</td>
+            <td>
+              {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'viewed' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'signed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'declined' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'expired' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'archived' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>v{{ obj.current_version }}</td>
+            <td>{{ obj.opportunity.number|default:"—" }}</td>
+            <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:contractdocument_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'crm:contractdocument_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'crm:contractdocument_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="file-text"></i>
+                <h3>No contracts found</h3>
+                <p>Create a contract to get started.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
