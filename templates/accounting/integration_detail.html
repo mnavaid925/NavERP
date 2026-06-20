@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:integration_list' %}">Integrations</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:integration_rotate_key' obj.pk %}" onsubmit="return confirm('Rotate the API key? The old key stops working immediately and the new key is shown only once.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="key-round"></i> Rotate Key</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'accounting:integration_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounting:integration_delete' obj.pk %}" onsubmit="return confirm('Delete this integration?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% if plaintext_once %}
+    {# One-time reveal — this plaintext key is never shown again after this page. #}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title"><i data-lucide="alert-triangle"></i> Copy this key now — it won't be shown again</h2></div>
+      <div class="card-body">
+        <p class="text-danger fw-600">Store this API key in a safe place. For security it is shown only once and cannot be retrieved later.</p>
+        <code style="display:block; margin-top:.75rem; padding:.75rem 1rem; word-break:break-all;">{{ plaintext_once }}</code>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Provider</dt><dd>{{ obj.get_provider_display }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'connected' %}green{% elif obj.status == 'error' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>API Key</dt><dd>{{ obj.masked|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd><span class="badge badge-{% if obj.is_active %}green{% else %}muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span></dd></div>
+      <div class="detail-item"><dt>Last Sync</dt><dd>{% if obj.last_sync %}{{ obj.last_sync|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'accounting:integration_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
