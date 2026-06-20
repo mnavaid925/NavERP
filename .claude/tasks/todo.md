@@ -88,3 +88,20 @@ Plan: `C:\Users\user\.claude\plans\groovy-splashing-hopper.md`. Reuses the unifi
   leaks, cross-tenant IDOR→404, lead_convert works).
 - **Skill:** `.claude/skills/crm/SKILL.md` authored. README roadmap/seeding/route-map/feature sections updated.
 - One file per commit to `main`; **not pushed** (user pushes).
+
+### Follow-up — rich Accounts & Contacts (CRUD + fields) ✅
+- User asked Contacts to have address/phone/etc. and Accounts more fields. Added CRM-owned
+  `AccountProfile`/`ContactProfile` (OneToOne `core.Party`); upgraded Accounts/Contacts from read-only
+  lenses to **full CRUD** (Party + profile managed atomically) with industry/website/revenue/employees/
+  parent (accounts) and job title/phone/mobile/employer (contacts) + address/source/owner. Idempotent
+  profile backfill in seeder. Migrations 0003 (models) + 0004 (filter indexes).
+- Review agents (all 7) on the enhancement, fixes committed between:
+  code-reviewer (atomic profile create in edit; URLField assume_scheme) · explorer (clean) ·
+  frontend-reviewer (address-blank guard; industry/source list filters) · performance-reviewer
+  (2nd-hop select_related N+1; profile indexes; admin list_select_related) · qa-smoke-tester (75/75) ·
+  security-reviewer (**delete = `@tenant_admin_required`**, buttons hidden from members) · test-writer
+  (116 new tests incl. member-403, IDOR, javascript:-URL rejection).
+- Verify: check clean; `seed_crm` idempotent; smoke green (account/contact create→edit→detail→delete +
+  IDOR + member-403); full suite **656 passed**.
+- **Open recommendation (foundation):** `core:party_delete` is still `@login_required` — for platform-wide
+  consistency the user may want it `@tenant_admin_required` too (left unchanged; out of CRM scope).
