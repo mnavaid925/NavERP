@@ -104,6 +104,44 @@ LIVE_LINKS = {
         "Dashboards": "crm:overview",                    # bullet
         "Standard Reports": "crm:overview",              # bullet
     },
+    # 1.7 Finance & Billing Management — only Expense Tracking is built; Invoicing &
+    # Payment Tracking need the Accounting ledger (Module 2, not built) → stay roadmap.
+    "1.7": {
+        "Expense Tracking": "crm:expense_list",          # bullet
+    },
+    # 1.8 Project & Delivery Management (Post-Sale)
+    "1.8": {
+        "Projects": "crm:crmproject_list",               # bullet
+        "Time Tracking": "crm:timesheet_list",           # bullet
+        "Resource Allocation": "crm:timesheet_list",     # bullet (workload via employee filter)
+        "Milestones": "crm:crmmilestone_list",           # extra (project Gantt/Kanban board)
+    },
+    # 1.9 Document & Contract Management
+    "1.9": {
+        "E-Signatures": "crm:contractdocument_list",     # bullet (contract + signer tracking)
+        "Document Generation": "crm:doctemplate_list",   # bullet (merge-variable templates)
+        "File Repository": "crm:contractdocument_list",  # bullet (versioned contract documents)
+    },
+    # 1.10 Automation & Workflow Engine
+    "1.10": {
+        "Trigger-Based Actions (If This, Then That)": "crm:workflowrule_list",  # bullet
+        "Approval Processes": "crm:approvalrequest_list",  # bullet
+        "Webhooks": "crm:workflowrule_list",             # bullet (webhook is a rule action type)
+        "Workflow Logs": "crm:workflowlog_list",         # extra (rule-execution audit)
+    },
+    # 1.11 Customer Success & Retention
+    "1.11": {
+        "Onboarding Pipelines": "crm:onboardingplan_list",  # bullet
+        "Health Scoring": "crm:healthscore_list",           # bullet
+        "Surveys & Feedback (NPS)": "crm:survey_list",      # bullet
+    },
+    # 1.12 Inventory & Vendor Management
+    "1.12": {
+        "Purchase Orders (POs)": "crm:crm_po_list",         # bullet
+        "Stock Tracking": "crm:productstock_list",          # bullet (on-hand + low-stock alerts)
+        "Vendor/Partner Portal": "crm:partnerportalaccess_list",  # bullet (portal access mgmt)
+        "Partner Portal": "crm:portal_dashboard",           # extra (partner-facing entry)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
