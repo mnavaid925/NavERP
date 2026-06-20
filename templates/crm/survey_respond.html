@@ -9,7 +9,8 @@
   {% csrf_token %}
   <div class="form-group">
     <label class="form-label" for="id_score">How likely are you to recommend us? (0–10)</label>
-    <select name="score" id="id_score" class="form-select">
+    <select name="score" id="id_score" class="form-select" required>
+      <option value="" selected disabled>Select a score…</option>
       {% for n in "0123456789"|make_list %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
       <option value="10">10</option>
     </select>
