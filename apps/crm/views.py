@@ -9,7 +9,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, DecimalField, F, Sum
+from django.db.models import Count, DecimalField, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -191,7 +191,7 @@ def campaign_delete(request, pk):
 @login_required
 def case_list(request):
     return crud_list(
-        request, Case.objects.filter(tenant=request.tenant).select_related("account", "contact", "owner"),
+        request, Case.objects.filter(tenant=request.tenant).select_related("account", "owner"),
         "crm/case_list.html",
         search_fields=["subject", "number"],
         filters=[("status", "status", False), ("priority", "priority", False), ("type", "type", False)],
@@ -230,7 +230,7 @@ def case_delete(request, pk):
 @login_required
 def knowledgearticle_list(request):
     return crud_list(
-        request, KnowledgeArticle.objects.filter(tenant=request.tenant).select_related("owner"),
+        request, KnowledgeArticle.objects.filter(tenant=request.tenant).defer("body"),
         "crm/knowledgearticle_list.html",
         search_fields=["title", "category", "number"],
         filters=[("status", "status", False), ("visibility", "visibility", False)],
@@ -274,7 +274,7 @@ def knowledgearticle_delete(request, pk):
 @login_required
 def task_list(request):
     return crud_list(
-        request, CrmTask.objects.filter(tenant=request.tenant).select_related("owner", "party"),
+        request, CrmTask.objects.filter(tenant=request.tenant).select_related("owner"),
         "crm/task_list.html",
         search_fields=["subject", "number"],
         filters=[("status", "status", False), ("priority", "priority", False), ("type", "type", False)],
@@ -378,9 +378,12 @@ def overview(request):
         )
         stats["pipeline"] = agg["pipeline"] or 0
         stats["weighted"] = (agg["weighted"] or 0) / 100
-        won = opps.filter(stage="closed_won").count()
-        closed = opps.filter(stage__in=["closed_won", "closed_lost"]).count()
-        stats["win_rate"] = round(won / closed * 100) if closed else 0
+        # Win rate: won and closed counts in a single annotated pass.
+        close_agg = opps.aggregate(
+            won=Count("id", filter=Q(stage="closed_won")),
+            closed=Count("id", filter=Q(stage__in=["closed_won", "closed_lost"])),
+        )
+        stats["win_rate"] = round(close_agg["won"] / close_agg["closed"] * 100) if close_agg["closed"] else 0
         stats["open_cases"] = cases.filter(status__in=Case.OPEN_STATUSES).count()
         stats["open_tasks"] = CrmTask.objects.filter(tenant=tenant, status__in=CrmTask.OPEN_STATUSES).count()
         stats["active_campaigns"] = Campaign.objects.filter(tenant=tenant, status="active").count()
