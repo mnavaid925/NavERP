@@ -9,7 +9,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.http import (
+    url_has_allowed_host_and_scheme,
+    urlsafe_base64_decode,
+    urlsafe_base64_encode,
+)
 from django.views.decorators.http import require_POST
 
 from apps.core.crud import crud_create, crud_edit, crud_list
@@ -46,12 +50,18 @@ def login_view(request):
             messages.error(request, "This account is not active. Contact your administrator.")
         else:
             login(request, user)
-            return redirect(request.GET.get("next") or "dashboard:home")
+            next_url = request.GET.get("next", "")
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(next_url)
+            return redirect("dashboard:home")
     elif request.GET.get("timeout"):
         messages.info(request, "Your session timed out. Please sign in again.")
     return render(request, "registration/login.html", {"form": form})
 
 
+@require_POST
 @login_required
 def logout_view(request):
     logout(request)
@@ -251,6 +261,8 @@ def invite_revoke(request, pk):
 
 
 def invite_accept(request, token):
+    # Public endpoint: the token is a 64-char crypto-random secret, so tenant scoping
+    # is not applicable here (the token itself authorizes the specific invite).
     invite = get_object_or_404(UserInvite, token=token)
     valid = invite.status == "pending" and not invite.is_expired()
     if invite.status == "pending" and invite.is_expired():
