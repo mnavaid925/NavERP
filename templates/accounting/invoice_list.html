@@ -54,7 +54,7 @@
             <tr>
               <td><a href="{% url 'accounting:invoice_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td><span class="badge badge-{% if obj.kind == 'credit_note' %}amber{% else %}info{% endif %}">{{ obj.get_kind_display }}</span></td>
-              <td>{{ obj.party.name }}</td>
+              <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
               <td>{{ obj.issue_date|date:"M d, Y" }}</td>
               <td>{% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td><span class="badge badge-{% if obj.status == 'paid' %}green{% elif obj.status == 'partial' %}amber{% elif obj.status == 'sent' %}info{% elif obj.status == 'void' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
