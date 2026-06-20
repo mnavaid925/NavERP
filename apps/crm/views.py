@@ -645,7 +645,7 @@ def expense_delete(request, pk):
     return crud_delete(request, model=Expense, pk=pk, success_url="crm:expense_list")
 
 
-@login_required
+@tenant_admin_required  # approving is a privileged action — a manager/admin, not the submitter
 @require_POST
 def expense_approve(request, pk):
     obj = get_object_or_404(Expense, pk=pk, tenant=request.tenant)
@@ -657,7 +657,7 @@ def expense_approve(request, pk):
     return redirect("crm:expense_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # rejecting is a privileged action — a manager/admin, not the submitter
 @require_POST
 def expense_reject(request, pk):
     obj = get_object_or_404(Expense, pk=pk, tenant=request.tenant)
@@ -949,22 +949,29 @@ def sign_document(request, token):
     contract = signer.contract
     already = signer.signed_at is not None or signer.declined_at is not None
     if request.method == "POST" and not already:
-        signer.ip_address = request.META.get("REMOTE_ADDR")
-        if request.POST.get("action") == "decline":
-            signer.declined_at = timezone.now()
-            signer.save(update_fields=["declined_at", "ip_address"])
-            contract.status = "declined"
-            contract.save(update_fields=["status", "updated_at"])
-        else:
-            signer.signed_at = timezone.now()
-            signer.save(update_fields=["signed_at", "ip_address"])
-            if not contract.signers.filter(signed_at__isnull=True).exists():
-                contract.status = "signed"
-                contract.signed_at = timezone.now()
-                contract.save(update_fields=["status", "signed_at", "updated_at"])
-            elif contract.status in ("draft", "sent"):
-                contract.status = "viewed"
-                contract.save(update_fields=["status", "updated_at"])
+        with transaction.atomic():
+            # Row-lock the signer to avoid a double-sign / lost-update race between two
+            # concurrent last-signer POSTs (re-check state inside the lock).
+            signer = (SignerRecord.objects.select_for_update()
+                      .select_related("contract").get(pk=signer.pk))
+            contract = signer.contract
+            if signer.signed_at is None and signer.declined_at is None:
+                signer.ip_address = request.META.get("REMOTE_ADDR")
+                if request.POST.get("action") == "decline":
+                    signer.declined_at = timezone.now()
+                    signer.save(update_fields=["declined_at", "ip_address"])
+                    contract.status = "declined"
+                    contract.save(update_fields=["status", "updated_at"])
+                else:
+                    signer.signed_at = timezone.now()
+                    signer.save(update_fields=["signed_at", "ip_address"])
+                    if not contract.signers.filter(signed_at__isnull=True).exists():
+                        contract.status = "signed"
+                        contract.signed_at = timezone.now()
+                        contract.save(update_fields=["status", "signed_at", "updated_at"])
+                    elif contract.status in ("draft", "sent"):
+                        contract.status = "viewed"
+                        contract.save(update_fields=["status", "updated_at"])
         return redirect("crm:sign_document", token=token)
     if signer.viewed_at is None:
         signer.viewed_at = timezone.now()
@@ -1075,7 +1082,7 @@ def approvalrequest_delete(request, pk):
     return crud_delete(request, model=ApprovalRequest, pk=pk, success_url="crm:approvalrequest_list")
 
 
-@login_required
+@tenant_admin_required  # approval decisions are privileged (manager/admin only)
 @require_POST
 def approvalrequest_approve(request, pk):
     obj = get_object_or_404(ApprovalRequest, pk=pk, tenant=request.tenant)
@@ -1089,7 +1096,7 @@ def approvalrequest_approve(request, pk):
     return redirect("crm:approvalrequest_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # approval decisions are privileged (manager/admin only)
 @require_POST
 def approvalrequest_reject(request, pk):
     obj = get_object_or_404(ApprovalRequest, pk=pk, tenant=request.tenant)
@@ -1170,7 +1177,7 @@ def onboardingstep_complete(request, step_pk):
     step.completed_at = None if step.completed_at else timezone.now()  # toggle
     step.save(update_fields=["completed_at"])
     plan = step.plan
-    if not plan.steps.filter(completed_at__isnull=True).exists():
+    if not plan.steps.filter(tenant=request.tenant, completed_at__isnull=True).exists():
         plan.status = "completed"
         plan.completed_at = timezone.now()
         plan.save(update_fields=["status", "completed_at", "updated_at"])
@@ -1297,7 +1304,8 @@ def survey_respond(request, token):
     survey = get_object_or_404(Survey, token=token)
     if request.method == "POST" and survey.responded_at is None:
         raw = request.POST.get("score", "")
-        survey.score = int(raw) if raw.isdigit() else None
+        # Clamp to the model's 0–10 range — this is a public endpoint, never trust the POST.
+        survey.score = max(0, min(10, int(raw))) if raw.isdigit() else None
         survey.feedback_text = request.POST.get("feedback_text", "").strip()
         survey.responded_at = timezone.now()
         survey.save()  # save() auto-classifies NPS
@@ -1404,11 +1412,12 @@ def crm_po_add_line(request, pk):
     po = get_object_or_404(PurchaseOrder, pk=pk, tenant=request.tenant)
     form = PurchaseOrderLineForm(request.POST, tenant=request.tenant)
     if form.is_valid():
-        line = form.save(commit=False)
-        line.tenant = request.tenant
-        line.purchase_order = po
-        line.save()
-        po.recalc_total()
+        with transaction.atomic():
+            line = form.save(commit=False)
+            line.tenant = request.tenant
+            line.purchase_order = po
+            line.save()
+            po.recalc_total()
         messages.success(request, "Line item added.")
     else:
         messages.error(request, "Could not add line — item name is required.")
@@ -1420,8 +1429,9 @@ def crm_po_add_line(request, pk):
 def crm_po_remove_line(request, pk, line_pk):
     po = get_object_or_404(PurchaseOrder, pk=pk, tenant=request.tenant)
     line = get_object_or_404(PurchaseOrderLine, pk=line_pk, purchase_order=po, tenant=request.tenant)
-    line.delete()
-    po.recalc_total()
+    with transaction.atomic():
+        line.delete()
+        po.recalc_total()
     messages.success(request, "Line item removed.")
     return redirect("crm:crm_po_detail", pk=po.pk)
 
@@ -1431,8 +1441,8 @@ def crm_po_remove_line(request, pk, line_pk):
 def crm_po_receive(request, pk):
     """1.12: mark a PO received and add its quantities to linked ProductStock on-hand."""
     po = get_object_or_404(PurchaseOrder, pk=pk, tenant=request.tenant)
-    if po.status == "received":
-        messages.info(request, "This purchase order is already received.")
+    if po.status not in ("draft", "sent"):
+        messages.info(request, "Only a draft or sent purchase order can be received.")
         return redirect("crm:crm_po_detail", pk=po.pk)
     with transaction.atomic():
         for line in po.lines.select_related("product"):
@@ -1496,7 +1506,7 @@ def _portal_access(request):
     if not request.user.is_authenticated:
         return None
     return (PartnerPortalAccess.objects
-            .filter(portal_user=request.user, is_active=True)
+            .filter(portal_user=request.user, tenant=request.tenant, is_active=True)
             .select_related("partner_party").first())
 
 
