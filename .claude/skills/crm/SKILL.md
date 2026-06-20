@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — leads, opportunities, campaigns, cases, knowledge base, tasks; accounts/contacts are core.Party lenses). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.6), or invokes /crm.
+description: Work on the CRM module (Module 1 — leads, opportunities, campaigns, cases, knowledge base, tasks; accounts/contacts are core.Party + CRM AccountProfile/ContactProfile with full CRUD). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.6), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.6)
@@ -38,14 +38,31 @@ created_at)`; CrmTask uses `(tenant, due_date, created_at)`).
 `converted_party`. **Decimal note:** `weighted_amount`/`roi` cast to `Decimal` so they're correct on
 freshly-created (un-round-tripped) instances.
 
+**Accounts & Contacts (1.1) are `core.Party`** — not CRM-owned tables. CRM adds two one-to-one
+extension models (plain `models.Model`, NOT `TenantNumbered`; `tenant` FK set in the view):
+- **`AccountProfile`** (OneToOne org `core.Party`, `related_name="crm_account_profile"`):
+  industry(choices)/website(URL)/phone/email/annual_revenue/employee_count/`parent_account`→Party/
+  address_line/city/state/postal/country/source(=`Lead.SOURCE_CHOICES`)/owner→User/description.
+  Indexes `(tenant, industry)`, `(tenant, source)`, `(tenant, parent_account)`.
+- **`ContactProfile`** (OneToOne person `core.Party`, `related_name="crm_contact_profile"`):
+  job_title/department/email/phone/mobile/`account`→Party(employer)/address_*/linkedin(URL)/source/
+  owner→User/description. Indexes `(tenant, source)`, `(tenant, account)`.
+
+The Party holds `name`/`tax_id`/`kind`; the profile holds the rich fields. Reverse accessor
+`party.crm_account_profile` / `party.crm_contact_profile` (Django's RelatedObjectDoesNotExist
+subclasses AttributeError, so `getattr(obj, "crm_account_profile", None)` and `{% if obj.crm_account_profile %}`
+are safe when no profile exists — e.g. a seeded vendor org or converted-lead party). `INDUSTRY_CHOICES`
+is a module-level constant in `models.py`. `website`/`linkedin` use `forms.URLField(assume_scheme="https")`.
+
 ## URLs / routes (`apps/crm/urls.py`, `app_name="crm"`)
 
 - Per CRUD model — `<entity>_list`, `<entity>_create`, `<entity>_detail`, `<entity>_edit`,
   `<entity>_delete` (delete is POST-only) — for `lead`, `opportunity`, `campaign`, `case`,
   `knowledgearticle`, `task`.
-- Custom: `crm:overview` (module landing, `/crm/`), `crm:lead_convert` (POST), and the Party lenses
-  `crm:account_list`/`account_detail`, `crm:contact_list`/`contact_detail` (list+detail only;
-  create/edit/delete intentionally link to `core:party_*`).
+- Custom: `crm:overview` (module landing, `/crm/`), `crm:lead_convert` (POST). **Accounts & Contacts
+  have full CRUD**, keyed by **Party pk**: `crm:account_list/_create/_detail/_edit/_delete` and
+  `crm:contact_*` (delete is POST-only **and `@tenant_admin_required`** — see Views). "View in Core"
+  links to `core:party_detail`.
 
 ## Views (`apps/crm/views.py`)
 
@@ -62,6 +79,16 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
   charts (`json_script` + `{% block extra_js %}` Chart.js, ids `stageChart`/`ratingChart`).
 - Detail reverse-relation sub-queries are **explicitly** `Model.objects.filter(tenant=request.tenant,
   fk=obj)` (defense-in-depth; never the bare reverse manager).
+- **Accounts/Contacts** — full CRUD over `core.Party` + the profile. `account_create`/`_edit`
+  orchestrate **Party + AccountProfile atomically** (form binds to existing-or-new profile so the
+  INSERT is inside `transaction.atomic()`; `name`/`tax_id` written to the Party from `cleaned_data`).
+  `account_detail` shows the profile + `child_accounts` (`parent_account=obj`) + `stakeholders`
+  (ContactProfiles whose `account=obj`). List querysets `select_related` the profile **and its
+  second-hop FKs** (`crm_account_profile__owner`, `crm_contact_profile__account`) to avoid N+1; list
+  filters traverse `crm_account_profile__industry/source`. **`account_delete`/`contact_delete` are
+  `@tenant_admin_required`** (not `@login_required`) — deleting the shared `core.Party` cascades the
+  profile/roles/addresses and SET_NULLs opportunities/cases, a cross-module blast radius, so it's
+  admin-only and the delete buttons are hidden from non-admins in the templates.
 
 ## Templates (`templates/crm/`)
 
@@ -69,18 +96,23 @@ Extend `base.html`; use the `theme.css` design system. Per CRUD model: `<entity>
 (filter-bar with `q` + status/FK selects reflecting `request.GET`, Actions column view/edit/delete-
 POST+confirm+csrf, pagination via `partials/pagination.html`, empty-state), `<entity>_detail.html`
 (`detail-grid` + actions + back link), `<entity>_form.html` (shared create/edit, generic
-`{% for field in form %}` in `.form-grid`). Plus `account_list/detail`, `contact_list/detail`
-(Party lenses; "New/Manage" link to `core:party_*`), and `overview.html`. Badges use exact model
-choice values with `{{ obj.get_<field>_display }}` fallback text. The opportunity list FK filter
-compares `request.GET.account == acc.pk|stringformat:"d"`.
+`{% for field in form %}` in `.form-grid`). Plus `account_list/detail/form`,
+`contact_list/detail/form` (Party + profile; CRM-native New/Edit/Delete; delete buttons wrapped in
+`{% if request.user.is_superuser or request.user.is_tenant_admin %}`; "View in Core" →
+`core:party_detail`), and `overview.html`. Badges use exact model choice values with
+`{{ obj.get_<field>_display }}` fallback text. The opportunity list FK filter compares
+`request.GET.account == acc.pk|stringformat:"d"`.
 
 ## Seeder (`apps/crm/management/commands/seed_crm.py`)
 
 `venv\Scripts\python.exe manage.py seed_crm` — idempotent (skips a tenant that already has `Lead`
 rows). Reuses existing core Parties (first org as `account`, first person as `contact`) rather than
 inventing duplicates. Per tenant: 2 campaigns, 3 leads, 4 opportunities (varied stages incl. one
-closed_won), 3 cases, 2 KB articles, 3 tasks. `owner` = tenant admin. Prints the demo-login reminder
-and the `admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
+closed_won), 3 cases, 2 KB articles, 3 tasks. `owner` = tenant admin. Also idempotently **backfills
+an `AccountProfile`/`ContactProfile`** onto the first org/person Party per tenant via
+`_backfill_profiles` (runs every time, independent of the lead-exists guard, so existing demo data
+gains firmographics/contact details without `--flush`). Prints the demo-login reminder and the
+`admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
 
 ## Sidebar wiring (`apps/core/navigation.py` → `LIVE_LINKS`)
 
@@ -101,7 +133,9 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   `admin_acme`/`password`.
 - **Context-var contract** (from `crud.py`): list → `object_list`+`page_obj`+`q` (+ the view's
   filter `*_choices`/FK querysets); detail/edit → `obj`; form → `form`+`is_edit`.
-- **Accounts/Contacts are NOT CRM-owned tables** — they're `core.Party` lenses; mutate via `core:`.
+- **Accounts/Contacts identity = `core.Party`** (no duplicate master table). CRM owns only the
+  `AccountProfile`/`ContactProfile` extensions + full CRUD that manages Party + profile together.
+  **Deleting an account/contact deletes the shared Party** (cross-module impact) → admin-only.
 - Auto-number collisions retry 5× inside `transaction.atomic()`; numbering is per-tenant per-prefix.
 - `related_name="+"` on the abstract tenant FK means no `tenant.crm_leads` reverse accessor — always
   `Lead.objects.filter(tenant=...)`.
