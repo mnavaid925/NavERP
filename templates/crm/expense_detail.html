@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:expense_list' %}">Expenses</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    {% if obj.status == 'submitted' %}
+    <form method="post" action="{% url 'crm:expense_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve this expense?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Approve</button>
+    </form>
+    <form method="post" action="{% url 'crm:expense_reject' obj.pk %}" style="display:inline;" onsubmit="return confirm('Reject this expense?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline"><i data-lucide="x"></i> Reject</button>
+    </form>
+    {% endif %}
+    <a href="{% url 'crm:expense_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:expense_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this expense?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }} {{ obj.currency_code }}</dd></div>
+      <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.opportunity %}<a href="{% url 'crm:opportunity_detail' obj.opportunity.pk %}">{{ obj.opportunity.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Project</dt><dd>{% if obj.project %}<a href="{% url 'crm:crmproject_detail' obj.project.pk %}">{{ obj.project.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.expense_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'submitted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Submitted by</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Receipt</dt><dd>{% if obj.receipt %}<a href="{{ obj.receipt.url }}" target="_blank">Download</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div>
+</div>
+
+<a href="{% url 'crm:expense_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
