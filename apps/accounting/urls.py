@@ -175,6 +175,7 @@ urlpatterns = [
     path("intercompany/<int:pk>/edit/", adv.intercompany_edit, name="intercompany_edit"),
     path("intercompany/<int:pk>/delete/", adv.intercompany_delete, name="intercompany_delete"),
     path("intercompany/<int:pk>/post/", adv.intercompany_post, name="intercompany_post"),
+    path("intercompany/<int:pk>/toggle-eliminated/", adv.intercompany_toggle_eliminated, name="intercompany_toggle_eliminated"),
 
     # 2.11 Tax
     path("tax-codes/", adv.tax_code_list, name="tax_code_list"),
