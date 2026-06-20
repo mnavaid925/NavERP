@@ -1,9 +1,9 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — leads, opportunities, campaigns, cases, knowledge base, tasks; accounts/contacts are core.Party + CRM AccountProfile/ContactProfile with full CRUD). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.6), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
-# CRM Module (Module 1, sub-modules 1.1–1.6)
+# CRM Module (Module 1, sub-modules 1.1–1.12)
 
 Customer Relationship Management. Reuses the unified core spine (NavERP-ERD.md): **Accounts and
 Contacts are `core.Party`** (one record, many roles) — CRM adds only its own domain tables and FKs
@@ -154,3 +154,85 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   maps to a `NavERP.md` bullet.
 - **Extend the seeder:** add rows inside `_seed_tenant`; keep the `Lead`-exists idempotency guard.
 - **Run the tests:** `venv\Scripts\python.exe -m pytest apps/crm -q` (SQLite via `config.settings_test`).
+
+---
+
+# Sub-modules 1.7–1.12 (extension — finance/delivery/docs/automation/success/vendor)
+
+Added as an extension pass on the **same `apps/crm` app** (one big `models.py`, `forms.py`, `views.py`,
+`urls.py`, `admin.py`, `seed_crm.py`). Migration `0005` created the 18 tables. **Spine-gap note:** the
+unified-core masters (`core.Item/Currency/Invoice/Payment/PurchaseOrder/StockMove`) are **not built
+yet** (Accounting/Inventory/Procurement = future modules 2/5/6), so 1.12 ships **CRM-owned**
+`PurchaseOrder`/`PurchaseOrderLine`/`ProductStock`, `Expense.currency_code` is a CharField, and health
+scoring derives from existing CRM signals. See `.claude/tasks/todo.md` "Spine-gap adaptation". When those
+modules land, migrate these onto the spine.
+
+## Models (1.7–1.12) — all `TenantNumbered` unless noted
+
+| Model | Prefix | Sub-mod | Key fields / behavior | Reuse |
+|-------|--------|---------|-----------------------|-------|
+| `Expense` | `EXP-` | 1.7 | category, amount, **currency_code**(char), expense_date, **receipt** FileField (allowlist+20MB via `clean_receipt`), status(draft/submitted/approved/rejected), **submitted_by/approved_by/status are system-set — NOT in the form** | `opportunity`/`project`→crm, submitted_by/approved_by→User |
+| `CrmProject` | `PRJ-` | 1.8 | name, status(planning/active/on_hold/completed/cancelled), start/end_date, budget, owner, description | `account`→Party, `source_opportunity`→Opportunity |
+| `CrmMilestone` | `MS-` | 1.8 | title, kind(milestone/task), status(not_started/in_progress/completed/blocked), order, `parent`(self-FK subtasks), `completed_at`(system via `save()`) | `project`→CrmProject(CASCADE), assignee→User |
+| `Timesheet` | `TS-` | 1.8 | date, hours, is_billable, status; (approved_by is NOT in the form) | `project`(CASCADE)/`milestone`→crm, employee→User, client→Party |
+| `DocTemplate` | `TPL-` | 1.9 | name, template_type(nda/proposal/contract/quote/receipt), `body`(merge-var HTML, deferred on list) , is_active | owner→User |
+| `ContractDocument` | `CTR-` | 1.9 | name, status(draft/sent/viewed/signed/declined/expired/archived), current_version, body_snapshot(deferred on list), signed_at/expires_at; **status/current_version are system-managed — NOT in the form** | `template`→DocTemplate, opportunity→crm, account→Party |
+| `SignerRecord` | — (plain) | 1.9 | per-signer: signer_name/email, `token`(secrets.token_urlsafe(32)), order(auto in view), viewed_at/signed_at/declined_at/ip_address | `contract`→ContractDocument(CASCADE) |
+| `WorkflowRule` | `WFR-` | 1.10 | name, is_active, trigger_entity/event/field/value, `conditions`/`actions` JSONField (declarative, **never eval'd**), delay_value/unit | owner→User |
+| `WorkflowLog` | — (plain) | 1.10 | append-only: record_label, status(success/failed/skipped), fired_at, error_msg(deferred on list). **Read-only — list+detail only, no create/edit/delete** | `rule`→WorkflowRule(SET_NULL) |
+| `ApprovalRequest` | `APR-` | 1.10 | subject, record_label, status(pending/approved/rejected/expired), threshold_field/value, approved_at/rejected_at(system), reason; prop `is_pending` | rule→WorkflowRule, approver/requested_by→User |
+| `OnboardingPlan` | `CS-` | 1.11 | name, status(active/completed/on_hold/cancelled), target_date, completed_at; prop `progress_pct`(from steps) | account→Party, owner→User |
+| `OnboardingStep` | — (plain) | 1.11 | order(auto in view), title, assignee, due_date, completed_at; inline on plan detail | `plan`→OnboardingPlan(CASCADE) |
+| `HealthScore` | `HS-` | 1.11 | score(0–100), tier(green/yellow/red), `breakdown` JSON; `unique_together(tenant,account)` **and** `(tenant,number)`; written by `compute_health_score()` | account→Party |
+| `HealthScoreConfig` | — (plain, OneToOne tenant) | 1.11 | weight_tickets/nps/tasks/engagement, red/yellow_threshold (singleton per tenant) | — |
+| `Survey` | `NPS-` | 1.11 | survey_type(nps/csat/ces), trigger, score(0–10), `classification`(auto in `save()` for NPS), `token`(auto in `save()`), sent_at/responded_at | account/contact→Party, related_case→Case |
+| `ProductStock` | `STK-` | 1.12 | name, sku, **on_hand_qty (system-managed via PO receipt — NOT in the form)**, reorder_level, unit_cost, is_active; prop `is_low_stock` | — |
+| `PurchaseOrder` | `PO-` | 1.12 | status(draft/sent/received/cancelled), order/expected_date, `total_amount`(via `recalc_total()`), received_at(system); `recalc_total()` = DB-side Sum(qty×price) | vendor→Party(org), owner→User |
+| `PurchaseOrderLine` | — (plain) | 1.12 | item_name, quantity, unit_price, order(auto in view); prop `line_total` | `purchase_order`(CASCADE)/`product`→crm |
+| `PartnerPortalAccess` | `PRT-` | 1.12 | access_level(read_only/lead_register/full), can_view_stock, can_register_leads, accepted_at, is_active | partner_party→Party, `portal_user`→User(OneToOne) |
+
+**Service fn `compute_health_score(party, tenant)`** (`models.py`, wrapped in `transaction.atomic()`):
+derives a 0–100 score from `crm.Case` (open/overdue), latest `crm.Survey` NPS, `crm.CrmTask` completion,
+and open `crm.Opportunity` engagement, weighted by `HealthScoreConfig`; `update_or_create`s one row per
+account. Called by `recompute_health_score` view + the seeder. (No invoice/payment signal — Accounting
+not built.)
+
+## URLs / views (1.7–1.12)
+
+Standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for: `expense`, `crmproject`,
+`crmmilestone`, `timesheet`, `doctemplate`, `contractdocument`, `workflowrule`, `approvalrequest`,
+`onboardingplan`, `healthscore`, `survey`, `productstock`, `crm_po` (PurchaseOrder), `partnerportalaccess`.
+`workflowlog` is **list+detail only** (read-only). Custom actions (all `@require_POST`):
+- **Expense:** `expense_submit` (owner, draft→submitted), `expense_approve`/`expense_reject` (**`@tenant_admin_required`**).
+- **1.8:** `opportunity_to_project` (won opp → CrmProject, **idempotent** guard on `source_opportunity`).
+- **1.9:** `contractdocument_add_signer`/`_remove_signer`; **public** `sign_document(token)` (no login; `select_for_update` against double-sign; refuses expired; sets `viewed_at`/`signed_at`/`declined_at`, flips contract→signed when all signed).
+- **1.10:** `approvalrequest_approve`/`_reject` (**`@tenant_admin_required`**).
+- **1.11:** `onboardingstep_add`/`_complete`(toggle)/`_delete`; `recompute_health_score`; `health_config_edit` (**`@tenant_admin_required`**); **public** `survey_respond(token)` (no login; clamps score 0–10, caps feedback 4000, no re-submit).
+- **1.12:** `crm_po_add_line`/`_remove_line` (atomic + `recalc_total`), `crm_po_receive` (**`@tenant_admin_required`** — bumps `ProductStock.on_hand_qty` via `F()`, blocks received/cancelled); partner-facing `portal_dashboard`/`portal_po_list`/`portal_stock` (gated by `_portal_access` = PartnerPortalAccess pinned to `request.tenant`; non-portal users redirect).
+
+## Security conventions (1.7–1.12) — important
+
+- **System-managed fields are excluded from their ModelForm** (prevents mass-assignment self-approval/forgery): `Expense.status/submitted_by/approved_by`, `Timesheet.approved_by`, `ContractDocument.status/current_version`, `ProductStock.on_hand_qty`. Set them only in the dedicated action views.
+- **Privileged actions are `@tenant_admin_required`:** expense approve/reject, approval approve/reject, `crm_po_receive` (inventory mutation), `health_config_edit` (tenant-wide config). Day-to-day CRUD stays `@login_required`.
+- **File upload** (`Expense.receipt`): `ExpenseForm.clean_receipt` mirrors `core.DocumentForm` (extension allowlist + 20 MB cap) — blocks `.html`/`.svg` same-origin XSS.
+- **Public endpoints** (`sign_document`, `survey_respond`): unguessable `secrets.token_urlsafe` tokens, `get_object_or_404(token=…)`, CSRF-protected (`{% csrf_token %}`, not exempt), extend `base_auth.html`. `body_snapshot` rendered **escaped** (no `|safe`).
+- **No `|safe`/`eval`/raw SQL** anywhere in the new code; WorkflowRule conditions/actions are stored JSON, never executed.
+
+## Seeder + sidebar (1.7–1.12)
+
+`seed_crm` gained `_seed_extension(tenant)` (runs after base data; guarded by `Expense.exists()`): seeds
+projects+milestones+timesheets, expenses, doc templates+contracts+signers, workflow rules+log+approvals,
+onboarding plan+steps, surveys + `compute_health_score` per org party, product stock + a purchase order +
+lines, and a PartnerPortalAccess (note: `portal_user=None` by default — assign a user to demo the portal).
+`LIVE_LINKS` (`apps/core/navigation.py`) wires 1.7 (Expense Tracking only — Invoicing/Payment need
+Accounting), 1.8 (Projects/Time Tracking/Resource Allocation + Milestones extra), 1.9 (E-Signatures/Document
+Generation/File Repository), 1.10 (Trigger-Based Actions/Approval Processes/Webhooks + Workflow Logs extra),
+1.11 (Onboarding Pipelines/Health Scoring/Surveys & Feedback (NPS)), 1.12 (Purchase Orders/Stock Tracking/
+Vendor-Partner Portal + Partner Portal extra).
+
+## Performance notes (1.7–1.12)
+
+List views `select_related` the FKs their templates render and **defer large TextFields** not shown on lists
+(`DocTemplate.body`, `ContractDocument.body_snapshot`, `WorkflowLog.error_msg`); `onboardingplan_list`
+`prefetch_related("steps")` so `progress_pct` doesn't N+1; filter dropdowns use `.only(...)`; portal
+list views are paginated. `PurchaseOrder.recalc_total()` / `compute_health_score` aggregate DB-side.
