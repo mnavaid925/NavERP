@@ -68,6 +68,9 @@ class CrmTaskForm(TenantModelForm):
 class AccountForm(TenantModelForm):
     name = forms.CharField(max_length=255, label="Account name")
     tax_id = forms.CharField(max_length=64, required=False, label="Tax ID")
+    # Explicit form field with the permanent assume_scheme API (avoids the Django 6.0 URLField
+    # default-scheme deprecation warning).
+    website = forms.URLField(required=False, assume_scheme="https")
 
     field_order = ["name", "tax_id", "industry", "website", "phone", "email", "annual_revenue",
                    "employee_count", "parent_account", "address_line", "address_city",
@@ -91,6 +94,7 @@ class AccountForm(TenantModelForm):
 
 class ContactForm(TenantModelForm):
     name = forms.CharField(max_length=255, label="Contact name")
+    linkedin = forms.URLField(required=False, assume_scheme="https")
 
     field_order = ["name", "job_title", "department", "email", "phone", "mobile", "account",
                    "address_line", "address_city", "address_state", "address_postal",
