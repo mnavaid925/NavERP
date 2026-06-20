@@ -9,7 +9,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, DecimalField, F, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -325,8 +325,9 @@ def account_list(request):
 @login_required
 def account_detail(request, pk):
     obj = get_object_or_404(
-        Party.objects.filter(kind="organization").prefetch_related("roles", "addresses", "contact_methods"),
-        pk=pk, tenant=request.tenant)
+        Party.objects.filter(tenant=request.tenant, kind="organization")
+        .prefetch_related("roles", "addresses", "contact_methods"),
+        pk=pk)
     return render(request, "crm/account_detail.html", {
         "obj": obj,
         "opportunities": Opportunity.objects.filter(tenant=request.tenant, account=obj).select_related("owner")[:20],
@@ -346,8 +347,9 @@ def contact_list(request):
 @login_required
 def contact_detail(request, pk):
     obj = get_object_or_404(
-        Party.objects.filter(kind="person").prefetch_related("roles", "contact_methods"),
-        pk=pk, tenant=request.tenant)
+        Party.objects.filter(tenant=request.tenant, kind="person")
+        .prefetch_related("roles", "contact_methods"),
+        pk=pk)
     return render(request, "crm/contact_detail.html", {
         "obj": obj,
         "opportunities": Opportunity.objects.filter(tenant=request.tenant, primary_contact=obj).select_related("account")[:20],
@@ -368,9 +370,14 @@ def overview(request):
         cases = Case.objects.filter(tenant=tenant)
 
         stats["open_leads"] = leads.exclude(status__in=["converted", "unqualified"]).count()
-        open_opps = list(opps.filter(stage__in=Opportunity.OPEN_STAGES))
-        stats["pipeline"] = sum((o.amount or 0) for o in open_opps)
-        stats["weighted"] = sum((o.weighted_amount for o in open_opps), 0)
+        # DB-side pipeline + weighted-forecast sums (no full-row fetch).
+        agg = opps.filter(stage__in=Opportunity.OPEN_STAGES).aggregate(
+            pipeline=Sum("amount"),
+            weighted=Sum(F("amount") * F("probability"),
+                         output_field=DecimalField(max_digits=18, decimal_places=2)),
+        )
+        stats["pipeline"] = agg["pipeline"] or 0
+        stats["weighted"] = (agg["weighted"] or 0) / 100
         won = opps.filter(stage="closed_won").count()
         closed = opps.filter(stage__in=["closed_won", "closed_lost"]).count()
         stats["win_rate"] = round(won / closed * 100) if closed else 0
