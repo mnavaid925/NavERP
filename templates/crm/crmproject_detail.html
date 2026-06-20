@@ -40,7 +40,7 @@
       <div class="detail-item"><dt>End date</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Budget</dt><dd>{{ obj.budget }}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
-      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div>
