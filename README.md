@@ -112,6 +112,22 @@ Three design ideas hold the whole platform together:
 - Tenant-scoped KPI overview: stat cards (users, parties, open invoices), party-role doughnut, activity-by-status
   bar chart, subscription status, tenant-health, and recent audit activity.
 
+### `crm` — Module 1: Customer Relationship Management (1.1–1.6)
+- **Leads** (`LEAD-#####`) with rating (hot/warm/cold), qualification status, scoring, and one-click
+  **conversion** to a `core.Party` account + contact + an Opportunity (atomic).
+- **Opportunities** (`OPP-#####`) — pipeline stages, amount/probability, weighted-forecast value, FK to the
+  account/contact `Party`, source lead, and campaign.
+- **Campaigns** (`CAM-#####`) — type, status, planned/actual budget, expected/actual revenue, and ROI.
+- **Cases** (`CASE-#####`) — support tickets with priority, status workflow, SLA `due_at` + overdue flagging,
+  and system-set `resolved_at`. **Knowledge Base** (`KB-#####`) articles with internal/external visibility and a
+  view counter.
+- **Tasks** (`TASK-#####`) — to-dos/calls/follow-ups with priority, due date, and system-set `completed_at`.
+- **Accounts & Contacts** are read-only **lenses over the shared `core.Party`** master (one record, many roles) —
+  no duplicate customer/contact tables; mutations route to the core party pages.
+- A CRM **overview** (analytics) page: stat cards (open leads, pipeline, weighted forecast, win rate, open
+  cases/tasks, active campaigns) + pipeline-by-stage and leads-by-rating charts. Full CRUD, tenant isolation,
+  filters, an idempotent `seed_crm`, and a 242-test suite.
+
 ---
 
 ## Technology stack
@@ -212,6 +228,7 @@ venv\Scripts\python.exe manage.py migrate
 venv\Scripts\python.exe manage.py seed_core
 venv\Scripts\python.exe manage.py seed_accounts
 venv\Scripts\python.exe manage.py seed_tenants
+venv\Scripts\python.exe manage.py seed_crm
 
 # 6. Start the development server
 venv\Scripts\python.exe manage.py runserver
@@ -293,6 +310,7 @@ backend) — copy the link from there.
 | Users & RBAC | `/` | `/users/`, `/roles/`, `/invites/`, `/invite/<token>/`, `/profile/` |
 | Core spine | `/core/` | `/core/parties/`, `/core/org-units/`, `/core/party-roles/`, `/core/addresses/`, `/core/contact-methods/`, `/core/relationships/`, `/core/employments/`, `/core/activities/`, `/core/documents/`, `/core/audit-logs/` |
 | Module 0.1 | `/tenants/` | `/tenants/subscriptions/`, `/tenants/subscription-invoices/`, `/tenants/branding/`, `/tenants/encryption-keys/`, `/tenants/health/`, `/tenants/onboarding/`, `/tenants/stripe/webhook/` |
+| Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/campaigns/`, `/crm/cases/`, `/crm/knowledge/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/` |
 | Django admin | `/admin/` | `/admin/` |
 
 Each CRUD resource follows the pattern: list (`/`), create (`/add/`), detail (`/<pk>/`), edit (`/<pk>/edit/`),
@@ -485,7 +503,7 @@ Before deploying:
 | # | Module | App slug | Status |
 |---|--------|----------|--------|
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
-| 1 | Customer Relationship Management (CRM) | `crm` | Roadmap |
+| 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.6 built (leads, opportunities, campaigns, cases, KB, tasks) |
 | 2 | Accounting & Finance | `accounting` | Roadmap |
 | 3 | Human Resource Management (HRM) | `hrm` | Roadmap |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
