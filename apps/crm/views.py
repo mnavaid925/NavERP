@@ -1516,7 +1516,7 @@ def portal_dashboard(request):
     if access is None:
         messages.error(request, "You don't have partner portal access.")
         return redirect("dashboard:home")
-    po_count = PurchaseOrder.objects.filter(tenant=access.tenant_id, vendor=access.partner_party).count()
+    po_count = PurchaseOrder.objects.filter(tenant=request.tenant, vendor=access.partner_party).count()
     return render(request, "crm/portal_dashboard.html", {"access": access, "po_count": po_count})
 
 
@@ -1527,7 +1527,7 @@ def portal_po_list(request):
         messages.error(request, "You don't have partner portal access.")
         return redirect("dashboard:home")
     orders = (PurchaseOrder.objects
-              .filter(tenant=access.tenant_id, vendor=access.partner_party)
+              .filter(tenant=request.tenant, vendor=access.partner_party)
               .order_by("-created_at"))
     return render(request, "crm/portal_po_list.html", {"access": access, "orders": orders})
 
@@ -1538,5 +1538,5 @@ def portal_stock(request):
     if access is None or not access.can_view_stock:
         messages.error(request, "You don't have access to stock levels.")
         return redirect("crm:portal_dashboard" if access else "dashboard:home")
-    products = ProductStock.objects.filter(tenant=access.tenant_id, is_active=True).order_by("name")
+    products = ProductStock.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
     return render(request, "crm/portal_stock.html", {"access": access, "products": products})
