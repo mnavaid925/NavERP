@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <nav class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a> <span class="sep">›</span> <a href="{% url 'crm:onboardingplan_list' %}">Onboarding Plans</a> <span class="sep">›</span> {{ obj.number }}</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:onboardingplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:onboardingplan_delete' obj.pk %}" onsubmit="return confirm('Delete this plan?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Account</dt><dd>{% if obj.account %}<a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'completed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Target date</dt><dd>{{ obj.target_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Completed at</dt><dd>{{ obj.completed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+    <div style="margin-top:1rem;">
+      <div class="progress"><div class="progress-bar" style="width:{{ obj.progress_pct }}%"></div></div>
+      <span class="form-help">{{ obj.progress_pct }}%</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Steps</h2></div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Title</th>
+            <th>Assignee</th>
+            <th>Due</th>
+            <th>Done</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in steps %}
+          <tr>
+            <td>{{ s.order }}</td>
+            <td>{{ s.title }}</td>
+            <td>{% if s.assignee %}{{ s.assignee.get_full_name|default:s.assignee.username }}{% else %}—{% endif %}</td>
+            <td>{{ s.due_date|date:"M d, Y"|default:"—" }}</td>
+            <td>{% if s.completed_at %}<span class="badge badge-green">Done</span>{% else %}<span class="badge badge-muted">Pending</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <form method="post" action="{% url 'crm:onboardingstep_complete' s.pk %}" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon" title="{% if s.completed_at %}Reopen{% else %}Complete{% endif %}"><i data-lucide="check-circle"></i></button>
+                </form>
+                <form method="post" action="{% url 'crm:onboardingstep_delete' s.pk %}" onsubmit="return confirm('Delete this step?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="list-checks"></i>
+                <h3>No steps yet</h3>
+                <p>Add the first onboarding step below.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="{% url 'crm:onboardingstep_add' obj.pk %}" style="margin-top:1rem;">
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in step_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> Add step</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<a href="{% url 'crm:onboardingplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
