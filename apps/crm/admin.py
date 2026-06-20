@@ -2,13 +2,32 @@ from django.contrib import admin
 
 from .models import (
     AccountProfile,
+    ApprovalRequest,
     Campaign,
     Case,
     ContactProfile,
+    ContractDocument,
+    CrmMilestone,
+    CrmProject,
     CrmTask,
+    DocTemplate,
+    Expense,
+    HealthScore,
+    HealthScoreConfig,
     KnowledgeArticle,
     Lead,
+    OnboardingPlan,
+    OnboardingStep,
     Opportunity,
+    PartnerPortalAccess,
+    ProductStock,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    SignerRecord,
+    Survey,
+    Timesheet,
+    WorkflowLog,
+    WorkflowRule,
 )
 
 
@@ -78,3 +97,171 @@ class ContactProfileAdmin(admin.ModelAdmin):
     raw_id_fields = ("party", "account")
     readonly_fields = ("created_at", "updated_at")
     list_select_related = ("party", "account", "owner", "tenant")
+
+
+# ===== Module 1 Extension — Sub-modules 1.7–1.12 =============================
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display = ("number", "category", "amount", "status", "submitted_by", "opportunity", "tenant")
+    list_filter = ("status", "category", "tenant")
+    search_fields = ("number", "description")
+    raw_id_fields = ("opportunity", "project")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(CrmProject)
+class CrmProjectAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "account", "status", "start_date", "end_date", "owner", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "name")
+    raw_id_fields = ("account", "source_opportunity")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(CrmMilestone)
+class CrmMilestoneAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "kind", "status", "due_date", "assignee", "tenant")
+    list_filter = ("kind", "status", "tenant")
+    search_fields = ("number", "title")
+    raw_id_fields = ("project", "parent")
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(Timesheet)
+class TimesheetAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "employee", "date", "hours", "is_billable", "status", "tenant")
+    list_filter = ("status", "is_billable", "tenant")
+    search_fields = ("number", "description")
+    raw_id_fields = ("project", "milestone", "client")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocTemplate)
+class DocTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "template_type", "is_active", "owner", "tenant")
+    list_filter = ("template_type", "is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ContractDocument)
+class ContractDocumentAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "template", "status", "current_version", "owner", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "name")
+    raw_id_fields = ("template", "opportunity", "account")
+    readonly_fields = ("number", "signed_at", "created_at", "updated_at")
+
+
+@admin.register(SignerRecord)
+class SignerRecordAdmin(admin.ModelAdmin):
+    list_display = ("contract", "signer_name", "signer_email", "order", "signed_at", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("signer_name", "signer_email")
+    raw_id_fields = ("contract", "signer_party")
+    readonly_fields = ("token", "viewed_at", "signed_at", "declined_at", "ip_address", "created_at")
+
+
+@admin.register(WorkflowRule)
+class WorkflowRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "trigger_entity", "trigger_event", "is_active", "owner", "tenant")
+    list_filter = ("trigger_entity", "trigger_event", "is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(WorkflowLog)
+class WorkflowLogAdmin(admin.ModelAdmin):
+    list_display = ("rule", "record_label", "status", "fired_at", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("record_label", "error_msg")
+    raw_id_fields = ("rule",)
+    readonly_fields = ("rule", "record_label", "fired_at", "status", "error_msg", "tenant")
+
+
+@admin.register(ApprovalRequest)
+class ApprovalRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "subject", "approver", "status", "created_at", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "subject", "record_label")
+    raw_id_fields = ("rule", "approver", "requested_by")
+    readonly_fields = ("number", "approved_at", "rejected_at", "created_at", "updated_at")
+
+
+@admin.register(OnboardingPlan)
+class OnboardingPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "account", "status", "target_date", "owner", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "name")
+    raw_id_fields = ("account",)
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(OnboardingStep)
+class OnboardingStepAdmin(admin.ModelAdmin):
+    list_display = ("plan", "order", "title", "assignee", "due_date", "completed_at", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("title",)
+    raw_id_fields = ("plan",)
+    readonly_fields = ("completed_at", "created_at")
+
+
+@admin.register(HealthScore)
+class HealthScoreAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "score", "tier", "computed_at", "tenant")
+    list_filter = ("tier", "tenant")
+    search_fields = ("number", "account__name")
+    raw_id_fields = ("account",)
+    readonly_fields = ("number", "computed_at", "created_at", "updated_at")
+
+
+@admin.register(HealthScoreConfig)
+class HealthScoreConfigAdmin(admin.ModelAdmin):
+    list_display = ("tenant", "weight_tickets", "weight_nps", "weight_tasks",
+                    "weight_engagement", "red_threshold", "yellow_threshold")
+    readonly_fields = ("updated_at",)
+
+
+@admin.register(Survey)
+class SurveyAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "survey_type", "score", "classification",
+                    "sent_at", "responded_at", "tenant")
+    list_filter = ("survey_type", "classification", "trigger", "tenant")
+    search_fields = ("number", "feedback_text")
+    raw_id_fields = ("account", "contact", "related_case")
+    readonly_fields = ("number", "classification", "token", "responded_at", "created_at", "updated_at")
+
+
+@admin.register(ProductStock)
+class ProductStockAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "sku", "on_hand_qty", "reorder_level", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "name", "sku")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "vendor", "status", "order_date", "total_amount", "owner", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "vendor__name", "notes")
+    raw_id_fields = ("vendor",)
+    readonly_fields = ("number", "total_amount", "received_at", "created_at", "updated_at")
+
+
+@admin.register(PurchaseOrderLine)
+class PurchaseOrderLineAdmin(admin.ModelAdmin):
+    list_display = ("purchase_order", "item_name", "quantity", "unit_price", "order", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("item_name",)
+    raw_id_fields = ("purchase_order", "product")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(PartnerPortalAccess)
+class PartnerPortalAccessAdmin(admin.ModelAdmin):
+    list_display = ("number", "partner_party", "portal_user", "access_level", "is_active", "tenant")
+    list_filter = ("access_level", "is_active", "tenant")
+    search_fields = ("number", "partner_party__name", "portal_user__username")
+    raw_id_fields = ("partner_party", "portal_user")
+    readonly_fields = ("number", "accepted_at", "created_at", "updated_at")
