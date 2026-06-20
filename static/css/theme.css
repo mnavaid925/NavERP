@@ -158,13 +158,27 @@ html[dir="rtl"] .main { margin-left: 0; margin-right: var(--sidebar-w); }
 .nav-link.active { background: var(--brand-100); color: var(--brand-700); font-weight: 600; }
 html.dark .nav-link:hover, html.dark .nav-link.active { background: rgba(59,130,246,.15); color: #bfdbfe; }
 .nav-link i { width: 18px; height: 18px; flex: 0 0 auto; }
-.nav-link .nav-caret { margin-left: auto; transition: transform .15s ease; }
+.nav-caret { transition: transform .15s ease; flex: 0 0 auto; }
+.nav-link .nav-caret { margin-left: auto; width: 16px; height: 16px; }
 .nav-group.open > .nav-link .nav-caret { transform: rotate(90deg); }
-.nav-sub { margin: 2px 0 6px 1.65rem; padding-left: .6rem; border-left: 1px solid var(--border); display: none; }
+.nav-sub { margin: 2px 0 6px 1.4rem; padding-left: .5rem; border-left: 1px solid var(--border); display: none; }
 .nav-group.open > .nav-sub { display: block; }
-.nav-sub a { display: flex; align-items: center; justify-content: space-between; padding: .4rem .55rem; border-radius: var(--radius-sm); color: var(--text-muted); font-size: .86rem; }
-.nav-sub a:hover { color: var(--brand-700); background: var(--brand-50); }
-.nav-sub a.active { color: var(--brand-700); font-weight: 600; }
+
+/* Level 2 — sub-modules */
+.nav-sublink { display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .4rem .55rem; margin-top: 1px; border-radius: var(--radius-sm); color: var(--sidebar-text); font-size: .83rem; font-weight: 500; cursor: pointer; }
+.nav-sublink i { width: 14px; height: 14px; }
+.nav-sublink:hover { color: var(--brand-700); background: var(--brand-50); }
+.nav-subgroup.open > .nav-sublink { color: var(--brand-700); }
+.nav-subgroup.open > .nav-sublink .nav-caret { transform: rotate(90deg); }
+html.dark .nav-sublink:hover, html.dark .nav-subgroup.open > .nav-sublink { background: rgba(59,130,246,.12); color: #bfdbfe; }
+
+/* Level 3 — features */
+.nav-features { display: none; margin: 1px 0 4px .45rem; padding-left: .5rem; border-left: 1px solid var(--border); }
+.nav-subgroup.open > .nav-features { display: block; }
+.nav-features a { display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .32rem .5rem; border-radius: var(--radius-sm); color: var(--text-muted); font-size: .8rem; }
+.nav-features a:hover { color: var(--brand-700); background: var(--brand-50); }
+.nav-features a.active { color: var(--brand-700); font-weight: 600; background: var(--brand-50); }
+html.dark .nav-features a:hover, html.dark .nav-features a.active { background: rgba(59,130,246,.12); color: #bfdbfe; }
 .nav-roadmap { opacity: .55; cursor: not-allowed; }
 .nav-roadmap .pill-soon { font-size: .6rem; text-transform: uppercase; color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 .35rem; }
 
