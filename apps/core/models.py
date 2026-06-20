@@ -215,6 +215,10 @@ class Activity(models.Model):
     class Meta:
         ordering = ["-due_at", "-created_at"]
         verbose_name_plural = "activities"
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="activity_tenant_status_idx"),
+            models.Index(fields=["tenant", "owner"], name="activity_tenant_owner_idx"),
+        ]
 
     def __str__(self):
         return self.subject
@@ -237,6 +241,9 @@ class AuditLog(models.Model):
 
     class Meta:
         ordering = ["-at"]
+        indexes = [
+            models.Index(fields=["tenant", "at"], name="auditlog_tenant_at_idx"),
+        ]
 
     def __str__(self):
         return f"{self.get_action_display()} {self.target} @ {self.at:%Y-%m-%d %H:%M}"
