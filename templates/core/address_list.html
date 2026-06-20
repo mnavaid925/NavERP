@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Addresses{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Addresses</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Addresses</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:address_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Address</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search by line 1 or city…">
+        </div>
+        <div class="form-group">
+          <select name="kind" class="form-select">
+            <option value="">All kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="party" class="form-select">
+            <option value="">All parties</option>
+            {% for item in parties %}
+              <option value="{{ item.pk }}" {% if request.GET.party == item.pk|stringformat:"d" %}selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'core:address_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Party</th><th>Kind</th><th>Line 1</th><th>City</th><th>Country</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'core:address_detail' obj.pk %}" class="fw-600">{% if obj.party %}{{ obj.party }}{% else %}—{% endif %}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_kind_display }}</span></td>
+              <td>{{ obj.line1 }}</td>
+              <td>{% if obj.city %}{{ obj.city }}{% else %}—{% endif %}</td>
+              <td>{% if obj.country %}{{ obj.country }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'core:address_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'core:address_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'core:address_delete' obj.pk %}" onsubmit="return confirm('Delete this address?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="map-pin"></i><h3>No addresses found</h3><p>Create your first address to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
