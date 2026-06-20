@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib import messages
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -107,16 +108,18 @@ def subscription_checkout(request, pk):
 def subscription_mark_paid(request, pk):
     """Manual settlement when Stripe is not configured."""
     sub = get_object_or_404(Subscription, pk=pk, tenant=request.tenant)
-    sub.status = "active"
-    if not sub.started_on:
-        sub.started_on = timezone.localdate()
-    sub.renews_on = timezone.localdate() + timezone.timedelta(days=30)
-    sub.save()
-    SubscriptionInvoice.objects.create(
-        tenant=sub.tenant, subscription=sub, status="paid", amount=sub.amount,
-        issued_on=timezone.localdate(), paid_at=timezone.now(),
-    )
+    with transaction.atomic():
+        sub.status = "active"
+        if not sub.started_on:
+            sub.started_on = timezone.localdate()
+        sub.renews_on = timezone.localdate() + timezone.timedelta(days=30)
+        sub.save()
+        invoice = SubscriptionInvoice.objects.create(
+            tenant=sub.tenant, subscription=sub, status="paid", amount=sub.amount,
+            issued_on=timezone.localdate(), paid_at=timezone.now(),
+        )
     write_audit_log(request.user, sub, "update", {"action": "mark_paid"})
+    write_audit_log(request.user, invoice, "create")
     messages.success(request, "Subscription marked as paid and an invoice was recorded.")
     return redirect("tenants:subscription_detail", pk=sub.pk)
 
