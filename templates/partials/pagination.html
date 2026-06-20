@@ -8,13 +8,15 @@
     <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</span>
 
     {% if page_obj.has_previous %}
-      <a href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">Prev</a>
+      <a aria-label="Previous page" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">Prev</a>
     {% else %}
       <span class="page disabled">Prev</span>
     {% endif %}
 
-    {% for n in page_obj.paginator.page_range %}
-      {% if n == page_obj.number %}
+    {% for n in page_obj.window %}
+      {% if n is None %}
+        <span class="page disabled">…</span>
+      {% elif n == page_obj.number %}
         <span class="page active">{{ n }}</span>
       {% else %}
         <a class="page" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ n }}">{{ n }}</a>
@@ -22,7 +24,7 @@
     {% endfor %}
 
     {% if page_obj.has_next %}
-      <a href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">Next</a>
+      <a aria-label="Next page" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">Next</a>
     {% else %}
       <span class="page disabled">Next</span>
     {% endif %}
