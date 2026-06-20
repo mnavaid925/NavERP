@@ -423,11 +423,16 @@ def project_create(request):
 @login_required
 def project_detail(request, pk):
     obj = get_object_or_404(Project.objects.select_related("client", "org_unit"), pk=pk, tenant=request.tenant)
+    # One grouped aggregate for the cost/revenue actuals (was 5 separate .aggregate() calls — perf C2).
+    sums = {r["kind"]: r["total"] or ZERO
+            for r in obj.cost_entries.filter(status="posted").values("kind").annotate(total=Sum("amount"))}
+    actual_cost, actual_revenue = sums.get("cost", ZERO), sums.get("revenue", ZERO)
     return render(request, "accounting/project_detail.html", {
         "obj": obj,
-        "cost_entries": obj.cost_entries.select_related("gl_account")[:20],
-        "actual_cost": obj.actual_cost(), "actual_revenue": obj.actual_revenue(),
-        "variance": obj.budget_variance(), "margin": obj.margin(),
+        "cost_entries": obj.cost_entries.all()[:20],
+        "actual_cost": actual_cost, "actual_revenue": actual_revenue,
+        "variance": (obj.budget_amount or ZERO) - actual_cost,
+        "margin": actual_revenue - actual_cost,
     })
 
 
@@ -608,7 +613,7 @@ def intercompany_post(request, pk):
 @login_required
 def tax_code_list(request):
     return crud_list(
-        request, TaxCode.objects.filter(tenant=request.tenant).select_related("payable_account"),
+        request, TaxCode.objects.filter(tenant=request.tenant),
         "accounting/tax_code_list.html",
         search_fields=["name", "jurisdiction"],
         filters=[("tax_type", "tax_type", False), ("is_active", "is_active", False)],
@@ -791,9 +796,10 @@ def budget_create(request):
 @login_required
 def budget_detail(request, pk):
     obj = get_object_or_404(Budget.objects.select_related("fiscal_period"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/budget_detail.html", {
-        "obj": obj, "lines": obj.lines.select_related("gl_account", "org_unit"), "total": obj.total(),
-    })
+    # Lines are fully fetched, so sum them in Python instead of a second aggregate query (perf I4).
+    lines = list(obj.lines.select_related("gl_account", "org_unit"))
+    total = sum((ln.amount or ZERO for ln in lines), ZERO)
+    return render(request, "accounting/budget_detail.html", {"obj": obj, "lines": lines, "total": total})
 
 
 @login_required
@@ -865,13 +871,12 @@ def budget_variance(request):
         return render(request, "accounting/budget_variance.html",
                       {"budgets": [], "selected": None, "rows": [], "total_budget": ZERO,
                        "total_actual": ZERO, "total_variance": ZERO})
-    budgets = Budget.objects.filter(tenant=request.tenant)
-    selected = None
+    # Evaluate the budget list once (was re-queried for the dropdown + pk lookup + fallback — perf I5).
+    budgets = list(Budget.objects.filter(tenant=request.tenant).select_related("fiscal_period"))
     bp = request.GET.get("budget", "")
-    if bp.isdigit():
-        selected = budgets.filter(pk=int(bp)).first()
-    if selected is None:
-        selected = budgets.first()
+    selected = next((b for b in budgets if str(b.pk) == bp), None) if bp.isdigit() else None
+    if selected is None and budgets:
+        selected = budgets[0]
     rows, total_budget, total_actual = [], ZERO, ZERO
     if selected is not None:
         balances = {r["code"]: r["balance"] for r in _account_balances(request.tenant)}
@@ -891,7 +896,7 @@ def budget_variance(request):
 @login_required
 def internal_control_list(request):
     return crud_list(
-        request, InternalControl.objects.filter(tenant=request.tenant).select_related("owner"),
+        request, InternalControl.objects.filter(tenant=request.tenant),
         "accounting/internal_control_list.html",
         search_fields=["code", "name"],
         filters=[("control_type", "control_type", False), ("risk_level", "risk_level", False),
