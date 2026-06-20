@@ -336,7 +336,7 @@ def account_list(request):
     return crud_list(
         request,
         Party.objects.filter(tenant=request.tenant, kind="organization")
-        .select_related("crm_account_profile"),
+        .select_related("crm_account_profile", "crm_account_profile__owner"),
         "crm/account_list.html", search_fields=["name", "tax_id"],
         filters=[("industry", "crm_account_profile__industry", False),
                  ("source", "crm_account_profile__source", False)],
@@ -348,7 +348,8 @@ def account_list(request):
 def account_detail(request, pk):
     obj = get_object_or_404(
         Party.objects.filter(tenant=request.tenant, kind="organization")
-        .select_related("crm_account_profile")
+        .select_related("crm_account_profile", "crm_account_profile__owner",
+                        "crm_account_profile__parent_account")
         .prefetch_related("roles", "addresses", "contact_methods"),
         pk=pk)
     return render(request, "crm/account_detail.html", {
@@ -424,7 +425,7 @@ def contact_list(request):
     return crud_list(
         request,
         Party.objects.filter(tenant=request.tenant, kind="person")
-        .select_related("crm_contact_profile"),
+        .select_related("crm_contact_profile", "crm_contact_profile__account"),
         "crm/contact_list.html", search_fields=["name"],
         filters=[("source", "crm_contact_profile__source", False)],
         extra_context={"source_choices": Lead.SOURCE_CHOICES},
@@ -435,7 +436,8 @@ def contact_list(request):
 def contact_detail(request, pk):
     obj = get_object_or_404(
         Party.objects.filter(tenant=request.tenant, kind="person")
-        .select_related("crm_contact_profile")
+        .select_related("crm_contact_profile", "crm_contact_profile__account",
+                        "crm_contact_profile__owner")
         .prefetch_related("roles", "contact_methods"),
         pk=pk)
     return render(request, "crm/contact_detail.html", {
