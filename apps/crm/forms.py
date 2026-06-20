@@ -111,3 +111,187 @@ class ContactForm(TenantModelForm):
         if self.tenant is not None:
             self.fields["account"].queryset = Party.objects.filter(
                 tenant=self.tenant, kind="organization").order_by("name")
+
+
+# ============================================================================
+# ===== Module 1 Extension — Sub-modules 1.7–1.12 forms ======================
+# ============================================================================
+# TenantModelForm auto-scopes every FK/OneToOne dropdown (incl. User FKs — User has a
+# tenant field) to the active tenant, so these need no custom __init__ for scoping.
+from .models import (  # noqa: E402  (after the base forms above)
+    ApprovalRequest,
+    ContractDocument,
+    CrmMilestone,
+    CrmProject,
+    DocTemplate,
+    Expense,
+    HealthScore,
+    HealthScoreConfig,
+    OnboardingPlan,
+    OnboardingStep,
+    PartnerPortalAccess,
+    ProductStock,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    SignerRecord,
+    Survey,
+    Timesheet,
+    WorkflowRule,
+)
+
+
+class ExpenseForm(TenantModelForm):
+    class Meta:
+        model = Expense
+        fields = ["opportunity", "project", "category", "amount", "currency_code",
+                  "expense_date", "description", "receipt", "status",
+                  "submitted_by", "approved_by"]
+
+
+class CrmProjectForm(TenantModelForm):
+    class Meta:
+        model = CrmProject
+        fields = ["name", "account", "source_opportunity", "status", "start_date",
+                  "end_date", "budget", "owner", "description"]
+
+
+class CrmMilestoneForm(TenantModelForm):
+    class Meta:
+        model = CrmMilestone
+        fields = ["project", "title", "kind", "status", "assignee", "start_date",
+                  "due_date", "order", "parent", "description"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A milestone can't be its own parent.
+        if self.instance and self.instance.pk:
+            self.fields["parent"].queryset = self.fields["parent"].queryset.exclude(pk=self.instance.pk)
+
+
+class TimesheetForm(TenantModelForm):
+    class Meta:
+        model = Timesheet
+        fields = ["project", "milestone", "employee", "client", "date", "hours",
+                  "description", "is_billable", "status", "approved_by"]
+
+
+class DocTemplateForm(TenantModelForm):
+    class Meta:
+        model = DocTemplate
+        fields = ["name", "template_type", "body", "is_active", "owner"]
+        widgets = {"body": forms.Textarea(attrs={"rows": 18})}
+
+
+class ContractDocumentForm(TenantModelForm):
+    class Meta:
+        model = ContractDocument
+        fields = ["name", "template", "opportunity", "account", "current_version",
+                  "status", "body_snapshot", "expires_at", "owner"]
+        widgets = {"body_snapshot": forms.Textarea(attrs={"rows": 12})}
+
+
+class SignerRecordForm(TenantModelForm):
+    """Inline on the ContractDocument detail page; tenant/contract/token set in the view."""
+
+    class Meta:
+        model = SignerRecord
+        fields = ["signer_party", "signer_name", "signer_email", "order"]
+
+
+class WorkflowRuleForm(TenantModelForm):
+    class Meta:
+        model = WorkflowRule
+        fields = ["name", "is_active", "trigger_entity", "trigger_event", "trigger_field",
+                  "trigger_value", "conditions", "actions", "delay_value", "delay_unit", "owner"]
+        widgets = {"conditions": forms.Textarea(attrs={"rows": 4}),
+                   "actions": forms.Textarea(attrs={"rows": 4})}
+
+
+class ApprovalRequestForm(TenantModelForm):
+    class Meta:
+        model = ApprovalRequest
+        fields = ["rule", "subject", "record_label", "approver", "requested_by",
+                  "threshold_field", "threshold_value"]
+
+
+class OnboardingPlanForm(TenantModelForm):
+    class Meta:
+        model = OnboardingPlan
+        fields = ["account", "name", "status", "target_date", "owner", "description"]
+
+
+class OnboardingStepForm(TenantModelForm):
+    """Inline on the OnboardingPlan detail page; tenant/plan set in the view."""
+
+    class Meta:
+        model = OnboardingStep
+        fields = ["order", "title", "description", "assignee", "due_date"]
+
+
+class HealthScoreForm(TenantModelForm):
+    """Manual score entry/override; breakdown + computed_at are system-set."""
+
+    class Meta:
+        model = HealthScore
+        fields = ["account", "score", "tier"]
+
+    def clean_account(self):
+        # One score row per account (unique_together) — block a duplicate at the form
+        # level so a manual create returns a friendly error instead of an IntegrityError 500.
+        account = self.cleaned_data.get("account")
+        if account is not None and self.tenant is not None:
+            qs = HealthScore.objects.filter(tenant=self.tenant, account=account)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError("A health score already exists for this account — edit or recompute it instead.")
+        return account
+
+
+class HealthScoreConfigForm(TenantModelForm):
+    class Meta:
+        model = HealthScoreConfig
+        fields = ["weight_tickets", "weight_nps", "weight_tasks", "weight_engagement",
+                  "red_threshold", "yellow_threshold"]
+
+
+class SurveyForm(TenantModelForm):
+    class Meta:
+        model = Survey
+        fields = ["account", "contact", "survey_type", "trigger", "related_case",
+                  "score", "feedback_text", "sent_at"]
+
+
+class ProductStockForm(TenantModelForm):
+    class Meta:
+        model = ProductStock
+        fields = ["name", "sku", "on_hand_qty", "reorder_level", "unit_cost",
+                  "is_active", "description"]
+
+
+class PurchaseOrderForm(TenantModelForm):
+    class Meta:
+        model = PurchaseOrder
+        fields = ["vendor", "status", "order_date", "expected_date", "notes", "owner"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Vendors are organization Parties.
+        if self.tenant is not None:
+            self.fields["vendor"].queryset = Party.objects.filter(
+                tenant=self.tenant, kind="organization").order_by("name")
+
+
+class PurchaseOrderLineForm(TenantModelForm):
+    """Inline on the PurchaseOrder form/detail; tenant/purchase_order set in the view."""
+
+    class Meta:
+        model = PurchaseOrderLine
+        fields = ["item_name", "product", "quantity", "unit_price", "order"]
+
+
+class PartnerPortalAccessForm(TenantModelForm):
+    class Meta:
+        model = PartnerPortalAccess
+        fields = ["partner_party", "portal_user", "access_level", "can_view_stock",
+                  "can_register_leads", "is_active"]
