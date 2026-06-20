@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:contact_list' %}">Contacts</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:party_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Manage in Core</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd></div>
+      <div class="detail-item"><dt>Roles</dt><dd>{% for r in obj.roles.all %}<span class="badge badge-info">{{ r.get_role_display }}</span> {% empty %}—{% endfor %}</dd></div>
+      <div class="detail-item"><dt>Contact methods</dt><dd>{% for c in obj.contact_methods.all %}{{ c.get_kind_display }}: {{ c.value }}<br>{% empty %}—{% endfor %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="layout-2col">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Opportunities</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th></tr></thead>
+          <tbody>
+            {% for opp in opportunities %}
+              <tr>
+                <td><a href="{% url 'crm:opportunity_detail' opp.pk %}" class="fw-600">{{ opp.number }}</a></td>
+                <td>{{ opp.name }}</td>
+                <td>{% if opp.account %}{{ opp.account.name }}{% else %}—{% endif %}</td>
+                <td>{{ opp.get_stage_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="target"></i><p>No opportunities for this contact.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Cases</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Subject</th><th>Priority</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for case in cases %}
+              <tr>
+                <td><a href="{% url 'crm:case_detail' case.pk %}" class="fw-600">{{ case.number }}</a></td>
+                <td>{{ case.subject }}</td>
+                <td>{{ case.get_priority_display }}</td>
+                <td>{{ case.get_status_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="life-buoy"></i><p>No cases for this contact.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <a href="{% url 'crm:contact_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to contacts</a>
+{% endblock %}
