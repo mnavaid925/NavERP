@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Checkout{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Checkout</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Checkout</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if result == 'success' %}
+      <div class="badge badge-green">Payment successful</div>
+      <p class="text-muted">Your subscription is being activated.</p>
+    {% else %}
+      <div class="badge badge-amber">Checkout cancelled</div>
+    {% endif %}
+    <div style="margin-top:1rem;">
+      {% if obj %}
+        <a class="btn btn-primary" href="{% url 'tenants:subscription_detail' obj.pk %}">Back to subscription</a>
+      {% else %}
+        <a class="btn btn-outline" href="{% url 'tenants:subscription_list' %}">Back to subscriptions</a>
+      {% endif %}
+    </div>
+  </div></div>
+{% endblock %}
