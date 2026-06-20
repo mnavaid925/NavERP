@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Ledger · {{ obj.code }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} · {{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><a href="{% url 'accounting:glaccount_list' %}">Chart of Accounts</a><span class="sep">›</span><span>Ledger</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:glaccount_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="landmark"></i> Account</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Entry</th><th>Description</th><th>Debit</th><th>Credit</th><th>Running Balance</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.line.entry.entry_date|date:"M d, Y" }}</td>
+              <td><a href="{% url 'accounting:journal_entry_detail' r.line.entry.pk %}" class="fw-600">{{ r.line.entry.number }}</a></td>
+              <td>{{ r.line.description|truncatechars:60|default:"—" }}</td>
+              <td>{{ r.line.debit|floatformat:2 }}</td>
+              <td>{{ r.line.credit|floatformat:2 }}</td>
+              <td class="fw-600">{{ r.running|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No posted lines</h3><p>This account has no posted journal activity yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:glaccount_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to account</a>
+{% endblock %}
