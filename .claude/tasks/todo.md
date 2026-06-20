@@ -14,10 +14,19 @@ Scope decisions: **Module-0 core spine only** · **real Stripe sandbox** (with n
 - [x] **Phase 3 — Backends**: core (spine + middleware/decorators/nav/crud/utils/context_processors), accounts (User/Role/Permission/UserInvite + auth + RBAC), tenants (0.1 + Stripe), dashboard. Seeders for all three.
 - [x] **Phase 4 — Config wiring**: config/urls.py, then config/settings.py LAST → `manage.py check` clean (L24).
 - [x] **Phase 5 — DB**: created `nav_erp`; makemigrations + migrate clean on MariaDB 10.4 (L23 shim proven); seed_core/seed_accounts/seed_tenants all ran (idempotent).
-- [~] **Templates**: shell + canonical party_* written; remaining ~52 CRUD templates generating via Workflow (core/accounts/tenants).
-- [ ] **Phase 6 — Verify**: runserver smoke + test-client sweep (all url names 200/302, no comment leak, IDOR→404, admin-gating), browser screenshots.
-- [ ] **Phase 7 — Review agents** (mandatory, in order): code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer. Commit per file.
-- [ ] **README** update (setup/.env/run/seed logins; MFA/SSO + django-axes roadmap notes).
+- [x] **Templates**: shell + canonical party_* hand-written; remaining 52 CRUD templates generated via Workflow (8 agents). 69 templates total.
+- [x] **Phase 6 — Verify**: test-client sweep over 72 URLs (all 200/302, no comment leak), IDOR→404, admin→403; browser screenshots of login + dashboard; no console errors.
+- [x] **Phase 7 — Review agents** (all 7, in order, fixes applied + committed per file): code-reviewer (open-redirect, logout POST, atomic mark-paid, orphan-create guard) · explorer (clean; stale-snapshot false alarm) · frontend-reviewer (windowed pagination, theme utilities, a11y labels, alt, toast) · performance-reviewer (N+1, indexes, branding accessor, health subquery, numbering retry) · qa-smoke-tester (49 checks, 0 fail) · security-reviewer (upload limits, SECRET_KEY fail-hard, invite guards, branding CSS-injection defense) · test-writer (**298 tests passing, 89% cover**).
+- [x] **README** rewritten (setup/.env/run/seed logins/Stripe/testing + MFA-SSO-axes-media roadmap notes).
+
+## Review (outcome)
+
+**Status: Module 0 foundation + sub-module 0.1 — COMPLETE and verified. ✅**
+
+- 4 apps (core/accounts/tenants/dashboard) + config; ~130 files; one-file-per-commit to `main` (not pushed).
+- `manage.py check` clean; `migrate` clean on MariaDB 10.4 (L23 shim proven); 3 idempotent seeders; 298 pytest green under SQLite test settings.
+- Stripe test-mode billing with signature-verified webhook + manual fallback. Multi-tenant isolation, RBAC, audit, reveal-once keys, white-label branding all working and tested.
+- Next: build modules 1–13 with the `/next-module` skill, reusing the unified core.
 
 ## Demo logins (after seed)
 - Superuser: `admin` / `admin` (tenant=None → no module data, by design).
