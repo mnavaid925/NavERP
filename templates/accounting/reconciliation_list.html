@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Reconciliations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reconciliations</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Reconciliations</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:reconciliation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Match</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search reconciliations…">
+        </div>
+        <div class="form-group">
+          <select name="is_confirmed" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_confirmed == 'True' %}selected{% endif %}>Confirmed</option>
+            <option value="False" {% if request.GET.is_confirmed == 'False' %}selected{% endif %}>Unconfirmed</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounting:reconciliation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Bank Txn</th><th>Date</th><th>Payment</th><th>Matched By</th><th>Confirmed</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounting:reconciliation_detail' obj.pk %}" class="fw-600">{% if obj.bank_transaction %}{{ obj.bank_transaction.description|truncatechars:40|default:"—" }}{% else %}—{% endif %}</a></td>
+              <td>{% if obj.bank_transaction %}{{ obj.bank_transaction.transaction_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.payment %}{{ obj.payment.number }}{% else %}—{% endif %}</td>
+              <td>{% if obj.matched_by %}{{ obj.matched_by.get_full_name|default:obj.matched_by.username }}{% else %}—{% endif %}</td>
+              <td>{% if obj.is_confirmed %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounting:reconciliation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <form method="post" action="{% url 'accounting:reconciliation_confirm' obj.pk %}" onsubmit="return confirm('{% if obj.is_confirmed %}Unconfirm{% else %}Confirm{% endif %} this match?');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_confirmed %}Unconfirm{% else %}Confirm{% endif %}"><i data-lucide="{% if obj.is_confirmed %}x{% else %}check{% endif %}"></i></button>
+                  </form>
+                  <form method="post" action="{% url 'accounting:reconciliation_delete' obj.pk %}" onsubmit="return confirm('Delete this match?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No reconciliations found</h3><p>Match a bank transaction to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
