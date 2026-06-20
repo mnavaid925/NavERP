@@ -118,11 +118,17 @@ def fixed_asset_edit(request, pk):
 @login_required
 @require_POST
 def fixed_asset_delete(request, pk):
-    asset = get_object_or_404(FixedAsset, pk=pk, tenant=request.tenant)
-    if asset.accumulated_depreciation or asset.disposals.exists():
-        messages.error(request, "Cannot delete an asset that has been depreciated or disposed.")
-        return redirect("accounting:fixed_asset_detail", pk=pk)
-    return crud_delete(request, model=FixedAsset, pk=pk, success_url="accounting:fixed_asset_list")
+    # Lock the row and re-check the guard + delete in one transaction so a concurrent depreciation
+    # run can't slip a row in between the check and the delete (code-review #3).
+    with transaction.atomic():
+        asset = get_object_or_404(FixedAsset.objects.select_for_update(), pk=pk, tenant=request.tenant)
+        if asset.accumulated_depreciation or asset.disposals.exists():
+            messages.error(request, "Cannot delete an asset that has been depreciated or disposed.")
+            return redirect("accounting:fixed_asset_detail", pk=pk)
+        write_audit_log(request.user, asset, "delete")
+        asset.delete()
+    messages.success(request, "Deleted successfully.")
+    return redirect("accounting:fixed_asset_list")
 
 
 @tenant_admin_required
