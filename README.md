@@ -149,7 +149,28 @@ Three design ideas hold the whole platform together:
   > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
   > the spine when those modules land.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite (850 project-wide).
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite (924 project-wide).
+
+### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.5
+
+The first domain module to **own the GL ledger spine** (no core ledger existed — see lesson L28). Double-entry
+throughout: journal entries post only when debits equal credits, posted entries are immutable (corrected via a
+reversal), account balances are always *derived* from posted lines, and posting into a closed period is blocked.
+
+- **2.1 Dashboard** — cash-position / AR / AP KPI cards, overdue alert centre, 6-week net-cash Chart.js trend, quick actions.
+- **2.2 General Ledger** — hierarchical **Chart of Accounts**, **Journal Entries** (`JE-#####`) with an inline
+  debit/credit line formset + post/void(reversal) workflow, **Fiscal Periods** with admin close, **Currencies**
+  (global) + per-tenant **Exchange Rates**, plus **Trial Balance** and per-account **Ledger** reports.
+- **2.3 Accounts Payable** — **Vendor Profiles** (on `core.Party`), **Bills** (`BILL-#####`) with line items +
+  approval routing + document attachment, **AP Aging**, **Payment Terms**.
+- **2.4 Accounts Receivable** — **Customer Profiles** (credit limit/hold), **Invoices** (`INV-#####`) + credit notes
+  with a line formset and credit-limit warning, **Cash Application** (payment→invoice allocation), **AR Aging**.
+- **Payments** — unified inbound/outbound **Payments** (`PAY-#####`) whose confirm/void post (and reverse) balanced
+  GL entries; invoice/bill status derives from confirmed allocations.
+- **2.5 Cash Management** — **Bank Accounts** (last-4 only) with a live balance, **Bank Transactions** (manual +
+  CSV import, deduped on external ref), **Reconciliation** matching.
+
+Full CRUD, tenant isolation, working filters, an idempotent `seed_accounting`, and a **74-test** accounting suite.
 
 ---
 
@@ -252,6 +273,7 @@ venv\Scripts\python.exe manage.py seed_core
 venv\Scripts\python.exe manage.py seed_accounts
 venv\Scripts\python.exe manage.py seed_tenants
 venv\Scripts\python.exe manage.py seed_crm
+venv\Scripts\python.exe manage.py seed_accounting
 
 # 6. Start the development server
 venv\Scripts\python.exe manage.py runserver
@@ -527,7 +549,7 @@ Before deploying:
 |---|--------|----------|--------|
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
-| 2 | Accounting & Finance | `accounting` | Roadmap |
+| 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.5 built (dashboard/analytics; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP: vendor profiles, bills, payments, AP aging; AR: customer profiles, invoices, cash application, AR aging; Cash: bank accounts, transactions + CSV import, reconciliation) |
 | 3 | Human Resource Management (HRM) | `hrm` | Roadmap |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
