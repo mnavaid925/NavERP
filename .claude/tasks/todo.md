@@ -848,5 +848,40 @@ git add 'README.md'; git commit -m 'docs(readme): add CRM 1.7-1.12 sub-modules t
 >   the rest of the plan stands — all their FKs target `crm.*`, `core.Party`, or the user model,
 >   which all exist).
 
-## Review notes
-(filled in after close-out)
+## Review notes — CRM 1.7–1.12 COMPLETE ✅ (2026-06-20)
+
+- **Built:** 18 CRM-owned models (migration `0005`) across all six sub-modules + `compute_health_score`
+  service; full CRUD via `apps/core/crud` helpers + custom actions; 52 templates; idempotent
+  `seed_crm._seed_extension`; LIVE_LINKS 1.7–1.12; admin for all models. Reused `core.Party` +
+  `crm.Opportunity/Case` + the user model only — **spine-gap adaptation** applied (CRM-owned
+  PurchaseOrder/PurchaseOrderLine/ProductStock, `Expense.currency_code` CharField, health from CRM signals).
+- **Module Creation Sequence (research → todo → code → 7 review agents → skill, one file per commit, no push):**
+  - research → `research-crm-1.7-1.12.md` (12 products: Vtiger/Bitrix24/Zoho/Salesforce/HubSpot/PandaDoc/Gainsight/…).
+  - todo → this plan; build-time re-plan committed for the missing spine.
+  - **code-reviewer** → 8 fixes (sign_document `select_for_update` double-sign race, public survey score clamp,
+    expense/approval approve+reject `@tenant_admin_required`, portal `_portal_access` pinned to tenant, PO
+    add/remove-line atomic + receive guard, onboarding step-complete tenant filter, `compute_health_score` atomic);
+    1 false-positive (boolean filter) verified working on MariaDB.
+  - **explorer** → restored the unreachable `opportunity_to_project` UI action; portal views use `request.tenant`.
+  - **frontend-reviewer** → public-page `|safe` XSS removed; `obj.created`→`created_at`; 28 list/form consistency
+    fixes (aria-label, filter form-groups, table-wrap restructure, `non_field_errors`) + 6 detail polish fixes.
+  - **performance-reviewer** → onboardingplan_list `prefetch_related(steps)` (N+1), defer body/body_snapshot/error_msg
+    on lists, `.only()` filter dropdowns, precomputed onboarding progress, paginated portal lists.
+    (Skipped the suggested child-table composite indexes — Django already auto-indexes the FK columns those reverse
+    lookups filter on.)
+  - **qa-smoke-tester** → 51/51 PASS; surfaced the required inline `order` field → dropped from the 3 inline forms,
+    auto-assigned in the views.
+  - **security-reviewer** → "not safe to ship" → fixed: mass-assignment on Expense/Contract/ProductStock/Timesheet
+    forms (system fields excluded), `Expense.receipt` extension+size allowlist, `health_config_edit`/`crm_po_receive`
+    `@tenant_admin_required`, contract expiry check on signing, survey feedback length cap, new `expense_submit`
+    (owner draft→submitted). All proven via direct exploit-attempt checks.
+  - **test-writer** → 194 new tests (`test_ext_models/views/security.py`); **apps/crm 552 passed, full project 850
+    passed, 0 failed** (exit 0 confirmed). No product bugs surfaced — security regressions locked in.
+- **Skill:** `.claude/skills/crm/SKILL.md` extended with the 1.7–1.12 model table, custom actions, security
+  conventions, seeder/LIVE_LINKS/perf notes. **README** roadmap/feature/route sections updated.
+- `manage.py check` clean; migrate clean on `nav_erp`; `seed_crm` idempotent; throwaway `temp/crm_smoke_ext.py`
+  green (all `crm:*` 200/302, public endpoints 200, IDOR→404, no comment leaks). One file per commit to `main`;
+  **not pushed** (user pushes).
+- **Deferred** (documented): Stripe/DocuSign/S3/SMTP integrations, Celery scheduled workflow actions, multi-level
+  approval chains, Gantt drag-reschedule, AI doc generation, partner self-service lead/PO, and migrating 1.12 onto
+  the real Inventory/Procurement spine once Modules 5/6 land.
