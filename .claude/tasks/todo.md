@@ -37,3 +37,36 @@ Scope decisions: **Module-0 core spine only** · **real Stripe sandbox** (with n
 - One file per commit, PowerShell-safe, to `main`; never push (user pushes).
 - ERD-silent choices committed: Activity.subject; UserInvite 7-day token; HealthMetric time-series; EncryptionKey prefix+sha256 reveal-once (L25); sessions idle 30m / absolute 12h; tenant from `user.tenant` (subdomain routing = roadmap).
 - Stripe: webhook is the only CSRF-exempt endpoint (signature-verified, idempotent); blank keys → manual mark-paid.
+
+---
+
+# Module 1 — CRM (sub-modules 1.1 → 1.6)
+
+Plan: `C:\Users\user\.claude\plans\groovy-splashing-hopper.md`. Reuses the unified core spine
+(Accounts/Contacts = `core.Party`); CRM adds 6 own tables. One file per commit to `main`, no push.
+
+## Backend (`apps/crm/`)
+- [ ] `__init__.py`, `apps.py` (AppConfig `apps.crm`)
+- [ ] `models.py` — abstract `TenantNumbered` + Lead/Opportunity/Campaign/Case/KnowledgeArticle/CrmTask
+- [ ] `forms.py` — 6 `TenantModelForm`s
+- [ ] `views.py` — CRUD (crud.py helpers) + account/contact lenses + lead_convert + overview
+- [ ] `urls.py` (`app_name='crm'`), `admin.py`
+- [ ] `migrations/0001_initial.py` (generated)
+- [ ] `seed_crm.py` (idempotent)
+
+## Wire-up
+- [ ] `config/settings.py` → `apps.crm`; `config/urls.py` → `crm/` include
+- [ ] `apps/core/navigation.py` → LIVE_LINKS 1.1–1.6
+
+## Templates (`templates/crm/`)
+- [ ] 6 models × (list, detail, form) + account/contact (list, detail) + overview
+
+## Verify
+- [ ] makemigrations+migrate; seed_crm ×2 (idempotent); `manage.py check`
+- [ ] temp/ smoke: crm:* urls 200/302, no comment leaks, cross-tenant IDOR → 404; sidebar Live
+
+## Close-out
+- [ ] Review agents (code→explorer→frontend→perf→qa→security→test-writer) + `.claude/skills/crm/SKILL.md` + README
+
+## Review notes
+(to fill in at the end)
