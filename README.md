@@ -122,8 +122,11 @@ Three design ideas hold the whole platform together:
   and system-set `resolved_at`. **Knowledge Base** (`KB-#####`) articles with internal/external visibility and a
   view counter.
 - **Tasks** (`TASK-#####`) — to-dos/calls/follow-ups with priority, due date, and system-set `completed_at`.
-- **Accounts & Contacts** are read-only **lenses over the shared `core.Party`** master (one record, many roles) —
-  no duplicate customer/contact tables; mutations route to the core party pages.
+- **Accounts & Contacts** are the shared **`core.Party`** identity (one record, many roles) enriched with CRM-owned
+  one-to-one **`AccountProfile`** (industry, website, revenue, employees, parent company, address) and
+  **`ContactProfile`** (job title, department, phone/mobile, employer account, address) extensions — **full CRUD**
+  in CRM, no duplicate customer/contact tables. Deleting an account/contact removes the shared Party and is
+  **tenant-admin-only** (cross-module impact).
 - A CRM **overview** (analytics) page: stat cards (open leads, pipeline, weighted forecast, win rate, open
   cases/tasks, active campaigns) + pipeline-by-stage and leads-by-rating charts. Full CRUD, tenant isolation,
   filters, an idempotent `seed_crm`, and a 242-test suite.
