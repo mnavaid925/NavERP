@@ -113,6 +113,13 @@ class BrandingSetting(models.Model):
     class Meta:
         ordering = ["-updated_at"]
 
+    def save(self, *args, **kwargs):
+        # Enforce the hex validator on every save (defense-in-depth vs CSS injection
+        # into inline style= — covers programmatic writes that bypass the form).
+        HEX_COLOR(self.primary_color)
+        HEX_COLOR(self.accent_color)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Branding · {self.tenant}"
 
