@@ -821,5 +821,32 @@ git add 'README.md'; git commit -m 'docs(readme): add CRM 1.7-1.12 sub-modules t
 - **Recurring invoice schedule (`crm.RecurringInvoice`)** — frequency/next_run_date scheduling; deferred to the Accounting module or a dedicated billing pass once `core.Invoice` is fully wired.
 - **Profit margin annotation on Opportunity list** — the detail page shows `amount − SUM(approved expenses)`; displaying this as a column on the list page requires an annotation subquery and is a performance pass.
 
+## Spine-gap adaptation (build-time re-plan — 2026-06-20)
+
+> The research/todo plan assumed unified-core master tables (`core.Item`, `core.Currency`,
+> `core.Invoice`/`Payment` AR-AP ledger, `core.PurchaseOrder`/`PurchaseOrderLine`,
+> `core.StockMove`) already exist. They do **not** — the foundation (Module 0) built only
+> `Party/PartyRole/Address/ContactMethod/PartyRelationship/Employment/Activity/AuditLog/Document`
+> in `core`, plus `Subscription/SubscriptionInvoice/BrandingSetting/EncryptionKey/HealthMetric`
+> in `tenants`. The AR/AP ledger + Item/Currency/StockMove/PurchaseOrder masters belong to the
+> still-unbuilt Accounting (2), Inventory (5) and Procurement (6) modules. Adaptation, keeping
+> every model self-contained or reusing only what exists (`core.Party`, `settings.AUTH_USER_MODEL`,
+> `crm.Opportunity/Case`):
+>
+> - **1.7 Expense** — drop `currency` FK→`core.Currency`; use `currency_code` CharField (default `"USD"`).
+> - **1.11 HealthScoreConfig** — weight signals are `tickets / nps / tasks / engagement` (drop
+>   `payments`, which needs the Accounting ledger). `compute_health_score()` derives from
+>   `crm.Case` (open/overdue), `crm.Survey` (latest NPS), `crm.CrmTask` (completion), and
+>   `crm.Opportunity` (open-deal engagement) — all existing CRM data.
+> - **1.12 Purchase Orders / Stock** — build CRM-owned `PurchaseOrder` [PO-] + `PurchaseOrderLine`
+>   (child) and `ProductStock` [STK-] instead of writing to non-existent `core.PurchaseOrder` /
+>   `core.StockMove`. Vendor = `core.Party` (organization). `crm_po_generate_bill` becomes
+>   `crm_po_receive` (marks the PO received + bumps `ProductStock.on_hand_qty`). The partner
+>   portal stock view reads `ProductStock`. When the Procurement/Inventory modules land, these
+>   can migrate onto the spine.
+> - Net model count: **18** definitions (adds `PurchaseOrder`, `PurchaseOrderLine`, `ProductStock`;
+>   the rest of the plan stands — all their FKs target `crm.*`, `core.Party`, or the user model,
+>   which all exist).
+
 ## Review notes
 (filled in after close-out)
