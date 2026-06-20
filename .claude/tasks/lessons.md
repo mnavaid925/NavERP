@@ -260,3 +260,21 @@ STOP and re-plan (CLAUDE.md): build a self-contained CRM-owned stand-in (e.g. CR
 `Expense.currency_code` CharField, health from existing CRM signals), document the adaptation in `todo.md`, and note
 the future migration onto the spine. The research/todo agent prompts should be told to verify entity existence, not
 trust the ERD doc.
+
+## L29 — Module 2 (`accounting`) now OWNS the financial ledger spine — later modules FK into `accounting.*`
+Resolving the L28 gap for the domain it belongs to: **Module 2 (`apps/accounting`) builds and owns the GL ledger**
+the foundation never built. As-built (`grep -n "^class" apps/accounting/models.py`): `Currency` (GLOBAL — no tenant
+FK), `ExchangeRate`, `GLAccount` (Chart of Accounts; balance is DERIVED, no stored field), `FiscalPeriod`,
+`JournalEntry`/`JournalLine` (append-only; immutable once posted — correct via a reversal), `PaymentTerm`,
+`VendorProfile`/`CustomerProfile` (OneToOne on `core.Party` — vendors/customers stay PartyRoles), `Invoice`/
+`InvoiceLine`, `Bill`/`BillLine`, `Payment`/`PaymentAllocation`, `BankAccount`, `BankTransaction`,
+`ReconciliationMatch`. **Rule for future modules:** the AR/AP ledger, journal posting, multi-currency, and bank
+masters are REAL now — when HRM payroll, Inventory costing, Procurement POs, Sales orders, or Assets depreciation
+need to post financial effects, FK into `accounting.*` **by string** (e.g. `models.ForeignKey('accounting.JournalEntry', ...)`,
+`('accounting.GLAccount', ...)`, `('accounting.Currency', ...)`) and post through a balanced `JournalEntry`/
+`JournalLine` inside `transaction.atomic()` — do NOT build a second ledger or a stand-in (that was only justified in
+CRM 1.7–1.12 because accounting didn't exist yet). Still UNBUILT spine masters (verify before reuse, per L28):
+`Item`/`UOM`/`StockMove`/`LotSerial` (Inventory, Module 5), `PurchaseOrder`/`GoodsReceipt` (Procurement, Module 6),
+`SalesOrder` (Sales, Module 8). Two deliberate accounting shortcuts to migrate later: the auto-posting heuristic
+picks the first `1100`/`2000`-prefixed GL account (should be per-tenant configurable control accounts), and there is
+no invoice/bill **void** action yet (only JE/payment void).
