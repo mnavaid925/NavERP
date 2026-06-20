@@ -30,7 +30,7 @@
             <tr>
               <td><a href="{% url 'accounts:role_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
               <td>{{ obj.description|default:"—" }}</td>
-              <td>{{ obj.permissions.count }}</td>
+              <td>{{ obj.perm_count }}</td>
               <td>{% if obj.is_system %}<span class="badge badge-slate">System</span>{% else %}<span class="badge badge-info">Custom</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
