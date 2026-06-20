@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Reconciliation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reconciliation Match</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:reconciliation_list' %}">Reconciliations</a><span class="sep">›</span><span>Match</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'accounting:reconciliation_confirm' obj.pk %}" onsubmit="return confirm('{% if obj.is_confirmed %}Unconfirm{% else %}Confirm{% endif %} this match?');">
+        {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="{% if obj.is_confirmed %}x{% else %}check{% endif %}"></i> {% if obj.is_confirmed %}Unconfirm{% else %}Confirm{% endif %}</button>
+      </form>
+      <form method="post" action="{% url 'accounting:reconciliation_delete' obj.pk %}" onsubmit="return confirm('Delete this match?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Bank Transaction</dt><dd>{% if obj.bank_transaction %}<a href="{% url 'accounting:bank_transaction_detail' obj.bank_transaction.pk %}">{{ obj.bank_transaction.description|truncatechars:60|default:"—" }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Transaction Date</dt><dd>{% if obj.bank_transaction %}{{ obj.bank_transaction.transaction_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{% if obj.bank_transaction %}{{ obj.bank_transaction.amount|floatformat:2 }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Payment</dt><dd>{% if obj.payment %}<a href="{% url 'accounting:payment_detail' obj.payment.pk %}">{{ obj.payment.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Journal Line</dt><dd>{% if obj.journal_line %}{{ obj.journal_line.entry.number }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Matched By</dt><dd>{% if obj.matched_by %}{{ obj.matched_by.get_full_name|default:obj.matched_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Confirmed</dt><dd>{% if obj.is_confirmed %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'accounting:reconciliation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
