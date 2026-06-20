@@ -8,9 +8,11 @@
     </div>
     <div class="page-actions">
       {% if obj.status == 'draft' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'accounting:invoice_post' obj.pk %}" onsubmit="return confirm('Post and send this invoice?');">
           {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Post</button>
         </form>
+        {% endif %}
       {% endif %}
       {% if not obj.is_locked %}
         {% if obj.status == 'draft' or obj.status == 'sent' %}
