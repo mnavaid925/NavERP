@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Projects</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Projects
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:crmproject_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Project</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search projects…">
+      <select name="status" class="form-select">
+        <option value="">All statuses</option>
+        {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:crmproject_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Name</th>
+            <th>Account</th>
+            <th>Status</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Budget</th>
+            <th>Owner</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'crm:crmproject_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.account.name|default:"—" }}</td>
+            <td>
+              {% if obj.status == 'planning' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'completed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.start_date|date:"M d, Y"|default:"—" }}</td>
+            <td>{{ obj.end_date|date:"M d, Y"|default:"—" }}</td>
+            <td>{{ obj.budget }}</td>
+            <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:crmproject_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'crm:crmproject_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'crm:crmproject_delete' obj.pk %}" onsubmit="return confirm('Delete this project?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="folder-kanban"></i>
+                <h3>No projects found</h3>
+                <p>Create a project to start tracking delivery work.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
