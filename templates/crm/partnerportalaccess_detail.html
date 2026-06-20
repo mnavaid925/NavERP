@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:partnerportalaccess_list' %}">Partner Portal Access</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:partnerportalaccess_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:partnerportalaccess_delete' obj.pk %}" onsubmit="return confirm('Delete this access record?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt>Number</dt>
+        <dd>{{ obj.number }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Partner</dt>
+        <dd>{% if obj.partner_party %}<a href="{% url 'crm:account_detail' obj.partner_party.pk %}">{{ obj.partner_party.name }}</a>{% else %}—{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Portal user</dt>
+        <dd>{% if obj.portal_user %}{{ obj.portal_user.username }}{% else %}—{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Access level</dt>
+        <dd>
+          {% if obj.access_level == 'read_only' %}<span class="badge badge-slate">{{ obj.get_access_level_display }}</span>
+          {% elif obj.access_level == 'lead_register' %}<span class="badge badge-info">{{ obj.get_access_level_display }}</span>
+          {% elif obj.access_level == 'full' %}<span class="badge badge-green">{{ obj.get_access_level_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_access_level_display }}</span>{% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt>Can view stock</dt>
+        <dd>{{ obj.can_view_stock|yesno:"Yes,No" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Can register leads</dt>
+        <dd>{{ obj.can_register_leads|yesno:"Yes,No" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Active</dt>
+        <dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Accepted at</dt>
+        <dd>{{ obj.accepted_at|date:"M d, Y H:i"|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Created</dt>
+        <dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </div>
+    </dl>
+  </div>
+</div>
+
+<a href="{% url 'crm:partnerportalaccess_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
