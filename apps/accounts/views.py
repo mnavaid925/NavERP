@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -176,7 +177,8 @@ def user_delete(request, pk):
 @tenant_admin_required
 def role_list(request):
     return crud_list(
-        request, Role.objects.filter(tenant=request.tenant).prefetch_related("permissions"),
+        request,
+        Role.objects.filter(tenant=request.tenant).annotate(perm_count=Count("permissions")),
         "accounts/role_list.html", search_fields=["name", "description"],
     )
 
