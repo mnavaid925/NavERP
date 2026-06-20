@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}CRM Overview{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">CRM Overview</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>CRM</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:lead_create' %}" class="btn btn-outline"><i data-lucide="user-plus"></i> New Lead</a>
+      <a href="{% url 'crm:opportunity_create' %}" class="btn btn-primary"><i data-lucide="target"></i> New Opportunity</a>
+    </div>
+  </div>
+
+  {% if not request.tenant %}
+    <div class="card"><div class="card-body text-muted">
+      You're signed in as a superuser with no tenant, so CRM data is empty by design.
+      Sign in as a tenant admin (e.g. <strong>admin_acme / password</strong>) to explore the data.
+    </div></div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user-plus"></i></div><div class="stat-value">{{ stats.open_leads }}</div><div class="stat-label">Open Leads</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.pipeline|floatformat:0 }}</div><div class="stat-label">Open Pipeline</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="gauge"></i></div><div class="stat-value">{{ stats.weighted|floatformat:0 }}</div><div class="stat-label">Weighted Forecast</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="percent"></i></div><div class="stat-value">{{ stats.win_rate }}%</div><div class="stat-label">Win Rate</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="life-buoy"></i></div><div class="stat-value">{{ stats.open_cases }}</div><div class="stat-label">Open Cases</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="check-square"></i></div><div class="stat-value">{{ stats.open_tasks }}</div><div class="stat-label">Open Tasks</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="megaphone"></i></div><div class="stat-value">{{ stats.active_campaigns }}</div><div class="stat-label">Active Campaigns</div></div>
+  </div>
+
+  <div class="layout-2col">
+    <div class="card">
+      <div class="card-header">
+        <h3>Pipeline by stage</h3>
+        <a href="{% url 'crm:opportunity_list' %}" class="btn btn-sm btn-outline">View all</a>
+      </div>
+      <div class="card-body"><canvas id="stageChart" height="140"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>Leads by rating</h3>
+        <a href="{% url 'crm:lead_list' %}" class="btn btn-sm btn-outline">View all</a>
+      </div>
+      <div class="card-body"><canvas id="ratingChart" height="180"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Recent opportunities</h3>
+      <a href="{% url 'crm:opportunity_list' %}" class="btn btn-sm btn-outline">View all</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Amount</th><th>Owner</th></tr></thead>
+        <tbody>
+          {% for opp in recent_opps %}
+            <tr>
+              <td><a href="{% url 'crm:opportunity_detail' opp.pk %}" class="fw-600">{{ opp.number }}</a></td>
+              <td>{{ opp.name }}</td>
+              <td>{% if opp.account %}{{ opp.account.name }}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if opp.stage == 'closed_won' %}green{% elif opp.stage == 'closed_lost' %}red{% elif opp.stage == 'negotiation' %}amber{% elif opp.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ opp.get_stage_display }}</span></td>
+              <td>{{ opp.amount }}</td>
+              <td>{% if opp.owner %}{{ opp.owner.get_full_name|default:opp.owner.username }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="target"></i><p>No opportunities yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {{ chart_stage_labels|json_script:"stage-labels" }}
+  {{ chart_stage_data|json_script:"stage-data" }}
+  {{ chart_rating_labels|json_script:"rating-labels" }}
+  {{ chart_rating_data|json_script:"rating-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777"];
+    var sl = J("stage-labels"), sd = J("stage-data");
+    if (document.getElementById("stageChart") && sl.length) {
+      new Chart(document.getElementById("stageChart"), {
+        type: "bar",
+        data: { labels: sl, datasets: [{ label: "Opportunities", data: sd, backgroundColor: blue, borderRadius: 6 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+    var rl = J("rating-labels"), rd = J("rating-data");
+    if (document.getElementById("ratingChart") && rl.length) {
+      new Chart(document.getElementById("ratingChart"), {
+        type: "doughnut",
+        data: { labels: rl, datasets: [{ data: rd, backgroundColor: palette }] },
+        options: { plugins: { legend: { position: "bottom" } } }
+      });
+    }
+  })();
+</script>
+{% endblock %}
