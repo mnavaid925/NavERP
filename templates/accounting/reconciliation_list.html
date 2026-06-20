@@ -43,9 +43,11 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'accounting:reconciliation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
                   <form method="post" action="{% url 'accounting:reconciliation_confirm' obj.pk %}" onsubmit="return confirm('{% if obj.is_confirmed %}Unconfirm{% else %}Confirm{% endif %} this match?');">
                     {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_confirmed %}Unconfirm{% else %}Confirm{% endif %}"><i data-lucide="{% if obj.is_confirmed %}x{% else %}check{% endif %}"></i></button>
                   </form>
+                  {% endif %}
                   <form method="post" action="{% url 'accounting:reconciliation_delete' obj.pk %}" onsubmit="return confirm('Delete this match?');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
