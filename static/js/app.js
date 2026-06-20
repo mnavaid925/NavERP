@@ -11,7 +11,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     initIcons();
 
-    // Expand/collapse sidebar nav groups
+    // Expand/collapse modules (level 1)
     document.querySelectorAll(".nav-group > .nav-link").forEach(function (link) {
       link.addEventListener("click", function (e) {
         var group = link.closest(".nav-group");
@@ -22,12 +22,16 @@
       });
     });
 
-    // Keep the active group open on load
-    var active = document.querySelector(".nav-sub a.active");
-    if (active) {
-      var g = active.closest(".nav-group");
-      if (g) g.classList.add("open");
-    }
+    // Expand/collapse sub-modules (level 2)
+    document.querySelectorAll(".nav-subgroup > .nav-sublink").forEach(function (link) {
+      link.addEventListener("click", function (e) {
+        var sub = link.closest(".nav-subgroup");
+        if (sub) {
+          e.preventDefault();
+          sub.classList.toggle("open");
+        }
+      });
+    });
 
     // ⌘K / Ctrl-K focuses the search box
     var search = document.getElementById("global-search");
