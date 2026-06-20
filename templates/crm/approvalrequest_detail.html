@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:approvalrequest_list' %}">Approval Requests</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    {% if obj.status == 'pending' %}
+    <form method="post" action="{% url 'crm:approvalrequest_approve' obj.pk %}" onsubmit="return confirm('Approve this request?');" style="display:inline-flex; gap:.5rem; align-items:center;">
+      {% csrf_token %}
+      <input type="text" name="reason" class="form-input" placeholder="Reason (optional)">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Approve</button>
+    </form>
+    <form method="post" action="{% url 'crm:approvalrequest_reject' obj.pk %}" onsubmit="return confirm('Reject this request?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline"><i data-lucide="x"></i> Reject</button>
+    </form>
+    {% endif %}
+    <a href="{% url 'crm:approvalrequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:approvalrequest_delete' obj.pk %}" onsubmit="return confirm('Delete this approval request?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Rule</dt><dd>{% if obj.rule %}<a href="{% url 'crm:workflowrule_detail' obj.rule.pk %}">{{ obj.rule.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Record</dt><dd>{{ obj.record_label|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Approver</dt><dd>{% if obj.approver %}{{ obj.approver.get_full_name|default:obj.approver.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Threshold field</dt><dd>{{ obj.threshold_field|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Threshold value</dt><dd>{{ obj.threshold_value|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'expired' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Approved at</dt><dd>{% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Rejected at</dt><dd>{% if obj.rejected_at %}{{ obj.rejected_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    {% if obj.reason %}<p style="margin-top:1rem;">{{ obj.reason|linebreaksbr }}</p>{% endif %}
+  </div>
+</div>
+
+<a href="{% url 'crm:approvalrequest_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
