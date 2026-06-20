@@ -59,6 +59,7 @@ Whenever you create a **new module or sub-module**, follow this exact sequence. 
 6. **Run the `qa-smoke-tester` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
 7. **Run the `security-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
 8. **Run the `test-writer` agent** — apply its output, then `git add` + `git commit`. Do NOT `git push`.
+9. **Create the module's Claude Code skill** — author `.claude/skills/<module-slug>/SKILL.md` documenting the new module, then `git add` + `git commit`. Do NOT `git push`. (See **Per-Module Skill (MANDATORY)** below.)
 
 **Rules for this sequence:**
 
@@ -66,6 +67,34 @@ Whenever you create a **new module or sub-module**, follow this exact sequence. 
 * After each agent step, commit the resulting changes before moving to the next agent (still one file per commit).
 * `git push` is **never** part of this sequence — stop at `git commit` every time.
 * If an agent reports no changes are needed, note that and proceed to the next step (no empty commit required).
+
+---
+
+### **Per-Module Skill (MANDATORY)**
+
+Every time you finish a **new module** (a Django app under `apps/<slug>`), you MUST create a dedicated Claude Code skill for it. This makes future work on that module fast and consistent (the skill is the module's living "how to work on me" guide).
+
+1. **Location & name:** create `.claude/skills/<module-slug>/SKILL.md` where `<module-slug>` is the app slug (e.g. `crm`, `accounting`, `inventory`). The skill `name` is the slug (or `<slug>-module`).
+
+2. **Frontmatter** (YAML) is required:
+   * `name:` — the slug.
+   * `description:` — one line that states **what the skill covers and when to trigger it**, with explicit trigger phrases, e.g. *"Work on the CRM module (leads, opportunities, contacts). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, or invokes /crm."*
+
+3. **Body** must document the **as-built** module so it can be worked on without re-reading everything:
+   * **Overview** — what the module does (mirror its `NavERP.md` section) and its app path.
+   * **Models** — each model + key fields, choices, and which **core-spine** entities it reuses (`core.Party`, `core.Item`, `JournalEntry`, etc.) vs. adds.
+   * **URLs / routes** — the `app_name` and url names (list/create/detail/edit/delete) + any custom actions.
+   * **Templates** — the `templates/<slug>/` pages and the shared patterns/partials they use.
+   * **Seeder** — the `seed_<slug>` command and the demo data it creates.
+   * **Conventions & gotchas** — tenant scoping, the context-var contract, any module-specific rules.
+   * **Common tasks** — concrete steps for "add a field", "add a new model + CRUD", "add a filter", "extend the seeder".
+   * **Sidebar wiring** — the `LIVE_LINKS` entries added in `apps/core/navigation.py` for this module.
+
+4. **Accuracy & upkeep:** the skill must reflect the real code (correct paths, url names, field names). When the module changes later, update its skill in the same change.
+
+5. **Commit it** as its own file (one file per commit, PowerShell-safe). **Never `git push`.**
+
+> Module 0 is the foundation; its reference skills already exist (`next-module`, `dump-module`, `sqa-review`, `manual-test`). Modules **1–13** each get their own skill via this rule.
 
 ---
 
