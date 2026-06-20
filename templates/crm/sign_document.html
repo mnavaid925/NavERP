@@ -6,7 +6,8 @@
     <h2>{{ contract.name }}</h2>
     <p>Signing as {{ signer.signer_name }} ({{ signer.signer_email }})</p>
 
-    <div>{{ contract.body_snapshot|safe }}</div>
+    {# Rendered as escaped text — body_snapshot is tenant-authored HTML; |safe here would be a stored-XSS vector on this public page. Rich rendering needs a server-side sanitizer (deferred). #}
+    <pre style="white-space:pre-wrap; border:1px solid var(--border); padding:1rem; border-radius:.5rem;">{{ contract.body_snapshot }}</pre>
 
     {% if already %}
     <p>You have already responded to this document.</p>
