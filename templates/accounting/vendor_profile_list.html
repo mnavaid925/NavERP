@@ -50,7 +50,7 @@
         <tbody>
           {% for obj in object_list %}
             <tr>
-              <td><a href="{% url 'accounting:vendor_profile_detail' obj.pk %}" class="fw-600">{{ obj.party.name }}</a></td>
+              <td><a href="{% url 'accounting:vendor_profile_detail' obj.pk %}" class="fw-600">{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</a></td>
               <td>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</td>
               <td>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</td>
               <td>{% if obj.is_1099 %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
