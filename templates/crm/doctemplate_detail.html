@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:doctemplate_list' %}">Templates</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:doctemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:doctemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-info">{{ obj.get_template_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Linked contracts</dt><dd>{{ contract_count }}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Body (merge variables)</h2>
+  </div>
+  <div class="card-body">
+    <pre style="white-space:pre-wrap; font-size:.85rem;">{{ obj.body }}</pre>
+  </div>
+</div>
+
+<a href="{% url 'crm:doctemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
