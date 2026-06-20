@@ -1,7 +1,7 @@
 """Dashboard home — tenant-scoped KPI aggregation (no models of its own)."""
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.shortcuts import render
 
 from apps.core.models import Activity, AuditLog, Party, PartyRole
@@ -38,13 +38,12 @@ def home(request):
             Activity.objects.filter(tenant=tenant).values("status").annotate(c=Count("id")).order_by("status")
         )
 
-        # Latest value per health metric (for progress bars / bar chart)
-        seen = set()
-        for hm in HealthMetric.objects.filter(tenant=tenant).order_by("-created_at"):
-            if hm.metric in seen:
-                continue
-            seen.add(hm.metric)
-            health.append(hm)
+        # Latest value per health metric (single query via max-id subquery)
+        latest_ids = (
+            HealthMetric.objects.filter(tenant=tenant)
+            .values("metric").annotate(latest_id=Max("id")).values("latest_id")
+        )
+        health = list(HealthMetric.objects.filter(pk__in=latest_ids).order_by("metric"))
 
         recent_audit = list(
             AuditLog.objects.filter(tenant=tenant).select_related("user").order_by("-at")[:8]
