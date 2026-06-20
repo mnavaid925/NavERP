@@ -3,9 +3,11 @@
 applies the theme widget classes. Excluded everywhere: ``tenant``, the auto ``number``, and
 system-set fields (``resolved_at``/``completed_at``/``views_count``/``converted_party``).
 """
+import os
+
 from django import forms
 
-from apps.core.forms import TenantModelForm
+from apps.core.forms import ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES, TenantModelForm
 from apps.core.models import Party
 
 from .models import (
@@ -143,9 +145,24 @@ from .models import (  # noqa: E402  (after the base forms above)
 class ExpenseForm(TenantModelForm):
     class Meta:
         model = Expense
+        # WARNING: status/submitted_by/approved_by are system-managed and MUST NOT be here —
+        # submitted_by is set in the view; status/approved_by only by the
+        # @tenant_admin_required approve/reject actions. Accepting them from POST would let any
+        # member self-approve an expense.
         fields = ["opportunity", "project", "category", "amount", "currency_code",
-                  "expense_date", "description", "receipt", "status",
-                  "submitted_by", "approved_by"]
+                  "expense_date", "description", "receipt"]
+
+    def clean_receipt(self):
+        # WARNING: without an extension allowlist + size cap, a member could upload .html/.svg
+        # and have it served same-origin from MEDIA_ROOT (stored XSS). Mirrors core.DocumentForm.
+        f = self.cleaned_data.get("receipt")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_DOC_EXTENSIONS:
+                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+            if getattr(f, "size", 0) and f.size > MAX_UPLOAD_BYTES:
+                raise forms.ValidationError("File exceeds the 20 MB limit.")
+        return f
 
 
 class CrmProjectForm(TenantModelForm):
@@ -171,8 +188,10 @@ class CrmMilestoneForm(TenantModelForm):
 class TimesheetForm(TenantModelForm):
     class Meta:
         model = Timesheet
+        # approved_by is system-set (not forgeable via the form); status stays editable as the
+        # timesheet's draft→submitted→approved workflow has no separate action view.
         fields = ["project", "milestone", "employee", "client", "date", "hours",
-                  "description", "is_billable", "status", "approved_by"]
+                  "description", "is_billable", "status"]
 
 
 class DocTemplateForm(TenantModelForm):
@@ -185,8 +204,10 @@ class DocTemplateForm(TenantModelForm):
 class ContractDocumentForm(TenantModelForm):
     class Meta:
         model = ContractDocument
-        fields = ["name", "template", "opportunity", "account", "current_version",
-                  "status", "body_snapshot", "expires_at", "owner"]
+        # WARNING: status/current_version are system-managed (the public signing flow + system
+        # transitions own them). Excluded so a member can't forge a "signed" contract via POST.
+        fields = ["name", "template", "opportunity", "account",
+                  "body_snapshot", "expires_at", "owner"]
         widgets = {"body_snapshot": forms.Textarea(attrs={"rows": 12})}
 
 
@@ -265,8 +286,9 @@ class SurveyForm(TenantModelForm):
 class ProductStockForm(TenantModelForm):
     class Meta:
         model = ProductStock
-        fields = ["name", "sku", "on_hand_qty", "reorder_level", "unit_cost",
-                  "is_active", "description"]
+        # WARNING: on_hand_qty is system-managed via PO receipt (crm_po_receive) — excluded so
+        # members can't directly rewrite inventory counts that the partner portal exposes.
+        fields = ["name", "sku", "reorder_level", "unit_cost", "is_active", "description"]
 
 
 class PurchaseOrderForm(TenantModelForm):
