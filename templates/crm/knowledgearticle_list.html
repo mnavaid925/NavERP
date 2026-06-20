@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Base{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Knowledge Base</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Knowledge Base</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:knowledgearticle_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Article</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search articles…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="visibility" class="form-select">
+            <option value="">All visibility</option>
+            {% for val, label in visibility_choices %}
+              <option value="{{ val }}" {% if request.GET.visibility == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'crm:knowledgearticle_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Category</th><th>Visibility</th><th>Status</th><th>Views</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'crm:knowledgearticle_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}</td>
+              <td>{{ obj.category|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.visibility == 'external' %}info{% else %}slate{% endif %}">{{ obj.get_visibility_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'published' %}green{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.views_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:knowledgearticle_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'crm:knowledgearticle_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'crm:knowledgearticle_delete' obj.pk %}" onsubmit="return confirm('Delete this article?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="book-open"></i><h3>No articles found</h3><p>Write your first knowledge-base article.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
