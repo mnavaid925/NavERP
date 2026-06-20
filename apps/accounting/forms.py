@@ -149,8 +149,10 @@ class BankAccountForm(TenantModelForm):
 class InvoiceForm(TenantModelForm):
     class Meta:
         model = Invoice
-        fields = ["kind", "party", "payment_terms", "issue_date", "due_date", "status",
-                  "currency", "notes"]
+        # `status` is EXCLUDED — it advances only via `invoice_post` (draft→sent, posts the GL) and
+        # `recompute_payment_status` (→partial/paid from confirmed allocations). Letting a member set
+        # it by hand bypasses GL posting (security review H1).
+        fields = ["kind", "party", "payment_terms", "issue_date", "due_date", "currency", "notes"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -170,8 +172,9 @@ class InvoiceLineForm(TenantModelForm):
 class BillForm(TenantModelForm):
     class Meta:
         model = Bill
-        fields = ["party", "payment_terms", "bill_date", "due_date", "status", "currency",
-                  "document", "notes"]
+        # `status` EXCLUDED — advances via `bill_approve` (→approved) and `recompute_payment_status`
+        # (→partial/paid). Not hand-settable (security review H1).
+        fields = ["party", "payment_terms", "bill_date", "due_date", "currency", "document", "notes"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -208,14 +211,25 @@ class PaymentAllocationForm(TenantModelForm):
 class BankTransactionForm(TenantModelForm):
     class Meta:
         model = BankTransaction
+        # `source` EXCLUDED — a manual entry must not be self-labelled "bank_feed"/"csv_import"
+        # (audit-trail integrity, security review M1). Model default "manual" applies on create;
+        # the CSV importer sets "csv_import" explicitly.
         fields = ["bank_account", "transaction_date", "description", "amount", "direction",
-                  "source", "external_ref"]
+                  "external_ref"]
 
 
 class ReconciliationMatchForm(TenantModelForm):
     class Meta:
         model = ReconciliationMatch
         fields = ["bank_transaction", "payment", "journal_line", "is_confirmed"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `journal_line` has no direct tenant field (tenant lives on its parent entry), so the
+        # TenantModelForm auto-scoper misses it — scope it explicitly to block cross-tenant IDOR
+        # via a crafted POST (security review H3).
+        if self.tenant is not None:
+            self.fields["journal_line"].queryset = JournalLine.objects.filter(entry__tenant=self.tenant)
 
 
 class CsvImportForm(forms.Form):
