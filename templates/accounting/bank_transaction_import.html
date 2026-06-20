@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Import Bank Transactions{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Import Bank Transactions</h1>
+    <div class="breadcrumb"><a href="{% url 'accounting:bank_transaction_list' %}">Bank Transactions</a><span class="sep">›</span><span>Import CSV</span></div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" enctype="multipart/form-data" action="{% url 'accounting:bank_transaction_import_csv' %}" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="file-text"></i> Import</button>
+        <a href="{% url 'accounting:bank_transaction_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">CSV format</h2></div>
+    <div class="card-body text-muted">
+      CSV columns: date, description, amount, direction (credit/debit), external_ref (optional).
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:bank_transaction_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
