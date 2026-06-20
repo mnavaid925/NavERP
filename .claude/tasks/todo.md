@@ -68,5 +68,23 @@ Plan: `C:\Users\user\.claude\plans\groovy-splashing-hopper.md`. Reuses the unifi
 ## Close-out
 - [ ] Review agents (code→explorer→frontend→perf→qa→security→test-writer) + `.claude/skills/crm/SKILL.md` + README
 
-## Review notes
-(to fill in at the end)
+## Review notes — CRM COMPLETE ✅
+
+- **Built:** `apps/crm/` (6 models via abstract `TenantNumbered` + lenses over `core.Party`), 23 templates,
+  idempotent `seed_crm`, wired into settings/urls/navigation (1.1–1.6 Live). Migrations 0001 (models) + 0002
+  (created_at indexes).
+- **Module Creation Sequence (all 7 agents, in order, fixes committed between):**
+  - code-reviewer → fixed converted_party→detail link by Party kind, tenant-scoped Party-lens querysets,
+    DB-side overview aggregation.
+  - explorer → all 5 categories clean, no changes.
+  - frontend-reviewer → valid stat-icon variant, dashboard-style layout-2col, case `new` badge, dark/RTL SLA banner.
+  - performance-reviewer → dropped unused list joins + deferred KB body, single-pass win/closed aggregate,
+    (tenant, created_at) indexes.
+  - qa-smoke-tester → 53/53 checks pass (0 leaks, 0 IDOR, require_POST enforced, idempotent seed).
+  - security-reviewer → explicit tenant scope on detail reverse-FK sub-queries (defense-in-depth).
+  - test-writer → 242 tests; surfaced + fixed Decimal-cast bug in `weighted_amount`/`roi`.
+- **Verification:** `manage.py check` clean; migrate clean on nav_erp; `seed_crm` idempotent; full suite
+  **540 passed** (298 foundation + 242 CRM); throwaway `temp/crm_smoke.py` green (all crm:* 200/302, no comment
+  leaks, cross-tenant IDOR→404, lead_convert works).
+- **Skill:** `.claude/skills/crm/SKILL.md` authored. README roadmap/seeding/route-map/feature sections updated.
+- One file per commit to `main`; **not pushed** (user pushes).
