@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.code }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} · {{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:glaccount_list' %}">Chart of Accounts</a><span class="sep">›</span><span>{{ obj.code }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:gl_account_ledger' obj.pk %}" class="btn btn-primary"><i data-lucide="list-checks"></i> View Ledger</a>
+      <a href="{% url 'accounting:glaccount_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if has_lines %}
+        <span class="text-muted">Has posted lines — cannot delete</span>
+      {% else %}
+        <form method="post" action="{% url 'accounting:glaccount_delete' obj.pk %}" onsubmit="return confirm('Delete this account?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-{% if obj.account_type == 'asset' %}info{% elif obj.account_type == 'liability' %}amber{% elif obj.account_type == 'income' %}green{% elif obj.account_type == 'expense' %}red{% else %}slate{% endif %}">{{ obj.get_account_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Normal Balance</dt><dd>{{ obj.get_normal_balance_display }}</dd></div>
+      <div class="detail-item"><dt>Parent</dt><dd>{% if obj.parent %}<a href="{% url 'accounting:glaccount_detail' obj.parent.pk %}">{{ obj.parent.code }} · {{ obj.parent.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Current Balance</dt><dd class="fw-600">${{ balance|floatformat:2 }}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Child accounts</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Active</th></tr></thead>
+        <tbody>
+          {% for child in children %}
+            <tr>
+              <td><a href="{% url 'accounting:glaccount_detail' child.pk %}" class="fw-600">{{ child.code }}</a></td>
+              <td>{{ child.name }}</td>
+              <td><span class="badge badge-{% if child.account_type == 'asset' %}info{% elif child.account_type == 'liability' %}amber{% elif child.account_type == 'income' %}green{% elif child.account_type == 'expense' %}red{% else %}slate{% endif %}">{{ child.get_account_type_display }}</span></td>
+              <td>{% if child.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="landmark"></i><p>No child accounts.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:glaccount_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
