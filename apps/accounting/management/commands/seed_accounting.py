@@ -325,6 +325,16 @@ class Command(BaseCommand):
             acquisition_cost=Decimal("18000"), salvage_value=Decimal("0"), useful_life_months=84,
             method="declining_balance", status="cip", asset_account=equipment,
             accumulated_account=accum_dep, expense_account=dep_exp, location=org_b)
+        old_printer = FixedAsset.objects.create(
+            tenant=tenant, name="Office Printer", category="Equipment",
+            acquisition_cost=Decimal("3000"), salvage_value=Decimal("200"), useful_life_months=36,
+            method="straight_line", in_service_date=today - datetime.timedelta(days=400), status="active",
+            accumulated_depreciation=Decimal("2400"), asset_account=equipment,
+            accumulated_account=accum_dep, expense_account=dep_exp, location=org_a)
+        from apps.accounting.models_advanced import AssetDisposal
+        AssetDisposal.objects.create(
+            tenant=tenant, asset=old_printer, disposal_date=today, proceeds=Decimal("500"),
+            status="draft", notes="End-of-life sale to staff.")
 
         # 2.7 Cost Allocation
         CostAllocation.objects.create(
