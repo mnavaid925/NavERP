@@ -88,7 +88,10 @@ class Lead(TenantNumbered):
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="crm_lead_tenant_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_lead_tenant_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_lead_tenant_created_idx"),
+        ]
 
     def __str__(self):
         return f"{self.number} · {self.name}"
@@ -132,7 +135,10 @@ class Campaign(TenantNumbered):
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="crm_campaign_tnt_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_campaign_tnt_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_campaign_tnt_created_idx"),
+        ]
 
     @property
     def roi(self):
@@ -176,7 +182,10 @@ class Opportunity(TenantNumbered):
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "stage"], name="crm_opp_tenant_stage_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "stage"], name="crm_opp_tenant_stage_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_opp_tenant_created_idx"),
+        ]
 
     @property
     def weighted_amount(self):
@@ -240,7 +249,10 @@ class Case(TenantNumbered):
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="crm_case_tenant_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_case_tenant_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_case_tenant_created_idx"),
+        ]
 
     @property
     def is_open(self):
@@ -282,7 +294,10 @@ class KnowledgeArticle(TenantNumbered):
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="crm_kb_tenant_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_kb_tenant_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_kb_tenant_created_idx"),
+        ]
 
     def __str__(self):
         return f"{self.number} · {self.title}"
@@ -323,7 +338,10 @@ class CrmTask(TenantNumbered):
     class Meta:
         ordering = ["due_date", "-created_at"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="crm_task_tenant_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_task_tenant_status_idx"),
+            models.Index(fields=["tenant", "due_date", "created_at"], name="crm_task_tnt_due_created_idx"),
+        ]
 
     @property
     def is_overdue(self):
