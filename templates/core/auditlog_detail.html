@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Audit Entry{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Audit Entry</h1>
+      <div class="breadcrumb"><a href="{% url 'core:auditlog_list' %}">Audit Log</a><span class="sep">›</span><span>Entry</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Action</dt><dd>{{ obj.get_action_display }}</dd></div>
+      <div class="detail-item"><dt>Target</dt><dd>{{ obj.target|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>User</dt><dd>{% if obj.user %}{{ obj.user.get_full_name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>When</dt><dd>{{ obj.at|date:"M d, H:i" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <h3 class="card-title">Changes</h3>
+    <pre class="mono">{{ obj.changes }}</pre>
+  </div></div>
+
+  <a href="{% url 'core:auditlog_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
