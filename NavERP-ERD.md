@@ -14,6 +14,14 @@ together by three ideas:
    reads or writes. Each module adds only its *own* domain tables on top of this spine (see the
    [Module coverage map](#module-coverage-map-0–13)).
 
+**This document set.** Read this alongside [`NavERP.md`](NavERP.md) (the catalog of *what* each module does) and
+[`README.md`](README.md) (how to install/run the built foundation). This file is the *how the data is modeled*
+reference. It has three layers:
+- the **target ERD** (the Mermaid diagram below) — the full spine the platform is designed around;
+- the **module coverage map** — what each module reuses vs. adds;
+- the **as-built foundation schema** ([jump](#as-built-foundation-schema-module-0--01)) — the concrete Django
+  models that actually exist today for Module 0 + 0.1, with real field lists and any deviations from the target.
+
 > **Notation (Mermaid crow's-foot):** `||--o{` = one-to-many (mandatory→optional), `||--|{` = one-to-(one-or-many),
 > `}o--||` = many-to-one, `}o--o{` = many-to-many. `PK` primary key, `FK` foreign key, `UK` unique key. Fields whose
 > type is `"GenericFK"` are Django `contenttypes` generic relations (`content_type` + `object_id`) so the entity can
@@ -494,5 +502,110 @@ them) and **adds** only its own domain tables. This is what keeps NavERP one ERP
 - **Money & quantities** — always `DecimalField` (never float), with explicit `max_digits`/`decimal_places`; keep
   amounts in the document currency plus a posted base-currency amount on journal lines.
 - **Numbering** — human-readable per-tenant sequences (`INV-#####`, `PO-#####`, `SO-#####`, `PRJ-#####`,
-  `WO-#####`, `CTR-#####`, `NCR-#####`, …) generated in `save()` with an existence guard; `unique_together
-  (tenant, number)`. See `apps/tenants/Invoice.save()` as the reference implementation.
+  `WO-#####`, `CTR-#####`, `NCR-#####`, …) generated in `save()` with an existence guard and a retry on the rare
+  concurrent collision; `unique_together (tenant, number)`. See
+  [`apps/tenants/models.py` `SubscriptionInvoice.save()`](apps/tenants/models.py) and the `next_number()` helper in
+  [`apps/core/utils.py`](apps/core/utils.py) as the reference implementation.
+
+---
+
+## As-built foundation schema (Module 0 + 0.1)
+
+The diagram above is the **target** spine for the whole platform. This section documents what is **actually
+implemented today** — the concrete Django models for Module 0 and sub-module 0.1, with their real fields. All
+business tables carry `tenant = ForeignKey('core.Tenant', db_index=True)` and (where relevant) `created_at` /
+`updated_at`; those are omitted from the per-field tables below for brevity. Choice fields list their stored values.
+
+### `apps/core` — platform & shared spine
+
+**Tenant** — a customer workspace (root of all tenant-scoped data).
+
+| field | type | notes |
+|-------|------|-------|
+| `name` | CharField(255) | |
+| `slug` | SlugField(120) | **unique** |
+| `plan` | CharField | `free` · `starter` · `pro` · `enterprise` |
+| `is_active` | BooleanField | default `True` |
+
+**Party** — one record per person/organization. **PartyRole** — the roles it plays.
+
+| model | key fields |
+|-------|-----------|
+| `Party` | `kind` (`person`/`organization`), `name`, `tax_id` |
+| `PartyRole` | `party→Party`, `role` (`customer`/`vendor`/`supplier`/`employee`/`lead`/`contact`/`partner`), `status` (`active`/`inactive`/`archived`), `start_date` · **unique(`party`,`role`)** |
+| `Address` | `party→Party`, `kind` (`billing`/`shipping`/`home`), `line1`, `city`, `country` |
+| `ContactMethod` | `party→Party`, `kind` (`email`/`phone`/`mobile`), `value` |
+| `PartyRelationship` | `from_party→Party`, `to_party→Party`, `kind` (`employee_of`/`contact_of`/`subsidiary_of`/`reports_to`) |
+
+**Org & people**
+
+| model | key fields |
+|-------|-----------|
+| `OrgUnit` | `kind` (`company`/`branch`/`department`/`team`/`cost_center`), `name`, `parent→self` |
+| `Employment` | `party→Party` (the employee), `org_unit→OrgUnit`, `manager→Party`, `job_title`, `hired_on`, `status` (`active`/`on_leave`/`terminated`) |
+
+**Cross-cutting anchors**
+
+| model | key fields | notes |
+|-------|-----------|-------|
+| `Activity` | `owner→User`, `party→Party`, `kind` (`task`/`call`/`email`/`meeting`/`note`), `subject`, `status` (`open`/`in_progress`/`done`/`cancelled`), `due_at`, GenericFK (`content_type`,`object_id`) | index `(tenant,status)`, `(tenant,owner)` |
+| `Document` | `file`, `name`, `classification` (`public`/`internal`/`confidential`), `version`, GenericFK | upload extension-allowlisted + size-capped |
+| `AuditLog` | `user→User`, `action` (`create`/`update`/`delete`), `target`, `changes` (JSON), `at`, GenericFK | append-only; read-only in UI; index `(tenant,at)` |
+
+### `apps/accounts` — identity, RBAC & invitations
+
+| model | key fields | notes |
+|-------|-----------|-------|
+| `User` | `email` (**unique**, USERNAME_FIELD), `username` (**unique**), `first_name`, `last_name`, `tenant→Tenant` (**nullable**), `party→Party` (nullable), `role→Role` (nullable), `is_tenant_admin`, `status` (`active`/`suspended`/`archived`), `is_active`, `is_staff` | `AbstractBaseUser`+`PermissionsMixin`; superuser has `tenant=None` |
+| `Permission` | `codename` (**unique**), `name`, `module` | **global** catalog (not tenant-scoped) |
+| `Role` | `name`, `description`, `permissions` (M2M→Permission), `is_system` | **unique(`tenant`,`name`)**; system roles protected from deletion |
+| `UserInvite` | `email`, `role→Role`, `token` (**unique**, `secrets.token_urlsafe`, write-only), `invited_by→User`, `status` (`pending`/`accepted`/`expired`/`revoked`), `expires_at` (+7 days), `accepted_at` | token excluded from forms |
+
+### `apps/tenants` — Module 0.1 (Tenant & Subscription Management)
+
+| model | key fields | notes |
+|-------|-----------|-------|
+| `Subscription` | `plan`, `status` (`trialing`/`active`/`past_due`/`canceled`/`incomplete`), `billing_cycle` (`monthly`/`yearly`), `amount`, `seats`, `started_on`, `renews_on`, `stripe_customer_id`, `stripe_subscription_id` (indexed) | SaaS platform→tenant billing |
+| `SubscriptionInvoice` | `subscription→Subscription`, `number` (`SINV-#####`), `status` (`draft`/`open`/`paid`/`void`/`uncollectible`), `amount`, `issued_on`, `due_on`, `paid_at`, `stripe_invoice_id` | **unique(`tenant`,`number`)**; index `(tenant,status)` |
+| `BrandingSetting` | `tenant` (**OneToOne**), `logo`, `primary_color`, `accent_color` (hex-validated), `email_from_name`, `email_footer` | per-tenant white-label |
+| `EncryptionKey` | `name`, `prefix`, `key_hash` (SHA-256), `status` (`active`/`rotated`/`revoked`), `last_rotated_at` | plaintext shown **once**, never stored |
+| `HealthMetric` | `metric` (`users`/`storage_mb`/`api_calls`/`db_rows`/`uptime_pct`), `value`, `status` (`ok`/`warning`/`critical`), `recorded_at` | index `(tenant,metric,-created_at)` |
+
+`apps/dashboard` has **no models** — it aggregates the above for the KPI home page.
+
+### Deviations & additions vs. the target ERD
+
+- `Activity` gains a human-readable **`subject`** label (the target ERD was silent on it).
+- **`UserInvite`** (accounts) is added for the invitation flow (not in the original spine).
+- Sub-module 0.1 realizes the Module-0 "adds" from the coverage map: `Subscription`, `SubscriptionInvoice`
+  (deliberately **distinct** from the spine's tenant-facing `Invoice`), `BrandingSetting`, `EncryptionKey`,
+  `HealthMetric`.
+- **Security-driven** choices: `EncryptionKey` stores only `prefix` + SHA-256 (reveal-once); `User` is
+  email-or-username with a nullable tenant; secrets are excluded from all ModelForms.
+- **Performance-driven** indexes were added on the hot read paths (audit, activity, invoices, health, Stripe id).
+- The remaining spine masters/ledgers (`Item`, `UOM`, `Location`, `GLAccount`, `Currency`, `TaxCode`,
+  `StockMove`, `JournalEntry`, `PurchaseOrder`, `SalesOrder`, `Invoice`, `Project`, `Asset`, `WorkOrder`,
+  `Contract`, `QualityRecord`) are **not yet built** — they land with their owning modules and FK into `core` by string.
+
+---
+
+## End-to-end flows the spine enables
+
+These canonical ERP flows are what make the shared core worthwhile: each reuses the same parties, items, and
+ledgers rather than re-implementing them. (Flows that touch not-yet-built modules are marked *roadmap*.)
+
+| Flow | Path | Posts to |
+|------|------|----------|
+| **Procure-to-Pay (P2P)** *(roadmap)* | PurchaseRequisition → RFQ → PurchaseOrder → GoodsReceipt → Bill/Invoice (payable) → Payment | `StockMove` (in) + `JournalEntry` |
+| **Order-to-Cash (O2C)** *(roadmap)* | Lead/Opportunity → Quote → SalesOrder → Delivery → Invoice (receivable) → Payment | `StockMove` (out) + `JournalEntry` |
+| **Record-to-Report (R2R)** *(roadmap)* | `JournalEntry`/`JournalLine` → derived GL balances → financial statements | derived from `JournalEntry` |
+| **Hire-to-Retire (H2R)** *(partly built)* | `Party` (employee role) + `Employment` → PayrollRun → posting | `JournalEntry` |
+| **Plan-to-Produce** *(roadmap)* | BillOfMaterials → WorkOrder → consume raw / produce finished | `StockMove` (both) + `JournalEntry` |
+| **Acquire-to-Retire (assets)** *(roadmap)* | `Asset` acquisition → periodic depreciation → disposal | `JournalEntry` |
+| **Subscribe-to-Bill (SaaS, 0.1)** *(built)* | `Subscription` → Stripe Checkout / manual → `SubscriptionInvoice` (`paid`) | platform billing (not the tenant ledger) |
+
+**Why "derived, never stored":** because on-hand = `Σ StockMove.qty` and an account balance = `Σ (debit − credit)`
+over `JournalLine`, there is never a balance field that can drift out of sync with its transactions. Each
+business action (post an invoice, receive goods, run payroll, depreciate an asset, complete a work order) is a
+single **service function** in `transaction.atomic()` that writes the move(s) and the balanced journal entry
+together, with a generic `source` pointing back to the originating document for full traceability.
