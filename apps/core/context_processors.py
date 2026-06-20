@@ -23,14 +23,12 @@ def branding(request):
     tenant = getattr(request, "tenant", None)
     if tenant is not None:
         try:
-            from apps.tenants.models import BrandingSetting
-
-            setting = BrandingSetting.objects.filter(tenant=tenant).first()
-            if setting is not None:
-                data["brand_primary"] = setting.primary_color
-                data["brand_accent"] = setting.accent_color
-                data["tenant_branding"] = setting
-        except Exception:  # pragma: no cover - tenants app/table not ready
+            # OneToOne accessor hits the unique index directly (no LIMIT 1 scan).
+            setting = tenant.branding
+            data["brand_primary"] = setting.primary_color
+            data["brand_accent"] = setting.accent_color
+            data["tenant_branding"] = setting
+        except Exception:  # pragma: no cover - no branding row / table not ready
             pass
     return data
 
