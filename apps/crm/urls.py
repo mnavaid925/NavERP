@@ -51,9 +51,17 @@ urlpatterns = [
     path("tasks/<int:pk>/edit/", views.task_edit, name="task_edit"),
     path("tasks/<int:pk>/delete/", views.task_delete, name="task_delete"),
 
-    # Accounts & Contacts — lenses over core.Party (1.1)
+    # Accounts — core.Party (organization) + AccountProfile (1.1)
     path("accounts/", views.account_list, name="account_list"),
+    path("accounts/add/", views.account_create, name="account_create"),
     path("accounts/<int:pk>/", views.account_detail, name="account_detail"),
+    path("accounts/<int:pk>/edit/", views.account_edit, name="account_edit"),
+    path("accounts/<int:pk>/delete/", views.account_delete, name="account_delete"),
+
+    # Contacts — core.Party (person) + ContactProfile (1.1)
     path("contacts/", views.contact_list, name="contact_list"),
+    path("contacts/add/", views.contact_create, name="contact_create"),
     path("contacts/<int:pk>/", views.contact_detail, name="contact_detail"),
+    path("contacts/<int:pk>/edit/", views.contact_edit, name="contact_edit"),
+    path("contacts/<int:pk>/delete/", views.contact_delete, name="contact_delete"),
 ]
