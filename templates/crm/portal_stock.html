@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Stock Levels{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Stock Levels</h1>
+    <nav class="breadcrumb"><span>Partner Portal</span></nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>SKU</th>
+            <th>On-hand</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td class="fw-600">{{ p.name }}</td>
+            <td>{{ p.sku|default:"—" }}</td>
+            <td>{{ p.on_hand_qty }}</td>
+            <td>
+              {% if p.is_low_stock %}<span class="badge badge-red">Low</span>
+              {% else %}<span class="badge badge-green">OK</span>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="boxes"></i>
+                <h3>No products found</h3>
+                <p>There are no stock items to display.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<a href="{% url 'crm:portal_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
