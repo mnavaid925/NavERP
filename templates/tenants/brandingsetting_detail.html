@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Custom Branding{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Custom Branding</h1>
+      <div class="breadcrumb"><a href="{% url 'tenants:brandingsetting_list' %}">Custom Branding</a><span class="sep">›</span><span>Detail</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:brandingsetting_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'tenants:brandingsetting_delete' obj.pk %}" onsubmit="return confirm('Delete this branding setting?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Primary color</dt><dd><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:{{ obj.primary_color }}"></span> {{ obj.primary_color }}</dd></div>
+      <div class="detail-item"><dt>Accent color</dt><dd><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:{{ obj.accent_color }}"></span> {{ obj.accent_color }}</dd></div>
+      <div class="detail-item"><dt>Email from name</dt><dd>{{ obj.email_from_name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Email footer</dt><dd>{{ obj.email_footer|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date }}</dd></div>
+    </dl>
+    {% if obj.logo %}<img src="{{ obj.logo.url }}" style="max-height:60px">{% endif %}
+  </div></div>
+
+  <a href="{% url 'tenants:brandingsetting_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
