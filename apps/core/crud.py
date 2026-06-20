@@ -19,7 +19,18 @@ from .utils import write_audit_log
 
 
 def paginate(request, qs, per_page=15):
-    return Paginator(qs, per_page).get_page(request.GET.get("page"))
+    page = Paginator(qs, per_page).get_page(request.GET.get("page"))
+    # Windowed page list (1 … n-2 n-1 [n] n+1 n+2 … last); None marks an ellipsis gap.
+    n, total = page.number, page.paginator.num_pages
+    nums = sorted(set([1, total] + list(range(max(1, n - 2), min(total, n + 2) + 1))))
+    window, prev = [], 0
+    for x in nums:
+        if x - prev > 1:
+            window.append(None)
+        window.append(x)
+        prev = x
+    page.window = window
+    return page
 
 
 def apply_search(qs, q, fields):
