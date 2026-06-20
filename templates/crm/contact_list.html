@@ -7,13 +7,13 @@
       <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Contacts</span></div>
     </div>
     <div class="page-actions">
-      <a href="{% url 'core:party_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Contact</a>
+      <a href="{% url 'crm:contact_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Contact</a>
     </div>
   </div>
 
   <div class="card">
     <div class="card-body">
-      <p class="text-muted" style="margin-bottom:.75rem;">Contacts are people in the shared core <strong>Party</strong> master (one record, many roles). Create and edit them in Core; this view is the CRM lens.</p>
+      <p class="text-muted" style="margin-bottom:.75rem;">Contacts are people in the shared core <strong>Party</strong> master (one identity, many roles), enriched with CRM job, phone and address details.</p>
       <form method="get" class="filter-bar">
         <div class="form-group" style="flex:1; min-width:200px;">
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search contacts…">
@@ -25,21 +25,28 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Name</th><th>Roles</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Job Title</th><th>Email</th><th>Phone</th><th>Account</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'crm:contact_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
-              <td>{% for r in obj.roles.all %}<span class="badge badge-info">{{ r.get_role_display }}</span> {% empty %}<span class="text-muted">—</span>{% endfor %}</td>
+              <td>{% if obj.crm_contact_profile %}{{ obj.crm_contact_profile.job_title|default:"—" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.crm_contact_profile %}{{ obj.crm_contact_profile.email|default:"—" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.crm_contact_profile %}{{ obj.crm_contact_profile.phone|default:"—" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.crm_contact_profile and obj.crm_contact_profile.account %}{{ obj.crm_contact_profile.account.name }}{% else %}—{% endif %}</td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'crm:contact_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'core:party_edit' obj.pk %}" class="btn-icon" title="Manage in Core"><i data-lucide="pencil"></i></a>
+                  <a href="{% url 'crm:contact_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'crm:contact_delete' obj.pk %}" onsubmit="return confirm('Delete this contact? This removes the person record and its CRM data.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
                 </div>
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="3"><div class="empty-state"><i data-lucide="contact"></i><h3>No contacts found</h3><p>Create a person in Core to see them here.</p></div></td></tr>
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="contact"></i><h3>No contacts found</h3><p>Create your first contact.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
