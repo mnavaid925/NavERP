@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Balance Sheet{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Balance Sheet</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Balance Sheet</span></div>
+    </div>
+    <div class="page-actions">
+      <span class="badge badge-{% if balanced %}green{% else %}red{% endif %}">{% if balanced %}Balanced{% else %}Out of balance{% endif %}</span>
+    </div>
+  </div>
+
+  {# Assets section #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Assets</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Account</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for r in assets %}
+            <tr>
+              <td class="fw-600">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.balance|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="landmark"></i><p>No asset balances.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if assets %}
+          <tfoot>
+            <tr class="fw-600"><td colspan="2">Total Assets</td><td>{{ total_assets|floatformat:2 }}</td></tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Liabilities section #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Liabilities</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Account</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for r in liabilities %}
+            <tr>
+              <td class="fw-600">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.balance|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="landmark"></i><p>No liability balances.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if liabilities %}
+          <tfoot>
+            <tr class="fw-600"><td colspan="2">Total Liabilities</td><td>{{ total_liabilities|floatformat:2 }}</td></tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Equity section #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Equity</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Account</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for r in equity %}
+            <tr>
+              <td class="fw-600">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.balance|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="landmark"></i><p>No equity balances.</p></div></td></tr>
+          {% endfor %}
+          <tr>
+            <td class="fw-600">—</td>
+            <td>Net Income (current period)</td>
+            <td>{{ net_income|floatformat:2 }}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr class="fw-600"><td colspan="2">Total Equity</td><td>{{ total_equity|floatformat:2 }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  {# Balance footer #}
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Total Assets</dt><dd class="fw-600">{{ total_assets|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Total Liabilities + Equity</dt><dd class="fw-600">{{ total_liab_equity|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if balanced %}green{% else %}red{% endif %}">{% if balanced %}Balanced{% else %}Out of balance{% endif %}</span></dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'accounting:accounting_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
