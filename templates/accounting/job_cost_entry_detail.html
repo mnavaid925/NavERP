@@ -30,7 +30,7 @@
       <div class="detail-item"><dt>Date</dt><dd>{{ obj.entry_date|date:"M d, Y" }}</dd></div>
       <div class="detail-item"><dt>Kind</dt><dd><span class="badge badge-{% if obj.kind == 'cost' %}amber{% else %}green{% endif %}">{{ obj.get_kind_display }}</span></dd></div>
       <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|floatformat:2 }}</dd></div>
-      <div class="detail-item"><dt>GL Account</dt><dd><span class="fw-600">{{ obj.gl_account.code }}</span> · {{ obj.gl_account.name }}</dd></div>
+      <div class="detail-item"><dt>GL Account</dt><dd>{% if obj.gl_account %}<span class="fw-600">{{ obj.gl_account.code }}</span> · {{ obj.gl_account.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'posted' %}green{% else %}info{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
     </dl>
