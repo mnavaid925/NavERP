@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ obj.party.name }}{% endblock %}
+{% block title %}{% if obj.party %}{{ obj.party.name }}{% else %}Profile #{{ obj.pk }}{% endif %}{% endblock %}
 {% block content %}
   <div class="page-header">
     <div>
-      <h1 class="page-title">{{ obj.party.name }}</h1>
-      <div class="breadcrumb"><a href="{% url 'accounting:vendor_profile_list' %}">Vendors</a><span class="sep">›</span><span>{{ obj.party.name }}</span></div>
+      <h1 class="page-title">{% if obj.party %}{{ obj.party.name }}{% else %}Profile #{{ obj.pk }}{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:vendor_profile_list' %}">Vendors</a><span class="sep">›</span><span>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</span></div>
     </div>
     <div class="page-actions">
       <a href="{% url 'accounting:vendor_profile_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
@@ -17,7 +17,7 @@
 
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
-      <div class="detail-item"><dt>Vendor</dt><dd>{{ obj.party.name }}</dd></div>
+      <div class="detail-item"><dt>Vendor</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Default Expense Account</dt><dd>{% if obj.default_expense_account %}{{ obj.default_expense_account.code }} · {{ obj.default_expense_account.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
