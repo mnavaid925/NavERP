@@ -10,10 +10,15 @@
 
   <div class="card"><div class="card-body">
     {% if result == 'success' %}
-      <div class="badge badge-green">Payment successful</div>
-      <p class="text-muted">Your subscription is being activated.</p>
+      <div class="toast success" style="position:static; max-width:none;">
+        <i data-lucide="check-circle"></i>
+        <div><strong>Payment successful.</strong> Your subscription is being activated.</div>
+      </div>
     {% else %}
-      <div class="badge badge-amber">Checkout cancelled</div>
+      <div class="toast warning" style="position:static; max-width:none;">
+        <i data-lucide="alert-triangle"></i>
+        <div>Checkout cancelled. No charge was made.</div>
+      </div>
     {% endif %}
     <div style="margin-top:1rem;">
       {% if obj %}
