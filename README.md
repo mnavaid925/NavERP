@@ -112,7 +112,7 @@ Three design ideas hold the whole platform together:
 - Tenant-scoped KPI overview: stat cards (users, parties, open invoices), party-role doughnut, activity-by-status
   bar chart, subscription status, tenant-health, and recent audit activity.
 
-### `crm` — Module 1: Customer Relationship Management (1.1–1.6)
+### `crm` — Module 1: Customer Relationship Management (1.1–1.12)
 - **Leads** (`LEAD-#####`) with rating (hot/warm/cold), qualification status, scoring, and one-click
   **conversion** to a `core.Party` account + contact + an Opportunity (atomic).
 - **Opportunities** (`OPP-#####`) — pipeline stages, amount/probability, weighted-forecast value, FK to the
@@ -128,8 +128,28 @@ Three design ideas hold the whole platform together:
   in CRM, no duplicate customer/contact tables. Deleting an account/contact removes the shared Party and is
   **tenant-admin-only** (cross-module impact).
 - A CRM **overview** (analytics) page: stat cards (open leads, pipeline, weighted forecast, win rate, open
-  cases/tasks, active campaigns) + pipeline-by-stage and leads-by-rating charts. Full CRUD, tenant isolation,
-  filters, an idempotent `seed_crm`, and a 242-test suite.
+  cases/tasks, active campaigns) + pipeline-by-stage and leads-by-rating charts.
+
+**Sub-modules 1.7–1.12** (extension pass, 18 CRM-owned tables, migration `0005`):
+- **1.7 Finance & Billing** — **Expenses** (`EXP-#####`): deal/project cost logging with receipt upload
+  (extension-allowlisted), an owner **submit** + tenant-admin **approve/reject** workflow.
+- **1.8 Project & Delivery** — **Projects** (`PRJ-#####`, one-click **convert** from a won opportunity),
+  **Milestones** (`MS-#####`, Gantt/Kanban, sub-tasks), **Timesheets** (`TS-#####`, billable/non-billable).
+- **1.9 Document & Contract** — **Doc Templates** (`TPL-#####`, merge-variable HTML) and **Contracts**
+  (`CTR-#####`) with per-signer e-signature tracking and a **public token-based signing page**.
+- **1.10 Automation & Workflow** — **Workflow Rules** (`WFR-#####`, declarative trigger/condition/action JSON),
+  an append-only **Workflow Log**, and **Approval Requests** (`APR-#####`, admin approve/reject).
+- **1.11 Customer Success** — **Onboarding Plans** (`CS-#####`, step checklists + progress), **Health Scores**
+  (`HS-#####`, 0–100 derived from tickets/NPS/tasks/engagement with configurable weights), **Surveys**
+  (`NPS-#####`, NPS/CSAT/CES with auto-classification + a public respond page).
+- **1.12 Inventory & Vendor** — CRM-owned **Product Stock** (`STK-#####`, low-stock alerts), **Purchase Orders**
+  (`PO-#####`) with line items + receive-to-stock, and **Partner Portal Access** (`PRT-#####`) with a
+  partner-facing read-only portal (orders + stock).
+  > 1.12 uses CRM-owned PurchaseOrder/ProductStock because the Inventory/Procurement spine masters
+  > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
+  > the spine when those modules land.
+
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite (850 project-wide).
 
 ---
 
@@ -313,7 +333,7 @@ backend) — copy the link from there.
 | Users & RBAC | `/` | `/users/`, `/roles/`, `/invites/`, `/invite/<token>/`, `/profile/` |
 | Core spine | `/core/` | `/core/parties/`, `/core/org-units/`, `/core/party-roles/`, `/core/addresses/`, `/core/contact-methods/`, `/core/relationships/`, `/core/employments/`, `/core/activities/`, `/core/documents/`, `/core/audit-logs/` |
 | Module 0.1 | `/tenants/` | `/tenants/subscriptions/`, `/tenants/subscription-invoices/`, `/tenants/branding/`, `/tenants/encryption-keys/`, `/tenants/health/`, `/tenants/onboarding/`, `/tenants/stripe/webhook/` |
-| Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/campaigns/`, `/crm/cases/`, `/crm/knowledge/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/` |
+| Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/campaigns/`, `/crm/cases/`, `/crm/knowledge/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/`, `/crm/expenses/`, `/crm/projects/`, `/crm/milestones/`, `/crm/timesheets/`, `/crm/doc-templates/`, `/crm/contracts/`, `/crm/workflows/`, `/crm/approvals/`, `/crm/onboarding/`, `/crm/health-scores/`, `/crm/surveys/`, `/crm/stock/`, `/crm/purchase-orders/`, `/crm/partner-portal/`, `/crm/portal/` (partner-facing); public `/crm/sign/<token>/`, `/crm/surveys/<token>/respond/` |
 | Django admin | `/admin/` | `/admin/` |
 
 Each CRUD resource follows the pattern: list (`/`), create (`/add/`), detail (`/<pk>/`), edit (`/<pk>/edit/`),
@@ -506,7 +526,7 @@ Before deploying:
 | # | Module | App slug | Status |
 |---|--------|----------|--------|
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
-| 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.6 built (leads, opportunities, campaigns, cases, KB, tasks) |
+| 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | Roadmap |
 | 3 | Human Resource Management (HRM) | `hrm` | Roadmap |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
