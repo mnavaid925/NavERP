@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Opportunities{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Opportunities</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Opportunities</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:opportunity_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Opportunity</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search opportunities…">
+        </div>
+        <div class="form-group">
+          <select name="stage" class="form-select">
+            <option value="">All stages</option>
+            {% for val, label in stage_choices %}
+              <option value="{{ val }}" {% if request.GET.stage == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="account" class="form-select">
+            <option value="">All accounts</option>
+            {% for acc in accounts %}
+              <option value="{{ acc.pk }}" {% if request.GET.account == acc.pk|stringformat:"d" %}selected{% endif %}>{{ acc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'crm:opportunity_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Amount</th><th>Prob.</th><th>Close Date</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'crm:opportunity_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.name }}</td>
+              <td>{% if obj.account %}{{ obj.account.name }}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if obj.stage == 'closed_won' %}green{% elif obj.stage == 'closed_lost' %}red{% elif obj.stage == 'negotiation' %}amber{% elif obj.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ obj.get_stage_display }}</span></td>
+              <td>{{ obj.amount }}</td>
+              <td>{{ obj.probability }}%</td>
+              <td>{% if obj.close_date %}{{ obj.close_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:opportunity_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'crm:opportunity_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'crm:opportunity_delete' obj.pk %}" onsubmit="return confirm('Delete this opportunity?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="target"></i><h3>No opportunities found</h3><p>Create your first deal to build your pipeline.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
