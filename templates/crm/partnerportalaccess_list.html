@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Partner Portal Access{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Partner Portal Access</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Partner Portal Access
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:partnerportalaccess_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Access</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search partners…">
+      <select name="is_active" class="form-select">
+        <option value="">All statuses</option>
+        <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+        <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+      </select>
+      <select name="access_level" class="form-select">
+        <option value="">All access levels</option>
+        {% for val, label in access_choices %}<option value="{{ val }}" {% if request.GET.access_level == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:partnerportalaccess_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Partner</th>
+            <th>Portal user</th>
+            <th>Access</th>
+            <th>Active</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'crm:partnerportalaccess_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+            <td>{{ obj.partner_party.name|default:"—" }}</td>
+            <td>{% if obj.portal_user %}{{ obj.portal_user.username }}{% else %}—{% endif %}</td>
+            <td>
+              {% if obj.access_level == 'read_only' %}<span class="badge badge-slate">{{ obj.get_access_level_display }}</span>
+              {% elif obj.access_level == 'lead_register' %}<span class="badge badge-info">{{ obj.get_access_level_display }}</span>
+              {% elif obj.access_level == 'full' %}<span class="badge badge-green">{{ obj.get_access_level_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_access_level_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+            </td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:partnerportalaccess_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'crm:partnerportalaccess_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'crm:partnerportalaccess_delete' obj.pk %}" onsubmit="return confirm('Delete this access record?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="shield"></i>
+                <h3>No partner access found</h3>
+                <p>Create a portal access record to grant a partner access.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
