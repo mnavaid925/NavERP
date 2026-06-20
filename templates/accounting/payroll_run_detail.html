@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:payroll_run_list' %}">Payroll Runs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:payroll_run_post' obj.pk %}" onsubmit="return confirm('Post this payroll run? It cannot be edited afterwards.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Post</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'accounting:payroll_run_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounting:payroll_run_delete' obj.pk %}" onsubmit="return confirm('Delete this payroll run?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'posted' %}green{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Period Start</dt><dd>{{ obj.period_start|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Period End</dt><dd>{{ obj.period_end|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Pay Date</dt><dd>{{ obj.pay_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Headcount</dt><dd>{{ obj.headcount }}</dd></div>
+      <div class="detail-item"><dt>Gross Wages</dt><dd>{{ obj.gross_wages|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Employee Tax</dt><dd>{{ obj.employee_tax|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Employer Tax</dt><dd>{{ obj.employer_tax|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Benefits</dt><dd>{{ obj.benefits|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Deductions</dt><dd>{{ obj.deductions|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Net Pay</dt><dd class="fw-600">{{ obj.net_pay|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Total Expense</dt><dd>{{ obj.total_expense|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'accounting:payroll_run_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
