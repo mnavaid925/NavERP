@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'tenants:subscriptioninvoice_list' %}">Subscription Invoices</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:subscriptioninvoice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'tenants:subscriptioninvoice_delete' obj.pk %}" onsubmit="return confirm('Delete this invoice?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Subscription</dt><dd>{% if obj.subscription %}{{ obj.subscription }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'paid' %}green{% elif obj.status == 'open' %}info{% elif obj.status == 'draft' %}muted{% elif obj.status == 'void' %}slate{% elif obj.status == 'uncollectible' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }}</dd></div>
+      <div class="detail-item"><dt>Issued</dt><dd>{{ obj.issued_on|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Due</dt><dd>{% if obj.due_on %}{{ obj.due_on|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Paid</dt><dd>{% if obj.paid_at %}{{ obj.paid_at|date:"M d, H:i" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'tenants:subscriptioninvoice_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
