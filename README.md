@@ -254,8 +254,8 @@ All commands are **Windows PowerShell** (the project's shell). Run from the repo
 ```powershell
 # 1. Create a virtual environment and install dependencies
 python -m venv venv
-venv\Scripts\python.exe -m pip install --upgrade pip
-venv\Scripts\python.exe -m pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 # 2. Create your local environment file, then edit it
 Copy-Item .env.example .env
@@ -266,17 +266,17 @@ Copy-Item .env.example .env
   -e "CREATE DATABASE IF NOT EXISTS nav_erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 # 4. Apply migrations
-venv\Scripts\python.exe manage.py migrate
+python manage.py migrate
 
 # 5. Seed demo data (idempotent — safe to re-run). Order matters:
-venv\Scripts\python.exe manage.py seed_core
-venv\Scripts\python.exe manage.py seed_accounts
-venv\Scripts\python.exe manage.py seed_tenants
-venv\Scripts\python.exe manage.py seed_crm
-venv\Scripts\python.exe manage.py seed_accounting
+python manage.py seed_core
+python manage.py seed_accounts
+python manage.py seed_tenants
+python manage.py seed_crm
+python manage.py seed_accounting
 
 # 6. Start the development server
-venv\Scripts\python.exe manage.py runserver
+python manage.py runserver
 ```
 
 Then open **http://127.0.0.1:8000/** and sign in with one of the [demo logins](#seed-data--demo-logins).
@@ -328,17 +328,17 @@ employments, activities, subscriptions, invoices, branding, encryption keys, and
 ## Running the app
 
 ```powershell
-venv\Scripts\python.exe manage.py runserver          # http://127.0.0.1:8000/
-venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000   # accessible on your LAN
+python manage.py runserver          # http://127.0.0.1:8000/
+python manage.py runserver 0.0.0.0:8000   # accessible on your LAN
 ```
 
 Useful management commands:
 
 ```powershell
-venv\Scripts\python.exe manage.py check              # system checks
-venv\Scripts\python.exe manage.py createsuperuser    # another Django superuser
-venv\Scripts\python.exe manage.py makemigrations
-venv\Scripts\python.exe manage.py migrate
+python manage.py check              # system checks
+python manage.py createsuperuser    # another Django superuser
+python manage.py makemigrations
+python manage.py migrate
 ```
 
 Forgot/reset password and invite emails are printed to the **runserver console** in development (console email
@@ -389,9 +389,9 @@ touches the application (Stripe-hosted checkout; only opaque `stripe_*_id`s are 
 ## Testing
 
 ```powershell
-venv\Scripts\python.exe -m pytest                 # full suite
-venv\Scripts\python.exe -m pytest apps/tenants    # one app
-venv\Scripts\python.exe -m pytest -k webhook -v   # by keyword
+python -m pytest                 # full suite
+python -m pytest apps/tenants    # one app
+python -m pytest -k webhook -v   # by keyword
 ```
 
 - ~300 tests run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch the
@@ -586,7 +586,7 @@ anchors) and **adds** only its own domain tables — see the coverage map in [`N
 |---------|-----|
 | `Unknown database 'nav_erp'` | Run setup step 3 (create the database). Ensure XAMPP MySQL is started. |
 | `(1064) … RETURNING …` during migrate | The MariaDB 10.4 shim in `config/__init__.py` must be present (it is) and the venv must have PyMySQL installed. |
-| `manage.py` can't import Django | Use the venv interpreter: `venv\Scripts\python.exe …`. |
+| `manage.py` can't import Django | Use the venv interpreter: `python …`. |
 | Module pages are empty | You're logged in as the superuser `admin` (no tenant). Log in as `admin_acme` / `password`. |
 | Login says "session timed out" repeatedly | Idle timeout is 30 min / absolute 12 h — just sign in again. |
 | Changes don't appear in the browser | The dev server may be running with `--noreload`; restart it and hard-refresh (Ctrl+Shift+R). |
