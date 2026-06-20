@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:asset_disposal_list' %}">Asset Disposals</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:asset_disposal_post' obj.pk %}" onsubmit="return confirm('Post this disposal? It posts a journal entry and cannot be edited afterwards.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Post</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'accounting:asset_disposal_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounting:asset_disposal_delete' obj.pk %}" onsubmit="return confirm('Delete this disposal?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Asset</dt><dd><a href="{% url 'accounting:fixed_asset_detail' obj.asset.pk %}">{{ obj.asset.number }} · {{ obj.asset.name }}</a></dd></div>
+      <div class="detail-item"><dt>Disposal Date</dt><dd>{{ obj.disposal_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Proceeds</dt><dd>{{ obj.proceeds|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Computed Gain/Loss</dt><dd class="{% if computed_gain_loss < 0 %}text-danger{% endif %} fw-600">{{ computed_gain_loss|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Recorded Gain/Loss</dt><dd>{{ obj.gain_loss|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'posted' %}green{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'accounting:asset_disposal_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
