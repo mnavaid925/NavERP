@@ -6,7 +6,13 @@
   </div>
   <nav class="nav">
     {% for section in nav_sections %}
-      {% if section.children %}
+      {% if section.kind == "link" %}
+        <a href="{{ section.href }}" class="nav-link{% if section.is_active %} active{% endif %}">
+          <i data-lucide="{{ section.icon }}"></i>
+          <span class="nav-label">{{ section.label }}</span>
+        </a>
+      {% else %}
+        {% comment %} Module → Sub-module → Feature (mirrors NavERP.md) {% endcomment %}
         <div class="nav-group{% if section.open %} open{% endif %}">
           <div class="nav-link">
             <i data-lucide="{{ section.icon }}"></i>
@@ -14,20 +20,25 @@
             <i data-lucide="chevron-right" class="nav-caret nav-label"></i>
           </div>
           <div class="nav-sub">
-            {% for child in section.children %}
-              {% if child.href %}
-                <a href="{{ child.href }}"{% if child.is_active %} class="active"{% endif %}>{{ child.label }}</a>
-              {% else %}
-                <a class="nav-roadmap" title="On the roadmap">{{ child.label }} <span class="pill-soon">soon</span></a>
-              {% endif %}
+            {% for sub in section.submodules %}
+              <div class="nav-subgroup{% if sub.open %} open{% endif %}">
+                <div class="nav-sublink">
+                  <span class="nav-label">{{ sub.label }}</span>
+                  <i data-lucide="chevron-right" class="nav-caret nav-label"></i>
+                </div>
+                <div class="nav-features">
+                  {% for feat in sub.features %}
+                    {% if feat.href %}
+                      <a href="{{ feat.href }}"{% if feat.is_active %} class="active"{% endif %}>{{ feat.label }}</a>
+                    {% else %}
+                      <a class="nav-roadmap" title="On the roadmap">{{ feat.label }} <span class="pill-soon">soon</span></a>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
             {% endfor %}
           </div>
         </div>
-      {% else %}
-        <a href="{{ section.href }}" class="nav-link{% if section.is_active %} active{% endif %}">
-          <i data-lucide="{{ section.icon }}"></i>
-          <span class="nav-label">{{ section.label }}</span>
-        </a>
       {% endif %}
     {% endfor %}
   </nav>
