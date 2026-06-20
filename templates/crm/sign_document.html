@@ -1,0 +1,24 @@
+{% extends "base_auth.html" %}
+{% block title %}Sign Document{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <h2>{{ contract.name }}</h2>
+    <p>Signing as {{ signer.signer_name }} ({{ signer.signer_email }})</p>
+
+    <div>{{ contract.body_snapshot|safe }}</div>
+
+    {% if already %}
+    <p>You have already responded to this document.</p>
+    {% else %}
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button name="action" value="sign" class="btn btn-primary">I agree &amp; Sign</button>
+        <button name="action" value="decline" class="btn btn-outline">Decline</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
