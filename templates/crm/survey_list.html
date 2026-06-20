@@ -18,24 +18,33 @@
 <div class="card">
   <div class="card-body">
     <form method="get" class="filter-bar">
-      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search surveys…">
-      <select name="survey_type" class="form-select">
-        <option value="">All types</option>
-        {% for val, label in type_choices %}<option value="{{ val }}" {% if request.GET.survey_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-      <select name="classification" class="form-select">
-        <option value="">All classifications</option>
-        {% for val, label in classification_choices %}<option value="{{ val }}" {% if request.GET.classification == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-      <select name="account" class="form-select">
-        <option value="">All accounts</option>
-        {% for o in accounts %}<option value="{{ o.pk }}" {% if request.GET.account == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
-      </select>
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search surveys…">
+      </div>
+      <div class="form-group">
+        <select name="survey_type" class="form-select">
+          <option value="">All types</option>
+          {% for val, label in type_choices %}<option value="{{ val }}" {% if request.GET.survey_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="classification" class="form-select">
+          <option value="">All classifications</option>
+          {% for val, label in classification_choices %}<option value="{{ val }}" {% if request.GET.classification == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="account" class="form-select">
+          <option value="">All accounts</option>
+          {% for o in accounts %}<option value="{{ o.pk }}" {% if request.GET.account == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
       <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
       <a href="{% url 'crm:survey_list' %}" class="btn btn-outline">Reset</a>
     </form>
+  </div>
 
-    <div class="table-wrap">
+  <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
@@ -89,8 +98,7 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
-    {% include "partials/pagination.html" %}
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 {% endblock %}
