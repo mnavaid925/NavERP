@@ -20,6 +20,12 @@
           <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
         </form>
       {% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:intercompany_toggle_eliminated' obj.pk %}" onsubmit="return confirm('Toggle the consolidation-elimination flag for this transaction?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="git-merge"></i> {% if obj.eliminated %}Unmark{% else %}Mark{% endif %} Eliminated</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 
