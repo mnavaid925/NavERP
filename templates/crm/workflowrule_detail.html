@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:workflowrule_list' %}">Workflow Rules</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:workflowrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:workflowrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Trigger entity</dt><dd>{{ obj.get_trigger_entity_display }}</dd></div>
+      <div class="detail-item"><dt>Trigger event</dt><dd>{{ obj.get_trigger_event_display }}</dd></div>
+      <div class="detail-item"><dt>Trigger field</dt><dd>{{ obj.trigger_field|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Trigger value</dt><dd>{{ obj.trigger_value|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Delay</dt><dd>{% if obj.delay_value %}{{ obj.delay_value }} {{ obj.get_delay_unit_display }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Conditions &amp; actions</h2>
+  </div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Conditions</dt><dd><pre>{{ obj.conditions }}</pre></dd></div>
+      <div class="detail-item"><dt>Actions</dt><dd><pre>{{ obj.actions }}</pre></dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Recent executions</h2>
+  </div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Record</th>
+            <th>Status</th>
+            <th>Fired</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in logs %}
+          <tr>
+            <td>{{ l.record_label }}</td>
+            <td>{% if l.status == 'success' %}<span class="badge badge-green">{{ l.get_status_display }}</span>{% elif l.status == 'failed' %}<span class="badge badge-red">{{ l.get_status_display }}</span>{% elif l.status == 'skipped' %}<span class="badge badge-muted">{{ l.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ l.get_status_display }}</span>{% endif %}</td>
+            <td>{{ l.fired_at|date:"M d, Y H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3">
+              <div class="empty-state">
+                <i data-lucide="activity"></i>
+                <h3>No executions yet</h3>
+                <p>This rule has not fired yet.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<a href="{% url 'crm:workflowrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
