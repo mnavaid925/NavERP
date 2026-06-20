@@ -24,7 +24,7 @@
       <div class="detail-item"><dt>Version</dt><dd>{{ obj.get_version_display }}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
     </dl>
-    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
   </div></div>
 
   <div class="card">
