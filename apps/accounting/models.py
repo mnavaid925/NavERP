@@ -414,10 +414,24 @@ class Invoice(TenantNumbered):
             self.save(update_fields=["subtotal", "tax_total", "total", "updated_at"])
 
     def amount_paid(self):
-        return self.allocations.aggregate(s=Sum("allocated_amount"))["s"] or ZERO
+        # Only confirmed payments count toward the balance — a voided payment's allocation
+        # must not keep an invoice marked paid.
+        return self.allocations.filter(payment__status="confirmed").aggregate(
+            s=Sum("allocated_amount"))["s"] or ZERO
 
     def balance_due(self):
         return self.total - self.amount_paid()
+
+    def recompute_payment_status(self):
+        """Derive sent/partial/paid from confirmed allocations. Status is NOT user-editable on the
+        form — it advances here (and via ``invoice_post``), never by hand (security review H1)."""
+        if self.status in ("draft", "void"):
+            return
+        paid = self.amount_paid()
+        new = "paid" if (self.total > ZERO and paid >= self.total) else ("partial" if paid > ZERO else "sent")
+        if new != self.status:
+            self.status = new
+            self.save(update_fields=["status", "updated_at"])
 
     def __str__(self):
         return self.number or f"INV #{self.pk}"
@@ -497,10 +511,21 @@ class Bill(TenantNumbered):
             self.save(update_fields=["subtotal", "tax_total", "total", "updated_at"])
 
     def amount_paid(self):
-        return self.allocations.aggregate(s=Sum("allocated_amount"))["s"] or ZERO
+        return self.allocations.filter(payment__status="confirmed").aggregate(
+            s=Sum("allocated_amount"))["s"] or ZERO
 
     def balance_due(self):
         return self.total - self.amount_paid()
+
+    def recompute_payment_status(self):
+        """Derive approved/partial/paid from confirmed allocations (security review H1)."""
+        if self.status in ("draft", "pending_approval", "void"):
+            return
+        paid = self.amount_paid()
+        new = "paid" if (self.total > ZERO and paid >= self.total) else ("partial" if paid > ZERO else "approved")
+        if new != self.status:
+            self.status = new
+            self.save(update_fields=["status", "updated_at"])
 
     def __str__(self):
         return self.number or f"BILL #{self.pk}"
