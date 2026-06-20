@@ -9,7 +9,9 @@
     {# Rendered as escaped text — body_snapshot is tenant-authored HTML; |safe here would be a stored-XSS vector on this public page. Rich rendering needs a server-side sanitizer (deferred). #}
     <pre style="white-space:pre-wrap; border:1px solid var(--border); padding:1rem; border-radius:.5rem;">{{ contract.body_snapshot }}</pre>
 
-    {% if already %}
+    {% if expired %}
+    <p>This document has expired and can no longer be signed.</p>
+    {% elif already %}
     <p>You have already responded to this document.</p>
     {% else %}
     <form method="post">
