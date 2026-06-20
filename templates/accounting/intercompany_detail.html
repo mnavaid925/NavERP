@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:intercompany_list' %}">Intercompany</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:intercompany_post' obj.pk %}" onsubmit="return confirm('Post this intercompany transaction? It cannot be edited afterwards.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Post</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'accounting:intercompany_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounting:intercompany_delete' obj.pk %}" onsubmit="return confirm('Delete this transaction?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.transaction_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>From Org Unit</dt><dd>{% if obj.from_org_unit %}{{ obj.from_org_unit.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>To Org Unit</dt><dd>{% if obj.to_org_unit %}{{ obj.to_org_unit.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Due-From Account</dt><dd>{% if obj.due_from_account %}<span class="fw-600">{{ obj.due_from_account.code }}</span> · {{ obj.due_from_account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Due-To Account</dt><dd>{% if obj.due_to_account %}<span class="fw-600">{{ obj.due_to_account.code }}</span> · {{ obj.due_to_account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Eliminated</dt><dd>{% if obj.eliminated %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'posted' %}green{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'accounting:intercompany_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
