@@ -49,21 +49,24 @@ Here is the text extracted from the image:
 
 ### **Module Creation Sequence (MANDATORY)**
 
-Whenever you create a **new module or sub-module**, follow this exact sequence. Each step ends with `git add` + `git commit` (one file per commit, PowerShell-safe). **Never run `git push` at any step** — the user pushes manually.
+Whenever you create a **new module or sub-module** (especially via `/next-module`), follow this exact sequence. It **starts with research and planning** (`research` → `todo`) so the build is driven by what the best products in the domain actually do, *then* writes the code, *then* runs the review agents. Each step ends with `git add` + `git commit` (one file per commit, PowerShell-safe). **Never run `git push` at any step** — the user pushes manually.
 
-1. **Write the module code** — implement the module, then `git add` + `git commit`. Do NOT `git push`.
-2. **Run the `code-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-3. **Run the `explorer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-4. **Run the `frontend-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-5. **Run the `performance-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-6. **Run the `qa-smoke-tester` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-7. **Run the `security-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-8. **Run the `test-writer` agent** — apply its output, then `git add` + `git commit`. Do NOT `git push`.
-9. **Create the module's Claude Code skill** — author `.claude/skills/<module-slug>/SKILL.md` documenting the new module, then `git add` + `git commit`. Do NOT `git push`. (See **Per-Module Skill (MANDATORY)** below.)
+1. **Run the `research` agent** — research the ~10 leading commercial software products in the module's domain, read their feature sets, and write a deduplicated, prioritized feature catalog to `.claude/tasks/research-<slug>.md` (features grouped by NavERP.md sub-module, mapped to the unified core spine, with a recommended 4–8-model build scope). Then `git add` + `git commit` that file. Do NOT `git push`.
+2. **Run the `todo` agent** — feed it the `research` output; it turns the specialized features into a checkable build plan in `.claude/tasks/todo.md` (the models + their fields/choices **driven by the researched features**, plus backend/wire-up/templates/verify/close-out items). Then `git add` + `git commit` that file. Do NOT `git push`.
+3. **Write the module code** — implement the module per the `todo` plan, then `git add` + `git commit`. Do NOT `git push`.
+4. **Run the `code-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
+5. **Run the `explorer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
+6. **Run the `frontend-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
+7. **Run the `performance-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
+8. **Run the `qa-smoke-tester` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
+9. **Run the `security-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
+10. **Run the `test-writer` agent** — apply its output, then `git add` + `git commit`. Do NOT `git push`.
+11. **Create the module's Claude Code skill** — author `.claude/skills/<module-slug>/SKILL.md` documenting the new module, then `git add` + `git commit`. Do NOT `git push`. (See **Per-Module Skill (MANDATORY)** below.)
 
 **Rules for this sequence:**
 
-* Run the agents **in this order, one at a time** — do not skip a step and do not reorder.
+* Run the agents **in this order, one at a time** — do not skip a step and do not reorder. **`research` runs first, then `todo`, then "Write the module code", then the review agents** as listed.
+* The `research` step produces `.claude/tasks/research-<slug>.md`; the `todo` step produces `.claude/tasks/todo.md` from it — commit each as its own file.
 * After each agent step, commit the resulting changes before moving to the next agent (still one file per commit).
 * `git push` is **never** part of this sequence — stop at `git commit` every time.
 * If an agent reports no changes are needed, note that and proceed to the next step (no empty commit required).
