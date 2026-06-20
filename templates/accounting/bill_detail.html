@@ -8,10 +8,12 @@
     </div>
     <div class="page-actions">
       {% if obj.status == 'draft' or obj.status == 'pending_approval' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'accounting:bill_approve' obj.pk %}" onsubmit="return confirm('Approve this bill?');">
           {% csrf_token %}
           <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
         </form>
+        {% endif %}
       {% endif %}
       {% if not obj.is_locked %}
         {% if obj.status == 'draft' or obj.status == 'pending_approval' %}
@@ -30,7 +32,7 @@
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
-      <div class="detail-item"><dt>Vendor</dt><dd>{{ obj.party.name }}</dd></div>
+      <div class="detail-item"><dt>Vendor</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'paid' or obj.status == 'approved' %}green{% elif obj.status == 'partial' or obj.status == 'pending_approval' %}amber{% elif obj.status == 'void' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Bill Date</dt><dd>{{ obj.bill_date|date:"M d, Y" }}</dd></div>
       <div class="detail-item"><dt>Due Date</dt><dd>{{ obj.due_date|date:"M d, Y"|default:"—" }}</dd></div>
@@ -53,19 +55,19 @@
             <tr>
               <td>{{ line.description|default:"—" }}</td>
               <td>{{ line.quantity }}</td>
-              <td>${{ line.unit_price|floatformat:2 }}</td>
+              <td>{{ line.unit_price|floatformat:2 }}</td>
               <td>{{ line.tax_rate_pct }}</td>
               <td>{% if line.gl_account %}{{ line.gl_account.code }} · {{ line.gl_account.name }}{% else %}—{% endif %}</td>
-              <td>${{ line.line_total|floatformat:2 }}</td>
+              <td>{{ line.line_total|floatformat:2 }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><p>No lines on this bill.</p></div></td></tr>
           {% endfor %}
         </tbody>
         <tfoot>
-          <tr><td colspan="5" class="fw-600" style="text-align:right;">Subtotal</td><td>${{ obj.subtotal|floatformat:2 }}</td></tr>
-          <tr><td colspan="5" class="fw-600" style="text-align:right;">Tax</td><td>${{ obj.tax_total|floatformat:2 }}</td></tr>
-          <tr><td colspan="5" class="fw-600" style="text-align:right;">Total</td><td class="fw-600">${{ obj.total|floatformat:2 }}</td></tr>
+          <tr><td colspan="5" class="fw-600">Subtotal</td><td>{{ obj.subtotal|floatformat:2 }}</td></tr>
+          <tr><td colspan="5" class="fw-600">Tax</td><td>{{ obj.tax_total|floatformat:2 }}</td></tr>
+          <tr><td colspan="5" class="fw-600">Total</td><td class="fw-600">{{ obj.total|floatformat:2 }}</td></tr>
         </tfoot>
       </table>
     </div>
@@ -79,16 +81,16 @@
         <tbody>
           {% for alloc in allocations %}
             <tr>
-              <td><a href="{% url 'accounting:payment_detail' alloc.payment.pk %}" class="fw-600">{{ alloc.payment.number }}</a></td>
-              <td>${{ alloc.allocated_amount|floatformat:2 }}</td>
+              <td>{% if alloc.payment %}<a href="{% url 'accounting:payment_detail' alloc.payment.pk %}" class="fw-600">{{ alloc.payment.number }}</a>{% else %}—{% endif %}</td>
+              <td>{{ alloc.allocated_amount|floatformat:2 }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="2"><div class="empty-state"><i data-lucide="wallet"></i><p>No payments applied to this bill yet.</p></div></td></tr>
           {% endfor %}
         </tbody>
         <tfoot>
-          <tr><td class="fw-600" style="text-align:right;">Amount Paid</td><td>${{ amount_paid|floatformat:2 }}</td></tr>
-          <tr><td class="fw-600" style="text-align:right;">Balance Due</td><td class="fw-600">${{ balance_due|floatformat:2 }}</td></tr>
+          <tr><td class="fw-600">Amount Paid</td><td>{{ amount_paid|floatformat:2 }}</td></tr>
+          <tr><td class="fw-600">Balance Due</td><td class="fw-600">{{ balance_due|floatformat:2 }}</td></tr>
         </tfoot>
       </table>
     </div>
