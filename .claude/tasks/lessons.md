@@ -245,3 +245,18 @@ the tenant could mutate them. **Rule:** privileged/workspace-config writes use `
 `{{ debug }}` built-in context var needs `INTERNAL_IPS`; to gate template content on DEBUG, expose `settings.DEBUG`
 explicitly via a context processor. Deferred (production hardening, not built): login rate-limiting/lockout
 (django-axes) — note it in the README rather than ship it in the foundation.
+
+## L28 — Verify the core spine actually EXISTS before a module plan reuses it; re-plan at build time if not
+Building CRM 1.7–1.12, the `research` and `todo` agents both wrote plans that reused unified-core masters
+(`core.Item`, `core.Currency`, `core.Invoice`/`Payment` AR-AP ledger, `core.PurchaseOrder`/`PurchaseOrderLine`,
+`core.StockMove`) as if they were built — they are NOT. The foundation only built
+`Party/PartyRole/Address/ContactMethod/PartyRelationship/Employment/Activity/AuditLog/Document/OrgUnit/Tenant`
+(core) + `Subscription/SubscriptionInvoice/BrandingSetting/EncryptionKey/HealthMetric` (tenants). Those masters
+belong to still-unbuilt Modules 2/5/6. Had I coded the plan verbatim, the 1.12 PO/stock views would have raised
+`ImportError`/`FieldError` at first request. **Rule:** before writing any code that FKs into or queries a spine
+entity, confirm it exists — `grep -n "^class <Name>" apps/core/models.py apps/tenants/models.py` (the agents'
+`NavERP-ERD.md`/`NavERP.md` describe the *intended* spine, not the *built* one). When a planned entity is missing,
+STOP and re-plan (CLAUDE.md): build a self-contained CRM-owned stand-in (e.g. CRM `PurchaseOrder`/`ProductStock`,
+`Expense.currency_code` CharField, health from existing CRM signals), document the adaptation in `todo.md`, and note
+the future migration onto the spine. The research/todo agent prompts should be told to verify entity existence, not
+trust the ERD doc.
