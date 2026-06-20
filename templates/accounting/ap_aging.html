@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}AP Aging{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">AP Aging</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>AP Aging</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Vendor</th><th>Current</th><th>1–30</th><th>31–60</th><th>61–90</th><th>90+</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for r in party_rows %}
+            <tr>
+              <td class="fw-600">{{ r.party }}</td>
+              <td>{{ r.current|floatformat:2 }}</td>
+              <td>{{ r.d1_30|floatformat:2 }}</td>
+              <td>{{ r.d31_60|floatformat:2 }}</td>
+              <td>{{ r.d61_90|floatformat:2 }}</td>
+              <td>{{ r.d90_plus|floatformat:2 }}</td>
+              <td class="fw-600">{{ r.total|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="receipt"></i><h3>Nothing outstanding</h3><p>No open vendor balances to age.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if party_rows %}
+          <tfoot>
+            <tr>
+              <td class="fw-600">Total</td>
+              <td class="fw-600">{{ totals.current|floatformat:2 }}</td>
+              <td class="fw-600">{{ totals.d1_30|floatformat:2 }}</td>
+              <td class="fw-600">{{ totals.d31_60|floatformat:2 }}</td>
+              <td class="fw-600">{{ totals.d61_90|floatformat:2 }}</td>
+              <td class="fw-600">{{ totals.d90_plus|floatformat:2 }}</td>
+              <td class="fw-600">{{ totals.total|floatformat:2 }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:accounting_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
