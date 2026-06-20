@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:bank_account_list' %}">Bank Accounts</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:bank_account_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounting:bank_account_delete' obj.pk %}" onsubmit="return confirm('Delete this bank account?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Bank</dt><dd>{{ obj.bank_name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Account Number</dt><dd>•••• {{ obj.account_number_last4 }}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>GL Account</dt><dd>{% if obj.gl_account %}<a href="{% url 'accounting:glaccount_detail' obj.gl_account.pk %}">{{ obj.gl_account.code }} · {{ obj.gl_account.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Opening Balance</dt><dd>{{ obj.opening_balance|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="banknote"></i></div><div class="stat-value">{{ current_balance|floatformat:2 }}</div><div class="stat-label">Current Balance</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Transactions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Direction</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for t in transactions %}
+            <tr>
+              <td>{{ t.transaction_date|date:"M d, Y" }}</td>
+              <td><a href="{% url 'accounting:bank_transaction_detail' t.pk %}">{{ t.description|truncatechars:60|default:"—" }}</a></td>
+              <td>{{ t.amount|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if t.direction == 'credit' %}green{% else %}red{% endif %}">{{ t.get_direction_display }}</span></td>
+              <td><span class="badge badge-{% if t.status == 'reconciled' %}green{% elif t.status == 'matched' %}info{% elif t.status == 'unmatched' %}amber{% else %}muted{% endif %}">{{ t.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="repeat-2"></i><p>No transactions yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:bank_account_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
