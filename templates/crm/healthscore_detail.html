@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:healthscore_list' %}">Health Scores</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{% url 'crm:recompute_health_score' obj.pk %}" onsubmit="return confirm('Recompute this health score?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="refresh-cw"></i> Recompute</button>
+    </form>
+    <a href="{% url 'crm:healthscore_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:healthscore_delete' obj.pk %}" onsubmit="return confirm('Delete this health score?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt>Number</dt>
+        <dd>{{ obj.number }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Account</dt>
+        <dd><a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a></dd>
+      </div>
+      <div class="detail-item">
+        <dt>Score</dt>
+        <dd><strong style="font-size:1.5rem;">{{ obj.score }}</strong> / 100</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Tier</dt>
+        <dd>
+          {% if obj.tier == 'green' %}<span class="badge badge-green">{{ obj.get_tier_display }}</span>
+          {% elif obj.tier == 'yellow' %}<span class="badge badge-amber">{{ obj.get_tier_display }}</span>
+          {% elif obj.tier == 'red' %}<span class="badge badge-red">{{ obj.get_tier_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_tier_display }}</span>{% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt>Computed at</dt>
+        <dd>{{ obj.computed_at|date:"M d, Y H:i"|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Updated</dt>
+        <dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd>
+      </div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Signal breakdown</h2>
+  </div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt>Tickets</dt>
+        <dd>{{ obj.breakdown.tickets|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>NPS</dt>
+        <dd>{{ obj.breakdown.nps|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Tasks</dt>
+        <dd>{{ obj.breakdown.tasks|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Engagement</dt>
+        <dd>{{ obj.breakdown.engagement|default:"—" }}</dd>
+      </div>
+    </dl>
+  </div>
+</div>
+
+<a href="{% url 'crm:healthscore_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
