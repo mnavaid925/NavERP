@@ -885,3 +885,973 @@ git add 'README.md'; git commit -m 'docs(readme): add CRM 1.7-1.12 sub-modules t
 - **Deferred** (documented): Stripe/DocuSign/S3/SMTP integrations, Celery scheduled workflow actions, multi-level
   approval chains, Gantt drag-reschedule, AI doc generation, partner self-service lead/PO, and migrating 1.12 onto
   the real Inventory/Procurement spine once Modules 5/6 land.
+
+---
+
+# Module 2 — Accounting & Finance (accounting) — plan from research-accounting.md  (2026-06-20)
+
+## Section 0 — Architecture decision: accounting OWNS the GL spine (L28 applied)
+
+> **Critical decision recorded here before any code is written.**
+>
+> `apps/core/models.py` (verified 2026-06-20) contains ONLY:
+> `Tenant`, `OrgUnit`, `Party`, `PartyRole`, `Address`, `ContactMethod`, `PartyRelationship`,
+> `Employment`, `Activity`, `AuditLog`, `Document`.
+>
+> There is NO `GLAccount`, NO `JournalEntry`, NO `Currency`, NO `Invoice`, NO `Payment`,
+> NO `BankAccount` in the core spine — those exist only in `NavERP-ERD.md` as *intended* future
+> entities, not as built code (L28). `CRM 1.7–1.12` already documented this gap and adapted.
+>
+> **Decision:** The `accounting` app BUILDS the financial spine from scratch. All later modules
+> (Inventory, Procurement, Sales, Assets) will FK into `accounting.*` models by string, exactly
+> as every module FKs into `core.*` by string.
+>
+> **What `accounting` builds (net-new tables, not wrappers):**
+> - `Currency` — ISO 4217 code master (shared, not tenant-scoped)
+> - `ExchangeRate` — daily spot rates per tenant (tenant-scoped)
+> - `GLAccount` — Chart of Accounts, hierarchical, tenant-scoped
+> - `FiscalPeriod` — tenant accounting periods, open/closed lock
+> - `JournalEntry` — double-entry header [JE-], tenant-scoped, append-only once posted
+> - `JournalLine` — debit/credit arms, FK to GLAccount + optionally Party/OrgUnit
+> - `PaymentTerm` — reusable Net-N / discount term configs, tenant-scoped
+> - `VendorProfile` — thin AP extension on `core.Party` (OneToOne)
+> - `CustomerProfile` — thin AR extension on `core.Party` (OneToOne)
+> - `Invoice` — AR invoice/credit note [INV-], tenant-scoped
+> - `InvoiceLine` — AR line items
+> - `Bill` — AP vendor bill [BILL-], tenant-scoped
+> - `BillLine` — AP line items
+> - `Payment` — unified inbound/outbound payment [PAY-], tenant-scoped
+> - `PaymentAllocation` — cash application join (Payment → Invoice/Bill)
+> - `BankAccount` — tenant bank accounts, FK to GLAccount
+> - `BankTransaction` — imported/manual bank statement lines
+> - `ReconciliationMatch` — matched pairs (BankTransaction + Payment/JournalLine)
+>
+> **What `accounting` REUSES from core (confirmed-existing):**
+> - `core.Party` / `core.PartyRole` — vendors and customers (no new vendor/customer tables;
+>   VendorProfile/CustomerProfile are accounting-owned OneToOne extensions only)
+> - `core.OrgUnit` — GL dimension / cost center (FK on JournalLine)
+> - `core.AuditLog` / `core.utils.write_audit_log` — immutable status-change log
+> - `core.utils.next_number` — per-tenant auto-numbering (JE-/INV-/BILL-/PAY- prefixes)
+> - `apps/core/decorators.py :: tenant_admin_required` — gates period-close, posting, void
+>
+> **Double-entry invariants (enforced at model.save() and view layer):**
+> 1. A `JournalEntry` may NOT be posted unless `sum(JournalLine.debit) == sum(JournalLine.credit)`.
+>    Validated in the post view before changing `status` to `posted`.
+> 2. Once `JournalEntry.status == 'posted'`, the entry and all its lines are IMMUTABLE — no edit
+>    or delete. Corrections are made by creating a reversal entry (`reversal_of` FK self).
+> 3. `GLAccount` balance is NEVER a stored field — always derived by aggregating posted
+>    `JournalLine` rows. No `balance` field on `GLAccount`.
+> 4. Posting into a `FiscalPeriod` with `status != 'open'` is blocked at the view layer
+>    (check before calling `entry.save()` with `status='posted'`).
+> 5. `Invoice.total` / `Bill.total` are stored for display performance but always recomputed
+>    from line aggregates on save — never hand-edited via the ModelForm.
+>
+> **TenantNumbered pattern:** accounting models with human numbers inherit the SAME abstract
+> base used in CRM — `TenantNumbered` from `apps/crm/models.py` — OR replicate its pattern
+> identically inside `apps/accounting/models.py` as a local abstract base (preferred: local
+> copy avoids cross-app import, since `crm` and `accounting` are peers). The local abstract
+> base has the same `tenant FK`, `number CharField(editable=False)`, `created_at`, `updated_at`,
+> and the same 5-retry `save()` via `apps.core.utils.next_number`.
+
+---
+
+## Section 1 — Models (18 accounting-owned tables)
+
+> Each item lists: Number Prefix | key fields + CHOICES | which core entities it reuses vs. adds
+> | the researched P0/P1 features that drove each non-obvious field.
+
+### Sub-module 2.2 — General Ledger
+
+- [ ] **`Currency`** (no NUMBER_PREFIX, global not tenant-scoped) — net-new table.
+  Fields: `code` CharField(max_length=3, unique=True) — ISO 4217 e.g. "USD"; `name`
+  CharField(max_length=60); `symbol` CharField(max_length=8); `is_active` BooleanField(default=True).
+  NO tenant FK — shared across all tenants (same as intended ERD). Seed with USD, EUR, GBP, CAD.
+  Drivers: Multi-currency GL (all 10 products), multi-currency invoicing, bank account currencies.
+
+- [ ] **`ExchangeRate`** — net-new, tenant-scoped. Fields: `tenant` FK→`"core.Tenant"`;
+  `currency` FK→`"accounting.Currency"` CASCADE; `rate_date` DateField; `rate` DecimalField
+  (max_digits=18, decimal_places=8); `source` CharField choices
+  `[("manual","Manual"),("feed","Feed")]` default `"manual"`. `unique_together = ("tenant",
+  "currency", "rate_date")`. No tenant auto-number (lookup table, not a transactional record).
+  Drivers: Multi-currency GL FX conversion, FX gain/loss at period-end, multi-currency invoicing.
+
+- [ ] **`GLAccount`** [no NUMBER_PREFIX — CoA uses `code` field, not an auto-number] — net-new,
+  tenant-scoped. Fields: `tenant` FK→`"core.Tenant"` CASCADE db_index=True;
+  `code` CharField(max_length=20); `name` CharField(max_length=255);
+  `account_type` CharField choices
+  `[("asset","Asset"),("liability","Liability"),("equity","Equity"),("income","Income"),("expense","Expense")]`;
+  `normal_balance` CharField choices `[("debit","Debit"),("credit","Credit")]`
+  (auto-set in save() based on account_type: asset/expense=debit, liability/equity/income=credit —
+  never on the ModelForm); `parent` FK→`"self"` SET_NULL null blank related_name=`"children"`
+  (hierarchical CoA — sub-accounts nest under parent); `is_active` BooleanField(default=True);
+  `description` TextField(blank=True). `unique_together = ("tenant", "code")`.
+  NOTE: NO `balance` field — balances are always derived via JournalLine aggregation.
+  Drivers: Chart of Accounts (all 10 products), Account Types, hierarchical sub-accounts,
+  GL dimensions/OrgUnit cost-center tagging, immutable audit trail.
+
+- [ ] **`FiscalPeriod`** — net-new, tenant-scoped. Fields: `tenant` FK→`"core.Tenant"` CASCADE
+  db_index=True; `name` CharField(max_length=60, e.g. "Jan 2025"); `period_type` CharField choices
+  `[("month","Month"),("quarter","Quarter"),("year","Year")]` default `"month"`; `start_date`
+  DateField; `end_date` DateField; `status` CharField choices
+  `[("open","Open"),("closed","Closed"),("locked","Locked")]` default `"open"`;
+  `closed_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null blank related_name=`"accounting_periods_closed"`;
+  `closed_at` DateTimeField null blank (system-set — EXCLUDE from ModelForm per L22).
+  Drivers: Fiscal Periods (all 10 products), Period Close Procedure, posting block into closed period,
+  year-end close.
+
+- [ ] **`JournalEntry`** [PREFIX `"JE"`] — net-new, tenant-scoped. Extends the local `TenantNumbered`
+  abstract base. Fields: `entry_type` CharField choices
+  `[("manual","Manual"),("invoice","Invoice Posting"),("payment","Payment"),("bank","Bank"),
+  ("recurring","Recurring"),("reversal","Reversal")]` default `"manual"`;
+  `status` CharField choices
+  `[("draft","Draft"),("pending_approval","Pending Approval"),("posted","Posted"),("void","Void")]`
+  default `"draft"`; `fiscal_period` FK→`"accounting.FiscalPeriod"` SET_NULL null blank
+  related_name=`"journal_entries"` (nullable because draft entries may predate period assignment);
+  `entry_date` DateField; `description` TextField(blank=True); `reference` CharField(max_length=100,
+  blank=True, help_text="External document reference e.g. PO number");
+  `reversal_of` FK→`"self"` SET_NULL null blank related_name=`"reversals"` (populated when this entry
+  is a reversal of another posted entry); `created_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null
+  related_name=`"accounting_je_created"` (system-set in view — EXCLUDE from ModelForm);
+  `approved_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null blank related_name=`"accounting_je_approved"`
+  (system-set when status moves to posted — EXCLUDE from ModelForm);
+  `posted_at` DateTimeField null blank (system-set — EXCLUDE from ModelForm).
+  IMMUTABILITY RULE: `save()` override blocks edits if `self.pk` already exists and the
+  ORIGINAL status was `"posted"` or `"void"` — raise `ValidationError`.
+  Drivers: Manual Journal Entries (all 10 products), Journal Approval Workflow, Recurring JEs,
+  Reversing JEs, immutable audit trail.
+
+- [ ] **`JournalLine`** — net-new, no auto-number (child of JournalEntry). Fields:
+  `entry` FK→`"accounting.JournalEntry"` CASCADE related_name=`"lines"`;
+  `gl_account` FK→`"accounting.GLAccount"` PROTECT related_name=`"journal_lines"`;
+  `debit` DecimalField(max_digits=18, decimal_places=2, default=0);
+  `credit` DecimalField(max_digits=18, decimal_places=2, default=0);
+  `description` CharField(max_length=255, blank=True);
+  `party` FK→`"core.Party"` SET_NULL null blank related_name=`"accounting_je_lines"`
+  (subledger drill-down to customer/vendor AR/AP);
+  `org_unit` FK→`"core.OrgUnit"` SET_NULL null blank related_name=`"accounting_je_lines"`
+  (cost-center dimension — reuses confirmed-existing core.OrgUnit);
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank related_name=`"je_lines"`
+  (transaction currency if different from functional currency);
+  `amount_foreign` DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+  (amount in transaction currency; null when same as functional);
+  `exchange_rate` DecimalField(max_digits=18, decimal_places=8, null=True, blank=True).
+  VALIDATION: `clean()` must enforce debit XOR credit (not both non-zero); view must
+  enforce sum balance before posting.
+  Drivers: Double-entry GL, Multi-currency GL, GL dimensions/cost centers (Sage Intacct, BC,
+  NetSuite), subledger drill-down, immutable audit trail.
+
+### Sub-module 2.3 — Accounts Payable + Sub-module 2.4 — Accounts Receivable (shared masters)
+
+- [ ] **`PaymentTerm`** — net-new, tenant-scoped. Fields: `tenant` FK→`"core.Tenant"` CASCADE
+  db_index=True; `name` CharField(max_length=80, e.g. "Net 30", "2/10 Net 30");
+  `days_due` PositiveSmallIntegerField; `discount_pct` DecimalField(max_digits=5, decimal_places=2,
+  default=0); `discount_days` PositiveSmallIntegerField(default=0); `is_active` BooleanField(default=True).
+  Drivers: Payment Terms (all 10 products), Early Payment Discount Capture,
+  auto-calculate due_date on bill/invoice entry.
+
+- [ ] **`VendorProfile`** — net-new, thin AP extension on confirmed-existing `core.Party`. Fields:
+  `party` OneToOneField→`"core.Party"` CASCADE related_name=`"vendor_profile"`;
+  `tenant` FK→`"core.Tenant"` CASCADE db_index=True (denorm for tenant-scoped querysets);
+  `payment_terms` FK→`"accounting.PaymentTerm"` SET_NULL null blank;
+  `default_expense_account` FK→`"accounting.GLAccount"` SET_NULL null blank
+  related_name=`"vendor_default_expense"`;
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank;
+  `is_1099` BooleanField(default=False); `notes` TextField(blank=True).
+  Drivers: Vendor Management via Party spine, Payment Terms, 1099/W-9 tracking flag.
+
+- [ ] **`CustomerProfile`** — net-new, thin AR extension on `core.Party`. Fields:
+  `party` OneToOneField→`"core.Party"` CASCADE related_name=`"customer_profile"`;
+  `tenant` FK→`"core.Tenant"` CASCADE db_index=True;
+  `payment_terms` FK→`"accounting.PaymentTerm"` SET_NULL null blank;
+  `credit_limit` DecimalField(max_digits=14, decimal_places=2, default=0);
+  `ar_account` FK→`"accounting.GLAccount"` SET_NULL null blank related_name=`"customer_ar_accounts"`;
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank;
+  `credit_on_hold` BooleanField(default=False).
+  Drivers: Customer Management via Party spine, Credit Limit Enforcement, credit hold automation.
+
+### Sub-module 2.4 — Accounts Receivable
+
+- [ ] **`Invoice`** [PREFIX `"INV"`] — net-new, tenant-scoped. Extends local `TenantNumbered`.
+  Fields: `kind` CharField choices `[("invoice","Invoice"),("credit_note","Credit Note")]`
+  default `"invoice"` (credit note = negative-amount invoice on same table, same CRUD);
+  `party` FK→`"core.Party"` PROTECT related_name=`"accounting_invoices"` (the customer);
+  `payment_terms` FK→`"accounting.PaymentTerm"` SET_NULL null blank;
+  `issue_date` DateField; `due_date` DateField null blank;
+  `status` CharField choices
+  `[("draft","Draft"),("sent","Sent"),("partial","Partial"),("paid","Paid"),("void","Void")]`
+  default `"draft"`;
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank;
+  `journal_entry` FK→`"accounting.JournalEntry"` SET_NULL null blank related_name=`"invoices"`
+  (populated when invoice is posted/confirmed — system-set, EXCLUDE from ModelForm);
+  `subtotal` DecimalField(max_digits=18, decimal_places=2, default=0)
+  (recomputed on line save — NOT on ModelForm; stored for display);
+  `tax_total` DecimalField(max_digits=18, decimal_places=2, default=0) (same);
+  `total` DecimalField(max_digits=18, decimal_places=2, default=0) (same);
+  `notes` TextField(blank=True).
+  IMMUTABILITY: once `status` is `paid` or `void`, block edit (validation gate in view — offer
+  credit note instead). A `void` status is set by posting a reversing JournalEntry.
+  Drivers: Customer Invoice (all 10 products), Invoice Numbering, Credit Notes/Refunds,
+  AR Aging Analysis, Recurring Invoicing anchor.
+
+- [ ] **`InvoiceLine`** — net-new, child of Invoice. Fields:
+  `invoice` FK→`"accounting.Invoice"` CASCADE related_name=`"lines"`;
+  `description` CharField(max_length=255);
+  `quantity` DecimalField(max_digits=14, decimal_places=4, default=1);
+  `unit_price` DecimalField(max_digits=14, decimal_places=2);
+  `tax_rate_pct` DecimalField(max_digits=5, decimal_places=2, default=0);
+  `line_total` DecimalField(max_digits=18, decimal_places=2, default=0)
+  (computed = quantity × unit_price, stored; NOT on form — recomputed in save());
+  `gl_account` FK→`"accounting.GLAccount"` SET_NULL null blank related_name=`"invoice_lines"`
+  (income/revenue account for this line).
+  Drivers: Per-line revenue GL coding, tax per line, credit note line reversals.
+
+### Sub-module 2.3 — Accounts Payable
+
+- [ ] **`Bill`** [PREFIX `"BILL"`] — net-new, tenant-scoped. Extends local `TenantNumbered`.
+  Fields: `party` FK→`"core.Party"` PROTECT related_name=`"accounting_bills"` (the vendor);
+  `payment_terms` FK→`"accounting.PaymentTerm"` SET_NULL null blank;
+  `bill_date` DateField; `due_date` DateField null blank;
+  `status` CharField choices
+  `[("draft","Draft"),("pending_approval","Pending Approval"),("approved","Approved"),
+  ("partial","Partial"),("paid","Paid"),("void","Void")]` default `"draft"`;
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank;
+  `journal_entry` FK→`"accounting.JournalEntry"` SET_NULL null blank related_name=`"bills"`
+  (system-set on approval — EXCLUDE from ModelForm);
+  `subtotal` DecimalField(max_digits=18, decimal_places=2, default=0) (recomputed — NOT on form);
+  `tax_total` DecimalField(max_digits=18, decimal_places=2, default=0) (same);
+  `total` DecimalField(max_digits=18, decimal_places=2, default=0) (same);
+  `approved_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null blank
+  related_name=`"accounting_bills_approved"` (system-set — EXCLUDE from ModelForm);
+  `document` FK→`"core.Document"` SET_NULL null blank related_name=`"accounting_bills"`
+  (scanned bill attachment — reuses confirmed-existing core.Document);
+  `notes` TextField(blank=True).
+  Drivers: Vendor Bill (all 10 products), Bill Approval Routing, AP Aging Report,
+  3-way match stub via Document attachment.
+
+- [ ] **`BillLine`** — net-new, child of Bill. Fields:
+  `bill` FK→`"accounting.Bill"` CASCADE related_name=`"lines"`;
+  `description` CharField(max_length=255);
+  `quantity` DecimalField(max_digits=14, decimal_places=4, default=1);
+  `unit_price` DecimalField(max_digits=14, decimal_places=2);
+  `tax_rate_pct` DecimalField(max_digits=5, decimal_places=2, default=0);
+  `line_total` DecimalField(max_digits=18, decimal_places=2, default=0)
+  (computed = quantity × unit_price — NOT on form);
+  `gl_account` FK→`"accounting.GLAccount"` SET_NULL null blank related_name=`"bill_lines"`
+  (expense account for this line).
+  Drivers: Per-line expense GL coding, early-payment discount line.
+
+- [ ] **`Payment`** [PREFIX `"PAY"`] — net-new, unified AP+AR, tenant-scoped. Extends local
+  `TenantNumbered`. Fields:
+  `direction` CharField choices `[("in","Inbound — Customer Receipt"),("out","Outbound — Vendor Payment")]`;
+  `party` FK→`"core.Party"` PROTECT related_name=`"accounting_payments"` (customer or vendor);
+  `bank_account` FK→`"accounting.BankAccount"` PROTECT related_name=`"payments"`;
+  `payment_method` CharField choices
+  `[("bank_transfer","Bank Transfer"),("check","Check"),("cash","Cash"),("card","Card"),
+  ("ach","ACH"),("wire","Wire Transfer")]` default `"bank_transfer"`;
+  `payment_date` DateField;
+  `amount` DecimalField(max_digits=18, decimal_places=2);
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank;
+  `status` CharField choices
+  `[("draft","Draft"),("confirmed","Confirmed"),("void","Void")]` default `"draft"`;
+  `journal_entry` FK→`"accounting.JournalEntry"` SET_NULL null blank related_name=`"payments"`
+  (system-set on confirmation — EXCLUDE from ModelForm);
+  `notes` TextField(blank=True).
+  NOTE: `BankAccount` FK forces the ordering — `BankAccount` model must be defined before
+  `Payment` in models.py.
+  Drivers: AP Payment Processing (all 10 products), AR Payment Collection, payment method choices,
+  bank balance impact, cash position dashboard.
+
+- [ ] **`PaymentAllocation`** — net-new, no auto-number, pure join table. Fields:
+  `payment` FK→`"accounting.Payment"` CASCADE related_name=`"allocations"`;
+  `invoice` FK→`"accounting.Invoice"` SET_NULL null blank related_name=`"allocations"`
+  (AR side; either invoice or bill must be set, not both);
+  `bill` FK→`"accounting.Bill"` SET_NULL null blank related_name=`"allocations"` (AP side);
+  `allocated_amount` DecimalField(max_digits=18, decimal_places=2);
+  `discount_taken` DecimalField(max_digits=14, decimal_places=2, default=0).
+  NOTE: no `tenant` FK — tenant is inherited from `payment.tenant`. Child join table.
+  Drivers: Cash Application / Matching (AR), Payment-to-Bill Matching (AP), Early Payment Discount
+  Capture, multi-invoice payment splits, partial allocation.
+
+### Sub-module 2.5 — Cash Management
+
+- [ ] **`BankAccount`** — net-new, tenant-scoped. Fields:
+  `tenant` FK→`"core.Tenant"` CASCADE db_index=True;
+  `name` CharField(max_length=255);
+  `account_number_last4` CharField(max_length=4, blank=True, help_text="Last 4 digits only");
+  `bank_name` CharField(max_length=255, blank=True);
+  `currency` FK→`"accounting.Currency"` SET_NULL null blank;
+  `gl_account` FK→`"accounting.GLAccount"` SET_NULL null blank related_name=`"bank_accounts"`
+  (the GL cash account this bank maps to);
+  `opening_balance` DecimalField(max_digits=18, decimal_places=2, default=0);
+  `opening_balance_date` DateField null blank;
+  `is_active` BooleanField(default=True).
+  NOTE: must be defined BEFORE `Payment` in models.py (Payment has FK→BankAccount).
+  Drivers: Bank Account Management (all 10 products), Cash Position Dashboard,
+  Reconciliation Engine anchor, Inter-account Transfers.
+
+- [ ] **`BankTransaction`** — net-new, tenant-scoped. Fields:
+  `tenant` FK→`"core.Tenant"` CASCADE db_index=True;
+  `bank_account` FK→`"accounting.BankAccount"` CASCADE related_name=`"transactions"`;
+  `transaction_date` DateField;
+  `description` CharField(max_length=512);
+  `amount` DecimalField(max_digits=18, decimal_places=2);
+  `direction` CharField choices `[("credit","Credit — Money In"),("debit","Debit — Money Out")]`;
+  `source` CharField choices
+  `[("manual","Manual Entry"),("csv_import","CSV Import"),("bank_feed","Bank Feed")]`
+  default `"manual"`;
+  `status` CharField choices
+  `[("unmatched","Unmatched"),("matched","Matched"),("reconciled","Reconciled"),
+  ("excluded","Excluded")]` default `"unmatched"`;
+  `external_ref` CharField(max_length=255, blank=True,
+  help_text="Bank's own transaction ID for deduplication").
+  Drivers: Bank Transaction Log (all 10 products), Bank Statement Import CSV,
+  Bank Feeds (same model, source='bank_feed'), Reconciliation Engine input,
+  Cash Position Dashboard.
+
+- [ ] **`ReconciliationMatch`** — net-new, tenant-scoped. Fields:
+  `tenant` FK→`"core.Tenant"` CASCADE db_index=True;
+  `bank_transaction` FK→`"accounting.BankTransaction"` CASCADE related_name=`"matches"`;
+  `payment` FK→`"accounting.Payment"` SET_NULL null blank related_name=`"reconciliation_matches"`
+  (primary match target; either payment or journal_line must be set);
+  `journal_line` FK→`"accounting.JournalLine"` SET_NULL null blank related_name=`"reconciliation_matches"`
+  (alternative match target for entries without a Payment record);
+  `matched_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null blank
+  related_name=`"accounting_reconciliation_matches"`;
+  `matched_at` DateTimeField(auto_now_add=True);
+  `is_confirmed` BooleanField(default=False).
+  Drivers: Reconciliation Engine (all 10 products), Auto-Match Rules output storage,
+  Bank Reconciliation Statement, Cash Application.
+
+---
+
+## Section 2 — Backend (`apps/accounting/`)
+
+### 2a — App skeleton
+
+- [ ] `apps/accounting/__init__.py` — empty file
+- [ ] `apps/accounting/apps.py` — `AppConfig` with `name = "apps.accounting"`,
+  `verbose_name = "Accounting & Finance"`
+- [ ] `apps/accounting/models.py` — all 18 models in dependency order:
+  `Currency` → `ExchangeRate` → `GLAccount` → `FiscalPeriod` → `JournalEntry` →
+  `JournalLine` → `PaymentTerm` → `VendorProfile` → `CustomerProfile` → `BankAccount` →
+  `Invoice` → `InvoiceLine` → `Bill` → `BillLine` → `Payment` → `PaymentAllocation` →
+  `BankTransaction` → `ReconciliationMatch`.
+  Include local `TenantNumbered` abstract base (copy the pattern from `apps/crm/models.py`;
+  do NOT import from `crm` — peer-app imports are fragile).
+  Include `Meta` indexes: `(tenant, status)` on Invoice/Bill/Payment/FiscalPeriod,
+  `(tenant, entry_date)` on JournalEntry, `(tenant, transaction_date)` on BankTransaction,
+  `(tenant, gl_account)` on JournalLine, `(tenant, is_active)` on GLAccount.
+  Encoding for later modules: add `__str__` that includes the human number where present.
+
+- [ ] `apps/accounting/forms.py` — one `ModelForm` per primary model.
+  MANDATORY EXCLUSIONS from every form's `Meta.fields` (per L22 + CLAUDE.md):
+  - Always exclude: `tenant`, `number` (auto), any `*_at` DateTimeField that is system-set
+    (`closed_at`, `posted_at`, `matched_at`), any `*_by` FK set in the view (`created_by`,
+    `approved_by`, `matched_by`), computed aggregates (`subtotal`, `tax_total`, `total`,
+    `line_total`, `normal_balance`), and `journal_entry` (set when posting, not on the form).
+  - `GLAccountForm`: fields `code, name, account_type, parent, is_active, description`;
+    `__init__` scopes `parent` queryset to `tenant` GLAccounts.
+  - `FiscalPeriodForm`: fields `name, period_type, start_date, end_date, status`;
+    exclude `closed_by`, `closed_at` (system-set by the close_period action view).
+  - `JournalEntryForm`: fields `entry_type, entry_date, description, reference, fiscal_period`;
+    exclude `status` (controlled via action views only), `reversal_of` (system-set),
+    `created_by`, `approved_by`, `posted_at`.
+  - `JournalLineForm` / inline formset: fields `gl_account, debit, credit, description,
+    party, org_unit, currency, amount_foreign, exchange_rate`.
+  - `PaymentTermForm`: all non-system fields.
+  - `VendorProfileForm`: fields `payment_terms, default_expense_account, currency, is_1099, notes`.
+  - `CustomerProfileForm`: fields `payment_terms, credit_limit, ar_account, currency, credit_on_hold`.
+  - `InvoiceForm`: fields `kind, party, payment_terms, issue_date, due_date, status, currency, notes`;
+    exclude `journal_entry`, `subtotal`, `tax_total`, `total`.
+  - `InvoiceLineForm`: fields `description, quantity, unit_price, tax_rate_pct, gl_account`;
+    exclude `line_total`.
+  - `BillForm`: fields `party, payment_terms, bill_date, due_date, status, currency, document, notes`;
+    exclude `journal_entry`, `subtotal`, `tax_total`, `total`, `approved_by`.
+  - `BillLineForm`: fields `description, quantity, unit_price, tax_rate_pct, gl_account`;
+    exclude `line_total`.
+  - `PaymentForm`: fields `direction, party, bank_account, payment_method, payment_date, amount,
+    currency, notes`; exclude `status` (set via confirm action), `journal_entry`.
+  - `PaymentAllocationForm`: fields `invoice, bill, allocated_amount, discount_taken`.
+  - `BankAccountForm`: all non-system fields.
+  - `BankTransactionForm`: fields `bank_account, transaction_date, description, amount, direction,
+    source, external_ref`; exclude `status` (set by reconciliation engine).
+  - `ReconciliationMatchForm`: fields `bank_transaction, payment, journal_line, is_confirmed`.
+  - `ExchangeRateForm`: all non-system fields.
+  - ALL FK dropdowns in `__init__` must be scoped to `tenant` via the pattern:
+    `self.fields['field'].queryset = Model.objects.filter(tenant=self.tenant)`.
+  - `Currency` FK dropdowns: filter `is_active=True` (no tenant scope — it's global).
+
+- [ ] `apps/accounting/views.py` — function-based views, `@login_required` on all.
+  `@tenant_admin_required` (from `apps.core.decorators`) on: `fiscal_period_close`,
+  `journal_entry_post`, `journal_entry_void`, `bill_approve`, `payment_confirm`,
+  `payment_void`, `reconciliation_confirm`. Regular `@login_required` on all CRUD and list views.
+  Tenant scope: every queryset uses `filter(tenant=request.tenant)`. No `Model.objects.all()`.
+  Full CRUD views for every primary model: `*_list` (search + filters + pagination),
+  `*_create`, `*_detail`, `*_edit`, `*_delete` (POST-only redirect).
+  Custom action views (POST-only, `@require_POST`):
+    - `journal_entry_post` — validate debit==credit sum; check fiscal_period open; set
+      status=`posted`, posted_at=now(), created_by=request.user; call write_audit_log.
+    - `journal_entry_void` — create reversal JournalEntry (reversal_of=original);
+      set original status=`void`; call write_audit_log.
+    - `bill_approve` — set Bill.status=`approved`, approved_by=request.user;
+      write_audit_log; redirect to bill_detail.
+    - `invoice_post` — mark Invoice.status=`sent`; auto-create posting JournalEntry
+      (debit AR account / credit income account) if GL accounts are configured; write_audit_log.
+    - `payment_confirm` — set Payment.status=`confirmed`; auto-create JournalEntry
+      (debit/credit bank + AR/AP accounts); write_audit_log.
+    - `payment_void` — set Payment.status=`void`; write_audit_log.
+    - `fiscal_period_close` — check no open draft JournalEntries in period; set
+      FiscalPeriod.status=`closed`, closed_by=request.user, closed_at=now(); write_audit_log.
+    - `bank_transaction_import_csv` — POST with uploaded CSV file; parse rows; create
+      BankTransaction rows (skip duplicates by external_ref); redirect to bank_transaction_list.
+    - `reconciliation_confirm` — toggle ReconciliationMatch.is_confirmed; update linked
+      BankTransaction.status to `reconciled`; write_audit_log.
+  Report views (GET, no model changes):
+    - `trial_balance` — aggregate posted JournalLine by GLAccount, compute debit_total /
+      credit_total / balance; render as table.
+    - `ar_aging` — aggregate open Invoice rows by due_date buckets vs today (current /
+      1-30 / 31-60 / 61-90 / 90+); group by party.
+    - `ap_aging` — same for Bill.
+    - `gl_account_ledger` — posted JournalLines for one GLAccount, date-filtered.
+  Dashboard view (`accounting_dashboard`) — compute and pass KPI context:
+    `cash_position` (sum BankAccount opening_balance + net BankTransaction credits-debits),
+    `ar_outstanding` (sum open Invoice.total),
+    `ap_outstanding` (sum open Bill.total),
+    `overdue_invoices` (Invoice where due_date < today and status not in paid/void),
+    `overdue_bills` (Bill where due_date < today and status not in paid/void),
+    `recent_je` (last 5 posted JournalEntries).
+  Filter rules (CLAUDE.md mandatory):
+    - All FK filters validated with `.isdigit()` guard before `filter(field_id=value)` (L11).
+    - All status filter dropdowns pass `status_choices` in context.
+    - All list views apply filters BEFORE pagination.
+
+- [ ] `apps/accounting/urls.py` — `app_name = "accounting"`. URL names for EVERY model:
+  **GLAccount:** `glaccounts/` → `glaccount_list`; `glaccounts/add/` → `glaccount_create`;
+  `glaccounts/<int:pk>/` → `glaccount_detail`; `glaccounts/<int:pk>/edit/` → `glaccount_edit`;
+  `glaccounts/<int:pk>/delete/` → `glaccount_delete`.
+  **FiscalPeriod:** `fiscal-periods/` → `fiscal_period_list`; `.../add/` → `fiscal_period_create`;
+  `.../<int:pk>/` → `fiscal_period_detail`; `.../edit/` → `fiscal_period_edit`;
+  `.../delete/` → `fiscal_period_delete`; `.../close/` → `fiscal_period_close` (POST).
+  **JournalEntry:** `journal-entries/` → `journal_entry_list`; `.../add/` → `journal_entry_create`;
+  `.../<int:pk>/` → `journal_entry_detail`; `.../edit/` → `journal_entry_edit`;
+  `.../delete/` → `journal_entry_delete`; `.../post/` → `journal_entry_post` (POST);
+  `.../void/` → `journal_entry_void` (POST).
+  **PaymentTerm:** `payment-terms/` → `payment_term_list`; `.../add/` → `payment_term_create`;
+  `.../<int:pk>/` → `payment_term_detail`; `.../edit/` → `payment_term_edit`;
+  `.../delete/` → `payment_term_delete`.
+  **VendorProfile:** `vendor-profiles/` → `vendor_profile_list`; `.../add/` → `vendor_profile_create`;
+  `.../<int:pk>/` → `vendor_profile_detail`; `.../edit/` → `vendor_profile_edit`;
+  `.../delete/` → `vendor_profile_delete`.
+  **CustomerProfile:** `customer-profiles/` → `customer_profile_list`; same 5 CRUD names
+  `customer_profile_*`.
+  **Invoice:** `invoices/` → `invoice_list`; `.../add/` → `invoice_create`;
+  `.../<int:pk>/` → `invoice_detail`; `.../edit/` → `invoice_edit`;
+  `.../delete/` → `invoice_delete`; `.../post/` → `invoice_post` (POST).
+  **Bill:** `bills/` → `bill_list`; `.../add/` → `bill_create`;
+  `.../<int:pk>/` → `bill_detail`; `.../edit/` → `bill_edit`;
+  `.../delete/` → `bill_delete`; `.../approve/` → `bill_approve` (POST).
+  **Payment:** `payments/` → `payment_list`; `.../add/` → `payment_create`;
+  `.../<int:pk>/` → `payment_detail`; `.../edit/` → `payment_edit`;
+  `.../delete/` → `payment_delete`; `.../confirm/` → `payment_confirm` (POST);
+  `.../void/` → `payment_void` (POST).
+  **PaymentAllocation:** `allocations/` → `allocation_list`; `.../add/` → `allocation_create`;
+  `.../<int:pk>/` → `allocation_detail`; `.../edit/` → `allocation_edit`;
+  `.../delete/` → `allocation_delete`.
+  **BankAccount:** `bank-accounts/` → `bank_account_list`; `.../add/` → `bank_account_create`;
+  `.../<int:pk>/` → `bank_account_detail`; `.../edit/` → `bank_account_edit`;
+  `.../delete/` → `bank_account_delete`.
+  **BankTransaction:** `bank-transactions/` → `bank_transaction_list`;
+  `.../add/` → `bank_transaction_create`; `.../<int:pk>/` → `bank_transaction_detail`;
+  `.../edit/` → `bank_transaction_edit`; `.../delete/` → `bank_transaction_delete`;
+  `bank-transactions/import-csv/` → `bank_transaction_import_csv` (POST).
+  **ReconciliationMatch:** `reconciliation/` → `reconciliation_list`;
+  `.../add/` → `reconciliation_create`; `.../<int:pk>/` → `reconciliation_detail`;
+  `.../edit/` → `reconciliation_edit`; `.../delete/` → `reconciliation_delete`;
+  `.../confirm/` → `reconciliation_confirm` (POST).
+  **ExchangeRate:** `exchange-rates/` → `exchange_rate_list`; `.../add/` → `exchange_rate_create`;
+  `.../<int:pk>/` → `exchange_rate_detail`; `.../edit/` → `exchange_rate_edit`;
+  `.../delete/` → `exchange_rate_delete`.
+  **Currency:** `currencies/` → `currency_list`; `.../add/` → `currency_create`;
+  `.../<int:pk>/` → `currency_detail`; `.../edit/` → `currency_edit`;
+  `.../delete/` → `currency_delete`.
+  **Reports and dashboard:**
+  `dashboard/` → `accounting_dashboard`; `reports/trial-balance/` → `trial_balance`;
+  `reports/ar-aging/` → `ar_aging`; `reports/ap-aging/` → `ap_aging`;
+  `reports/ledger/<int:account_pk>/` → `gl_account_ledger`.
+
+- [ ] `apps/accounting/admin.py` — `@admin.register` for every model.
+  Common pattern: `list_display` includes `tenant`, human `number` where present,
+  status, key FKs; `list_filter` on status + tenant; `search_fields`; `readonly_fields`
+  for all system-set fields (numbers, `*_at`, `*_by`, `normal_balance`, totals).
+  `JournalEntryAdmin`: `readonly_fields = ("number", "status", "created_by",
+  "approved_by", "posted_at", "created_at", "updated_at")` — prevent admin users from
+  manually posting/voiding outside the view workflow.
+  `JournalLineAdmin`: inline under `JournalEntryAdmin` (`TabularInline`).
+  `InvoiceLineAdmin`: inline under `InvoiceAdmin`.
+  `BillLineAdmin`: inline under `BillAdmin`.
+  `PaymentAllocationAdmin`: inline under `PaymentAdmin`.
+
+- [ ] `apps/accounting/migrations/0001_initial.py` — generated via `makemigrations`.
+  NOTE: run `makemigrations` AFTER all 18 model classes are complete; do NOT run it
+  incrementally during model development. One migration file covering all 18 tables.
+
+- [ ] `apps/accounting/management/__init__.py` — empty (required)
+- [ ] `apps/accounting/management/commands/__init__.py` — empty (required)
+- [ ] `apps/accounting/management/commands/seed_accounting.py` — idempotent seeder.
+  Idempotency guard: at the top of each model block, `if Model.objects.filter(tenant=tenant).exists(): continue`.
+  For Currency (global): `Currency.objects.get_or_create(code="USD", defaults={...})`.
+  Seed data per tenant (2 tenants: acme, globex):
+  - 4 Currencies: USD, EUR, GBP, CAD (get_or_create, global).
+  - 1 ExchangeRate per non-USD currency per tenant for today's date.
+  - ~15 GLAccounts per tenant (a minimal Chart of Accounts: 1000-Cash, 1100-AR,
+    1200-Prepaid Expenses, 2000-AP, 2100-Accrued Liabilities, 3000-Owner Equity,
+    4000-Revenue, 4100-Service Revenue, 5000-COGS, 6000-Operating Expenses,
+    6100-Salaries, 6200-Rent, 6300-Utilities, 7000-Interest Expense, 8000-Tax Expense).
+  - 2 FiscalPeriods per tenant (current month open, previous month closed).
+  - 2 PaymentTerms: "Net 30" (days_due=30), "2/10 Net 30" (days_due=30,
+    discount_pct=2, discount_days=10).
+  - 1 BankAccount per tenant (linked to the 1000-Cash GLAccount).
+  - Reuse existing `core.Party` vendor-role rows for VendorProfile creation
+    (get Party where PartyRole.role='vendor', get_or_create VendorProfile).
+  - Reuse existing `core.Party` customer-role rows for CustomerProfile creation.
+  - 2 Invoices per tenant: one `sent` (with 2 lines), one `draft` (with 1 line);
+    check by number before creating (`existing = Invoice.objects.filter(tenant=t, number=n).first()`).
+  - 2 Bills per tenant: one `approved` (with 2 lines), one `draft`.
+  - 1 Payment (direction='in') linked to the sent Invoice + 1 PaymentAllocation.
+  - 3 BankTransactions per tenant: 2 matched, 1 unmatched.
+  - 1 ReconciliationMatch per tenant.
+  - 1 manual JournalEntry per tenant (status=`posted`, 2 lines: debit 1000-Cash / credit 4000-Revenue).
+  - After seeding, print: `"Accounting module seeded. Login as admin_acme / password to verify."`
+    and `"Superuser 'admin' has no tenant — data won't appear when logged in as admin."`
+
+---
+
+## Section 3 — Wire-up
+
+- [ ] **`config/settings.py`** — add `"apps.accounting"` to `INSTALLED_APPS` (after `"apps.crm"`).
+  NOTE: add ONLY after all model/views/urls files exist (L12/L24 — settings wire-up is last).
+
+- [ ] **`config/urls.py`** — add `path("accounting/", include("apps.accounting.urls"))` to
+  `urlpatterns` (after the `crm/` include). Use the string form to match project convention.
+
+- [ ] **`apps/core/navigation.py`** — add `LIVE_LINKS` entries for sub-modules 2.1–2.5.
+  Use the **exact NavERP.md bullet text** as keys (verified from NavERP.md §2):
+  ```python
+  "2.1": {
+      "Executive Summary": "accounting:accounting_dashboard",
+      "Cash Flow Widget": "accounting:accounting_dashboard",
+      "Alert Center": "accounting:accounting_dashboard",
+      "Quick Actions": "accounting:accounting_dashboard",
+      "Custom Reports": "accounting:trial_balance",
+      "Forecasting": "accounting:accounting_dashboard",
+  },
+  "2.2": {
+      "Chart of Accounts": "accounting:glaccount_list",
+      "Journal Entries": "accounting:journal_entry_list",
+      "Journal Approval": "accounting:journal_entry_list",
+      "Period Close": "accounting:fiscal_period_list",
+      "Account Reconciliation": "accounting:trial_balance",
+      "Allocation Rules": "accounting:glaccount_list",
+      "Audit Trail": "accounting:journal_entry_list",
+      "Multi-currency Support": "accounting:exchange_rate_list",
+  },
+  "2.3": {
+      "Vendor Management": "accounting:vendor_profile_list",
+      "Bill Capture": "accounting:bill_list",
+      "Bill Processing": "accounting:bill_list",
+      "Payment Processing": "accounting:payment_list",
+      "Payment Scheduling": "accounting:payment_list",
+      "Aging Reports": "accounting:ap_aging",
+      "Vendor Portal": "accounting:vendor_profile_list",
+      "Early Payment Discounts": "accounting:payment_term_list",
+  },
+  "2.4": {
+      "Customer Management": "accounting:customer_profile_list",
+      "Invoice Generation": "accounting:invoice_list",
+      "Recurring Invoicing": "accounting:invoice_list",
+      "Payment Collection": "accounting:payment_list",
+      "Cash Application": "accounting:allocation_list",
+      "Collections Management": "accounting:ar_aging",
+      "Credit Management": "accounting:customer_profile_list",
+      "Aging Analysis": "accounting:ar_aging",
+      "Customer Portal": "accounting:invoice_list",
+  },
+  "2.5": {
+      "Bank Account Management": "accounting:bank_account_list",
+      "Bank Feeds": "accounting:bank_transaction_list",
+      "Reconciliation Engine": "accounting:reconciliation_list",
+      "Cash Positioning": "accounting:accounting_dashboard",
+      "Treasury Forecasting": "accounting:accounting_dashboard",
+      "Inter-company Transfers": "accounting:bank_transaction_list",
+      "Bank Fee Analysis": "accounting:bank_transaction_list",
+  },
+  ```
+
+---
+
+## Section 4 — Templates (`templates/accounting/`)
+
+One file per template; each mirrors the CRM template conventions (filter-bar with `request.GET`
+pre-fill, Actions column: view/edit/delete for list, sidebar buttons for detail, pagination with
+`has_previous`/`has_next` guards per L9, empty-state, breadcrumb). FK pk comparisons use
+`|stringformat:"d"` (CLAUDE.md Filter Rule). Every `{% if fk %}…{% endif %}` guard on nullable
+user FKs (L10). Edit/Delete buttons on immutable records (posted JEs, paid invoices) are hidden.
+
+### Sub-module 2.1 — Dashboard
+
+- [ ] `templates/accounting/dashboard.html` — the 2.1 overview page. Contains:
+  KPI stat-cards row: cash position (sum), AR outstanding (sum), AP outstanding (sum);
+  Overdue alert center: two tables (overdue invoices / overdue bills) with party name,
+  amount, days overdue (`(today - due_date).days`), link to detail;
+  Cash flow widget: Chart.js bar chart with 6 weeks of net cash (credits - debits from
+  BankTransaction, passed as JSON from view context);
+  Quick-action buttons: "New Invoice" → `accounting:invoice_create`; "Record Bill" →
+  `accounting:bill_create`; "New Journal Entry" → `accounting:journal_entry_create`;
+  "Reconcile Bank" → `accounting:reconciliation_list`;
+  Recent journal entries table (last 5 posted).
+
+### Sub-module 2.2 — GL templates
+
+- [ ] `templates/accounting/glaccount_list.html` — table: code, name, account_type badge,
+  parent link, is_active badge; filter: account_type + is_active dropdowns; Actions: view/edit/delete.
+- [ ] `templates/accounting/glaccount_detail.html` — all fields; child accounts list;
+  "View Ledger" link → `gl_account_ledger`; sidebar: edit/delete (block delete if has JournalLines).
+- [ ] `templates/accounting/glaccount_form.html` — create/edit; parent field scoped to tenant GLAccounts.
+- [ ] `templates/accounting/fiscal_period_list.html` — table: name, period_type badge, start/end date,
+  status badge; Actions: view/edit/delete + "Close Period" button (POST, shown when status=open).
+- [ ] `templates/accounting/fiscal_period_detail.html` — all fields; closed_by/closed_at if closed;
+  "Close Period" action button in sidebar (conditional on status=open, @tenant_admin_required).
+- [ ] `templates/accounting/fiscal_period_form.html` — create/edit; exclude closed_at/closed_by.
+- [ ] `templates/accounting/journal_entry_list.html` — table: number, entry_date, entry_type badge,
+  status badge, description, fiscal_period; filter: status + entry_type dropdowns + date range;
+  Actions: view (always) / edit (only if draft) / delete (only if draft).
+- [ ] `templates/accounting/journal_entry_detail.html` — header metadata; JournalLine table
+  (account code+name, debit, credit, party, org_unit); debit/credit column totals;
+  sidebar action buttons: "Post" (if draft, @tenant_admin_required), "Void" (if posted),
+  "Create Reversal" (if posted); edit/delete (only if draft).
+- [ ] `templates/accounting/journal_entry_form.html` — create/edit; inline JournalLine formset
+  (dynamic add-row via minimal JS); exclude status/posted_at/created_by.
+- [ ] `templates/accounting/trial_balance.html` — report page (no model form); table of all
+  active GLAccounts with debit_total / credit_total / balance; grand totals row;
+  date-range filter (start_date, end_date GET params).
+- [ ] `templates/accounting/gl_account_ledger.html` — ledger for a single GLAccount; table of
+  posted JournalLines with date, JE number, description, debit, credit, running balance;
+  date-range filter; back link.
+- [ ] `templates/accounting/exchange_rate_list.html` — table: currency code+name, rate_date, rate,
+  source badge; filter: currency FK dropdown; Actions: view/edit/delete.
+- [ ] `templates/accounting/exchange_rate_detail.html` — all fields; sidebar: edit/delete.
+- [ ] `templates/accounting/exchange_rate_form.html` — create/edit form.
+- [ ] `templates/accounting/currency_list.html` — table: code, name, symbol, is_active; Actions.
+- [ ] `templates/accounting/currency_detail.html` — all fields; sidebar: edit/delete.
+- [ ] `templates/accounting/currency_form.html` — create/edit form.
+
+### Sub-module 2.3 — AP templates
+
+- [ ] `templates/accounting/vendor_profile_list.html` — table: party name (link to core:party_detail),
+  payment_terms, currency, is_1099 badge, is_active via Party; filter: payment_terms + is_1099 dropdowns;
+  Actions: view/edit/delete.
+- [ ] `templates/accounting/vendor_profile_detail.html` — VendorProfile fields + linked Party name;
+  related Bills list (last 5); AP aging for this vendor; sidebar: edit/delete.
+- [ ] `templates/accounting/vendor_profile_form.html` — create/edit form (party field scoped to
+  tenant Parties with role=vendor; `payment_terms` and `default_expense_account` scoped to tenant).
+- [ ] `templates/accounting/bill_list.html` — table: number, party name, bill_date, due_date,
+  status badge, total; filter: status + party dropdowns; Actions: view/edit/delete + "Approve"
+  button (shown when status=pending_approval).
+- [ ] `templates/accounting/bill_detail.html` — header fields; BillLine table (description, qty,
+  unit_price, tax_rate_pct, line_total, gl_account); subtotal/tax/total footer; linked document
+  attachment; approved_by display; sidebar: "Approve" (if pending_approval, @tenant_admin_required),
+  edit (if draft/pending only), delete (if draft only).
+- [ ] `templates/accounting/bill_form.html` — create/edit; inline BillLine formset; exclude
+  approved_by, journal_entry, subtotal, tax_total, total.
+- [ ] `templates/accounting/ap_aging.html` — AP aging report: table grouped by party (vendor),
+  columns: party name, current, 1-30, 31-60, 61-90, 90+ days, total; grand-total row;
+  date-as-of filter (GET param).
+- [ ] `templates/accounting/payment_term_list.html` — table: name, days_due, discount_pct,
+  discount_days, is_active; Actions: view/edit/delete.
+- [ ] `templates/accounting/payment_term_detail.html` — all fields; sidebar: edit/delete.
+- [ ] `templates/accounting/payment_term_form.html` — create/edit.
+
+### Sub-module 2.4 — AR templates
+
+- [ ] `templates/accounting/customer_profile_list.html` — table: party name, payment_terms,
+  credit_limit, credit_on_hold badge; filter: payment_terms + credit_on_hold dropdowns; Actions.
+- [ ] `templates/accounting/customer_profile_detail.html` — CustomerProfile fields + Party name;
+  related Invoices list (last 5); AR aging for this customer; sidebar: edit/delete.
+- [ ] `templates/accounting/customer_profile_form.html` — create/edit; party scoped to
+  tenant Parties with role=customer.
+- [ ] `templates/accounting/invoice_list.html` — table: number, kind badge, party name, issue_date,
+  due_date, status badge, total; filter: status + kind + party dropdowns; Actions: view/edit/delete
+  + "Post/Send" button (shown when draft).
+- [ ] `templates/accounting/invoice_detail.html` — header fields; InvoiceLine table; totals;
+  linked journal_entry link; linked PaymentAllocations (amount paid, remaining balance);
+  credit limit warning if CustomerProfile.credit_on_hold; sidebar: "Post" (if draft),
+  edit (if draft/sent only), delete (if draft only).
+- [ ] `templates/accounting/invoice_form.html` — create/edit; inline InvoiceLine formset;
+  credit limit check: render warning banner if party's CustomerProfile.credit_limit is exceeded
+  by outstanding Invoices (computed in view context); exclude journal_entry, subtotal, tax_total, total.
+- [ ] `templates/accounting/ar_aging.html` — AR aging report: same structure as AP aging but for
+  Invoices and customers.
+- [ ] `templates/accounting/allocation_list.html` — table: payment number, invoice number / bill
+  number, allocated_amount, discount_taken; filter: payment FK dropdown; Actions: view/edit/delete.
+- [ ] `templates/accounting/allocation_detail.html` — all fields; links to payment + invoice/bill.
+- [ ] `templates/accounting/allocation_form.html` — create/edit; payment, invoice, bill scoped to
+  tenant.
+
+### Sub-module 2.4+2.3 — Shared Payment templates
+
+- [ ] `templates/accounting/payment_list.html` — table: number, direction badge (in=green/out=red),
+  party name, bank_account, payment_method badge, payment_date, amount, status badge; filter:
+  direction + status + payment_method dropdowns; Actions: view/edit/delete + "Confirm" (if draft)
+  + "Void" (if confirmed).
+- [ ] `templates/accounting/payment_detail.html` — all fields; linked PaymentAllocations table
+  (invoice/bill + amount + discount); sidebar: "Confirm" (if draft), "Void" (if confirmed),
+  edit (if draft only), delete (if draft only).
+- [ ] `templates/accounting/payment_form.html` — create/edit; exclude status, journal_entry;
+  party scoped to tenant; bank_account scoped to tenant.
+
+### Sub-module 2.5 — Cash Management templates
+
+- [ ] `templates/accounting/bank_account_list.html` — table: name, bank_name, currency, gl_account,
+  opening_balance, is_active badge; filter: currency + is_active dropdowns; Actions: view/edit/delete.
+- [ ] `templates/accounting/bank_account_detail.html` — all fields (account_number_last4 masked);
+  recent BankTransactions list (last 10); current balance (opening_balance + net transactions);
+  sidebar: edit/delete.
+- [ ] `templates/accounting/bank_account_form.html` — create/edit.
+- [ ] `templates/accounting/bank_transaction_list.html` — table: bank_account, transaction_date,
+  description, amount, direction badge, source badge, status badge; filter: bank_account +
+  direction + status dropdowns; "Import CSV" button → `bank_transaction_import_csv`;
+  Actions: view/edit/delete.
+- [ ] `templates/accounting/bank_transaction_detail.html` — all fields; linked
+  ReconciliationMatch if any; sidebar: edit (if unmatched only) / delete (if unmatched only).
+- [ ] `templates/accounting/bank_transaction_form.html` — create/edit (manual entry);
+  exclude status.
+- [ ] `templates/accounting/bank_transaction_import.html` — CSV import form: file upload field
+  (`<input type="file" accept=".csv">`), bank_account selector, submit button; instructions block
+  (expected columns: date, description, amount, direction).
+- [ ] `templates/accounting/reconciliation_list.html` — table: bank_transaction (date + desc),
+  payment / journal_line link, matched_by, matched_at, is_confirmed badge; filter: bank_account
+  + is_confirmed dropdowns; Actions: view/edit/delete + "Confirm" toggle button.
+- [ ] `templates/accounting/reconciliation_detail.html` — all fields; bank_transaction detail;
+  payment/journal_line detail; sidebar: "Confirm/Unconfirm" action, edit, delete.
+- [ ] `templates/accounting/reconciliation_form.html` — create/edit; bank_transaction, payment,
+  journal_line scoped to tenant.
+
+---
+
+## Section 5 — Verify
+
+Run all commands with the venv Python (`C:\xampp\htdocs\NavERP\venv\Scripts\python.exe`):
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations accounting` — confirm single migration
+  `0001_initial.py` generated covering all 18 models.
+- [ ] `venv\Scripts\python.exe manage.py sqlmigrate accounting 0001` — review SQL; confirm all FK
+  references resolve, `unique_together` constraints present, `db_index` on tenant FKs, no
+  reference to non-existent tables.
+- [ ] `venv\Scripts\python.exe manage.py migrate` — zero errors on `nav_erp`.
+- [ ] `venv\Scripts\python.exe manage.py seed_accounting` — first run: seeds all demo data;
+  prints login instructions and superuser-no-tenant warning.
+- [ ] `venv\Scripts\python.exe manage.py seed_accounting` (second run) — must print "already
+  exists — skipping" for every model block; zero duplicate rows; idempotent confirmed.
+- [ ] `venv\Scripts\python.exe manage.py check` — zero errors, zero warnings.
+- [ ] Write `temp/accounting_smoke.py` — test-client sweep (Django test Client, logged in as
+  `admin_acme` / `password`):
+  - All `accounting:*` URL names (list, detail, create, edit) → 200 or 302 (never 500).
+  - POST action URLs (journal_entry_post, bill_approve, payment_confirm) → 302 redirect (never 500).
+  - No `{#` or `{% comment` template leaks in rendered HTML for any URL.
+  - Cross-tenant IDOR: for each pk-based URL, try the pk from globex while logged in as acme →
+    must return 404 (not 200 or 500).
+  - Double-entry invariant: attempt to POST a `journal_entry_post` action when
+    sum(debit) != sum(credit) → view must reject (stay on page with error, not redirect).
+  - Posting into a closed FiscalPeriod → view must reject.
+  - A confirmed/posted JournalEntry pk → edit URL → form save must fail / redirect to detail
+    (immutability gate).
+  - CSV import URL → GET returns 200; POST with a valid 3-row CSV creates 3 BankTransaction
+    rows (idempotent: second import with same external_ref skips duplicates).
+  - Trial balance URL → 200 with no missing template variables.
+  - AR aging / AP aging URLs → 200.
+- [ ] Run `temp/accounting_smoke.py` — all checks green.
+- [ ] Sidebar check: sub-modules 2.1, 2.2, 2.3, 2.4, 2.5 all show as **Live** (not "On the roadmap")
+  in the sidebar navigation.
+
+---
+
+## Section 6 — Close-out
+
+### Review agents (run in this exact order, one at a time, commit fixes between)
+
+- [ ] Run **`code-reviewer` agent** — check: double-entry invariant enforcement in
+  `journal_entry_post` view; immutability guards on posted JE / paid Invoice / paid Bill;
+  fiscal period close check before posting; L11 integer FK filter guard (.isdigit()) on all
+  list views; L22 DateTimeField exclusions from all forms; L10 nullable FK display guards in
+  templates; `@tenant_admin_required` on all privileged action views; `tenant_id` filter on
+  ALL querysets; `approved_by` / `created_by` / `posted_at` never on ModelForm fields.
+  Apply findings; commit each changed file separately (PowerShell-safe).
+
+- [ ] Run **`explorer` agent** — explore the built module for gaps: any URL name in
+  `navigation.py` that 404s; any view reachable from a template link that doesn't exist in
+  `urls.py`; any context variable used in a template that the view doesn't pass; any inline
+  formset that the form/template doesn't render. Apply findings; commit.
+
+- [ ] Run **`frontend-reviewer` agent** — check: filter-bar `selected` comparisons use
+  `|stringformat:"d"` for FK pks; all form `<label for=id_field>` present; pagination guards
+  use `has_previous`/`has_next` (L9); no `text-danger` / unknown CSS utility class (L13);
+  dashboard Chart.js data correctly JSON-serialized; debit/credit columns visually distinct;
+  badge colors consistent (status → color map). Apply findings; commit.
+
+- [ ] Run **`performance-reviewer` agent** — check: N+1 on JournalLine lists
+  (`select_related("gl_account", "entry", "party", "org_unit")`); N+1 on Invoice/Bill lists
+  (`select_related("party", "currency", "payment_terms")`); trial_balance aggregate query
+  (should be a single GROUP BY, not Python loops); AR/AP aging report queries (subquery vs.
+  Python bucketing); dashboard KPI queries (check query count); BankTransaction list pagination
+  correct for large import sets. Apply findings; commit.
+
+- [ ] Run **`qa-smoke-tester` agent** — run the module's full smoke coverage with its own
+  structured test script; verify all action views require POST; verify all delete views are
+  POST-only; verify CSV import handles malformed rows gracefully (no 500); verify
+  PaymentAllocation total does not exceed Payment.amount (data integrity); verify
+  credit-limit warning renders on invoice create form. Apply findings; commit.
+
+- [ ] Run **`security-reviewer` agent** — check: all `@tenant_admin_required` gates correct
+  (journal_entry_post, bill_approve, payment_confirm, fiscal_period_close); cross-tenant IDOR
+  on all pk-based views; CSV import file extension + size validation (allowlist `.csv` only,
+  reject `.exe`/`.php`/etc., max 5 MB); `account_number_last4` field never stores full account
+  number; `normal_balance` is read-only (not on any form); mass-assignment check (no system
+  fields on any ModelForm); `reversal_of` FK only set by the void/reversal action view, never
+  by the user form; posted JE immutability cannot be bypassed via direct form POST. Apply
+  findings; commit.
+
+- [ ] Run **`test-writer` agent** — write tests for:
+  double-entry balance validation (sum mismatch → reject post),
+  fiscal period blocking (closed period → reject post),
+  JE immutability (posted JE → edit blocked),
+  invoice credit limit warning (CustomerProfile.credit_limit exceeded → context flag),
+  AR/AP aging bucket placement (due_date = today-45 → 31-60 bucket),
+  bill_approve requires @tenant_admin_required,
+  payment_confirm requires @tenant_admin_required,
+  CSV import idempotency (duplicate external_ref skipped),
+  cross-tenant IDOR 404 for all pk-based views,
+  seeder idempotency (seed twice → row count unchanged),
+  PaymentAllocation allocated_amount <= Payment.amount validation.
+  Apply output; commit each test file.
+
+### Documentation close-out
+
+- [ ] Create **`.claude/skills/accounting/SKILL.md`** — as-built module skill (all 18 models,
+  url names, seeder description, LIVE_LINKS entries 2.1–2.5, double-entry invariant conventions,
+  gotchas: Currency is global/not tenant-scoped; GLAccount balance is always derived; posted JE
+  is immutable; BankAccount must be defined before Payment in models.py). Commit.
+- [ ] Update **`README.md`** — add accounting module to feature table; add seeder section
+  (`seed_accounting`); add route map for accounting:*; update module status table (Module 2 built).
+  Commit.
+
+### Per-file commit list (PowerShell-safe, one file per commit — reference for the build step)
+
+```
+git add 'apps\accounting\__init__.py'; git commit -m 'feat(accounting): app package init'
+git add 'apps\accounting\apps.py'; git commit -m 'feat(accounting): AppConfig — apps.accounting'
+git add 'apps\accounting\models.py'; git commit -m 'feat(accounting): 18 models — Currency/ExchangeRate/GLAccount/FiscalPeriod/JournalEntry/JournalLine/PaymentTerm/VendorProfile/CustomerProfile/BankAccount/Invoice/InvoiceLine/Bill/BillLine/Payment/PaymentAllocation/BankTransaction/ReconciliationMatch'
+git add 'apps\accounting\migrations\0001_initial.py'; git commit -m 'feat(accounting): initial migration — 18 accounting models'
+git add 'apps\accounting\forms.py'; git commit -m 'feat(accounting): forms for all 18 models (system fields excluded per L22)'
+git add 'apps\accounting\views.py'; git commit -m 'feat(accounting): function-based views — full CRUD + post/void/approve/confirm/close/import-csv/trial-balance/aging/ledger/dashboard'
+git add 'apps\accounting\urls.py'; git commit -m 'feat(accounting): URL patterns (app_name=accounting) — all 18 models + reports + dashboard'
+git add 'apps\accounting\admin.py'; git commit -m 'feat(accounting): admin registration for all 18 models with inline formsets'
+git add 'apps\accounting\management\__init__.py'; git commit -m 'feat(accounting): management package init'
+git add 'apps\accounting\management\commands\__init__.py'; git commit -m 'feat(accounting): management/commands package init'
+git add 'apps\accounting\management\commands\seed_accounting.py'; git commit -m 'feat(accounting): idempotent seed_accounting — CoA/periods/terms/bank/invoices/bills/payments/JEs/reconciliation for 2 tenants'
+git add 'config\settings.py'; git commit -m 'feat(config): add apps.accounting to INSTALLED_APPS'
+git add 'config\urls.py'; git commit -m 'feat(config): include accounting/ URLs'
+git add 'apps\core\navigation.py'; git commit -m 'feat(core/nav): LIVE_LINKS 2.1-2.5 — dashboard/GL/AP/AR/cash management routes'
+git add 'templates\accounting\dashboard.html'; git commit -m 'feat(accounting): 2.1 dashboard — KPI cards, overdue alert center, cash flow chart, quick actions'
+git add 'templates\accounting\glaccount_list.html'; git commit -m 'feat(accounting): GL account list with account_type/is_active filters'
+git add 'templates\accounting\glaccount_detail.html'; git commit -m 'feat(accounting): GL account detail with child accounts and ledger link'
+git add 'templates\accounting\glaccount_form.html'; git commit -m 'feat(accounting): GL account create/edit form'
+git add 'templates\accounting\fiscal_period_list.html'; git commit -m 'feat(accounting): fiscal period list with close-period action'
+git add 'templates\accounting\fiscal_period_detail.html'; git commit -m 'feat(accounting): fiscal period detail with close action (tenant_admin_required)'
+git add 'templates\accounting\fiscal_period_form.html'; git commit -m 'feat(accounting): fiscal period create/edit form'
+git add 'templates\accounting\journal_entry_list.html'; git commit -m 'feat(accounting): journal entry list with status/type filters, edit/delete gated on draft status'
+git add 'templates\accounting\journal_entry_detail.html'; git commit -m 'feat(accounting): journal entry detail with JE lines table, post/void/reversal actions'
+git add 'templates\accounting\journal_entry_form.html'; git commit -m 'feat(accounting): journal entry create/edit form with inline JournalLine formset'
+git add 'templates\accounting\trial_balance.html'; git commit -m 'feat(accounting): trial balance report — GLAccount debit/credit totals, date-range filter'
+git add 'templates\accounting\gl_account_ledger.html'; git commit -m 'feat(accounting): GL account ledger — posted JE lines, running balance, date filter'
+git add 'templates\accounting\exchange_rate_list.html'; git commit -m 'feat(accounting): exchange rate list'
+git add 'templates\accounting\exchange_rate_detail.html'; git commit -m 'feat(accounting): exchange rate detail'
+git add 'templates\accounting\exchange_rate_form.html'; git commit -m 'feat(accounting): exchange rate create/edit form'
+git add 'templates\accounting\currency_list.html'; git commit -m 'feat(accounting): currency list'
+git add 'templates\accounting\currency_detail.html'; git commit -m 'feat(accounting): currency detail'
+git add 'templates\accounting\currency_form.html'; git commit -m 'feat(accounting): currency create/edit form'
+git add 'templates\accounting\vendor_profile_list.html'; git commit -m 'feat(accounting): vendor profile list with payment_terms/1099 filters'
+git add 'templates\accounting\vendor_profile_detail.html'; git commit -m 'feat(accounting): vendor profile detail with related bills and AP aging'
+git add 'templates\accounting\vendor_profile_form.html'; git commit -m 'feat(accounting): vendor profile create/edit form'
+git add 'templates\accounting\bill_list.html'; git commit -m 'feat(accounting): bill list with status/party filters and approve action'
+git add 'templates\accounting\bill_detail.html'; git commit -m 'feat(accounting): bill detail with line items, document attachment, approve action'
+git add 'templates\accounting\bill_form.html'; git commit -m 'feat(accounting): bill create/edit form with inline BillLine formset'
+git add 'templates\accounting\ap_aging.html'; git commit -m 'feat(accounting): AP aging report — buckets by vendor'
+git add 'templates\accounting\payment_term_list.html'; git commit -m 'feat(accounting): payment term list'
+git add 'templates\accounting\payment_term_detail.html'; git commit -m 'feat(accounting): payment term detail'
+git add 'templates\accounting\payment_term_form.html'; git commit -m 'feat(accounting): payment term create/edit form'
+git add 'templates\accounting\customer_profile_list.html'; git commit -m 'feat(accounting): customer profile list with credit_on_hold filter'
+git add 'templates\accounting\customer_profile_detail.html'; git commit -m 'feat(accounting): customer profile detail with related invoices and AR aging'
+git add 'templates\accounting\customer_profile_form.html'; git commit -m 'feat(accounting): customer profile create/edit form'
+git add 'templates\accounting\invoice_list.html'; git commit -m 'feat(accounting): invoice list with kind/status/party filters and post action'
+git add 'templates\accounting\invoice_detail.html'; git commit -m 'feat(accounting): invoice detail with line items, payment allocations, credit limit warning'
+git add 'templates\accounting\invoice_form.html'; git commit -m 'feat(accounting): invoice create/edit form with inline InvoiceLine formset and credit limit check'
+git add 'templates\accounting\ar_aging.html'; git commit -m 'feat(accounting): AR aging report — buckets by customer'
+git add 'templates\accounting\allocation_list.html'; git commit -m 'feat(accounting): payment allocation list'
+git add 'templates\accounting\allocation_detail.html'; git commit -m 'feat(accounting): payment allocation detail'
+git add 'templates\accounting\allocation_form.html'; git commit -m 'feat(accounting): payment allocation create/edit form'
+git add 'templates\accounting\payment_list.html'; git commit -m 'feat(accounting): payment list with direction/status/method filters, confirm/void actions'
+git add 'templates\accounting\payment_detail.html'; git commit -m 'feat(accounting): payment detail with allocations table, confirm/void sidebar actions'
+git add 'templates\accounting\payment_form.html'; git commit -m 'feat(accounting): payment create/edit form'
+git add 'templates\accounting\bank_account_list.html'; git commit -m 'feat(accounting): bank account list with currency/active filters'
+git add 'templates\accounting\bank_account_detail.html'; git commit -m 'feat(accounting): bank account detail with recent transactions and current balance'
+git add 'templates\accounting\bank_account_form.html'; git commit -m 'feat(accounting): bank account create/edit form'
+git add 'templates\accounting\bank_transaction_list.html'; git commit -m 'feat(accounting): bank transaction list with bank_account/direction/status filters, CSV import link'
+git add 'templates\accounting\bank_transaction_detail.html'; git commit -m 'feat(accounting): bank transaction detail with reconciliation match link'
+git add 'templates\accounting\bank_transaction_form.html'; git commit -m 'feat(accounting): bank transaction manual entry form'
+git add 'templates\accounting\bank_transaction_import.html'; git commit -m 'feat(accounting): bank transaction CSV import page with column format instructions'
+git add 'templates\accounting\reconciliation_list.html'; git commit -m 'feat(accounting): reconciliation match list with bank_account/confirmed filters'
+git add 'templates\accounting\reconciliation_detail.html'; git commit -m 'feat(accounting): reconciliation match detail with confirm/unconfirm toggle'
+git add 'templates\accounting\reconciliation_form.html'; git commit -m 'feat(accounting): reconciliation match create/edit form'
+git add 'temp\accounting_smoke.py'; git commit -m 'test(accounting): smoke test — all accounting:* routes 200/302, double-entry invariant, IDOR 404, CSV import, immutability gate'
+git add '.claude\skills\accounting\SKILL.md'; git commit -m 'docs(skill/accounting): SKILL.md — 18 models, routes, seeder, invariants, LIVE_LINKS 2.1-2.5'
+git add 'README.md'; git commit -m 'docs(readme): accounting module — feature table, seeder logins, route map, module status'
+```
+
+---
+
+## Section 7 — Later passes / deferred
+
+- **Bank Feeds via Plaid / Yodlee / Open Banking** — `BankTransaction.source='bank_feed'` is modeled;
+  the external API connector and daily sync webhook are a separate integration pass. Model is ready.
+- **OCR / AI Bill Capture** — `core.Document` attachment is on `Bill`; the OCR-to-form-prefill
+  (Veryfi / AWS Textract) is an integration/later pass. UI file upload already works.
+- **AI Cash Flow Forecasting** — ML 30/90-day liquidity projection reads Invoice + Bill +
+  BankTransaction; deferred to a BI/analytics pass (Module 10). Dashboard shows static sum today.
+- **Customer Portal (self-service invoice view/pay)** — public-facing portal + payment gateway
+  (Stripe, PayPal) integration. Model is ready; the portal + OAuth token flow is a separate pass.
+- **Allocation Rules Engine (departmental cost splits)** — automatic percentage/proportional
+  JournalLine splits across OrgUnits. New `AllocationRule` table; deferred (complex rule engine).
+- **1099 / W-9 Form Generation** — `VendorProfile.is_1099` flag is built; generating compliant
+  PDF 1099-MISC / 1099-NEC forms requires a US-localization pass (deferred).
+- **Fixed Assets (sub-module 2.6)** — Asset Register, depreciation engine, disposals. Scoped to
+  a future NavERP Module 11 (Assets). `GLAccount` capitalization account linkage already exists.
+- **Revenue Recognition (ASC 606 / IFRS 15)** — deferred revenue schedules, performance obligation
+  tracking; a later Accounting extension pass for SaaS/subscription businesses.
+- **Custom Report Builder** — drag-and-drop financial report designer; deferred to BI module (10).
+- **Recurring Journal Entry auto-posting scheduler** — `RecurringJournal` template storage + Celery
+  beat job are deferred to a task-queue integration pass. Manual "post now" action is MVP.
+- **Dunning auto-send** — `DunningRule` storage and AR aging are in scope; auto-emailing customers
+  requires SMTP/SendGrid integration (deferred to notifications pass).
+- **Sub-modules 2.6 Fixed Assets, 2.7 Inventory & Cost, 2.8 Payroll, 2.9 Project/Job Costing,
+  2.10 Multi-Entity Consolidation** — all deferred to later passes or their respective modules
+  (Inventory = Module 5, Payroll within HRM = Module 3, Project Costing within Projects = Module 7).
+- **FX Gain/Loss revaluation journal** — period-end unrealized gain/loss from ExchangeRate
+  movements on open Invoices/Bills denominated in foreign currency. The data model supports it;
+  deferred to a multi-currency hardening pass.
+- **Inter-account Transfers UI** — the two-JournalLine / two-BankTransaction pattern for inter-bank
+  transfers is documented; a dedicated "Transfer" action view is a convenience UX deferred item.
+
+## Review notes
+
+(filled in after the build + all 7 review agents complete)
+
