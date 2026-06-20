@@ -15,7 +15,22 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import Party, PartyRole, Tenant
+from apps.core.models import OrgUnit, Party, PartyRole, Tenant
+from apps.accounting.models_advanced import (
+    Budget,
+    BudgetLine,
+    CostAllocation,
+    FixedAsset,
+    IntegrationConfig,
+    IntercompanyTransaction,
+    InternalControl,
+    JobCostEntry,
+    PayrollRun,
+    Project,
+    ScheduledReport,
+    TaxCode,
+    TaxReturn,
+)
 from apps.accounting.models import (
     BankAccount,
     BankTransaction,
@@ -85,9 +100,11 @@ class Command(BaseCommand):
 
         for tenant in tenants:
             if GLAccount.objects.filter(tenant=tenant).exists():
-                self.stdout.write(f"{tenant.name}: accounting data already exists — skipping.")
-                continue
-            self._seed_tenant(tenant, usd)
+                self.stdout.write(f"{tenant.name}: base accounting data already exists — skipping base seed.")
+            else:
+                self._seed_tenant(tenant, usd)
+            # Advanced sub-modules 2.6–2.15 — self-guarded so it runs once even when base data exists.
+            self._seed_advanced(tenant, usd)
 
         self.stdout.write(self.style.SUCCESS("Accounting seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view accounting data.")
@@ -257,3 +274,136 @@ class Command(BaseCommand):
                 entry=entry, gl_account=account, debit=debit or Decimal("0"),
                 credit=credit or Decimal("0"), description=description)
         return entry
+
+    # ------------------------------------------------ advanced sub-modules 2.6–2.15
+    def _seed_advanced(self, tenant, usd):
+        """Seed demo rows for 2.6–2.15. Idempotent: skips a tenant that already has a FixedAsset.
+        Records are left in DRAFT so the user can exercise the post/run actions; the GL accounts
+        they need are get_or_create'd so posting works out of the box."""
+        if FixedAsset.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: advanced accounting data already exists — skipping.")
+            return
+        today = timezone.localdate()
+        admin = self._admin(tenant)
+
+        def acct(code, name, atype):
+            obj, _ = GLAccount.objects.get_or_create(
+                tenant=tenant, code=code, defaults={"name": name, "account_type": atype})
+            return obj
+
+        cash = acct("1000", "Cash", "asset")
+        ar = acct("1100", "Accounts Receivable", "asset")
+        equipment = acct("1600", "Equipment", "asset")
+        accum_dep = acct("1690", "Accumulated Depreciation", "asset")
+        due_from = acct("1150", "Due from Affiliates", "asset")
+        due_to = acct("2050", "Due to Affiliates", "liability")
+        tax_payable = acct("2200", "Sales Tax Payable", "liability")
+        ded_payable = acct("2100", "Accrued Liabilities", "liability")
+        revenue = acct("4100", "Service Revenue", "income")
+        opex = acct("6000", "Operating Expenses", "expense")
+        dep_exp = acct("6400", "Depreciation Expense", "expense")
+        wages_exp = acct("6100", "Salaries & Wages", "expense")
+
+        org_units = list(OrgUnit.objects.filter(tenant=tenant).order_by("id")[:2])
+        while len(org_units) < 2:
+            org_units.append(OrgUnit.objects.create(
+                tenant=tenant, kind="department", name=f"Division {len(org_units) + 1}"))
+        org_a, org_b = org_units[0], org_units[1]
+        custodian = self._party(tenant, "Operations Lead", "person", "employee")
+        client = Party.objects.filter(tenant=tenant, roles__role="customer").first() \
+            or self._party(tenant, "Project Client", "organization", "customer")
+
+        # 2.6 Fixed Assets
+        FixedAsset.objects.create(
+            tenant=tenant, name="Delivery Van", category="Vehicles",
+            acquisition_cost=Decimal("48000"), salvage_value=Decimal("6000"), useful_life_months=60,
+            method="straight_line", in_service_date=today - datetime.timedelta(days=90), status="active",
+            asset_account=equipment, accumulated_account=accum_dep, expense_account=dep_exp,
+            custodian=custodian, location=org_a)
+        FixedAsset.objects.create(
+            tenant=tenant, name="Warehouse Racking", category="Equipment",
+            acquisition_cost=Decimal("18000"), salvage_value=Decimal("0"), useful_life_months=84,
+            method="declining_balance", status="cip", asset_account=equipment,
+            accumulated_account=accum_dep, expense_account=dep_exp, location=org_b)
+
+        # 2.7 Cost Allocation
+        CostAllocation.objects.create(
+            tenant=tenant, description="Allocate shared IT cost to Sales", allocation_date=today,
+            amount=Decimal("1200"), source_account=opex, target_account=opex, target_org_unit=org_a)
+
+        # 2.8 Payroll
+        PayrollRun.objects.create(
+            tenant=tenant, period_start=today.replace(day=1), period_end=today, pay_date=today,
+            headcount=8, gross_wages=Decimal("32000"), employee_tax=Decimal("6400"),
+            employer_tax=Decimal("2450"), benefits=Decimal("1800"), deductions=Decimal("950"))
+
+        # 2.9 Project / Job costing
+        project = Project.objects.create(
+            tenant=tenant, name="Website Redesign", client=client, org_unit=org_a,
+            billing_method="time_materials", budget_amount=Decimal("40000"),
+            start_date=today - datetime.timedelta(days=30), status="active")
+        JobCostEntry.objects.create(
+            tenant=tenant, project=project, entry_date=today, kind="cost", amount=Decimal("5000"),
+            gl_account=opex, description="Contractor hours")
+        JobCostEntry.objects.create(
+            tenant=tenant, project=project, entry_date=today, kind="revenue", amount=Decimal("12000"),
+            gl_account=revenue, description="Progress billing")
+
+        # 2.10 Multi-entity / Intercompany
+        IntercompanyTransaction.objects.create(
+            tenant=tenant, description="HQ funds Branch operations", transaction_date=today,
+            amount=Decimal("15000"), from_org_unit=org_a, to_org_unit=org_b,
+            due_from_account=due_from, due_to_account=due_to)
+
+        # 2.11 Tax
+        sales_tax = TaxCode.objects.create(
+            tenant=tenant, name="State Sales Tax", jurisdiction="CA", tax_type="sales",
+            rate_pct=Decimal("8.250"), payable_account=tax_payable)
+        TaxCode.objects.create(
+            tenant=tenant, name="VAT Standard", jurisdiction="EU", tax_type="vat",
+            rate_pct=Decimal("20.000"), payable_account=tax_payable)
+        TaxReturn.objects.create(
+            tenant=tenant, tax_code=sales_tax, period_start=today.replace(day=1), period_end=today,
+            taxable_amount=Decimal("40000"), tax_due=Decimal("3300"), status="draft",
+            due_date=today + datetime.timedelta(days=20))
+
+        # 2.12 Scheduled reports
+        ScheduledReport.objects.create(
+            tenant=tenant, name="Monthly Balance Sheet", report_type="balance_sheet",
+            frequency="monthly", recipients="cfo@example.com", is_active=True)
+
+        # 2.13 Budgeting
+        period = FiscalPeriod.objects.filter(tenant=tenant, status="open").first()
+        budget = Budget.objects.create(
+            tenant=tenant, name="FY Operating Budget", fiscal_period=period, version="original",
+            status="approved")
+        BudgetLine.objects.create(tenant=tenant, budget=budget, gl_account=revenue, org_unit=org_a,
+                                  amount=Decimal("120000"))
+        BudgetLine.objects.create(tenant=tenant, budget=budget, gl_account=opex, org_unit=org_a,
+                                  amount=Decimal("45000"))
+        BudgetLine.objects.create(tenant=tenant, budget=budget, gl_account=wages_exp, org_unit=org_a,
+                                  amount=Decimal("60000"))
+
+        # 2.14 Audit & controls
+        InternalControl.objects.create(
+            tenant=tenant, code="CTRL-AP-01", name="Two-way invoice approval", control_type="preventive",
+            frequency="transactional", risk_level="high", owner=custodian,
+            last_tested_date=today - datetime.timedelta(days=15), last_result="pass", status="active",
+            description="All vendor bills over $1,000 require a second approver.")
+        InternalControl.objects.create(
+            tenant=tenant, code="CTRL-GL-02", name="Monthly bank reconciliation", control_type="detective",
+            frequency="monthly", risk_level="medium", owner=custodian, last_result="na", status="active",
+            description="Reconcile every bank account within 5 business days of month-end.")
+
+        # 2.15 Integration & API
+        plaid = IntegrationConfig.objects.create(
+            tenant=tenant, name="Plaid Bank Feed", provider="plaid", category="banking",
+            status="connected", is_active=True, notes="Daily transaction sync.")
+        plaid.set_secret(IntegrationConfig.generate_secret())
+        plaid.save(update_fields=["api_key_prefix", "api_key_hash"])
+        IntegrationConfig.objects.create(
+            tenant=tenant, name="Avalara Tax", provider="avalara", category="tax",
+            status="disconnected", is_active=False, notes="Sales-tax rate lookup (not yet connected).")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"{tenant.name}: seeded advanced 2.6–2.15 (assets/cost/payroll/projects/intercompany/tax/budgets/controls/integrations)"))
