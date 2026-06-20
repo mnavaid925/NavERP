@@ -33,37 +33,46 @@ MODULE_ICONS = {
 # is appended to the sub-module as an extra live leaf (used for core master-data pages
 # that aren't called out as Module-0 bullets).
 LIVE_LINKS = {
+    # 0.1 Tenant & Subscription Management
     "0.1": {
-        "Tenant Onboarding": "tenants:onboarding",
-        "Subscription & Billing": "tenants:subscription_list",
-        "Subscription Invoices": "tenants:subscriptioninvoice_list",
-        "Tenant Isolation & Security": "tenants:encryptionkey_list",
-        "Custom Branding": "tenants:brandingsetting_list",
-        "Tenant Health Monitoring": "tenants:healthmetric_list",
+        "Tenant Onboarding": "tenants:onboarding",          # bullet
+        "Subscription & Billing": "tenants:subscription_list",   # bullet
+        "Subscription Invoices": "tenants:subscriptioninvoice_list",  # extra (part of billing)
+        "Custom Branding": "tenants:brandingsetting_list",  # bullet
+        "Tenant Health Monitoring": "tenants:healthmetric_list",  # bullet
     },
+    # 0.2 Identity & Access Management (IAM)
     "0.2": {
-        "Centralized User Directory": "accounts:user_list",
-        "Provisioning & De-Provisioning": "accounts:invite_list",
+        "Centralized User Directory": "accounts:user_list",       # bullet
+        "Provisioning & De-Provisioning": "accounts:invite_list",  # bullet (user provisioning)
     },
+    # 0.3 RBAC & Permissions
     "0.3": {
-        "Roles & Role Hierarchies": "accounts:role_list",
+        "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.5 User & Organization Management
     "0.5": {
-        "Organization & Hierarchy Modeling": "core:orgunit_list",
-        "User Profiles & Preferences": "accounts:profile",
-        "Employee/User Lifecycle Sync": "core:employment_list",
+        "Organization & Hierarchy Modeling": "core:orgunit_list",  # bullet
+        "User Profiles & Preferences": "accounts:profile",  # bullet
+        "Employments": "core:employment_list",  # extra (no exact bullet; HRM owns lifecycle)
     },
+    # 0.7 Data Security & Encryption  (encryption keys live here, not under 0.1)
+    "0.7": {
+        "Key & Secret Management": "tenants:encryptionkey_list",   # bullet (key create/rotate/revoke)
+    },
+    # 0.9 Audit Trail & Activity Logging
     "0.9": {
-        "Immutable Audit Logs": "core:auditlog_list",
-        "User Activity Tracking": "core:activity_list",
+        "Immutable Audit Logs": "core:auditlog_list",   # bullet
+        "Activities": "core:activity_list",  # extra (task/call/note log; sub-module = Activity Logging)
     },
+    # 0.14 Master Data & Reference Configuration  (the shared Party master + records)
     "0.14": {
-        "Master Data Governance": "core:party_list",
-        "Party Roles": "core:partyrole_list",
-        "Addresses": "core:address_list",
-        "Contact Methods": "core:contactmethod_list",
-        "Party Relationships": "core:partyrelationship_list",
-        "Documents": "core:document_list",
+        "Master Data Governance": "core:party_list",    # bullet (customer/vendor masters = Party)
+        "Party Roles": "core:partyrole_list",           # extra
+        "Addresses": "core:address_list",               # extra
+        "Contact Methods": "core:contactmethod_list",   # extra
+        "Party Relationships": "core:partyrelationship_list",  # extra
+        "Documents": "core:document_list",              # extra
     },
 }
 
