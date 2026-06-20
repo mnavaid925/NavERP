@@ -29,7 +29,7 @@
       <div class="detail-item"><dt>Source</dt><dd>{% if profile and profile.source %}{{ profile.get_source_display }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if profile and profile.owner %}{{ profile.owner.get_full_name|default:profile.owner.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Roles</dt><dd>{% for r in obj.roles.all %}<span class="badge badge-info">{{ r.get_role_display }}</span> {% empty %}—{% endfor %}</dd></div>
-      <div class="detail-item" style="grid-column:1/-1;"><dt>Address</dt><dd>{% if profile and profile.address_line %}{{ profile.address_line }}{% if profile.address_city %}, {{ profile.address_city }}{% endif %}{% if profile.address_state %}, {{ profile.address_state }}{% endif %} {{ profile.address_postal }} {{ profile.address_country }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Address</dt><dd>{% if profile and profile.address_line %}{{ profile.address_line }}{% if profile.address_city %}, {{ profile.address_city }}{% endif %}{% if profile.address_state %}, {{ profile.address_state }}{% endif %}{% if profile.address_postal %} {{ profile.address_postal }}{% endif %}{% if profile.address_country %} {{ profile.address_country }}{% endif %}{% else %}—{% endif %}</dd></div>
     </dl>
     {% if profile and profile.description %}<p style="margin-top:1rem;">{{ profile.description|linebreaksbr }}</p>{% endif %}
   </div></div>
