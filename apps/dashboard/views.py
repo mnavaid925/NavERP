@@ -15,13 +15,12 @@ def home(request):
     tenant = request.tenant
     stats = {
         "users_count": 0, "active_users": 0, "parties_count": 0,
-        "open_invoices": 0, "subscription": None, "sub_status": "—",
+        "open_invoices": 0, "subscription": None,
     }
     role_rows = []
     activity_rows = []
     health = []
     recent_audit = []
-    recent_invites = []
 
     if tenant is not None:
         stats["users_count"] = User.objects.filter(tenant=tenant).count()
@@ -31,7 +30,6 @@ def home(request):
 
         subscription = Subscription.objects.filter(tenant=tenant).order_by("-created_at").first()
         stats["subscription"] = subscription
-        stats["sub_status"] = subscription.get_status_display() if subscription else "No subscription"
 
         role_rows = list(
             PartyRole.objects.filter(tenant=tenant).values("role").annotate(c=Count("id")).order_by("-c")
