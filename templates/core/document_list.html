@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Documents</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Documents</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:document_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Document</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search by name…">
+        </div>
+        <div class="form-group">
+          <select name="classification" class="form-select">
+            <option value="">All classifications</option>
+            {% for val, label in classification_choices %}
+              <option value="{{ val }}" {% if request.GET.classification == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'core:document_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Classification</th><th>Version</th><th>Uploaded</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'core:document_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td><span class="badge badge-{% if obj.classification == 'public' %}muted{% elif obj.classification == 'internal' %}info{% elif obj.classification == 'confidential' %}red{% else %}muted{% endif %}">{{ obj.get_classification_display }}</span></td>
+              <td>{{ obj.version }}</td>
+              <td>{{ obj.uploaded_at|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'core:document_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'core:document_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'core:document_delete' obj.pk %}" onsubmit="return confirm('Delete this document?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="file-text"></i><h3>No documents found</h3><p>Create your first document to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
