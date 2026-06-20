@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.tenants",
     "apps.dashboard",
+    "apps.crm",
 ]
 
 MIDDLEWARE = [
