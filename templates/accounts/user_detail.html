@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ user_obj.get_full_name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ user_obj.get_full_name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounts:user_list' %}">Users</a><span class="sep">›</span><span>{{ user_obj.email }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounts:user_edit' user_obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounts:user_delete' user_obj.pk %}" onsubmit="return confirm('Delete this user?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-header" style="display:flex; align-items:center; gap:.75rem; margin-bottom:1rem;">
+      <span class="avatar-initial">{{ user_obj.initials }}</span>
+      <div>
+        <div class="fw-600">{{ user_obj.get_full_name }}</div>
+        <div class="muted">{{ user_obj.email }}</div>
+      </div>
+    </div>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Email</dt><dd>{{ user_obj.email }}</dd></div>
+      <div class="detail-item"><dt>Username</dt><dd>{{ user_obj.username }}</dd></div>
+      <div class="detail-item"><dt>Full name</dt><dd>{{ user_obj.get_full_name }}</dd></div>
+      <div class="detail-item"><dt>Role</dt><dd>{% if user_obj.role %}{{ user_obj.role }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Tenant admin</dt><dd>{% if user_obj.is_tenant_admin %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ user_obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if user_obj.is_active %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Joined</dt><dd>{{ user_obj.date_joined|date:"M d, Y" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'accounts:user_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
