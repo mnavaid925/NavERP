@@ -19,14 +19,25 @@ from apps.core.models import ContactMethod, Party, PartyRole
 from apps.core.utils import write_audit_log
 
 from .forms import (
+    AccountForm,
     CampaignForm,
     CaseForm,
+    ContactForm,
     CrmTaskForm,
     KnowledgeArticleForm,
     LeadForm,
     OpportunityForm,
 )
-from .models import Campaign, Case, CrmTask, KnowledgeArticle, Lead, Opportunity
+from .models import (
+    AccountProfile,
+    Campaign,
+    Case,
+    ContactProfile,
+    CrmTask,
+    KnowledgeArticle,
+    Lead,
+    Opportunity,
+)
 
 
 # ===================================================================== Leads (1.1)
@@ -314,14 +325,17 @@ def task_delete(request, pk):
     return crud_delete(request, model=CrmTask, pk=pk, success_url="crm:task_list")
 
 
-# ============================== Accounts & Contacts — lenses over core.Party (1.1) ==========
-# Accounts/Contacts ARE the shared core.Party (one record, many roles); CRM provides
-# read-oriented lenses. Mutations live on the core party pages (no duplicate master tables).
+# ===================== Accounts & Contacts — core.Party + CRM profile (1.1) =================
+# Accounts/Contacts ARE the shared core.Party (one identity, many roles); CRM owns a one-to-one
+# AccountProfile/ContactProfile carrying the rich fields. Full CRUD here manages the Party + its
+# profile together. Routes are keyed by Party pk. Delete removes the underlying Party (cascading
+# the profile/roles/addresses); opportunities/cases keep their rows with the link SET_NULL.
 @login_required
 def account_list(request):
     return crud_list(
         request,
-        Party.objects.filter(tenant=request.tenant, kind="organization").prefetch_related("roles"),
+        Party.objects.filter(tenant=request.tenant, kind="organization")
+        .select_related("crm_account_profile"),
         "crm/account_list.html", search_fields=["name", "tax_id"],
     )
 
@@ -330,20 +344,83 @@ def account_list(request):
 def account_detail(request, pk):
     obj = get_object_or_404(
         Party.objects.filter(tenant=request.tenant, kind="organization")
+        .select_related("crm_account_profile")
         .prefetch_related("roles", "addresses", "contact_methods"),
         pk=pk)
     return render(request, "crm/account_detail.html", {
         "obj": obj,
+        "profile": getattr(obj, "crm_account_profile", None),
         "opportunities": Opportunity.objects.filter(tenant=request.tenant, account=obj).select_related("owner")[:20],
         "cases": Case.objects.filter(tenant=request.tenant, account=obj).select_related("owner")[:20],
+        "child_accounts": AccountProfile.objects.filter(tenant=request.tenant, parent_account=obj).select_related("party")[:20],
+        "stakeholders": ContactProfile.objects.filter(tenant=request.tenant, account=obj).select_related("party")[:20],
     })
+
+
+@login_required
+def account_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = AccountForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                party = Party.objects.create(
+                    tenant=request.tenant, kind="organization",
+                    name=form.cleaned_data["name"], tax_id=form.cleaned_data.get("tax_id", ""))
+                profile = form.save(commit=False)
+                profile.tenant = request.tenant
+                profile.party = party
+                profile.save()
+            write_audit_log(request.user, party, "create")
+            messages.success(request, "Account created.")
+            return redirect("crm:account_detail", pk=party.pk)
+    else:
+        form = AccountForm(tenant=request.tenant)
+    return render(request, "crm/account_form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def account_edit(request, pk):
+    party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="organization")
+    profile, _ = AccountProfile.objects.get_or_create(party=party, defaults={"tenant": request.tenant})
+    if request.method == "POST":
+        form = AccountForm(request.POST, instance=profile, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                party.name = form.cleaned_data["name"]
+                party.tax_id = form.cleaned_data.get("tax_id", "")
+                party.save(update_fields=["name", "tax_id"])
+                p = form.save(commit=False)
+                p.tenant = request.tenant
+                p.party = party
+                p.save()
+            write_audit_log(request.user, party, "update")
+            messages.success(request, "Account updated.")
+            return redirect("crm:account_detail", pk=party.pk)
+    else:
+        form = AccountForm(instance=profile, tenant=request.tenant,
+                           initial={"name": party.name, "tax_id": party.tax_id})
+    return render(request, "crm/account_form.html", {"form": form, "is_edit": True, "obj": party})
+
+
+@login_required
+@require_POST
+def account_delete(request, pk):
+    party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="organization")
+    write_audit_log(request.user, party, "delete")
+    party.delete()
+    messages.success(request, "Account deleted.")
+    return redirect("crm:account_list")
 
 
 @login_required
 def contact_list(request):
     return crud_list(
         request,
-        Party.objects.filter(tenant=request.tenant, kind="person").prefetch_related("roles"),
+        Party.objects.filter(tenant=request.tenant, kind="person")
+        .select_related("crm_contact_profile"),
         "crm/contact_list.html", search_fields=["name"],
     )
 
@@ -352,13 +429,70 @@ def contact_list(request):
 def contact_detail(request, pk):
     obj = get_object_or_404(
         Party.objects.filter(tenant=request.tenant, kind="person")
+        .select_related("crm_contact_profile")
         .prefetch_related("roles", "contact_methods"),
         pk=pk)
     return render(request, "crm/contact_detail.html", {
         "obj": obj,
+        "profile": getattr(obj, "crm_contact_profile", None),
         "opportunities": Opportunity.objects.filter(tenant=request.tenant, primary_contact=obj).select_related("account")[:20],
         "cases": Case.objects.filter(tenant=request.tenant, contact=obj).select_related("owner")[:20],
     })
+
+
+@login_required
+def contact_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = ContactForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                party = Party.objects.create(
+                    tenant=request.tenant, kind="person", name=form.cleaned_data["name"])
+                profile = form.save(commit=False)
+                profile.tenant = request.tenant
+                profile.party = party
+                profile.save()
+            write_audit_log(request.user, party, "create")
+            messages.success(request, "Contact created.")
+            return redirect("crm:contact_detail", pk=party.pk)
+    else:
+        form = ContactForm(tenant=request.tenant)
+    return render(request, "crm/contact_form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def contact_edit(request, pk):
+    party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="person")
+    profile, _ = ContactProfile.objects.get_or_create(party=party, defaults={"tenant": request.tenant})
+    if request.method == "POST":
+        form = ContactForm(request.POST, instance=profile, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                party.name = form.cleaned_data["name"]
+                party.save(update_fields=["name"])
+                p = form.save(commit=False)
+                p.tenant = request.tenant
+                p.party = party
+                p.save()
+            write_audit_log(request.user, party, "update")
+            messages.success(request, "Contact updated.")
+            return redirect("crm:contact_detail", pk=party.pk)
+    else:
+        form = ContactForm(instance=profile, tenant=request.tenant, initial={"name": party.name})
+    return render(request, "crm/contact_form.html", {"form": form, "is_edit": True, "obj": party})
+
+
+@login_required
+@require_POST
+def contact_delete(request, pk):
+    party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="person")
+    write_audit_log(request.user, party, "delete")
+    party.delete()
+    messages.success(request, "Contact deleted.")
+    return redirect("crm:contact_list")
 
 
 # ===================================================== Analytics & Reporting overview (1.6)
