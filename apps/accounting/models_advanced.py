@@ -111,6 +111,7 @@ class AssetDisposal(TenantNumbered):
     class Meta:
         ordering = ["-disposal_date", "-id"]
         unique_together = ("tenant", "number")
+        indexes = [models.Index(fields=["tenant", "status"], name="acc_disp_tenant_status_idx")]
 
     @property
     def is_locked(self):
@@ -147,6 +148,7 @@ class CostAllocation(TenantNumbered):
     class Meta:
         ordering = ["-allocation_date", "-id"]
         unique_together = ("tenant", "number")
+        indexes = [models.Index(fields=["tenant", "status"], name="acc_calloc_tenant_status_idx")]
 
     @property
     def is_locked(self):
@@ -266,6 +268,10 @@ class JobCostEntry(TenantNumbered):
     class Meta:
         ordering = ["-entry_date", "-id"]
         unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="acc_jce_tenant_status_idx"),
+            models.Index(fields=["tenant", "project"], name="acc_jce_tenant_project_idx"),
+        ]
 
     @property
     def is_locked(self):
@@ -300,6 +306,10 @@ class IntercompanyTransaction(TenantNumbered):
     class Meta:
         ordering = ["-transaction_date", "-id"]
         unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="acc_ict_tenant_status_idx"),
+            models.Index(fields=["tenant", "eliminated"], name="acc_ict_tenant_elim_idx"),
+        ]
 
     @property
     def is_locked(self):
