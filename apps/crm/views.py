@@ -384,24 +384,24 @@ def account_create(request):
 @login_required
 def account_edit(request, pk):
     party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="organization")
-    profile, _ = AccountProfile.objects.get_or_create(party=party, defaults={"tenant": request.tenant})
-    if request.method == "POST":
-        form = AccountForm(request.POST, instance=profile, tenant=request.tenant)
-        if form.is_valid():
-            with transaction.atomic():
-                party.name = form.cleaned_data["name"]
-                party.tax_id = form.cleaned_data.get("tax_id", "")
-                party.save(update_fields=["name", "tax_id"])
-                p = form.save(commit=False)
-                p.tenant = request.tenant
-                p.party = party
-                p.save()
-            write_audit_log(request.user, party, "update")
-            messages.success(request, "Account updated.")
-            return redirect("crm:account_detail", pk=party.pk)
-    else:
-        form = AccountForm(instance=profile, tenant=request.tenant,
-                           initial={"name": party.name, "tax_id": party.tax_id})
+    # Bind to the existing profile, or a new (unsaved) one carrying the party — so the form's
+    # parent-account self-exclusion works and the profile INSERT happens inside the atomic block.
+    profile = (AccountProfile.objects.filter(party=party).first()
+               or AccountProfile(party=party, tenant=request.tenant))
+    form = AccountForm(request.POST or None, instance=profile, tenant=request.tenant,
+                       initial={"name": party.name, "tax_id": party.tax_id})
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            party.name = form.cleaned_data["name"]
+            party.tax_id = form.cleaned_data.get("tax_id", "")
+            party.save(update_fields=["name", "tax_id"])
+            p = form.save(commit=False)
+            p.tenant = request.tenant
+            p.party = party
+            p.save()
+        write_audit_log(request.user, party, "update")
+        messages.success(request, "Account updated.")
+        return redirect("crm:account_detail", pk=party.pk)
     return render(request, "crm/account_form.html", {"form": form, "is_edit": True, "obj": party})
 
 
@@ -466,22 +466,21 @@ def contact_create(request):
 @login_required
 def contact_edit(request, pk):
     party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="person")
-    profile, _ = ContactProfile.objects.get_or_create(party=party, defaults={"tenant": request.tenant})
-    if request.method == "POST":
-        form = ContactForm(request.POST, instance=profile, tenant=request.tenant)
-        if form.is_valid():
-            with transaction.atomic():
-                party.name = form.cleaned_data["name"]
-                party.save(update_fields=["name"])
-                p = form.save(commit=False)
-                p.tenant = request.tenant
-                p.party = party
-                p.save()
-            write_audit_log(request.user, party, "update")
-            messages.success(request, "Contact updated.")
-            return redirect("crm:contact_detail", pk=party.pk)
-    else:
-        form = ContactForm(instance=profile, tenant=request.tenant, initial={"name": party.name})
+    profile = (ContactProfile.objects.filter(party=party).first()
+               or ContactProfile(party=party, tenant=request.tenant))
+    form = ContactForm(request.POST or None, instance=profile, tenant=request.tenant,
+                       initial={"name": party.name})
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            party.name = form.cleaned_data["name"]
+            party.save(update_fields=["name"])
+            p = form.save(commit=False)
+            p.tenant = request.tenant
+            p.party = party
+            p.save()
+        write_audit_log(request.user, party, "update")
+        messages.success(request, "Contact updated.")
+        return redirect("crm:contact_detail", pk=party.pk)
     return render(request, "crm/contact_form.html", {"form": form, "is_edit": True, "obj": party})
 
 
