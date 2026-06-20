@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Trial Balance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Trial Balance</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Trial Balance</span></div>
+    </div>
+    <div class="page-actions">
+      <span class="badge badge-{% if balanced %}green{% else %}red{% endif %}">{% if balanced %}Balanced{% else %}Out of balance{% endif %}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Account</th><th>Debit</th><th>Credit</th><th>Balance (Dr)</th><th>Balance (Cr)</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td class="fw-600">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.debit|floatformat:2 }}</td>
+              <td>{{ r.credit|floatformat:2 }}</td>
+              <td>{{ r.balance_debit|floatformat:2 }}</td>
+              <td>{{ r.balance_credit|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="landmark"></i><h3>No posted activity</h3><p>Post a journal entry to see the trial balance.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td colspan="2" class="fw-600">Total</td>
+              <td class="fw-600">{{ total_debit|floatformat:2 }}</td>
+              <td class="fw-600">{{ total_credit|floatformat:2 }}</td>
+              <td colspan="2">
+                <span class="badge badge-{% if balanced %}green{% else %}red{% endif %}">{% if balanced %}Balanced{% else %}Out of balance{% endif %}</span>
+              </td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:accounting_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
