@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:fixed_asset_list' %}">Fixed Assets</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'active' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:fixed_asset_depreciate' obj.pk %}" onsubmit="return confirm('Run depreciation for this period? It posts a journal entry.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="trending-down"></i> Depreciate</button>
+        </form>
+        {% endif %}
+      {% endif %}
+      <a href="{% url 'accounting:fixed_asset_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounting:fixed_asset_delete' obj.pk %}" onsubmit="return confirm('Delete this asset?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="wallet"></i></div>
+      <div><div class="text-muted">Book Value</div><div class="page-title">{{ book_value|floatformat:2 }}</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
+      <div><div class="text-muted">Next Depreciation</div><div class="page-title">{{ next_depreciation|floatformat:2 }}</div></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{{ obj.category|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Method</dt><dd>{{ obj.get_method_display }}</dd></div>
+      <div class="detail-item"><dt>Acquisition Cost</dt><dd>{{ obj.acquisition_cost|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Salvage Value</dt><dd>{{ obj.salvage_value|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Useful Life (months)</dt><dd>{{ obj.useful_life_months }}</dd></div>
+      <div class="detail-item"><dt>In-Service Date</dt><dd>{% if obj.in_service_date %}{{ obj.in_service_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Accumulated Depreciation</dt><dd>{{ obj.accumulated_depreciation|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'cip' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Custodian</dt><dd>{% if obj.custodian %}{{ obj.custodian.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}{{ obj.location.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Asset Account</dt><dd>{% if obj.asset_account %}{{ obj.asset_account.code }} · {{ obj.asset_account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Accumulated Account</dt><dd>{% if obj.accumulated_account %}{{ obj.accumulated_account.code }} · {{ obj.accumulated_account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Expense Account</dt><dd>{% if obj.expense_account %}{{ obj.expense_account.code }} · {{ obj.expense_account.name }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Disposals</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Date</th><th>Proceeds</th><th>Gain/Loss</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for d in disposals %}
+            <tr>
+              <td><a href="{% url 'accounting:asset_disposal_detail' d.pk %}" class="fw-600">{{ d.number }}</a></td>
+              <td>{{ d.disposal_date|date:"M d, Y" }}</td>
+              <td>{{ d.proceeds|floatformat:2 }}</td>
+              <td>{{ d.gain_loss|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if d.status == 'posted' %}green{% else %}muted{% endif %}">{{ d.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="archive"></i><p>No disposals recorded for this asset.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:fixed_asset_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
