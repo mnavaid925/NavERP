@@ -64,4 +64,130 @@ urlpatterns = [
     path("contacts/<int:pk>/", views.contact_detail, name="contact_detail"),
     path("contacts/<int:pk>/edit/", views.contact_edit, name="contact_edit"),
     path("contacts/<int:pk>/delete/", views.contact_delete, name="contact_delete"),
+
+    # ===== Module 1 Extension — Sub-modules 1.7–1.12 =========================
+
+    # Expenses (1.7)
+    path("expenses/", views.expense_list, name="expense_list"),
+    path("expenses/add/", views.expense_create, name="expense_create"),
+    path("expenses/<int:pk>/", views.expense_detail, name="expense_detail"),
+    path("expenses/<int:pk>/edit/", views.expense_edit, name="expense_edit"),
+    path("expenses/<int:pk>/delete/", views.expense_delete, name="expense_delete"),
+    path("expenses/<int:pk>/approve/", views.expense_approve, name="expense_approve"),
+    path("expenses/<int:pk>/reject/", views.expense_reject, name="expense_reject"),
+
+    # Projects (1.8)
+    path("projects/", views.crmproject_list, name="crmproject_list"),
+    path("projects/add/", views.crmproject_create, name="crmproject_create"),
+    path("projects/<int:pk>/", views.crmproject_detail, name="crmproject_detail"),
+    path("projects/<int:pk>/edit/", views.crmproject_edit, name="crmproject_edit"),
+    path("projects/<int:pk>/delete/", views.crmproject_delete, name="crmproject_delete"),
+    path("opportunities/<int:pk>/to-project/", views.opportunity_to_project, name="opportunity_to_project"),
+
+    # Milestones (1.8)
+    path("milestones/", views.crmmilestone_list, name="crmmilestone_list"),
+    path("milestones/add/", views.crmmilestone_create, name="crmmilestone_create"),
+    path("milestones/<int:pk>/", views.crmmilestone_detail, name="crmmilestone_detail"),
+    path("milestones/<int:pk>/edit/", views.crmmilestone_edit, name="crmmilestone_edit"),
+    path("milestones/<int:pk>/delete/", views.crmmilestone_delete, name="crmmilestone_delete"),
+
+    # Timesheets (1.8)
+    path("timesheets/", views.timesheet_list, name="timesheet_list"),
+    path("timesheets/add/", views.timesheet_create, name="timesheet_create"),
+    path("timesheets/<int:pk>/", views.timesheet_detail, name="timesheet_detail"),
+    path("timesheets/<int:pk>/edit/", views.timesheet_edit, name="timesheet_edit"),
+    path("timesheets/<int:pk>/delete/", views.timesheet_delete, name="timesheet_delete"),
+
+    # Document templates (1.9)
+    path("doc-templates/", views.doctemplate_list, name="doctemplate_list"),
+    path("doc-templates/add/", views.doctemplate_create, name="doctemplate_create"),
+    path("doc-templates/<int:pk>/", views.doctemplate_detail, name="doctemplate_detail"),
+    path("doc-templates/<int:pk>/edit/", views.doctemplate_edit, name="doctemplate_edit"),
+    path("doc-templates/<int:pk>/delete/", views.doctemplate_delete, name="doctemplate_delete"),
+
+    # Contract documents + e-signature (1.9)
+    path("contracts/", views.contractdocument_list, name="contractdocument_list"),
+    path("contracts/add/", views.contractdocument_create, name="contractdocument_create"),
+    path("contracts/<int:pk>/", views.contractdocument_detail, name="contractdocument_detail"),
+    path("contracts/<int:pk>/edit/", views.contractdocument_edit, name="contractdocument_edit"),
+    path("contracts/<int:pk>/delete/", views.contractdocument_delete, name="contractdocument_delete"),
+    path("contracts/<int:pk>/add-signer/", views.contractdocument_add_signer, name="contractdocument_add_signer"),
+    path("contracts/<int:pk>/remove-signer/<int:signer_pk>/", views.contractdocument_remove_signer, name="contractdocument_remove_signer"),
+    path("sign/<str:token>/", views.sign_document, name="sign_document"),  # public
+
+    # Workflow rules (1.10)
+    path("workflows/", views.workflowrule_list, name="workflowrule_list"),
+    path("workflows/add/", views.workflowrule_create, name="workflowrule_create"),
+    path("workflows/<int:pk>/", views.workflowrule_detail, name="workflowrule_detail"),
+    path("workflows/<int:pk>/edit/", views.workflowrule_edit, name="workflowrule_edit"),
+    path("workflows/<int:pk>/delete/", views.workflowrule_delete, name="workflowrule_delete"),
+
+    # Workflow logs (1.10, read-only)
+    path("workflow-logs/", views.workflowlog_list, name="workflowlog_list"),
+    path("workflow-logs/<int:pk>/", views.workflowlog_detail, name="workflowlog_detail"),
+
+    # Approval requests (1.10)
+    path("approvals/", views.approvalrequest_list, name="approvalrequest_list"),
+    path("approvals/add/", views.approvalrequest_create, name="approvalrequest_create"),
+    path("approvals/<int:pk>/", views.approvalrequest_detail, name="approvalrequest_detail"),
+    path("approvals/<int:pk>/edit/", views.approvalrequest_edit, name="approvalrequest_edit"),
+    path("approvals/<int:pk>/delete/", views.approvalrequest_delete, name="approvalrequest_delete"),
+    path("approvals/<int:pk>/approve/", views.approvalrequest_approve, name="approvalrequest_approve"),
+    path("approvals/<int:pk>/reject/", views.approvalrequest_reject, name="approvalrequest_reject"),
+
+    # Onboarding plans + steps (1.11)
+    path("onboarding/", views.onboardingplan_list, name="onboardingplan_list"),
+    path("onboarding/add/", views.onboardingplan_create, name="onboardingplan_create"),
+    path("onboarding/<int:pk>/", views.onboardingplan_detail, name="onboardingplan_detail"),
+    path("onboarding/<int:pk>/edit/", views.onboardingplan_edit, name="onboardingplan_edit"),
+    path("onboarding/<int:pk>/delete/", views.onboardingplan_delete, name="onboardingplan_delete"),
+    path("onboarding/<int:pk>/add-step/", views.onboardingstep_add, name="onboardingstep_add"),
+    path("onboarding/steps/<int:step_pk>/complete/", views.onboardingstep_complete, name="onboardingstep_complete"),
+    path("onboarding/steps/<int:step_pk>/delete/", views.onboardingstep_delete, name="onboardingstep_delete"),
+
+    # Health scores (1.11)
+    path("health-scores/", views.healthscore_list, name="healthscore_list"),
+    path("health-scores/add/", views.healthscore_create, name="healthscore_create"),
+    path("health-scores/config/", views.health_config_edit, name="health_config_edit"),
+    path("health-scores/<int:pk>/", views.healthscore_detail, name="healthscore_detail"),
+    path("health-scores/<int:pk>/edit/", views.healthscore_edit, name="healthscore_edit"),
+    path("health-scores/<int:pk>/delete/", views.healthscore_delete, name="healthscore_delete"),
+    path("health-scores/<int:pk>/recompute/", views.recompute_health_score, name="recompute_health_score"),
+
+    # Surveys (1.11)
+    path("surveys/", views.survey_list, name="survey_list"),
+    path("surveys/add/", views.survey_create, name="survey_create"),
+    path("surveys/<int:pk>/", views.survey_detail, name="survey_detail"),
+    path("surveys/<int:pk>/edit/", views.survey_edit, name="survey_edit"),
+    path("surveys/<int:pk>/delete/", views.survey_delete, name="survey_delete"),
+    path("surveys/<str:token>/respond/", views.survey_respond, name="survey_respond"),  # public
+
+    # Product stock (1.12)
+    path("stock/", views.productstock_list, name="productstock_list"),
+    path("stock/add/", views.productstock_create, name="productstock_create"),
+    path("stock/<int:pk>/", views.productstock_detail, name="productstock_detail"),
+    path("stock/<int:pk>/edit/", views.productstock_edit, name="productstock_edit"),
+    path("stock/<int:pk>/delete/", views.productstock_delete, name="productstock_delete"),
+
+    # Purchase orders (1.12)
+    path("purchase-orders/", views.crm_po_list, name="crm_po_list"),
+    path("purchase-orders/add/", views.crm_po_create, name="crm_po_create"),
+    path("purchase-orders/<int:pk>/", views.crm_po_detail, name="crm_po_detail"),
+    path("purchase-orders/<int:pk>/edit/", views.crm_po_edit, name="crm_po_edit"),
+    path("purchase-orders/<int:pk>/delete/", views.crm_po_delete, name="crm_po_delete"),
+    path("purchase-orders/<int:pk>/add-line/", views.crm_po_add_line, name="crm_po_add_line"),
+    path("purchase-orders/<int:pk>/remove-line/<int:line_pk>/", views.crm_po_remove_line, name="crm_po_remove_line"),
+    path("purchase-orders/<int:pk>/receive/", views.crm_po_receive, name="crm_po_receive"),
+
+    # Partner portal access — admin (1.12)
+    path("partner-portal/", views.partnerportalaccess_list, name="partnerportalaccess_list"),
+    path("partner-portal/add/", views.partnerportalaccess_create, name="partnerportalaccess_create"),
+    path("partner-portal/<int:pk>/", views.partnerportalaccess_detail, name="partnerportalaccess_detail"),
+    path("partner-portal/<int:pk>/edit/", views.partnerportalaccess_edit, name="partnerportalaccess_edit"),
+    path("partner-portal/<int:pk>/delete/", views.partnerportalaccess_delete, name="partnerportalaccess_delete"),
+
+    # Partner portal — partner-facing (1.12)
+    path("portal/", views.portal_dashboard, name="portal_dashboard"),
+    path("portal/orders/", views.portal_po_list, name="portal_po_list"),
+    path("portal/stock/", views.portal_stock, name="portal_stock"),
 ]
