@@ -142,6 +142,51 @@ LIVE_LINKS = {
         "Vendor/Partner Portal": "crm:partnerportalaccess_list",  # bullet (portal access mgmt)
         "Partner Portal": "crm:portal_dashboard",           # extra (partner-facing entry)
     },
+    # ========================= Module 2 — Accounting & Finance
+    # 2.1 Dashboard & Analytics — the KPI/alert/quick-action overview + report links.
+    "2.1": {
+        "Executive Summary": "accounting:accounting_dashboard",  # bullet
+        "Cash Flow Widget": "accounting:accounting_dashboard",   # bullet (6-week net-cash chart)
+        "Alert Center": "accounting:accounting_dashboard",       # bullet (overdue invoices/bills)
+        "Quick Actions": "accounting:accounting_dashboard",      # bullet
+        "Custom Reports": "accounting:trial_balance",            # bullet (trial balance report)
+    },
+    # 2.2 General Ledger (GL)
+    "2.2": {
+        "Chart of Accounts": "accounting:glaccount_list",        # bullet
+        "Journal Entries": "accounting:journal_entry_list",      # bullet
+        "Journal Approval": "accounting:journal_entry_list",     # bullet (post action = approval)
+        "Period Close": "accounting:fiscal_period_list",         # bullet
+        "Account Reconciliation": "accounting:trial_balance",    # bullet (balance verification)
+        "Audit Trail": "core:auditlog_list",                     # bullet (immutable log)
+        "Multi-currency Support": "accounting:exchange_rate_list",  # bullet
+    },
+    # 2.3 Accounts Payable (AP)
+    "2.3": {
+        "Vendor Management": "accounting:vendor_profile_list",   # bullet (Party vendor role + terms)
+        "Bill Capture": "accounting:bill_list",                  # bullet
+        "Bill Processing": "accounting:bill_list",               # bullet (approval routing)
+        "Payment Processing": "accounting:payment_list",         # bullet
+        "Aging Reports": "accounting:ap_aging",                  # bullet
+        "Early Payment Discounts": "accounting:payment_term_list",  # bullet
+    },
+    # 2.4 Accounts Receivable (AR)
+    "2.4": {
+        "Customer Management": "accounting:customer_profile_list",  # bullet (Party customer role + credit)
+        "Invoice Generation": "accounting:invoice_list",         # bullet
+        "Payment Collection": "accounting:payment_list",         # bullet
+        "Cash Application": "accounting:allocation_list",        # bullet (payment→invoice matching)
+        "Collections Management": "accounting:ar_aging",         # bullet
+        "Credit Management": "accounting:customer_profile_list",  # bullet (credit limits/holds)
+        "Aging Analysis": "accounting:ar_aging",                 # bullet
+    },
+    # 2.5 Cash Management
+    "2.5": {
+        "Bank Account Management": "accounting:bank_account_list",  # bullet
+        "Bank Feeds": "accounting:bank_transaction_list",        # bullet (CSV import / feed rows)
+        "Reconciliation Engine": "accounting:reconciliation_list",  # bullet
+        "Cash Positioning": "accounting:accounting_dashboard",   # bullet (live cash position)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
