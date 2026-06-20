@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Job Cost Entries{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Job Cost Entries</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Job Cost Entries</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:job_cost_entry_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Entry</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" class="form-select">
+            <option value="">All kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="project" class="form-select">
+            <option value="">All projects</option>
+            {% for o in projects %}
+              <option value="{{ o.pk }}" {% if request.GET.project == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounting:job_cost_entry_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Project</th><th>Date</th><th>Kind</th><th>Amount</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounting:job_cost_entry_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.project.name }}</td>
+              <td>{{ obj.entry_date|date:"M d, Y" }}</td>
+              <td><span class="badge badge-{% if obj.kind == 'cost' %}amber{% else %}green{% endif %}">{{ obj.get_kind_display }}</span></td>
+              <td>{{ obj.amount|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if obj.status == 'posted' %}green{% else %}info{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounting:job_cost_entry_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'accounting:job_cost_entry_post' obj.pk %}" onsubmit="return confirm('Post this cost entry? It cannot be edited afterwards.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Post"><i data-lucide="check"></i></button>
+                    </form>
+                    {% endif %}
+                    <a href="{% url 'accounting:job_cost_entry_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'accounting:job_cost_entry_delete' obj.pk %}" onsubmit="return confirm('Delete this entry?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="receipt"></i><h3>No cost entries found</h3><p>Record your first job cost entry.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
