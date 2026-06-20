@@ -1,6 +1,6 @@
 ---
 name: accounting
-description: Work on the Accounting & Finance module (Module 2 — 2.1 dashboard, 2.2 General Ledger, 2.3 Accounts Payable, 2.4 Accounts Receivable, 2.5 Cash Management). Use when the user asks to add/change/debug anything under apps/accounting or templates/accounting, extend the seed_accounting seeder, touch accounting sidebar wiring (LIVE_LINKS 2.1–2.5), or invokes /accounting.
+description: Work on the Accounting & Finance module (Module 2 — 2.1 dashboard, 2.2 General Ledger, 2.3 Accounts Payable, 2.4 Accounts Receivable, 2.5 Cash Management, plus advanced 2.6 Fixed Assets, 2.7 Cost Allocation, 2.8 Payroll, 2.9 Project/Job Costing, 2.10 Multi-Entity/Intercompany, 2.11 Tax, 2.12 Reporting/Balance-Sheet/P&L, 2.13 Budgeting, 2.14 Audit Controls, 2.15 Integration). Use when the user asks to add/change/debug anything under apps/accounting or templates/accounting, extend the seed_accounting seeder, touch accounting sidebar wiring (LIVE_LINKS 2.1–2.15), or invokes /accounting.
 ---
 
 # Accounting & Finance (Module 2)
@@ -75,8 +75,54 @@ Extend `base.html`, design-system classes only (`.card/.btn/.badge badge-green|r
 - **Add a list filter** → pass the choices/queryset in the view's `crud_list(extra_context=...)`; add the `<select>` to the list template (string compare `request.GET.x == val`; FK compare `obj.pk|stringformat:"d"`; bool `value="True"/"False"`).
 - **Extend the seeder** → add to `_seed_tenant` guarded by the CoA-exists check; use balanced `_posted_je(...)` legs for any JE.
 
+## Advanced sub-modules 2.6–2.15 (`models_advanced.py` / `views_advanced.py` / `forms_advanced.py`)
+A second pass (migrations `0002` + index `0003`) added 14 accounting-owned models that REUSE the GL spine and
+`core.OrgUnit` (the cost-centre / department / legal-entity / consolidation dimension — no new Entity table). New
+code lives in `*_advanced.py` files imported into `models.py`/`urls.py`/`admin.py`; templates are in the same
+`templates/accounting/` dir. Six **balanced-JE posting actions** (all `@tenant_admin_required`, POST-only) build a
+balanced `JournalEntry` via the local `views_advanced._post_journal_entry(tenant, user, desc, legs)` helper
+(`legs=[(gl_account, debit, credit, party, org_unit)]`, refuses to post unless Σdebit==Σcredit>0).
+
+- **2.6 Fixed Assets** — `FixedAsset` [FA-] (cost/salvage/useful_life/method straight_line|declining_balance|units,
+  derived `book_value()`/`period_depreciation()`; `accumulated_depreciation` advanced by the action) + action
+  `fixed_asset_depreciate` (Dr depreciation expense / Cr accumulated, capped at depreciable base); `AssetDisposal`
+  [DISP-] + action `asset_disposal_post` (Dr cash+accum / Cr cost ± gain/loss; sets asset `disposed`).
+- **2.7 Cost Allocation** — `CostAllocation` [CALLOC-] + `cost_allocation_post` (Dr target / Cr source).
+- **2.8 Payroll** — `PayrollRun` [PRUN-] (aggregate totals; `net_pay` DERIVED = gross−employee_tax−deductions so the
+  JE balances) + `payroll_run_post` (Dr wages+tax+benefits expense / Cr cash + taxes-payable + deductions-payable).
+- **2.9 Project/Job Costing** — `Project` [PRJ-] (budget vs derived actuals) + `JobCostEntry` [JCE-] +
+  `job_cost_entry_post` (cost: Dr expense/Cr cash; revenue: Dr cash/Cr income).
+- **2.10 Multi-Entity** — `IntercompanyTransaction` [ICT-] + `intercompany_post` (Dr due-from on lender org / Cr
+  due-to on borrower org) + `intercompany_toggle_eliminated` (admin; the `eliminated` flag is NOT on the form).
+- **2.11 Tax** — `TaxCode` (rate master) + `TaxReturn` [TAXR-] (filing record, no JE; edit/delete admin-gated).
+- **2.12 Reporting** — report views (no CRUD model): `balance_sheet`, `profit_and_loss` (both read one grouped
+  `_account_balances(tenant)` aggregate over posted lines) + `ScheduledReport` config model.
+- **2.13 Budgeting** — `Budget` [BUD-] + `BudgetLine` (standalone CRUD under a budget; `budget_line_*` views redirect
+  to the parent detail) + `budget_variance` report (budget vs posted actuals).
+- **2.14 Audit & Controls** — `InternalControl` [CTRL-] (SOX control + last test result); audit trail reuses `core.AuditLog`.
+- **2.15 Integration** — `IntegrationConfig` (provider/category/status); the API secret is NEVER stored — only
+  prefix + SHA-256 hash (L20/L25); `integration_rotate_key` (admin) reveals the plaintext once via a pop-once
+  session key; `integration_edit`/`delete` are admin-gated; the form has no key field.
+
+Advanced conventions: status fields owned by posting actions are OFF the forms (AssetDisposal/CostAllocation/
+PayrollRun/JobCostEntry); `FixedAssetForm` drops the `disposed` choice; posted records are immutable (`is_locked`);
+the advanced demo data is seeded DRAFT (via `_seed_advanced`, self-guarded on `FixedAsset`) so you can exercise the
+post actions. Account-resolution heuristic: posting actions use model FKs where set, else `_first_account(tenant,
+type, code_prefix)` (e.g. depreciation→1600/1690/6400, payroll→6100/1000/2200/2100) — per-tenant configurable
+control accounts are the documented future migration.
+
 ## Sidebar wiring (`apps/core/navigation.py` LIVE_LINKS)
-Keys **`"2.1"`–`"2.5"`** map NavERP.md bullets → routes: 2.1 dashboard/trial-balance; 2.2 glaccount/journal_entry/fiscal_period/exchange_rate + `core:auditlog_list`; 2.3 vendor_profile/bill/payment/ap_aging/payment_term; 2.4 customer_profile/invoice/payment/allocation/ar_aging; 2.5 bank_account/bank_transaction/reconciliation/dashboard. Don't edit `MODULE_CATALOG`.
+Keys **`"2.1"`–`"2.15"`** map NavERP.md bullets → routes. 2.1 dashboard/trial-balance; 2.2 GL; 2.3 AP; 2.4 AR; 2.5
+cash (see above). Advanced: 2.6 fixed_asset/asset_disposal; 2.7 cost_allocation; 2.8 payroll_run; 2.9 project/
+job_cost_entry; 2.10 `core:orgunit_list` + intercompany; 2.11 tax_code/tax_return; 2.12 balance_sheet/profit_and_loss/
+scheduled_report + dashboard; 2.13 budget/budget_variance; 2.14 internal_control + `core:auditlog_list`/`core:document_list`/
+`accounts:role_list`; 2.15 integration. Don't edit `MODULE_CATALOG`.
 
 ## Deferred (later passes)
-Bank feeds (Plaid), OCR bill capture, AI cash-flow forecast, customer payment portal, allocation-rules engine, 1099 generation, recurring JE scheduler, dunning auto-send, FX revaluation, invoice/bill **void** actions + per-tenant configurable AR/AP control accounts (today the posting heuristic picks the first 1100/2000 account), gl_account_ledger pagination, and sub-modules 2.6–2.15.
+Bank feeds (Plaid), OCR bill capture, AI cash-flow forecast, customer/vendor portal, allocation-rules engine, 1099
+generation, recurring JE scheduler, dunning auto-send, FX revaluation, invoice/bill **void** actions, per-tenant
+configurable AR/AP/depreciation control accounts (posting picks the first matching code-prefix today),
+gl_account_ledger pagination. Advanced deferred: live integration sync (Plaid/Avalara/Stripe API calls), DRF REST
+API, Celery scheduled-report delivery, parallel tax-depreciation books, full WBS/earned-value, currency-translation
+(CTA) run, XBRL/EDGAR, and the FK migration onto Inventory (Module 5)/HRM (Module 3)/Projects (Module 7) masters
+when those modules land.
