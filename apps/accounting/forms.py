@@ -74,7 +74,11 @@ class GLAccountForm(TenantModelForm):
 class FiscalPeriodForm(TenantModelForm):
     class Meta:
         model = FiscalPeriod
-        fields = ["name", "period_type", "start_date", "end_date", "status"]
+        # `status` is intentionally EXCLUDED — a period is opened on create (model default) and
+        # only ever transitions to closed via the @tenant_admin_required `fiscal_period_close`
+        # action. Leaving it on this @login_required edit form would let any member close/lock a
+        # period and bypass the admin gate (code-review finding).
+        fields = ["name", "period_type", "start_date", "end_date"]
 
 
 class JournalEntryForm(TenantModelForm):
