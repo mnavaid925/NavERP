@@ -195,7 +195,7 @@ class SignerRecordForm(TenantModelForm):
 
     class Meta:
         model = SignerRecord
-        fields = ["signer_party", "signer_name", "signer_email", "order"]
+        fields = ["signer_party", "signer_name", "signer_email"]  # order auto-assigned in the view
 
 
 class WorkflowRuleForm(TenantModelForm):
@@ -225,7 +225,7 @@ class OnboardingStepForm(TenantModelForm):
 
     class Meta:
         model = OnboardingStep
-        fields = ["order", "title", "description", "assignee", "due_date"]
+        fields = ["title", "description", "assignee", "due_date"]  # order auto-assigned in the view
 
 
 class HealthScoreForm(TenantModelForm):
@@ -287,7 +287,7 @@ class PurchaseOrderLineForm(TenantModelForm):
 
     class Meta:
         model = PurchaseOrderLine
-        fields = ["item_name", "product", "quantity", "unit_price", "order"]
+        fields = ["item_name", "product", "quantity", "unit_price"]  # order auto-assigned in the view
 
 
 class PartnerPortalAccessForm(TenantModelForm):
