@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Workflow Logs{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Workflow Logs</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Workflow Logs
+    </nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search logs…">
+      <select name="status" class="form-select">
+        <option value="">All statuses</option>
+        {% for val,label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <select name="rule" class="form-select">
+        <option value="">All rules</option>
+        {% for o in rules %}<option value="{{ o.pk }}" {% if request.GET.rule == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:workflowlog_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Record</th>
+            <th>Status</th>
+            <th>Fired</th>
+            <th>Error</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+          <tr>
+            <td>{% if obj.rule %}<a href="{% url 'crm:workflowrule_detail' obj.rule.pk %}">{{ obj.rule.name }}</a>{% else %}—{% endif %}</td>
+            <td>{{ obj.record_label }}</td>
+            <td>{% if obj.status == 'success' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == 'skipped' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+            <td>{{ obj.fired_at|date:"M d, Y H:i" }}</td>
+            <td>{{ obj.error_msg|truncatechars:40|default:"—" }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:workflowlog_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="activity"></i>
+                <h3>No logs found</h3>
+                <p>Workflow executions will appear here once rules fire.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
