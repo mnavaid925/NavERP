@@ -21,7 +21,13 @@
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
-        <a href="{% url 'accounting:budget_list' %}" class="btn btn-outline">Cancel</a>
+        {% if is_edit and obj %}
+          <a href="{% url 'accounting:budget_detail' obj.budget_id %}" class="btn btn-outline">Cancel</a>
+        {% elif request.GET.budget %}
+          <a href="{% url 'accounting:budget_detail' request.GET.budget %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+          <a href="{% url 'accounting:budget_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
       </div>
     </form>
   </div></div>
