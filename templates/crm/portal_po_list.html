@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}My Purchase Orders{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">My Purchase Orders</h1>
+    <nav class="breadcrumb"><span>Partner Portal</span></nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Status</th>
+            <th>Order date</th>
+            <th>Expected</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td class="fw-600">{{ o.number }}</td>
+            <td>
+              {% if o.status == 'draft' %}<span class="badge badge-muted">{{ o.get_status_display }}</span>
+              {% elif o.status == 'sent' %}<span class="badge badge-info">{{ o.get_status_display }}</span>
+              {% elif o.status == 'received' %}<span class="badge badge-green">{{ o.get_status_display }}</span>
+              {% elif o.status == 'cancelled' %}<span class="badge badge-red">{{ o.get_status_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ o.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{{ o.order_date|date:"M d, Y"|default:"—" }}</td>
+            <td>{{ o.expected_date|date:"M d, Y"|default:"—" }}</td>
+            <td>{{ o.total_amount }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="shopping-cart"></i>
+                <h3>No purchase orders found</h3>
+                <p>You don't have any purchase orders yet.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<a href="{% url 'crm:portal_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
