@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}My Profile{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Profile</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>My Profile</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-header" style="display:flex; align-items:center; gap:.75rem;">
+      <span class="avatar-initial">{{ user_obj.initials }}</span>
+      <div>
+        <div class="fw-600">{{ user_obj.get_full_name }}</div>
+        <div class="muted">{{ user_obj.email }}</div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
