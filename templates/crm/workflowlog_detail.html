@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Workflow Log{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Workflow Log</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:workflowlog_list' %}">Workflow Logs</a>
+      <span class="sep">›</span>
+      {{ obj.pk }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:workflowlog_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Rule</dt><dd>{% if obj.rule %}<a href="{% url 'crm:workflowrule_detail' obj.rule.pk %}">{{ obj.rule.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Record</dt><dd>{{ obj.record_label|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == 'success' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == 'skipped' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Fired</dt><dd>{{ obj.fired_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Error</dt><dd>{{ obj.error_msg|default:"—" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<a href="{% url 'crm:workflowlog_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
