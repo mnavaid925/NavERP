@@ -329,8 +329,8 @@ class Command(BaseCommand):
             tenant=tenant, name="Office Printer", category="Equipment",
             acquisition_cost=Decimal("3000"), salvage_value=Decimal("200"), useful_life_months=36,
             method="straight_line", in_service_date=today - datetime.timedelta(days=400), status="active",
-            accumulated_depreciation=Decimal("2400"), asset_account=equipment,
-            accumulated_account=accum_dep, expense_account=dep_exp, location=org_a)
+            accumulated_depreciation=Decimal("2400"), last_depreciation_date=today - datetime.timedelta(days=30),
+            asset_account=equipment, accumulated_account=accum_dep, expense_account=dep_exp, location=org_a)
         from apps.accounting.models_advanced import AssetDisposal
         AssetDisposal.objects.create(
             tenant=tenant, asset=old_printer, disposal_date=today, proceeds=Decimal("500"),
