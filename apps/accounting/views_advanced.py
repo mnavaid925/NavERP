@@ -211,9 +211,9 @@ def asset_disposal_post(request, pk):
         messages.error(request, "This disposal is already posted.")
         return redirect("accounting:asset_disposal_detail", pk=pk)
     asset = disposal.asset
-    cost_acct = asset.asset_account or _first_account(request.tenant, "asset", "1500") \
+    cost_acct = asset.asset_account or _first_account(request.tenant, "asset", "1600") \
         or _first_account(request.tenant, "asset")
-    accum_acct = asset.accumulated_account or _first_account(request.tenant, "asset", "1500") \
+    accum_acct = asset.accumulated_account or _first_account(request.tenant, "asset", "1690") \
         or _first_account(request.tenant, "asset")
     cash_acct = _first_account(request.tenant, "asset", "1000") or _first_account(request.tenant, "asset")
     gain_acct = _first_account(request.tenant, "income")
@@ -234,6 +234,9 @@ def asset_disposal_post(request, pk):
     with transaction.atomic():
         je = _post_journal_entry(request.tenant, request.user,
                                  f"Disposal of {asset.number} {asset.name}", legs, reference=disposal.number)
+        if je is None:
+            messages.error(request, "Disposal entry did not balance — nothing was posted.")
+            return redirect("accounting:asset_disposal_detail", pk=pk)
         disposal.gain_loss = gain_loss
         disposal.journal_entry = je
         disposal.status = "posted"
@@ -309,6 +312,9 @@ def cost_allocation_post(request, pk):
             request.tenant, request.user, f"Cost allocation {alloc.number} — {alloc.description}",
             [(alloc.target_account, alloc.amount, ZERO, None, alloc.target_org_unit),
              (alloc.source_account, ZERO, alloc.amount, None, None)], reference=alloc.number)
+        if je is None:
+            messages.error(request, "Allocation entry did not balance — nothing was posted.")
+            return redirect("accounting:cost_allocation_detail", pk=pk)
         alloc.journal_entry = je
         alloc.status = "posted"
         alloc.save(update_fields=["journal_entry", "status", "updated_at"])
@@ -504,6 +510,9 @@ def job_cost_entry_post(request, pk):
         je = _post_journal_entry(request.tenant, request.user,
                                  f"{entry.get_kind_display()} — {entry.project.name} ({entry.number})", legs,
                                  reference=entry.number)
+        if je is None:
+            messages.error(request, "Cost entry did not balance — nothing was posted.")
+            return redirect("accounting:job_cost_entry_detail", pk=pk)
         entry.journal_entry = je
         entry.status = "posted"
         entry.save(update_fields=["journal_entry", "status", "updated_at"])
@@ -578,10 +587,15 @@ def intercompany_post(request, pk):
         messages.error(request, "Due-from and due-to accounts and a positive amount are required to post.")
         return redirect("accounting:intercompany_detail", pk=pk)
     with transaction.atomic():
+        # due-from (receivable) sits on the lender's books (from_org_unit); due-to (payable) on the
+        # borrower's books (to_org_unit).
         je = _post_journal_entry(
             request.tenant, request.user, f"Intercompany {ict.number} — {ict.description}",
-            [(due_from, ict.amount, ZERO, None, ict.to_org_unit),
-             (due_to, ZERO, ict.amount, None, ict.from_org_unit)], reference=ict.number)
+            [(due_from, ict.amount, ZERO, None, ict.from_org_unit),
+             (due_to, ZERO, ict.amount, None, ict.to_org_unit)], reference=ict.number)
+        if je is None:
+            messages.error(request, "Intercompany transaction did not balance — nothing was posted.")
+            return redirect("accounting:intercompany_detail", pk=pk)
         ict.journal_entry = je
         ict.status = "posted"
         ict.save(update_fields=["journal_entry", "status", "updated_at"])
@@ -797,14 +811,40 @@ def budget_delete(request, pk):
 # --------------------------------------------------------------- Budget lines
 @login_required
 def budget_line_create(request):
-    return crud_create(request, form_class=BudgetLineForm, template="accounting/budget_line_form.html",
-                       success_url="accounting:budget_list")
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before adding budget lines.")
+        return redirect("accounting:budget_list")
+    initial = {}
+    bp = request.GET.get("budget", "")
+    if bp.isdigit():
+        initial["budget"] = bp
+    if request.method == "POST":
+        form = BudgetLineForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Budget line added.")
+            return redirect("accounting:budget_detail", pk=obj.budget_id)
+    else:
+        form = BudgetLineForm(tenant=request.tenant, initial=initial)
+    return render(request, "accounting/budget_line_form.html", {"form": form, "is_edit": False})
 
 
 @login_required
 def budget_line_edit(request, pk):
-    return crud_edit(request, model=BudgetLine, pk=pk, form_class=BudgetLineForm,
-                     template="accounting/budget_line_form.html", success_url="accounting:budget_list")
+    line = get_object_or_404(BudgetLine, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = BudgetLineForm(request.POST, instance=line, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Budget line updated.")
+            return redirect("accounting:budget_detail", pk=obj.budget_id)
+    else:
+        form = BudgetLineForm(instance=line, tenant=request.tenant)
+    return render(request, "accounting/budget_line_form.html", {"form": form, "obj": line, "is_edit": True})
 
 
 @login_required
@@ -821,6 +861,10 @@ def budget_line_delete(request, pk):
 @login_required
 def budget_variance(request):
     """Budget vs. posted actuals for a chosen budget (?budget=pk, default = latest)."""
+    if request.tenant is None:
+        return render(request, "accounting/budget_variance.html",
+                      {"budgets": [], "selected": None, "rows": [], "total_budget": ZERO,
+                       "total_actual": ZERO, "total_variance": ZERO})
     budgets = Budget.objects.filter(tenant=request.tenant)
     selected = None
     bp = request.GET.get("budget", "")
@@ -929,9 +973,10 @@ def integration_delete(request, pk):
 def integration_rotate_key(request, pk):
     obj = get_object_or_404(IntegrationConfig, pk=pk, tenant=request.tenant)
     secret = IntegrationConfig.generate_secret()
-    obj.set_secret(secret)
-    obj.status = "connected"
-    obj.save(update_fields=["api_key_prefix", "api_key_hash", "status", "updated_at"])
+    with transaction.atomic():
+        obj.set_secret(secret)
+        obj.status = "connected"
+        obj.save(update_fields=["api_key_prefix", "api_key_hash", "status", "updated_at"])
     # Reveal exactly once on the redirect target — never via messages (would persist in the session, L25).
     request.session["_integration_key_reveal"] = {"pk": obj.pk, "secret": secret}
     write_audit_log(request.user, obj, "update", {"action": "rotate_key"})
