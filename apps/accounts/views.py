@@ -178,7 +178,7 @@ def user_delete(request, pk):
 def role_list(request):
     return crud_list(
         request,
-        Role.objects.filter(tenant=request.tenant).annotate(perm_count=Count("permissions")),
+        Role.objects.filter(tenant=request.tenant).annotate(perm_count=Count("permissions")).order_by("name"),
         "accounts/role_list.html", search_fields=["name", "description"],
     )
 
