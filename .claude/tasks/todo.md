@@ -3183,7 +3183,38 @@ git add 'README.md'; git commit -m 'docs(readme): accounting 2.6-2.15 — featur
   Research rated this "common"; trimmed to keep model count at 14; add in a cost-management pass.
 - **Invoice/Bill void actions** — carried forward from 2.1–2.5 deferred list; still pending.
 
-## Review notes
+## Review notes — Module 2 Advanced (2.6–2.15) outcome (2026-06-21)
 
-(filled in after the build)
+**Built:** 14 accounting-owned models (trimmed from the 21-model research proposal — one primary live page per
+sub-module, NO inline formsets, migration `0002` purely additive + `0003` indexes) in `models_advanced.py`/
+`forms_advanced.py`/`views_advanced.py`, 43 templates, idempotent `_seed_advanced`, LIVE_LINKS 2.6–2.15. Reuses the
+2.1–2.5 GL spine + `core.OrgUnit` (entity/cost-centre dimension — no new Entity table). Six balanced-JE posting
+actions (depreciate/dispose/allocate/payroll/job-cost/intercompany) via `_post_journal_entry` + Balance Sheet/P&L/
+budget-variance reports + a write-once/reveal-once hashed integration key. Backend solo; 43 templates via a 6-agent
+Workflow. Migrated clean; seeder idempotent; `manage.py check` clean; ledger balanced after every post.
+
+**Verification:** advanced GET smoke (69 routes 200/302, no leaks, IDOR 404); functional posting check (all 6 actions
+post balanced JEs, disposal gain/loss, masked key); qa-smoke-tester **118/118** (POST-only, immutability, depreciation
+cap, admin gating, CSRF, reports balance); test-writer **100 new pytest tests** → accounting suite 74→**174**, full
+project **924→1024**, no regressions.
+
+**Review agents (all 7, in order):**
+- **code-reviewer** → fixed: intercompany org-unit attribution (lender=due-from); distinct disposal account fallbacks
+  (1600/1690); je-None guards on 4 posts; budget_variance tenant-None guard; atomic key rotation; budget-line views
+  redirect to parent; budget badge real choices; seed last_depreciation_date. (Verified non-issues: ZERO is Decimal,
+  payroll balances, TaxReturn posts no JE.)
+- **explorer** → 1 silent-blank (budget_detail `obj.description`→`obj.notes`); else clean.
+- **frontend-reviewer** → net-loss styled red on balance sheet; budget-line Cancel returns to parent; gl_account guard.
+  (Icon `title` vs aria-label flagged app-wide, not forked.)
+- **performance-reviewer** → project_detail 5 aggregates → 1 grouped query; budget_detail/variance evaluate once;
+  dropped 2 unused select_related; added (tenant,status) indexes on 4 advanced models (migration 0003).
+- **qa-smoke-tester** → 118/118, no code changes.
+- **security-reviewer** → integration_edit/delete + tax_return_edit/delete now `@tenant_admin_required`; `eliminated`
+  off the intercompany form + admin toggle action; (unsalted-sha256 flagged app-wide vs the foundation EncryptionKey).
+- **test-writer** → 100 tests across posting / security / reports.
+
+**Deferred (Section 7 + SKILL.md):** live integration sync (Plaid/Avalara/Stripe APIs), DRF REST API, Celery
+scheduled-report delivery, parallel tax-depreciation books, full WBS/earned-value, CTA currency translation,
+XBRL/EDGAR, per-tenant configurable control accounts, invoice/bill void, and FK migration onto Inventory/HRM/Projects
+masters when those modules land.
 
