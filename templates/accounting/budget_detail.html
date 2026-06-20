@@ -22,7 +22,7 @@
       <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
       <div class="detail-item"><dt>Fiscal Period</dt><dd>{% if obj.fiscal_period %}{{ obj.fiscal_period.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Version</dt><dd>{{ obj.get_version_display }}</dd></div>
-      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'planning' %}info{% elif obj.status == 'closed' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div></div>
