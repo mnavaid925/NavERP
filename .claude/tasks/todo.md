@@ -1886,3 +1886,1304 @@ checks (aging/trial-balance 8q, dashboard fixed-cost); test-writer **74 pytest t
 accounts (today the auto-post heuristic picks the first 1100/2000 account), gl_account_ledger pagination,
 6-week trend single-query (TruncWeek), bank feeds/OCR/forecasting/portal/dunning, sub-modules 2.6–2.15.
 
+---
+
+# Module 2 Advanced — Accounting 2.6–2.15 (accounting)  — plan from research-accounting-advanced.md  (2026-06-21)
+
+## Section 0 — Architecture constraints (read before touching any file)
+
+> **KEY RULES — violating any of these is a build-stopper.**
+>
+> 1. **No inline formsets.** Every child table (PayrollJournalLine, ProjectBudgetLine, BudgetLine,
+>    ControlTest, etc.) is its own standalone list/create/edit/delete CRUD — no formset on any parent
+>    page. This eliminates the most expensive part of the original 21-model research proposal.
+>
+> 2. **~14 accounting-OWNED models this pass** (trimmed from research's 21). Child tables that have
+>    no user-facing list of their own (DepreciationSchedule) are owned exclusively through their
+>    parent's action views and admin. See Section 1 for the exact scope.
+>
+> 3. **File layout — extend, don't overwrite:**
+>    - New models → `apps/accounting/models_advanced.py`; bottom of `apps/accounting/models.py`
+>      gains one line: `from .models_advanced import *  # noqa`
+>    - New forms → `apps/accounting/forms_advanced.py`; imported at the top of
+>      `apps/accounting/views_advanced.py`
+>    - New views → `apps/accounting/views_advanced.py`
+>    - New URL patterns → appended to the existing `urlpatterns` list in
+>      `apps/accounting/urls.py` (same file, no new urls file)
+>    - New admin entries → appended to `apps/accounting/admin.py` (same file)
+>    - Migration → `apps/accounting/migrations/0002_advanced.py` (generated via makemigrations)
+>    - Seeder → extend the existing `seed_accounting` command to call a new
+>      `_seed_advanced(tenant)` helper function; idempotency guard at the top of each model block
+>
+> 4. **Every workflow action posts a BALANCED JournalEntry** (Σdebit == Σcredit, enforced inside
+>    `transaction.atomic()`) using the existing helpers from `views.py`:
+>    `_first_account(tenant, account_type, code_prefix)`, `_open_period(tenant)`,
+>    `_reverse_journal_entry(tenant, user, original)`. Posting actions are `@tenant_admin_required`
+>    POST-only views.
+>
+> 5. **Reuse, never rebuild:**
+>    - Spine: `accounting.GLAccount`, `accounting.JournalEntry`/`JournalLine`,
+>      `accounting.FiscalPeriod`, `accounting.Currency`, `accounting.Payment` (for tax remittances).
+>    - Core: `core.Party` (clients/employees/custodians), `core.OrgUnit` (cost centre / department /
+>      legal entity / consolidation entity — do NOT create a new Entity table), `core.Document`
+>      (evidence attachment), `core.AuditLog` / `write_audit_log`.
+>    - Local abstract bases: import `TenantOwned` and `TenantNumbered` from `.models` (not from crm).
+>    - Do NOT depend on unbuilt masters: no `inventory.Item`, no `StockMove`, no `hrm.PayrollRun`,
+>      no `projects.Project` (L28). The advanced models are self-contained or FK into confirmed-built
+>      `accounting.*` and `core.*` tables only.
+>
+> 6. **Security (L20/L25):** `IntegrationConfig.api_key_encrypted` stores ONLY a
+>    `prefix + ":" + sha256_hex` string — never the raw secret. The field is EXCLUDED from the
+>    ModelForm. A separate write-only "rotate key" POST action is the only entry point for
+>    updating the credential.
+>
+> 7. **L22 rule:** all system-set `*_at` DateTimeFields (`posted_at`, `disposed_at`,
+>    `last_synced_at`, `completed_at`, etc.) are EXCLUDED from every ModelForm. Only genuine
+>    user-set `DateField`s get a widget.
+
+---
+
+## Section 1 — Models (14 accounting-owned tables + 3 field migrations on existing tables)
+
+All new models live in `apps/accounting/models_advanced.py`. Import `TenantOwned` and
+`TenantNumbered` from `.models`. All have `tenant` FK → `"core.Tenant"` (except
+`DepreciationSchedule`/`PayrollJournalLine`/`BudgetLine`/`ControlTest`/`PeriodCloseTask` which
+are child tables that inherit tenant from their parent FK and therefore omit a direct tenant FK,
+mirroring the `JournalLine` / `PaymentAllocation` pattern).
+
+### 2.6 Fixed Assets — 2 primary models + 1 child
+
+- [ ] **`FixedAsset`** [PREFIX `FA`] — extends `TenantNumbered`; the asset register.
+  Fields:
+  - `asset_class` CharField max_length=100 (e.g. "Machinery", "Furniture", "Vehicles")
+  - `description` TextField blank
+  - `serial_number` CharField max_length=100 blank
+  - `acquisition_cost` DecimalField max_digits=18 decimal_places=2
+  - `acquisition_date` DateField
+  - `in_service_date` DateField null blank (set when status moves from cip → active)
+  - `salvage_value` DecimalField max_digits=14 decimal_places=2 default=0
+  - `useful_life_months` PositiveSmallIntegerField default=60
+  - `depreciation_method` CharField choices
+    `[("straight_line","Straight-Line"),("declining_balance","Declining Balance"),
+    ("units_of_production","Units of Production")]` default `"straight_line"`
+  - `status` CharField choices
+    `[("cip","Construction in Progress"),("active","Active"),
+    ("disposed","Disposed"),("retired","Retired")]` default `"active"`
+  - `accumulated_depreciation` DecimalField max_digits=18 decimal_places=2 default=0
+    (updated by the `depreciation_run` action — EXCLUDE from ModelForm; displayed on detail page)
+  - `asset_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"fixed_asset_accounts"` (the fixed asset balance account, e.g. 1500-Equipment)
+  - `accum_depr_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"fixed_asset_accum_depr"` (accumulated depreciation contra account)
+  - `depr_expense_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"fixed_asset_depr_expense"` (depreciation expense account)
+  - `custodian` FK → `"core.Party"` SET_NULL null blank related_name `"custodied_assets"`
+    (employee or department custodian; driver: Asset Register — custodian tracking)
+  - `location` FK → `"core.OrgUnit"` SET_NULL null blank related_name `"located_assets"`
+    (department/location; driver: Asset Transfers — inter-department moves)
+  - `capitalization_je` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"capitalized_assets"` editable=False
+    (JE posted at acquisition — system-set by `asset_capitalize` action)
+  - `unique_together = ("tenant", "number")`
+  - Indexes: `(tenant, status)`, `(tenant, acquisition_date)`
+  - Drivers: Asset Register (NetSuite/Sage/Xero/QB), CIP status (NetSuite/D365/SAP),
+    custodian/location tracking (NetSuite/Sage/D365)
+
+- [ ] **`DepreciationSchedule`** — child of `FixedAsset`, no auto-number, no direct tenant FK
+  (tenant inherited via asset FK; mirrors JournalLine pattern).
+  Fields:
+  - `asset` FK → `"accounting.FixedAsset"` CASCADE related_name `"depreciation_schedules"`
+  - `fiscal_period` FK → `"accounting.FiscalPeriod"` SET_NULL null blank
+    related_name `"depreciation_schedules"`
+  - `book_type` CharField choices
+    `[("book","Book / GAAP"),("tax","Tax / MACRS"),("ifrs","IFRS")]` default `"book"`
+  - `period_depr_amount` DecimalField max_digits=18 decimal_places=2
+  - `accum_depr_to_date` DecimalField max_digits=18 decimal_places=2
+  - `status` CharField choices `[("scheduled","Scheduled"),("posted","Posted")]` default `"scheduled"`
+  - `journal_entry` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"depreciation_schedules"` editable=False (system-set on post)
+  - Indexes: `(asset, fiscal_period, book_type)` unique_together
+  - No standalone CRUD list page; accessed via FixedAsset detail + admin.
+  - Drivers: Depreciation Engine (all 6 platforms), Parallel Tax Books (NetSuite/Sage/D365/SAP)
+
+- [ ] **`AssetDisposal`** [PREFIX `DISP`] — extends `TenantNumbered`; records a disposal event.
+  Fields:
+  - `asset` FK → `"accounting.FixedAsset"` CASCADE related_name `"disposals"`
+  - `disposal_date` DateField
+  - `disposal_type` CharField choices
+    `[("sale","Sale"),("scrap","Scrap"),("donation","Donation"),("transfer","Transfer")]`
+    default `"sale"`
+  - `proceeds` DecimalField max_digits=18 decimal_places=2 default=0
+  - `gain_loss` DecimalField max_digits=18 decimal_places=2 default=0 editable=False
+    (computed = proceeds − (acquisition_cost − accumulated_depreciation); system-set by
+    `asset_dispose` action — EXCLUDE from ModelForm)
+  - `cash_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"disposal_cash_accounts"`
+  - `gain_loss_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"disposal_gain_loss_accounts"`
+  - `journal_entry` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"asset_disposals"` editable=False
+  - `notes` TextField blank
+  - `unique_together = ("tenant", "number")`
+  - Drivers: Asset Disposal/Retirement (NetSuite/Sage/Xero/D365/SAP)
+  - JE legs on `asset_dispose` action:
+    Dr `accum_depr_gl_account` (accumulated depreciation cleared)
+    Dr `cash_gl_account` (proceeds received)
+    Dr `gain_loss_gl_account` OR Cr `gain_loss_gl_account` (gain or loss)
+    Cr `asset_gl_account` (asset cost removed)
+
+### 2.7 Inventory & Cost (accounting-owned financial stub — NO item master)
+
+- [ ] **`InventoryCostItem`** — extends `TenantOwned`; thin financial-valuation stub.
+  No auto-number (looked up by sku). Fields:
+  - `sku` CharField max_length=100
+  - `description` CharField max_length=255
+  - `valuation_method` CharField choices
+    `[("fifo","FIFO"),("lifo","LIFO"),("weighted_avg","Weighted Average"),
+    ("standard","Standard Cost")]` default `"weighted_avg"`
+  - `standard_cost` DecimalField max_digits=14 decimal_places=4 default=0
+  - `current_avg_cost` DecimalField max_digits=14 decimal_places=4 default=0
+  - `on_hand_qty` DecimalField max_digits=14 decimal_places=4 default=0
+  - `inventory_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"inventory_cost_items"`
+  - `cogs_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"inventory_cogs_items"`
+  - `variance_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"inventory_variance_items"`
+  - `unique_together = ("tenant", "sku")`
+  - Indexes: `(tenant, sku)`, `(tenant, valuation_method)`
+  - When Module 5 Inventory ships: add FK → `inventory.Item` here (migration); stub is buildable now.
+  - Drivers: Inventory Valuation (SAP/NetSuite/D365/Sage), COGS posting, Standard Cost Variance
+
+- [ ] **`CostTransaction`** [PREFIX `CT`] — extends `TenantNumbered`; one row per inbound/outbound movement.
+  Fields:
+  - `cost_item` FK → `"accounting.InventoryCostItem"` CASCADE related_name `"cost_transactions"`
+  - `transaction_date` DateField
+  - `direction` CharField choices `[("in","Inbound"),("out","Outbound")]`
+  - `reference_type` CharField choices
+    `[("purchase","Purchase"),("sale","Sale"),("adjustment","Adjustment"),
+    ("landed_cost","Landed Cost")]` default `"purchase"`
+  - `quantity` DecimalField max_digits=14 decimal_places=4
+  - `unit_cost` DecimalField max_digits=14 decimal_places=4
+  - `total_cost` DecimalField max_digits=18 decimal_places=2 editable=False
+    (computed = quantity × unit_cost; system-set in view — EXCLUDE from ModelForm)
+  - `journal_entry` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"cost_transactions"` editable=False
+  - `description` CharField max_length=255 blank
+  - `unique_together = ("tenant", "number")`
+  - Indexes: `(tenant, transaction_date)`, `(tenant, direction)`
+  - On outbound `post_cost_transaction` action:
+    Dr `cogs_gl_account` (COGS)
+    Cr `inventory_gl_account` (Inventory)
+  - Weighted-avg update logic: after each inbound, recompute
+    `current_avg_cost = (old_qty * old_cost + qty * unit_cost) / new_qty` on `InventoryCostItem`.
+  - Drivers: COGS Posting (NetSuite/SAP/D365/Sage), Weighted-Average Cost (NetSuite/SAP/Sage/D365)
+
+### 2.8 Payroll Integration (GL/accrual layer only — no employee master)
+
+- [ ] **`PayrollJournalBatch`** [PREFIX `PJB`] — extends `TenantNumbered`; one batch per pay run.
+  Fields:
+  - `pay_period_start` DateField
+  - `pay_period_end` DateField
+  - `pay_date` DateField
+  - `source` CharField choices
+    `[("manual","Manual"),("csv_import","CSV Import"),("hris_import","HRIS Import")]`
+    default `"manual"`
+  - `is_accrual` BooleanField default=False
+    (if True: JE posts to the CURRENT period; a reversal JE is created on pay_date's period
+    first day via the existing `_reverse_journal_entry` helper)
+  - `fiscal_period` FK → `"accounting.FiscalPeriod"` SET_NULL null blank
+    related_name `"payroll_journal_batches"`
+  - `status` CharField choices `[("draft","Draft"),("posted","Posted")]` default `"draft"`
+  - `journal_entry` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"payroll_journal_batches"` editable=False (system-set on post)
+  - `notes` TextField blank
+  - `unique_together = ("tenant", "number")`
+  - Indexes: `(tenant, status)`, `(tenant, pay_date)`
+  - Drivers: Payroll Journal Batch (Workday/ADP/QB Payroll/SAP/D365),
+    Accrual/Reversal Pattern (NetSuite/Sage/D365/Workday)
+
+- [ ] **`PayrollJournalLine`** — child of `PayrollJournalBatch`, no auto-number, no direct tenant FK.
+  Fields:
+  - `batch` FK → `"accounting.PayrollJournalBatch"` CASCADE related_name `"lines"`
+  - `line_type` CharField choices
+    `[("gross_wages","Gross Wages"),("employer_tax","Employer Payroll Tax"),
+    ("employee_tax","Employee Tax Withholding"),("benefits","Benefits"),
+    ("garnishment","Garnishment"),("net_pay","Net Pay Clearing")]`
+  - `amount` DecimalField max_digits=18 decimal_places=2
+  - `gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"payroll_journal_lines"`
+  - `org_unit` FK → `"core.OrgUnit"` SET_NULL null blank
+    related_name `"payroll_journal_lines"` (department cost split)
+  - `description` CharField max_length=255 blank
+  - No standalone CRUD list page; accessed via PayrollJournalBatch detail + admin.
+  - On `payroll_batch_post` action the view aggregates all lines to build one balanced JE:
+    Dr lines where line_type in (gross_wages, employer_tax, benefits) → Expense GLAccounts
+    Cr lines where line_type in (employee_tax, net_pay, garnishment, benefits) → Liability GLAccounts
+  - Drivers: Payroll GL Posting (all platforms), Benefits Accounting, Garnishment Payable Clearing
+
+### 2.9 Project / Job Costing
+
+- [ ] **`Project`** [PREFIX `PRJ`] — extends `TenantNumbered`; the project container.
+  Fields:
+  - `name` CharField max_length=255
+  - `client` FK → `"core.Party"` SET_NULL null blank related_name `"accounting_projects"`
+  - `org_unit` FK → `"core.OrgUnit"` SET_NULL null blank related_name `"accounting_projects"`
+  - `project_manager` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank
+    related_name `"managed_accounting_projects"`
+  - `billing_method` CharField choices
+    `[("t_and_m","Time & Materials"),("fixed","Fixed Price"),
+    ("milestone","Milestone"),("cost_plus","Cost Plus")]` default `"t_and_m"`
+  - `status` CharField choices
+    `[("active","Active"),("on_hold","On Hold"),("completed","Completed"),("cancelled","Cancelled")]`
+    default `"active"`
+  - `start_date` DateField null blank
+  - `end_date` DateField null blank
+  - `budget_amount` DecimalField max_digits=18 decimal_places=2 default=0
+  - `retention_pct` DecimalField max_digits=5 decimal_places=2 default=0
+    (for progress billing; driver: Project Invoice / Progress Billing — Sage/NetSuite/D365)
+  - `notes` TextField blank
+  - `unique_together = ("tenant", "number")`
+  - Indexes: `(tenant, status)`, `(tenant, client)`
+  - Drivers: Project Master (Sage/NetSuite/D365), Budget vs. Actual Profitability
+
+- [ ] **`ProjectBudgetLine`** — standalone CRUD child, no auto-number, no direct tenant FK.
+  Fields:
+  - `project` FK → `"accounting.Project"` CASCADE related_name `"budget_lines"`
+  - `gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"project_budget_lines"`
+  - `fiscal_period` FK → `"accounting.FiscalPeriod"` SET_NULL null blank
+    related_name `"project_budget_lines"`
+  - `budgeted_amount` DecimalField max_digits=18 decimal_places=2
+  - `description` CharField max_length=255 blank
+  - `unique_together = ("project", "gl_account", "fiscal_period")`
+  - Has its own list/create/edit/delete under the `accounting:` namespace — NOT an inline formset.
+  - Drivers: Project Budget (Sage/NetSuite/D365/Oracle Fusion)
+
+> FK ADDITIONS on existing tables (migration 0002 adds columns to 0001 tables):
+> - [ ] Add `project` nullable FK → `"accounting.Project"` SET_NULL on `accounting.JournalLine`
+>   (cost transaction tagging; driver: Cost Transaction Tagging — Sage Intacct dimensions)
+> - [ ] Add `project` nullable FK → `"accounting.Project"` SET_NULL on `accounting.Invoice`
+>   (progress billing link; driver: Project Invoice / Progress Billing — Sage/NetSuite/D365)
+
+### 2.10 Multi-Entity & Consolidation
+
+- [ ] **`ConsolidationGroup`** — extends `TenantOwned`; no auto-number (looked up by name).
+  Fields:
+  - `name` CharField max_length=255
+  - `parent_entity` FK → `"core.OrgUnit"` SET_NULL null blank
+    related_name `"consolidation_groups_as_parent"`
+    (OrgUnit with unit_type=entity is the legal-entity dimension — do NOT create a new table)
+  - `members` ManyToManyField → `"core.OrgUnit"` related_name `"consolidation_groups"`
+    blank (member subsidiaries)
+  - `reporting_currency` FK → `"accounting.Currency"` SET_NULL null blank
+    related_name `"consolidation_groups"`
+  - `is_active` BooleanField default=True
+  - `unique_together = ("tenant", "name")`
+  - Drivers: Entity Management (NetSuite OneWorld/Sage Intacct/D365)
+
+- [ ] **`IntercompanyTransaction`** [PREFIX `ICT`] — extends `TenantNumbered`.
+  Fields:
+  - `consolidation_group` FK → `"accounting.ConsolidationGroup"` CASCADE
+    related_name `"intercompany_transactions"`
+  - `from_entity` FK → `"core.OrgUnit"` SET_NULL null blank
+    related_name `"ict_from_transactions"`
+  - `to_entity` FK → `"core.OrgUnit"` SET_NULL null blank
+    related_name `"ict_to_transactions"`
+  - `transaction_date` DateField
+  - `amount` DecimalField max_digits=18 decimal_places=2
+  - `currency` FK → `"accounting.Currency"` SET_NULL null blank
+    related_name `"intercompany_transactions"`
+  - `from_journal_entry` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"ict_from_entries"` editable=False
+  - `to_journal_entry` FK → `"accounting.JournalEntry"` SET_NULL null blank
+    related_name `"ict_to_entries"` editable=False
+  - `status` CharField choices
+    `[("draft","Draft"),("posted","Posted"),("eliminated","Eliminated")]` default `"draft"`
+  - `notes` TextField blank
+  - `document` FK → `"core.Document"` SET_NULL null blank related_name `"intercompany_docs"`
+    (transfer pricing documentation attachment; driver: Transfer Pricing Documentation)
+  - `unique_together = ("tenant", "number")`
+  - Indexes: `(tenant, status)`, `(tenant, transaction_date)`
+  - On `ict_post` action (two paired JEs inside atomic()):
+    Entity A JE: Dr `due_from_gl_account` / Cr Revenue (or Pass-through GLAccount)
+    Entity B JE: Dr Expense / Cr `due_to_gl_account`
+    (GL accounts resolved via `_first_account` on each entity's OrgUnit; or user-supplied on form)
+  - On `ict_eliminate` action: posts elimination JE tagged `entry_type="elimination"` with
+    `consolidation_group` FK on JournalEntry (migration 0002 adds this field)
+  - Drivers: Intercompany Transaction Pair (NetSuite/Sage/D365/SAP), Elimination Entry,
+    Transfer Pricing Documentation
+
+> FIELD ADDITION on `JournalEntry` (migration 0002):
+> - [ ] Add `consolidation_group` nullable FK → `"accounting.ConsolidationGroup"` SET_NULL
+>   on `accounting.JournalEntry` (tags elimination entries to a group)
+> - [ ] Add `entry_type` choice `"elimination"` to `JournalEntry.ENTRY_TYPE_CHOICES`
+
+### 2.11 Tax
+
+- [ ] **`TaxCode`** — extends `TenantOwned`; rate master (lookup table, no auto-number).
+  Fields:
+  - `code` CharField max_length=20
+  - `name` CharField max_length=255
+  - `tax_type` CharField choices
+    `[("sales","Sales Tax"),("use","Use Tax"),("vat","VAT"),("gst","GST"),
+    ("withholding","Withholding"),("income","Income Tax")]` default `"sales"`
+  - `rate_pct` DecimalField max_digits=7 decimal_places=4
+  - `jurisdiction_level` CharField choices
+    `[("federal","Federal"),("state","State"),("county","County"),("city","City")]`
+    default `"state"`
+  - `country` CharField max_length=2 default `"US"` (ISO 3166-1 alpha-2)
+  - `region` CharField max_length=100 blank (state/province code)
+  - `effective_from` DateField null blank
+  - `effective_to` DateField null blank
+  - `payable_gl_account` FK → `"accounting.GLAccount"` SET_NULL null blank
+    related_name `"tax_code_payables"` (tax payable control account)
+  - `is_active` BooleanField default=True
+  - `unique_together = ("tenant", "code")`
+  - Indexes: `(tenant, tax_type)`, `(tenant, is_active)`
+  - Drivers: Tax Rate Master (Avalara/Vertex/NetSuite/Sage/SAP/D365)
+
+- [ ] **`TaxNexus`** — extends `TenantOwned`; economic/physical nexus tracking.
+  Fields:
+  - `jurisdiction_name` CharField max_length=255
+  - `country` CharField max_length=2 default `"US"`
+  - `region` CharField max_length=100 blank
+  - `nexus_type` CharField choices `[("physical","Physical"),("economic","Economic")]`
+    default `"economic"`
+  - `threshold_amount` DecimalField max_digits=14 decimal_places=2 default=100000
+  - `current_ytd_sales` DecimalField max_digits=18 decimal_places=2 default=0
+  - `registration_number` CharField max_length=100 blank
+  - `is_registered` BooleanField default=False
+  - `registration_date` DateField null blank
+  - Indexes: `(tenant, is_registered)`, `(tenant, nexus_type)`
+  - Drivers: Nexus Tracking (Avalara/Vertex/NetSuite/D365)
+
+- [ ] **`TaxFilingObligation`** — extends `TenantOwned`; one filing record per jurisdiction per period.
+  Fields:
+  - `tax_nexus` FK → `"accounting.TaxNexus"` CASCADE related_name `"filing_obligations"`
+  - `tax_code` FK → `"accounting.TaxCode"` SET_NULL null blank
+    related_name `"filing_obligations"`
+  - `filing_period_start` DateField
+  - `filing_period_end` DateField
+  - `due_date` DateField
+  - `status` CharField choices
+    `[("upcoming","Upcoming"),("filed","Filed"),("overdue","Overdue")]` default `"upcoming"`
+  - `taxable_amount` DecimalField max_digits=18 decimal_places=2 default=0
+  - `tax_due` DecimalField max_digits=18 decimal_places=2 default=0
+  - `filed_date` DateField null blank
+  - `filed_by` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank
+    related_name `"tax_filings_filed"` (system-set — EXCLUDE from ModelForm per L22)
+  - `payment` FK → `"accounting.Payment"` SET_NULL null blank
+    related_name `"tax_filing_payments"` (links to the remittance Payment)
+  - Indexes: `(tenant, status)`, `(tenant, due_date)`
+  - Drivers: Tax Calendar (Avalara/NetSuite/D365/Sage), Sales Tax Return (Avalara/NetSuite/D365)
+
+> FIELD ADDITION on existing table (migration 0002):
+> - [ ] Add `cash_flow_category` nullable CharField choices
+>   `[("operating","Operating"),("investing","Investing"),("financing","Financing")]`
+>   on `accounting.GLAccount` (enables Cash Flow Statement classification;
+>   driver: Cash Flow Statement — NetSuite/Sage/D365/QB Enterprise)
+
+### 2.12 Reporting & Compliance (1 model + 4 report views — no formsets)
+
+- [ ] **`ScheduledReport`** — extends `TenantOwned`; configuration row for automated report delivery.
+  Fields:
+  - `report_type` CharField choices
+    `[("balance_sheet","Balance Sheet"),("profit_loss","Profit & Loss"),
+    ("cash_flow","Cash Flow"),("trial_balance","Trial Balance"),
+    ("ar_aging","AR Aging"),("ap_aging","AP Aging"),
+    ("budget_variance","Budget vs. Actual")]` default `"balance_sheet"`
+  - `frequency` CharField choices
+    `[("daily","Daily"),("weekly","Weekly"),("monthly","Monthly")]` default `"monthly"`
+  - `recipients` JSONField default=list (list of email address strings)
+  - `format` CharField choices `[("pdf","PDF"),("xlsx","XLSX")]` default `"pdf"`
+  - `last_run_at` DateTimeField null blank editable=False (system-set — EXCLUDE from ModelForm per L22)
+  - `next_run_at` DateField null blank (user-set target date)
+  - `is_active` BooleanField default=True
+  - `fiscal_period` FK → `"accounting.FiscalPeriod"` SET_NULL null blank
+    related_name `"scheduled_reports"` (optional scoping)
+  - Indexes: `(tenant, is_active)`, `(tenant, frequency)`
+  - Drivers: Scheduled Reports (QB Enterprise/D365/NetSuite/Sage)
+  - NOTE: actual Celery/email delivery = deferred. This pass builds the config model + CRUD
+    + the 4 live report views below.
+
+> The 4 report views (no new models — pure query/aggregation over existing tables):
+> - `balance_sheet` — assets/liabilities/equity as of a date; GLAccount balance() aggregated
+>   by account_type; posted JournalLine rows only.
+> - `profit_and_loss` — revenue minus expenses for a date range; income and expense accounts.
+> - `cash_flow_statement` — operating/investing/financing sections using `GLAccount.cash_flow_category`
+>   (added in the 0002 migration above); indirect method stub.
+> - `budget_variance_report` — BudgetLine amounts vs. posted JournalLine actuals grouped by
+>   (gl_account, fiscal_period, org_unit); renders once BudgetVersion / BudgetLine are built.
+
+### 2.13 Budgeting & Planning
+
+- [ ] **`BudgetVersion`** [PREFIX `BV`] — extends `TenantNumbered`; named budget scenario container.
+  Fields:
+  - `name` CharField max_length=255
+  - `fiscal_year` PositiveSmallIntegerField (e.g. 2026)
+  - `version_type` CharField choices
+    `[("original","Original"),("revised","Revised"),("forecast","Rolling Forecast"),
+    ("what_if","What-If Scenario")]` default `"original"`
+  - `is_active` BooleanField default=False (only one per tenant should be True at a time)
+  - `is_locked` BooleanField default=False (lock prevents BudgetLine edits)
+  - `copied_from` FK → `"self"` SET_NULL null blank related_name `"derived_versions"`
+    (What-If: copied from a base version; driver: What-If Scenario Modeling — Vena/Workday Adaptive/D365)
+  - `approved_by` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank
+    related_name `"approved_budget_versions"` editable=False (system-set — EXCLUDE from ModelForm)
+  - `unique_together = ("tenant", "number")`
+  - Indexes: `(tenant, fiscal_year)`, `(tenant, is_active)`
+  - Custom action `budget_copy` (POST): duplicates a BudgetVersion + all its BudgetLines
+    into a new BudgetVersion with version_type=`"what_if"`.
+  - Drivers: Budget Version / Scenario (Vena/Planful/Workday Adaptive/D365/NetSuite),
+    Rolling Forecast (Planful/Workday Adaptive/D365)
+
+- [ ] **`BudgetLine`** — standalone CRUD (no formset), no auto-number, no direct tenant FK.
+  Fields:
+  - `budget_version` FK → `"accounting.BudgetVersion"` CASCADE related_name `"lines"`
+  - `gl_account` FK → `"accounting.GLAccount"` PROTECT related_name `"budget_lines"`
+  - `fiscal_period` FK → `"accounting.FiscalPeriod"` SET_NULL null blank
+    related_name `"budget_lines"`
+  - `org_unit` FK → `"core.OrgUnit"` SET_NULL null blank related_name `"budget_lines"`
+  - `budgeted_amount` DecimalField max_digits=18 decimal_places=2
+  - `is_locked_actuals` BooleanField default=False
+    (for rolling forecast: True = this past period's amount came from actuals, not a projection)
+  - `unique_together = ("budget_version", "gl_account", "fiscal_period", "org_unit")`
+  - Has its own list/create/edit/delete — NOT an inline formset.
+  - Drivers: Budget Line (Vena/Planful/Workday Adaptive/D365/NetSuite),
+    Rolling Forecast past-period actuals lock (Planful/Workday Adaptive/D365)
+
+### 2.14 Audit & Controls
+
+- [ ] **`ControlRecord`** — extends `TenantOwned`; SOX control documentation.
+  Fields:
+  - `name` CharField max_length=255
+  - `description` TextField blank
+  - `control_type` CharField choices
+    `[("preventive","Preventive"),("detective","Detective"),("corrective","Corrective")]`
+    default `"preventive"`
+  - `frequency` CharField choices
+    `[("daily","Daily"),("weekly","Weekly"),("monthly","Monthly"),
+    ("quarterly","Quarterly"),("annual","Annual")]` default `"quarterly"`
+  - `risk_area` CharField max_length=255 blank
+  - `owner` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank
+    related_name `"owned_controls"`
+  - `is_active` BooleanField default=True
+  - Indexes: `(tenant, control_type)`, `(tenant, is_active)`
+  - Drivers: SOX Controls (FloQast/AuditBoard/D365 GRC/SAP GRC)
+
+- [ ] **`ControlTest`** — standalone CRUD child, no auto-number, no direct tenant FK.
+  Fields:
+  - `control_record` FK → `"accounting.ControlRecord"` CASCADE related_name `"tests"`
+  - `test_date` DateField
+  - `tester` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank related_name `"control_tests"`
+  - `result` CharField choices
+    `[("pass","Pass"),("fail","Fail"),("exception","Exception / Partial")]` default `"pass"`
+  - `notes` TextField blank
+  - `evidence_document` FK → `"core.Document"` SET_NULL null blank
+    related_name `"control_test_evidence"` (attached audit evidence; reuses confirmed-existing `core.Document`)
+  - `created_at` DateTimeField auto_now_add=True
+  - Has its own list/create/edit/delete under `accounting:` namespace.
+  - Drivers: Control Test / Evidence (FloQast/AuditBoard)
+
+- [ ] **`PeriodCloseTask`** — standalone CRUD child, no auto-number, no direct tenant FK.
+  Fields:
+  - `fiscal_period` FK → `"accounting.FiscalPeriod"` CASCADE related_name `"close_tasks"`
+  - `task_name` CharField max_length=255
+  - `task_type` CharField choices
+    `[("bank_recon","Bank Reconciliation"),("depreciation","Post Depreciation"),
+    ("payroll_accrual","Payroll Accrual"),("exception_review","Review Exceptions"),
+    ("consolidation","Consolidation Run"),("custom","Custom")]` default `"custom"`
+  - `assignee` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank
+    related_name `"period_close_tasks"`
+  - `due_date` DateField null blank
+  - `status` CharField choices
+    `[("pending","Pending"),("in_progress","In Progress"),("done","Done")]` default `"pending"`
+  - `completed_by` FK → `settings.AUTH_USER_MODEL` SET_NULL null blank
+    related_name `"completed_close_tasks"` editable=False (system-set — EXCLUDE from ModelForm)
+  - `completed_at` DateTimeField null blank editable=False (system-set — EXCLUDE from ModelForm per L22)
+  - Has its own list/create/edit/delete. Custom `task_complete` POST action sets status=`"done"`,
+    `completed_by=request.user`, `completed_at=now()`.
+  - Drivers: Period Close Checklist (FloQast/AuditBoard/D365/Sage)
+
+### 2.15 Integration & API
+
+- [ ] **`IntegrationConfig`** — extends `TenantOwned`; one row per external integration per tenant.
+  Fields:
+  - `integration_type` CharField choices
+    `[("plaid","Plaid — Banking"),("stripe","Stripe — Payments"),
+    ("paypal","PayPal — Payments"),("avalara","Avalara — Tax"),
+    ("vertex","Vertex — Tax"),("shopify","Shopify — E-commerce"),
+    ("woocommerce","WooCommerce — E-commerce"),("salesforce","Salesforce — CRM"),
+    ("hubspot","HubSpot — CRM"),("workday","Workday — HRIS"),
+    ("adp","ADP — Payroll"),("bamboohr","BambooHR — HRIS"),("custom","Custom")]`
+  - `endpoint_url` URLField blank
+  - `api_key_encrypted` CharField max_length=255 blank
+    (stores ONLY `prefix:sha256_hex` — NEVER the raw secret; EXCLUDE from the ModelForm entirely;
+    only settable via the write-only `integration_rotate_key` POST action)
+  - `is_active` BooleanField default=False
+  - `last_synced_at` DateTimeField null blank editable=False (system-set — EXCLUDE from ModelForm per L22)
+  - `sync_status` CharField choices
+    `[("idle","Idle"),("running","Running"),("error","Error"),("success","Last Sync OK")]`
+    default `"idle"` editable=False (system-set — EXCLUDE from ModelForm)
+  - `error_message` TextField blank editable=False (system-set — EXCLUDE from ModelForm)
+  - `notes` TextField blank (human notes; safe to display)
+  - Indexes: `(tenant, integration_type)`, `(tenant, is_active)`
+  - `unique_together = ("tenant", "integration_type")` — one config per type per tenant
+  - Drivers: External Integration Config (NetSuite/D365/Xero), Banking APIs (2.15),
+    Payment Gateways (2.15), Tax Software (2.15), HRIS (2.15)
+  - Security: `api_key_encrypted` EXCLUDED from `IntegrationConfigForm.Meta.fields` (L20);
+    `integration_rotate_key` POST action writes the new `prefix:sha256_hex` value;
+    the raw secret is returned once via `request.session["_key_reveal"]` pop-once pattern (L25).
+
+---
+
+## Section 2 — Backend (`apps/accounting/` extensions)
+
+### 2a — New files
+
+- [ ] `apps/accounting/models_advanced.py` — all 14 new model classes (plus `DepreciationSchedule`,
+  `PayrollJournalLine`, `BudgetLine`, `ControlTest`, `PeriodCloseTask` child classes)
+  in dependency order:
+  `FixedAsset` → `DepreciationSchedule` → `AssetDisposal` → `InventoryCostItem` → `CostTransaction` →
+  `PayrollJournalBatch` → `PayrollJournalLine` → `Project` → `ProjectBudgetLine` →
+  `ConsolidationGroup` → `IntercompanyTransaction` → `TaxCode` → `TaxNexus` → `TaxFilingObligation` →
+  `ScheduledReport` → `BudgetVersion` → `BudgetLine` → `ControlRecord` → `ControlTest` →
+  `PeriodCloseTask` → `IntegrationConfig`.
+  Import `TenantOwned`, `TenantNumbered`, `ZERO` from `.models`.
+
+- [ ] `apps/accounting/forms_advanced.py` — one `TenantModelForm` per primary model.
+  MANDATORY EXCLUSIONS from every form (L22 + L20 + CLAUDE.md):
+  - Always: `tenant`, `number` (auto), all `*_at` system DateTimeFields,
+    `*_by` system FKs set in view, `journal_entry` FK, `gain_loss` (computed),
+    `total_cost` (computed), `accumulated_depreciation` (system-updated),
+    `capitalization_je`, `from_journal_entry`, `to_journal_entry`.
+  - `IntegrationConfigForm`: EXCLUDE `api_key_encrypted`, `sync_status`,
+    `error_message`, `last_synced_at` (L20 + L22).
+  - `ScheduledReportForm`: EXCLUDE `last_run_at`.
+  - `PeriodCloseTaskForm`: EXCLUDE `completed_by`, `completed_at`.
+  - `TaxFilingObligationForm`: EXCLUDE `filed_by`.
+  - `BudgetVersionForm`: EXCLUDE `approved_by`.
+  - All FK dropdowns scoped to `tenant` in `__init__`; `Currency` scoped to `is_active=True`.
+
+- [ ] `apps/accounting/views_advanced.py` — function-based views, all `@login_required`.
+  Privileged action views are `@tenant_admin_required`:
+  `asset_capitalize`, `depreciation_run`, `asset_dispose`,
+  `post_cost_transaction`, `payroll_batch_post`,
+  `ict_post`, `ict_eliminate`, `budget_copy`, `task_complete`, `integration_rotate_key`.
+  Full list/create/detail/edit/delete for all 14 primary models
+  plus child-model standalone CRUD for: `DepreciationSchedule` (list under asset + admin only),
+  `PayrollJournalLine` (list under batch detail + admin only),
+  `ProjectBudgetLine`, `BudgetLine`, `ControlTest`, `PeriodCloseTask`.
+  Report views (GET only, no DB writes):
+  `balance_sheet`, `profit_and_loss`, `cash_flow_statement`, `budget_variance_report`,
+  `consolidation_report` (aggregates across ConsolidationGroup members).
+  Import: `_first_account`, `_open_period`, `_reverse_journal_entry` from `.views`.
+  Every queryset: `filter(tenant=request.tenant)`. No `Model.objects.all()`.
+  All FK filter dropdowns: `.isdigit()` guard (L11).
+  All list views apply filters BEFORE pagination.
+  Status/type dropdowns pass `*_choices` in context (CLAUDE.md Filter Rule).
+
+### 2b — Existing files to modify
+
+- [ ] `apps/accounting/models.py` — add at bottom:
+  `from .models_advanced import *  # noqa`
+  Also add the three new field migrations listed in Section 1 as Python fields on the existing
+  model classes (Django discovers them):
+  - `JournalLine.project` nullable FK → `"accounting.Project"` SET_NULL
+  - `Invoice.project` nullable FK → `"accounting.Project"` SET_NULL
+  - `JournalEntry.consolidation_group` nullable FK → `"accounting.ConsolidationGroup"` SET_NULL
+  - `JournalEntry.ENTRY_TYPE_CHOICES` extended with `("elimination","Elimination")`
+  - `GLAccount.cash_flow_category` nullable CharField choices
+    `[("operating","Operating"),("investing","Investing"),("financing","Financing")]`
+
+- [ ] `apps/accounting/urls.py` — APPEND to existing `urlpatterns` (keep `app_name = "accounting"`):
+  **FixedAsset (2.6):** `fixed-assets/` → `fixedasset_list`; `.../add/` → `fixedasset_create`;
+  `.../<int:pk>/` → `fixedasset_detail`; `.../edit/` → `fixedasset_edit`;
+  `.../delete/` → `fixedasset_delete`; `.../capitalize/` → `asset_capitalize` (POST);
+  `.../depreciate/` → `depreciation_run` (POST); `.../dispose/` → `asset_dispose` (POST);
+  `depreciation-schedules/<int:asset_pk>/` → `depreciation_schedule_list` (list under asset).
+  **AssetDisposal (2.6):** `asset-disposals/` → `assetdisposal_list`; `.../add/` → `assetdisposal_create`;
+  `.../<int:pk>/` → `assetdisposal_detail`; `.../edit/` → `assetdisposal_edit`;
+  `.../delete/` → `assetdisposal_delete`.
+  **InventoryCostItem (2.7):** `inventory-cost/` → `inventorycostitem_list`;
+  `.../add/` → `inventorycostitem_create`; `.../<int:pk>/` → `inventorycostitem_detail`;
+  `.../edit/` → `inventorycostitem_edit`; `.../delete/` → `inventorycostitem_delete`.
+  **CostTransaction (2.7):** `cost-transactions/` → `costtransaction_list`;
+  `.../add/` → `costtransaction_create`; `.../<int:pk>/` → `costtransaction_detail`;
+  `.../edit/` → `costtransaction_edit`; `.../delete/` → `costtransaction_delete`;
+  `.../post/` → `post_cost_transaction` (POST).
+  **PayrollJournalBatch (2.8):** `payroll-batches/` → `payrolljournalbatch_list`;
+  `.../add/` → `payrolljournalbatch_create`; `.../<int:pk>/` → `payrolljournalbatch_detail`;
+  `.../edit/` → `payrolljournalbatch_edit`; `.../delete/` → `payrolljournalbatch_delete`;
+  `.../post/` → `payroll_batch_post` (POST);
+  `payroll-batches/<int:batch_pk>/lines/` → `payrolljournalline_list`;
+  `payroll-batches/<int:batch_pk>/lines/add/` → `payrolljournalline_create`;
+  `payroll-lines/<int:pk>/edit/` → `payrolljournalline_edit`;
+  `payroll-lines/<int:pk>/delete/` → `payrolljournalline_delete`.
+  **Project (2.9):** `projects/` → `project_list`; `.../add/` → `project_create`;
+  `.../<int:pk>/` → `project_detail`; `.../edit/` → `project_edit`;
+  `.../delete/` → `project_delete`.
+  **ProjectBudgetLine (2.9):** `project-budget-lines/` → `projectbudgetline_list`;
+  `.../add/` → `projectbudgetline_create`; `.../<int:pk>/` → `projectbudgetline_detail`;
+  `.../edit/` → `projectbudgetline_edit`; `.../delete/` → `projectbudgetline_delete`.
+  **ConsolidationGroup (2.10):** `consolidation-groups/` → `consolidationgroup_list`;
+  `.../add/` → `consolidationgroup_create`; `.../<int:pk>/` → `consolidationgroup_detail`;
+  `.../edit/` → `consolidationgroup_edit`; `.../delete/` → `consolidationgroup_delete`.
+  **IntercompanyTransaction (2.10):** `intercompany/` → `intercompanytransaction_list`;
+  `.../add/` → `intercompanytransaction_create`; `.../<int:pk>/` → `intercompanytransaction_detail`;
+  `.../edit/` → `intercompanytransaction_edit`; `.../delete/` → `intercompanytransaction_delete`;
+  `.../post/` → `ict_post` (POST); `.../eliminate/` → `ict_eliminate` (POST).
+  **TaxCode (2.11):** `tax-codes/` → `taxcode_list`; `.../add/` → `taxcode_create`;
+  `.../<int:pk>/` → `taxcode_detail`; `.../edit/` → `taxcode_edit`; `.../delete/` → `taxcode_delete`.
+  **TaxNexus (2.11):** `tax-nexus/` → `taxnexus_list`; `.../add/` → `taxnexus_create`;
+  `.../<int:pk>/` → `taxnexus_detail`; `.../edit/` → `taxnexus_edit`;
+  `.../delete/` → `taxnexus_delete`.
+  **TaxFilingObligation (2.11):** `tax-filings/` → `taxfilingobligation_list`;
+  `.../add/` → `taxfilingobligation_create`; `.../<int:pk>/` → `taxfilingobligation_detail`;
+  `.../edit/` → `taxfilingobligation_edit`; `.../delete/` → `taxfilingobligation_delete`.
+  **ScheduledReport (2.12):** `scheduled-reports/` → `scheduledreport_list`;
+  `.../add/` → `scheduledreport_create`; `.../<int:pk>/` → `scheduledreport_detail`;
+  `.../edit/` → `scheduledreport_edit`; `.../delete/` → `scheduledreport_delete`.
+  **Report views (2.12):** `reports/balance-sheet/` → `balance_sheet`;
+  `reports/profit-loss/` → `profit_and_loss`; `reports/cash-flow/` → `cash_flow_statement`;
+  `reports/budget-variance/` → `budget_variance_report`;
+  `reports/consolidation/` → `consolidation_report`.
+  **BudgetVersion (2.13):** `budget-versions/` → `budgetversion_list`;
+  `.../add/` → `budgetversion_create`; `.../<int:pk>/` → `budgetversion_detail`;
+  `.../edit/` → `budgetversion_edit`; `.../delete/` → `budgetversion_delete`;
+  `.../copy/` → `budget_copy` (POST).
+  **BudgetLine (2.13):** `budget-lines/` → `budgetline_list`; `.../add/` → `budgetline_create`;
+  `.../<int:pk>/` → `budgetline_detail`; `.../edit/` → `budgetline_edit`;
+  `.../delete/` → `budgetline_delete`.
+  **ControlRecord (2.14):** `controls/` → `controlrecord_list`; `.../add/` → `controlrecord_create`;
+  `.../<int:pk>/` → `controlrecord_detail`; `.../edit/` → `controlrecord_edit`;
+  `.../delete/` → `controlrecord_delete`.
+  **ControlTest (2.14):** `control-tests/` → `controltest_list`; `.../add/` → `controltest_create`;
+  `.../<int:pk>/` → `controltest_detail`; `.../edit/` → `controltest_edit`;
+  `.../delete/` → `controltest_delete`.
+  **PeriodCloseTask (2.14):** `period-close-tasks/` → `periodclosetask_list`;
+  `.../add/` → `periodclosetask_create`; `.../<int:pk>/` → `periodclosetask_detail`;
+  `.../edit/` → `periodclosetask_edit`; `.../delete/` → `periodclosetask_delete`;
+  `.../complete/` → `task_complete` (POST).
+  **IntegrationConfig (2.15):** `integrations/` → `integrationconfig_list`;
+  `.../add/` → `integrationconfig_create`; `.../<int:pk>/` → `integrationconfig_detail`;
+  `.../edit/` → `integrationconfig_edit`; `.../delete/` → `integrationconfig_delete`;
+  `.../rotate-key/` → `integration_rotate_key` (POST, @tenant_admin_required).
+  **Audit trail view (2.14):** `audit-trail/` → `audit_trail_list`
+  (read-only view over `core.AuditLog`, filtered by `tenant`, searchable by model/user/date/action).
+
+- [ ] `apps/accounting/admin.py` — APPEND `@admin.register` classes for all 14 new primary models
+  + child models (`DepreciationSchedule`, `PayrollJournalLine`, `BudgetLine`, `ControlTest`,
+  `PeriodCloseTask`) as TabularInline entries under their parents.
+  `IntegrationConfigAdmin`: `readonly_fields` includes `api_key_encrypted` (display masked),
+  `sync_status`, `error_message`, `last_synced_at`.
+
+### 2c — Migration
+
+- [ ] Run `python manage.py makemigrations accounting` → generates
+  `apps/accounting/migrations/0002_advanced.py` (one file covering all new tables +
+  3 FK additions on existing tables + 2 field additions on existing models).
+- [ ] Run `python manage.py sqlmigrate accounting 0002` — confirm SQL: no missing FKs,
+  unique_together constraints present, `db_index` on all tenant and FK columns.
+
+### 2d — Seeder extension
+
+- [ ] Extend `apps/accounting/management/commands/seed_accounting.py` with a
+  `_seed_advanced(tenant, admin_user)` function called from `handle()` after the existing seed:
+  Idempotency guard per model: `if Model.objects.filter(tenant=tenant).exists(): skip`.
+  Seed data per tenant (reuse existing GLAccounts seeded in 0001 via code_prefix lookups):
+  - **2.6 Fixed Assets:** 2 `FixedAsset` rows (one `active`, one `cip`); 2 `DepreciationSchedule`
+    rows (one `posted`, one `scheduled`); 1 `AssetDisposal` (status=`disposed` on the disposed asset).
+  - **2.7 Inventory Cost:** 2 `InventoryCostItem` rows; 3 `CostTransaction` rows
+    (2 inbound, 1 outbound with posted JE); weighted-avg recomputed.
+  - **2.8 Payroll:** 1 `PayrollJournalBatch` (status=`posted`) with 4 `PayrollJournalLine` rows
+    (gross_wages, employer_tax, employee_tax, net_pay); linked JE balanced.
+  - **2.9 Projects:** 2 `Project` rows (one `active`, one `completed`); 2 `ProjectBudgetLine` rows.
+  - **2.10 Consolidation:** 1 `ConsolidationGroup` using 2 existing `core.OrgUnit` rows as members;
+    1 `IntercompanyTransaction` (status=`posted`); both JEs posted and balanced.
+  - **2.11 Tax:** 2 `TaxCode` rows (sales, use); 1 `TaxNexus`; 1 `TaxFilingObligation` (upcoming).
+  - **2.12 Reporting:** 1 `ScheduledReport` (monthly balance_sheet, is_active=True).
+  - **2.13 Budgeting:** 1 `BudgetVersion` (original, is_active=True); 3 `BudgetLine` rows
+    covering revenue and expense accounts.
+  - **2.14 Audit & Controls:** 1 `ControlRecord` (monthly, preventive); 1 `ControlTest` (pass);
+    2 `PeriodCloseTask` rows (one done, one pending).
+  - **2.15 Integrations:** 1 `IntegrationConfig` (integration_type=`"plaid"`, is_active=False,
+    api_key_encrypted=`"plaid_test:abc123...sha256"` placeholder, notes set).
+  - After seeding: print `"Advanced accounting (2.6-2.15) seeded. Login as admin_acme / password."`
+    and `"Superuser 'admin' has no tenant — data won't appear when logged in as admin."`
+
+---
+
+## Section 3 — Wire-up
+
+### `apps/core/navigation.py` — LIVE_LINKS for 2.6–2.15
+
+Add the following entries using the **exact NavERP.md bullet text** as keys:
+
+- [ ] **Sub-module 2.6 — Fixed Assets:**
+  ```python
+  "2.6": {
+      "Asset Register": "accounting:fixedasset_list",
+      "Acquisition": "accounting:fixedasset_create",
+      "Depreciation Engine": "accounting:fixedasset_list",
+      "Asset Transfers": "accounting:fixedasset_list",
+      "Disposals & Retirements": "accounting:assetdisposal_list",
+      "Impairment Testing": "accounting:fixedasset_list",
+      "Physical Inventory": "accounting:fixedasset_list",
+      "Tax Depreciation": "accounting:depreciation_schedule_list",  # resolves to asset-scoped; see note
+  },
+  ```
+  Note: `depreciation_schedule_list` requires an `asset_pk` — map to `fixedasset_list` as fallback
+  if LIVE_LINKS cannot accept a parameterized URL; the build step resolves this.
+
+- [ ] **Sub-module 2.7 — Inventory & Cost Management:**
+  ```python
+  "2.7": {
+      "Item Master": "accounting:inventorycostitem_list",
+      "Inventory Valuation": "accounting:inventorycostitem_list",
+      "Purchase Orders": "accounting:costtransaction_list",
+      "Inventory Transactions": "accounting:costtransaction_list",
+      "Cost of Goods Sold": "accounting:costtransaction_list",
+      "Reorder Point Planning": "accounting:inventorycostitem_list",
+      "Cycle Counting": "accounting:inventorycostitem_list",
+      "Landed Cost": "accounting:costtransaction_list",
+  },
+  ```
+
+- [ ] **Sub-module 2.8 — Payroll Integration:**
+  ```python
+  "2.8": {
+      "Employee Master": "accounting:payrolljournalbatch_list",
+      "Payroll Journal": "accounting:payrolljournalbatch_list",
+      "Tax Management": "accounting:taxcode_list",
+      "Benefits Accounting": "accounting:payrolljournalbatch_list",
+      "Garnishments": "accounting:payrolljournalbatch_list",
+      "Workers Comp": "accounting:payrolljournalbatch_list",
+      "Payroll Reconciliation": "accounting:payrolljournalbatch_list",
+  },
+  ```
+
+- [ ] **Sub-module 2.9 — Project/Job Costing:**
+  ```python
+  "2.9": {
+      "Project Setup": "accounting:project_list",
+      "Time & Expense": "accounting:project_list",
+      "Revenue Recognition": "accounting:project_list",
+      "Project Billing": "accounting:project_list",
+      "Profitability Analysis": "accounting:budget_variance_report",
+      "Resource Planning": "accounting:project_list",
+  },
+  ```
+
+- [ ] **Sub-module 2.10 — Multi-Entity & Consolidation:**
+  ```python
+  "2.10": {
+      "Entity Management": "accounting:consolidationgroup_list",
+      "Inter-company Transactions": "accounting:intercompanytransaction_list",
+      "Currency Translation": "accounting:consolidationgroup_list",
+      "Consolidation Engine": "accounting:consolidation_report",
+      "Transfer Pricing": "accounting:intercompanytransaction_list",
+      "Regulatory Reporting": "accounting:consolidation_report",
+  },
+  ```
+
+- [ ] **Sub-module 2.11 — Tax:**
+  ```python
+  "2.11": {
+      "Sales Tax Engine": "accounting:taxcode_list",
+      "Tax Returns": "accounting:taxfilingobligation_list",
+      "Use Tax Tracking": "accounting:taxcode_list",
+      "Income Tax Provision": "accounting:taxfilingobligation_list",
+      "Tax Calendar": "accounting:taxfilingobligation_list",
+      "Audit Support": "accounting:controltest_list",
+      "Nexus Tracking": "accounting:taxnexus_list",
+  },
+  ```
+
+- [ ] **Sub-module 2.12 — Reporting & Compliance:**
+  ```python
+  "2.12": {
+      "Financial Statements": "accounting:balance_sheet",
+      "Management Reports": "accounting:profit_and_loss",
+      "Custom Report Builder": "accounting:trial_balance",
+      "Scheduled Reports": "accounting:scheduledreport_list",
+      "XBRL/EDGAR Filing": "accounting:scheduledreport_list",
+      "Statutory Reporting": "accounting:balance_sheet",
+      "Consolidation Reports": "accounting:consolidation_report",
+      "Dashboards": "accounting:accounting_dashboard",
+  },
+  ```
+
+- [ ] **Sub-module 2.13 — Budgeting & Planning:**
+  ```python
+  "2.13": {
+      "Budget Creation": "accounting:budgetversion_list",
+      "Version Control": "accounting:budgetversion_list",
+      "Driver-based Planning": "accounting:budgetversion_list",
+      "Rolling Forecasts": "accounting:budgetversion_list",
+      "Variance Analysis": "accounting:budget_variance_report",
+      "What-if Analysis": "accounting:budgetversion_list",
+      "Workforce Planning": "accounting:budgetversion_list",
+  },
+  ```
+
+- [ ] **Sub-module 2.14 — Audit & Controls:**
+  ```python
+  "2.14": {
+      "SOX Controls": "accounting:controlrecord_list",
+      "Segregation of Duties": "accounting:controlrecord_list",
+      "Access Controls": "accounting:audit_trail_list",
+      "Change Management": "accounting:periodclosetask_list",
+      "Audit Trail": "accounting:audit_trail_list",
+      "Exception Reporting": "accounting:audit_trail_list",
+      "Document Management": "accounting:controltest_list",
+  },
+  ```
+
+- [ ] **Sub-module 2.15 — Integration & API:**
+  ```python
+  "2.15": {
+      "Banking APIs": "accounting:integrationconfig_list",
+      "Payment Gateways": "accounting:integrationconfig_list",
+      "E-commerce": "accounting:integrationconfig_list",
+      "CRM": "accounting:integrationconfig_list",
+      "ERP": "accounting:integrationconfig_list",
+      "HRIS": "accounting:integrationconfig_list",
+      "Tax Software": "accounting:integrationconfig_list",
+      "Document Storage": "accounting:integrationconfig_list",
+      "Custom API": "accounting:integrationconfig_list",
+  },
+  ```
+
+---
+
+## Section 4 — Templates (`templates/accounting/` — new files only)
+
+One file per template. Mirror existing `templates/accounting/` conventions: filter-bar with
+`request.GET` pre-fill, Actions column (view/edit/delete) using `|stringformat:"d"` for FK pk
+comparison (CLAUDE.md Filter Rule), `has_previous`/`has_next` pagination guards (L9),
+nullable FK guards (L10), empty-state, breadcrumb. **NO inline formsets on any page.**
+Child-table pages (PayrollJournalLine, BudgetLine, ControlTest, PeriodCloseTask) are standalone
+list/create/edit/delete pages linked from their parent's detail page.
+
+### 2.6 Fixed Asset templates (5 files)
+
+- [ ] `templates/accounting/fixedasset_list.html` — table: number, asset_class, description, status
+  badge, acquisition_cost, accumulated_depreciation, location, custodian; filter: status dropdown;
+  Actions: view/edit/delete + "Capitalize" button (shown when status=cip)
+- [ ] `templates/accounting/fixedasset_detail.html` — all fields; DepreciationSchedule list (latest
+  5: period, amount, book_type, status, JE link); sidebar: "Run Depreciation" POST button
+  (@tenant_admin_required, shown when active), "Dispose" link, edit/delete (gated on non-disposed)
+- [ ] `templates/accounting/fixedasset_form.html` — create/edit; exclude accumulated_depreciation,
+  capitalization_je, system fields
+- [ ] `templates/accounting/assetdisposal_list.html` — table: number, asset link, disposal_date,
+  disposal_type badge, proceeds, gain_loss, journal_entry link; filter: disposal_type dropdown;
+  Actions: view/edit/delete
+- [ ] `templates/accounting/assetdisposal_detail.html` — all fields; JE link; sidebar: edit/delete
+
+> `assetdisposal_form.html` — reuse the pattern; exclude gain_loss, journal_entry.
+- [ ] `templates/accounting/assetdisposal_form.html` — create/edit form
+
+### 2.7 Inventory Cost templates (4 files)
+
+- [ ] `templates/accounting/inventorycostitem_list.html` — table: sku, description,
+  valuation_method badge, standard_cost, current_avg_cost, on_hand_qty; filter: valuation_method
+  dropdown; Actions: view/edit/delete
+- [ ] `templates/accounting/inventorycostitem_detail.html` — all fields; related CostTransactions
+  list (latest 5); sidebar: edit/delete
+- [ ] `templates/accounting/inventorycostitem_form.html` — create/edit form
+- [ ] `templates/accounting/costtransaction_list.html` — table: number, cost_item sku, direction
+  badge, quantity, unit_cost, total_cost, transaction_date, reference_type badge, JE link; filter:
+  direction + reference_type dropdowns; Actions: view/edit/delete + "Post" button (shown when no JE)
+- [ ] `templates/accounting/costtransaction_detail.html` — all fields; JE link; sidebar: "Post" POST
+  button (@tenant_admin_required, shown when journal_entry is null), edit/delete
+- [ ] `templates/accounting/costtransaction_form.html` — create/edit; exclude total_cost, journal_entry
+
+### 2.8 Payroll templates (4 files)
+
+- [ ] `templates/accounting/payrolljournalbatch_list.html` — table: number, pay_period_start,
+  pay_period_end, pay_date, source badge, is_accrual badge, status badge; filter: status +
+  source dropdowns; Actions: view/edit/delete + "Post" button (shown when draft)
+- [ ] `templates/accounting/payrolljournalbatch_detail.html` — batch header; PayrollJournalLine
+  table (line_type badge, gl_account, org_unit, amount) with link to add/edit lines; JE link;
+  sidebar: "Post Batch" POST button (@tenant_admin_required, shown when draft), edit/delete
+- [ ] `templates/accounting/payrolljournalbatch_form.html` — create/edit; exclude journal_entry
+- [ ] `templates/accounting/payrolljournalline_list.html` — scoped to a batch; table: line_type
+  badge, gl_account, org_unit, amount, description; filter: line_type dropdown; Actions: edit/delete
+- [ ] `templates/accounting/payrolljournalline_form.html` — create/edit (used for both
+  add and edit; batch is pre-filled from URL arg)
+
+### 2.9 Project templates (4 files + 2 for child)
+
+- [ ] `templates/accounting/project_list.html` — table: number, name, client, billing_method badge,
+  status badge, budget_amount, start_date, end_date; filter: status + billing_method dropdowns;
+  Actions: view/edit/delete
+- [ ] `templates/accounting/project_detail.html` — all fields; ProjectBudgetLine list (account,
+  period, amount) with add/edit/delete links; budget-vs-actual summary (total budgeted vs. sum of
+  tagged JournalLines); sidebar: edit/delete
+- [ ] `templates/accounting/project_form.html` — create/edit form
+- [ ] `templates/accounting/projectbudgetline_list.html` — table: project, gl_account, fiscal_period,
+  budgeted_amount; filter: project + fiscal_period dropdowns; Actions: view/edit/delete
+- [ ] `templates/accounting/projectbudgetline_detail.html` — all fields; sidebar: edit/delete
+- [ ] `templates/accounting/projectbudgetline_form.html` — create/edit form
+
+### 2.10 Multi-Entity & Consolidation templates (4 files)
+
+- [ ] `templates/accounting/consolidationgroup_list.html` — table: name, parent_entity, member
+  count, reporting_currency, is_active badge; filter: is_active dropdown; Actions: view/edit/delete
+- [ ] `templates/accounting/consolidationgroup_detail.html` — all fields; member OrgUnit list;
+  "Run Consolidation Report" link → `consolidation_report`; sidebar: edit/delete
+- [ ] `templates/accounting/consolidationgroup_form.html` — create/edit (members ManyToManyField
+  as a multi-select widget)
+- [ ] `templates/accounting/intercompanytransaction_list.html` — table: number, from_entity,
+  to_entity, transaction_date, amount, currency, status badge; filter: status + consolidation_group
+  dropdowns; Actions: view/edit/delete + "Post" (shown when draft) + "Eliminate" (shown when posted)
+- [ ] `templates/accounting/intercompanytransaction_detail.html` — all fields; from_journal_entry
+  and to_journal_entry links; document attachment link; sidebar: "Post" and "Eliminate" POST
+  buttons (@tenant_admin_required), edit/delete (gated on draft)
+- [ ] `templates/accounting/intercompanytransaction_form.html` — create/edit; exclude
+  from_journal_entry, to_journal_entry
+- [ ] `templates/accounting/consolidation_report.html` — report page (no model form); consolidation
+  group selector; table of aggregated revenue/expense/asset/liability by member entity; elimination
+  column; consolidated totals; date-range filter
+
+### 2.11 Tax templates (6 files)
+
+- [ ] `templates/accounting/taxcode_list.html` — table: code, name, tax_type badge, rate_pct,
+  jurisdiction_level, country/region, is_active badge; filter: tax_type + is_active dropdowns;
+  Actions: view/edit/delete
+- [ ] `templates/accounting/taxcode_detail.html` — all fields; effective_from/effective_to;
+  payable_gl_account link; sidebar: edit/delete
+- [ ] `templates/accounting/taxcode_form.html` — create/edit form
+- [ ] `templates/accounting/taxnexus_list.html` — table: jurisdiction_name, country, nexus_type
+  badge, threshold_amount, current_ytd_sales, is_registered badge; filter: nexus_type +
+  is_registered dropdowns; Actions: view/edit/delete
+- [ ] `templates/accounting/taxnexus_detail.html` — all fields; related filing obligations list;
+  sidebar: edit/delete
+- [ ] `templates/accounting/taxnexus_form.html` — create/edit form
+- [ ] `templates/accounting/taxfilingobligation_list.html` — table: tax_nexus, filing period,
+  due_date, status badge (overdue highlighted), tax_due; filter: status + tax_nexus dropdowns;
+  Actions: view/edit/delete
+- [ ] `templates/accounting/taxfilingobligation_detail.html` — all fields; payment link if remitted;
+  sidebar: edit/delete
+- [ ] `templates/accounting/taxfilingobligation_form.html` — create/edit; exclude filed_by
+
+### 2.12 Reporting & Compliance templates (5 files)
+
+- [ ] `templates/accounting/scheduledreport_list.html` — table: report_type badge, frequency badge,
+  format, next_run_at, is_active badge; filter: report_type + frequency + is_active dropdowns;
+  Actions: view/edit/delete
+- [ ] `templates/accounting/scheduledreport_detail.html` — all fields; recipients list; sidebar:
+  edit/delete
+- [ ] `templates/accounting/scheduledreport_form.html` — create/edit; exclude last_run_at
+- [ ] `templates/accounting/balance_sheet.html` — report: as-of date filter (GET param); two-column
+  layout (Assets left, Liabilities+Equity right); account groups with subtotals; totals row;
+  "must balance" check note
+- [ ] `templates/accounting/profit_and_loss.html` — report: date-range filter; Revenue section +
+  Expense section + Net Income row; prior-period column if selected
+- [ ] `templates/accounting/cash_flow_statement.html` — report: date-range filter; operating /
+  investing / financing sections (from GLAccount.cash_flow_category); net change in cash
+- [ ] `templates/accounting/budget_variance_report.html` — report: BudgetVersion selector +
+  FiscalPeriod filter; table: gl_account | org_unit | budgeted_amount | actual | variance | variance%
+  (highlighted red when over budget)
+
+### 2.13 Budgeting & Planning templates (4 files)
+
+- [ ] `templates/accounting/budgetversion_list.html` — table: number, name, fiscal_year,
+  version_type badge, is_active badge, is_locked badge, copied_from link; filter: version_type +
+  fiscal_year + is_active dropdowns; Actions: view/edit/delete + "Copy" POST button
+- [ ] `templates/accounting/budgetversion_detail.html` — all fields; BudgetLine count + total;
+  link to `budgetline_list` filtered by this version; "Copy to What-If" POST button in sidebar;
+  sidebar: edit/delete
+- [ ] `templates/accounting/budgetversion_form.html` — create/edit; exclude approved_by
+- [ ] `templates/accounting/budgetline_list.html` — table: budget_version link, gl_account code+name,
+  fiscal_period, org_unit, budgeted_amount, is_locked_actuals badge; filter: budget_version +
+  gl_account (dropdown) + fiscal_period + org_unit dropdowns; Actions: view/edit/delete
+- [ ] `templates/accounting/budgetline_detail.html` — all fields; sidebar: edit/delete
+- [ ] `templates/accounting/budgetline_form.html` — create/edit form (budget_version, gl_account,
+  fiscal_period, org_unit, budgeted_amount, is_locked_actuals)
+
+### 2.14 Audit & Controls templates (7 files)
+
+- [ ] `templates/accounting/controlrecord_list.html` — table: name, control_type badge,
+  frequency badge, risk_area, owner, is_active badge; filter: control_type + frequency + is_active
+  dropdowns; Actions: view/edit/delete
+- [ ] `templates/accounting/controlrecord_detail.html` — all fields; ControlTest list (test_date,
+  tester, result badge, evidence_document link) with link to add new test; sidebar: edit/delete
+- [ ] `templates/accounting/controlrecord_form.html` — create/edit form
+- [ ] `templates/accounting/controltest_list.html` — table: control_record link, test_date, tester,
+  result badge, notes truncated, evidence_document link; filter: result dropdown; Actions:
+  view/edit/delete
+- [ ] `templates/accounting/controltest_detail.html` — all fields; sidebar: edit/delete
+- [ ] `templates/accounting/controltest_form.html` — create/edit (control_record, test_date, tester,
+  result, notes, evidence_document)
+- [ ] `templates/accounting/periodclosetask_list.html` — table: fiscal_period, task_name,
+  task_type badge, assignee, due_date, status badge; filter: fiscal_period + task_type + status
+  dropdowns; Actions: view/edit/delete + "Mark Done" POST button (shown when status!=done)
+- [ ] `templates/accounting/periodclosetask_detail.html` — all fields; completed_by/completed_at
+  if done; sidebar: "Mark Done" POST button (@login_required, not admin-only), edit/delete
+- [ ] `templates/accounting/periodclosetask_form.html` — create/edit; exclude completed_by,
+  completed_at
+- [ ] `templates/accounting/audit_trail_list.html` — read-only list over `core.AuditLog` filtered
+  to `tenant`; table: timestamp, user, model_name, object_id, action, changes summary; filter:
+  model_name (select of distinct values) + user (select) + action (select) + date range (start/end);
+  no create/edit/delete; pagination
+
+### 2.15 Integration & API templates (3 files)
+
+- [ ] `templates/accounting/integrationconfig_list.html` — table: integration_type badge,
+  endpoint_url (truncated), is_active badge, sync_status badge, last_synced_at; filter:
+  integration_type + is_active dropdowns; Actions: view/edit/delete; masked api_key_encrypted
+  display (show `prefix:****` — never the hash)
+- [ ] `templates/accounting/integrationconfig_detail.html` — all fields; api_key_encrypted shown as
+  `prefix:****` (never raw); "Rotate Key" POST button in sidebar (@tenant_admin_required); if
+  `request.session["_key_reveal"]` is set, show one-time reveal box with copy button and pop it
+  (L25 pattern); sidebar: edit/delete
+- [ ] `templates/accounting/integrationconfig_form.html` — create/edit; DO NOT render
+  api_key_encrypted field (L20); shows note "Use 'Rotate Key' to set the API credential"
+
+---
+
+## Section 5 — Verify
+
+Run all commands with `C:\xampp\htdocs\NavERP\venv\Scripts\python.exe`:
+
+- [ ] `python manage.py makemigrations accounting` — confirm single `0002_advanced.py` covering
+  all new tables + field additions on existing models; no `0002a/0002b` splits.
+- [ ] `python manage.py sqlmigrate accounting 0002` — review SQL: FK references to
+  `accounting_fixedasset`, `accounting_project`, `accounting_consolidationgroup`, etc. all resolve;
+  unique_together constraints present; `db_index` on all tenant FKs; no reference to unbuilt
+  tables (no `inventory_*`, `hrm_*`).
+- [ ] `python manage.py migrate` — zero errors on `nav_erp`.
+- [ ] `python manage.py seed_accounting` — first run: `_seed_advanced` creates all demo data;
+  prints new login instructions and superuser-no-tenant warning.
+- [ ] `python manage.py seed_accounting` (second run) — must skip all advanced model blocks
+  with "already exists — skipping"; zero duplicate rows created.
+- [ ] `python manage.py check` — zero errors, zero warnings.
+- [ ] Write `temp/accounting_advanced_smoke.py` — test-client sweep:
+  - All new `accounting:*` URL names (list, detail, create, edit, report views) → 200 or 302.
+  - POST action URLs (asset_capitalize, depreciation_run, asset_dispose, post_cost_transaction,
+    payroll_batch_post, ict_post, ict_eliminate, budget_copy, task_complete,
+    integration_rotate_key) → 302 redirect (not 500); wrong-tenant object → 404.
+  - No `{#` / `{% comment` template leaks in any rendered page.
+  - Cross-tenant IDOR: pk from tenant B while logged in as tenant A → 404 on all detail views.
+  - JE balance assertion for each posting action: after action, verify the posted `JournalEntry`
+    has Σdebit == Σcredit and > 0.
+  - `depreciation_run` on an `active` FixedAsset → creates a `DepreciationSchedule` row,
+    posts a balanced JE, updates `accumulated_depreciation` on the asset.
+  - `asset_dispose` → sets `FixedAsset.status = "disposed"`, posts balanced disposal JE
+    (Dr accum_depr + cash, Cr asset_cost, Dr/Cr gain_loss account).
+  - `payroll_batch_post` → sets batch status=`"posted"`, creates balanced multi-leg JE.
+  - `ict_post` → creates two balanced JEs (one per entity), links them to the ICT.
+  - `integration_rotate_key` → api_key_encrypted updated to `prefix:sha256_hex` format;
+    session contains `_key_reveal`; second GET to detail pops it (absent on refresh).
+  - Report pages (balance_sheet, profit_and_loss, cash_flow_statement, budget_variance_report,
+    consolidation_report) → 200 with no missing template variables or `None` rendered inline.
+  - Sidebar: 2.6–2.15 all show as **Live** in the navigation.
+- [ ] Run `temp/accounting_advanced_smoke.py` — all checks green.
+- [ ] Sidebar check: sub-modules 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14, 2.15 all
+  show as **Live** (not "On the roadmap") in the sidebar navigation.
+
+---
+
+## Section 6 — Close-out
+
+### Review agents (run in order, one at a time, commit fixes between)
+
+- [ ] Run **`code-reviewer` agent** — check: every posting action verifies Σdebit==Σcredit before
+  `JournalEntry.status='posted'`; `accumulated_depreciation` updated atomically in `depreciation_run`;
+  `IntegrationConfig.api_key_encrypted` never set on the ModelForm (L20); all `*_at` system fields
+  excluded from forms (L22); `@tenant_admin_required` on all privileged action views;
+  `filed_by`/`completed_by`/`approved_by` set in view not form; `total_cost` and `gain_loss`
+  computed in view before save; L11 `.isdigit()` guard on all FK list filters.
+
+- [ ] Run **`explorer` agent** — verify: every URL name in the new LIVE_LINKS resolves (no 404);
+  every new template's context variables are passed by the corresponding view; child-table list
+  pages (PayrollJournalLine, BudgetLine, etc.) are reachable from their parent's detail page;
+  `from .models_advanced import *` is present at bottom of `models.py`.
+
+- [ ] Run **`frontend-reviewer` agent** — check: filter `selected` comparisons use
+  `|stringformat:"d"` for all FK pk dropdowns; all `<label for=id_*>` present; pagination guards
+  use `has_previous`/`has_next` (L9); no unknown CSS utility classes (L13); report pages render
+  cleanly with no inline `None` or blank columns; "Rotate Key" reveal box shows only once (L25);
+  `api_key_encrypted` never rendered in plaintext anywhere.
+
+- [ ] Run **`performance-reviewer` agent** — check: `fixedasset_list` select_related for
+  `custodian`, `location`; `costtransaction_list` select_related for `cost_item`; budget_variance
+  query is a single annotated JOIN (not Python loops); consolidation_report aggregates in one query
+  per entity; no N+1 on `ControlRecord` detail (prefetch `tests`); `audit_trail_list` paginates
+  (do not load all AuditLog rows).
+
+- [ ] Run **`qa-smoke-tester` agent** — verify: all POST action views require POST method (405 on
+  GET); all delete views are POST-only; `depreciation_run` on a `cip` asset → rejected (not active);
+  `asset_dispose` on an already-disposed asset → rejected; `payroll_batch_post` when no lines →
+  rejected (or warns); `ict_eliminate` on a draft ICT → rejected; `budget_copy` creates new
+  BudgetVersion + copies all BudgetLines; seed runs twice → row count unchanged.
+
+- [ ] Run **`security-reviewer` agent** — verify: `api_key_encrypted` absent from every form
+  widget (L20); `IntegrationConfigForm.Meta.fields` does not include `api_key_encrypted`;
+  `integration_rotate_key` stores `prefix:sha256_hex` not raw secret; session `_key_reveal`
+  is popped (not readable on refresh, L25); cross-tenant IDOR 404 on ALL new pk-based views;
+  child-table FKs verified against tenant (e.g. `PayrollJournalLine` accessed via batch that
+  belongs to request.tenant); `PeriodCloseTask.fiscal_period` FK scoped to tenant in form
+  `__init__`; `consolidation_group` members only from tenant's OrgUnits; all privileged
+  action views gated with `@tenant_admin_required`.
+
+- [ ] Run **`test-writer` agent** — write tests covering:
+  depreciation_run balanced JE and accumulated_depreciation update,
+  asset_dispose gain/loss JE correctness (both gain and loss paths),
+  payroll_batch_post multi-leg balanced JE,
+  ict_post two paired JEs balanced individually,
+  post_cost_transaction weighted-avg update on InventoryCostItem,
+  budget_copy duplicates BudgetLines correctly,
+  integration_rotate_key stores prefix:hash not raw secret + session pop,
+  balance_sheet and profit_and_loss render with non-empty data,
+  cross-tenant IDOR 404 on all new model detail views,
+  seeder idempotency (run twice → row count unchanged for all 14 models).
+
+### Documentation close-out
+
+- [ ] Update **`.claude/skills/accounting/SKILL.md`** — extend existing skill with 2.6–2.15
+  models (all 14 new tables + child tables), new URL names, new LIVE_LINKS entries, new seeder
+  section (`_seed_advanced`), posting action JE legs, `IntegrationConfig` security conventions
+  (L20/L25), `models_advanced.py` / `views_advanced.py` / `forms_advanced.py` file locations.
+  Do NOT rewrite the 2.1–2.5 section; append only.
+
+- [ ] Update **`README.md`** — add sub-modules 2.6–2.15 to the feature table; add
+  `seed_accounting` already seeds the advanced data via `_seed_advanced`; add route map
+  entries for new `accounting:*` URLs.
+
+### Per-file commit list (PowerShell-safe, one file per commit)
+
+```
+git add 'apps\accounting\models_advanced.py'; git commit -m 'feat(accounting): models_advanced.py — 14 new models for 2.6-2.15 (FixedAsset/DepreciationSchedule/AssetDisposal/InventoryCostItem/CostTransaction/PayrollJournalBatch/PayrollJournalLine/Project/ProjectBudgetLine/ConsolidationGroup/IntercompanyTransaction/TaxCode/TaxNexus/TaxFilingObligation/ScheduledReport/BudgetVersion/BudgetLine/ControlRecord/ControlTest/PeriodCloseTask/IntegrationConfig)'
+git add 'apps\accounting\models.py'; git commit -m 'feat(accounting): models.py — add models_advanced import + 5 field additions on existing models (JournalLine.project, Invoice.project, JournalEntry.consolidation_group, JournalEntry.ENTRY_TYPE elimination, GLAccount.cash_flow_category)'
+git add 'apps\accounting\migrations\0002_advanced.py'; git commit -m 'feat(accounting): migration 0002 — 14 new advanced models + 5 field additions on existing tables'
+git add 'apps\accounting\forms_advanced.py'; git commit -m 'feat(accounting): forms_advanced.py — ModelForms for all 14 new models; system fields/api_key_encrypted excluded per L20/L22'
+git add 'apps\accounting\views_advanced.py'; git commit -m 'feat(accounting): views_advanced.py — function-based CRUD + 10 posting/action views (asset_capitalize, depreciation_run, asset_dispose, post_cost_transaction, payroll_batch_post, ict_post, ict_eliminate, budget_copy, task_complete, integration_rotate_key) + 5 report views'
+git add 'apps\accounting\urls.py'; git commit -m 'feat(accounting): urls.py — append 2.6-2.15 URL patterns for all 14 new models + 5 report views + audit_trail_list'
+git add 'apps\accounting\admin.py'; git commit -m 'feat(accounting): admin.py — append admin registration for 14 new models with child TabularInlines'
+git add 'apps\accounting\management\commands\seed_accounting.py'; git commit -m 'feat(accounting): extend seed_accounting with _seed_advanced — idempotent demo data for 2.6-2.15 models'
+git add 'apps\core\navigation.py'; git commit -m 'feat(core/nav): LIVE_LINKS 2.6-2.15 — fixed-assets/cost/payroll/projects/consolidation/tax/reporting/budgeting/controls/integration routes'
+git add 'templates\accounting\fixedasset_list.html'; git commit -m 'feat(accounting): fixed asset list with status filter and capitalize action'
+git add 'templates\accounting\fixedasset_detail.html'; git commit -m 'feat(accounting): fixed asset detail with depreciation schedule list and run-depreciation action'
+git add 'templates\accounting\fixedasset_form.html'; git commit -m 'feat(accounting): fixed asset create/edit form'
+git add 'templates\accounting\assetdisposal_list.html'; git commit -m 'feat(accounting): asset disposal list with disposal_type filter'
+git add 'templates\accounting\assetdisposal_detail.html'; git commit -m 'feat(accounting): asset disposal detail'
+git add 'templates\accounting\assetdisposal_form.html'; git commit -m 'feat(accounting): asset disposal create/edit form'
+git add 'templates\accounting\inventorycostitem_list.html'; git commit -m 'feat(accounting): inventory cost item list with valuation_method filter'
+git add 'templates\accounting\inventorycostitem_detail.html'; git commit -m 'feat(accounting): inventory cost item detail with related cost transactions'
+git add 'templates\accounting\inventorycostitem_form.html'; git commit -m 'feat(accounting): inventory cost item create/edit form'
+git add 'templates\accounting\costtransaction_list.html'; git commit -m 'feat(accounting): cost transaction list with direction/reference_type filters and post action'
+git add 'templates\accounting\costtransaction_detail.html'; git commit -m 'feat(accounting): cost transaction detail with post action'
+git add 'templates\accounting\costtransaction_form.html'; git commit -m 'feat(accounting): cost transaction create/edit form'
+git add 'templates\accounting\payrolljournalbatch_list.html'; git commit -m 'feat(accounting): payroll journal batch list with status/source filters and post action'
+git add 'templates\accounting\payrolljournalbatch_detail.html'; git commit -m 'feat(accounting): payroll journal batch detail with journal lines table and post action'
+git add 'templates\accounting\payrolljournalbatch_form.html'; git commit -m 'feat(accounting): payroll journal batch create/edit form'
+git add 'templates\accounting\payrolljournalline_list.html'; git commit -m 'feat(accounting): payroll journal line list scoped to batch with line_type filter'
+git add 'templates\accounting\payrolljournalline_form.html'; git commit -m 'feat(accounting): payroll journal line create/edit form'
+git add 'templates\accounting\project_list.html'; git commit -m 'feat(accounting): project list with status/billing_method filters'
+git add 'templates\accounting\project_detail.html'; git commit -m 'feat(accounting): project detail with budget lines and budget-vs-actual summary'
+git add 'templates\accounting\project_form.html'; git commit -m 'feat(accounting): project create/edit form'
+git add 'templates\accounting\projectbudgetline_list.html'; git commit -m 'feat(accounting): project budget line list with project/period filters'
+git add 'templates\accounting\projectbudgetline_detail.html'; git commit -m 'feat(accounting): project budget line detail'
+git add 'templates\accounting\projectbudgetline_form.html'; git commit -m 'feat(accounting): project budget line create/edit form'
+git add 'templates\accounting\consolidationgroup_list.html'; git commit -m 'feat(accounting): consolidation group list with is_active filter'
+git add 'templates\accounting\consolidationgroup_detail.html'; git commit -m 'feat(accounting): consolidation group detail with member list and consolidation report link'
+git add 'templates\accounting\consolidationgroup_form.html'; git commit -m 'feat(accounting): consolidation group create/edit form with multi-select members'
+git add 'templates\accounting\intercompanytransaction_list.html'; git commit -m 'feat(accounting): intercompany transaction list with status/group filters and post/eliminate actions'
+git add 'templates\accounting\intercompanytransaction_detail.html'; git commit -m 'feat(accounting): intercompany transaction detail with JE links and post/eliminate actions'
+git add 'templates\accounting\intercompanytransaction_form.html'; git commit -m 'feat(accounting): intercompany transaction create/edit form'
+git add 'templates\accounting\consolidation_report.html'; git commit -m 'feat(accounting): consolidation report — group aggregation with elimination column'
+git add 'templates\accounting\taxcode_list.html'; git commit -m 'feat(accounting): tax code list with tax_type/is_active filters'
+git add 'templates\accounting\taxcode_detail.html'; git commit -m 'feat(accounting): tax code detail'
+git add 'templates\accounting\taxcode_form.html'; git commit -m 'feat(accounting): tax code create/edit form'
+git add 'templates\accounting\taxnexus_list.html'; git commit -m 'feat(accounting): tax nexus list with nexus_type/is_registered filters'
+git add 'templates\accounting\taxnexus_detail.html'; git commit -m 'feat(accounting): tax nexus detail with filing obligations list'
+git add 'templates\accounting\taxnexus_form.html'; git commit -m 'feat(accounting): tax nexus create/edit form'
+git add 'templates\accounting\taxfilingobligation_list.html'; git commit -m 'feat(accounting): tax filing obligation list with status/nexus filters'
+git add 'templates\accounting\taxfilingobligation_detail.html'; git commit -m 'feat(accounting): tax filing obligation detail with payment link'
+git add 'templates\accounting\taxfilingobligation_form.html'; git commit -m 'feat(accounting): tax filing obligation create/edit form'
+git add 'templates\accounting\scheduledreport_list.html'; git commit -m 'feat(accounting): scheduled report list with report_type/frequency/is_active filters'
+git add 'templates\accounting\scheduledreport_detail.html'; git commit -m 'feat(accounting): scheduled report detail with recipients list'
+git add 'templates\accounting\scheduledreport_form.html'; git commit -m 'feat(accounting): scheduled report create/edit form'
+git add 'templates\accounting\balance_sheet.html'; git commit -m 'feat(accounting): balance sheet report — assets/liabilities/equity as of date'
+git add 'templates\accounting\profit_and_loss.html'; git commit -m 'feat(accounting): profit and loss report — revenue minus expenses for date range'
+git add 'templates\accounting\cash_flow_statement.html'; git commit -m 'feat(accounting): cash flow statement — operating/investing/financing sections'
+git add 'templates\accounting\budget_variance_report.html'; git commit -m 'feat(accounting): budget vs actual variance report with BudgetVersion selector'
+git add 'templates\accounting\budgetversion_list.html'; git commit -m 'feat(accounting): budget version list with version_type/fiscal_year/is_active filters and copy action'
+git add 'templates\accounting\budgetversion_detail.html'; git commit -m 'feat(accounting): budget version detail with budget lines summary and copy action'
+git add 'templates\accounting\budgetversion_form.html'; git commit -m 'feat(accounting): budget version create/edit form'
+git add 'templates\accounting\budgetline_list.html'; git commit -m 'feat(accounting): budget line list with version/account/period/org_unit filters'
+git add 'templates\accounting\budgetline_detail.html'; git commit -m 'feat(accounting): budget line detail'
+git add 'templates\accounting\budgetline_form.html'; git commit -m 'feat(accounting): budget line create/edit form'
+git add 'templates\accounting\controlrecord_list.html'; git commit -m 'feat(accounting): control record list with control_type/frequency/is_active filters'
+git add 'templates\accounting\controlrecord_detail.html'; git commit -m 'feat(accounting): control record detail with control tests list'
+git add 'templates\accounting\controlrecord_form.html'; git commit -m 'feat(accounting): control record create/edit form'
+git add 'templates\accounting\controltest_list.html'; git commit -m 'feat(accounting): control test list with result filter'
+git add 'templates\accounting\controltest_detail.html'; git commit -m 'feat(accounting): control test detail'
+git add 'templates\accounting\controltest_form.html'; git commit -m 'feat(accounting): control test create/edit form'
+git add 'templates\accounting\periodclosetask_list.html'; git commit -m 'feat(accounting): period close task list with period/task_type/status filters and mark-done action'
+git add 'templates\accounting\periodclosetask_detail.html'; git commit -m 'feat(accounting): period close task detail with mark-done action'
+git add 'templates\accounting\periodclosetask_form.html'; git commit -m 'feat(accounting): period close task create/edit form'
+git add 'templates\accounting\audit_trail_list.html'; git commit -m 'feat(accounting): audit trail list — read-only view over core.AuditLog with model/user/action filters'
+git add 'templates\accounting\integrationconfig_list.html'; git commit -m 'feat(accounting): integration config list with type/is_active filters; api_key shown masked'
+git add 'templates\accounting\integrationconfig_detail.html'; git commit -m 'feat(accounting): integration config detail with rotate-key action and one-time reveal (L25)'
+git add 'templates\accounting\integrationconfig_form.html'; git commit -m 'feat(accounting): integration config create/edit form — api_key_encrypted excluded (L20)'
+git add 'temp\accounting_advanced_smoke.py'; git commit -m 'test(accounting): advanced smoke test — 2.6-2.15 routes 200/302, posting JE balance, IDOR 404, rotate-key L25 session pop, report pages render'
+git add '.claude\skills\accounting\SKILL.md'; git commit -m 'docs(skill/accounting): extend SKILL.md with 2.6-2.15 models, URLs, seeder _seed_advanced, IntegrationConfig security'
+git add 'README.md'; git commit -m 'docs(readme): accounting 2.6-2.15 — feature table, route map, seed_accounting covers advanced models'
+```
+
+---
+
+## Section 7 — Later passes / deferred
+
+- **Live Plaid bank feed OAuth** — `IntegrationConfig` (type=plaid) is buildable now as a config
+  stub; the actual Plaid token exchange, account-link flow, and daily transaction polling requires
+  Plaid SDK + OAuth redirect endpoint. Deferred to an integration pass.
+- **Avalara AvaTax real-time API** — `TaxCode` rate master covers manual/imported rates;
+  the Avalara AvaTax API call on invoice-post (12,000+ jurisdiction lookup) needs
+  `IntegrationConfig` credential + HTTP call. Deferred.
+- **Vertex income tax provision automation** — `TaxFilingObligation` stub supports manual entry
+  of current/deferred tax amounts; automated deferred-tax calculation from temporary differences
+  (asset book-tax timing differences) requires a rules engine. Deferred.
+- **XBRL / EDGAR filing** — structured tagging of financials for SEC/EDGAR submission. Deferred
+  (public companies only; requires XBRL taxonomy library).
+- **Module 5 Item FK on `InventoryCostItem`** — when Inventory (Module 5) ships, add a FK from
+  `InventoryCostItem` to `inventory.Item` and from `CostTransaction` to `inventory.StockMove`.
+  The financial valuation layer is buildable now without it.
+- **Module 3 HRM FK on `PayrollJournalBatch`** — when HRM (Module 3) ships, add a FK from
+  `PayrollJournalBatch` to `hrm.PayrollRun`; the accounting-GL layer is buildable now without it.
+- **Full WBS task hierarchy on `Project`** — multi-level task tree (epic/task/subtask). Covered
+  in the NavERP ERD stub; deferred to the full Project Management module (Module 7).
+- **Earned Value Management (EVM)** — BCWS, BCWP, ACWP, SPI, CPI metrics. Deferred to Module 7
+  Projects where schedule data exists.
+- **HRIS API payroll import (Workday/ADP)** — `PayrollJournalBatch.source='hris_import'` is
+  modeled; live API connector for auto-creating batches = integration/later.
+- **Stripe/PayPal payment gateway webhooks** — `IntegrationConfig` type=stripe/paypal is modeled;
+  webhook endpoint + signature verification = integration/later.
+- **DRF REST API layer** — Django REST Framework serializers/viewsets for new accounting objects.
+  No new models needed; DRF is an integration/API pass separate from the core module build.
+- **CRON-based scheduled report delivery** — `ScheduledReport` model buildable now;
+  Celery beat task for timed generation + email = async-worker pass.
+- **SoDRule (Segregation of Duties documentation table)** — trimmed from this pass; the audit
+  trail list view surfaces the behavioral trail; a formal `SoDRule` table with automated scanning
+  is an audit-controls enhancement pass.
+- **`ImpairmentRecord` / `AssetAudit`** — research identified these as differentiators;
+  trimmed from 14-model scope; can be added in a Fixed Assets enhancement pass.
+- **`CurrencyTranslation` run table** — CTA calculation and translation JEs; deferred from 2.10;
+  the data model (ExchangeRate + OrgUnit-as-entity + ConsolidationGroup) is ready.
+- **Minority interest calculation** — complex equity consolidation for partial ownership.
+  Deferred; full consolidation engine is an enterprise-only feature.
+- **Budget encumbrance blocking** — view-layer budget check against BudgetLine is buildable;
+  pre-encumbrance on purchase requisitions requires Module 6 Procurement to ship first.
+- **`LandedCostAllocation` table** — allocation of freight/duty/insurance across CostTransactions.
+  Research rated this "common"; trimmed to keep model count at 14; add in a cost-management pass.
+- **Invoice/Bill void actions** — carried forward from 2.1–2.5 deferred list; still pending.
+
+## Review notes
+
+(filled in after the build)
+
