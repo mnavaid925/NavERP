@@ -82,7 +82,7 @@
           <tr>
             <td class="fw-600">—</td>
             <td>Net Income (current period)</td>
-            <td>{{ net_income|floatformat:2 }}</td>
+            <td class="{% if net_income < 0 %}text-danger{% endif %}">{{ net_income|floatformat:2 }}</td>
           </tr>
         </tbody>
         <tfoot>
