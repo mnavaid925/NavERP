@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.subject }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.subject }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:activity_list' %}">Activities</a><span class="sep">›</span><span>{{ obj.subject }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:activity_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:activity_delete' obj.pk %}" onsubmit="return confirm('Delete this activity?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject }}</dd></div>
+      <div class="detail-item"><dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Party</dt><dd>{% if obj.party %}{{ obj.party }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Due</dt><dd>{% if obj.due_at %}{{ obj.due_at|date:"M d, H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'core:activity_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
