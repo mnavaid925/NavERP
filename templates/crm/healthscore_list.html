@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Health Scores{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Health Scores</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Health Scores
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:health_config_edit' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Configure Weights</a>
+    <a href="{% url 'crm:healthscore_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Score</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search accounts…">
+      <select name="tier" class="form-select">
+        <option value="">All tiers</option>
+        {% for val, label in tier_choices %}
+        <option value="{{ val }}" {% if request.GET.tier == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:healthscore_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Account</th>
+            <th>Score</th>
+            <th>Tier</th>
+            <th>Computed</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'crm:healthscore_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+            <td>{{ obj.account.name }}</td>
+            <td>{{ obj.score }}/100</td>
+            <td>
+              {% if obj.tier == 'green' %}<span class="badge badge-green">{{ obj.get_tier_display }}</span>
+              {% elif obj.tier == 'yellow' %}<span class="badge badge-amber">{{ obj.get_tier_display }}</span>
+              {% elif obj.tier == 'red' %}<span class="badge badge-red">{{ obj.get_tier_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_tier_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.computed_at|date:"M d, Y H:i"|default:"—" }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:healthscore_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'crm:healthscore_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'crm:healthscore_delete' obj.pk %}" onsubmit="return confirm('Delete this health score?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="heart-pulse"></i>
+                <h3>No health scores found</h3>
+                <p>Compute account health scores to track customer success signals.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
