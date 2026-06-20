@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Partner Portal{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Partner Portal</h1>
+    <nav class="breadcrumb"><span>Partner Portal</span></nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Partner</dt><dd>{{ access.partner_party.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Purchase orders</dt><dd>{{ po_count }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="form-actions">
+      <a class="btn btn-primary" href="{% url 'crm:portal_po_list' %}"><i data-lucide="shopping-cart"></i> My purchase orders</a>
+      {% if access.can_view_stock %}<a class="btn btn-outline" href="{% url 'crm:portal_stock' %}"><i data-lucide="boxes"></i> Stock levels</a>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
