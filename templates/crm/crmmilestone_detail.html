@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:crmmilestone_list' %}">Milestones</a>
+      <span class="sep">›</span>
+      <span>{{ obj.number }}</span>
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:crmmilestone_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:crmmilestone_delete' obj.pk %}" onsubmit="return confirm('Delete this milestone?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Project</dt><dd>{% if obj.project %}<a href="{% url 'crm:crmproject_detail' obj.project.pk %}">{{ obj.project.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Title</dt><dd>{{ obj.title|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Kind</dt><dd>
+        {% if obj.kind == 'milestone' %}<span class="badge badge-info">{{ obj.get_kind_display }}</span>
+        {% elif obj.kind == 'task' %}<span class="badge badge-slate">{{ obj.get_kind_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_kind_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'not_started' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'in_progress' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'blocked' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Assignee</dt><dd>{% if obj.assignee %}{{ obj.assignee.get_full_name|default:obj.assignee.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Start date</dt><dd>{{ obj.start_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Due date</dt><dd>{{ obj.due_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Completed at</dt><dd>{{ obj.completed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Parent</dt><dd>{% if obj.parent %}<a href="{% url 'crm:crmmilestone_detail' obj.parent.pk %}">{{ obj.parent.title }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Order</dt><dd>{{ obj.order|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Sub-tasks</h2>
+  </div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Title</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in subtasks %}
+          <tr>
+            <td><a href="{% url 'crm:crmmilestone_detail' s.pk %}" class="fw-600">{{ s.number }}</a></td>
+            <td>{{ s.title }}</td>
+            <td>
+              {% if s.status == 'not_started' %}<span class="badge badge-muted">{{ s.get_status_display }}</span>
+              {% elif s.status == 'in_progress' %}<span class="badge badge-amber">{{ s.get_status_display }}</span>
+              {% elif s.status == 'completed' %}<span class="badge badge-green">{{ s.get_status_display }}</span>
+              {% elif s.status == 'blocked' %}<span class="badge badge-red">{{ s.get_status_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ s.get_status_display }}</span>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3">
+              <div class="empty-state">
+                <i data-lucide="list-checks"></i>
+                <h3>No sub-tasks</h3>
+                <p>This milestone has no sub-tasks.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<a href="{% url 'crm:crmmilestone_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
