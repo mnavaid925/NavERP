@@ -47,7 +47,7 @@
               <td>{{ obj.name }}</td>
               <td>{% if obj.fiscal_period %}{{ obj.fiscal_period.name }}{% else %}—{% endif %}</td>
               <td>{{ obj.get_version_display }}</td>
-              <td><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'planning' %}info{% elif obj.status == 'closed' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'accounting:budget_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
