@@ -674,3 +674,9 @@ class ReconciliationMatch(TenantOwned):
 
     def __str__(self):
         return f"Match #{self.pk} · {self.bank_transaction_id}"
+
+
+# Advanced sub-modules 2.6–2.15 live in models_advanced.py (Fixed Assets, Cost Allocation,
+# Payroll, Job Costing, Intercompany, Tax, Scheduled Reports, Budgeting, Controls, Integration).
+# Imported here so Django registers them under the `accounting` app label.
+from .models_advanced import *  # noqa: E402,F401,F403
