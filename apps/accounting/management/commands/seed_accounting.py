@@ -203,10 +203,16 @@ class Command(BaseCommand):
         bill_draft.recalc_totals()
 
         # --- Payment + cash application (partial on the sent invoice) -----------
+        # A confirmed payment carries a balanced GL posting (Dr Cash / Cr AR), mirroring the
+        # payment_confirm view so the demo ledger reflects the cash receipt.
+        pay_je = self._posted_je(tenant, open_period, admin, today - datetime.timedelta(days=5),
+                                 f"Receipt for {inv_sent.number}",
+                                 [(accounts["1000"], Decimal("3000"), None),
+                                  (accounts["1100"], None, Decimal("3000"))])
         payment = Payment.objects.create(
             tenant=tenant, direction="in", party=customer, bank_account=bank,
             payment_method="bank_transfer", payment_date=today - datetime.timedelta(days=5),
-            amount=Decimal("3000"), currency=usd, status="confirmed")
+            amount=Decimal("3000"), currency=usd, status="confirmed", journal_entry=pay_je)
         PaymentAllocation.objects.create(payment=payment, invoice=inv_sent,
                                          allocated_amount=Decimal("3000"))
 
