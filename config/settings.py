@@ -13,8 +13,15 @@ def _bool(name, default="False"):
     return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
 
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-me")
 DEBUG = _bool("DEBUG", "True")
+
+# SECRET_KEY must be set in .env. Fail hard in production rather than fall back to a
+# guessable default (which would let an attacker forge sessions/CSRF/reset tokens).
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY or SECRET_KEY.startswith("django-insecure-change-me"):
+    if not DEBUG:
+        raise RuntimeError("SECRET_KEY is not set. Set a strong key in .env before running with DEBUG=False.")
+    SECRET_KEY = "django-insecure-dev-only-do-not-use-in-production"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
 INSTALLED_APPS = [
