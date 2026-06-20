@@ -922,6 +922,7 @@ def contractdocument_add_signer(request, pk):
         signer = form.save(commit=False)
         signer.tenant = request.tenant
         signer.contract = contract
+        signer.order = contract.signers.count() + 1  # append after existing signers
         signer.token = secrets.token_urlsafe(32)
         signer.save()
         write_audit_log(request.user, contract, "update",
@@ -1165,6 +1166,7 @@ def onboardingstep_add(request, pk):
         step = form.save(commit=False)
         step.tenant = request.tenant
         step.plan = plan
+        step.order = plan.steps.count()  # append after existing steps
         step.save()
         messages.success(request, "Step added.")
     else:
@@ -1419,6 +1421,7 @@ def crm_po_add_line(request, pk):
             line = form.save(commit=False)
             line.tenant = request.tenant
             line.purchase_order = po
+            line.order = po.lines.count()  # append after existing lines
             line.save()
             po.recalc_total()
         messages.success(request, "Line item added.")
