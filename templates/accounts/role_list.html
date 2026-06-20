@@ -15,7 +15,7 @@
     <div class="card-body">
       <form method="get" class="filter-bar">
         <div class="form-group" style="flex:1; min-width:200px;">
-          <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search by name or description…">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by name or description…">
         </div>
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
         <a href="{% url 'accounts:role_list' %}" class="btn btn-outline">Reset</a>
