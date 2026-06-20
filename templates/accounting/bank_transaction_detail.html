@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Bank Transaction{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.description|truncatechars:60|default:"Bank Transaction" }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:bank_transaction_list' %}">Bank Transactions</a><span class="sep">›</span><span>{{ obj.transaction_date|date:"M d, Y" }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'unmatched' %}
+        <a href="{% url 'accounting:bank_transaction_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounting:bank_transaction_delete' obj.pk %}" onsubmit="return confirm('Delete this transaction?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.transaction_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Bank Account</dt><dd>{% if obj.bank_account %}<a href="{% url 'accounting:bank_account_detail' obj.bank_account.pk %}">{{ obj.bank_account.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Direction</dt><dd><span class="badge badge-{% if obj.direction == 'credit' %}green{% else %}red{% endif %}">{{ obj.get_direction_display }}</span></dd></div>
+      <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'reconciled' %}green{% elif obj.status == 'matched' %}info{% elif obj.status == 'unmatched' %}amber{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>External Ref</dt><dd>{{ obj.external_ref|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  {% if match %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Matched</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Payment</dt><dd>{% if match.payment %}<a href="{% url 'accounting:payment_detail' match.payment.pk %}">{{ match.payment.number }}</a>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Matched By</dt><dd>{% if match.matched_by %}{{ match.matched_by.get_full_name|default:match.matched_by.username }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Confirmed</dt><dd>{% if match.is_confirmed %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'accounting:bank_transaction_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
