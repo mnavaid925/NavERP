@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list
+from apps.core.decorators import tenant_admin_required
 from apps.core.models import ContactMethod, Party, PartyRole
 from apps.core.utils import write_audit_log
 
@@ -410,7 +411,7 @@ def account_edit(request, pk):
     return render(request, "crm/account_form.html", {"form": form, "is_edit": True, "obj": party})
 
 
-@login_required
+@tenant_admin_required  # deleting a shared core.Party identity is privileged (cross-module blast radius)
 @require_POST
 def account_delete(request, pk):
     party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="organization")
@@ -492,7 +493,7 @@ def contact_edit(request, pk):
     return render(request, "crm/contact_form.html", {"form": form, "is_edit": True, "obj": party})
 
 
-@login_required
+@tenant_admin_required  # deleting a shared core.Party identity is privileged (cross-module blast radius)
 @require_POST
 def contact_delete(request, pk):
     party = get_object_or_404(Party, pk=pk, tenant=request.tenant, kind="person")
