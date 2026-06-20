@@ -423,6 +423,11 @@ class AccountProfile(models.Model):
 
     class Meta:
         ordering = ["party__name"]
+        indexes = [
+            models.Index(fields=["tenant", "industry"], name="crm_accp_tnt_industry_idx"),
+            models.Index(fields=["tenant", "source"], name="crm_accp_tnt_source_idx"),
+            models.Index(fields=["tenant", "parent_account"], name="crm_accp_tnt_parent_idx"),
+        ]
 
     def __str__(self):
         return f"Account · {self.party.name}"
@@ -453,6 +458,10 @@ class ContactProfile(models.Model):
 
     class Meta:
         ordering = ["party__name"]
+        indexes = [
+            models.Index(fields=["tenant", "source"], name="crm_conp_tnt_source_idx"),
+            models.Index(fields=["tenant", "account"], name="crm_conp_tnt_account_idx"),
+        ]
 
     def __str__(self):
         return f"Contact · {self.party.name}"
