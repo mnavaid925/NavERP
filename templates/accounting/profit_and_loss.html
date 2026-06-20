@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Profit & Loss{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Profit & Loss</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Profit & Loss</span></div>
+    </div>
+    <div class="page-actions">
+      <span class="badge badge-{% if net_income >= 0 %}green{% else %}red{% endif %}">Net Income {{ net_income|floatformat:2 }}</span>
+    </div>
+  </div>
+
+  {# Revenue section #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Revenue</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Account</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for r in income %}
+            <tr>
+              <td class="fw-600">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.balance|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="trending-up"></i><p>No revenue balances.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if income %}
+          <tfoot>
+            <tr class="fw-600"><td colspan="2">Total Revenue</td><td>{{ total_income|floatformat:2 }}</td></tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Expenses section #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Expenses</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Account</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for r in expense %}
+            <tr>
+              <td class="fw-600">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.balance|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="trending-down"></i><p>No expense balances.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if expense %}
+          <tfoot>
+            <tr class="fw-600"><td colspan="2">Total Expenses</td><td>{{ total_expense|floatformat:2 }}</td></tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Net income footer #}
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Total Revenue</dt><dd class="fw-600">{{ total_income|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Total Expenses</dt><dd class="fw-600">{{ total_expense|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Net Income</dt><dd class="fw-600 {% if net_income < 0 %}text-danger{% endif %}">{{ net_income|floatformat:2 }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'accounting:accounting_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
