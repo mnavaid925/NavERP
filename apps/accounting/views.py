@@ -128,8 +128,17 @@ def accounting_dashboard(request):
     cash_labels, cash_data = [], []
     if tenant is not None:
         today = timezone.localdate()
-        banks = BankAccount.objects.filter(tenant=tenant)
-        stats["cash_position"] = sum((b.current_balance() for b in banks), ZERO)
+        # Cash position in TWO queries (not N+1): one grouped aggregate of all bank-txn movement
+        # keyed by account, plus the fixed opening balances (perf-review C-1).
+        banks = list(BankAccount.objects.filter(tenant=tenant))
+        net_by_bank = {
+            r["bank_account_id"]: (r["credit"] or ZERO) - (r["debit"] or ZERO)
+            for r in BankTransaction.objects.filter(tenant=tenant).values("bank_account_id")
+            .annotate(credit=Sum("amount", filter=Q(direction="credit")),
+                      debit=Sum("amount", filter=Q(direction="debit")))
+        }
+        stats["cash_position"] = sum(
+            ((b.opening_balance or ZERO) + net_by_bank.get(b.pk, ZERO) for b in banks), ZERO)
         stats["ar_outstanding"] = (
             Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES)
             .aggregate(s=Sum("total"))["s"] or ZERO
@@ -210,7 +219,9 @@ def _aging(rows, due_attr, today):
     totals["total"] = ZERO
     for doc in rows:
         due = getattr(doc, due_attr)
-        amount = doc.balance_due()
+        # `paid_agg` is annotated on the queryset by the caller (perf-review C-2) so this loop
+        # issues NO per-document aggregate query.
+        amount = (doc.total or ZERO) - (doc.paid_agg or ZERO)
         if amount <= ZERO:
             continue
         days = (today - due).days if due else 0
@@ -239,7 +250,8 @@ def ar_aging(request):
     party_rows, totals = [], {}
     if tenant is not None:
         docs = list(Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES)
-                    .select_related("party").prefetch_related("allocations"))
+                    .select_related("party")
+                    .annotate(paid_agg=Sum("allocations__allocated_amount")))
         party_rows, totals = _aging(docs, "due_date", timezone.localdate())
     return render(request, "accounting/ar_aging.html", {"party_rows": party_rows, "totals": totals})
 
@@ -250,7 +262,8 @@ def ap_aging(request):
     party_rows, totals = [], {}
     if tenant is not None:
         docs = list(Bill.objects.filter(tenant=tenant, status__in=Bill.OPEN_STATUSES)
-                    .select_related("party").prefetch_related("allocations"))
+                    .select_related("party")
+                    .annotate(paid_agg=Sum("allocations__allocated_amount")))
         party_rows, totals = _aging(docs, "due_date", timezone.localdate())
     return render(request, "accounting/ap_aging.html", {"party_rows": party_rows, "totals": totals})
 
@@ -378,7 +391,7 @@ def fiscal_period_close(request, pk):
 @login_required
 def journal_entry_list(request):
     return crud_list(
-        request, JournalEntry.objects.filter(tenant=request.tenant).select_related("fiscal_period"),
+        request, JournalEntry.objects.filter(tenant=request.tenant),
         "accounting/journal_entry_list.html",
         search_fields=["number", "description", "reference"],
         filters=[("status", "status", False), ("entry_type", "entry_type", False)],
@@ -1174,7 +1187,7 @@ def bank_transaction_detail(request, pk):
     obj = get_object_or_404(BankTransaction.objects.select_related("bank_account"), pk=pk, tenant=request.tenant)
     return render(request, "accounting/bank_transaction_detail.html", {
         "obj": obj,
-        "match": obj.matches.select_related("payment", "journal_line").first(),
+        "match": obj.matches.select_related("payment", "journal_line", "matched_by").first(),
     })
 
 
@@ -1208,6 +1221,13 @@ def bank_transaction_import_csv(request):
                 messages.error(request, "Could not read the uploaded file.")
                 return redirect("accounting:bank_transaction_import_csv")
             reader = csv.DictReader(io.StringIO(text))
+            # Dedupe against existing external_refs in ONE query (not a per-row .exists()), build
+            # the rows in memory, then a single atomic bulk_create (perf-review I-7).
+            existing_refs = set(
+                BankTransaction.objects.filter(tenant=request.tenant, bank_account=bank_account)
+                .exclude(external_ref="").values_list("external_ref", flat=True)
+            )
+            to_create, seen_refs = [], set()
             for row in reader:
                 row = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
                 raw_date = row.get("date", "")
@@ -1220,9 +1240,8 @@ def bank_transaction_import_csv(request):
                 direction = row.get("direction", "").lower()
                 if direction not in ("credit", "debit"):
                     direction = "credit" if amount >= 0 else "debit"
-                ext = row.get("external_ref", "") or row.get("reference", "")
-                if ext and BankTransaction.objects.filter(tenant=request.tenant, bank_account=bank_account,
-                                                          external_ref=ext).exists():
+                ext = (row.get("external_ref", "") or row.get("reference", ""))[:255]
+                if ext and (ext in existing_refs or ext in seen_refs):
                     skipped += 1
                     continue
                 parsed_date = None
@@ -1235,13 +1254,16 @@ def bank_transaction_import_csv(request):
                 if parsed_date is None:
                     skipped += 1
                     continue
-                BankTransaction.objects.create(
+                if ext:
+                    seen_refs.add(ext)
+                to_create.append(BankTransaction(
                     tenant=request.tenant, bank_account=bank_account, transaction_date=parsed_date,
                     description=desc[:512] or "(imported)", amount=abs(amount), direction=direction,
-                    source="csv_import", external_ref=ext[:255],
-                )
-                created += 1
-            messages.success(request, f"Imported {created} transaction(s); skipped {skipped}.")
+                    source="csv_import", external_ref=ext,
+                ))
+            with transaction.atomic():
+                BankTransaction.objects.bulk_create(to_create)
+            messages.success(request, f"Imported {len(to_create)} transaction(s); skipped {skipped}.")
             return redirect("accounting:bank_transaction_list")
     else:
         form = CsvImportForm(tenant=request.tenant)
@@ -1269,7 +1291,8 @@ def reconciliation_create(request):
 @login_required
 def reconciliation_detail(request, pk):
     obj = get_object_or_404(
-        ReconciliationMatch.objects.select_related("bank_transaction", "payment", "journal_line", "matched_by"),
+        ReconciliationMatch.objects.select_related(
+            "bank_transaction", "payment", "journal_line", "journal_line__entry", "matched_by"),
         pk=pk, tenant=request.tenant,
     )
     return render(request, "accounting/reconciliation_detail.html", {"obj": obj})
