@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:survey_list' %}">Surveys</a>
+      <span class="sep">›</span>
+      <span>{{ obj.number }}</span>
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:survey_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:survey_delete' obj.pk %}" onsubmit="return confirm('Delete this survey?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt>Number</dt>
+        <dd>{{ obj.number }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Account</dt>
+        <dd>{% if obj.account %}<a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a>{% else %}—{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Contact</dt>
+        <dd>{% if obj.contact %}<a href="{% url 'crm:contact_detail' obj.contact.pk %}">{{ obj.contact.name }}</a>{% else %}—{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Type</dt>
+        <dd>{{ obj.get_survey_type_display }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Trigger</dt>
+        <dd>{{ obj.get_trigger_display }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Related case</dt>
+        <dd>{% if obj.related_case %}<a href="{% url 'crm:case_detail' obj.related_case.pk %}">{{ obj.related_case.number }}</a>{% else %}—{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Score</dt>
+        <dd>{{ obj.score|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Classification</dt>
+        <dd>
+          {% if obj.classification == 'promoter' %}<span class="badge badge-green">{{ obj.get_classification_display }}</span>
+          {% elif obj.classification == 'passive' %}<span class="badge badge-amber">{{ obj.get_classification_display }}</span>
+          {% elif obj.classification == 'detractor' %}<span class="badge badge-red">{{ obj.get_classification_display }}</span>
+          {% elif obj.classification %}<span class="badge badge-muted">{{ obj.get_classification_display }}</span>
+          {% else %}—{% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt>Sent at</dt>
+        <dd>{{ obj.sent_at|date:"M d, Y H:i"|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Responded at</dt>
+        <dd>{{ obj.responded_at|date:"M d, Y H:i"|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Created</dt>
+        <dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </div>
+    </dl>
+    {% if obj.feedback_text %}<p style="margin-top:1rem;">{{ obj.feedback_text|linebreaksbr }}</p>{% endif %}
+    {% if obj.token %}
+    <div class="detail-item" style="margin-top:1rem;">
+      <dt>Public respond link</dt>
+      <dd><code>{% url 'crm:survey_respond' obj.token %}</code></dd>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<a href="{% url 'crm:survey_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
