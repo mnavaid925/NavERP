@@ -55,7 +55,9 @@ def lead_detail(request, pk):
                             pk=pk, tenant=request.tenant)
     return render(request, "crm/lead_detail.html", {
         "obj": obj,
-        "opportunities": obj.opportunities.select_related("account")[:20],
+        # Explicit tenant scope (defense-in-depth) — never trust a reverse-FK manager alone.
+        "opportunities": Opportunity.objects.filter(
+            tenant=request.tenant, source_lead=obj).select_related("account")[:20],
     })
 
 
@@ -131,7 +133,8 @@ def opportunity_detail(request, pk):
         pk=pk, tenant=request.tenant)
     return render(request, "crm/opportunity_detail.html", {
         "obj": obj,
-        "tasks": obj.tasks.select_related("owner")[:20],
+        "tasks": CrmTask.objects.filter(
+            tenant=request.tenant, related_opportunity=obj).select_related("owner")[:20],
     })
 
 
@@ -171,7 +174,8 @@ def campaign_detail(request, pk):
     obj = get_object_or_404(Campaign.objects.select_related("owner"), pk=pk, tenant=request.tenant)
     return render(request, "crm/campaign_detail.html", {
         "obj": obj,
-        "opportunities": obj.opportunities.select_related("account")[:20],
+        "opportunities": Opportunity.objects.filter(
+            tenant=request.tenant, campaign=obj).select_related("account")[:20],
     })
 
 
