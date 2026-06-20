@@ -52,6 +52,10 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
 
 def crud_create(request, *, form_class, template, success_url, extra_context=None,
                 set_tenant=True, audit=True):
+    # A tenant-less user (e.g. the superuser, tenant=None) must not create orphan rows.
+    if set_tenant and request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     if request.method == "POST":
         form = form_class(request.POST, request.FILES, tenant=request.tenant)
         if form.is_valid():
@@ -100,6 +104,7 @@ def crud_detail(request, *, model, pk, template, extra_context=None, select_rela
 
 
 def crud_delete(request, *, model, pk, success_url, audit=True):
+    # Self-defending: only mutate on POST even if a caller forgets @require_POST.
     obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
     if request.method == "POST":
         if audit:
