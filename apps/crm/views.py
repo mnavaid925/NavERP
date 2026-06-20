@@ -29,6 +29,7 @@ from .forms import (
     OpportunityForm,
 )
 from .models import (
+    INDUSTRY_CHOICES,
     AccountProfile,
     Campaign,
     Case,
@@ -337,6 +338,9 @@ def account_list(request):
         Party.objects.filter(tenant=request.tenant, kind="organization")
         .select_related("crm_account_profile"),
         "crm/account_list.html", search_fields=["name", "tax_id"],
+        filters=[("industry", "crm_account_profile__industry", False),
+                 ("source", "crm_account_profile__source", False)],
+        extra_context={"industry_choices": INDUSTRY_CHOICES, "source_choices": Lead.SOURCE_CHOICES},
     )
 
 
@@ -422,6 +426,8 @@ def contact_list(request):
         Party.objects.filter(tenant=request.tenant, kind="person")
         .select_related("crm_contact_profile"),
         "crm/contact_list.html", search_fields=["name"],
+        filters=[("source", "crm_contact_profile__source", False)],
+        extra_context={"source_choices": Lead.SOURCE_CHOICES},
     )
 
 
