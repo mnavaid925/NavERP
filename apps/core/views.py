@@ -313,7 +313,8 @@ def activity_list(request):
         extra_context={"kind_choices": Activity.KIND_CHOICES,
                        "status_choices": Activity.STATUS_CHOICES,
                        "parties": _parties(request),
-                       "owners": User.objects.filter(tenant=request.tenant)},
+                       "owners": User.objects.filter(tenant=request.tenant)
+                       .only("id", "email", "first_name", "last_name")},
     )
 
 
@@ -385,7 +386,8 @@ def auditlog_list(request):
         search_fields=["target"],
         filters=[("action", "action", False)],
         extra_context={"action_choices": AuditLog.ACTION_CHOICES,
-                       "users": User.objects.filter(tenant=request.tenant)},
+                       "users": User.objects.filter(tenant=request.tenant)
+                       .only("id", "email", "first_name", "last_name")},
     )
 
 
