@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:job_cost_entry_list' %}">Job Cost Entries</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:job_cost_entry_post' obj.pk %}" onsubmit="return confirm('Post this cost entry? It cannot be edited afterwards.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Post</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'accounting:job_cost_entry_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounting:job_cost_entry_delete' obj.pk %}" onsubmit="return confirm('Delete this entry?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Project</dt><dd><a href="{% url 'accounting:project_detail' obj.project.pk %}">{{ obj.project.name }}</a></dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.entry_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Kind</dt><dd><span class="badge badge-{% if obj.kind == 'cost' %}amber{% else %}green{% endif %}">{{ obj.get_kind_display }}</span></dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>GL Account</dt><dd><span class="fw-600">{{ obj.gl_account.code }}</span> · {{ obj.gl_account.name }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'posted' %}green{% else %}info{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'accounting:job_cost_entry_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
