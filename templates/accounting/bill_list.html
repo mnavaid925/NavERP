@@ -45,18 +45,20 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'accounting:bill_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
-              <td>{{ obj.party.name }}</td>
+              <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
               <td>{{ obj.bill_date|date:"M d, Y" }}</td>
               <td>{{ obj.due_date|date:"M d, Y"|default:"—" }}</td>
               <td><span class="badge badge-{% if obj.status == 'paid' or obj.status == 'approved' %}green{% elif obj.status == 'partial' or obj.status == 'pending_approval' %}amber{% elif obj.status == 'void' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
-              <td>${{ obj.total|floatformat:2 }}</td>
+              <td>{{ obj.total|floatformat:2 }}</td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'accounting:bill_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% if obj.status == 'pending_approval' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'accounting:bill_approve' obj.pk %}" onsubmit="return confirm('Approve this bill?');">
                       {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                   {% if not obj.is_locked %}
                     <a href="{% url 'accounting:bill_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
