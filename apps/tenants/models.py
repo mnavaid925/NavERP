@@ -8,7 +8,7 @@ import hashlib
 import secrets
 
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.core.models import Tenant
@@ -41,7 +41,7 @@ class Subscription(models.Model):
     renews_on = models.DateField(null=True, blank=True)
     # Stripe linkage — set by the webhook, excluded from forms.
     stripe_customer_id = models.CharField(max_length=120, blank=True)
-    stripe_subscription_id = models.CharField(max_length=120, blank=True)
+    stripe_subscription_id = models.CharField(max_length=120, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -79,11 +79,23 @@ class SubscriptionInvoice(models.Model):
     class Meta:
         ordering = ["-issued_on", "-id"]
         unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="subinv_tenant_status_idx"),
+            models.Index(fields=["stripe_invoice_id"], name="subinv_stripe_inv_idx"),
+        ]
 
     def save(self, *args, **kwargs):
-        if not self.number:
+        if self.number:
+            return super().save(*args, **kwargs)
+        # Assign SINV-#####; retry on the rare concurrent-collision (unique_together).
+        for _ in range(5):
             self.number = next_number(SubscriptionInvoice, self.tenant, "SINV")
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                self.number = ""
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return self.number
@@ -153,6 +165,9 @@ class HealthMetric(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "metric", "-created_at"], name="health_tenant_metric_idx"),
+        ]
 
     def __str__(self):
         return f"{self.get_metric_display()}: {self.value}"
