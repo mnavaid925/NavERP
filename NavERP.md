@@ -1,6 +1,31 @@
 # NavERP — Enterprise Resource Planning
 
-NavERP is the master catalog of all modules and sub-modules across the platform. Cross-cutting platform capabilities — multi-tenancy, identity, RBAC, authentication, data security, audit, integration/API, backup/DR, monitoring, and related concerns — are defined ONCE in **Module 0 — System Admin & Security** and are therefore not repeated inside the functional modules. Each functional module (1–13) lists only its own domain-specific capabilities.
+> **Master module catalog.** This is the authoritative, hierarchical map of *what* NavERP does — every module
+> (0–13), its sub-modules, and the capabilities within each. It is the planning companion to:
+> - [`NavERP-ERD.md`](NavERP-ERD.md) — *how* the data is modeled (the shared `Party` + two-ledger spine every module reuses), including the **as-built** foundation schema.
+> - [`README.md`](README.md) — *how* to install, run, and operate what has been built so far.
+
+NavERP is a multi-tenant SaaS ERP: many organizations ("tenants") share one deployment with strict per-tenant
+data isolation. It is built **one module at a time on a single unified core**, so customers, vendors, employees,
+items, money, and stock are modeled **once** and reused everywhere — never duplicated per module.
+
+Cross-cutting platform capabilities — multi-tenancy, identity, RBAC, authentication, data security, audit,
+integration/API, backup/DR, monitoring, and related concerns — are defined ONCE in **Module 0 — System Admin &
+Security** and are therefore not repeated inside the functional modules. Each functional module (1–13) lists only
+its own domain-specific capabilities and inherits Module 0 for everything cross-cutting.
+
+### How to read this catalog
+- `## N. Module` — a top-level business domain, realized as one Django app under `apps/<slug>`.
+- `### N.M Sub-module` — a coherent capability area within a module.
+- Bullets under a sub-module are individual features/screens.
+- Anything cross-cutting (auth, audit, notifications, API, …) lives in Module 0 and is not repeated per module.
+
+### Build approach
+Modules are delivered incrementally, sub-module by sub-module. Each **reuses** the core spine (`Party`, `Item`,
+`StockMove`, `JournalEntry`, `OrgUnit`, `Activity`, `Document`, …) and **adds** only its own domain tables, FK'ing
+into the core by string. Every record is tenant-scoped; every transaction posts to the two universal ledgers so
+balances and on-hand quantities are always **derived**, never hand-edited. See the
+[Module coverage map](NavERP-ERD.md#module-coverage-map-0-13) (reuse vs. add per module).
 
 ## Module Index
 
@@ -19,9 +44,37 @@ NavERP is the master catalog of all modules and sub-modules across the platform.
 12. Quality Management System (QMS)
 13. Document Management System (DMS)
 
+### Module status & app mapping
+
+| # | Module | Django app(s) | Status |
+|---|--------|---------------|--------|
+| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built; sub-module **0.1 complete** |
+| 1 | Customer Relationship Management (CRM) | `crm` | ⬜ Roadmap |
+| 2 | Accounting & Finance | `accounting` | ⬜ Roadmap |
+| 3 | Human Resource Management (HRM) | `hrm` | ⬜ Roadmap |
+| 4 | Supply Chain Management (SCM) | `scm` | ⬜ Roadmap |
+| 5 | Inventory Management System (IMS) | `inventory` | ⬜ Roadmap |
+| 6 | Procurement Management System | `procurement` | ⬜ Roadmap |
+| 7 | Project Management | `projects` | ⬜ Roadmap |
+| 8 | Sales Management System | `sales` | ⬜ Roadmap |
+| 9 | eCommerce Management System | `ecommerce` | ⬜ Roadmap |
+| 10 | Business Intelligence (BI) | `bi` | ⬜ Roadmap (read-only over the spine) |
+| 11 | Asset Management System | `assets` | ⬜ Roadmap |
+| 12 | Quality Management System (QMS) | `quality` | ⬜ Roadmap |
+| 13 | Document Management System (DMS) | `documents` | ⬜ Roadmap |
+
 ---
 
 ## 0. System Admin & Security
+
+> **Implementation status (this repo).** Module 0 is realized by four Django apps — `core` (tenant spine,
+> middleware, navigation, audit, shared CRUD), `accounts` (users, RBAC, auth, invites), `tenants` (sub-module
+> **0.1**), and `dashboard` (KPIs). Sub-module **0.1 Tenant & Subscription Management is fully built**
+> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). IAM/RBAC,
+> User & Organization management, and Audit (0.2 / 0.3 / 0.5 / 0.9) are substantially realized by `accounts` +
+> `core`; the remaining sub-modules below are on the roadmap. See [`README.md`](README.md) for the as-built
+> feature list and routes, and [`NavERP-ERD.md`](NavERP-ERD.md#as-built-foundation-schema-module-0--01) for the
+> concrete schema.
 
 ### 0.1 Tenant & Subscription Management
 - **Tenant Onboarding** — Self-service registration, domain provisioning, and initial configuration wizard.
