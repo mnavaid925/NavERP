@@ -1851,7 +1851,38 @@ git add 'README.md'; git commit -m 'docs(readme): accounting module — feature 
 - **Inter-account Transfers UI** — the two-JournalLine / two-BankTransaction pattern for inter-bank
   transfers is documented; a dedicated "Transfer" action view is a convenience UX deferred item.
 
-## Review notes
+## Review notes — Module 2 build outcome (2026-06-21)
 
-(filled in after the build + all 7 review agents complete)
+**Built:** 18 models (the GL spine, owned by `accounting` per L28), full CRUD + 9 workflow actions
+(post/void/approve/confirm/close/import-csv/reconcile) + 4 reports + dashboard, 51 templates, idempotent
+`seed_accounting`, LIVE_LINKS 2.1–2.5. Migrated clean to `nav_erp`; seeder idempotent; `manage.py check` clean;
+per-tenant posted ledger balances (Σdebit==Σcredit). Backend built solo (financial correctness); 51 templates via a
+6-agent parallel Workflow against a pinned context-var spec (zero L7 drift — smoke passed first try).
+
+**Verification:** custom GET smoke (81 routes 200/302, no comment leaks, cross-tenant IDOR 404); qa-smoke-tester
+50/50 (workflow paths, immutability, period-close, void-reversal, CSV idempotency, CSRF, POST-only); query-count
+checks (aging/trial-balance 8q, dashboard fixed-cost); test-writer **74 pytest tests** (suite 850 → **924**, no regressions).
+
+**Review agents (all 7 run, in order):**
+- **code-reviewer** → fixed: `payment_void` now posts a balanced GL reversal; `status` removed from `FiscalPeriodForm`
+  (privilege bypass); auth decorators outermost on all POST actions; `reconciliation_confirm` refreshes `updated_at`;
+  `invoice_post` warns on skipped GL; seeded payment carries a real JE. (False positives rejected: PaymentAllocation
+  FK scoping, posted-only delete guard, alloc.payment null guard, trial-balance sign — all verified non-issues.)
+- **explorer** → zero wiring gaps (routes, url tags, context vars, formsets, filter context all clean); 2 N+1 notes
+  routed to performance-reviewer.
+- **frontend-reviewer** → gated 10 admin-only action buttons behind `is_tenant_admin`; added nullable-FK guards;
+  removed hard-coded `$`/inline `text-align` in bill templates; hid Delete on non-open periods.
+- **performance-reviewer** → killed N+1s: dashboard cash-position (1 grouped aggregate, was N), AR/AP aging
+  (`paid_agg` annotation, was per-doc), added `journal_line__entry`/`matched_by` select_related, dropped unused JE
+  join, CSV import dedupes in one query + `bulk_create` inside `atomic()`.
+- **qa-smoke-tester** → 50/50 PASS, no code changes.
+- **security-reviewer** → fixed: `journal_line` cross-tenant scoping in `ReconciliationMatchForm` (H3); `status`
+  off Invoice/Bill forms + `source` off BankTransaction form (mass-assignment); `invoice_post` + Currency CRUD
+  now `@tenant_admin_required` (H2/L1); CSV bank-account ownership re-check (M2). Added `recompute_payment_status`
+  so partial/paid derive from *confirmed* allocations (lifecycle completion).
+- **test-writer** → 74 tests across double-entry / lifecycle / security / csv / seeder.
+
+**Deferred (documented in Section 7):** invoice/bill **void** actions + per-tenant configurable AR/AP control
+accounts (today the auto-post heuristic picks the first 1100/2000 account), gl_account_ledger pagination,
+6-week trend single-query (TruncWeek), bank feeds/OCR/forecasting/portal/dunning, sub-modules 2.6–2.15.
 
