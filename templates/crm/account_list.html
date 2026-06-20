@@ -18,7 +18,23 @@
         <div class="form-group" style="flex:1; min-width:200px;">
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search accounts…">
         </div>
-        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Search</button>
+        <div class="form-group">
+          <select name="industry" class="form-select">
+            <option value="">All industries</option>
+            {% for val, label in industry_choices %}
+              <option value="{{ val }}" {% if request.GET.industry == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
         <a href="{% url 'crm:account_list' %}" class="btn btn-outline">Reset</a>
       </form>
     </div>
