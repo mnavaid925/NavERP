@@ -14,12 +14,11 @@
   </div>
   <div class="page-actions">
     {% if obj.status == 'pending' %}
-    <form method="post" action="{% url 'crm:approvalrequest_approve' obj.pk %}" onsubmit="return confirm('Approve this request?');" style="display:inline-flex; gap:.5rem; align-items:center;">
+    <form method="post" action="{% url 'crm:approvalrequest_approve' obj.pk %}" onsubmit="return confirm('Approve this request?');">
       {% csrf_token %}
-      <input type="text" name="reason" class="form-input" placeholder="Reason (optional)">
       <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Approve</button>
     </form>
-    <form method="post" action="{% url 'crm:approvalrequest_reject' obj.pk %}" onsubmit="return confirm('Reject this request?');" style="display:inline;">
+    <form method="post" action="{% url 'crm:approvalrequest_reject' obj.pk %}" onsubmit="return confirm('Reject this request?');">
       {% csrf_token %}
       <button type="submit" class="btn btn-outline"><i data-lucide="x"></i> Reject</button>
     </form>
