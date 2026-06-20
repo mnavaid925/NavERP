@@ -168,3 +168,131 @@ class ReconciliationMatchAdmin(admin.ModelAdmin):
     list_display = ("bank_transaction", "payment", "journal_line", "is_confirmed", "matched_by", "tenant")
     list_filter = ("is_confirmed", "tenant")
     readonly_fields = ("matched_by", "matched_at")
+
+
+# ===================== Advanced sub-modules 2.6–2.15 =====================
+from .models_advanced import (  # noqa: E402
+    AssetDisposal,
+    Budget,
+    BudgetLine,
+    CostAllocation,
+    FixedAsset,
+    IntegrationConfig,
+    IntercompanyTransaction,
+    InternalControl,
+    JobCostEntry,
+    PayrollRun,
+    Project,
+    ScheduledReport,
+    TaxCode,
+    TaxReturn,
+)
+
+
+@admin.register(FixedAsset)
+class FixedAssetAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "category", "method", "acquisition_cost",
+                    "accumulated_depreciation", "status", "tenant")
+    list_filter = ("status", "method", "tenant")
+    search_fields = ("number", "name", "category")
+    readonly_fields = ("number", "accumulated_depreciation", "last_depreciation_date", "created_at", "updated_at")
+
+
+@admin.register(AssetDisposal)
+class AssetDisposalAdmin(admin.ModelAdmin):
+    list_display = ("number", "asset", "disposal_date", "proceeds", "gain_loss", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "asset__name")
+    readonly_fields = ("number", "gain_loss", "journal_entry", "created_at", "updated_at")
+
+
+@admin.register(CostAllocation)
+class CostAllocationAdmin(admin.ModelAdmin):
+    list_display = ("number", "description", "allocation_date", "amount", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "description")
+    readonly_fields = ("number", "journal_entry", "created_at", "updated_at")
+
+
+@admin.register(PayrollRun)
+class PayrollRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "pay_date", "gross_wages", "net_pay", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number",)
+    readonly_fields = ("number", "net_pay", "journal_entry", "created_at", "updated_at")
+
+
+@admin.register(Project)
+class ProjectAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "client", "billing_method", "budget_amount", "status", "tenant")
+    list_filter = ("status", "billing_method", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(JobCostEntry)
+class JobCostEntryAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "kind", "amount", "status", "tenant")
+    list_filter = ("status", "kind", "tenant")
+    search_fields = ("number", "project__name")
+    readonly_fields = ("number", "journal_entry", "created_at", "updated_at")
+
+
+@admin.register(IntercompanyTransaction)
+class IntercompanyTransactionAdmin(admin.ModelAdmin):
+    list_display = ("number", "description", "from_org_unit", "to_org_unit", "amount", "eliminated", "status", "tenant")
+    list_filter = ("status", "eliminated", "tenant")
+    search_fields = ("number", "description")
+    readonly_fields = ("number", "journal_entry", "created_at", "updated_at")
+
+
+@admin.register(TaxCode)
+class TaxCodeAdmin(admin.ModelAdmin):
+    list_display = ("name", "jurisdiction", "tax_type", "rate_pct", "is_active", "tenant")
+    list_filter = ("tax_type", "is_active", "tenant")
+    search_fields = ("name", "jurisdiction")
+
+
+@admin.register(TaxReturn)
+class TaxReturnAdmin(admin.ModelAdmin):
+    list_display = ("number", "tax_code", "period_end", "tax_due", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ScheduledReport)
+class ScheduledReportAdmin(admin.ModelAdmin):
+    list_display = ("name", "report_type", "frequency", "is_active", "tenant")
+    list_filter = ("report_type", "frequency", "is_active", "tenant")
+    search_fields = ("name",)
+    readonly_fields = ("last_run",)
+
+
+class BudgetLineInline(admin.TabularInline):
+    model = BudgetLine
+    extra = 0
+
+
+@admin.register(Budget)
+class BudgetAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "fiscal_period", "version", "status", "tenant")
+    list_filter = ("status", "version", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [BudgetLineInline]
+
+
+@admin.register(InternalControl)
+class InternalControlAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "control_type", "risk_level", "last_result", "status", "tenant")
+    list_filter = ("control_type", "risk_level", "status", "last_result", "tenant")
+    search_fields = ("code", "name")
+
+
+@admin.register(IntegrationConfig)
+class IntegrationConfigAdmin(admin.ModelAdmin):
+    list_display = ("name", "provider", "category", "status", "is_active", "tenant")
+    list_filter = ("category", "status", "is_active", "tenant")
+    search_fields = ("name", "provider")
+    readonly_fields = ("api_key_prefix", "api_key_hash", "last_sync")
