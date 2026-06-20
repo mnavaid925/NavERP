@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -229,6 +230,9 @@ def invite_list(request):
 
 @tenant_admin_required
 def invite_create(request):
+    if request.tenant is None:  # tenant-less superuser must not create orphan invites
+        messages.error(request, "Select a tenant workspace before sending invites.")
+        return redirect("dashboard:home")
     if request.method == "POST":
         form = UserInviteForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -272,18 +276,19 @@ def invite_accept(request, token):
         invite.save(update_fields=["status"])
     form = InviteAcceptForm(request.POST or None)
     if valid and request.method == "POST" and form.is_valid():
-        user = UserModel.objects.create_user(
-            email=invite.email,
-            username=form.cleaned_data["username"],
-            password=form.cleaned_data["password1"],
-            first_name=form.cleaned_data["first_name"],
-            last_name=form.cleaned_data.get("last_name", ""),
-            tenant=invite.tenant,
-            role=invite.role,
-        )
-        invite.status = "accepted"
-        invite.accepted_at = timezone.now()
-        invite.save(update_fields=["status", "accepted_at"])
+        with transaction.atomic():
+            user = UserModel.objects.create_user(
+                email=invite.email,
+                username=form.cleaned_data["username"],
+                password=form.cleaned_data["password1"],
+                first_name=form.cleaned_data["first_name"],
+                last_name=form.cleaned_data.get("last_name", ""),
+                tenant=invite.tenant,
+                role=invite.role,
+            )
+            invite.status = "accepted"
+            invite.accepted_at = timezone.now()
+            invite.save(update_fields=["status", "accepted_at"])
         auth_user = authenticate(request, username=user.email, password=form.cleaned_data["password1"])
         if auth_user is not None:
             login(request, auth_user)
