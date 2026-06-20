@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Workflow Rules{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Workflow Rules</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Workflow Rules
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:workflowrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search rules…">
+      <select name="is_active" class="form-select">
+        <option value="">All statuses</option>
+        <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+        <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+      </select>
+      <select name="trigger_entity" class="form-select">
+        <option value="">All entities</option>
+        {% for val,label in entity_choices %}<option value="{{ val }}" {% if request.GET.trigger_entity == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:workflowrule_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Name</th>
+            <th>Trigger</th>
+            <th>Active</th>
+            <th>Owner</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'crm:workflowrule_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+            <td>{{ obj.name }}</td>
+            <td><span class="badge badge-info">{{ obj.get_trigger_entity_display }}</span> {{ obj.get_trigger_event_display }}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+            <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:workflowrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'crm:workflowrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'crm:workflowrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="git-branch"></i>
+                <h3>No rules found</h3>
+                <p>Create your first workflow rule to automate CRM actions.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
