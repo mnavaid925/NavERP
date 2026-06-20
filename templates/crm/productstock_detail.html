@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:productstock_list' %}">Products</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:productstock_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:productstock_delete' obj.pk %}" onsubmit="return confirm('Delete this product?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt>Number</dt>
+        <dd>{{ obj.number }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Name</dt>
+        <dd>{{ obj.name }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>SKU</dt>
+        <dd>{{ obj.sku|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>On-hand qty</dt>
+        <dd>{{ obj.on_hand_qty }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Reorder level</dt>
+        <dd>{{ obj.reorder_level }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Unit cost</dt>
+        <dd>{{ obj.unit_cost }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Low stock</dt>
+        <dd>{% if obj.is_low_stock %}<span class="badge badge-red">Below reorder level</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Active</dt>
+        <dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Created</dt>
+        <dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div>
+</div>
+
+<a href="{% url 'crm:productstock_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
