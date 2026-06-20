@@ -4,6 +4,7 @@ spine Parties seeded by ``seed_core`` (no duplicate customers/contacts). Run aft
 ``seed_core`` / ``seed_accounts`` / ``seed_tenants``.
 """
 import datetime
+import secrets
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -14,13 +15,32 @@ from django.utils import timezone
 from apps.core.models import Party, Tenant
 from apps.crm.models import (
     AccountProfile,
+    ApprovalRequest,
     Campaign,
     Case,
     ContactProfile,
+    ContractDocument,
+    CrmMilestone,
+    CrmProject,
     CrmTask,
+    DocTemplate,
+    Expense,
+    HealthScoreConfig,
     KnowledgeArticle,
     Lead,
+    OnboardingPlan,
+    OnboardingStep,
     Opportunity,
+    PartnerPortalAccess,
+    ProductStock,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    SignerRecord,
+    Survey,
+    Timesheet,
+    WorkflowLog,
+    WorkflowRule,
+    compute_health_score,
 )
 
 User = get_user_model()
@@ -68,9 +88,11 @@ class Command(BaseCommand):
             # parties gain firmographics/contact details without a --flush.
             self._backfill_profiles(tenant)
             if Lead.objects.filter(tenant=tenant).exists():
-                self.stdout.write(f"{tenant.name}: CRM data already exists — skipping")
-                continue
-            self._seed_tenant(tenant)
+                self.stdout.write(f"{tenant.name}: CRM base data already exists — skipping base seed")
+            else:
+                self._seed_tenant(tenant)
+            # 1.7–1.12 extension data — runs after base data exists; self-guards on Expense.
+            self._seed_extension(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -159,3 +181,161 @@ class Command(BaseCommand):
                 address_country="USA", source="event", owner=owner,
                 description="Primary point of contact.",
             )
+
+    def _seed_extension(self, tenant):
+        """Idempotently seed the 1.7–1.12 demo data (expenses, projects/milestones/timesheets,
+        doc templates/contracts/signers, workflows/approvals, onboarding/health/surveys,
+        product stock/purchase orders/partner portal). Guard: skip if Expenses already exist."""
+        if Expense.objects.filter(tenant=tenant).exists():
+            return
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        account = Party.objects.filter(tenant=tenant, kind="organization").first()
+        won_opp = Opportunity.objects.filter(tenant=tenant, stage="closed_won").first()
+        any_opp = Opportunity.objects.filter(tenant=tenant).first()
+        a_case = Case.objects.filter(tenant=tenant).first()
+        acct_label = account.name if account else "Client"
+        today = timezone.localdate()
+        now = timezone.now()
+        td = datetime.timedelta
+
+        # --- 1.8 Projects + milestones + timesheets
+        project = CrmProject.objects.create(
+            tenant=tenant, name=f"{acct_label} — Delivery", account=account,
+            source_opportunity=won_opp, status="active", start_date=today - td(days=10),
+            end_date=today + td(days=50), budget=(won_opp.amount if won_opp else Decimal("30000")),
+            owner=owner, description="Delivery project for the won deal.")
+        CrmProject.objects.create(
+            tenant=tenant, name="Discovery Engagement", account=account, status="planning",
+            budget=Decimal("12000"), owner=owner, description="Pre-sale scoping engagement.")
+        for i, (title, kind, status, off) in enumerate([
+            ("Kickoff", "milestone", "completed", -5),
+            ("Build Phase", "task", "in_progress", 10),
+            ("Go-Live", "milestone", "not_started", 40),
+        ]):
+            CrmMilestone.objects.create(
+                tenant=tenant, project=project, title=title, kind=kind, status=status,
+                assignee=owner, order=i, start_date=today, due_date=today + td(days=off))
+        for hrs, billable, status, off in [
+            (Decimal("7.50"), True, "approved", -3),
+            (Decimal("4.00"), True, "submitted", -1),
+            (Decimal("2.00"), False, "draft", 0),
+        ]:
+            Timesheet.objects.create(
+                tenant=tenant, project=project, employee=owner, client=account,
+                date=today + td(days=off), hours=hrs, is_billable=billable, status=status,
+                approved_by=(owner if status == "approved" else None),
+                description="Work logged against the project.")
+
+        # --- 1.7 Expenses (linked to the won deal / project)
+        for cat, amt, status, off in [
+            ("travel", Decimal("450.00"), "approved", -7),
+            ("meals", Decimal("85.50"), "submitted", -3),
+            ("software", Decimal("120.00"), "draft", -1),
+        ]:
+            Expense.objects.create(
+                tenant=tenant, opportunity=won_opp, project=project, category=cat, amount=amt,
+                currency_code="USD", expense_date=today + td(days=off), status=status,
+                submitted_by=owner, approved_by=(owner if status == "approved" else None),
+                description=f"Deal-related {cat} cost.")
+
+        # --- 1.9 Doc templates + contracts + signers
+        tpl = DocTemplate.objects.create(
+            tenant=tenant, name="Standard Service Contract", template_type="contract",
+            is_active=True, owner=owner,
+            body=("<h1>Service Agreement</h1><p>This agreement is between {{ account.name }} "
+                  "and our company, dated {{ today }}. Total contract value "
+                  "{{ opportunity.amount }}.</p>"))
+        DocTemplate.objects.create(
+            tenant=tenant, name="Sales Proposal", template_type="proposal", is_active=True,
+            owner=owner, body="<h1>Proposal for {{ account.name }}</h1><p>Prepared {{ today }}.</p>")
+        signed = ContractDocument.objects.create(
+            tenant=tenant, name=f"MSA — {acct_label}", template=tpl, opportunity=won_opp,
+            account=account, status="signed", current_version=1, signed_at=now, owner=owner,
+            body_snapshot="<h1>Service Agreement</h1><p>Signed copy.</p>")
+        draft = ContractDocument.objects.create(
+            tenant=tenant, name="Mutual NDA (Draft)", template=tpl, account=account,
+            status="draft", owner=owner)
+        SignerRecord.objects.create(
+            tenant=tenant, contract=signed, signer_name="Jordan Lee",
+            signer_email="jordan@example.com", token=secrets.token_urlsafe(32), order=1,
+            viewed_at=now, signed_at=now)
+        SignerRecord.objects.create(
+            tenant=tenant, contract=draft, signer_name="Pat Morgan",
+            signer_email="pat@example.com", token=secrets.token_urlsafe(32), order=1)
+
+        # --- 1.10 Workflow rules + log + approvals
+        rule = WorkflowRule.objects.create(
+            tenant=tenant, name="Auto-task on won deal", is_active=True,
+            trigger_entity="opportunity", trigger_event="status_changed", trigger_field="stage",
+            trigger_value="closed_won",
+            conditions=[{"field": "amount", "operator": ">", "value": 10000}],
+            actions=[{"type": "create_task", "params": {"subject": "Kick off delivery"}}],
+            owner=owner)
+        WorkflowRule.objects.create(
+            tenant=tenant, name="Email on new case", is_active=False, trigger_entity="case",
+            trigger_event="created",
+            actions=[{"type": "send_email", "params": {"template": "new_case"}}], owner=owner)
+        WorkflowLog.objects.create(
+            tenant=tenant, rule=rule, record_label=(won_opp.number if won_opp else "OPP-00001"),
+            status="success")
+        ApprovalRequest.objects.create(
+            tenant=tenant, rule=rule, subject="Approve 25% discount on deal",
+            record_label=(any_opp.number if any_opp else ""), approver=owner, requested_by=owner,
+            threshold_field="discount_pct", threshold_value=Decimal("25"), status="pending")
+        ApprovalRequest.objects.create(
+            tenant=tenant, subject="Approve vendor contract", approver=owner, requested_by=owner,
+            status="approved", approved_at=now, reason="Within budget.")
+
+        # --- 1.11 Onboarding + health + surveys
+        plan = OnboardingPlan.objects.create(
+            tenant=tenant, account=account, name=f"{acct_label} — 90-Day Onboarding",
+            status="active", target_date=today + td(days=90), owner=owner,
+            description="Standard new-client onboarding checklist.")
+        for i, (title, off, done) in enumerate([
+            ("Welcome & kickoff call", -5, True),
+            ("Product training session", 5, False),
+            ("30-day go-live review", 30, False),
+        ]):
+            OnboardingStep.objects.create(
+                tenant=tenant, plan=plan, order=i, title=title, assignee=owner,
+                due_date=today + td(days=off), completed_at=(now if done else None))
+
+        HealthScoreConfig.objects.get_or_create(tenant=tenant)
+        Survey.objects.create(
+            tenant=tenant, account=account, survey_type="nps", trigger="post_close", score=9,
+            feedback_text="Great onboarding experience!", sent_at=now - td(days=5),
+            responded_at=now - td(days=4))
+        Survey.objects.create(
+            tenant=tenant, account=account, survey_type="csat", trigger="post_ticket",
+            related_case=a_case, score=4, feedback_text="Quick resolution.",
+            sent_at=now - td(days=2), responded_at=now - td(days=2))
+        Survey.objects.create(
+            tenant=tenant, account=account, survey_type="nps", trigger="manual", score=4,
+            feedback_text="A few rough edges to fix.", sent_at=now - td(days=1))
+        # Compute a health score per org Party (after surveys/cases/tasks exist).
+        for party in Party.objects.filter(tenant=tenant, kind="organization")[:3]:
+            compute_health_score(party, tenant)
+
+        # --- 1.12 Product stock + purchase order + partner portal
+        widget = ProductStock.objects.create(
+            tenant=tenant, name="Standard Widget", sku="WID-100", on_hand_qty=Decimal("120"),
+            reorder_level=Decimal("50"), unit_cost=Decimal("12.50"))
+        gizmo = ProductStock.objects.create(
+            tenant=tenant, name="Premium Gizmo", sku="GIZ-200", on_hand_qty=Decimal("8"),
+            reorder_level=Decimal("25"), unit_cost=Decimal("40.00"))  # below reorder = low stock
+        po = PurchaseOrder.objects.create(
+            tenant=tenant, vendor=account, status="sent", order_date=today - td(days=2),
+            expected_date=today + td(days=7), owner=owner, notes="Restock order.")
+        PurchaseOrderLine.objects.create(
+            tenant=tenant, purchase_order=po, product=gizmo, item_name="Premium Gizmo",
+            quantity=Decimal("50"), unit_price=Decimal("40.00"), order=0)
+        PurchaseOrderLine.objects.create(
+            tenant=tenant, purchase_order=po, product=widget, item_name="Standard Widget",
+            quantity=Decimal("100"), unit_price=Decimal("12.50"), order=1)
+        po.recalc_total()
+        PartnerPortalAccess.objects.create(
+            tenant=tenant, partner_party=account, access_level="read_only", can_view_stock=True,
+            can_register_leads=False, is_active=True)
+
+        self.stdout.write(self.style.SUCCESS(f"{tenant.name}: seeded CRM 1.7–1.12 extension data"))
