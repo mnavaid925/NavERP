@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Budget Variance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Budget Variance</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:budget_list' %}">Budgets</a><span class="sep">›</span><span>Variance Report</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <select name="budget" class="form-select" onchange="this.form.submit()">
+            <option value="">Select a budget…</option>
+            {% for b in budgets %}
+              <option value="{{ b.pk }}" {% if selected.pk and request.GET.budget == b.pk|stringformat:"d" %}selected{% endif %}>{{ b.number }} · {{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="bar-chart-3"></i> Run</button>
+        <a href="{% url 'accounting:budget_variance' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    {% if selected %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Account</th><th>Org Unit</th><th>Budget</th><th>Actual</th><th>Variance</th></tr></thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td><span class="fw-600">{{ row.line.gl_account.code }}</span> · {{ row.line.gl_account.name }}</td>
+                <td>{% if row.line.org_unit %}{{ row.line.org_unit.name }}{% else %}—{% endif %}</td>
+                <td>{{ row.line.amount|floatformat:2 }}</td>
+                <td>{{ row.actual|floatformat:2 }}</td>
+                <td class="{% if row.variance < 0 %}text-danger{% endif %}">{{ row.variance|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="list-checks"></i><p>This budget has no lines.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+          {% if rows %}
+            <tfoot>
+              <tr class="fw-600">
+                <td colspan="2">Total</td>
+                <td>{{ total_budget|floatformat:2 }}</td>
+                <td>{{ total_actual|floatformat:2 }}</td>
+                <td class="{% if total_variance < 0 %}text-danger{% endif %}">{{ total_variance|floatformat:2 }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No budget selected</h3><p>Pick a budget above to see budget-vs-actual variance.</p></div>
+    {% endif %}
+  </div>
+
+  <a href="{% url 'accounting:budget_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to budgets</a>
+{% endblock %}
