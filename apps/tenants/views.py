@@ -65,7 +65,7 @@ def subscription_detail(request, pk):
     obj = get_object_or_404(Subscription, pk=pk, tenant=request.tenant)
     return render(request, "tenants/subscription_detail.html", {
         "obj": obj,
-        "invoices": obj.invoices.all(),
+        "invoices": obj.invoices.order_by("-issued_on")[:50],  # cap embedded list
         "stripe_enabled": stripe_utils.is_enabled(),
     })
 
