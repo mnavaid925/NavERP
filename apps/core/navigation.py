@@ -74,6 +74,36 @@ LIVE_LINKS = {
         "Party Relationships": "core:partyrelationship_list",  # extra
         "Documents": "core:document_list",              # extra
     },
+    # ========================= Module 1 — Customer Relationship Management (CRM)
+    # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
+    "1.1": {
+        "Contacts": "crm:contact_list",                 # bullet (person Party lens)
+        "Accounts (Companies)": "crm:account_list",     # bullet (organization Party lens)
+        "Leads (Potential Customers)": "crm:lead_list", # bullet
+    },
+    # 1.2 Sales Force Automation (SFA)
+    "1.2": {
+        "Opportunity Management (Deals)": "crm:opportunity_list",  # bullet
+        "Forecasting": "crm:overview",                  # bullet (weighted pipeline on the overview)
+    },
+    # 1.3 Marketing Automation
+    "1.3": {
+        "Campaign Management": "crm:campaign_list",      # bullet
+    },
+    # 1.4 Customer Service & Support (Help Desk)
+    "1.4": {
+        "Case / Ticket Management": "crm:case_list",         # bullet
+        "Solutions & Knowledge Base": "crm:knowledgearticle_list",  # bullet
+    },
+    # 1.5 Activity & Communication Management
+    "1.5": {
+        "Task Management": "crm:task_list",              # bullet
+    },
+    # 1.6 Analytics & Reporting
+    "1.6": {
+        "Dashboards": "crm:overview",                    # bullet
+        "Standard Reports": "crm:overview",              # bullet
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
