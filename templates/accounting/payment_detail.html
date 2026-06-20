@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:payment_list' %}">Payments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'accounting:payment_confirm' obj.pk %}" onsubmit="return confirm('Confirm this payment?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Confirm</button>
+        </form>
+        <a href="{% url 'accounting:payment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounting:payment_delete' obj.pk %}" onsubmit="return confirm('Delete this payment?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% elif obj.status == 'confirmed' %}
+        <form method="post" action="{% url 'accounting:payment_void' obj.pk %}" onsubmit="return confirm('Void this payment?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Void</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Direction</dt><dd><span class="badge badge-{% if obj.direction == 'in' %}green{% else %}red{% endif %}">{{ obj.get_direction_display }}</span></dd></div>
+      <div class="detail-item"><dt>Party</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Bank Account</dt><dd>{% if obj.bank_account %}{{ obj.bank_account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Method</dt><dd>{{ obj.get_payment_method_display }}</dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.payment_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'confirmed' %}green{% elif obj.status == 'void' %}red{% else %}info{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.reference %}<p style="margin-top:1rem;">{{ obj.reference }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Allocations</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Invoice</th><th>Bill</th><th>Allocated</th><th>Discount Taken</th></tr></thead>
+        <tbody>
+          {% for a in allocations %}
+            <tr>
+              <td>{% if a.invoice %}{{ a.invoice.number }}{% else %}—{% endif %}</td>
+              <td>{% if a.bill %}{{ a.bill.number }}{% else %}—{% endif %}</td>
+              <td>{{ a.allocated_amount|floatformat:2 }}</td>
+              <td>{{ a.discount_taken|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="list-checks"></i><p>No allocations recorded.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Unallocated</dt><dd class="fw-600">{{ unallocated|floatformat:2 }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:payment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
