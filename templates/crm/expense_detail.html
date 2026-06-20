@@ -13,6 +13,12 @@
     </nav>
   </div>
   <div class="page-actions">
+    {% if obj.status == 'draft' %}
+    <form method="post" action="{% url 'crm:expense_submit' obj.pk %}" style="display:inline;" onsubmit="return confirm('Submit this expense for approval?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="send"></i> Submit</button>
+    </form>
+    {% endif %}
     {% if obj.status == 'submitted' %}
     <form method="post" action="{% url 'crm:expense_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve this expense?');">
       {% csrf_token %}
