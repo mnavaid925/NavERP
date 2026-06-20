@@ -12,7 +12,16 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import Party, Tenant
-from apps.crm.models import Campaign, Case, CrmTask, KnowledgeArticle, Lead, Opportunity
+from apps.crm.models import (
+    AccountProfile,
+    Campaign,
+    Case,
+    ContactProfile,
+    CrmTask,
+    KnowledgeArticle,
+    Lead,
+    Opportunity,
+)
 
 User = get_user_model()
 
@@ -55,6 +64,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("No tenants found — run `seed_core` first."))
             return
         for tenant in tenants:
+            # Backfill Account/Contact profiles for every tenant (idempotent) so existing demo
+            # parties gain firmographics/contact details without a --flush.
+            self._backfill_profiles(tenant)
             if Lead.objects.filter(tenant=tenant).exists():
                 self.stdout.write(f"{tenant.name}: CRM data already exists — skipping")
                 continue
@@ -121,3 +133,29 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"{tenant.name}: seeded CRM leads/opportunities/campaigns/cases/KB/tasks"))
+
+    def _backfill_profiles(self, tenant):
+        """Idempotently add a demo AccountProfile + ContactProfile to the tenant's first
+        organization / person Party so the rich Account/Contact fields show example data."""
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        org = Party.objects.filter(tenant=tenant, kind="organization").first()
+        if org and not AccountProfile.objects.filter(party=org).exists():
+            AccountProfile.objects.create(
+                tenant=tenant, party=org, industry="technology", website="https://example.com",
+                phone="+1 555 0100", email=f"info@{org.name.split()[0].lower()}.example",
+                annual_revenue=Decimal("5000000"), employee_count=250,
+                address_line="100 Market St", address_city="Springfield", address_state="CA",
+                address_postal="94000", address_country="USA", source="referral", owner=owner,
+                description="Key strategic account.",
+            )
+        person = Party.objects.filter(tenant=tenant, kind="person").first()
+        if person and not ContactProfile.objects.filter(party=person).exists():
+            ContactProfile.objects.create(
+                tenant=tenant, party=person, job_title="Operations Lead", department="Operations",
+                email=f"{person.name.split()[0].lower()}@example.com", phone="+1 555 0111",
+                mobile="+1 555 0112", account=org, address_line="100 Market St",
+                address_city="Springfield", address_state="CA", address_postal="94000",
+                address_country="USA", source="event", owner=owner,
+                description="Primary point of contact.",
+            )
