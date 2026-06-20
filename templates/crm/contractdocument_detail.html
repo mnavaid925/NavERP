@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Contract{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:contractdocument_list' %}">Contracts</a>
+      <span class="sep">›</span>
+      <span>{{ obj.number }}</span>
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:contractdocument_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:contractdocument_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Template</dt><dd>{% if obj.template %}<a href="{% url 'crm:doctemplate_detail' obj.template.pk %}">{{ obj.template.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.opportunity %}<a href="{% url 'crm:opportunity_detail' obj.opportunity.pk %}">{{ obj.opportunity.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Account</dt><dd>{% if obj.account %}<a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Version</dt><dd>v{{ obj.current_version }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'viewed' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'signed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'declined' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'expired' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'archived' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Expires</dt><dd>{{ obj.expires_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Signed at</dt><dd>{{ obj.signed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Body snapshot</h2></div>
+  <div class="card-body">
+    <pre style="white-space:pre-wrap;">{{ obj.body_snapshot|default:"(not yet generated)" }}</pre>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Signers</h2></div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Order</th>
+            <th>Viewed</th>
+            <th>Signed</th>
+            <th>Declined</th>
+            <th>Link</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in signers %}
+          <tr>
+            <td>{{ s.signer_name }}</td>
+            <td>{{ s.signer_email }}</td>
+            <td>{{ s.order }}</td>
+            <td>{{ s.viewed_at|date:"M d, H:i"|default:"—" }}</td>
+            <td>{{ s.signed_at|date:"M d, H:i"|default:"—" }}</td>
+            <td>{{ s.declined_at|date:"M d, H:i"|default:"—" }}</td>
+            <td><a href="{% url 'crm:sign_document' s.token %}" target="_blank">Sign URL</a></td>
+            <td>
+              <div class="table-actions">
+                <form method="post" action="{% url 'crm:contractdocument_remove_signer' obj.pk s.pk %}" onsubmit="return confirm('Remove this signer?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Remove"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="users"></i>
+                <h3>No signers yet</h3>
+                <p>Add a signer below.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="{% url 'crm:contractdocument_add_signer' obj.pk %}" style="margin-top:1rem;">
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in signer_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="form-help">{{ field.help_text }}</p>{% endif %}
+          {% for error in field.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><i data-lucide="user-plus"></i> Add signer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<a href="{% url 'crm:contractdocument_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
