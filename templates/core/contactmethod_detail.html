@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Contact Method{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Contact Method</h1>
+      <div class="breadcrumb"><a href="{% url 'core:contactmethod_list' %}">Contact Methods</a><span class="sep">›</span><span>Contact Method</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:contactmethod_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:contactmethod_delete' obj.pk %}" onsubmit="return confirm('Delete this contact method?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Party</dt><dd>{% if obj.party %}{{ obj.party }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd></div>
+      <div class="detail-item"><dt>Value</dt><dd>{{ obj.value }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'core:contactmethod_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
