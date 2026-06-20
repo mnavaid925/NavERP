@@ -36,7 +36,13 @@
       <div class="detail-item"><dt>Est. Value</dt><dd>{{ obj.est_value }}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
       {% if obj.converted_party %}
-        <div class="detail-item"><dt>Converted to</dt><dd><a href="{% url 'crm:account_detail' obj.converted_party.pk %}">{{ obj.converted_party.name }}</a></dd></div>
+        <div class="detail-item"><dt>Converted to</dt><dd>
+          {% if obj.converted_party.kind == 'organization' %}
+            <a href="{% url 'crm:account_detail' obj.converted_party.pk %}">{{ obj.converted_party.name }}</a>
+          {% else %}
+            <a href="{% url 'crm:contact_detail' obj.converted_party.pk %}">{{ obj.converted_party.name }}</a>
+          {% endif %}
+        </dd></div>
       {% endif %}
       <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
     </dl>
