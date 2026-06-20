@@ -67,6 +67,7 @@ class AccountProfileAdmin(admin.ModelAdmin):
     search_fields = ("party__name", "phone", "email")
     raw_id_fields = ("party", "parent_account")
     readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("party", "owner", "tenant")
 
 
 @admin.register(ContactProfile)
@@ -76,3 +77,4 @@ class ContactProfileAdmin(admin.ModelAdmin):
     search_fields = ("party__name", "job_title", "phone", "email")
     raw_id_fields = ("party", "account")
     readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("party", "account", "owner", "tenant")
