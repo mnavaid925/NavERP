@@ -7,8 +7,10 @@ number (LEAD-/OPP-/CAM-/CASE-/KB-/TASK-) assigned in ``save()`` via the shared
 ``apps.core.utils.next_number`` helper, with the retry-on-collision pattern proven in
 ``tenants.SubscriptionInvoice``.
 """
+from decimal import Decimal
+
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
@@ -142,10 +144,15 @@ class Campaign(TenantNumbered):
 
     @property
     def roi(self):
-        """Return on investment %, or None when no actual spend is recorded."""
-        if not self.budget_actual:
+        """Return on investment %, or None when no actual spend is recorded.
+
+        Casts to Decimal so the property is correct on a freshly-created (un-round-tripped)
+        instance, where DecimalField values are still plain strings.
+        """
+        budget = Decimal(self.budget_actual or 0)
+        if not budget:
             return None
-        return (self.actual_revenue - self.budget_actual) / self.budget_actual * 100
+        return (Decimal(self.actual_revenue or 0) - budget) / budget * 100
 
     def __str__(self):
         return f"{self.number} · {self.name}"
@@ -189,8 +196,11 @@ class Opportunity(TenantNumbered):
 
     @property
     def weighted_amount(self):
-        """Pipeline-forecast value: amount × probability (used by the overview forecast)."""
-        return (self.amount or 0) * self.probability / 100
+        """Pipeline-forecast value: amount × probability ÷ 100.
+
+        Casts to Decimal so it is correct on a freshly-created instance (where the
+        DecimalField value is still a string before the first DB round-trip)."""
+        return Decimal(self.amount or 0) * self.probability / 100
 
     @property
     def is_open(self):
