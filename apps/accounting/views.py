@@ -97,6 +97,27 @@ def _open_period(tenant):
     return FiscalPeriod.objects.filter(tenant=tenant, status="open").order_by("-start_date").first()
 
 
+def _reverse_journal_entry(tenant, user, original):
+    """Post a balanced reversal of a posted ``JournalEntry`` (debits/credits swapped) and mark the
+    original ``void``. The single point of truth for voiding any posted GL entry (manual JE *or* the
+    JE behind a payment) so the ledger always stays balanced. Caller wraps this in atomic()."""
+    reversal = JournalEntry.objects.create(
+        tenant=tenant, entry_type="reversal", status="posted",
+        fiscal_period=original.fiscal_period if (original.fiscal_period and original.fiscal_period.is_open) else _open_period(tenant),
+        entry_date=timezone.localdate(), description=f"Reversal of {original.number}",
+        reversal_of=original, created_by=user, approved_by=user, posted_at=timezone.now(),
+    )
+    for ln in original.lines.all():
+        JournalLine.objects.create(
+            entry=reversal, gl_account=ln.gl_account, debit=ln.credit, credit=ln.debit,
+            description=f"Reversal: {ln.description}", party=ln.party, org_unit=ln.org_unit,
+            currency=ln.currency,
+        )
+    original.status = "void"
+    original.save(update_fields=["status", "updated_at"])
+    return reversal
+
+
 # ============================================================== 2.1 Dashboard + reports
 @login_required
 def accounting_dashboard(request):
@@ -333,8 +354,8 @@ def fiscal_period_delete(request, pk):
     return crud_delete(request, model=FiscalPeriod, pk=pk, success_url="accounting:fiscal_period_list")
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def fiscal_period_close(request, pk):
     period = get_object_or_404(FiscalPeriod, pk=pk, tenant=request.tenant)
     if period.status != "open":
@@ -438,8 +459,8 @@ def journal_entry_delete(request, pk):
     return crud_delete(request, model=JournalEntry, pk=pk, success_url="accounting:journal_entry_list")
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def journal_entry_post(request, pk):
     entry = get_object_or_404(JournalEntry, pk=pk, tenant=request.tenant)
     if entry.is_locked:
@@ -460,29 +481,15 @@ def journal_entry_post(request, pk):
     return redirect("accounting:journal_entry_detail", pk=pk)
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def journal_entry_void(request, pk):
     entry = get_object_or_404(JournalEntry, pk=pk, tenant=request.tenant)
     if entry.status != "posted":
         messages.error(request, "Only a posted entry can be voided.")
         return redirect("accounting:journal_entry_detail", pk=pk)
     with transaction.atomic():
-        reversal = JournalEntry.objects.create(
-            tenant=request.tenant, entry_type="reversal", status="posted",
-            fiscal_period=entry.fiscal_period if (entry.fiscal_period and entry.fiscal_period.is_open) else _open_period(request.tenant),
-            entry_date=timezone.localdate(), description=f"Reversal of {entry.number}",
-            reversal_of=entry, created_by=request.user, approved_by=request.user,
-            posted_at=timezone.now(),
-        )
-        for ln in entry.lines.all():
-            JournalLine.objects.create(
-                entry=reversal, gl_account=ln.gl_account, debit=ln.credit, credit=ln.debit,
-                description=f"Reversal: {ln.description}", party=ln.party, org_unit=ln.org_unit,
-                currency=ln.currency,
-            )
-        entry.status = "void"
-        entry.save(update_fields=["status", "updated_at"])
+        reversal = _reverse_journal_entry(request.tenant, request.user, entry)
     write_audit_log(request.user, entry, "update", {"action": "void", "reversal": reversal.number})
     messages.success(request, f"{entry.number} voided — reversal {reversal.number} posted.")
     return redirect("accounting:journal_entry_detail", pk=pk)
@@ -734,8 +741,8 @@ def bill_delete(request, pk):
     return crud_delete(request, model=Bill, pk=pk, success_url="accounting:bill_list")
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def bill_approve(request, pk):
     bill = get_object_or_404(Bill, pk=pk, tenant=request.tenant)
     if bill.status not in ("draft", "pending_approval"):
@@ -885,8 +892,8 @@ def invoice_delete(request, pk):
     return crud_delete(request, model=Invoice, pk=pk, success_url="accounting:invoice_list")
 
 
-@require_POST
 @login_required
+@require_POST
 def invoice_post(request, pk):
     inv = get_object_or_404(Invoice, pk=pk, tenant=request.tenant)
     if inv.status != "draft":
@@ -914,6 +921,8 @@ def invoice_post(request, pk):
     else:
         inv.status = "sent"
         inv.save()
+        messages.warning(request, "Issued without a GL entry — configure an AR (1100) and an income "
+                                  "account so invoices post to the ledger automatically.")
     write_audit_log(request.user, inv, "update", {"action": "post", "journal_entry": je.number if je else None})
     messages.success(request, f"Invoice {inv.number} issued{' and posted to the GL' if je else ''}.")
     return redirect("accounting:invoice_detail", pk=pk)
@@ -973,8 +982,8 @@ def payment_delete(request, pk):
     return crud_delete(request, model=Payment, pk=pk, success_url="accounting:payment_list")
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def payment_confirm(request, pk):
     payment = get_object_or_404(Payment, pk=pk, tenant=request.tenant)
     if payment.status != "draft":
@@ -1015,17 +1024,23 @@ def payment_confirm(request, pk):
     return redirect("accounting:payment_detail", pk=pk)
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def payment_void(request, pk):
-    payment = get_object_or_404(Payment, pk=pk, tenant=request.tenant)
+    payment = get_object_or_404(Payment.objects.select_related("journal_entry"), pk=pk, tenant=request.tenant)
     if payment.status != "confirmed":
         messages.error(request, "Only a confirmed payment can be voided.")
         return redirect("accounting:payment_detail", pk=pk)
-    payment.status = "void"
-    payment.save(update_fields=["status", "updated_at"])
-    write_audit_log(request.user, payment, "update", {"action": "void"})
-    messages.success(request, f"Payment {payment.number} voided.")
+    with transaction.atomic():
+        reversal = None
+        # Reverse the GL effect of the confirmation so the ledger stays balanced (code-review #2).
+        if payment.journal_entry_id and payment.journal_entry.status == "posted":
+            reversal = _reverse_journal_entry(request.tenant, request.user, payment.journal_entry)
+        payment.status = "void"
+        payment.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, payment, "update",
+                    {"action": "void", "reversal": reversal.number if reversal else None})
+    messages.success(request, f"Payment {payment.number} voided{' — GL reversal posted' if reversal else ''}.")
     return redirect("accounting:payment_detail", pk=pk)
 
 
@@ -1272,14 +1287,14 @@ def reconciliation_delete(request, pk):
     return crud_delete(request, model=ReconciliationMatch, pk=pk, success_url="accounting:reconciliation_list")
 
 
-@require_POST
 @tenant_admin_required
+@require_POST
 def reconciliation_confirm(request, pk):
     match = get_object_or_404(ReconciliationMatch, pk=pk, tenant=request.tenant)
     match.is_confirmed = not match.is_confirmed
     if match.matched_by_id is None:
         match.matched_by = request.user
-    match.save(update_fields=["is_confirmed", "matched_by"])
+    match.save(update_fields=["is_confirmed", "matched_by", "updated_at"])
     txn = match.bank_transaction
     txn.status = "reconciled" if match.is_confirmed else "matched"
     txn.save(update_fields=["status"])
