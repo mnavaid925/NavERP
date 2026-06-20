@@ -18,16 +18,21 @@
 <div class="card">
   <div class="card-body">
     <form method="get" class="filter-bar">
-      <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search projects…">
-      <select name="status" class="form-select">
-        <option value="">All statuses</option>
-        {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search projects…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
       <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
       <a href="{% url 'crm:crmproject_list' %}" class="btn btn-outline">Reset</a>
     </form>
+  </div>
 
-    <div class="table-wrap">
+  <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
@@ -84,8 +89,7 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
-    {% include "partials/pagination.html" %}
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 {% endblock %}
