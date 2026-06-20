@@ -77,10 +77,7 @@
     </dl>
     {% if obj.feedback_text %}<p style="margin-top:1rem;">{{ obj.feedback_text|linebreaksbr }}</p>{% endif %}
     {% if obj.token %}
-    <div class="detail-item" style="margin-top:1rem;">
-      <dt>Public respond link</dt>
-      <dd><code>{% url 'crm:survey_respond' obj.token %}</code></dd>
-    </div>
+    <p class="form-help" style="margin-top:1rem;">Public respond link: <code>{% url 'crm:survey_respond' obj.token %}</code></p>
     {% endif %}
   </div>
 </div>
