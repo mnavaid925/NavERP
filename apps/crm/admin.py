@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from .models import Campaign, Case, CrmTask, KnowledgeArticle, Lead, Opportunity
+from .models import (
+    AccountProfile,
+    Campaign,
+    Case,
+    ContactProfile,
+    CrmTask,
+    KnowledgeArticle,
+    Lead,
+    Opportunity,
+)
 
 
 @admin.register(Lead)
@@ -49,3 +58,21 @@ class CrmTaskAdmin(admin.ModelAdmin):
     list_filter = ("status", "priority", "type", "tenant")
     search_fields = ("number", "subject")
     readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(AccountProfile)
+class AccountProfileAdmin(admin.ModelAdmin):
+    list_display = ("party", "industry", "phone", "employee_count", "owner", "tenant")
+    list_filter = ("industry", "tenant")
+    search_fields = ("party__name", "phone", "email")
+    raw_id_fields = ("party", "parent_account")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ContactProfile)
+class ContactProfileAdmin(admin.ModelAdmin):
+    list_display = ("party", "job_title", "department", "phone", "account", "owner", "tenant")
+    list_filter = ("department", "tenant")
+    search_fields = ("party__name", "job_title", "phone", "email")
+    raw_id_fields = ("party", "account")
+    readonly_fields = ("created_at", "updated_at")
