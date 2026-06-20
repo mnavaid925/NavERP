@@ -24,51 +24,55 @@
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.pipeline|floatformat:0 }}</div><div class="stat-label">Open Pipeline</div></div>
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="gauge"></i></div><div class="stat-value">{{ stats.weighted|floatformat:0 }}</div><div class="stat-label">Weighted Forecast</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="percent"></i></div><div class="stat-value">{{ stats.win_rate }}%</div><div class="stat-label">Win Rate</div></div>
-    <div class="stat-card"><div class="stat-icon red"><i data-lucide="life-buoy"></i></div><div class="stat-value">{{ stats.open_cases }}</div><div class="stat-label">Open Cases</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="life-buoy"></i></div><div class="stat-value">{{ stats.open_cases }}</div><div class="stat-label">Open Cases</div></div>
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="check-square"></i></div><div class="stat-value">{{ stats.open_tasks }}</div><div class="stat-label">Open Tasks</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="megaphone"></i></div><div class="stat-value">{{ stats.active_campaigns }}</div><div class="stat-label">Active Campaigns</div></div>
   </div>
 
   <div class="layout-2col">
-    <div class="card">
-      <div class="card-header">
-        <h3>Pipeline by stage</h3>
-        <a href="{% url 'crm:opportunity_list' %}" class="btn btn-sm btn-outline">View all</a>
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Pipeline by stage</h3>
+          <a href="{% url 'crm:opportunity_list' %}" class="btn btn-sm btn-outline">View all</a>
+        </div>
+        <div class="card-body"><canvas id="stageChart" height="140"></canvas></div>
       </div>
-      <div class="card-body"><canvas id="stageChart" height="140"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-header">
-        <h3>Leads by rating</h3>
-        <a href="{% url 'crm:lead_list' %}" class="btn btn-sm btn-outline">View all</a>
+      <div class="card">
+        <div class="card-header">
+          <h3>Recent opportunities</h3>
+          <a href="{% url 'crm:opportunity_list' %}" class="btn btn-sm btn-outline">View all</a>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Amount</th><th>Owner</th></tr></thead>
+            <tbody>
+              {% for opp in recent_opps %}
+                <tr>
+                  <td><a href="{% url 'crm:opportunity_detail' opp.pk %}" class="fw-600">{{ opp.number }}</a></td>
+                  <td>{{ opp.name }}</td>
+                  <td>{% if opp.account %}{{ opp.account.name }}{% else %}—{% endif %}</td>
+                  <td><span class="badge badge-{% if opp.stage == 'closed_won' %}green{% elif opp.stage == 'closed_lost' %}red{% elif opp.stage == 'negotiation' %}amber{% elif opp.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ opp.get_stage_display }}</span></td>
+                  <td>{{ opp.amount }}</td>
+                  <td>{% if opp.owner %}{{ opp.owner.get_full_name|default:opp.owner.username }}{% else %}—{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6"><div class="empty-state"><i data-lucide="target"></i><p>No opportunities yet.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="card-body"><canvas id="ratingChart" height="180"></canvas></div>
     </div>
-  </div>
 
-  <div class="card">
-    <div class="card-header">
-      <h3>Recent opportunities</h3>
-      <a href="{% url 'crm:opportunity_list' %}" class="btn btn-sm btn-outline">View all</a>
-    </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Amount</th><th>Owner</th></tr></thead>
-        <tbody>
-          {% for opp in recent_opps %}
-            <tr>
-              <td><a href="{% url 'crm:opportunity_detail' opp.pk %}" class="fw-600">{{ opp.number }}</a></td>
-              <td>{{ opp.name }}</td>
-              <td>{% if opp.account %}{{ opp.account.name }}{% else %}—{% endif %}</td>
-              <td><span class="badge badge-{% if opp.stage == 'closed_won' %}green{% elif opp.stage == 'closed_lost' %}red{% elif opp.stage == 'negotiation' %}amber{% elif opp.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ opp.get_stage_display }}</span></td>
-              <td>{{ opp.amount }}</td>
-              <td>{% if opp.owner %}{{ opp.owner.get_full_name|default:opp.owner.username }}{% else %}—{% endif %}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="6"><div class="empty-state"><i data-lucide="target"></i><p>No opportunities yet.</p></div></td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Leads by rating</h3>
+          <a href="{% url 'crm:lead_list' %}" class="btn btn-sm btn-outline">View all</a>
+        </div>
+        <div class="card-body"><canvas id="ratingChart" height="180"></canvas></div>
+      </div>
     </div>
   </div>
 
