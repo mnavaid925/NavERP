@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:document_list' %}">Documents</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:document_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:document_delete' obj.pk %}" onsubmit="return confirm('Delete this document?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Classification</dt><dd>{{ obj.get_classification_display }}</dd></div>
+      <div class="detail-item"><dt>Version</dt><dd>{{ obj.version }}</dd></div>
+      <div class="detail-item"><dt>Uploaded</dt><dd>{{ obj.uploaded_at|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>File</dt><dd>{% if obj.file %}<a class="btn btn-outline btn-sm" href="{{ obj.file.url }}"><i data-lucide="download"></i> Download</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'core:document_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
