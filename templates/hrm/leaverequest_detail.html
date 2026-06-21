@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:leaverequest_list' %}">Leave Requests</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:leaverequest_submit' obj.pk %}" onsubmit="return confirm('Submit this leave request for approval?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+        </form>
+        <a href="{% url 'hrm:leaverequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.status == 'pending' %}
+        <a href="{% url 'hrm:leaverequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'pending' %}
+        <form method="post" action="{% url 'hrm:leaverequest_delete' obj.pk %}" onsubmit="return confirm('Delete this leave request?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Leave Type</dt><dd>{{ obj.leave_type.name }}</dd></div>
+      <div class="detail-item"><dt>Start Date</dt><dd>{{ obj.start_date }}</dd></div>
+      <div class="detail-item"><dt>End Date</dt><dd>{{ obj.end_date }}</dd></div>
+      <div class="detail-item"><dt>Days</dt><dd>{{ obj.days }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'pending' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Approver</dt><dd>{% if obj.approver %}{{ obj.approver.get_full_name|default:obj.approver.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved At</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Reason</dt><dd>{{ obj.reason|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Rejected Reason</dt><dd>{{ obj.rejected_reason|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Cancelled Reason</dt><dd>{{ obj.cancelled_reason|default:"—" }}</dd></div>
+    </dl>
+    {% if allocation %}
+      <p style="margin-top:1rem;">Balance for {{ obj.leave_type.name }} ({{ obj.start_date.year }}): {{ allocation.balance }} of {{ allocation.allocated_days }} days remaining.</p>
+    {% endif %}
+  </div></div>
+
+  {% if obj.status == 'draft' or obj.status == 'pending' or obj.status == 'approved' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body">
+        {% if obj.status == 'pending' %}
+          <div class="form-actions" style="margin-bottom:1rem;">
+            <form method="post" action="{% url 'hrm:leaverequest_approve' obj.pk %}" onsubmit="return confirm('Approve this leave request?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+            </form>
+          </div>
+          <form method="post" action="{% url 'hrm:leaverequest_reject' obj.pk %}" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label">Reject reason</label>
+              <textarea name="rejected_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'draft' or obj.status == 'pending' or obj.status == 'approved' %}
+          <form method="post" action="{% url 'hrm:leaverequest_cancel' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label">Cancel reason</label>
+              <textarea name="cancelled_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:leaverequest_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
