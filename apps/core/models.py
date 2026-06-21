@@ -178,6 +178,10 @@ class Employment(models.Model):
 
     class Meta:
         ordering = ["party__name"]
+        indexes = [
+            # HRM employee_list filters by employment status (employment__status) per tenant.
+            models.Index(fields=["tenant", "status"], name="core_emp_tenant_status_idx"),
+        ]
 
     def __str__(self):
         return f"{self.party} — {self.job_title}" if self.job_title else str(self.party)
