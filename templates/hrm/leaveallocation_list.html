@@ -26,7 +26,7 @@
           </select>
         </div>
         <div class="form-group">
-          <input type="number" name="year" value="{{ request.GET.year }}" class="form-input" placeholder="Year">
+          <input type="number" name="year" value="{{ request.GET.year|default:current_year }}" class="form-input" placeholder="Year">
         </div>
         <div class="form-group">
           <select name="employee" class="form-select">
