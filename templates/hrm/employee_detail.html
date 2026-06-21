@@ -48,7 +48,7 @@
         <div class="detail-item"><dt>Manager</dt><dd>{% if obj.manager %}{{ obj.manager.name }}{% else %}—{% endif %}</dd></div>
         <div class="detail-item"><dt>Hired On</dt><dd>{{ obj.employment.hired_on|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Status</dt><dd>{% if obj.employment %}<span class="badge badge-{% if obj.employment.status == 'active' %}green{% elif obj.employment.status == 'on_leave' %}amber{% elif obj.employment.status == 'terminated' %}red{% else %}muted{% endif %}">{{ obj.employment.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
-        <div class="detail-item"><dt>Probation End</dt><dd>{{ obj.probation_end|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Probation End</dt><dd>{{ obj.probation_end_date|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Confirmed On</dt><dd>{{ obj.confirmed_on|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Bank Name</dt><dd>{{ obj.bank_name|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Account</dt><dd>{{ obj.masked_bank_account|default:"—" }}</dd></div>
