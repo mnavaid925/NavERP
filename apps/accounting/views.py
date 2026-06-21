@@ -328,7 +328,10 @@ def cash_forecast(request):
                 return None
             return (due - first_monday).days // 7
 
-        invoices = (Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES)
+        # Only true invoices are expected cash inflows. A credit note (kind="credit_note") carries a
+        # positive total but economically REDUCES receivables (a refund/offset, not money in), so it
+        # must not be projected as inflow — exclude it (adversarial-review finding).
+        invoices = (Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES, kind="invoice")
                     .annotate(paid_agg=Sum("allocations__allocated_amount",
                                            filter=Q(allocations__payment__status="confirmed"))))
         for inv in invoices:
