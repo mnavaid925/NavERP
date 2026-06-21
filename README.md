@@ -183,6 +183,13 @@ workflow action posts a balanced `JournalEntry`:
   Integrations** (Plaid/Stripe/Avalara/… config with a write-once, reveal-once hashed API key).
 All posting/approval actions are `@tenant_admin_required`; the GL stays balanced (Σdebits == Σcredits).
 
+Sidebar completion pass (2.x): **Recurring Invoicing** (`RINV-`, generates draft invoices on a weekly/monthly/
+quarterly/annual cadence anchored to the start date) and a discount-aware **Payment Schedule** report were added, and
+~13 previously-roadmap feature bullets were wired to the pages that already deliver them (incl. *Employee Master →
+HRM*, and the 2.15 connector categories as filtered integration views). The bullets still marked "Soon" are
+deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
+integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
+
 ### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.9/3.10/3.12
 
 First HRM pass — **employee directory + leave + attendance**, reusing the core spine: an employee is a
