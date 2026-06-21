@@ -19,6 +19,7 @@ from .models import (
     Payment,
     PaymentAllocation,
     PaymentTerm,
+    RecurringInvoice,
     ReconciliationMatch,
     VendorProfile,
 )
@@ -117,6 +118,17 @@ class InvoiceAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "journal_entry", "subtotal", "tax_total", "total",
                        "created_at", "updated_at")
     inlines = [InvoiceLineInline]
+
+
+@admin.register(RecurringInvoice)
+class RecurringInvoiceAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "description", "amount", "cadence", "next_run_date",
+                    "status", "occurrences_generated", "tenant")
+    list_filter = ("status", "cadence", "tenant")
+    search_fields = ("number", "party__name", "description")
+    readonly_fields = ("number", "last_generated_at", "occurrences_generated",
+                       "created_at", "updated_at")
+    raw_id_fields = ("party", "currency", "payment_terms")
 
 
 class BillLineInline(admin.TabularInline):
