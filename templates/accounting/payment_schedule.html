@@ -33,7 +33,7 @@
             <tr>
               <td><a href="{% url 'accounting:bill_detail' r.bill.pk %}" class="fw-600">{{ r.bill.number }}</a></td>
               <td>{% if r.bill.party %}{{ r.bill.party.name }}{% else %}—{% endif %}</td>
-              <td class="{% if r.overdue %}text-danger{% endif %}">{{ r.due_date|date:"M d, Y"|default:"—" }}{% if r.overdue %} (overdue){% endif %}</td>
+              <td class="{% if r.overdue %}text-danger{% endif %}">{{ r.bill.due_date|date:"M d, Y"|default:"—" }}{% if r.overdue %} (overdue){% endif %}</td>
               <td class="text-right">{{ r.outstanding|floatformat:2 }}</td>
               <td class="text-right">{% if r.discount %}<span class="badge badge-green">−{{ r.discount|floatformat:2 }}</span>{% else %}—{% endif %}</td>
               <td>{{ r.suggested|date:"M d, Y"|default:"—" }}</td>
