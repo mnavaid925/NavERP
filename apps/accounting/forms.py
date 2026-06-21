@@ -181,11 +181,19 @@ class RecurringInvoiceForm(TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _active_currencies(self)
-        self.fields["next_run_date"].required = False  # defaults to start_date in model.save()
+        self.fields["next_run_date"].required = False  # create: defaults to start_date in model.save()
         if self.tenant is not None:
             self.fields["party"].queryset = (
                 Party.objects.filter(tenant=self.tenant, roles__role="customer").distinct()
             )
+
+    def clean_next_run_date(self):
+        # On edit, a blank Next Run keeps the schedule's current value rather than rewinding it
+        # (review F2). On create (no pk) blank falls through to the start-date default in save().
+        val = self.cleaned_data.get("next_run_date")
+        if not val and self.instance and self.instance.pk:
+            return self.instance.next_run_date
+        return val
 
 
 class BillForm(TenantModelForm):
