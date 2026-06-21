@@ -401,7 +401,11 @@ def _route_name(url_name):
 def _is_active(url_name, current):
     """True if `current` is this route or one of its CRUD sub-routes (detail/edit/...).
 
-    A ``name?query`` / ``name#fragment`` value matches on the route name alone."""
+    A ``name?query`` / ``name#fragment`` value matches on the route name alone. Note: bullets that
+    share one route but differ only by ``?query``/``#fragment`` (the 2.1 dashboard widgets, the 2.15
+    integration categories) therefore ALL highlight together on that page — the resolver match
+    carries no query string, and URL fragments are never sent to the server, so a single-bullet
+    highlight isn't derivable here (review F4, accepted limitation)."""
     if not url_name or not current:
         return False
     name, _ = _route_name(url_name)
