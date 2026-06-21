@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.party.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employee_list' %}">Employees</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:employee_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:employee_delete' obj.pk %}" onsubmit="return confirm('Delete this employee?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% if obj.photo %}
+    <div class="card"><div class="card-body">
+      <img src="{{ obj.photo.url }}" alt="" style="max-width:120px;border-radius:8px;">
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Personal Information</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.party.name }}</dd></div>
+        <div class="detail-item"><dt>Employee Type</dt><dd><span class="badge badge-{% if obj.employee_type == 'full_time' %}green{% elif obj.employee_type == 'part_time' %}info{% elif obj.employee_type == 'contract' %}amber{% elif obj.employee_type == 'intern' %}slate{% elif obj.employee_type == 'consultant' %}muted{% else %}muted{% endif %}">{{ obj.get_employee_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Gender</dt><dd>{{ obj.get_gender_display|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Date of Birth</dt><dd>{{ obj.date_of_birth|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Blood Group</dt><dd>{{ obj.blood_group|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Nationality</dt><dd>{{ obj.nationality|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Personal Email</dt><dd>{{ obj.personal_email|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Mobile</dt><dd>{{ obj.mobile|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Emergency Contact</dt><dd>{{ obj.emergency_contact_name|default:"—" }}{% if obj.emergency_contact_phone %} · {{ obj.emergency_contact_phone }}{% endif %}{% if obj.emergency_contact_relation %} ({{ obj.emergency_contact_relation }}){% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Employment</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Designation</dt><dd>{{ obj.designation.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Department</dt><dd>{{ obj.department.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Manager</dt><dd>{% if obj.manager %}{{ obj.manager.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Hired On</dt><dd>{{ obj.employment.hired_on|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.employment %}<span class="badge badge-{% if obj.employment.status == 'active' %}green{% elif obj.employment.status == 'on_leave' %}amber{% elif obj.employment.status == 'terminated' %}red{% else %}muted{% endif %}">{{ obj.employment.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Probation End</dt><dd>{{ obj.probation_end|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Confirmed On</dt><dd>{{ obj.confirmed_on|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Bank Name</dt><dd>{{ obj.bank_name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Account</dt><dd>{{ obj.masked_bank_account|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Routing</dt><dd>{{ obj.bank_routing|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Leave Balances ({{ year }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Type</th><th>Allocated</th><th>Used</th><th>Balance</th></tr></thead>
+        <tbody>
+          {% for b in balances %}
+            <tr>
+              <td>{{ b.leave_type.name }}</td>
+              <td>{{ b.allocated }}</td>
+              <td>{{ b.used }}</td>
+              <td>{{ b.balance }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="calendar"></i><p>No allocations for {{ year }}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Attendance</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in recent_attendance %}
+            <tr>
+              <td>{{ a.date }}</td>
+              <td>{{ a.check_in|default:"—" }}</td>
+              <td>{{ a.check_out|default:"—" }}</td>
+              <td>{{ a.hours_worked }}</td>
+              <td><span class="badge badge-{% if a.status == 'present' %}green{% elif a.status == 'absent' %}red{% elif a.status == 'half_day' %}amber{% elif a.status == 'on_leave' %}info{% elif a.status == 'holiday' %}slate{% elif a.status == 'regularized' %}muted{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="clock"></i><p>No attendance records.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Current Shift</h2></div>
+    <div class="card-body">
+      {% if current_shift %}{{ current_shift.shift.name }} (from {{ current_shift.effective_from }}){% else %}No shift assigned{% endif %}
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:employee_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
