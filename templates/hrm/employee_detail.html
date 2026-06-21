@@ -16,9 +16,12 @@
   </div>
 
   {% if obj.photo %}
-    <div class="card"><div class="card-body">
-      <img src="{{ obj.photo.url }}" alt="" style="max-width:120px;border-radius:8px;">
-    </div></div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Photo</h2></div>
+      <div class="card-body">
+        <img src="{{ obj.photo.url }}" alt="Photo of {{ obj.party.name }}" style="max-width:120px;border-radius:8px;">
+      </div>
+    </div>
   {% endif %}
 
   <div class="card">
@@ -104,6 +107,28 @@
     <div class="card-header"><h2 class="card-title">Current Shift</h2></div>
     <div class="card-body">
       {% if current_shift %}{{ current_shift.shift.name }} (from {{ current_shift.effective_from }}){% else %}No shift assigned{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Leave Requests</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in recent_leaves %}
+            <tr>
+              <td><a href="{% url 'hrm:leaverequest_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.leave_type.name }}</td>
+              <td>{{ r.start_date }} – {{ r.end_date }}</td>
+              <td>{{ r.days }}</td>
+              <td><span class="badge badge-{% if r.status == 'approved' %}green{% elif r.status == 'pending' %}amber{% elif r.status == 'rejected' %}red{% elif r.status == 'draft' %}info{% elif r.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ r.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="calendar-clock"></i><p>No leave requests.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 
