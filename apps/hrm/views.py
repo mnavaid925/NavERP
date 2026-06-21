@@ -7,10 +7,13 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * the leave-request workflow actions (submit / approve / reject / cancel),
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, OuterRef, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -42,6 +45,21 @@ from .models import (
     Shift,
     ShiftAssignment,
 )
+
+
+_DEC = DecimalField(max_digits=7, decimal_places=2)
+
+
+def _used_days_subquery():
+    """Correlated sub-select of approved leave-days for a LeaveAllocation's
+    (tenant, employee, leave_type, start-year) window — pushes the per-row aggregate the
+    ``LeaveAllocation.used_days`` property would otherwise run into one SQL pass."""
+    inner = (LeaveRequest.objects
+             .filter(tenant=OuterRef("tenant"), employee=OuterRef("employee"),
+                     leave_type=OuterRef("leave_type"), status="approved",
+                     start_date__year=OuterRef("year"))
+             .values("employee").annotate(s=Sum("days")).values("s"))
+    return Coalesce(Subquery(inner, output_field=_DEC), Decimal("0"), output_field=_DEC)
 
 
 # ============================================================ HRM Overview (3.1)
@@ -158,12 +176,12 @@ def employee_detail(request, pk):
         pk=pk, tenant=request.tenant)
     year = timezone.localdate().year
     allocations = (LeaveAllocation.objects.filter(tenant=request.tenant, employee=obj, year=year)
-                   .select_related("leave_type"))
+                   .select_related("leave_type").annotate(used_days_db=_used_days_subquery()))
     balances = [{
         "leave_type": a.leave_type,
         "allocated": a.allocated_days,
-        "used": a.used_days,
-        "balance": a.balance,
+        "used": a.used_days_db,
+        "balance": (a.allocated_days or Decimal("0")) - a.used_days_db,
     } for a in allocations]
     return render(request, "hrm/employee_detail.html", {
         "obj": obj,
@@ -258,10 +276,13 @@ def leavetype_delete(request, pk):
 # ============================================================ Leave Allocations (3.10)
 @login_required
 def leaveallocation_list(request):
+    used_subq = _used_days_subquery()
     return crud_list(
         request,
         LeaveAllocation.objects.filter(tenant=request.tenant)
-        .select_related("employee__party", "leave_type"),
+        .select_related("employee__party", "leave_type")
+        .annotate(used_days_db=used_subq)
+        .annotate(balance_db=ExpressionWrapper(F("allocated_days") - F("used_days_db"), output_field=_DEC)),
         "hrm/leaveallocation_list.html",
         search_fields=["number", "employee__party__name", "leave_type__name"],
         filters=[("status", "status", False), ("year", "year", True),
@@ -439,8 +460,8 @@ def publicholiday_list(request):
     year = request.GET.get("year", "").strip()
     if year.isdigit():
         qs = qs.filter(date__year=int(year))
-    years = sorted({d.year for d in PublicHoliday.objects.filter(tenant=request.tenant)
-                    .values_list("date", flat=True)}, reverse=True)
+    years = sorted(PublicHoliday.objects.filter(tenant=request.tenant)
+                   .values_list("date__year", flat=True).distinct().order_by(), reverse=True)
     today_year = timezone.localdate().year
     for y in (today_year, today_year + 1):
         if y not in years:
