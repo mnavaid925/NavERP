@@ -104,8 +104,9 @@ class Command(BaseCommand):
         persons = list(Party.objects.filter(tenant=tenant, kind="person").order_by("id"))
         i = 0
         while len(persons) < 4:
+            # Unique suffix so a tenant with zero existing persons never gets duplicate names.
             persons.append(Party.objects.create(
-                tenant=tenant, kind="person", name=PERSON_NAMES[i % len(PERSON_NAMES)]))
+                tenant=tenant, kind="person", name=f"{PERSON_NAMES[i % len(PERSON_NAMES)]} {i + 1}"))
             i += 1
         persons = persons[:5]
 
