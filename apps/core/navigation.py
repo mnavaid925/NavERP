@@ -161,6 +161,7 @@ LIVE_LINKS = {
         "Journal Approval": "accounting:journal_entry_list",     # bullet (post action = approval)
         "Period Close": "accounting:fiscal_period_list",         # bullet
         "Account Reconciliation": "accounting:trial_balance",    # bullet (balance verification)
+        "Allocation Rules": "accounting:cost_allocation_list",   # bullet (automatic cost distribution)
         "Audit Trail": "core:auditlog_list",                     # bullet (immutable log)
         "Multi-currency Support": "accounting:exchange_rate_list",  # bullet
     },
@@ -170,6 +171,7 @@ LIVE_LINKS = {
         "Bill Capture": "accounting:bill_list",                  # bullet
         "Bill Processing": "accounting:bill_list",               # bullet (approval routing)
         "Payment Processing": "accounting:payment_list",         # bullet
+        "Payment Scheduling": "accounting:payment_schedule",     # bullet (discount-aware due-date schedule)
         "Aging Reports": "accounting:ap_aging",                  # bullet
         "Early Payment Discounts": "accounting:payment_term_list",  # bullet
     },
@@ -177,6 +179,7 @@ LIVE_LINKS = {
     "2.4": {
         "Customer Management": "accounting:customer_profile_list",  # bullet (Party customer role + credit)
         "Invoice Generation": "accounting:invoice_list",         # bullet
+        "Recurring Invoicing": "accounting:recurringinvoice_list",  # bullet (subscription/cadence billing)
         "Payment Collection": "accounting:payment_list",         # bullet
         "Cash Application": "accounting:allocation_list",        # bullet (payment→invoice matching)
         "Collections Management": "accounting:ar_aging",         # bullet
@@ -189,6 +192,8 @@ LIVE_LINKS = {
         "Bank Feeds": "accounting:bank_transaction_list",        # bullet (CSV import / feed rows)
         "Reconciliation Engine": "accounting:reconciliation_list",  # bullet
         "Cash Positioning": "accounting:accounting_dashboard",   # bullet (live cash position)
+        "Treasury Forecasting": "accounting:cash_forecast",      # bullet (short/long-term cash projection)
+        "Inter-company Transfers": "accounting:intercompany_list",  # bullet (cross-entity fund movements)
     },
     # 2.6 Fixed Assets
     "2.6": {
@@ -201,14 +206,16 @@ LIVE_LINKS = {
         "Cost of Goods Sold": "accounting:cost_allocation_list",  # bullet (cost allocation/posting)
         "Cost Allocation": "accounting:cost_allocation_list",     # extra
     },
-    # 2.8 Payroll Integration
+    # 2.8 Payroll Integration — Employee Master is owned by HRM (Module 3); the rest is the GL slice.
     "2.8": {
+        "Employee Master": "hrm:employee_list",                  # bullet (HRIS = HRM employee directory)
         "Payroll Journal": "accounting:payroll_run_list",        # bullet
         "Payroll Reconciliation": "accounting:payroll_run_list",  # bullet
     },
     # 2.9 Project/Job Costing
     "2.9": {
         "Project Setup": "accounting:project_list",              # bullet
+        "Time & Expense": "accounting:job_cost_entry_list",      # bullet (time/expense booked to a job)
         "Profitability Analysis": "accounting:project_list",     # bullet (budget vs actual on detail)
         "Job Cost Entries": "accounting:job_cost_entry_list",    # extra
     },
@@ -216,6 +223,7 @@ LIVE_LINKS = {
     "2.10": {
         "Entity Management": "core:orgunit_list",                # bullet (entities = OrgUnits)
         "Inter-company Transactions": "accounting:intercompany_list",  # bullet
+        "Currency Translation": "accounting:exchange_rate_list",  # bullet (FX rates drive translation)
         "Consolidation Engine": "accounting:intercompany_list",  # bullet (eliminations)
     },
     # 2.11 Tax
@@ -227,9 +235,9 @@ LIVE_LINKS = {
     # 2.12 Reporting & Compliance
     "2.12": {
         "Financial Statements": "accounting:balance_sheet",      # bullet
+        "Management Reports": "accounting:profit_and_loss",      # bullet (P&L = the management report)
         "Scheduled Reports": "accounting:scheduled_report_list",  # bullet
         "Dashboards": "accounting:accounting_dashboard",         # bullet
-        "Profit & Loss": "accounting:profit_and_loss",           # extra
     },
     # 2.13 Budgeting & Planning
     "2.13": {
@@ -244,11 +252,18 @@ LIVE_LINKS = {
         "Access Controls": "accounts:role_list",                 # bullet (RBAC)
         "Document Management": "core:document_list",              # bullet
     },
-    # 2.15 Integration & API
+    # 2.15 Integration & API — each connector category deep-links to the integrations list filtered
+    # to that category (the IntegrationConfig list already supports ?category=).
     "2.15": {
-        "Banking APIs": "accounting:integration_list",           # bullet
-        "Payment Gateways": "accounting:integration_list",       # bullet
-        "Custom API": "accounting:integration_list",             # bullet
+        "Banking APIs": "accounting:integration_list?category=banking",      # bullet
+        "Payment Gateways": "accounting:integration_list?category=payments",  # bullet
+        "E-commerce": "accounting:integration_list?category=ecommerce",      # bullet
+        "CRM": "accounting:integration_list?category=crm",                   # bullet
+        "ERP": "accounting:integration_list?category=erp",                   # bullet
+        "HRIS": "accounting:integration_list?category=hris",                 # bullet
+        "Tax Software": "accounting:integration_list?category=tax",          # bullet
+        "Document Storage": "accounting:integration_list?category=storage",  # bullet
+        "Custom API": "accounting:integration_list",                         # bullet (full list)
     },
     # ========================= Module 3 — Human Resource Management (HRM)
     # 3.1 Employee Management — employee is core.Party + core.Employment + hrm.EmployeeProfile.
@@ -373,13 +388,23 @@ def _feature_node(name, url, current):
             "is_active": _is_active(url, current)}
 
 
+def _route_name(url_name):
+    """Strip an optional ``?query`` / ``#fragment`` suffix, returning just the route name."""
+    cut = len(url_name)
+    for sep in ("?", "#"):
+        i = url_name.find(sep)
+        if i != -1:
+            cut = min(cut, i)
+    return url_name[:cut], url_name[cut:]
+
+
 def _is_active(url_name, current):
     """True if `current` is this route or one of its CRUD sub-routes (detail/edit/...).
 
-    A ``name#fragment`` value (same-page anchor) matches on the route name alone."""
+    A ``name?query`` / ``name#fragment`` value matches on the route name alone."""
     if not url_name or not current:
         return False
-    name = url_name.partition("#")[0]
+    name, _ = _route_name(url_name)
     if current == name:
         return True
     base = name[:-5] if name.endswith("_list") else name
@@ -387,13 +412,14 @@ def _is_active(url_name, current):
 
 
 def _safe_reverse(url_name):
-    """Reverse a ``namespace:name`` route. Supports an optional ``#fragment`` suffix so a
-    feature can deep-link to a section of an already-built page (e.g. the dashboard widgets)."""
+    """Reverse a ``namespace:name`` route. Supports an optional ``?query`` and/or ``#fragment``
+    suffix so a feature can deep-link to a filtered view or a section of an already-built page
+    (e.g. the dashboard widgets, or the integrations list scoped to one category)."""
     if not url_name:
         return None
-    name, sep, fragment = url_name.partition("#")
+    name, suffix = _route_name(url_name)
     try:
         href = reverse(name)
     except NoReverseMatch:
         return None
-    return f"{href}#{fragment}" if sep else href
+    return href + suffix
