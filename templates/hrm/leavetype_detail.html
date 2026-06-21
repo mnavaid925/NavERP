@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:leavetype_list' %}">Leave Types</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:leavetype_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:leavetype_delete' obj.pk %}" onsubmit="return confirm('Delete this leave type?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Paid</dt><dd>{% if obj.is_paid %}<span class="badge badge-green">Paid</span>{% else %}<span class="badge badge-muted">Unpaid</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Accrual Rule</dt><dd>{{ obj.get_accrual_rule_display }}</dd></div>
+      <div class="detail-item"><dt>Accrual Days</dt><dd>{{ obj.accrual_days }}</dd></div>
+      <div class="detail-item"><dt>Max Balance</dt><dd>{{ obj.max_balance }}{% if obj.max_balance == 0 %} <span class="form-help">(0 = unlimited)</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Max Carry Forward</dt><dd>{{ obj.max_carry_forward }}</dd></div>
+      <div class="detail-item"><dt>Encashable</dt><dd>{% if obj.encashable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Allocations ({{ year }})</dt><dd><a href="{% url 'hrm:leaveallocation_list' %}">{{ allocation_count }}</a></dd></div>
+      <div class="detail-item"><dt>Total Requests</dt><dd><a href="{% url 'hrm:leaverequest_list' %}">{{ request_count }}</a></dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:leavetype_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
