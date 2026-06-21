@@ -3218,3 +3218,562 @@ scheduled-report delivery, parallel tax-depreciation books, full WBS/earned-valu
 XBRL/EDGAR, per-tenant configurable control accounts, invoice/bill void, and FK migration onto Inventory/HRM/Projects
 masters when those modules land.
 
+---
+
+# Module 3 — Human Resource Management (hrm) — plan from research-hrm.md  (2026-06-21)
+
+> **Context:** New `apps/hrm` app. Sub-modules 3.1–3.12 covered in this pass (8 models: employee
+> foundation + leave management + attendance/shift). Payroll/performance/recruiting are deferred
+> to pass 2. Every HRM table FKs to `EmployeeProfile`, never directly to `core.Party`.
+> `accounting.PayrollRun` (PRUN-#####) already owns GL posting — HRM must NOT touch it this pass.
+> Departments reuse `core.OrgUnit` (kind=department) — no new Department table.
+
+---
+
+## Models (from research)
+
+- [ ] **`Designation`** — job title catalog with grade + salary band, linked to `core.OrgUnit`
+  - `tenant` FK→`"core.Tenant"` CASCADE related_name=`"hrm_designations"` db_index=True
+  - `name` CharField max_length=255 (e.g. "Senior Software Engineer")
+  - `grade` CharField max_length=50 blank (e.g. "L3", "M1", "Executive")
+  - `department` FK→`"core.OrgUnit"` SET_NULL null blank related_name=`"designations"` (reuses OrgUnit kind=department)
+  - `min_salary` DecimalField max_digits=14 decimal_places=2 null blank (salary band floor)
+  - `max_salary` DecimalField max_digits=14 decimal_places=2 null blank (salary band ceiling)
+  - `is_active` BooleanField default=True
+  - `created_at` DateTimeField auto_now_add=True; `updated_at` DateTimeField auto_now=True
+  - Meta: ordering=["name"]; unique_together=("tenant","name")
+  - Indexes: (tenant, is_active); (tenant, department)
+  - __str__: `f"{self.name} ({self.grade})"` if grade else name
+  - Drivers: "Designation/Job Title Hierarchy with salary bands" (Workday, SAP SuccessFactors, ADP, Zoho People, Paycom, Frappe HRMS — table-stakes)
+  - Reuses: `core.OrgUnit` for department reference; adds HRM-owned job-grade table
+
+- [ ] **`EmployeeProfile`** [EMP-] — HRM anchor; 1:1 extension of `core.Party` + `core.Employment`
+  - Inherits `TenantNumbered` abstract base (local copy in `apps/hrm/models.py`): `tenant`, `number`, `created_at`, `updated_at`; `NUMBER_PREFIX = "EMP"`; `unique_together = ("tenant", "number")`; save() 5-retry guard via `core.utils.next_number`
+  - `party` OneToOneField→`"core.Party"` CASCADE related_name=`"employee_profile"` (the underlying person record)
+  - `employment` OneToOneField→`"core.Employment"` SET_NULL null blank related_name=`"employee_profile"` (job title, org_unit, manager, hired_on, status from core)
+  - `designation` FK→`"hrm.Designation"` SET_NULL null blank related_name=`"employees"` (HRM-specific job grade)
+  - `EMPLOYEE_TYPE_CHOICES = [("full_time","Full Time"),("part_time","Part Time"),("contract","Contract"),("intern","Intern"),("consultant","Consultant")]`
+  - `employee_type` CharField max_length=20 choices=EMPLOYEE_TYPE_CHOICES default="full_time"
+  - `GENDER_CHOICES = [("male","Male"),("female","Female"),("other","Other"),("prefer_not_to_say","Prefer Not to Say")]`
+  - `gender` CharField max_length=20 choices=GENDER_CHOICES blank
+  - `date_of_birth` DateField null blank
+  - `BLOOD_GROUP_CHOICES = [("A+","A+"),("A-","A-"),("B+","B+"),("B-","B-"),("AB+","AB+"),("AB-","AB-"),("O+","O+"),("O-","O-")]`
+  - `blood_group` CharField max_length=5 choices=BLOOD_GROUP_CHOICES blank
+  - `nationality` CharField max_length=100 blank
+  - `personal_email` EmailField blank (separate from corporate email in core.ContactMethod)
+  - `mobile` CharField max_length=30 blank
+  - `bank_name` CharField max_length=255 blank (driver: self-service bank update — BambooHR, Gusto, Zoho People)
+  - `bank_account` CharField max_length=64 blank (account number; stored as plain text, not encrypted — flag for security reviewer)
+  - `bank_routing` CharField max_length=20 blank (routing/IFSC/SWIFT code)
+  - `probation_end_date` DateField null blank (driver: lifecycle management — SAP SuccessFactors, Zoho People)
+  - `confirmed_on` DateField null blank (date probation formally ended and employee confirmed permanent)
+  - `emergency_contact_name` CharField max_length=255 blank
+  - `emergency_contact_phone` CharField max_length=30 blank
+  - `emergency_contact_relation` CharField max_length=100 blank
+  - `photo` ImageField upload_to=`"hrm/photos/%Y/%m/"` null blank (passport-size photo)
+  - `notes` TextField blank (HR-internal notes)
+  - Meta: ordering=["party__name"]; unique_together already from TenantNumbered; indexes: (tenant, employee_type), (tenant, designation)
+  - __str__: `f"{self.number} · {self.party.name}"`
+  - Drivers: "Centralized Employee Database" seen in all 10 products; EMP- number matches Workday/BambooHR/Frappe HRMS employee ID pattern; emergency contact = Rippling/BambooHR table-stakes
+  - Reuses: `core.Party` (person record), `core.Employment` (job/org/manager), `core.OrgUnit` (via employment.org_unit)
+  - IMPORTANT: all other HRM models FK to `EmployeeProfile`, not to `core.Party` directly
+
+- [ ] **`LeaveType`** — configurable leave catalog (no auto-number; few dozen rows per tenant)
+  - `tenant` FK→`"core.Tenant"` CASCADE related_name=`"hrm_leave_types"` db_index=True
+  - `name` CharField max_length=100 (e.g. "Annual Leave", "Sick Leave")
+  - `code` CharField max_length=20 (e.g. "AL", "SL", "CL", "CO", "UNPAID")
+  - `is_paid` BooleanField default=True (driver: unpaid leave tracking — all products)
+  - `ACCRUAL_CHOICES = [("none","No Accrual"),("monthly","Monthly Accrual"),("annual","Annual Grant")]`
+  - `accrual_rule` CharField max_length=20 choices=ACCRUAL_CHOICES default="annual"
+  - `accrual_days` DecimalField max_digits=5 decimal_places=2 default=0 (days accrued per cycle; driver: BambooHR/Zoho/Frappe HRMS configurable accrual)
+  - `max_balance` DecimalField max_digits=5 decimal_places=2 default=0 (0=unlimited; driver: capping leave accumulation)
+  - `max_carry_forward` DecimalField max_digits=5 decimal_places=2 default=0 (days carriable to next year; 0=none; driver: Zoho People/Frappe HRMS)
+  - `encashable` BooleanField default=False (driver: encashment flag — Zoho People, SAP SuccessFactors, Frappe HRMS)
+  - `is_active` BooleanField default=True
+  - `created_at` DateTimeField auto_now_add=True; `updated_at` DateTimeField auto_now=True
+  - Meta: ordering=["name"]; unique_together=("tenant","code")
+  - Indexes: (tenant, is_active)
+  - __str__: `f"{self.name} ({self.code})"`
+  - Drivers: every product configures leave types; BambooHR/Zoho People/Gusto/ADP/Frappe HRMS all expose accrual/carry-forward/encashment flags
+
+- [ ] **`LeaveAllocation`** [LA-] — per-employee per-year entitlement; balance DERIVED not stored
+  - Inherits `TenantNumbered`; `NUMBER_PREFIX = "LA"`
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"leave_allocations"`
+  - `leave_type` FK→`"hrm.LeaveType"` CASCADE related_name=`"allocations"`
+  - `year` PositiveSmallIntegerField (e.g. 2026; driver: annual leave cycle)
+  - `allocated_days` DecimalField max_digits=5 decimal_places=2
+  - `note` TextField blank
+  - `STATUS_CHOICES = [("draft","Draft"),("active","Active"),("expired","Expired")]`
+  - `status` CharField max_length=20 choices=STATUS_CHOICES default="active"
+  - `created_at` DateTimeField auto_now_add=True; `updated_at` DateTimeField auto_now=True
+  - Meta: ordering=["-year","employee__party__name"]; unique_together=("tenant","number"); also unique_together=("tenant","employee","leave_type","year") to prevent duplicates
+  - Indexes: (tenant, employee, year), (tenant, leave_type, year), (tenant, status)
+  - Property `used_days`: `LeaveRequest.objects.filter(employee=self.employee, leave_type=self.leave_type, start_date__year=self.year, status="approved").aggregate(Sum("days"))["days__sum"] or 0` — NEVER stored, always derived
+  - Property `balance`: `self.allocated_days - self.used_days`
+  - __str__: `f"{self.number} · {self.employee} · {self.leave_type} · {self.year}"`
+  - Drivers: BambooHR, Zoho People, Gusto track per-employee balance per year; "real-time balance" = derived calculation pattern from spine design principle
+
+- [ ] **`LeaveRequest`** [LR-] — apply/approve/reject workflow
+  - Inherits `TenantNumbered`; `NUMBER_PREFIX = "LR"`
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"leave_requests"`
+  - `leave_type` FK→`"hrm.LeaveType"` CASCADE related_name=`"leave_requests"`
+  - `start_date` DateField
+  - `end_date` DateField
+  - `days` DecimalField max_digits=5 decimal_places=2 default=0 (computed in save() as (end_date - start_date).days + 1, excluding PublicHolidays; driver: automatic day calculation — all 10 products)
+  - `reason` TextField blank
+  - `STATUS_CHOICES = [("draft","Draft"),("pending","Pending"),("approved","Approved"),("rejected","Rejected"),("cancelled","Cancelled")]`
+  - `status` CharField max_length=20 choices=STATUS_CHOICES default="draft"
+  - `approver` FK→settings.AUTH_USER_MODEL SET_NULL null blank related_name=`"hrm_approvals"` (manager who approves)
+  - `approved_at` DateTimeField null blank (system-set on approval)
+  - `rejected_reason` TextField blank (manager's rejection note)
+  - `cancelled_reason` TextField blank
+  - `created_at` DateTimeField auto_now_add=True; `updated_at` DateTimeField auto_now=True
+  - save() override: auto-compute `days` from start_date/end_date when both set and days==0; cross-check that end_date >= start_date (raise ValidationError otherwise)
+  - Meta: ordering=["-start_date"]; unique_together=("tenant","number")
+  - Indexes: (tenant, employee, status), (tenant, status), (tenant, leave_type, start_date)
+  - __str__: `f"{self.number} · {self.employee} · {self.leave_type} · {self.start_date}"`
+  - Drivers: table-stakes in all 10 products; draft→pending→approved/rejected workflow matches BambooHR/Zoho People/ADP patterns; cancelled_reason matches Rippling/Workday
+
+- [ ] **`PublicHoliday`** — tenant-scoped holiday calendar (no auto-number; reference data)
+  - `tenant` FK→`"core.Tenant"` CASCADE related_name=`"hrm_public_holidays"` db_index=True
+  - `date` DateField
+  - `name` CharField max_length=255
+  - `is_optional` BooleanField default=False (driver: floating/optional holidays — Zoho People, Frappe HRMS, SAP SuccessFactors)
+  - `created_at` DateTimeField auto_now_add=True
+  - Meta: ordering=["date"]; unique_together=("tenant","date","name")
+  - Indexes: (tenant, date)
+  - __str__: `f"{self.date} — {self.name}"`
+  - Drivers: every product integrates holiday calendar into leave calculations; holiday list used by LeaveRequest.save() to exclude holidays from `days` count
+
+- [ ] **`Shift`** — shift definition (no auto-number; few dozen rows per tenant)
+  - `tenant` FK→`"core.Tenant"` CASCADE related_name=`"hrm_shifts"` db_index=True
+  - `name` CharField max_length=100 (e.g. "Morning Shift", "Night Shift")
+  - `start_time` TimeField (e.g. 09:00)
+  - `end_time` TimeField (e.g. 18:00)
+  - `grace_minutes` PositiveSmallIntegerField default=15 (late-arrival grace period; driver: Zoho People/Frappe HRMS grace tolerance setting)
+  - `is_default` BooleanField default=False (driver: default shift for new employees — UKG Pro, ADP)
+  - `is_active` BooleanField default=True
+  - `created_at` DateTimeField auto_now_add=True; `updated_at` DateTimeField auto_now=True
+  - Meta: ordering=["name"]; unique_together=("tenant","name")
+  - Indexes: (tenant, is_active)
+  - __str__: `f"{self.name} ({self.start_time}–{self.end_time})"`
+  - Drivers: Zoho People/ADP/UKG Pro/Frappe HRMS/SAP SuccessFactors — shift management is table-stakes for attendance accuracy
+
+- [ ] **`ShiftAssignment`** — assigns a Shift to an EmployeeProfile with effective dates
+  - `tenant` FK→`"core.Tenant"` CASCADE related_name=`"hrm_shift_assignments"` db_index=True
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"shift_assignments"`
+  - `shift` FK→`"hrm.Shift"` CASCADE related_name=`"assignments"`
+  - `effective_from` DateField
+  - `effective_to` DateField null blank (null = currently active)
+  - `created_at` DateTimeField auto_now_add=True
+  - Meta: ordering=["-effective_from"]; unique_together=("tenant","employee","effective_from")
+  - Indexes: (tenant, employee, effective_from), (tenant, shift)
+  - __str__: `f"{self.employee} → {self.shift} from {self.effective_from}"`
+  - Drivers: shift rotation tracking seen in Zoho People, Frappe HRMS, UKG Pro
+
+- [ ] **`AttendanceRecord`** [ATT-] — daily attendance entry per employee
+  - Inherits `TenantNumbered`; `NUMBER_PREFIX = "ATT"`
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"attendance_records"`
+  - `date` DateField
+  - `check_in` TimeField null blank (driver: web/mobile/biometric punch-in — all 10 products)
+  - `check_out` TimeField null blank
+  - `hours_worked` DecimalField max_digits=5 decimal_places=2 default=0 (computed in save() from check_in/check_out; NEVER stored from form — always recalculated; driver: automatic hours derivation — ADP/UKG Pro/Zoho People)
+  - `shift` FK→`"hrm.Shift"` SET_NULL null blank related_name=`"attendance_records"` (the expected shift for that day)
+  - `STATUS_CHOICES = [("present","Present"),("absent","Absent"),("half_day","Half Day"),("on_leave","On Leave"),("holiday","Holiday"),("regularized","Regularized")]`
+  - `status` CharField max_length=20 choices=STATUS_CHOICES default="present"
+  - `SOURCE_CHOICES = [("web","Web"),("mobile","Mobile App"),("biometric","Biometric"),("manual","Manual Entry")]`
+  - `source` CharField max_length=20 choices=SOURCE_CHOICES default="web"
+  - `notes` TextField blank (used for regularization notes)
+  - `created_at` DateTimeField auto_now_add=True; `updated_at` DateTimeField auto_now=True
+  - save() override: when check_in and check_out both set, compute hours_worked = (datetime.combine(date.today(), check_out) - datetime.combine(date.today(), check_in)).seconds / 3600; handle overnight shifts (check_out < check_in → add 24h); round to 2 decimal places
+  - Meta: ordering=["-date"]; unique_together=("tenant","number"); also unique_together=("tenant","employee","date") to prevent duplicate records per day
+  - Indexes: (tenant, employee, date), (tenant, date, status), (tenant, status)
+  - __str__: `f"{self.number} · {self.employee} · {self.date} · {self.get_status_display()}"`
+  - Drivers: table-stakes in all 10 products; source tracking = ADP/UKG Pro/Zoho People/Rippling/Paycom; status enum = Frappe HRMS pattern
+
+---
+
+## Backend (`apps/hrm/`)
+
+### App bootstrap
+- [ ] `apps/hrm/__init__.py` — empty
+- [ ] `apps/hrm/apps.py` — `AppConfig`, name=`"apps.hrm"`, verbose_name=`"Human Resource Management"`
+
+### Models (`apps/hrm/models.py`)
+- [ ] Define local `TenantOwned` + `TenantNumbered` abstract bases (mirror accounting pattern — peer apps do not import each other; local copy keeps hrm self-contained)
+- [ ] `Designation` — fields as specified above; validators: min_salary <= max_salary in clean()
+- [ ] `EmployeeProfile` [EMP-] — fields as specified; `save()` sets `number` via retry guard; property `department` returns `self.employment.org_unit` if employment exists (convenience accessor); property `manager` returns `self.employment.manager` if set
+- [ ] `LeaveType` — fields as specified; clean(): accrual_days > 0 required when accrual_rule != "none"
+- [ ] `LeaveAllocation` [LA-] — fields + properties `used_days` and `balance`; unique_together enforced via model-level constraint (not just form)
+- [ ] `LeaveRequest` [LR-] — fields + save() auto-computes `days`; clean() validates end_date >= start_date
+- [ ] `PublicHoliday` — fields as specified
+- [ ] `Shift` — fields; clean(): end_time may be less than start_time (overnight shift is valid)
+- [ ] `ShiftAssignment` — fields; clean(): effective_to must be >= effective_from if set
+- [ ] `AttendanceRecord` [ATT-] — fields + save() computes `hours_worked`; unique_together on (tenant, employee, date) enforced
+
+### Forms (`apps/hrm/forms.py`)
+Exclude from all forms: `tenant`, `number` (auto), system-computed fields (`hours_worked`, `days`, `approved_at`, `confirmed_on` system-set fields). Use `__init__` to scope FK querysets to `request.tenant`.
+
+- [ ] `DesignationForm` — fields: `name`, `grade`, `department`, `min_salary`, `max_salary`, `is_active`; `__init__` scopes `department` queryset to tenant OrgUnits with kind="department" OR all OrgUnits (to handle mixed kind data)
+- [ ] `EmployeeProfileForm` — fields: `party`, `employment`, `designation`, `employee_type`, `gender`, `date_of_birth`, `blood_group`, `nationality`, `personal_email`, `mobile`, `bank_name`, `bank_account`, `bank_routing`, `probation_end_date`, `emergency_contact_name`, `emergency_contact_phone`, `emergency_contact_relation`, `photo`, `notes`; `__init__` scopes `party` to tenant Parties with kind="person", `employment` to tenant Employments, `designation` to tenant Designations
+- [ ] `LeaveTypeForm` — fields: `name`, `code`, `is_paid`, `accrual_rule`, `accrual_days`, `max_balance`, `max_carry_forward`, `encashable`, `is_active`
+- [ ] `LeaveAllocationForm` — fields: `employee`, `leave_type`, `year`, `allocated_days`, `note`, `status`; `__init__` scopes `employee` and `leave_type` to tenant
+- [ ] `LeaveRequestForm` — fields: `employee`, `leave_type`, `start_date`, `end_date`, `reason`, `status`, `approver`; exclude: `days` (computed), `approved_at`, `rejected_reason`, `cancelled_reason`; `__init__` scopes `employee`, `leave_type`, `approver` to tenant
+- [ ] `LeaveApprovalForm` — minimal form for approve/reject: fields `rejected_reason` (for reject action), `cancelled_reason` (for cancel action); used in custom approve/reject views
+- [ ] `PublicHolidayForm` — fields: `date`, `name`, `is_optional`
+- [ ] `ShiftForm` — fields: `name`, `start_time`, `end_time`, `grace_minutes`, `is_default`, `is_active`
+- [ ] `ShiftAssignmentForm` — fields: `employee`, `shift`, `effective_from`, `effective_to`; `__init__` scopes `employee` and `shift` to tenant
+- [ ] `AttendanceRecordForm` — fields: `employee`, `date`, `check_in`, `check_out`, `shift`, `status`, `source`, `notes`; exclude: `hours_worked` (computed); `__init__` scopes `employee` and `shift` to tenant
+
+### Views (`apps/hrm/views.py`)
+All views: `@login_required`, `tenant=request.tenant` filter everywhere, full CRUD via `crud_list`/`crud_create`/`crud_edit`/`crud_delete` helpers + `write_audit_log`. Mirror the `crm` view shape exactly.
+
+**Designations (3.2):**
+- [ ] `designation_list` — `crud_list(Designation.objects.filter(tenant=request.tenant).select_related("department"), "hrm/designation_list.html", search_fields=["name","grade","department__name"], filters=[("is_active","is_active",False)], extra_context={"departments": OrgUnit.objects.filter(tenant=request.tenant)})` — filter `is_active` maps `"true"/"false"` to bool
+- [ ] `designation_create` — `crud_create(DesignationForm, "hrm/designation_form.html", "hrm:designation_list")`
+- [ ] `designation_detail` — `get_object_or_404(Designation, pk=pk, tenant=request.tenant)` + context with `employees` count
+- [ ] `designation_edit` — `crud_edit(Designation, pk, DesignationForm, "hrm/designation_form.html", "hrm:designation_list")`
+- [ ] `designation_delete` — POST-only, `crud_delete(Designation, pk, "hrm:designation_list")`
+
+**Employee Profiles (3.1):**
+- [ ] `employee_list` — filters: employee_type, designation (int FK), status from employment (via employment__status); search: party__name, number, personal_email, mobile; select_related: party, employment, designation; extra_context: employee_type_choices, designations queryset, status_choices from Employment
+- [ ] `employee_create` — `crud_create(EmployeeProfileForm, "hrm/employee_form.html", "hrm:employee_list")`; write_audit_log on success
+- [ ] `employee_detail` — full profile; related leave_allocations (current year), recent attendance (last 10 records), shift assignment (current active), leave balance summary across all LeaveTypes
+- [ ] `employee_edit` — `crud_edit(EmployeeProfile, pk, EmployeeProfileForm, "hrm/employee_form.html", "hrm:employee_list")`
+- [ ] `employee_delete` — POST-only; guard: cannot delete if Employment.status == "active" (raise messages.error and redirect); write_audit_log
+
+**Leave Types (3.10):**
+- [ ] `leavetype_list` — filters: is_active, is_paid; search: name, code; extra_context: accrual_choices
+- [ ] `leavetype_create` — `crud_create(LeaveTypeForm, "hrm/leavetype_form.html", "hrm:leavetype_list")`
+- [ ] `leavetype_detail` — show all fields; allocations count for current year
+- [ ] `leavetype_edit` — `crud_edit(LeaveType, pk, LeaveTypeForm, "hrm/leavetype_form.html", "hrm:leavetype_list")`
+- [ ] `leavetype_delete` — POST-only; guard: cannot delete if active allocations or requests exist
+
+**Leave Allocations (3.10):**
+- [ ] `leaveallocation_list` — filters: status, year (integer input), employee (int FK), leave_type (int FK); search: number, employee__party__name, leave_type__name; select_related: employee__party, leave_type; extra_context: status_choices, employees, leave_types, current year default; annotate with `used_days` subquery
+- [ ] `leaveallocation_create` — `crud_create(LeaveAllocationForm, ...)`; guard: check unique_together before create (show error if duplicate employee+leave_type+year)
+- [ ] `leaveallocation_detail` — show allocation fields + derived balance + used_days computed from approved LeaveRequests
+- [ ] `leaveallocation_edit` — `crud_edit(...)`
+- [ ] `leaveallocation_delete` — POST-only
+
+**Leave Requests (3.10):**
+- [ ] `leaverequest_list` — filters: status, employee (int FK), leave_type (int FK); search: number, employee__party__name, reason; select_related: employee__party, leave_type, approver; extra_context: status_choices, employees, leave_types
+- [ ] `leaverequest_create` — `crud_create(LeaveRequestForm, ...)`; on success write_audit_log; days computed in model.save()
+- [ ] `leaverequest_detail` — show all fields; balance remaining for that leave_type+year on this employee; approve/reject/cancel buttons (conditional on status)
+- [ ] `leaverequest_edit` — only editable when status in ["draft","pending"]; `crud_edit(...)`
+- [ ] `leaverequest_delete` — POST-only; guard: cannot delete if status in ["approved","rejected"]
+- [ ] `leaverequest_submit` (custom POST, `@require_POST`, `@login_required`) — sets status="pending", write_audit_log, redirect to detail
+- [ ] `leaverequest_approve` (custom POST, `@require_POST`, `@login_required`) — sets status="approved", approved_at=now(), write_audit_log; update AttendanceRecord status="on_leave" for the date range; redirect to detail
+- [ ] `leaverequest_reject` (custom POST, `@require_POST`, `@login_required`) — sets status="rejected" + rejected_reason from POST; write_audit_log; redirect to detail
+- [ ] `leaverequest_cancel` (custom POST, `@require_POST`, `@login_required`) — sets status="cancelled" + cancelled_reason from POST; write_audit_log; redirect to detail
+
+**Public Holidays (3.10 / 3.12):**
+- [ ] `publicholiday_list` — filters: is_optional, year (derived from date__year); search: name; ordering: date; extra_context: year_choices (distinct years from existing holidays + current + next year)
+- [ ] `publicholiday_create` — `crud_create(PublicHolidayForm, ...)`
+- [ ] `publicholiday_detail` — show date, name, is_optional
+- [ ] `publicholiday_edit` — `crud_edit(...)`
+- [ ] `publicholiday_delete` — POST-only
+
+**Shifts (3.9):**
+- [ ] `shift_list` — filters: is_active; search: name; extra_context: none needed beyond list
+- [ ] `shift_create` — `crud_create(ShiftForm, ...)`
+- [ ] `shift_detail` — show shift fields; active assignments count; employees currently on this shift
+- [ ] `shift_edit` — `crud_edit(...)`
+- [ ] `shift_delete` — POST-only; guard: cannot delete if active ShiftAssignments reference this shift
+
+**Shift Assignments (3.9):**
+- [ ] `shiftassignment_list` — filters: shift (int FK), employee (int FK); search: employee__party__name, shift__name; select_related: employee__party, shift; extra_context: shifts, employees
+- [ ] `shiftassignment_create` — `crud_create(ShiftAssignmentForm, ...)`
+- [ ] `shiftassignment_detail` — show employee, shift, effective dates
+- [ ] `shiftassignment_edit` — `crud_edit(...)`
+- [ ] `shiftassignment_delete` — POST-only
+
+**Attendance Records (3.9):**
+- [ ] `attendancerecord_list` — filters: status, source, employee (int FK), date range (date_from/date_to GET params); search: number, employee__party__name, notes; select_related: employee__party, shift; extra_context: status_choices, source_choices, employees; pagination 30 per page (attendance has many rows)
+- [ ] `attendancerecord_create` — `crud_create(AttendanceRecordForm, ...)`; guard: check unique (employee, date) before create
+- [ ] `attendancerecord_detail` — show full record; hours_worked derived display; shift link; late-arrival detection (check_in > shift.start_time + grace_minutes → show "Late" badge)
+- [ ] `attendancerecord_edit` — `crud_edit(...)`; hours_worked re-derived in model.save()
+- [ ] `attendancerecord_delete` — POST-only
+
+**HRM Overview / Dashboard (3.1):**
+- [ ] `hrm_overview` — aggregate stats: total employees, new this month, on leave today (approved LeaveRequest covering today), present today (AttendanceRecord.date=today, status=present), absent today; recent leave requests (pending); upcoming holidays (next 5 from PublicHoliday); render `hrm/hrm_overview.html`
+
+### URLs (`apps/hrm/urls.py`)
+- [ ] `app_name = "hrm"` — must be set
+- [ ] Overview: `""` → `hrm_overview` name=`"hrm_overview"`
+- [ ] Designations: `designations/` → `designation_list`; `designations/add/` → `designation_create`; `designations/<int:pk>/` → `designation_detail`; `designations/<int:pk>/edit/` → `designation_edit`; `designations/<int:pk>/delete/` → `designation_delete`
+- [ ] Employees: `employees/` → `employee_list`; `employees/add/` → `employee_create`; `employees/<int:pk>/` → `employee_detail`; `employees/<int:pk>/edit/` → `employee_edit`; `employees/<int:pk>/delete/` → `employee_delete`
+- [ ] Leave Types: `leave-types/` → `leavetype_list`; `leave-types/add/` → `leavetype_create`; `leave-types/<int:pk>/` → `leavetype_detail`; `leave-types/<int:pk>/edit/` → `leavetype_edit`; `leave-types/<int:pk>/delete/` → `leavetype_delete`
+- [ ] Leave Allocations: `leave-allocations/` → `leaveallocation_list`; `leave-allocations/add/` → `leaveallocation_create`; `leave-allocations/<int:pk>/` → `leaveallocation_detail`; `leave-allocations/<int:pk>/edit/` → `leaveallocation_edit`; `leave-allocations/<int:pk>/delete/` → `leaveallocation_delete`
+- [ ] Leave Requests: `leave-requests/` → `leaverequest_list`; `leave-requests/add/` → `leaverequest_create`; `leave-requests/<int:pk>/` → `leaverequest_detail`; `leave-requests/<int:pk>/edit/` → `leaverequest_edit`; `leave-requests/<int:pk>/delete/` → `leaverequest_delete`; `leave-requests/<int:pk>/submit/` → `leaverequest_submit`; `leave-requests/<int:pk>/approve/` → `leaverequest_approve`; `leave-requests/<int:pk>/reject/` → `leaverequest_reject`; `leave-requests/<int:pk>/cancel/` → `leaverequest_cancel`
+- [ ] Public Holidays: `holidays/` → `publicholiday_list`; `holidays/add/` → `publicholiday_create`; `holidays/<int:pk>/` → `publicholiday_detail`; `holidays/<int:pk>/edit/` → `publicholiday_edit`; `holidays/<int:pk>/delete/` → `publicholiday_delete`
+- [ ] Shifts: `shifts/` → `shift_list`; `shifts/add/` → `shift_create`; `shifts/<int:pk>/` → `shift_detail`; `shifts/<int:pk>/edit/` → `shift_edit`; `shifts/<int:pk>/delete/` → `shift_delete`
+- [ ] Shift Assignments: `shift-assignments/` → `shiftassignment_list`; `shift-assignments/add/` → `shiftassignment_create`; `shift-assignments/<int:pk>/` → `shiftassignment_detail`; `shift-assignments/<int:pk>/edit/` → `shiftassignment_edit`; `shift-assignments/<int:pk>/delete/` → `shiftassignment_delete`
+- [ ] Attendance: `attendance/` → `attendancerecord_list`; `attendance/add/` → `attendancerecord_create`; `attendance/<int:pk>/` → `attendancerecord_detail`; `attendance/<int:pk>/edit/` → `attendancerecord_edit`; `attendance/<int:pk>/delete/` → `attendancerecord_delete`
+
+### Admin (`apps/hrm/admin.py`)
+- [ ] `DesignationAdmin` — list_display: `name, grade, department, min_salary, max_salary, is_active, tenant`; list_filter: `is_active, tenant`; search_fields: `name, grade`; readonly_fields: `created_at, updated_at`
+- [ ] `EmployeeProfileAdmin` — list_display: `number, party, employee_type, designation, gender, created_at, tenant`; list_filter: `employee_type, tenant`; search_fields: `number, party__name, personal_email, mobile`; readonly_fields: `number, created_at, updated_at`; raw_id_fields: `party, employment, designation`
+- [ ] `LeaveTypeAdmin` — list_display: `name, code, is_paid, accrual_rule, accrual_days, encashable, is_active, tenant`; list_filter: `is_active, is_paid, accrual_rule, tenant`; search_fields: `name, code`; readonly_fields: `created_at, updated_at`
+- [ ] `LeaveAllocationAdmin` — list_display: `number, employee, leave_type, year, allocated_days, status, tenant`; list_filter: `status, year, tenant`; search_fields: `number, employee__party__name`; readonly_fields: `number, created_at, updated_at`; raw_id_fields: `employee, leave_type`
+- [ ] `LeaveRequestAdmin` — list_display: `number, employee, leave_type, start_date, end_date, days, status, approver, tenant`; list_filter: `status, tenant`; search_fields: `number, employee__party__name, reason`; readonly_fields: `number, days, approved_at, created_at, updated_at`; raw_id_fields: `employee, leave_type, approver`
+- [ ] `PublicHolidayAdmin` — list_display: `date, name, is_optional, tenant`; list_filter: `is_optional, tenant`; search_fields: `name`; ordering: `date`; readonly_fields: `created_at`
+- [ ] `ShiftAdmin` — list_display: `name, start_time, end_time, grace_minutes, is_default, is_active, tenant`; list_filter: `is_active, is_default, tenant`; search_fields: `name`; readonly_fields: `created_at, updated_at`
+- [ ] `ShiftAssignmentAdmin` — list_display: `employee, shift, effective_from, effective_to, tenant`; list_filter: `tenant`; search_fields: `employee__party__name, shift__name`; readonly_fields: `created_at`; raw_id_fields: `employee, shift`
+- [ ] `AttendanceRecordAdmin` — list_display: `number, employee, date, check_in, check_out, hours_worked, status, source, tenant`; list_filter: `status, source, tenant`; search_fields: `number, employee__party__name`; readonly_fields: `number, hours_worked, created_at, updated_at`; raw_id_fields: `employee, shift`
+
+### Migrations
+- [ ] `apps/hrm/migrations/__init__.py` — empty
+- [ ] Run `python manage.py makemigrations hrm` → `apps/hrm/migrations/0001_initial.py`
+- [ ] Verify with `python manage.py sqlmigrate hrm 0001` — confirm FK references, unique_together, indexes all render correctly
+- [ ] Run `python manage.py migrate` — zero errors
+
+### Seeder (`apps/hrm/management/commands/seed_hrm.py`)
+- [ ] `apps/hrm/management/__init__.py` — empty
+- [ ] `apps/hrm/management/commands/__init__.py` — empty
+- [ ] `apps/hrm/management/commands/seed_hrm.py` — implement `Command` class with `handle()`
+
+Seeder logic (idempotent — check `EmployeeProfile.objects.filter(tenant=tenant).exists()` at the top; print skip warning if data exists; support `--flush` flag to delete and re-seed):
+
+1. **Loop over both demo tenants** (acme + globex): use `Tenant.objects.filter(slug__in=["acme","globex"])`
+2. **Reuse existing core.Party rows** (kind="person") for employee profiles — do NOT create new Party rows; query `Party.objects.filter(tenant=tenant, kind="person")[:5]`; if fewer than 3 person Parties exist, print warning and skip that tenant
+3. **Designations** — seed 3 per tenant: `("Software Engineer","L2")`, `("Senior Engineer","L3")`, `("Engineering Manager","M1")` — link to first OrgUnit with kind="department" (or any OrgUnit if none with kind=department); use `get_or_create(tenant=tenant, name=name)`
+4. **EmployeeProfiles** — seed up to 3 per tenant; for each Party, `get_or_create` an Employment if not exists, then `get_or_create` an EmployeeProfile (check by party); assign designations round-robin; mix employee_types (full_time, part_time, contract)
+5. **LeaveTypes** — seed 4 per tenant: Annual Leave (AL, is_paid=True, accrual_rule=annual, accrual_days=21, max_carry_forward=5, encashable=True), Sick Leave (SL, is_paid=True, accrual_rule=monthly, accrual_days=1.5, max_balance=18), Casual Leave (CL, is_paid=True, accrual_rule=annual, accrual_days=12), Unpaid Leave (UPL, is_paid=False, accrual_rule=none); use `get_or_create(tenant=tenant, code=code)`
+6. **LeaveAllocations** — seed one allocation per employee per leave type for current year; use `get_or_create(tenant=tenant, employee=emp, leave_type=lt, year=current_year)`; status="active"
+7. **LeaveRequests** — seed 2 per tenant: one "approved" (past dates, status=approved, approved_at set), one "pending" (upcoming dates); use number-check idempotency: `if LeaveRequest.objects.filter(tenant=tenant).exists(): skip_msg; continue`
+8. **PublicHolidays** — seed 5 standard holidays for current year: New Year (Jan 1), Labor Day (May 1), Independence Day (Aug 14 or Jul 4), Christmas Eve (Dec 24), Christmas (Dec 25); `get_or_create(tenant=tenant, date=date, name=name)`; is_optional=False except 1 floating holiday
+9. **Shifts** — seed 2 per tenant: "Morning Shift" (09:00-18:00, grace=15) and "Night Shift" (21:00-06:00, grace=30); use `get_or_create(tenant=tenant, name=name)`; Morning is_default=True
+10. **ShiftAssignments** — assign Morning Shift to all employees with effective_from=date(current_year,1,1); use `get_or_create(tenant=tenant, employee=emp, effective_from=date)`
+11. **AttendanceRecords** — seed 5 records per employee (last 5 working days from today); mix of statuses (present x3, absent x1, on_leave x1); use number-check idempotency on (employee, date) unique; source="manual" for seeder
+12. After seeding, print:
+    ```
+    HRM seeded for tenant '{tenant.name}':
+      Employees: {count}
+      Leave Allocations: {count}
+      Attendance Records: {count}
+    Login as admin_acme / password (or admin_globex / password) to verify.
+    WARNING: Superuser 'admin' has no tenant — data won't appear when logged in as admin.
+    ```
+
+---
+
+## Wire-up
+
+- [ ] `config/settings.py` — add `"apps.hrm"` to `INSTALLED_APPS` (after `apps.accounting`)
+- [ ] `config/urls.py` — add `path("hrm/", include("apps.hrm.urls", namespace="hrm"))`
+
+### `apps/core/navigation.py` — LIVE_LINKS additions
+Add the following HRM entries to the `LIVE_LINKS` dict. Use the **exact** NavERP.md `**Feature**` bullet text as keys so the sidebar lights up the built bullets:
+
+```python
+# ========================= Module 3 — Human Resource Management (HRM)
+# 3.1 Employee Management
+"3.1": {
+    "Employee Directory": "hrm:employee_list",       # bullet
+    "Employee Profile": "hrm:employee_list",         # bullet (detail view linked from list)
+    "Employment Details": "hrm:employee_list",       # bullet (employment FKed from profile)
+},
+# 3.2 Organizational Structure
+"3.2": {
+    "Designation/Job Titles": "hrm:designation_list",  # bullet
+    "Department Management": "core:orgunit_list",       # bullet (OrgUnit reuse)
+},
+# 3.9 Attendance Management
+"3.9": {
+    "Check-in/Check-out": "hrm:attendancerecord_list",  # bullet
+    "Attendance Calendar": "hrm:attendancerecord_list",  # bullet
+    "Shift Management": "hrm:shift_list",               # bullet
+    "Shift Assignments": "hrm:shiftassignment_list",    # extra
+},
+# 3.10 Leave Management
+"3.10": {
+    "Leave Types": "hrm:leavetype_list",             # bullet
+    "Leave Balance": "hrm:leaveallocation_list",     # bullet
+    "Leave Application": "hrm:leaverequest_list",    # bullet
+    "Leave Calendar": "hrm:leaverequest_list",       # bullet (calendar view from list)
+},
+# 3.12 Holiday Management
+"3.12": {
+    "Holiday Calendar": "hrm:publicholiday_list",    # bullet
+},
+```
+
+- [ ] Also add `"HRM Overview": "hrm:hrm_overview"` as extra entry under `"3.1"` (non-bullet; the module landing page)
+
+---
+
+## Templates (`templates/hrm/`)
+
+All templates mirror `crm/lead_list.html` pattern: filter-bar with `request.GET` pre-fill, Actions column (eye/pencil/bin icons), `|stringformat:"d"` for FK pk filter comparison, pagination, empty-state, breadcrumb. Use the existing design system (Tailwind + Lucide icons, `base.html` extends).
+
+### HRM Overview
+- [ ] `hrm/hrm_overview.html` — module landing page; stat cards (total employees, new this month, on leave today, present today, absent today); table of pending leave requests (LR number, employee, leave type, dates, days); upcoming holidays (next 5); quick-action buttons to employee_create, leaverequest_create, attendancerecord_create
+
+### Designations (3.2)
+- [ ] `hrm/designation_list.html` — table: name, grade, department, salary band (min–max), is_active badge, employee count; filter bar: is_active dropdown; search box; Actions column: view/edit/delete; pagination; empty-state
+- [ ] `hrm/designation_detail.html` — all fields; salary band display; employee count (link to employee_list filtered by this designation); sidebar: Edit / Delete / Back to List
+- [ ] `hrm/designation_form.html` — create/edit form; is_edit context toggle for page title; department field with OrgUnit dropdown
+
+### Employee Profiles (3.1)
+- [ ] `hrm/employee_list.html` — table: EMP number, name (party__name), employee_type badge, designation, department (via employment.org_unit), status (via employment.status), joined date (via employment.hired_on); filter bar: employee_type dropdown, designation dropdown (int FK comparison with `|stringformat:"d"`), employment status dropdown; search box; Actions column: view/edit/delete; pagination; empty-state
+- [ ] `hrm/employee_detail.html` — two-column layout; left: personal info (gender, DOB, blood group, nationality, personal email, mobile, emergency contact); right: employment info (EMP number, employee_type, designation, department, manager, hired_on, probation_end_date, confirmed_on); bank details section (bank_name, account masked); photo display if set; leave balance table (all LeaveTypes for current year: type, allocated, used, balance); recent attendance (last 10 records in a table); current shift assignment; sidebar: Edit / Delete / Back to List
+- [ ] `hrm/employee_form.html` — create/edit form; group fields into fieldsets: "Personal Information" (party, gender, DOB, blood group, nationality, personal_email, mobile), "Employment Details" (employment, designation, employee_type, probation_end_date), "Bank Details" (bank_name, bank_account, bank_routing), "Emergency Contact" (name, phone, relation), "Other" (photo, notes); photo field shows current image on edit
+
+### Leave Types (3.10)
+- [ ] `hrm/leavetype_list.html` — table: name, code, is_paid badge, accrual_rule badge, accrual_days, max_carry_forward, encashable badge, is_active badge; filter bar: is_active + is_paid dropdowns; search box; Actions column: view/edit/delete; empty-state
+- [ ] `hrm/leavetype_detail.html` — all fields with descriptive labels; active allocations count (link to leaveallocation_list filtered by this type); sidebar: Edit / Delete / Back
+- [ ] `hrm/leavetype_form.html` — create/edit form; accrual_days field shown/hidden based on accrual_rule via simple JS; max_balance note: "0 = unlimited"
+
+### Leave Allocations (3.10)
+- [ ] `hrm/leaveallocation_list.html` — table: LA number, employee name, leave type, year, allocated_days, used_days (derived annotation), balance, status badge; filter bar: status dropdown, year integer filter (GET `year`), employee dropdown (int FK), leave_type dropdown (int FK); search box; Actions column: view/edit/delete; empty-state
+- [ ] `hrm/leaveallocation_detail.html` — all fields; used_days derived (count of approved requests for employee+leave_type+year); balance = allocated - used; link to related leave requests; sidebar: Edit / Delete / Back
+- [ ] `hrm/leaveallocation_form.html` — create/edit form; year field defaults to current year
+
+### Leave Requests (3.10)
+- [ ] `hrm/leaverequest_list.html` — table: LR number, employee, leave type, start_date, end_date, days, status badge with colour coding (pending=yellow, approved=green, rejected=red, cancelled=grey), approver; filter bar: status, employee (int FK), leave_type (int FK) dropdowns; search box; Actions column: view/edit/delete + Submit button (when status=draft); empty-state
+- [ ] `hrm/leaverequest_detail.html` — all fields; balance remaining for this leave_type+year; status workflow history note; conditional action buttons in sidebar: "Submit" (when draft), "Approve" (when pending), "Reject" (when pending, with textarea for rejected_reason), "Cancel" (when draft/pending, with textarea for cancelled_reason); sidebar: Edit (when draft/pending) / Delete (when draft) / Back; all action buttons POST with `{% csrf_token %}`
+- [ ] `hrm/leaverequest_form.html` — create/edit form; end_date must be >= start_date (HTML5 min attribute); days shown as read-only computed value (JS: update on date change); reason textarea
+
+### Public Holidays (3.10 / 3.12)
+- [ ] `hrm/publicholiday_list.html` — table: date, name, is_optional badge, day-of-week; filter bar: is_optional dropdown, year filter (GET `year`, default current year); search box; Actions column: view/edit/delete; holiday count for selected year in page header; empty-state
+- [ ] `hrm/publicholiday_detail.html` — date, name, is_optional, day-of-week; sidebar: Edit / Delete / Back
+- [ ] `hrm/publicholiday_form.html` — create/edit form; date picker; is_optional checkbox with help text "Optional holidays can be chosen by employee"
+
+### Shifts (3.9)
+- [ ] `hrm/shift_list.html` — table: name, start_time, end_time, grace_minutes, is_default badge, is_active badge, active_assignments count; filter bar: is_active dropdown; search box; Actions column: view/edit/delete; empty-state
+- [ ] `hrm/shift_detail.html` — all fields; active ShiftAssignment count and list (employee names, effective_from); sidebar: Edit / Delete / Back
+- [ ] `hrm/shift_form.html` — create/edit form; time pickers for start_time/end_time; is_default checkbox with note "Only one default shift is enforced at the view layer"
+
+### Shift Assignments (3.9)
+- [ ] `hrm/shiftassignment_list.html` — table: employee name, shift name, effective_from, effective_to (or "Ongoing" if null); filter bar: shift dropdown (int FK), employee dropdown (int FK); search box; Actions column: view/edit/delete; empty-state
+- [ ] `hrm/shiftassignment_detail.html` — employee, shift, dates; sidebar: Edit / Delete / Back
+- [ ] `hrm/shiftassignment_form.html` — create/edit form; effective_to nullable (blank = ongoing); employee + shift dropdowns scoped to tenant
+
+### Attendance Records (3.9)
+- [ ] `hrm/attendancerecord_list.html` — table: ATT number, employee, date, check_in, check_out, hours_worked, status badge (colour-coded: present=green, absent=red, half_day=yellow, on_leave=blue, holiday=grey, regularized=purple), source badge; filter bar: status, source, employee (int FK) dropdowns + date_from/date_to date inputs; search box; pagination 30 per page; Actions column: view/edit/delete; empty-state
+- [ ] `hrm/attendancerecord_detail.html` — all fields; late-arrival indicator (check_in vs shift.start_time + grace_minutes); hours_worked display; shift link; sidebar: Edit / Delete / Back
+- [ ] `hrm/attendancerecord_form.html` — create/edit form; employee + shift dropdowns scoped to tenant; check_in/check_out time pickers; hours_worked shown as read-only (auto-computed on save); date picker
+
+---
+
+## Verify
+
+All commands run with `C:\xampp\htdocs\NavERP\venv\Scripts\python.exe`:
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations hrm` — confirm single `0001_initial.py` created with all 9 models (Designation, EmployeeProfile, LeaveType, LeaveAllocation, LeaveRequest, PublicHoliday, Shift, ShiftAssignment, AttendanceRecord)
+- [ ] `venv\Scripts\python.exe manage.py sqlmigrate hrm 0001` — review SQL; confirm FK references to core.Tenant, core.Party, core.Employment, core.OrgUnit, auth.User are correct; unique_together constraints render; indexes for all indexed fields
+- [ ] `venv\Scripts\python.exe manage.py migrate` — zero errors on `nav_erp`
+- [ ] `venv\Scripts\python.exe manage.py seed_hrm` — first run: seeds designations, employees, leave types, allocations, requests, holidays, shifts, assignments, attendance; prints login + warning
+- [ ] `venv\Scripts\python.exe manage.py seed_hrm` (second run) — must print "Data already exists — skipping" for every model block; zero duplicate rows (idempotency proof)
+- [ ] `venv\Scripts\python.exe manage.py check` — zero errors, zero warnings
+- [ ] Write `temp/hrm_smoke.py` — Django test-client sweep:
+  - Authenticate as `admin_acme` (tenant admin)
+  - Hit all `hrm:*` list/detail/create/edit/delete URLs → all return 200 or 302
+  - Check no `{#` or `{% comment` template leaks in any response body
+  - Cross-tenant IDOR: log in as `admin_globex`, request detail URL for an acme EmployeeProfile pk → must return 404
+  - Cross-tenant IDOR for LeaveRequest, AttendanceRecord → 404
+  - POST `leaverequest_submit` → status transitions to "pending"
+  - POST `leaverequest_approve` → status transitions to "approved"
+  - POST `leaverequest_reject` with rejected_reason → status transitions to "rejected"
+  - POST `attendancerecord_delete` → record gone, redirect 302
+  - `seed_hrm` ×2 idempotency confirmed (record count same after second run)
+- [ ] Run `temp/hrm_smoke.py` — all checks green
+- [ ] Sidebar check: sub-modules 3.1, 3.2, 3.9, 3.10, 3.12 all show as **Live** (non-grey) with correct href in the rendered sidebar navigation
+
+---
+
+## Close-out
+
+- [ ] Run **`code-reviewer` agent** — apply findings; commit each changed file one at a time (PowerShell-safe)
+- [ ] Run **`explorer` agent** — apply findings (check for N+1 on employee_detail balance/leave queries, attendance record date-range filter, used_days subquery); commit
+- [ ] Run **`frontend-reviewer` agent** — apply findings (filter-bar `|stringformat:"d"` FK comparisons, badge choice values match model CHOICES, photo display on detail, leave balance table, late-arrival badge logic); commit
+- [ ] Run **`performance-reviewer` agent** — apply findings (employee_detail: batch the leave balance table into one query with annotate+values; attendance list: add composite index on (tenant, employee, date); used_days derived via subquery annotation on leaveallocation_list); commit
+- [ ] Run **`qa-smoke-tester` agent** — apply findings (test every status transition for LeaveRequest, test employee_delete guard when active, test AttendanceRecord duplicate-date guard, test EmployeeProfile unique_together on (tenant, number)); commit
+- [ ] Run **`security-reviewer` agent** — apply findings (flag: `bank_account` stored as plaintext — WARNING comment + recommendation to encrypt or mask on display; employee_delete guard bypass; leaverequest approve/reject must check `request.user` has manager role; photo upload MIME validation); commit
+- [ ] Run **`test-writer` agent** — write pytest tests for: all 9 models CRUD, status-machine transitions (LeaveRequest submit/approve/reject/cancel), AttendanceRecord.save() hours_worked computation, LeaveAllocation.used_days/balance properties, EmployeeProfile.department/manager property accessors, seeder idempotency, IDOR 404 on all detail/edit/delete views, employee_delete active-employment guard; commit
+- [ ] Create **`.claude/skills/hrm/SKILL.md`** — document as-built module: 9 models, all URL names (app_name="hrm"), templates, seeder, LIVE_LINKS entries, conventions (EmployeeProfile as anchor, derived fields, accounting.PayrollRun coordination deferred), common tasks (add a leave type, add an employee, extend attendance); commit
+- [ ] Update **`README.md`** — add Module 3 HRM to module status table (sub-modules 3.1/3.2/3.9/3.10/3.12 Live), update seeder section with `seed_hrm` instructions; commit
+
+### Per-file commit list (PowerShell-safe, one file per commit)
+```
+git add 'apps\hrm\__init__.py'; git commit -m 'feat(hrm): new app bootstrap __init__.py'
+git add 'apps\hrm\apps.py'; git commit -m 'feat(hrm): AppConfig for hrm module'
+git add 'apps\hrm\models.py'; git commit -m 'feat(hrm): 9 models — Designation, EmployeeProfile, LeaveType, LeaveAllocation, LeaveRequest, PublicHoliday, Shift, ShiftAssignment, AttendanceRecord with TenantNumbered abstract base'
+git add 'apps\hrm\migrations\__init__.py'; git commit -m 'feat(hrm): migrations package __init__'
+git add 'apps\hrm\migrations\0001_initial.py'; git commit -m 'feat(hrm): initial migration — all 9 HRM models with FKs, unique_together, indexes'
+git add 'apps\hrm\forms.py'; git commit -m 'feat(hrm): forms for all 9 models — tenant-scoped FK querysets, exclude computed fields'
+git add 'apps\hrm\views.py'; git commit -m 'feat(hrm): views — full CRUD + search/filters + hrm_overview + leave workflow actions (submit/approve/reject/cancel) + attendance'
+git add 'apps\hrm\urls.py'; git commit -m 'feat(hrm): URL patterns — app_name=hrm, all CRUD routes + custom workflow action URLs'
+git add 'apps\hrm\admin.py'; git commit -m 'feat(hrm): admin registration for all 9 HRM models with list_display, list_filter, search_fields, readonly_fields'
+git add 'apps\hrm\management\__init__.py'; git commit -m 'feat(hrm): management package __init__'
+git add 'apps\hrm\management\commands\__init__.py'; git commit -m 'feat(hrm): management/commands package __init__'
+git add 'apps\hrm\management\commands\seed_hrm.py'; git commit -m 'feat(hrm): idempotent seed_hrm command — designations, employees (reuse core.Party), leave types, allocations, requests, holidays, shifts, assignments, attendance'
+git add 'config\settings.py'; git commit -m 'feat(hrm): add apps.hrm to INSTALLED_APPS'
+git add 'config\urls.py'; git commit -m 'feat(hrm): include hrm/ URL prefix in config/urls.py'
+git add 'apps\core\navigation.py'; git commit -m 'feat(core/nav): wire LIVE_LINKS 3.1/3.2/3.9/3.10/3.12 for HRM module — employee/designation/leave/attendance/holiday/shift routes'
+git add 'templates\hrm\hrm_overview.html'; git commit -m 'feat(hrm): HRM overview/landing page — employee stats, pending leave requests, upcoming holidays'
+git add 'templates\hrm\designation_list.html'; git commit -m 'feat(hrm): designation list template with is_active filter and employee count'
+git add 'templates\hrm\designation_detail.html'; git commit -m 'feat(hrm): designation detail template with salary band and employee count'
+git add 'templates\hrm\designation_form.html'; git commit -m 'feat(hrm): designation create/edit form template'
+git add 'templates\hrm\employee_list.html'; git commit -m 'feat(hrm): employee list with type/designation/status filters and EMP number'
+git add 'templates\hrm\employee_detail.html'; git commit -m 'feat(hrm): employee detail — personal info, employment, leave balance table, recent attendance, shift'
+git add 'templates\hrm\employee_form.html'; git commit -m 'feat(hrm): employee create/edit form with fieldsets for personal/employment/bank/emergency/photo'
+git add 'templates\hrm\leavetype_list.html'; git commit -m 'feat(hrm): leave type list with accrual/paid filters'
+git add 'templates\hrm\leavetype_detail.html'; git commit -m 'feat(hrm): leave type detail with allocations count'
+git add 'templates\hrm\leavetype_form.html'; git commit -m 'feat(hrm): leave type create/edit form'
+git add 'templates\hrm\leaveallocation_list.html'; git commit -m 'feat(hrm): leave allocation list with status/year/employee/type filters and balance column'
+git add 'templates\hrm\leaveallocation_detail.html'; git commit -m 'feat(hrm): leave allocation detail with derived used_days and balance'
+git add 'templates\hrm\leaveallocation_form.html'; git commit -m 'feat(hrm): leave allocation create/edit form'
+git add 'templates\hrm\leaverequest_list.html'; git commit -m 'feat(hrm): leave request list with status/employee/type filters and Submit button for drafts'
+git add 'templates\hrm\leaverequest_detail.html'; git commit -m 'feat(hrm): leave request detail with workflow action buttons (submit/approve/reject/cancel)'
+git add 'templates\hrm\leaverequest_form.html'; git commit -m 'feat(hrm): leave request create/edit form with date validation'
+git add 'templates\hrm\publicholiday_list.html'; git commit -m 'feat(hrm): public holiday list with year/optional filters'
+git add 'templates\hrm\publicholiday_detail.html'; git commit -m 'feat(hrm): public holiday detail template'
+git add 'templates\hrm\publicholiday_form.html'; git commit -m 'feat(hrm): public holiday create/edit form'
+git add 'templates\hrm\shift_list.html'; git commit -m 'feat(hrm): shift list with is_active filter and assignment count'
+git add 'templates\hrm\shift_detail.html'; git commit -m 'feat(hrm): shift detail with active assignment list'
+git add 'templates\hrm\shift_form.html'; git commit -m 'feat(hrm): shift create/edit form with time pickers'
+git add 'templates\hrm\shiftassignment_list.html'; git commit -m 'feat(hrm): shift assignment list with shift/employee filters'
+git add 'templates\hrm\shiftassignment_detail.html'; git commit -m 'feat(hrm): shift assignment detail template'
+git add 'templates\hrm\shiftassignment_form.html'; git commit -m 'feat(hrm): shift assignment create/edit form'
+git add 'templates\hrm\attendancerecord_list.html'; git commit -m 'feat(hrm): attendance record list with status/source/employee/date-range filters'
+git add 'templates\hrm\attendancerecord_detail.html'; git commit -m 'feat(hrm): attendance record detail with late-arrival indicator'
+git add 'templates\hrm\attendancerecord_form.html'; git commit -m 'feat(hrm): attendance record create/edit form with time pickers'
+git add 'temp\hrm_smoke.py'; git commit -m 'test(hrm): smoke test — all hrm:* routes 200/302, no leaks, IDOR 404, leave workflow transitions, attendance delete'
+git add '.claude\skills\hrm\SKILL.md'; git commit -m 'docs(skill/hrm): SKILL.md — 9 models, URL names, seeder, LIVE_LINKS, conventions, common tasks'
+git add 'README.md'; git commit -m 'docs(readme): Module 3 HRM — sub-modules 3.1/3.2/3.9/3.10/3.12 Live, seed_hrm instructions'
+```
+
+---
+
+## Later passes / deferred
+
+- **SalaryComponent + SalaryStructure + EmployeeSalary** — pay component engine (Basic/HRA/PF/ESI/TDS); required before per-employee payslips can be computed; deferred to HRM pass 2. Do NOT duplicate `accounting.PayrollRun` when building these — the HRM `PayrollEntry` (per-employee payslip line) will FK into `accounting.PayrollRun` (period-level GL journal)
+- **PayrollEntry (per-employee payslip)** — coordinates with `accounting.PayrollRun` (PRUN-#####); HRM owns the component-level breakdown; accounting owns the GL journal; deferred until SalaryStructure is built
+- **JobRequisition + Candidate + InterviewRound + InterviewFeedback + OfferLetter** — full ATS/recruiting flow (sub-modules 3.5/3.6/3.7/3.8); separate pass once employee foundation is stable; can reuse `core.Party` for candidate + `hrm.Designation` for requisition job grade
+- **OnboardingTask / OnboardingChecklist** — sub-module 3.3; checklist per new hire; pass 2; reuses `core.Document` (GenericFK) for attachment; `is_preboarding` flag on task
+- **SeparationRequest + ExitInterview** — sub-modules 3.4; resignation/offboarding flow; pass 2; coordinates with leave encashment in PayrollEntry
+- **PerformanceReview + Goal** — sub-modules 3.18/3.19; OKR/KPI goal setting + review cycle; depends on employee foundation; deferred to pass 2
+- **Timesheet + TimesheetEntry** — sub-module 3.11; weekly timesheet against projects; coordinates with `accounting.Project` (PRJ-) for job costing; deferred to pass 2
+- **Leave carry-forward year-end batch** — `LeaveType.max_carry_forward` is modeled; the year-end management command that rolls over balances to new LeaveAllocation rows is deferred (batch job / Celery task)
+- **Leave encashment calculation** — `LeaveType.encashable` flag is modeled; the encashment computation (leave × daily_rate from salary structure) is deferred until SalaryStructure is built
+- **AttendanceRegularizationRequest** — employee requests correction for missing/incorrect punches; pass 2; new table FKing to AttendanceRecord
+- **Geofenced / IP-restricted check-in** — `check_in_location` JSON field on AttendanceRecord; requires mobile/GPS integration; deferred
+- **Floating/Optional holiday selection** — `OptionalHolidaySelection(employee, holiday)` through-model; `PublicHoliday.is_optional` flag is already modeled; employee selection UI is deferred
+- **SalaryBenchmarking** — external market salary data comparison; requires external data feed; deferred
+- **BenefitPlan + EmployeeBenefit** — health/retirement benefits enrollment; US-market feature; later pass
+- **TaxDeclaration + Form16** — jurisdiction-specific investment declarations + annual tax certificate; later pass
+- **TrainingSession + LMS + TrainingAttendance** — training calendar + LMS content (sub-modules 3.22/3.23/3.24); full LMS is a separate pass
+- **EngagementSurvey + SurveyResponse** — sub-modules 3.27/3.32; employee engagement surveys; deferred
+- **Announcement model** — company-wide HR broadcasts (sub-module 3.27); deferred
+- **ExpenseClaim** — employee expense submission with manager approval; sub-module 3.34; coordinates with `accounting.JournalEntry` on approval; deferred (after accounting expense GL flow confirmed)
+- **HRAssetAllocation** — sub-module 3.33; links to Module 11 Asset (not yet built); deferred
+- **SuccessionPlan / TalentRating (9-Box Grid)** — sub-modules 3.38/3.40; talent management; deferred
+- **Predictive attrition analytics** — requires BI module + ML pipeline; deferred
+- **NACHA / bank file export** — payroll bank disbursement file generation; deferred to payroll pass
+- **Self-Service employee portal** — sub-module 3.25; filtered views scoped to `request.user.party`; deferred (can be added as a separate URL prefix once employee foundation is stable)
+- **DRF REST API for HRM** — biometric device integration and mobile check-in rely on REST endpoints; deferred to API infrastructure pass
+
+## Review notes
+(filled in at the end)
