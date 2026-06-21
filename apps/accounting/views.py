@@ -127,6 +127,19 @@ def _reverse_journal_entry(tenant, user, original):
 
 
 # ============================================================== 2.1 Dashboard + reports
+def _cash_position(tenant):
+    """Current cash = Σ(bank opening balances) + net (credit − debit) of all bank transactions.
+    Two queries (no N+1): one grouped movement aggregate keyed by account + the opening balances."""
+    banks = list(BankAccount.objects.filter(tenant=tenant))
+    net_by_bank = {
+        r["bank_account_id"]: (r["credit"] or ZERO) - (r["debit"] or ZERO)
+        for r in BankTransaction.objects.filter(tenant=tenant).values("bank_account_id")
+        .annotate(credit=Sum("amount", filter=Q(direction="credit")),
+                  debit=Sum("amount", filter=Q(direction="debit")))
+    }
+    return sum(((b.opening_balance or ZERO) + net_by_bank.get(b.pk, ZERO) for b in banks), ZERO)
+
+
 @login_required
 def accounting_dashboard(request):
     tenant = request.tenant
@@ -136,17 +149,7 @@ def accounting_dashboard(request):
     cash_labels, cash_data = [], []
     if tenant is not None:
         today = timezone.localdate()
-        # Cash position in TWO queries (not N+1): one grouped aggregate of all bank-txn movement
-        # keyed by account, plus the fixed opening balances (perf-review C-1).
-        banks = list(BankAccount.objects.filter(tenant=tenant))
-        net_by_bank = {
-            r["bank_account_id"]: (r["credit"] or ZERO) - (r["debit"] or ZERO)
-            for r in BankTransaction.objects.filter(tenant=tenant).values("bank_account_id")
-            .annotate(credit=Sum("amount", filter=Q(direction="credit")),
-                      debit=Sum("amount", filter=Q(direction="debit")))
-        }
-        stats["cash_position"] = sum(
-            ((b.opening_balance or ZERO) + net_by_bank.get(b.pk, ZERO) for b in banks), ZERO)
+        stats["cash_position"] = _cash_position(tenant)
         stats["ar_outstanding"] = (
             Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES)
             .aggregate(s=Sum("total"))["s"] or ZERO
@@ -290,6 +293,86 @@ def gl_account_ledger(request, account_pk):
         running += delta
         rows.append({"line": ln, "running": running})
     return render(request, "accounting/gl_account_ledger.html", {"obj": account, "rows": rows})
+
+
+@login_required
+def cash_forecast(request):
+    """2.1 Cash-flow forecast — projects the cash position forward from open AR (expected inflows)
+    and open AP (expected outflows), bucketed weekly by due date. Overdue / no-due-date items roll
+    into the first week (assumed to settle now); amounts due beyond the horizon are reported
+    separately. Deterministic (no ML): every figure traces to a real open invoice/bill plus the
+    live cash position. ``?weeks=`` (4–52, default 13) sets the horizon."""
+    tenant = request.tenant
+    try:
+        weeks = int(request.GET.get("weeks", 13))
+    except (TypeError, ValueError):
+        weeks = 13
+    weeks = max(4, min(52, weeks))
+
+    rows, chart_labels, chart_balance = [], [], []
+    stats = {"opening": ZERO, "inflow": ZERO, "outflow": ZERO, "projected": ZERO,
+             "low_balance": ZERO, "beyond_inflow": ZERO, "beyond_outflow": ZERO}
+    if tenant is not None:
+        today = timezone.localdate()
+        opening = _cash_position(tenant)
+        first_monday = today - timedelta(days=today.weekday())
+        buckets = [{"start": first_monday + timedelta(weeks=i), "inflow": ZERO, "outflow": ZERO}
+                   for i in range(weeks)]
+        horizon_end = buckets[-1]["start"] + timedelta(days=6)
+
+        def _idx(due):
+            # No due date or overdue → first week; beyond horizon → None (reported separately).
+            if due is None or due < first_monday:
+                return 0
+            if due > horizon_end:
+                return None
+            return (due - first_monday).days // 7
+
+        invoices = (Invoice.objects.filter(tenant=tenant, status__in=Invoice.OPEN_STATUSES)
+                    .annotate(paid_agg=Sum("allocations__allocated_amount",
+                                           filter=Q(allocations__payment__status="confirmed"))))
+        for inv in invoices:
+            amt = (inv.total or ZERO) - (inv.paid_agg or ZERO)
+            if amt <= ZERO:
+                continue
+            idx = _idx(inv.due_date)
+            if idx is None:
+                stats["beyond_inflow"] += amt
+            else:
+                buckets[idx]["inflow"] += amt
+
+        bills = (Bill.objects.filter(tenant=tenant, status__in=Bill.OPEN_STATUSES)
+                 .annotate(paid_agg=Sum("allocations__allocated_amount",
+                                        filter=Q(allocations__payment__status="confirmed"))))
+        for bill in bills:
+            amt = (bill.total or ZERO) - (bill.paid_agg or ZERO)
+            if amt <= ZERO:
+                continue
+            idx = _idx(bill.due_date)
+            if idx is None:
+                stats["beyond_outflow"] += amt
+            else:
+                buckets[idx]["outflow"] += amt
+
+        running, low, total_in, total_out = opening, opening, ZERO, ZERO
+        for b in buckets:
+            net = b["inflow"] - b["outflow"]
+            running += net
+            low = min(low, running)
+            total_in += b["inflow"]
+            total_out += b["outflow"]
+            rows.append({"start": b["start"], "end": b["start"] + timedelta(days=6),
+                         "inflow": b["inflow"], "outflow": b["outflow"], "net": net,
+                         "balance": running})
+            chart_labels.append(b["start"].strftime("%b %d"))
+            chart_balance.append(float(running))
+        stats.update({"opening": opening, "inflow": total_in, "outflow": total_out,
+                      "projected": running, "low_balance": low})
+    return render(request, "accounting/cash_forecast.html", {
+        "rows": rows, "stats": stats, "weeks": weeks, "weeks_options": [4, 8, 13, 26, 52],
+        "chart_labels": chart_labels, "chart_balance": chart_balance,
+        "today": timezone.localdate(),
+    })
 
 
 # ============================================================ 2.2 GL — Chart of Accounts
