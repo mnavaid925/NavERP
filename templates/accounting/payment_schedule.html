@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Payment Schedule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Payment Schedule</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Payment Schedule</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:ap_aging' %}" class="btn btn-outline"><i data-lucide="layers"></i> AP Aging</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body text-muted">
+    Open bills (approved or partially paid) ordered by due date. When a bill's payment term offers an
+    early-payment discount that is still capturable, the suggested pay date is the discount deadline
+    and the discount is netted off; otherwise it's the due date. The running total is the cumulative
+    net cash outflow if you pay in this order.
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="receipt"></i></div><div class="stat-value">{{ totals.outstanding|floatformat:2 }}</div><div class="stat-label">Total Outstanding</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="badge-percent"></i></div><div class="stat-value">{{ totals.discount|floatformat:2 }}</div><div class="stat-label">Capturable Discounts</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ totals.net|floatformat:2 }}</div><div class="stat-label">Net Payable</div></div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Bill</th><th>Vendor</th><th>Due Date</th><th class="text-right">Outstanding</th><th class="text-right">Discount</th><th>Suggested Pay</th><th class="text-right">Net</th><th class="text-right">Running</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td><a href="{% url 'accounting:bill_detail' r.bill.pk %}" class="fw-600">{{ r.bill.number }}</a></td>
+              <td>{% if r.bill.party %}{{ r.bill.party.name }}{% else %}—{% endif %}</td>
+              <td class="{% if r.overdue %}text-danger{% endif %}">{{ r.due_date|date:"M d, Y"|default:"—" }}{% if r.overdue %} (overdue){% endif %}</td>
+              <td class="text-right">{{ r.outstanding|floatformat:2 }}</td>
+              <td class="text-right">{% if r.discount %}<span class="badge badge-green">−{{ r.discount|floatformat:2 }}</span>{% else %}—{% endif %}</td>
+              <td>{{ r.suggested|date:"M d, Y"|default:"—" }}</td>
+              <td class="text-right">{{ r.net|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ r.running|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>Nothing scheduled</h3><p>No open bills awaiting payment.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td class="fw-600" colspan="3">Total</td>
+              <td class="text-right fw-600">{{ totals.outstanding|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.discount|floatformat:2 }}</td>
+              <td></td>
+              <td class="text-right fw-600">{{ totals.net|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:accounting_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
