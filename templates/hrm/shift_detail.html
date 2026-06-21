@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:shift_list' %}">Shifts</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:shift_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:shift_delete' obj.pk %}" onsubmit="return confirm('Delete this shift?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Start Time</dt><dd>{{ obj.start_time }}</dd></div>
+      <div class="detail-item"><dt>End Time</dt><dd>{{ obj.end_time }}</dd></div>
+      <div class="detail-item"><dt>Grace Minutes</dt><dd>{{ obj.grace_minutes }}</dd></div>
+      <div class="detail-item"><dt>Default</dt><dd><span class="badge badge-{% if obj.is_default %}green{% else %}muted{% endif %}">{% if obj.is_default %}Yes{% else %}No{% endif %}</span></dd></div>
+      <div class="detail-item"><dt>Active</dt><dd><span class="badge badge-{% if obj.is_active %}green{% else %}muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span></dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Assigned Employees</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>From</th><th>To</th></tr></thead>
+        <tbody>
+          {% for a in assignments %}
+            <tr>
+              <td><a href="{% url 'hrm:shiftassignment_detail' a.pk %}" class="fw-600">{{ a.employee.party.name }}</a></td>
+              <td>{{ a.effective_from }}</td>
+              <td>{{ a.effective_to|default:"Ongoing" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="users"></i><p>No employees assigned to this shift yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:shift_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
