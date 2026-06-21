@@ -3775,5 +3775,36 @@ git add 'README.md'; git commit -m 'docs(readme): Module 3 HRM — sub-modules 3
 - **Self-Service employee portal** — sub-module 3.25; filtered views scoped to `request.user.party`; deferred (can be added as a separate URL prefix once employee foundation is stable)
 - **DRF REST API for HRM** — biometric device integration and mobile check-in rely on REST endpoints; deferred to API infrastructure pass
 
-## Review notes
-(filled in at the end)
+## Review notes — Module 3 HRM build outcome (2026-06-21)
+
+**Built & verified.** 9 models (Designation, EmployeeProfile, LeaveType, LeaveAllocation, LeaveRequest,
+PublicHoliday, Shift, ShiftAssignment, AttendanceRecord) across `apps/hrm` + 28 templates. Migrates clean to
+`nav_erp`, `manage.py check` clean, `seed_hrm` idempotent (5 employees / 20 allocations / 25 attendance per tenant,
+reuses core Parties). Sub-modules 3.1/3.2/3.9/3.10/3.12 Live in the sidebar.
+
+**Module Creation Sequence — all agents run, findings applied (one commit per file, never pushed):**
+- **research → todo** — competitive catalog (10 HCM products) → 9-model plan.
+- **code-reviewer** — fixed C1 (LeaveRequestForm exposed `status`/`approver` → self-approval; removed both),
+  C3 (cancel now reverts on_leave attendance, atomic), H3 (`probation_end` → `probation_end_date` template typo),
+  M3 (designation delete guard), M5 (seed unique party names), L4 (cancel confirm). H2 (boolean filter) verified a
+  **false positive** — Django coerces `"False"`→False.
+- **explorer** — wired the unused `current_year` into the leave-allocation year filter default. All routes/url
+  names/context vars/NavERP.md bullets verified consistent.
+- **frontend-reviewer** — added a11y (img alt, label `for`/`id` on reason textareas, date-input aria-labels),
+  rendered the previously-unused `recent_leaves` card, photo card header. (Inline-style→CSS refactors skipped —
+  they match the existing CRM convention.)
+- **performance-reviewer** — killed the `used_days`/`balance` per-row N+1 with a correlated `Subquery` annotation
+  (`used_days_db`/`balance_db`) in leaveallocation_list + employee_detail (list ~40+ queries → 11); year_choices
+  via `distinct date__year`; cached `used_days` on the instance; added `core.Employment (tenant, status)` index.
+- **qa-smoke-tester** — 98/98 checks pass (routes 200/302, no leaks, IDOR 404, workflow transitions, privilege,
+  delete guards, sidebar). No fixes needed.
+- **security-reviewer** — redacted bank fields from `AuditLog.changes` (shared `core.crud`), validated attendance
+  date filters (no 500 on bad input), `clean_photo` allowlist+size cap, audit-logged the attendance batch on
+  approve/cancel, broadened bank WARNING. F5 (per-employee ownership on submit/cancel) deferred to the RBAC pass —
+  matches the app's tenant-trust baseline.
+- **test-writer** — 239 pytest tests, 99% HRM coverage, **1263 project-wide**, zero regressions.
+- **skill** — `.claude/skills/hrm/SKILL.md` documents the as-built module.
+
+**Deferred** (next HRM passes): payroll/payslip (FK into `accounting.PayrollRun`), recruiting/ATS, onboarding/
+offboarding, performance/goals, timesheets, statutory/tax, attendance regularization & geofencing, leave carry-
+forward/encashment batch, self-service portal + employee↔user linkage. See the "Later passes / deferred" list above.
