@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Recurring{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.description }}</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><a href="{% url 'accounting:recurringinvoice_list' %}">Recurring Invoices</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'active' %}
+        <form method="post" action="{% url 'accounting:recurringinvoice_generate' obj.pk %}" onsubmit="return confirm('Generate the next invoice now?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="file-plus"></i> Generate invoice now</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'accounting:recurringinvoice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'accounting:recurringinvoice_delete' obj.pk %}" onsubmit="return confirm('Delete this schedule?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Customer</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</dd></div>
+      <div class="detail-item"><dt>Cadence</dt><dd><span class="badge badge-info">{{ obj.get_cadence_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'paused' %}amber{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}Net 30 (default){% endif %}</dd></div>
+      <div class="detail-item"><dt>Start Date</dt><dd>{{ obj.start_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Next Run</dt><dd>{{ obj.next_run_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Invoices Generated</dt><dd>{{ obj.occurrences_generated }}</dd></div>
+      <div class="detail-item"><dt>Last Generated</dt><dd>{{ obj.last_generated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    </dl>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h3>Generated invoices</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Issue Date</th><th>Due Date</th><th>Status</th><th class="text-right">Total</th></tr></thead>
+        <tbody>
+          {% for inv in generated %}
+            <tr>
+              <td><a href="{% url 'accounting:invoice_detail' inv.pk %}" class="fw-600">{{ inv.number }}</a></td>
+              <td>{{ inv.issue_date|date:"M d, Y" }}</td>
+              <td>{{ inv.due_date|date:"M d, Y"|default:"—" }}</td>
+              <td><span class="badge badge-{% if inv.status == 'paid' %}green{% elif inv.status == 'partial' or inv.status == 'sent' %}amber{% elif inv.status == 'void' %}red{% else %}muted{% endif %}">{{ inv.get_status_display }}</span></td>
+              <td class="text-right">{{ inv.total|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="file-text"></i><p>No invoices generated yet. Use “Generate invoice now” to create the first.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounting:recurringinvoice_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
