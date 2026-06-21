@@ -79,7 +79,7 @@ def designation_list(request):
     return crud_list(
         request,
         Designation.objects.filter(tenant=request.tenant).select_related("department")
-        .annotate(employee_count=Count("employees")),
+        .annotate(employee_count=Count("employees")).order_by("name"),
         "hrm/designation_list.html",
         search_fields=["name", "grade", "department__name"],
         filters=[("is_active", "is_active", False), ("department", "department_id", True)],
@@ -466,7 +466,7 @@ def shift_list(request):
     return crud_list(
         request,
         Shift.objects.filter(tenant=request.tenant)
-        .annotate(assignment_count=Count("assignments")),
+        .annotate(assignment_count=Count("assignments")).order_by("name"),
         "hrm/shift_list.html",
         search_fields=["name"],
         filters=[("is_active", "is_active", False)],
