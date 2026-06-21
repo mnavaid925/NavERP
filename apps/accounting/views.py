@@ -448,9 +448,7 @@ def recurringinvoice_detail(request, pk):
     obj = get_object_or_404(
         RecurringInvoice.objects.select_related("party", "currency", "payment_terms"),
         pk=pk, tenant=request.tenant)
-    # Invoices generated from this schedule are tagged in their notes (loose link — no FK needed).
-    generated = (Invoice.objects.filter(tenant=request.tenant,
-                                        notes__contains=f"schedule {obj.number}")
+    generated = (Invoice.objects.filter(tenant=request.tenant, recurring_invoice=obj)
                  .order_by("-issue_date", "-id")[:20])
     return render(request, "accounting/recurringinvoice_detail.html",
                   {"obj": obj, "generated": generated})
@@ -484,13 +482,13 @@ def recurringinvoice_generate(request, pk):
         inv = Invoice.objects.create(
             tenant=request.tenant, party=rec.party, kind="invoice", issue_date=issue,
             due_date=issue + timedelta(days=days_due), status="draft",
-            currency=rec.currency, payment_terms=rec.payment_terms,
+            currency=rec.currency, payment_terms=rec.payment_terms, recurring_invoice=rec,
             notes=f"Auto-generated from recurring schedule {rec.number}.")
         InvoiceLine.objects.create(invoice=inv, description=rec.description, quantity=1,
                                    unit_price=rec.amount)
         inv.recalc_totals()
-        rec.advance()
         rec.occurrences_generated += 1
+        rec.advance()  # anchored to start_date via run_date_for(occurrences_generated)
         rec.last_generated_at = timezone.now()
         rec.save(update_fields=["next_run_date", "occurrences_generated", "last_generated_at",
                                 "updated_at"])
