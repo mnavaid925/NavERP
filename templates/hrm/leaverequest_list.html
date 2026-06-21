@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Leave Requests{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Leave Requests</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Leave Requests</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:leaverequest_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search requests…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="leave_type" class="form-select">
+            <option value="">All leave types</option>
+            {% for lt in leave_types %}
+              <option value="{{ lt.pk }}" {% if request.GET.leave_type == lt.pk|stringformat:"d" %}selected{% endif %}>{{ lt.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:leaverequest_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Approver</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:leaverequest_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.leave_type.name }}</td>
+              <td>{{ obj.start_date }}</td>
+              <td>{{ obj.end_date }}</td>
+              <td>{{ obj.days }}</td>
+              <td><span class="badge badge-{% if obj.status == 'pending' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{% if obj.approver %}{{ obj.approver.get_full_name|default:obj.approver.username }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:leaverequest_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:leaverequest_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'hrm:leaverequest_submit' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Submit"><i data-lucide="send"></i></button></form>
+                  {% endif %}
+                  <form method="post" action="{% url 'hrm:leaverequest_delete' obj.pk %}" onsubmit="return confirm('Delete this leave request?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="calendar-clock"></i><h3>No leave requests found</h3><p>Submit your first leave request to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
