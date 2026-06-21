@@ -128,6 +128,20 @@ def test_draft_invoice_excluded(client_a, tenant_a, customer_party, usd, bank_ac
     assert ctx["stats"]["inflow"] == Decimal("0")
 
 
+def test_credit_note_not_counted_as_inflow(client_a, tenant_a, customer_party, usd, bank_account):
+    """An OPEN credit note has a positive total but must NOT be projected as a cash inflow."""
+    from django.utils import timezone
+    today = timezone.localdate()
+    _open_invoice(tenant_a, customer_party, usd, "500", today + datetime.timedelta(weeks=2),
+                  status="sent")  # a real invoice -> inflow
+    inv = _open_invoice(tenant_a, customer_party, usd, "300", today + datetime.timedelta(weeks=2),
+                        status="sent")
+    inv.kind = "credit_note"
+    inv.save(update_fields=["kind"])
+    ctx = _ctx(client_a)
+    assert ctx["stats"]["inflow"] == Decimal("500")  # the 300 credit note is excluded, not added
+
+
 def test_low_balance_flags_negative(client_a, tenant_a, vendor_party, usd, bank_account):
     from django.utils import timezone
     today = timezone.localdate()
