@@ -11,6 +11,7 @@ urlpatterns = [
     path("dashboard/", views.accounting_dashboard, name="dashboard"),
     path("reports/trial-balance/", views.trial_balance, name="trial_balance"),
     path("reports/cash-forecast/", views.cash_forecast, name="cash_forecast"),
+    path("reports/payment-schedule/", views.payment_schedule, name="payment_schedule"),
     path("reports/ar-aging/", views.ar_aging, name="ar_aging"),
     path("reports/ap-aging/", views.ap_aging, name="ap_aging"),
     path("reports/ledger/<int:account_pk>/", views.gl_account_ledger, name="gl_account_ledger"),
@@ -87,6 +88,14 @@ urlpatterns = [
     path("invoices/<int:pk>/edit/", views.invoice_edit, name="invoice_edit"),
     path("invoices/<int:pk>/delete/", views.invoice_delete, name="invoice_delete"),
     path("invoices/<int:pk>/post/", views.invoice_post, name="invoice_post"),
+
+    # 2.4 AR — Recurring invoices (subscription/cadence billing)
+    path("recurring-invoices/", views.recurringinvoice_list, name="recurringinvoice_list"),
+    path("recurring-invoices/add/", views.recurringinvoice_create, name="recurringinvoice_create"),
+    path("recurring-invoices/<int:pk>/", views.recurringinvoice_detail, name="recurringinvoice_detail"),
+    path("recurring-invoices/<int:pk>/edit/", views.recurringinvoice_edit, name="recurringinvoice_edit"),
+    path("recurring-invoices/<int:pk>/delete/", views.recurringinvoice_delete, name="recurringinvoice_delete"),
+    path("recurring-invoices/<int:pk>/generate/", views.recurringinvoice_generate, name="recurringinvoice_generate"),
 
     # 2.3+2.4 — Payments + cash application
     path("payments/", views.payment_list, name="payment_list"),
