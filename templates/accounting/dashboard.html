@@ -6,7 +6,7 @@
       <h1 class="page-title">Accounting</h1>
       <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Accounting</span></div>
     </div>
-    <div class="page-actions">
+    <div class="page-actions" id="quick-actions" style="scroll-margin-top:1rem;">
       <a href="{% url 'accounting:invoice_create' %}" class="btn btn-outline"><i data-lucide="file-text"></i> New Invoice</a>
       <a href="{% url 'accounting:bill_create' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Record Bill</a>
       <a href="{% url 'accounting:journal_entry_create' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> New Journal Entry</a>
@@ -21,7 +21,7 @@
     </div></div>
   {% endif %}
 
-  <div class="stat-grid">
+  <div class="stat-grid" id="executive-summary" style="scroll-margin-top:1rem;">
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ stats.cash_position|floatformat:2 }}</div><div class="stat-label">Cash Position</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.ar_outstanding|floatformat:2 }}</div><div class="stat-label">AR Outstanding</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="trending-down"></i></div><div class="stat-value">{{ stats.ap_outstanding|floatformat:2 }}</div><div class="stat-label">AP Outstanding</div></div>
@@ -30,7 +30,7 @@
 
   <div class="layout-2col">
     <div>
-      <div class="card">
+      <div class="card" id="alert-center" style="scroll-margin-top:1rem;">
         <div class="card-header">
           <h3>Overdue invoices</h3>
           <a href="{% url 'accounting:invoice_list' %}" class="btn btn-sm btn-outline">View all</a>
@@ -104,8 +104,11 @@
     </div>
 
     <div>
-      <div class="card">
-        <div class="card-header"><h3>Net cash trend</h3></div>
+      <div class="card" id="cash-flow" style="scroll-margin-top:1rem;">
+        <div class="card-header">
+          <h3>Net cash trend</h3>
+          <a href="{% url 'accounting:cash_forecast' %}" class="btn btn-sm btn-outline"><i data-lucide="line-chart"></i> Forecast</a>
+        </div>
         <div class="card-body"><canvas id="cashChart" height="180"></canvas></div>
       </div>
     </div>
