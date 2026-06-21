@@ -289,3 +289,24 @@ operational asset register, **Module 3 (HRM)** builds payroll/employee masters, 
 operational project/WBS, those modules own the operational lifecycle and should FK to (or be FK'd by) the accounting
 financial model rather than duplicating the depreciation/payroll-journal/job-cost posting — keep the *posting* in
 accounting (it owns the ledger). Do NOT build a second FixedAsset/Payroll/Project posting path.
+
+---
+
+## L30 — Review/test agents verify *correctness*, not *UX/information-architecture* or *scope* — do a human sidebar pass per module
+User reported two Accounting 2.1 issues the review/test agents (code-reviewer, explorer, frontend-reviewer,
+qa-smoke-tester, test-writer) never flagged: (1) four sub-module 2.1 feature bullets (Executive Summary / Cash Flow
+Widget / Alert Center / Quick Actions) all pointed at the *same* `accounting:accounting_dashboard` URL; (2)
+"Forecasting" rendered "Soon". **Why the agents missed them — both were correct-by-spec, not defects:** the
+qa-smoke-tester asserts every built route reverses + returns 200/302 (all four links DID work); the explorer checks
+LIVE_LINKS route names *exist* (no typo), not that sibling features resolve to *distinct* destinations; "Soon" is the
+intended render for any NavERP.md bullet with no LIVE_LINKS entry, and forecasting was an explicitly *deferred*
+feature, so there was no route to sweep and no failing assertion possible. A blanket "no two bullets may share a URL"
+test would be WRONG — many bullets legitimately share a page (Bill Capture + Bill Processing → bill_list; Payment
+Collection under both AP and AR). **Rules:** (a) functional agents can't catch UX/IA quality or product-scope gaps —
+budget a short *human/product pass on the sidebar* when finishing a module: for each built sub-module, confirm its
+bullets land on *meaningfully distinct* destinations (if several are widgets on one page, give them anchor deep-links,
+not the same bare URL), and review which bullets are still "Soon" to confirm each deferral is *intended*, not
+forgotten. (b) The nav now supports `name#fragment` hrefs (`apps/core/navigation.py` `_safe_reverse`/`_is_active`
+strip the fragment) — use `"app:view#section"` to deep-link dashboard/one-page widget groups, with matching `id=`
+anchors (+ `scroll-margin-top`) in the template. (c) When a deferred feature is later requested, it's a normal
+build (view + url + template + LIVE_LINKS entry + tests), not a "bug fix".
