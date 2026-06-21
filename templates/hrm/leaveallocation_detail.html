@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:leaveallocation_list' %}">Leave Allocations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:leaveallocation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:leaveallocation_delete' obj.pk %}" onsubmit="return confirm('Delete this allocation?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Leave Type</dt><dd>{{ obj.leave_type.name }}</dd></div>
+      <div class="detail-item"><dt>Year</dt><dd>{{ obj.year }}</dd></div>
+      <div class="detail-item"><dt>Allocated</dt><dd>{{ obj.allocated_days }}</dd></div>
+      <div class="detail-item"><dt>Used</dt><dd>{{ obj.used_days }}</dd></div>
+      <div class="detail-item"><dt>Balance</dt><dd>{{ obj.balance }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'draft' %}amber{% elif obj.status == 'expired' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Note</dt><dd>{{ obj.note|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Leave Requests</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Dates</th><th>Days</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in requests %}
+            <tr>
+              <td><a href="{% url 'hrm:leaverequest_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.start_date }} – {{ r.end_date }}</td>
+              <td>{{ r.days }}</td>
+              <td><span class="badge badge-{% if r.status == 'approved' %}green{% elif r.status == 'pending' %}amber{% elif r.status == 'rejected' %}red{% elif r.status == 'cancelled' %}muted{% elif r.status == 'draft' %}info{% else %}muted{% endif %}">{{ r.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="calendar-x"></i><p>No leave requests against this allocation.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:leaveallocation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
