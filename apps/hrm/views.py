@@ -9,7 +9,8 @@ int-FK-guarded filters + windowed pagination + audit), plus:
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Q
+from django.db import transaction
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -113,7 +114,16 @@ def designation_edit(request, pk):
 @login_required
 @require_POST
 def designation_delete(request, pk):
-    return crud_delete(request, model=Designation, pk=pk, success_url="hrm:designation_list")
+    obj = get_object_or_404(Designation, pk=pk, tenant=request.tenant)
+    # Guard: deleting a designation in use would silently de-designate employees (SET_NULL).
+    if EmployeeProfile.objects.filter(tenant=request.tenant, designation=obj).exists():
+        messages.error(request, "Cannot delete a designation assigned to employees. "
+                                "Deactivate it instead.")
+        return redirect("hrm:designation_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Designation deleted.")
+    return redirect("hrm:designation_list")
 
 
 # ============================================================ Employee Profiles (3.1)
@@ -406,9 +416,17 @@ def leaverequest_reject(request, pk):
 def leaverequest_cancel(request, pk):
     obj = get_object_or_404(LeaveRequest, pk=pk, tenant=request.tenant)
     if obj.status in ("draft", "pending", "approved"):
-        obj.status = "cancelled"
-        obj.cancelled_reason = request.POST.get("cancelled_reason", "").strip()[:2000]
-        obj.save(update_fields=["status", "cancelled_reason", "updated_at"])
+        was_approved = obj.status == "approved"
+        with transaction.atomic():
+            obj.status = "cancelled"
+            obj.cancelled_reason = request.POST.get("cancelled_reason", "").strip()[:2000]
+            obj.save(update_fields=["status", "cancelled_reason", "updated_at"])
+            # Undo the on-leave marking that approval applied, so attendance reports stay correct
+            # (inverse of leaverequest_approve). Only touch rows we put into on_leave.
+            if was_approved:
+                AttendanceRecord.objects.filter(
+                    tenant=request.tenant, employee=obj.employee, status="on_leave",
+                    date__gte=obj.start_date, date__lte=obj.end_date).update(status="present")
         write_audit_log(request.user, obj, "update", {"action": "cancel"})
         messages.success(request, f"Leave request {obj.number} cancelled.")
     return redirect("hrm:leaverequest_detail", pk=obj.pk)
