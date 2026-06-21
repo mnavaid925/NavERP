@@ -125,9 +125,22 @@ def crud_delete(request, *, model, pk, success_url, audit=True):
     return redirect(success_url)
 
 
+# Field names whose values must never be written verbatim into AuditLog.changes
+# (e.g. bank/account/routing numbers, secrets). Redacted to a placeholder instead.
+_SENSITIVE_AUDIT_FIELDS = frozenset({
+    "bank_account", "bank_routing", "password", "token", "secret", "api_key",
+})
+
+
 def _changed(form):
-    """Compact {field: new_value} of changed fields for the audit log."""
+    """Compact {field: new_value} of changed fields for the audit log.
+
+    Sensitive fields are redacted so a plaintext account/secret never lands in the
+    immutable audit trail (it would otherwise outlive any later encryption-at-rest)."""
     out = {}
     for name in getattr(form, "changed_data", []):
-        out[name] = str(form.cleaned_data.get(name))[:200]
+        if name in _SENSITIVE_AUDIT_FIELDS:
+            out[name] = "***redacted***"
+        else:
+            out[name] = str(form.cleaned_data.get(name))[:200]
     return out
