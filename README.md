@@ -183,6 +183,27 @@ workflow action posts a balanced `JournalEntry`:
   Integrations** (Plaid/Stripe/Avalara/… config with a write-once, reveal-once hashed API key).
 All posting/approval actions are `@tenant_admin_required`; the GL stays balanced (Σdebits == Σcredits).
 
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.9/3.10/3.12
+
+First HRM pass — **employee directory + leave + attendance**, reusing the core spine: an employee is a
+`core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`) anchor; departments reuse
+`core.OrgUnit`. Payroll GL posting stays with `accounting.PayrollRun` (not duplicated here).
+
+- **3.1 Employee Management** — `EmployeeProfile` directory with personal/employment/bank (masked account) /
+  emergency-contact / photo, leave-balance + recent-attendance + recent-leave on the detail, and an HRM overview
+  (headcount / today's attendance / pending leave / upcoming holidays).
+- **3.2 Organizational Structure** — `Designation` (job grade + salary band, linked to `core.OrgUnit`).
+- **3.9 Attendance Management** — `AttendanceRecord` (`ATT-`, auto `hours_worked` incl. overnight, late-arrival
+  badge, source/status), `Shift` (grace window) + `ShiftAssignment`.
+- **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
+  **derived** used/balance from approved requests), `LeaveRequest` (`LR-`) with a draft→pending→approved/rejected/
+  cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
+- **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
+
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **239-test** HRM suite
+(1263 project-wide). Leave/approver fields are workflow-set (never form-set); sensitive bank fields are redacted
+from the audit trail.
+
 ---
 
 ## Technology stack
@@ -285,6 +306,7 @@ python manage.py seed_accounts
 python manage.py seed_tenants
 python manage.py seed_crm
 python manage.py seed_accounting
+python manage.py seed_hrm
 
 # 6. Start the development server
 python manage.py runserver
@@ -561,7 +583,7 @@ Before deploying:
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, payments + cash application, aging; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
-| 3 | Human Resource Management (HRM) | `hrm` | Roadmap |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.9/3.10/3.12 built (employee directory + profiles on `core.Party`/`core.Employment`; designations + salary bands on `core.OrgUnit`; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`; 239-test suite) |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
 | 6 | Procurement Management System | `procurement` | Roadmap |
