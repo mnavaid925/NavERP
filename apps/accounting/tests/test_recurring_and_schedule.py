@@ -27,13 +27,23 @@ def test_add_months_clamps_to_month_end():
     ("quarterly", datetime.date(2026, 1, 15), datetime.date(2026, 4, 15)),
     ("annually", datetime.date(2026, 1, 15), datetime.date(2027, 1, 15)),
 ])
-def test_advance_per_cadence(tenant_a, customer_party, cadence, start, expected):
+def test_run_date_for_one_step(tenant_a, customer_party, cadence, start, expected):
     rec = RecurringInvoice.objects.create(
         tenant=tenant_a, party=customer_party, description="x", amount=Decimal("100"),
         cadence=cadence, start_date=start)
-    assert rec.next_run_date == start  # save() defaulted next_run to start
-    rec.advance()
-    assert rec.next_run_date == expected
+    assert rec.next_run_date == start          # save() defaulted next_run to start
+    assert rec.run_date_for(0) == start
+    assert rec.run_date_for(1) == expected
+
+
+def test_run_date_for_anchors_month_end(tenant_a, customer_party):
+    """A month-end schedule keeps its day-of-month instead of drifting earlier (review F3)."""
+    rec = RecurringInvoice.objects.create(
+        tenant=tenant_a, party=customer_party, description="x", amount=Decimal("100"),
+        cadence="monthly", start_date=datetime.date(2026, 1, 31))
+    assert rec.run_date_for(1) == datetime.date(2026, 2, 28)
+    assert rec.run_date_for(2) == datetime.date(2026, 3, 31)  # anchored back to 31, not 28
+    assert rec.run_date_for(3) == datetime.date(2026, 4, 30)
 
 
 def test_number_assigned_and_next_run_defaults(tenant_a, customer_party):
@@ -75,7 +85,33 @@ def test_generate_creates_invoice_and_advances(client_a, tenant_a, customer_part
     assert inv.status == "draft"
     assert inv.party_id == customer_party.pk
     assert inv.total == Decimal("750.00")  # one line, qty 1 * 750, no tax
-    assert f"schedule {rec.number}" in inv.notes
+    assert inv.recurring_invoice_id == rec.pk  # authoritative FK link
+
+
+def test_edit_blank_next_run_preserves_value(client_a, tenant_a, customer_party):
+    """Clearing Next Run while editing keeps the current value, not a rewind to start (review F2)."""
+    rec = _rec(tenant_a, customer_party, start_date=datetime.date(2026, 1, 1))
+    rec.next_run_date = datetime.date(2026, 6, 1)
+    rec.save(update_fields=["next_run_date"])
+    resp = client_a.post(reverse("accounting:recurringinvoice_edit", args=[rec.pk]), {
+        "party": customer_party.pk, "description": rec.description, "amount": "750",
+        "cadence": "monthly", "start_date": "2026-01-01", "status": "active", "next_run_date": ""})
+    assert resp.status_code == 302
+    rec.refresh_from_db()
+    assert rec.next_run_date == datetime.date(2026, 6, 1)  # preserved, not snapped to 2026-01-01
+
+
+def test_generated_link_uses_fk_not_notes(client_a, tenant_a, customer_party):
+    """The generated-invoices list is FK-based, so an invoice merely mentioning the schedule
+    number in its (user-editable) notes is NOT listed (review F5/F6)."""
+    rec = _rec(tenant_a, customer_party)
+    client_a.post(reverse("accounting:recurringinvoice_generate", args=[rec.pk]))
+    Invoice.objects.create(tenant=tenant_a, party=customer_party, kind="invoice",
+                           issue_date=datetime.date(2026, 1, 1), status="draft",
+                           notes=f"mentions schedule {rec.number} but was not generated")
+    gen = client_a.get(reverse("accounting:recurringinvoice_detail", args=[rec.pk])).context["generated"]
+    assert len(gen) == 1
+    assert all(i.recurring_invoice_id == rec.pk for i in gen)
 
 
 def test_generate_blocked_when_not_active(client_a, tenant_a, customer_party):
@@ -149,6 +185,14 @@ def test_payment_schedule_no_discount_when_window_passed(client_a, tenant_a, ven
     row = client_a.get(reverse("accounting:payment_schedule")).context["rows"][0]
     assert row["discount"] == Decimal("0")
     assert row["overdue"] is True
+
+
+def test_payment_schedule_renders_due_date(client_a, tenant_a, vendor_party):
+    """The Due Date column must render the bill's date, not a blank cell (review F1)."""
+    due = datetime.date(2026, 5, 10)
+    _open_bill(tenant_a, vendor_party, "1000", due, bill_date=datetime.date(2026, 4, 10))
+    resp = client_a.get(reverse("accounting:payment_schedule"))
+    assert b"May 10, 2026" in resp.content  # Django "M d, Y" of the bill due date
 
 
 def test_payment_schedule_excludes_other_tenant(client_a, tenant_b, party_b):
