@@ -402,6 +402,9 @@ class Invoice(TenantNumbered):
                                  related_name="invoices")
     journal_entry = models.ForeignKey("accounting.JournalEntry", on_delete=models.SET_NULL, null=True, blank=True,
                                       related_name="invoices", editable=False)
+    recurring_invoice = models.ForeignKey("accounting.RecurringInvoice", on_delete=models.SET_NULL, null=True,
+                                          blank=True, related_name="generated_invoices", editable=False,
+                                          help_text="The schedule that generated this invoice, if any.")
     subtotal = models.DecimalField(max_digits=18, decimal_places=2, default=0, editable=False)
     tax_total = models.DecimalField(max_digits=18, decimal_places=2, default=0, editable=False)
     total = models.DecimalField(max_digits=18, decimal_places=2, default=0, editable=False)
@@ -508,21 +511,28 @@ class RecurringInvoice(TenantNumbered):
         indexes = [models.Index(fields=["tenant", "status"], name="acc_rinv_tenant_status_idx")]
 
     def save(self, *args, **kwargs):
-        if not self.next_run_date:
+        # Default next_run_date to start_date on INSERT only — never on update, or clearing the
+        # field while editing would silently rewind a schedule already mid-run (review F2).
+        if self._state.adding and not self.next_run_date:
             self.next_run_date = self.start_date
         super().save(*args, **kwargs)
 
-    def advance(self):
-        """Move ``next_run_date`` forward by one cadence step (real calendar months, day-clamped)."""
-        base = self.next_run_date or self.start_date
+    def run_date_for(self, n):
+        """Anchored date of the ``n``-th occurrence (0-indexed). Always re-derived from
+        ``start_date`` so a month-end schedule keeps its day-of-month instead of drifting earlier
+        after passing through a short month (review F3)."""
         if self.cadence == "weekly":
-            self.next_run_date = base + timedelta(days=7)
-        elif self.cadence == "monthly":
-            self.next_run_date = add_months(base, 1)
-        elif self.cadence == "quarterly":
-            self.next_run_date = add_months(base, 3)
-        else:  # annually
-            self.next_run_date = add_months(base, 12)
+            return self.start_date + timedelta(days=7 * n)
+        if self.cadence == "monthly":
+            return add_months(self.start_date, n)
+        if self.cadence == "quarterly":
+            return add_months(self.start_date, 3 * n)
+        return add_months(self.start_date, 12 * n)  # annually
+
+    def advance(self):
+        """Point ``next_run_date`` at the next un-generated occurrence (anchored to start_date).
+        Call AFTER incrementing ``occurrences_generated``."""
+        self.next_run_date = self.run_date_for(self.occurrences_generated)
 
     def is_due(self, on=None):
         from django.utils import timezone
