@@ -7,6 +7,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * the leave-request workflow actions (submit / approve / reject / cancel),
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
+from datetime import date as _date
 from decimal import Decimal
 
 from django.contrib import messages
@@ -48,6 +49,14 @@ from .models import (
 
 
 _DEC = DecimalField(max_digits=7, decimal_places=2)
+
+
+def _parse_iso_date(value):
+    """Return a date for a ``YYYY-MM-DD`` string, or None for blank/malformed input."""
+    try:
+        return _date.fromisoformat(value)
+    except (ValueError, TypeError):
+        return None
 
 
 def _used_days_subquery():
@@ -410,10 +419,12 @@ def leaverequest_approve(request, pk):
         obj.approved_at = timezone.now()
         obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
         # Reflect the approval on any existing attendance rows in the leave window.
-        AttendanceRecord.objects.filter(
+        touched = AttendanceRecord.objects.filter(
             tenant=request.tenant, employee=obj.employee,
             date__gte=obj.start_date, date__lte=obj.end_date).update(status="on_leave")
-        write_audit_log(request.user, obj, "update", {"action": "approve"})
+        write_audit_log(request.user, obj, "update", {
+            "action": "approve",
+            "attendance_set_on_leave": f"{obj.start_date}..{obj.end_date} ({touched} rows)"})
         messages.success(request, f"Leave request {obj.number} approved.")
     return redirect("hrm:leaverequest_detail", pk=obj.pk)
 
@@ -444,11 +455,13 @@ def leaverequest_cancel(request, pk):
             obj.save(update_fields=["status", "cancelled_reason", "updated_at"])
             # Undo the on-leave marking that approval applied, so attendance reports stay correct
             # (inverse of leaverequest_approve). Only touch rows we put into on_leave.
+            reverted = 0
             if was_approved:
-                AttendanceRecord.objects.filter(
+                reverted = AttendanceRecord.objects.filter(
                     tenant=request.tenant, employee=obj.employee, status="on_leave",
                     date__gte=obj.start_date, date__lte=obj.end_date).update(status="present")
-        write_audit_log(request.user, obj, "update", {"action": "cancel"})
+        write_audit_log(request.user, obj, "update", {
+            "action": "cancel", "attendance_reverted_rows": reverted})
         messages.success(request, f"Leave request {obj.number} cancelled.")
     return redirect("hrm:leaverequest_detail", pk=obj.pk)
 
@@ -594,8 +607,10 @@ def shiftassignment_delete(request, pk):
 def attendancerecord_list(request):
     qs = (AttendanceRecord.objects.filter(tenant=request.tenant)
           .select_related("employee__party", "shift"))
-    date_from = request.GET.get("date_from", "").strip()
-    date_to = request.GET.get("date_to", "").strip()
+    # Parse the date-range GET params defensively — a malformed string passed straight to
+    # .filter(date__gte=...) would raise a 500 (ValueError/DataError); ignore bad input instead.
+    date_from = _parse_iso_date(request.GET.get("date_from", "").strip())
+    date_to = _parse_iso_date(request.GET.get("date_to", "").strip())
     if date_from:
         qs = qs.filter(date__gte=date_from)
     if date_to:
