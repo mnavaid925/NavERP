@@ -45,9 +45,10 @@ NavERP is a SaaS-style ERP where many independent organizations ("tenants") shar
 one database, with strict per-tenant data isolation. It is built **module by module** on a single shared data
 model so that customers, vendors, employees, items, money, and stock are never duplicated across modules.
 
-This repository currently delivers **Module 0 — System Admin & Security** (the cross-cutting foundation that
-every other module depends on) and its first sub-module **0.1 Tenant & Subscription Management**. The remaining
-functional modules (1–13) are planned and scaffolded against the same core.
+This repository currently delivers the **Module 0 foundation** (System Admin & Security —
+`core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
+**Module 2 — Accounting & Finance** (2.1–2.15), and the first pass of **Module 3 — HRM** (employees, leave,
+attendance). The remaining functional modules (4–13) are planned and scaffolded against the same core.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -63,10 +64,10 @@ Three design ideas hold the whole platform together:
    This collapses the customer/vendor/employee duplication that otherwise spreads across CRM, Accounting, HR,
    Procurement, and Sales.
 
-2. **Two universal ledgers (roadmap).** Every inventory effect will post to `StockMove` and every financial
-   effect to `JournalEntry`/`JournalLine` (append-only). On-hand quantities and account balances are **derived**
-   by aggregation, never stored as editable fields — that consistency is what makes it an ERP. (These ledgers
-   arrive with the inventory/accounting modules; the foundation establishes the pattern.)
+2. **Two universal ledgers.** Every financial effect posts to `JournalEntry`/`JournalLine` (append-only) — **built
+   and owned by the Accounting module (Module 2)** — and every inventory effect will post to `StockMove` (arrives
+   with the Inventory module). Account balances and on-hand quantities are **derived** by aggregation, never stored
+   as editable fields — that consistency is what makes it an ERP.
 
 3. **Shared cross-module anchors.** A small set of backbone entities (`OrgUnit`, `Employment`, `Activity`,
    `Document`, `AuditLog`, and later `Project`, `Asset`, `WorkOrder`, `Contract`) are read/written by more than
@@ -149,7 +150,7 @@ Three design ideas hold the whole platform together:
   > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
   > the spine when those modules land.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite (1024 project-wide).
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite.
 
 ### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.5
 
@@ -170,7 +171,7 @@ reversal), account balances are always *derived* from posted lines, and posting 
 - **2.5 Cash Management** — **Bank Accounts** (last-4 only) with a live balance, **Bank Transactions** (manual +
   CSV import, deduped on external ref), **Reconciliation** matching.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_accounting`, and a **174-test** accounting suite.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_accounting`, and a **212-test** accounting suite.
 
 **Advanced sub-modules 2.6–2.15** (extension pass, 14 accounting-owned models, migrations `0002`/`0003`) — every
 workflow action posts a balanced `JournalEntry`:
@@ -208,7 +209,7 @@ First HRM pass — **employee directory + leave + attendance**, reusing the core
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **239-test** HRM suite
-(1263 project-wide). Leave/approver fields are workflow-set (never form-set); sensitive bank fields are redacted
+(**1301 project-wide**). Leave/approver fields are workflow-set (never form-set); sensitive bank fields are redacted
 from the audit trail.
 
 ---
@@ -352,7 +353,9 @@ checkout appears; otherwise the UI shows a "configure Stripe" state and a manual
 ## Seed data & demo logins
 
 Seeding creates two demo tenants (**Acme Inc** `acme`, **Globex Corporation** `globex`) with parties, org units,
-employments, activities, subscriptions, invoices, branding, encryption keys, and health metrics.
+employments, activities, subscriptions, invoices, branding, encryption keys, and health metrics — plus the domain
+demo data: **CRM** (leads/opportunities/cases/…), **Accounting** (GL accounts, invoices/bills/payments, bank
+transactions, a recurring-invoice schedule), and **HRM** (employees, leave allocations/requests, attendance).
 
 | Role | Username | Password | Notes |
 |------|----------|----------|-------|
@@ -396,6 +399,8 @@ backend) — copy the link from there.
 | Core spine | `/core/` | `/core/parties/`, `/core/org-units/`, `/core/party-roles/`, `/core/addresses/`, `/core/contact-methods/`, `/core/relationships/`, `/core/employments/`, `/core/activities/`, `/core/documents/`, `/core/audit-logs/` |
 | Module 0.1 | `/tenants/` | `/tenants/subscriptions/`, `/tenants/subscription-invoices/`, `/tenants/branding/`, `/tenants/encryption-keys/`, `/tenants/health/`, `/tenants/onboarding/`, `/tenants/stripe/webhook/` |
 | Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/campaigns/`, `/crm/cases/`, `/crm/knowledge/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/`, `/crm/expenses/`, `/crm/projects/`, `/crm/milestones/`, `/crm/timesheets/`, `/crm/doc-templates/`, `/crm/contracts/`, `/crm/workflows/`, `/crm/approvals/`, `/crm/onboarding/`, `/crm/health-scores/`, `/crm/surveys/`, `/crm/stock/`, `/crm/purchase-orders/`, `/crm/partner-portal/`, `/crm/portal/` (partner-facing); public `/crm/sign/<token>/`, `/crm/surveys/<token>/respond/` |
+| Module 2 (Accounting) | `/accounting/` | `/accounting/` (dashboard), `/accounting/glaccounts/`, `/accounting/journal-entries/`, `/accounting/fiscal-periods/`, `/accounting/currencies/`, `/accounting/exchange-rates/`, `/accounting/vendor-profiles/`, `/accounting/bills/`, `/accounting/customer-profiles/`, `/accounting/invoices/`, `/accounting/recurring-invoices/`, `/accounting/payments/`, `/accounting/allocations/`, `/accounting/bank-accounts/`, `/accounting/bank-transactions/`, `/accounting/reconciliation/`, `/accounting/fixed-assets/`, `/accounting/asset-disposals/`, `/accounting/cost-allocations/`, `/accounting/payroll-runs/`, `/accounting/projects/`, `/accounting/intercompany/`, `/accounting/tax-codes/`, `/accounting/tax-returns/`, `/accounting/budgets/`, `/accounting/controls/`, `/accounting/integrations/`; reports `/accounting/reports/{trial-balance,cash-forecast,payment-schedule,ar-aging,ap-aging,balance-sheet,profit-and-loss,budget-variance}/` |
+| Module 3 (HRM) | `/hrm/` | `/hrm/` (overview), `/hrm/employees/`, `/hrm/designations/`, `/hrm/leave-types/`, `/hrm/leave-allocations/`, `/hrm/leave-requests/`, `/hrm/holidays/`, `/hrm/shifts/`, `/hrm/shift-assignments/`, `/hrm/attendance/` |
 | Django admin | `/admin/` | `/admin/` |
 
 Each CRUD resource follows the pattern: list (`/`), create (`/add/`), detail (`/<pk>/`), edit (`/<pk>/edit/`),
@@ -434,12 +439,15 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- ~300 tests run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch the
-  MySQL dev database.
+- **1301 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+  the MySQL dev database. Per-module suites include foundation (`core`/`accounts`/`tenants`), **CRM 552**,
+  **Accounting 212**, and **HRM 239**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
   (member → 403), forgot-password non-enumeration, invite token/expiry, encryption-key secrecy, branding hex
-  validation, and the Stripe webhook signature rejection.
+  validation, the Stripe webhook signature rejection, **double-entry GL invariants + posting/void workflows**
+  (Accounting), the **leave-request approval state machine + derived balances** (HRM), and the recurring-invoice
+  cadence/generation + cash-forecast projection.
 
 ---
 
@@ -467,12 +475,18 @@ NavERP/
 │  │  ├─ models.py  stripe_utils.py  forms.py  views.py  urls.py  admin.py
 │  │  ├─ management/commands/seed_tenants.py
 │  │  └─ tests/
-│  └─ dashboard/            KPI aggregation (no models)
+│  ├─ dashboard/            KPI aggregation (no models)
+│  ├─ crm/                  Module 1 — CRM (leads/opportunities/cases/… + 1.7–1.12)
+│  ├─ accounting/           Module 2 — GL ledger, AP/AR, cash, recurring invoicing + advanced 2.6–2.15
+│  │  ├─ models.py  models_advanced.py  views.py  views_advanced.py  forms.py  urls.py  admin.py
+│  │  ├─ management/commands/seed_accounting.py
+│  │  └─ tests/
+│  └─ hrm/                  Module 3 — employees, leave, attendance
 ├─ templates/
 │  ├─ base.html  base_auth.html
 │  ├─ partials/             sidebar, topbar, footer, messages, pagination, customizer
 │  ├─ registration/         login, register, forgot/reset password, invite accept
-│  ├─ core/ accounts/ tenants/ dashboard/   per-model CRUD pages
+│  ├─ core/ accounts/ tenants/ dashboard/ crm/ accounting/ hrm/   per-model CRUD pages
 ├─ static/
 │  ├─ css/theme.css         design system (component classes, dark mode, layout variants)
 │  ├─ js/layout.js          layout customizer (persists to localStorage)
@@ -589,7 +603,7 @@ Before deploying:
 |---|--------|----------|--------|
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
-| 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, payments + cash application, aging; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
+| 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard + cash-forecast; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, recurring invoicing, payments + cash application, aging, payment schedule; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
 | 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.9/3.10/3.12 built (employee directory + profiles on `core.Party`/`core.Employment`; designations + salary bands on `core.OrgUnit`; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`; 239-test suite) |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
