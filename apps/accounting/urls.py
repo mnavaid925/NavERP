@@ -10,6 +10,7 @@ urlpatterns = [
     path("", views.accounting_dashboard, name="accounting_dashboard"),
     path("dashboard/", views.accounting_dashboard, name="dashboard"),
     path("reports/trial-balance/", views.trial_balance, name="trial_balance"),
+    path("reports/cash-forecast/", views.cash_forecast, name="cash_forecast"),
     path("reports/ar-aging/", views.ar_aging, name="ar_aging"),
     path("reports/ap-aging/", views.ap_aging, name="ap_aging"),
     path("reports/ledger/<int:account_pk>/", views.gl_account_ledger, name="gl_account_ledger"),
