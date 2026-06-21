@@ -51,9 +51,11 @@ Abstract bases: `TenantOwned` (tenant FK + timestamps), `TenantNumbered(TenantOw
 - `ReconciliationMatch` — `bank_transaction`, `payment` or `journal_line`, `matched_by` (system), `matched_at`, `is_confirmed`.
 
 ## URLs / routes (`apps/accounting/urls.py`, namespace `accounting:`)
-Per CRUD model: `<base>_list / _create / _detail / _edit / _delete`. Bases: `glaccount`, `fiscal_period`, `journal_entry`, `currency`, `exchange_rate`, `payment_term`, `vendor_profile`, `bill`, `customer_profile`, `invoice`, `payment`, `allocation`, `bank_account`, `bank_transaction`, `reconciliation`.
-**Custom actions (POST-only, `@tenant_admin_required` unless noted):** `fiscal_period_close`, `journal_entry_post`, `journal_entry_void`, `bill_approve`, `invoice_post`, `payment_confirm`, `payment_void`, `reconciliation_confirm`, `bank_transaction_import_csv` (GET form + POST upload, `@login_required`).
-**Reports / dashboard (GET, `@login_required`):** `accounting_dashboard` (+ alias `dashboard`), `trial_balance`, `cash_forecast` (2.1 Forecasting — projects cash from open AR/AP by due date; `?weeks=` 4–52 default 13; shares the `_cash_position(tenant)` helper with the dashboard), `ar_aging`, `ap_aging`, `gl_account_ledger` (arg `account_pk`). The dashboard's four 2.1 widgets carry anchor ids (`#executive-summary`/`#cash-flow`/`#alert-center`/`#quick-actions`) that the sidebar deep-links to.
+Per CRUD model: `<base>_list / _create / _detail / _edit / _delete`. Bases: `glaccount`, `fiscal_period`, `journal_entry`, `currency`, `exchange_rate`, `payment_term`, `vendor_profile`, `bill`, `customer_profile`, `invoice`, `recurringinvoice` (2.4 Recurring Invoicing), `payment`, `allocation`, `bank_account`, `bank_transaction`, `reconciliation`.
+**Custom actions (POST-only, `@tenant_admin_required` unless noted):** `fiscal_period_close`, `journal_entry_post`, `journal_entry_void`, `bill_approve`, `invoice_post`, `recurringinvoice_generate` (`@login_required` — creates a draft Invoice from the schedule, sets `Invoice.recurring_invoice` FK, advances `next_run_date` anchored to `start_date`), `payment_confirm`, `payment_void`, `reconciliation_confirm`, `bank_transaction_import_csv` (GET form + POST upload, `@login_required`).
+**Reports / dashboard (GET, `@login_required`):** `accounting_dashboard` (+ alias `dashboard`), `trial_balance`, `cash_forecast` (2.1 Forecasting — projects cash from open AR/AP by due date; `?weeks=` 4–52 default 13; shares the `_cash_position(tenant)` helper with the dashboard), `payment_schedule` (2.3 — open bills by due date with discount-aware suggested pay date + running outflow), `ar_aging`, `ap_aging`, `gl_account_ledger` (arg `account_pk`). The dashboard's four 2.1 widgets carry anchor ids (`#executive-summary`/`#cash-flow`/`#alert-center`/`#quick-actions`) that the sidebar deep-links to.
+
+**`RecurringInvoice` model** [RINV-, `models.py`]: party (customer)/description/amount/currency/payment_terms/cadence (weekly/monthly/quarterly/annually)/start_date/next_run_date/status (active/paused/ended) + system `last_generated_at`/`occurrences_generated`. `run_date_for(n)` gives the anchored date of the n-th occurrence (re-derived from `start_date` via `models.add_months`, day-clamped — no month-end drift); `advance()` sets `next_run_date = run_date_for(occurrences_generated)`. Generated invoices link back via the `Invoice.recurring_invoice` FK (`obj.generated_invoices`).
 
 ## Templates (`templates/accounting/`, 51 files)
 Extend `base.html`, design-system classes only (`.card/.btn/.badge badge-green|red|amber|info|muted|slate/.stat-card/.detail-grid/.form-grid/.filter-bar/.table-actions/.empty-state`). Lists: GET filter-bar reflecting `request.GET` + Actions column + `{% include "partials/pagination.html" %}`. Context contract (from `core.crud`): list → `object_list`/`page_obj`/`q`; detail/edit → `obj`; forms → `form`/`is_edit` (+ `formset` for JE/Invoice/Bill). `dashboard.html` uses `json_script` + Chart.js (mirror `crm/overview.html`). Admin-gated action buttons are wrapped `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
@@ -112,11 +114,23 @@ type, code_prefix)` (e.g. depreciation→1600/1690/6400, payroll→6100/1000/220
 control accounts are the documented future migration.
 
 ## Sidebar wiring (`apps/core/navigation.py` LIVE_LINKS)
-Keys **`"2.1"`–`"2.15"`** map NavERP.md bullets → routes. A route value may carry an optional `#fragment`
-(e.g. `accounting:accounting_dashboard#cash-flow`) to deep-link a same-page section — `_safe_reverse`/`_is_active`
-strip the fragment for reversing/active-matching. 2.1: the four dashboard widgets → distinct `#`-anchors,
-Custom Reports → trial_balance, **Forecasting → cash_forecast**; 2.2 GL; 2.3 AP; 2.4 AR; 2.5
-cash (see above). Advanced: 2.6 fixed_asset/asset_disposal; 2.7 cost_allocation; 2.8 payroll_run; 2.9 project/
+Keys **`"2.1"`–`"2.15"`** map NavERP.md bullets → routes. A route value may carry an optional `?query` and/or
+`#fragment` (e.g. `accounting:accounting_dashboard#cash-flow`, `accounting:integration_list?category=crm`) to
+deep-link a same-page section or a filtered list — `_route_name` splits the suffix off; `_safe_reverse` re-appends
+it; `_is_active` matches on the route name only (so bullets sharing a route all highlight together — accepted, see
+the `_is_active` docstring F4 note). Wired bullets of note: 2.2 Allocation Rules → cost_allocation_list; 2.3 Payment
+Scheduling → payment_schedule; 2.4 Recurring Invoicing → recurringinvoice_list; 2.5 Treasury Forecasting →
+cash_forecast, Inter-company Transfers → intercompany_list; 2.8 **Employee Master → `hrm:employee_list`** (HRM
+owns it); 2.9 Time & Expense → job_cost_entry_list; 2.10 Currency Translation → exchange_rate_list; 2.12 Management
+Reports → profit_and_loss; 2.15 the connector categories → `integration_list?category=<banking|payments|ecommerce|
+crm|erp|hris|tax|storage>`. 2.1: the four dashboard widgets → distinct `#`-anchors, Custom Reports → trial_balance,
+**Forecasting → cash_forecast**.
+**Still "Soon" (intentional — owned by another module or needs an external integration):** all of 2.7 (Item
+Master/Inventory Valuation/Purchase Orders/… → Inventory Module 5 + Procurement Module 6); vendor/customer portals;
+payroll detail (benefits/garnishments/workers-comp); rev-rec/project-billing; transfer-pricing/regulatory; specialized
+tax (use-tax/provision/nexus); report-builder/XBRL/statutory; driver-based/rolling/what-if budgeting; SoD/change-mgmt/
+exception controls; bank-fee analysis (needs txn categorization). Don't wire these to placeholder pages.
+The pre-2.x mappings: 2.2 GL; 2.3 AP; 2.4 AR; 2.5 cash (see above). Advanced: 2.6 fixed_asset/asset_disposal; 2.7 cost_allocation; 2.8 payroll_run; 2.9 project/
 job_cost_entry; 2.10 `core:orgunit_list` + intercompany; 2.11 tax_code/tax_return; 2.12 balance_sheet/profit_and_loss/
 scheduled_report + dashboard; 2.13 budget/budget_variance; 2.14 internal_control + `core:auditlog_list`/`core:document_list`/
 `accounts:role_list`; 2.15 integration. Don't edit `MODULE_CATALOG`.
