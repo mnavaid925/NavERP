@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:attendancerecord_list' %}">Attendance</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:attendancerecord_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:attendancerecord_delete' obj.pk %}" onsubmit="return confirm('Delete this record?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.date }}</dd></div>
+      <div class="detail-item"><dt>Check In</dt><dd>{{ obj.check_in|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Check Out</dt><dd>{{ obj.check_out|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Hours Worked</dt><dd>{{ obj.hours_worked }}</dd></div>
+      <div class="detail-item"><dt>Shift</dt><dd>{{ obj.shift.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'present' %}green{% elif obj.status == 'absent' %}red{% elif obj.status == 'half_day' %}amber{% elif obj.status == 'on_leave' %}info{% elif obj.status == 'holiday' %}slate{% elif obj.status == 'regularized' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}</dd></div>
+      <div class="detail-item"><dt>Late?</dt><dd>{% if obj.is_late %}<span class="badge badge-amber">Late</span>{% else %}<span class="badge badge-green">On time</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:attendancerecord_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
