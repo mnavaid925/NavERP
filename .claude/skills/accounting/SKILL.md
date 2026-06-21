@@ -53,7 +53,7 @@ Abstract bases: `TenantOwned` (tenant FK + timestamps), `TenantNumbered(TenantOw
 ## URLs / routes (`apps/accounting/urls.py`, namespace `accounting:`)
 Per CRUD model: `<base>_list / _create / _detail / _edit / _delete`. Bases: `glaccount`, `fiscal_period`, `journal_entry`, `currency`, `exchange_rate`, `payment_term`, `vendor_profile`, `bill`, `customer_profile`, `invoice`, `payment`, `allocation`, `bank_account`, `bank_transaction`, `reconciliation`.
 **Custom actions (POST-only, `@tenant_admin_required` unless noted):** `fiscal_period_close`, `journal_entry_post`, `journal_entry_void`, `bill_approve`, `invoice_post`, `payment_confirm`, `payment_void`, `reconciliation_confirm`, `bank_transaction_import_csv` (GET form + POST upload, `@login_required`).
-**Reports / dashboard (GET, `@login_required`):** `accounting_dashboard` (+ alias `dashboard`), `trial_balance`, `ar_aging`, `ap_aging`, `gl_account_ledger` (arg `account_pk`).
+**Reports / dashboard (GET, `@login_required`):** `accounting_dashboard` (+ alias `dashboard`), `trial_balance`, `cash_forecast` (2.1 Forecasting — projects cash from open AR/AP by due date; `?weeks=` 4–52 default 13; shares the `_cash_position(tenant)` helper with the dashboard), `ar_aging`, `ap_aging`, `gl_account_ledger` (arg `account_pk`). The dashboard's four 2.1 widgets carry anchor ids (`#executive-summary`/`#cash-flow`/`#alert-center`/`#quick-actions`) that the sidebar deep-links to.
 
 ## Templates (`templates/accounting/`, 51 files)
 Extend `base.html`, design-system classes only (`.card/.btn/.badge badge-green|red|amber|info|muted|slate/.stat-card/.detail-grid/.form-grid/.filter-bar/.table-actions/.empty-state`). Lists: GET filter-bar reflecting `request.GET` + Actions column + `{% include "partials/pagination.html" %}`. Context contract (from `core.crud`): list → `object_list`/`page_obj`/`q`; detail/edit → `obj`; forms → `form`/`is_edit` (+ `formset` for JE/Invoice/Bill). `dashboard.html` uses `json_script` + Chart.js (mirror `crm/overview.html`). Admin-gated action buttons are wrapped `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
@@ -112,7 +112,10 @@ type, code_prefix)` (e.g. depreciation→1600/1690/6400, payroll→6100/1000/220
 control accounts are the documented future migration.
 
 ## Sidebar wiring (`apps/core/navigation.py` LIVE_LINKS)
-Keys **`"2.1"`–`"2.15"`** map NavERP.md bullets → routes. 2.1 dashboard/trial-balance; 2.2 GL; 2.3 AP; 2.4 AR; 2.5
+Keys **`"2.1"`–`"2.15"`** map NavERP.md bullets → routes. A route value may carry an optional `#fragment`
+(e.g. `accounting:accounting_dashboard#cash-flow`) to deep-link a same-page section — `_safe_reverse`/`_is_active`
+strip the fragment for reversing/active-matching. 2.1: the four dashboard widgets → distinct `#`-anchors,
+Custom Reports → trial_balance, **Forecasting → cash_forecast**; 2.2 GL; 2.3 AP; 2.4 AR; 2.5
 cash (see above). Advanced: 2.6 fixed_asset/asset_disposal; 2.7 cost_allocation; 2.8 payroll_run; 2.9 project/
 job_cost_entry; 2.10 `core:orgunit_list` + intercompany; 2.11 tax_code/tax_return; 2.12 balance_sheet/profit_and_loss/
 scheduled_report + dashboard; 2.13 budget/budget_variance; 2.14 internal_control + `core:auditlog_list`/`core:document_list`/
