@@ -447,12 +447,13 @@ class AttendanceRecord(TenantNumbered):
             self.hours_worked = ZERO
 
     def is_late(self):
-        """True when check-in is past the shift start + grace window (display-only helper)."""
+        """True when check-in is past the shift start + grace window (display-only helper).
+        Compared in minutes-of-day to stay platform-safe (no epoch conversion)."""
         if not (self.check_in and self.shift_id and self.shift and self.shift.start_time):
             return False
-        start = datetime.combine(date.min, self.shift.start_time)
-        allowed = start.timestamp() + self.shift.grace_minutes * 60
-        return datetime.combine(date.min, self.check_in).timestamp() > allowed
+        start_min = self.shift.start_time.hour * 60 + self.shift.start_time.minute
+        check_in_min = self.check_in.hour * 60 + self.check_in.minute
+        return check_in_min > start_min + self.shift.grace_minutes
 
     def save(self, *args, **kwargs):
         self._recompute_hours()
