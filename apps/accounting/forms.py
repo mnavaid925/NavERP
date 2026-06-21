@@ -30,6 +30,7 @@ from .models import (
     Payment,
     PaymentAllocation,
     PaymentTerm,
+    RecurringInvoice,
     ReconciliationMatch,
     VendorProfile,
 )
@@ -167,6 +168,24 @@ class InvoiceLineForm(TenantModelForm):
     class Meta:
         model = InvoiceLine
         fields = ["description", "quantity", "unit_price", "tax_rate_pct", "gl_account"]
+
+
+class RecurringInvoiceForm(TenantModelForm):
+    class Meta:
+        model = RecurringInvoice
+        # `number`, `next_run_date` default + advance, `last_generated_at`, `occurrences_generated`
+        # are system-managed; `party` is scoped to customers below.
+        fields = ["party", "description", "amount", "currency", "payment_terms", "cadence",
+                  "start_date", "next_run_date", "status", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _active_currencies(self)
+        self.fields["next_run_date"].required = False  # defaults to start_date in model.save()
+        if self.tenant is not None:
+            self.fields["party"].queryset = (
+                Party.objects.filter(tenant=self.tenant, roles__role="customer").distinct()
+            )
 
 
 class BillForm(TenantModelForm):
