@@ -44,6 +44,7 @@ from .forms import (
     PaymentAllocationForm,
     PaymentForm,
     PaymentTermForm,
+    RecurringInvoiceForm,
     ReconciliationMatchForm,
     VendorProfileForm,
 )
@@ -58,11 +59,13 @@ from .models import (
     FiscalPeriod,
     GLAccount,
     Invoice,
+    InvoiceLine,
     JournalEntry,
     JournalLine,
     Payment,
     PaymentAllocation,
     PaymentTerm,
+    RecurringInvoice,
     ReconciliationMatch,
     VendorProfile,
 )
@@ -376,6 +379,124 @@ def cash_forecast(request):
         "chart_labels": chart_labels, "chart_balance": chart_balance,
         "today": timezone.localdate(),
     })
+
+
+@login_required
+def payment_schedule(request):
+    """2.3 Payment Scheduling — open bills (approved/partial) ordered by due date, with each bill's
+    early-payment discount window from its PaymentTerm. Suggested pay date = the discount deadline
+    when a discount is still capturable today, else the due date; a running net-outflow total helps
+    time payments against cash. Read-only — reuses Bill + PaymentTerm, no new model."""
+    tenant = request.tenant
+    rows = []
+    totals = {"outstanding": ZERO, "discount": ZERO, "net": ZERO}
+    if tenant is not None:
+        today = timezone.localdate()
+        bills = (Bill.objects.filter(tenant=tenant, status__in=Bill.OPEN_STATUSES)
+                 .select_related("party", "payment_terms")
+                 .annotate(paid_agg=Sum("allocations__allocated_amount",
+                                        filter=Q(allocations__payment__status="confirmed")))
+                 .order_by("due_date", "id"))
+        running = ZERO
+        for b in bills:
+            outstanding = (b.total or ZERO) - (b.paid_agg or ZERO)
+            if outstanding <= ZERO:
+                continue
+            term = b.payment_terms
+            discount, deadline, suggested = ZERO, None, b.due_date
+            if term and term.discount_pct and term.discount_days and b.bill_date:
+                deadline = b.bill_date + timedelta(days=term.discount_days)
+                if deadline >= today:  # early-payment discount still capturable
+                    discount = (outstanding * term.discount_pct / 100).quantize(Decimal("0.01"))
+                    suggested = deadline
+            net = outstanding - discount
+            running += net
+            rows.append({"bill": b, "outstanding": outstanding, "discount": discount,
+                         "deadline": deadline, "suggested": suggested, "net": net, "running": running,
+                         "overdue": bool(b.due_date and b.due_date < today)})
+            totals["outstanding"] += outstanding
+            totals["discount"] += discount
+            totals["net"] += net
+    return render(request, "accounting/payment_schedule.html",
+                  {"rows": rows, "totals": totals, "today": timezone.localdate()})
+
+
+# ===================================================== 2.4 Recurring Invoicing
+@login_required
+def recurringinvoice_list(request):
+    return crud_list(
+        request,
+        RecurringInvoice.objects.filter(tenant=request.tenant)
+        .select_related("party", "currency", "payment_terms"),
+        "accounting/recurringinvoice_list.html",
+        search_fields=["number", "description", "party__name"],
+        filters=[("status", "status", False), ("cadence", "cadence", False)],
+        extra_context={"status_choices": RecurringInvoice.STATUS_CHOICES,
+                       "cadence_choices": RecurringInvoice.CADENCE_CHOICES},
+    )
+
+
+@login_required
+def recurringinvoice_create(request):
+    return crud_create(request, form_class=RecurringInvoiceForm,
+                       template="accounting/recurringinvoice_form.html",
+                       success_url="accounting:recurringinvoice_list")
+
+
+@login_required
+def recurringinvoice_detail(request, pk):
+    obj = get_object_or_404(
+        RecurringInvoice.objects.select_related("party", "currency", "payment_terms"),
+        pk=pk, tenant=request.tenant)
+    # Invoices generated from this schedule are tagged in their notes (loose link — no FK needed).
+    generated = (Invoice.objects.filter(tenant=request.tenant,
+                                        notes__contains=f"schedule {obj.number}")
+                 .order_by("-issue_date", "-id")[:20])
+    return render(request, "accounting/recurringinvoice_detail.html",
+                  {"obj": obj, "generated": generated})
+
+
+@login_required
+def recurringinvoice_edit(request, pk):
+    return crud_edit(request, model=RecurringInvoice, pk=pk, form_class=RecurringInvoiceForm,
+                     template="accounting/recurringinvoice_form.html",
+                     success_url="accounting:recurringinvoice_list")
+
+
+@login_required
+@require_POST
+def recurringinvoice_delete(request, pk):
+    return crud_delete(request, model=RecurringInvoice, pk=pk,
+                       success_url="accounting:recurringinvoice_list")
+
+
+@login_required
+@require_POST
+def recurringinvoice_generate(request, pk):
+    """Generate the next draft Invoice from an active schedule and advance its next run date."""
+    rec = get_object_or_404(RecurringInvoice, pk=pk, tenant=request.tenant)
+    if rec.status != "active":
+        messages.error(request, "Only an active schedule can generate invoices.")
+        return redirect("accounting:recurringinvoice_detail", pk=rec.pk)
+    with transaction.atomic():
+        issue = rec.next_run_date or timezone.localdate()
+        days_due = rec.payment_terms.days_due if rec.payment_terms else 30
+        inv = Invoice.objects.create(
+            tenant=request.tenant, party=rec.party, kind="invoice", issue_date=issue,
+            due_date=issue + timedelta(days=days_due), status="draft",
+            currency=rec.currency, payment_terms=rec.payment_terms,
+            notes=f"Auto-generated from recurring schedule {rec.number}.")
+        InvoiceLine.objects.create(invoice=inv, description=rec.description, quantity=1,
+                                   unit_price=rec.amount)
+        inv.recalc_totals()
+        rec.advance()
+        rec.occurrences_generated += 1
+        rec.last_generated_at = timezone.now()
+        rec.save(update_fields=["next_run_date", "occurrences_generated", "last_generated_at",
+                                "updated_at"])
+    write_audit_log(request.user, rec, "update", {"action": "generate", "invoice": inv.number})
+    messages.success(request, f"Draft invoice {inv.number} created from {rec.number}.")
+    return redirect("accounting:invoice_detail", pk=inv.pk)
 
 
 # ============================================================ 2.2 GL — Chart of Accounts
