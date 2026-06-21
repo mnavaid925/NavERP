@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:publicholiday_list' %}">Public Holidays</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:publicholiday_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:publicholiday_delete' obj.pk %}" onsubmit="return confirm('Delete this holiday?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.date }}</dd></div>
+      <div class="detail-item"><dt>Day</dt><dd>{{ obj.date|date:"l" }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{% if obj.is_optional %}<span class="badge badge-info">Optional</span>{% else %}<span class="badge badge-muted">Public</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:publicholiday_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
