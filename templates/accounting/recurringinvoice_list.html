@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Recurring Invoices{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Recurring Invoices</h1>
+      <div class="breadcrumb"><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Recurring Invoices</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:recurringinvoice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Schedule</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search schedules…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="cadence" class="form-select">
+            <option value="">All cadences</option>
+            {% for val, label in cadence_choices %}
+              <option value="{{ val }}" {% if request.GET.cadence == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounting:recurringinvoice_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Customer</th><th>Description</th><th class="text-right">Amount</th><th>Cadence</th><th>Next Run</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounting:recurringinvoice_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
+              <td>{{ obj.description|truncatechars:40 }}</td>
+              <td class="text-right">{{ obj.amount|floatformat:2 }}</td>
+              <td><span class="badge badge-info">{{ obj.get_cadence_display }}</span></td>
+              <td>{{ obj.next_run_date|date:"M d, Y"|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'paused' %}amber{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounting:recurringinvoice_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'active' %}
+                    <form method="post" action="{% url 'accounting:recurringinvoice_generate' obj.pk %}" onsubmit="return confirm('Generate the next invoice from this schedule?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Generate invoice now"><i data-lucide="file-plus"></i></button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'accounting:recurringinvoice_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'accounting:recurringinvoice_delete' obj.pk %}" onsubmit="return confirm('Delete this schedule?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="repeat"></i><h3>No recurring invoices</h3><p>Create a schedule to bill a customer automatically on a cadence.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
