@@ -4,10 +4,16 @@ applies the theme widget classes. Excluded everywhere: ``tenant``, the auto ``nu
 system-computed fields (``days``, ``hours_worked``, ``approved_at``, ``confirmed_on``,
 ``rejected_reason``/``cancelled_reason`` — set by the workflow actions in the view).
 """
+import os
+
 from django import forms
 
 from apps.core.forms import TenantModelForm
 from apps.core.models import Party
+
+# Photo upload safety: rasterizable-image allowlist + size cap (mirrors core DocumentForm).
+ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 
 from .models import (
     AttendanceRecord,
@@ -44,6 +50,17 @@ class EmployeeProfileForm(TenantModelForm):
         if self.tenant is not None:
             self.fields["party"].queryset = Party.objects.filter(
                 tenant=self.tenant, kind="person").order_by("name")
+
+    def clean_photo(self):
+        f = self.cleaned_data.get("photo")
+        # Only validate a freshly-uploaded file (an existing FieldFile has no size to re-check).
+        if f and hasattr(f, "name") and hasattr(f, "size"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_PHOTO_EXTENSIONS:
+                raise forms.ValidationError(f"Photo type '{ext}' is not allowed. Use JPG, PNG, WebP or GIF.")
+            if f.size and f.size > MAX_PHOTO_BYTES:
+                raise forms.ValidationError("Photo exceeds the 5 MB limit.")
+        return f
 
 
 class LeaveTypeForm(TenantModelForm):
