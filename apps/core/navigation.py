@@ -247,6 +247,37 @@ LIVE_LINKS = {
         "Payment Gateways": "accounting:integration_list",       # bullet
         "Custom API": "accounting:integration_list",             # bullet
     },
+    # ========================= Module 3 — Human Resource Management (HRM)
+    # 3.1 Employee Management — employee is core.Party + core.Employment + hrm.EmployeeProfile.
+    "3.1": {
+        "Employee Directory": "hrm:employee_list",       # bullet
+        "Employee Profile": "hrm:employee_list",         # bullet (rich profile = detail page)
+        "Employment Details": "hrm:employee_list",        # bullet (job/dept/manager on the profile)
+        "HRM Overview": "hrm:hrm_overview",               # extra (module landing/dashboard)
+    },
+    # 3.2 Organizational Structure — Designations are HRM-owned; departments reuse core.OrgUnit.
+    "3.2": {
+        "Designation/Job Titles": "hrm:designation_list",  # bullet
+        "Department Management": "core:orgunit_list",      # bullet (OrgUnit reuse)
+    },
+    # 3.9 Attendance Management
+    "3.9": {
+        "Check-in/Check-out": "hrm:attendancerecord_list",  # bullet
+        "Attendance Calendar": "hrm:attendancerecord_list",  # bullet (date-filtered list)
+        "Shift Management": "hrm:shift_list",                # bullet
+        "Shift Assignments": "hrm:shiftassignment_list",     # extra (employee↔shift mapping)
+    },
+    # 3.10 Leave Management
+    "3.10": {
+        "Leave Types": "hrm:leavetype_list",             # bullet
+        "Leave Balance": "hrm:leaveallocation_list",     # bullet (per-employee allocation + balance)
+        "Leave Application": "hrm:leaverequest_list",    # bullet
+        "Leave Calendar": "hrm:leaverequest_list",       # bullet (request list as calendar source)
+    },
+    # 3.12 Holiday Management
+    "3.12": {
+        "Holiday Calendar": "hrm:publicholiday_list",    # bullet
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
