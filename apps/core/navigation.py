@@ -143,13 +143,16 @@ LIVE_LINKS = {
         "Partner Portal": "crm:portal_dashboard",           # extra (partner-facing entry)
     },
     # ========================= Module 2 — Accounting & Finance
-    # 2.1 Dashboard & Analytics — the KPI/alert/quick-action overview + report links.
+    # 2.1 Dashboard & Analytics — the KPI/alert/quick-action overview + report links. The four
+    # dashboard widgets are sections of one page, so each deep-links to its anchor (#fragment)
+    # instead of all pointing at the same bare URL.
     "2.1": {
-        "Executive Summary": "accounting:accounting_dashboard",  # bullet
-        "Cash Flow Widget": "accounting:accounting_dashboard",   # bullet (6-week net-cash chart)
-        "Alert Center": "accounting:accounting_dashboard",       # bullet (overdue invoices/bills)
-        "Quick Actions": "accounting:accounting_dashboard",      # bullet
+        "Executive Summary": "accounting:accounting_dashboard#executive-summary",  # bullet (KPI cards)
+        "Cash Flow Widget": "accounting:accounting_dashboard#cash-flow",  # bullet (net-cash chart)
+        "Alert Center": "accounting:accounting_dashboard#alert-center",   # bullet (overdue invoices/bills)
+        "Quick Actions": "accounting:accounting_dashboard#quick-actions",  # bullet (header actions)
         "Custom Reports": "accounting:trial_balance",            # bullet (trial balance report)
+        "Forecasting": "accounting:cash_forecast",               # bullet (cash-flow projection)
     },
     # 2.2 General Ledger (GL)
     "2.2": {
@@ -371,19 +374,26 @@ def _feature_node(name, url, current):
 
 
 def _is_active(url_name, current):
-    """True if `current` is this route or one of its CRUD sub-routes (detail/edit/...)."""
+    """True if `current` is this route or one of its CRUD sub-routes (detail/edit/...).
+
+    A ``name#fragment`` value (same-page anchor) matches on the route name alone."""
     if not url_name or not current:
         return False
-    if current == url_name:
+    name = url_name.partition("#")[0]
+    if current == name:
         return True
-    base = url_name[:-5] if url_name.endswith("_list") else url_name
+    base = name[:-5] if name.endswith("_list") else name
     return current.startswith(base + "_")
 
 
 def _safe_reverse(url_name):
+    """Reverse a ``namespace:name`` route. Supports an optional ``#fragment`` suffix so a
+    feature can deep-link to a section of an already-built page (e.g. the dashboard widgets)."""
     if not url_name:
         return None
+    name, sep, fragment = url_name.partition("#")
     try:
-        return reverse(url_name)
+        href = reverse(name)
     except NoReverseMatch:
         return None
+    return f"{href}#{fragment}" if sep else href
