@@ -73,7 +73,7 @@ class Command(BaseCommand):
             self._seed_tenant(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
-            "Log in as admin_acme / admin_globex (password123)."))
+            "Log in as admin_acme / admin_globex (password)."))
 
     @transaction.atomic
     def _seed_tenant(self, tenant, *, flush):
