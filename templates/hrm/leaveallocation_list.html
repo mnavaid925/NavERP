@@ -60,8 +60,8 @@
               <td>{{ obj.leave_type.name }}</td>
               <td>{{ obj.year }}</td>
               <td>{{ obj.allocated_days }}</td>
-              <td>{{ obj.used_days }}</td>
-              <td>{{ obj.balance }}</td>
+              <td>{{ obj.used_days_db }}</td>
+              <td>{{ obj.balance_db }}</td>
               <td><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'draft' %}amber{% elif obj.status == 'expired' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>
                 <div class="table-actions">
