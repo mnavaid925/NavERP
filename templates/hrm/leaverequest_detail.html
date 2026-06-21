@@ -67,7 +67,7 @@
           </form>
         {% endif %}
         {% if obj.status == 'draft' or obj.status == 'pending' or obj.status == 'approved' %}
-          <form method="post" action="{% url 'hrm:leaverequest_cancel' obj.pk %}">
+          <form method="post" action="{% url 'hrm:leaverequest_cancel' obj.pk %}" onsubmit="return confirm('Cancel this leave request?');">
             {% csrf_token %}
             <div class="form-group">
               <label class="form-label">Cancel reason</label>
