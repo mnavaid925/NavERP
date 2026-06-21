@@ -60,8 +60,8 @@
           <form method="post" action="{% url 'hrm:leaverequest_reject' obj.pk %}" style="margin-bottom:1rem;">
             {% csrf_token %}
             <div class="form-group">
-              <label class="form-label">Reject reason</label>
-              <textarea name="rejected_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+              <label class="form-label" for="id_rejected_reason">Reject reason</label>
+              <textarea id="id_rejected_reason" name="rejected_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
             </div>
             <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
           </form>
@@ -70,8 +70,8 @@
           <form method="post" action="{% url 'hrm:leaverequest_cancel' obj.pk %}" onsubmit="return confirm('Cancel this leave request?');">
             {% csrf_token %}
             <div class="form-group">
-              <label class="form-label">Cancel reason</label>
-              <textarea name="cancelled_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+              <label class="form-label" for="id_cancelled_reason">Cancel reason</label>
+              <textarea id="id_cancelled_reason" name="cancelled_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
             </div>
             <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
           </form>
