@@ -12,6 +12,7 @@ urlpatterns = [
     path("tenants/", include("apps.tenants.urls")),  # /tenants/subscriptions/, /tenants/stripe/webhook/, ...
     path("crm/", include("apps.crm.urls")),         # /crm/, /crm/leads/, /crm/opportunities/, ...
     path("accounting/", include("apps.accounting.urls")),  # /accounting/, GL/AP/AR/cash management
+    path("hrm/", include("apps.hrm.urls")),         # /hrm/, employees/leave/attendance/shifts/holidays
 ]
 
 if settings.DEBUG:
