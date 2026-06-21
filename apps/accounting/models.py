@@ -23,6 +23,8 @@ Double-entry invariants (enforced at the model + view layer):
   5. ``Invoice``/``Bill`` ``subtotal``/``tax_total``/``total`` are recomputed from line items
      (:pymeth:`recalc_totals`), never hand-edited on the ModelForm.
 """
+import calendar
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -33,6 +35,15 @@ from django.db.models import Q, Sum
 from apps.core.utils import next_number
 
 ZERO = Decimal("0")
+
+
+def add_months(d, n):
+    """Return ``d`` shifted forward by ``n`` calendar months, clamping the day to month-end."""
+    month_index = d.month - 1 + n
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    return d.replace(year=year, month=month, day=day)
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +467,70 @@ class InvoiceLine(models.Model):
 
     def __str__(self):
         return self.description
+
+
+class RecurringInvoice(TenantNumbered):
+    """A recurring-billing schedule [RINV-] that generates draft Invoices on a cadence (2.4).
+
+    Each run creates a one-line ``Invoice`` for ``party`` of ``amount`` and advances
+    ``next_run_date``. The generation itself (Invoice + line + status/date math) lives in the view
+    inside ``transaction.atomic()`` — the model just owns the schedule and the date arithmetic."""
+
+    NUMBER_PREFIX = "RINV"
+
+    CADENCE_CHOICES = [
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("annually", "Annually"),
+    ]
+    STATUS_CHOICES = [("active", "Active"), ("paused", "Paused"), ("ended", "Ended")]
+
+    party = models.ForeignKey("core.Party", on_delete=models.PROTECT, related_name="recurring_invoices")
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="recurring_invoices")
+    payment_terms = models.ForeignKey("accounting.PaymentTerm", on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="recurring_invoices")
+    cadence = models.CharField(max_length=10, choices=CADENCE_CHOICES, default="monthly")
+    start_date = models.DateField()
+    next_run_date = models.DateField(null=True, blank=True,
+                                     help_text="Defaults to the start date; advances after each generated invoice.")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="active")
+    last_generated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    occurrences_generated = models.PositiveIntegerField(default=0, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        unique_together = ("tenant", "number")
+        indexes = [models.Index(fields=["tenant", "status"], name="acc_rinv_tenant_status_idx")]
+
+    def save(self, *args, **kwargs):
+        if not self.next_run_date:
+            self.next_run_date = self.start_date
+        super().save(*args, **kwargs)
+
+    def advance(self):
+        """Move ``next_run_date`` forward by one cadence step (real calendar months, day-clamped)."""
+        base = self.next_run_date or self.start_date
+        if self.cadence == "weekly":
+            self.next_run_date = base + timedelta(days=7)
+        elif self.cadence == "monthly":
+            self.next_run_date = add_months(base, 1)
+        elif self.cadence == "quarterly":
+            self.next_run_date = add_months(base, 3)
+        else:  # annually
+            self.next_run_date = add_months(base, 12)
+
+    def is_due(self, on=None):
+        from django.utils import timezone
+        today = on or timezone.localdate()
+        return self.status == "active" and self.next_run_date is not None and self.next_run_date <= today
+
+    def __str__(self):
+        return f"{self.number} · {self.description}"
 
 
 # ========================================================== 2.3 Accounts Payable
