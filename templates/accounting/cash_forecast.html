@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Cash Flow Forecast{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cash Flow Forecast</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'accounting:accounting_dashboard' %}">Accounting</a><span class="sep">›</span><span>Cash Flow Forecast</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="get" class="filter-bar" style="margin:0;">
+        <label class="form-label" for="weeks" style="margin:0 .5rem 0 0;">Horizon</label>
+        <select name="weeks" id="weeks" class="form-select" onchange="this.form.submit()">
+          {% for w in weeks_options %}
+            <option value="{{ w }}" {% if weeks == w %}selected{% endif %}>{{ w }} weeks</option>
+          {% endfor %}
+        </select>
+        <noscript><button class="btn btn-outline" type="submit">Go</button></noscript>
+      </form>
+      <a href="{% url 'accounting:accounting_dashboard' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Dashboard</a>
+    </div>
+  </div>
+
+  {% if not request.tenant %}
+    <div class="card"><div class="card-body text-muted">
+      You're signed in as a superuser with no tenant, so accounting data is empty by design.
+      Sign in as a tenant admin (e.g. <strong>admin_acme / password</strong>) to see the forecast.
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body text-muted">
+    Projected from <strong>open invoices</strong> (expected inflows) and <strong>open bills</strong>
+    (expected outflows), bucketed by due date, starting from your current cash position. Overdue and
+    undated items are assumed to settle in the first week. This is a deterministic projection — no
+    payment is guaranteed on its due date.
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ stats.opening|floatformat:2 }}</div><div class="stat-label">Opening Cash</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.inflow|floatformat:2 }}</div><div class="stat-label">Expected Inflow ({{ weeks }}w)</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="trending-down"></i></div><div class="stat-value">{{ stats.outflow|floatformat:2 }}</div><div class="stat-label">Expected Outflow ({{ weeks }}w)</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="wallet"></i></div><div class="stat-value {% if stats.projected < 0 %}text-danger{% endif %}">{{ stats.projected|floatformat:2 }}</div><div class="stat-label">Projected Balance</div></div>
+    <div class="stat-card"><div class="stat-icon {% if stats.low_balance < 0 %}orange{% else %}green{% endif %}"><i data-lucide="alert-triangle"></i></div><div class="stat-value {% if stats.low_balance < 0 %}text-danger{% endif %}">{{ stats.low_balance|floatformat:2 }}</div><div class="stat-label">Lowest Projected Balance</div></div>
+  </div>
+
+  {% if stats.low_balance < 0 %}
+    <div class="card"><div class="card-body text-danger">
+      <i data-lucide="alert-triangle"></i> The projection dips below zero within the next {{ weeks }} weeks —
+      expected outflows outpace cash on hand. Consider accelerating collections or deferring payments.
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h3>Projected cash balance</h3></div>
+    <div class="card-body"><canvas id="forecastChart" height="120"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Weekly projection</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Week of</th><th class="text-right">Inflow</th><th class="text-right">Outflow</th><th class="text-right">Net</th><th class="text-right">Projected Balance</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.start|date:"M d" }} – {{ row.end|date:"M d, Y" }}</td>
+              <td class="text-right">{{ row.inflow|floatformat:2 }}</td>
+              <td class="text-right">{{ row.outflow|floatformat:2 }}</td>
+              <td class="text-right {% if row.net < 0 %}text-danger{% endif %}">{{ row.net|floatformat:2 }}</td>
+              <td class="text-right fw-600 {% if row.balance < 0 %}text-danger{% endif %}">{{ row.balance|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="line-chart"></i><p>No open invoices or bills to project. Cash position stays flat at {{ stats.opening|floatformat:2 }}.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if stats.beyond_inflow or stats.beyond_outflow %}
+      <div class="card-body text-muted">
+        Due beyond the {{ weeks }}-week horizon (not included above):
+        inflows {{ stats.beyond_inflow|floatformat:2 }}, outflows {{ stats.beyond_outflow|floatformat:2 }}.
+      </div>
+    {% endif %}
+  </div>
+
+  {{ chart_labels|json_script:"fc-labels" }}
+  {{ chart_balance|json_script:"fc-balance" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
+    var labels = J("fc-labels"), balance = J("fc-balance");
+    var canvas = document.getElementById("forecastChart");
+    if (canvas && labels.length) {
+      new Chart(canvas, {
+        type: "line",
+        data: { labels: labels, datasets: [{
+          label: "Projected balance", data: balance,
+          borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,0.12)",
+          fill: true, tension: 0.3, pointRadius: 2
+        }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false } } }
+      });
+    }
+  })();
+</script>
+{% endblock %}
