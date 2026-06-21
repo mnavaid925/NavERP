@@ -247,6 +247,9 @@ class LeaveAllocation(TenantNumbered):
 
     @property
     def used_days(self):
+        # Calendar-year semantic: a request is charged to the year of its start_date. A request
+        # straddling a year boundary is counted whole against the start year (acceptable for the
+        # demo; exact split + year-end carry-forward is a deferred enhancement — see todo.md).
         agg = LeaveRequest.objects.filter(
             tenant_id=self.tenant_id, employee_id=self.employee_id,
             leave_type_id=self.leave_type_id, status="approved",
