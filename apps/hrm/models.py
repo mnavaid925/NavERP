@@ -136,8 +136,10 @@ class EmployeeProfile(TenantNumbered):
     nationality = models.CharField(max_length=100, blank=True)
     personal_email = models.EmailField(blank=True)
     mobile = models.CharField(max_length=30, blank=True)
-    # WARNING: bank_account is stored in plaintext for demo purposes. In production, encrypt at
-    # rest (e.g. via the tenants EncryptionKey pattern) or store only a tokenized/masked value.
+    # WARNING: bank_account / bank_routing are stored in plaintext for demo purposes. In
+    # production, encrypt at rest (e.g. via the tenants EncryptionKey pattern) or store only a
+    # tokenized/masked value. Never render the raw account number — use masked_bank_account().
+    # Both are also redacted from AuditLog.changes (see core.crud._SENSITIVE_AUDIT_FIELDS).
     bank_name = models.CharField(max_length=255, blank=True)
     bank_account = models.CharField(max_length=64, blank=True)
     bank_routing = models.CharField(max_length=20, blank=True)
