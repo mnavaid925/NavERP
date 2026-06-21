@@ -48,6 +48,7 @@ from apps.accounting.models import (
     Payment,
     PaymentAllocation,
     PaymentTerm,
+    RecurringInvoice,
     ReconciliationMatch,
     VendorProfile,
 )
@@ -197,6 +198,12 @@ class Command(BaseCommand):
                                    quantity=Decimal("1"), unit_price=Decimal("3000"),
                                    tax_rate_pct=Decimal("0"), gl_account=accounts["4100"])
         inv_draft.recalc_totals()
+
+        # --- Recurring invoice schedule (2.4) -----------------------------------
+        RecurringInvoice.objects.create(
+            tenant=tenant, party=customer, description="Monthly SaaS subscription",
+            amount=Decimal("750"), currency=usd, payment_terms=net30, cadence="monthly",
+            start_date=first_of_month, status="active")
 
         # --- AP bills -----------------------------------------------------------
         bill_appr = Bill.objects.create(
