@@ -20,19 +20,23 @@ def generate_tasks_from_template(program):
     """
     if not program.template_id:
         return 0
-    created = 0
-    for tt in program.template.template_tasks.order_by("phase", "order", "title"):
+    template_tasks = list(program.template.template_tasks.order_by("phase", "order", "title"))
+    if not template_tasks:
+        return 0
+    # One SELECT for the titles already present, then one bulk INSERT — keeps the idempotency
+    # contract (title-keyed) while avoiding the 2N queries a per-row get_or_create would run.
+    existing = set(OnboardingTask.objects.filter(tenant=program.tenant, program=program)
+                   .values_list("title", flat=True))
+    to_create = []
+    for tt in template_tasks:
+        if tt.title in existing:
+            continue
         due = program.start_date + timedelta(days=tt.due_offset_days) if program.start_date else None
-        _, was_created = OnboardingTask.objects.get_or_create(
+        to_create.append(OnboardingTask(
             tenant=program.tenant, program=program, title=tt.title,
-            defaults={
-                "description": tt.description,
-                "task_category": tt.task_category,
-                "assignee_role": tt.assignee_role,
-                "due_date": due,
-                "phase": tt.phase,
-                "is_mandatory": tt.is_mandatory,
-                "order": tt.order,
-            })
-        created += 1 if was_created else 0
-    return created
+            description=tt.description, task_category=tt.task_category,
+            assignee_role=tt.assignee_role, due_date=due, phase=tt.phase,
+            is_mandatory=tt.is_mandatory, order=tt.order))
+    if to_create:
+        OnboardingTask.objects.bulk_create(to_create)
+    return len(to_create)
