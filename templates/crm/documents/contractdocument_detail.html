@@ -81,7 +81,7 @@
             <td>{{ s.viewed_at|date:"M d, H:i"|default:"—" }}</td>
             <td>{{ s.signed_at|date:"M d, H:i"|default:"—" }}</td>
             <td>{{ s.declined_at|date:"M d, H:i"|default:"—" }}</td>
-            <td><a href="{% url 'crm:sign_document' s.token %}" target="_blank">Sign URL</a></td>
+            <td><a href="{% url 'crm:sign_document' s.token %}" target="_blank" rel="noopener">Sign URL</a></td>
             <td>
               <div class="table-actions">
                 <form method="post" action="{% url 'crm:contractdocument_remove_signer' obj.pk s.pk %}" onsubmit="return confirm('Remove this signer?');" style="display:inline;">
