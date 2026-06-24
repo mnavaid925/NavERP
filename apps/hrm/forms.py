@@ -198,15 +198,13 @@ class OnboardingDocumentForm(TenantModelForm):
 
 
 class AssetAllocationForm(TenantModelForm):
-    # SECURITY: `returned_at` (system-set on return) and the auto `number` are excluded.
+    # `issued_at` / `issued_by` are stamped by the Issue action (and `returned_at` by Return) — kept
+    # out of the form so they can't be hand-spoofed/back-dated. `status` stays editable so HR can
+    # record lost/damaged; the Issue/Return actions own the issued↔returned transition + timestamps.
     class Meta:
         model = AssetAllocation
         fields = ["program", "employee", "asset_name", "asset_category", "serial_number",
-                  "asset_tag", "status", "issued_at", "issued_by", "return_due_date", "notes"]
-        widgets = {
-            "issued_at": forms.DateTimeInput(
-                attrs={"type": "datetime-local", "class": "form-input"}, format="%Y-%m-%dT%H:%M"),
-        }
+                  "asset_tag", "status", "return_due_date", "notes"]
 
 
 class OrientationSessionForm(TenantModelForm):
