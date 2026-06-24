@@ -310,3 +310,21 @@ forgotten. (b) The nav now supports `name#fragment` hrefs (`apps/core/navigation
 strip the fragment) — use `"app:view#section"` to deep-link dashboard/one-page widget groups, with matching `id=`
 anchors (+ `scroll-margin-top`) in the template. (c) When a deferred feature is later requested, it's a normal
 build (view + url + template + LIVE_LINKS entry + tests), not a "bug fix".
+
+## L31 — "next"/`/next-module` builds ONE SUB-MODULE per run, not a whole module (auto-detect at the N.M level)
+The `next-module` skill auto-detected the next *whole module* ("lowest `N` in 1..13 whose app slug doesn't exist
+under `apps/`"), so once an app folder existed it jumped to the *next module entirely*. The user wants "next" to
+advance **one sub-module at a time within the current module** — "if 3.1 and 3.2 are done, 'next' should build 3.3,"
+not re-scaffold a whole new module. **Root cause:** the build unit was the module, but NavERP modules are huge (HRM
+41 sub-modules) and are meant to grow sub-module-by-sub-module across many runs. **Fix (in
+`.claude/skills/next-module/SKILL.md`):** the build unit is now a sub-module `N.M`. Auto-detect = (1) **active
+module** = highest-numbered module whose `apps/<slug>` already exists (the one under construction; if none exist →
+Module 1); (2) **next sub-module** = lowest-numbered `### N.M` in `NavERP.md` order with **no** `LIVE_LINKS["N.M"]`
+entry in `apps/core/navigation.py` (that dict, keyed `"N.M"`, IS the built-vs-roadmap signal); (3) **rollover** to
+the next module's `N.1` only once every sub-module of the active one is wired. An existing app is **extended** (append
+models/views/urls, new incremental migration, extend `seed_<slug>`, add ONE `LIVE_LINKS["N.M"]` entry) — do NOT
+re-touch `INSTALLED_APPS`/`config/urls.py` or re-create `apps.py`, and **update** the module's existing skill rather
+than authoring a new one. Explicit args still win: `N.M` (e.g. `3.4`) → that exact sub-module; a sub-module name
+(`payroll`/`offboarding`) → its `N.M`; a bare module number/name → that module's *next unbuilt* sub-module. **Rule:**
+the unit of "next" is the sub-module; CLAUDE.md's Module Creation Sequence (research→todo→code→reviews→skill) runs
+per sub-module, scoped to that one `N.M`.
