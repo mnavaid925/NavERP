@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Onboarding Documents{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Onboarding Documents</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Onboarding Documents</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:onboardingdocument_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Document</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search documents…">
+        </div>
+        <div class="form-group">
+          <select name="program" class="form-select">
+            <option value="">All programs</option>
+            {% for o in programs %}
+              <option value="{{ o.pk }}" {% if request.GET.program == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="document_type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.document_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="esign_status" class="form-select">
+            <option value="">All e-sign statuses</option>
+            {% for val, label in esign_choices %}
+              <option value="{{ val }}" {% if request.GET.esign_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:onboardingdocument_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Program</th><th>Type</th><th>Title</th><th>Required</th><th>E-sign Status</th><th>Due</th><th>File</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:onboardingprogram_detail' obj.program.pk %}">{{ obj.program.number }}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_document_type_display }}</span></td>
+              <td><a href="{% url 'hrm:onboardingdocument_detail' obj.pk %}" class="fw-600">{{ obj.title }}</a></td>
+              <td>{% if obj.esign_required %}Yes{% else %}No{% endif %}</td>
+              <td><span class="badge badge-{% if obj.esign_status == 'not_required' %}muted{% elif obj.esign_status == 'pending' %}amber{% elif obj.esign_status == 'sent' %}info{% elif obj.esign_status == 'viewed' %}info{% elif obj.esign_status == 'signed' %}green{% elif obj.esign_status == 'declined' %}red{% else %}muted{% endif %}">{{ obj.get_esign_status_display }}</span></td>
+              <td>{{ obj.due_date|default:"—" }}</td>
+              <td>{% if obj.file %}<a href="{{ obj.file.url }}">Download</a>{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:onboardingdocument_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:onboardingdocument_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if obj.esign_status != 'signed' %}
+                    <form method="post" action="{% url 'hrm:onboardingdocument_mark_signed' obj.pk %}" onsubmit="return confirm('Mark this document as signed?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Signed"><i data-lucide="pen-tool"></i></button></form>
+                  {% endif %}
+                  <form method="post" action="{% url 'hrm:onboardingdocument_delete' obj.pk %}" onsubmit="return confirm('Delete this document?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-text"></i><h3>No onboarding documents found</h3><p>Add your first onboarding document to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
