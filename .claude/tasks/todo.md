@@ -4300,5 +4300,29 @@ git add 'README.md'; git commit -m 'docs(readme): mark HRM 3.3 Employee Onboardi
 - **Link `AssetAllocation` to Module 11 `assets.Asset`** — `asset_id_stub` comment in the model documents where the FK goes. Once Module 11 (Asset Management) is built, add migration: `asset_id = models.ForeignKey("assets.Asset", SET_NULL, null=True, blank=True)`.
 - **Policy acknowledgment workflow** — A richer version of tracking policy acknowledgment (timestamp, digital signature, version tracking, per-policy acknowledgment list). Currently modeled as `OnboardingDocument(document_type="policy_acknowledgment", esign_status="signed")`. A dedicated compliance pass is deferred.
 
-## Review notes
-(filled in at the end)
+## Review notes (3.3 Employee Onboarding — delivered 2026-06-25)
+
+**Shipped as planned:** all 7 models (`OnboardingTemplate` ONBT-, `OnboardingTemplateTask`, `OnboardingProgram`
+ONB-, `OnboardingTask`, `OnboardingDocument`, `AssetAllocation` AST-, `OrientationSession`), full CRUD + 12 workflow
+POST actions, 7 forms, 21 templates, admin, migrations 0002 (tables) + 0003 (index), extended `seed_hrm`
+(`_seed_onboarding`), and `LIVE_LINKS["3.3"]`. Welcome Kit = fields on the program (no table), as planned.
+
+**Design deltas from the plan (deliberate):**
+- Task generation lives in **`apps/hrm/services.py`** (`generate_tasks_from_template`), not in `views.py` — so the
+  seeder/tests import it without the view layer (code-review #6). It uses a titles pre-check + `bulk_create`
+  (3 queries vs the planned per-row `get_or_create`; perf-review #9), keeping title-keyed idempotency.
+- **`esign_status` and `attendance_status` are workflow-owned, NOT form fields** (security-review). `OnboardingDocument.save()`
+  derives `esign_status` from `esign_required` (not_required↔pending, preserves signed/declined). `AssetAllocationForm`
+  also excludes `issued_at`/`issued_by`. This closes a mass-assignment self-sign/self-attend hole the plan's field
+  lists would have opened.
+- One-program-per-employee + self-buddy enforced in `OnboardingProgramForm.clean()` (form has the tenant; model
+  clean does not at validation time) — not a DB `unique_together`, so re-onboarding after cancel stays possible.
+
+**Review-agent pass (all 7, in order):** code-reviewer (8 fixes), explorer (2), frontend-reviewer (5),
+performance-reviewer (4), qa-smoke-tester (168/168, no changes), security-reviewer (3 — closed 2 Medium mass-assignment
+issues), test-writer (**195 new tests**). Full `apps/hrm` suite: **434 passed**. `manage.py check` clean. Verified
+under `config.settings_test` (MySQL/XAMPP was down) via throwaway smoke scripts in `temp/` (31 backend + 78 URL checks).
+
+**Deferred (unchanged from the plan):** live e-sign API, preboarding pre-EmployeeProfile (ATS 3.5–3.8), offboarding
+(3.4), reminders/calendar/IT-provisioning automation, AI 30-60-90 plans, ESS portal, Module 11 `assets.Asset` FK,
+and onboarding session reschedule/cancel actions (reachable only via Django admin for now).
