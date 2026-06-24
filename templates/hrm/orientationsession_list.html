@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Orientation Sessions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Orientation Sessions</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Orientation Sessions</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:orientationsession_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Session</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search sessions…">
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="session_type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.session_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="attendance_status" class="form-select">
+            <option value="">All attendance</option>
+            {% for val, label in attendance_choices %}
+              <option value="{{ val }}" {% if request.GET.attendance_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:orientationsession_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Title</th><th>Type</th><th>Employee</th><th>When</th><th>Facilitator</th><th>Attendance</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:orientationsession_detail' obj.pk %}" class="fw-600">{{ obj.title }}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_session_type_display }}</span></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.scheduled_at|default:"—" }}</td>
+              <td>{{ obj.facilitator.username|default:obj.facilitator_name|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.attendance_status == 'scheduled' %}info{% elif obj.attendance_status == 'attended' %}green{% elif obj.attendance_status == 'missed' %}red{% elif obj.attendance_status == 'rescheduled' %}amber{% elif obj.attendance_status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ obj.get_attendance_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:orientationsession_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:orientationsession_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if obj.attendance_status != 'attended' %}
+                    <form method="post" action="{% url 'hrm:orientationsession_mark_attended' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Attended"><i data-lucide="check"></i></button></form>
+                  {% endif %}
+                  {% if obj.attendance_status != 'missed' %}
+                    <form method="post" action="{% url 'hrm:orientationsession_mark_missed' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Missed"><i data-lucide="x"></i></button></form>
+                  {% endif %}
+                  <form method="post" action="{% url 'hrm:orientationsession_delete' obj.pk %}" onsubmit="return confirm('Delete this orientation session?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="presentation"></i><h3>No orientation sessions found</h3><p>Schedule your first orientation session to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
