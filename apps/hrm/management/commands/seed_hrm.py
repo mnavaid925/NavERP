@@ -332,8 +332,8 @@ class Command(BaseCommand):
                           "external_ref": "DEMO-ENV-0001"})
             OnboardingDocument.objects.get_or_create(
                 tenant=tenant, program=program, title="Government ID Proof",
-                defaults={"document_type": "id_proof", "esign_required": False,
-                          "esign_status": "pending", "due_date": program.start_date})
+                defaults={"document_type": "id_proof", "esign_required": True,
+                          "due_date": program.start_date})  # esign_status derived → "pending"
             OnboardingDocument.objects.get_or_create(
                 tenant=tenant, program=program, title="Employee Handbook Acknowledgment",
                 defaults={"document_type": "policy_acknowledgment", "esign_required": False,
