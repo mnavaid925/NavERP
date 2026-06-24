@@ -40,7 +40,7 @@
       <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Approved By</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
       {% if obj.document %}
-        <div class="detail-item"><dt>Document</dt><dd><a href="{{ obj.document.file.url }}" target="_blank"><i data-lucide="file-text"></i> View document</a></dd></div>
+        <div class="detail-item"><dt>Document</dt><dd><a href="{{ obj.document.file.url }}" target="_blank" rel="noopener"><i data-lucide="file-text"></i> View document</a></dd></div>
       {% endif %}
     </dl>
   </div></div>
