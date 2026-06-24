@@ -802,7 +802,8 @@ def onboardingprogram_list(request):
         .select_related("employee__party", "buddy__party", "template")
         .annotate(tasks_total=Count("tasks", distinct=True),
                   tasks_done=Count("tasks", filter=Q(tasks__status__in=("completed", "skipped")),
-                                   distinct=True)),
+                                   distinct=True))
+        .order_by("-start_date"),  # explicit — aggregate annotation drops Meta ordering (pagination guard)
         "hrm/onboardingprogram_list.html",
         search_fields=["number", "employee__party__name"],
         filters=[("status", "status", False), ("employee", "employee_id", True)],
