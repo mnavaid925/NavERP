@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:onboardingtemplatetask_list' %}">Template Tasks</a><span class="sep">›</span><span>{{ obj.title }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:onboardingtemplatetask_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:onboardingtemplatetask_delete' obj.pk %}" onsubmit="return confirm('Delete this template task?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Template</dt><dd><a href="{% url 'hrm:onboardingtemplate_detail' obj.template.pk %}">{{ obj.template.name }}</a></dd></div>
+      <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd><span class="badge badge-muted">{{ obj.get_task_category_display }}</span></dd></div>
+      <div class="detail-item"><dt>Assignee Role</dt><dd><span class="badge badge-muted">{{ obj.get_assignee_role_display }}</span></dd></div>
+      <div class="detail-item"><dt>Phase</dt><dd><span class="badge badge-info">{{ obj.get_phase_display }}</span></dd></div>
+      <div class="detail-item"><dt>Due Offset Days</dt><dd>{{ obj.due_offset_days }}</dd></div>
+      <div class="detail-item"><dt>Order</dt><dd>{{ obj.order }}</dd></div>
+      <div class="detail-item"><dt>Mandatory</dt><dd>{% if obj.is_mandatory %}<span class="badge badge-info">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:onboardingtemplatetask_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
