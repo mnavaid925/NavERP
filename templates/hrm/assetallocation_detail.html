@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:assetallocation_list' %}">Asset Allocations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'pending' %}
+        <form method="post" action="{% url 'hrm:assetallocation_issue' obj.pk %}" onsubmit="return confirm('Issue this asset to the employee?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Issue</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'issued' %}
+        <form method="post" action="{% url 'hrm:assetallocation_return' obj.pk %}" onsubmit="return confirm('Mark this asset as returned?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="undo-2"></i> Return</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'hrm:assetallocation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:assetallocation_delete' obj.pk %}" onsubmit="return confirm('Delete this asset allocation?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Asset Name</dt><dd>{{ obj.asset_name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd><span class="badge badge-muted">{{ obj.get_asset_category_display }}</span></dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:employee_detail' obj.employee.pk %}">{{ obj.employee.party.name }}</a></dd></div>
+      <div class="detail-item"><dt>Program</dt><dd>{% if obj.program %}<a href="{% url 'hrm:onboardingprogram_detail' obj.program.pk %}">{{ obj.program.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Serial Number</dt><dd>{{ obj.serial_number|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Asset Tag</dt><dd>{{ obj.asset_tag|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'pending' %}info{% elif obj.status == 'issued' %}green{% elif obj.status == 'returned' %}muted{% elif obj.status == 'lost' %}red{% elif obj.status == 'damaged' %}amber{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Issued At</dt><dd>{{ obj.issued_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Issued By</dt><dd>{{ obj.issued_by.username|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Return Due Date</dt><dd>{{ obj.return_due_date|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Returned At</dt><dd>{{ obj.returned_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+    {% comment %}
+      A future link to the Module 11 Asset register is reserved: once Module 11 (Asset
+      Management) exists, this allocation will carry a nullable FK to assets.Asset and the
+      asset name/serial above will deep-link into the canonical fixed-asset register.
+    {% endcomment %}
+    <p class="form-help" style="margin-top:1rem;">A future link to the Module 11 Asset register is reserved.</p>
+  </div></div>
+
+  <a href="{% url 'hrm:assetallocation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
