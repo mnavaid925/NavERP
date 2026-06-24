@@ -278,6 +278,15 @@ LIVE_LINKS = {
         "Designation/Job Titles": "hrm:designation_list",  # bullet
         "Department Management": "core:orgunit_list",      # bullet (OrgUnit reuse)
     },
+    # 3.3 Employee Onboarding — template→program→task model; Welcome Kit fields live on the program.
+    "3.3": {
+        "Onboarding Tasks": "hrm:onboardingprogram_list",       # bullet (tasks are managed on the program)
+        "Document Collection": "hrm:onboardingdocument_list",   # bullet
+        "Asset Allocation": "hrm:assetallocation_list",         # bullet
+        "Orientation Schedule": "hrm:orientationsession_list",  # bullet
+        "Welcome Kit": "hrm:onboardingprogram_list",            # bullet (welcome fields live on the program)
+        "Onboarding Templates": "hrm:onboardingtemplate_list",  # extra (reusable checklist admin)
+    },
     # 3.9 Attendance Management
     "3.9": {
         "Check-in/Check-out": "hrm:attendancerecord_list",  # bullet
