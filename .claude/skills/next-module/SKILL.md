@@ -1,11 +1,15 @@
 ---
 name: next-module
-description: Scaffold and build the next NavERP module end-to-end (Modules 1–13 from NavERP.md) — a Django app under apps/<slug> with tenant-scoped models, full CRUD views/forms/urls/admin, Tailwind+HTMX templates, an idempotent seeder, navigation wiring, and migrations — reusing the unified core data model (NavERP-ERD.md) and the foundation-app conventions. Use when the user says "new", "next", "new module", "next module", "build the next module", "create the next module", "continue the modules", "scaffold the next module", or invokes /next-module. Optional argument: a specific module number 1–13 (e.g. "/next-module 5") or a module name; with no argument, auto-detect the lowest-numbered module not yet built.
+description: Build the next NavERP SUB-module end-to-end — ONE sub-module ("N.M") per run, NOT a whole module. Extend the module's Django app under apps/<slug> with that sub-module's tenant-scoped models, full CRUD views/forms/urls/admin, Tailwind+HTMX templates, an idempotent seeder, navigation wiring (a LIVE_LINKS "N.M" entry), and migrations — reusing the unified core data model (NavERP-ERD.md) and the foundation-app conventions. Use when the user says "new", "next", "next sub-module", "build/create the next sub-module", "continue the modules", or invokes /next-module. Optional argument: a specific sub-module "N.M" (e.g. "/next-module 3.4"), a sub-module name (e.g. "payroll", "offboarding"), or a whole module number/name (build its next unbuilt sub-module). With no argument, auto-detect and build the next unbuilt sub-module of the module currently in progress.
 ---
 
 # next-module — NavERP module builder
 
-When this skill is invoked, you build **one complete NavERP module** end-to-end, matching the conventions
+When this skill is invoked, you build **one NavERP sub-module** (`N.M`) end-to-end — the **next unbuilt
+sub-module of the module currently in progress**, NOT the whole module in one pass. Modules are large (HRM has 41
+sub-modules, Accounting 15); each "next"/`​/next-module` run delivers exactly **one** sub-module's slice, then
+stops. If the module's app already exists under `apps/<slug>`, you **extend** it (add that sub-module's models +
+pages + a `LIVE_LINKS["N.M"]` entry) — you do NOT re-scaffold the app. You match the conventions
 established in the codebase and the unified core data model. Module 0 (**System Admin & Security**) is realized by
 the foundation apps `core` / `accounts` / `tenants` / `dashboard` — these are the **canonical reference
 implementation** for a tenant-scoped CRUD module. Read them (especially `apps/tenants`) whenever you are unsure how
@@ -13,8 +17,8 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
 (entities) — new modules POINT AT the spine instead of duplicating it.
 
 ## Triggers
-- User says: **"new"**, **"next"**, "new module", "next module", "build/create the next module", "continue the modules", "scaffold module N".
-- User invokes **`/next-module`** (optionally with a module number `1`–`13` or a module name).
+- User says: **"new"**, **"next"**, "next sub-module", "build/create the next sub-module", "continue the modules". **"new"/"next" mean the next *sub-module*, one per run — never the whole module.**
+- User invokes **`/next-module`** (optionally with a sub-module `N.M` like `3.4`, a sub-module name like `payroll`/`offboarding`, or a whole module number `1`–`13` / module name — in which case you build that module's *next unbuilt* sub-module).
 
 ## When NOT to use
 - User wants tests for a module → `/manual-test` or `/sqa-review`.
@@ -68,10 +72,12 @@ copying from `apps/tenants`: `Invoice.save()` per-tenant auto-numbering (`INV-00
 `EncryptionKey.generate_secret()` / `.masked`, `OnboardingStep.seed_defaults()`, `RegisterForm.save()` (atomic)
 for form `clean()` password validation, and `HEX_COLOR_VALIDATOR` on `BrandingSetting` colors.
 
-> ⚠️ **NavERP modules are large.** Each module in `NavERP.md` has many sub-modules (e.g. HRM has 41, Accounting 15).
-> Do NOT try to build an entire module's every sub-module in one pass. Build the module's **core entities first**
-> (the representative models below), get them fully CRUD + tenant-scoped + wired + seeded + verified, then layer
-> additional sub-modules in follow-up runs. Reuse the unified core so you build domain logic, not plumbing.
+> ⚠️ **NavERP modules are large — build ONE sub-module per run.** Each module in `NavERP.md` has many sub-modules
+> (e.g. HRM has 41, Accounting 15). **Each `/next-module` run (and each "next"/"new") builds exactly ONE sub-module
+> (`N.M`)** — its 1–4 own tenant-scoped models, get them fully CRUD + tenant-scoped + wired (`LIVE_LINKS["N.M"]`) +
+> seeded + verified, then STOP. Do NOT build the rest of the module's sub-modules in the same run. The module's app
+> is built up **sub-module by sub-module across many runs**. Reuse the unified core so you build domain logic, not
+> plumbing. (The first run for a brand-new module also scaffolds the app skeleton — see Step 1 + Step 2.)
 
 ---
 
@@ -85,34 +91,54 @@ the unified-core master tables Party/PartyRole/Item/UOM/Location/Currency/GLAcco
 If `apps/core` / `config/settings.py` do not exist yet, build the foundation first (enter plan mode, follow
 `PROMPT.md` + `NavERP-ERD.md`) — it is the reference every domain module clones.
 
-## Step 1 — Decide which module to build
+## Step 1 — Decide which SUB-MODULE to build
 
-1. **If the user passed an argument, resolve it to exactly one module** (number, name, keyword, or app slug — all
-   accepted, case-insensitive, punctuation/`&`/`and` ignored):
-   - **Number** — `1`–`13` (also `01`, `#3`, `module 5`) → that module.
-   - **App slug** — a value from the table below (e.g. `crm`, `accounting`, `inventory`) → that module.
-   - **Full or partial module name** — match against the `MODULE_CATALOG` names in `apps/core/navigation.py`
-     (e.g. `Accounting`, `HRM`, `Inventory`, `Procurement`, `Quality`). Case-insensitive substring/keyword match on
-     the module name **and** its app slug.
-   - **Sub-module name** — if the text matches a sub-module (e.g. `General Ledger`, `Payroll`, `CAPA`, `Bin
-     Management`), build (or extend) that sub-module's parent module.
-   - If the text matches **more than one** module → ask the user to pick via `AskUserQuestion`. If it matches
-     **none** → tell the user and show the module table.
-   - If the resolved module's app already exists under `apps/`, say so and ask whether to extend it (add more
-     sub-modules) or pick another.
+> **You always resolve to exactly ONE sub-module `N.M`** (e.g. `3.4 Employee Offboarding`). The "build unit" is a
+> sub-module, never a whole module. **How "built" is tracked:** a sub-module is BUILT iff it has a
+> `LIVE_LINKS["N.M"]` entry in `apps/core/navigation.py` (the sidebar lights it up). Read that dict + the
+> `### N.M …` sub-module headings in `NavERP.md` (or call `parse_catalog()`) to know the order and what's done.
 
-   Examples: `/next-module 5`, `/next-module inventory`, `/next-module "Accounting & Finance"`,
-   `/next-module payroll`, `"build the Procurement module"`, `"create Quality Management"` all resolve to one module.
+1. **If the user passed an argument, resolve it to exactly one sub-module** (case-insensitive, punctuation/`&`/`and`
+   ignored):
+   - **Sub-module number `N.M`** — e.g. `3.4`, `2.13`, `module 3.4`, `#3.4` → exactly that sub-module. Build it
+     (extend module N's app). This is the most direct form.
+   - **Sub-module name** — e.g. `payroll`, `offboarding`, `exit interview`, `General Ledger`, `CAPA` → match it
+     against the `### N.M <name>` headings in `NavERP.md` and resolve to that one `N.M`. (Match on the sub-module
+     title and its feature bullets.)
+   - **Whole module number `1`–`13`, app slug, or module name** — e.g. `3`, `hrm`, `"Human Resource Management"`,
+     `inventory` → resolve to that module, then pick its **next unbuilt sub-module** = the lowest-numbered `N.M`
+     (NavERP.md order) with **no** `LIVE_LINKS["N.M"]` entry. (Building "module 3" means building 3's next
+     sub-module, NOT all of module 3.)
+   - If the text matches **more than one** sub-module/module → ask the user to pick via `AskUserQuestion`. If it
+     matches **none** → tell the user and show the relevant `### N.M` list.
 
-2. **If no argument**, **auto-detect the next module**: the lowest `N` in `1..13` whose app slug (table below)
-   does NOT yet exist under `apps/`. (Once the foundation is built, the first domain run targets **Module 1 =
-   `crm`**.) Confirm by checking the directory and `apps/core/navigation.py` `LIVE_LINKS`.
-3. State which module you're building and proceed (enter plan mode per CLAUDE.md, present the short model/page
-   spec for the module's core entities, then build — lean toward building, don't over-deliberate).
+   Examples: `/next-module 3.4` → HRM Employee Offboarding. `/next-module payroll` → HRM 3.14. `/next-module 5`
+   → Inventory's next unbuilt sub-module. `/next-module hrm` → HRM's next unbuilt sub-module.
 
-### Module → app-slug + suggested core models (representative — adapt and extend per NavERP.md)
+2. **If no argument**, **auto-detect the next unbuilt sub-module** of the module currently in progress:
+   1. **Active module** = the **highest-numbered** module `N` (1–13) whose app slug (table below) already exists
+      under `apps/` — that's the module under construction. (If NO domain app exists yet, the active module is the
+      lowest unbuilt one, normally **Module 1 = `crm`**, and this run scaffolds its app + builds `1.1`.)
+   2. **Next sub-module** within the active module = the **lowest-numbered `N.M`** (NavERP.md document order) that
+      has **no** `LIVE_LINKS["N.M"]` entry. That is what you build. **Always read the *real* current `LIVE_LINKS`
+      keys at run time** — the built set changes every run (and other sessions may build in parallel), so never
+      assume it from memory or from this doc. *(Illustration of the rule only, NOT live state: if a module has
+      `LIVE_LINKS` entries for `X.1, X.2, X.3, X.9, X.10, X.12`, the lowest `N.M` with no entry is **X.4**, so
+      "next" → X.4, then X.5 … Out-of-order earlier builds (X.9/X.10/X.12) don't matter — you always take the
+      lowest-numbered unbuilt one.)*
+   3. **Module rollover:** if the active module has a `LIVE_LINKS` entry for **every** `### N.M` in NavERP.md (fully
+      wired), advance to the **next module** = the lowest `1..13` whose app does NOT exist, scaffold its app, and
+      build its **first** sub-module (`N.1`). Only then does a new app get created.
 
-Reuse the unified core where noted; the models below are each module's **own** domain tables.
+3. **State the one sub-module you resolved** (`N.M <name>`) and which models it adds, then proceed: enter plan mode
+   per CLAUDE.md, present the short model/page spec for **that sub-module only**, then build it and STOP. If the
+   user wanted a different sub-module they can pass an explicit `N.M`. Lean toward building, don't over-deliberate.
+
+### Module → app-slug + suggested core models (module-level reference — pick the slice your sub-module needs)
+
+This table is the **module-level** map (app slug + the kinds of models a module owns). For a single-sub-module run,
+build only the **1–4 models that sub-module needs** — not every model listed for the module. Reuse the unified core
+where noted; the models below are each module's **own** domain tables.
 
 | # | Module | app slug | Suggested tenant-scoped models (own tables; reuse core for Party/Item/ledgers) |
 |---|--------|----------|--------------------------------------------------------------------------------|
@@ -130,21 +156,37 @@ Reuse the unified core where noted; the models below are each module's **own** d
 | 12 | Quality Management System | `quality` | NonConformance[NCR-], CapaAction[CAPA-], Inspection[QC-], QualityAudit[QA-], Calibration |
 | 13 | Document Management System | `documents` | Folder, ControlledDocument[DOC-], DocumentVersion, ApprovalRequest, RetentionPolicy — (core `Document` is the generic attachment; DMS is the full repository) |
 
-Aim for **4–8 models** per module pass so the most important sub-modules each map to a real list page. Some
-sub-modules are already covered by the foundation (`accounts:role_list`, `accounts:user_list`, `core:audit_log`,
-all `tenants:*`) — keep those mappings and only build the missing pieces.
+Aim for **1–4 models** per sub-module pass (the one `N.M` you resolved) so that sub-module's features each map to a
+real list page. Some sub-modules are already covered by the foundation (`accounts:role_list`, `accounts:user_list`,
+`core:audit_log`, all `tenants:*`) or by an earlier sub-module — keep those mappings and only build the missing
+pieces. Before coding, **verify the spine/sibling models you plan to reuse actually exist** (`grep -n "^class <Name>"
+apps/<slug>/models.py apps/core/models.py apps/accounting/models.py`); if a planned parent (e.g. an onboarding
+`AssetAllocation`, a `core.Item`) was researched but never built, make this sub-module self-contained and note the
+future migration (lessons L28/L29).
 
 ---
 
-## Step 2 — Build the module (prefer a parallel agent Workflow for speed)
+## Step 2 — Build the sub-module (prefer a parallel agent Workflow for speed)
 
-The user prefers fanning work out across agents. For a single module a small **2–3 agent Workflow** works well:
+**Existing module vs. new module.** First check whether `apps/<slug>/` already exists:
+- **App exists (the common case — you're adding a sub-module):** you **extend** it. Append the new sub-module's
+  models to `models.py`, its views to `views.py`, its url patterns to `urls.py`, register in `admin.py`, and extend
+  the existing `seed_<slug>.py`. **Skip** the `apps.py`/`__init__.py` scaffolding and the `config/settings.py`
+  `INSTALLED_APPS` + `config/urls.py` `include(...)` wire-up — those are already done; touching them again is
+  needless churn. The only navigation change is **one new `LIVE_LINKS["N.M"]` entry** for the sub-module you built.
+  `makemigrations <slug>` produces a new incremental migration (e.g. `0002_…`), not `0001_initial`.
+- **App does NOT exist (first run for a brand-new module):** scaffold the full app skeleton below (`apps.py`,
+  `__init__.py`, `migrations/__init__.py`, the `management/commands` tree) AND do the `config/settings.py` +
+  `config/urls.py` wire-up — then build that module's first sub-module (`N.1`).
+
+The user prefers fanning work out across agents. For one sub-module a small **2–3 agent Workflow** works well:
 keep **backend + migrations + seed** as one solo agent (single DB writer), then **templates** as 1–2 agents.
-You may also build it inline if it's quick. Either way produce ALL of the following:
+You may also build it inline if it's quick. Produce ALL of the following **for the one sub-module** (for an existing
+app, "create" means "append to the existing file"):
 
 ### 2a. Backend (`apps/<slug>/`)
-- `apps.py` (`name='apps.<slug>'`, `verbose_name`), `__init__.py`.
-- `models.py` — the core models above. Each: `tenant` FK, timestamps (mirror `apps/tenants` base or add
+- `apps.py` (`name='apps.<slug>'`, `verbose_name`), `__init__.py` — **new-app run only** (skip if the app exists).
+- `models.py` — this sub-module's 1–4 models. Each: `tenant` FK, timestamps (mirror `apps/tenants` base or add
   `created_at/updated_at`), `STATUS_CHOICES` class attrs where relevant, `__str__`, `class Meta: ordering`.
   FK into the unified core **by string** (`models.ForeignKey('core.Party', ...)`, `('core.Item', ...)`). Where a
   domain model belongs to a parent in another module, FK it by string **once that module exists**. Auto-number in
@@ -154,27 +196,26 @@ You may also build it inline if it's quick. Either way produce ALL of the follow
 - `views.py` — function-based, `@login_required` (privileged writes `@tenant_admin_required`), tenant-scoped, full
   CRUD + search + filters + pagination (copy the shape from `apps/tenants/views.py`). Write an `AuditLog` row on
   meaningful changes via `apps.core.utils.log_action`.
-- `urls.py` — `app_name='<slug>'`, names `<entity>_list/_detail/_create/_edit/_delete` per model.
-- `admin.py` — register every model.
-- `migrations/__init__.py` (+ generated `0001_initial.py`).
-- `management/__init__.py`, `management/commands/__init__.py`, `management/commands/seed_<slug>.py`
-  (idempotent Faker seeder for both demo tenants; mirror `seed_demo`'s per-tenant guard + summary print; reuse
-  existing Party/Item rows rather than inventing duplicates).
+- `urls.py` — `app_name='<slug>'` (already set on an existing app), add names `<entity>_list/_detail/_create/_edit/_delete` for the new model(s).
+- `admin.py` — register the new model(s).
+- `migrations/` — `makemigrations <slug>` yields `0001_initial.py` for a new app, or the next incremental migration (`000N_…`) for an existing one. (`migrations/__init__.py` exists already on an existing app.)
+- `management/commands/seed_<slug>.py` — for a new app create the `management/__init__.py` + `management/commands/__init__.py` tree + the command; for an existing app **extend the existing `seed_<slug>.py`** with this sub-module's demo rows (idempotent per-tenant guard; reuse existing Party/EmployeeProfile/Item rows rather than inventing duplicates).
 
 ### 2b. Wire-up
-- `config/settings.py`: add `'apps.<slug>'` to `INSTALLED_APPS`.
-- `config/urls.py`: add `path('<slug>/', include('apps.<slug>.urls'))`.
-- `apps/core/navigation.py`: add entries to `LIVE_LINKS` mapping each built sub-module
-  `(<module_number>, '<exact sub-module name from MODULE_CATALOG>')` → `'<slug>:<entity>_list'` (or the most
-  relevant live page). After this, the sidebar shows those sub-modules as **Live** instead of the roadmap
-  placeholder. Do not change `MODULE_CATALOG` (names/descriptions are already correct from NavERP.md).
+- `config/settings.py` — add `'apps.<slug>'` to `INSTALLED_APPS` **only for a brand-new app** (skip if already present).
+- `config/urls.py` — add `path('<slug>/', include('apps.<slug>.urls'))` **only for a brand-new app** (skip if already present).
+- `apps/core/navigation.py` — add **one `LIVE_LINKS["N.M"]` entry** for the sub-module you built, mapping its exact
+  NavERP.md feature-bullet names → `'<slug>:<entity>_list'` (or the most relevant live page). After this the sidebar
+  shows that sub-module as **Live** instead of the roadmap placeholder. Do NOT change `MODULE_CATALOG` (names from
+  NavERP.md are already correct) and do NOT touch other sub-modules' `LIVE_LINKS` entries.
 
 ### 2c. Frontend (`templates/<slug>/`)
-- For each model: `<entity>_list.html`, `<entity>_detail.html`, `<entity>_form.html` (shared create/edit).
+- For each new model: `<entity>_list.html`, `<entity>_detail.html`, `<entity>_form.html` (shared create/edit).
 - Extend `base.html`; use the design-system classes; list pages get a GET filter form (search `q` + status/FK
   selects reflecting `request.GET`), an Actions column (view/edit/delete POST+confirm+csrf), pagination, and an
-  `.empty-state`. Badges use the model's exact choice values + `{{ obj.get_<field>_display }}` fallback. Add a
-  module landing/overview page (stat cards summarizing the module) if helpful.
+  `.empty-state`. Badges use the model's exact choice values + `{{ obj.get_<field>_display }}` fallback. If the
+  module already has a landing/overview page, link the new pages from it; only add a new overview page on a
+  brand-new-app run.
 
 ### 2d. Migrate + seed + verify (venv python)
 ```
@@ -207,30 +248,37 @@ Credentials: tenant admins `admin_acme` / `admin_globex`, password `password123`
 ---
 
 ## Step 4 — Document + commit snippet
-1. Update `README.md` (mark the sub-modules complete in the roadmap; add `seed_<slug>` to the seeding section).
-2. Update `.claude/tasks/todo.md` with a short review.
+1. Update `README.md` (mark **this sub-module** complete in the roadmap; ensure `seed_<slug>` is in the seeding section).
+2. Update `.claude/tasks/todo.md` with a short review of the sub-module just built.
 3. Output the **one-file-per-commit** PowerShell snippet for every created/changed file
-   (`git add 'apps/<slug>/models.py'; git commit -m 'feat(<slug>): models (...)'` etc.), plus the edits to
-   `config/settings.py`, `config/urls.py`, `apps/core/navigation.py`, `README.md`. One `git add` + one
-   `git commit` per file — never bundle. Commit to `main`; do NOT `git push`.
+   (`git add 'apps/<slug>/models.py'; git commit -m 'feat(<slug>): N.M models (...)'` etc.), plus the edits to
+   `apps/core/navigation.py` (the new `LIVE_LINKS["N.M"]` entry) and `README.md` — and, **on a brand-new-app run
+   only**, `config/settings.py` + `config/urls.py`. One `git add` + one `git commit` per file — never bundle.
+   Commit to `main`; do NOT `git push`.
 
 ---
 
 ## Step 5 — Close with the specialist review agents (CLAUDE.md "Module Creation Sequence")
 After the build verifies, run the review agents **one at a time, in order** — `code-reviewer`, `explorer`,
-`frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`, `test-writer` — applying each
-one's findings and committing between steps (per CLAUDE.md). This is the quality bar, not optional (lesson L18).
+`frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`, `test-writer` — scoped to the
+sub-module's new files, applying each one's findings and committing between steps (per CLAUDE.md). This is the
+quality bar, not optional (lesson L18). Then **update the module's existing skill** (`.claude/skills/<slug>/SKILL.md`)
+to document the new sub-module's models/routes/templates/seeder rows — for an existing module you *update* the skill,
+you do NOT create a new one (a new skill is only authored on a brand-new-app run). Commit the skill on its own.
 
 ---
 
 ## Continue / repeat
-If the user says "next" again after a module is done, repeat Step 1 (auto-detect now returns the next-lowest
-unbuilt module) and build that one. Keep going module by module — or sub-module by sub-module within a large
-module — on request.
+If the user says "next" again after a sub-module is done, repeat Step 1 — auto-detect now returns **the next
+unbuilt sub-module** (the lowest `N.M` without a `LIVE_LINKS["N.M"]` entry in the active module), and you build that
+ONE. Keep going **sub-module by sub-module** within a module; only roll over to the next module (building its `N.1`)
+once every sub-module of the current one is wired (Step 1 rollover rule).
 
 ## Quality bar
-A delivered module must: migrate cleanly to `nav_erp`; seed idempotently; pass `manage.py check`; have every
-list page rendering 200 with working search/filters/pagination + Actions; appear as **Live** in the sidebar for
-its built sub-modules; reuse the unified core instead of duplicating Party/Item/ledgers; match the blue/white
-Tailwind design system; and isolate data per tenant. Would a staff engineer approve it? If a piece feels hacky,
-redo it the elegant way before presenting.
+A delivered sub-module must: migrate cleanly to `nav_erp` (incremental migration on an existing app); seed
+idempotently; pass `manage.py check`; have every new list page rendering 200 with working search/filters/pagination
++ Actions; appear as **Live** in the sidebar via its new `LIVE_LINKS["N.M"]` entry; reuse the unified core and
+existing sibling models instead of duplicating Party/EmployeeProfile/Item/ledgers; match the blue/white Tailwind
+design system; and isolate data per tenant. The run builds **exactly one sub-module** — if you find yourself adding
+a second sub-module's models, stop. Would a staff engineer approve it? If a piece feels hacky, redo it the elegant
+way before presenting.
