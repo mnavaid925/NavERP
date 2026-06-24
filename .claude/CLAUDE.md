@@ -230,6 +230,41 @@ Every new module MUST include all CRUD operations from the start. Never ship a m
 
 ---
 
+### Template Folder Structure (MANDATORY)
+
+Templates MUST be organized **one folder per sub-module**, never flat. A module's templates live under
+`templates/<app>/<submodule>/<page>.html` — grouped by the NavERP.md sub-module that owns each model.
+
+1. **Path shape:** `templates/<app>/<submodule>/<entity>_<page>.html` (e.g.
+   `templates/hrm/onboarding/document_list.html`, `templates/accounting/ledger/journal_entry_list.html`,
+   `templates/crm/directory/lead_list.html`). The view's `render()` / `crud_*` `template=` argument uses that
+   full path: `render(request, "hrm/onboarding/document_list.html", ...)`.
+
+2. **Folder = sub-module.** All of a sub-module's models share ONE folder named with a short, clear slug for that
+   sub-module (e.g. HRM: `employee/ designation/ onboarding/ attendance/ leave/ holiday/`; Accounting:
+   `ledger/ payable/ receivable/ cash/ assets/ costing/ payroll/ projects/ intercompany/ tax/ reports/ budget/
+   audit/ integration/`; CRM: `directory/ sales/ marketing/ service/ activities/ finance/ projects/ documents/
+   workflow/ success/ vendor/`). Do NOT create a folder per model.
+
+3. **Filename — drop a redundant sub-module prefix.** If the model/template name begins with the folder slug,
+   strip that leading token: `onboardingdocument_list.html` → `onboarding/document_list.html`,
+   `leavetype_list.html` → `leave/type_list.html`, `tax_code_list.html` → `tax/code_list.html`,
+   `budget_list.html` → `budget/list.html`. Otherwise keep the entity name as-is inside the folder:
+   `onboarding/assetallocation_list.html`, `cash/bank_account_list.html`, `directory/contact_list.html`. Never
+   leave a leading underscore or an empty name — keep the full name in that case.
+
+4. **Module landing page stays at the app root** (it is not a sub-module): `templates/hrm/hrm_overview.html`,
+   `templates/crm/overview.html`, `templates/accounting/dashboard.html`.
+
+5. **New modules (via `/next-module`)** MUST follow this from the start — create the sub-module folders and place
+   each model's `list/detail/form` templates inside the owning sub-module's folder. Never ship flat
+   `templates/<app>/<entity>_<page>.html` files.
+
+6. **`{% extends %}` / `{% include %}` are unaffected** by the folder — keep `{% extends "base.html" %}` and
+   `{% include "partials/..." %}` (base + partials live at the templates root, not inside a module).
+
+---
+
 ### Seed Command Rules (Preventing Data Issues)
 
 1. **Idempotent by default:**
