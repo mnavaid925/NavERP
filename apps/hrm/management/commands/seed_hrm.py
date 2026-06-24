@@ -7,18 +7,26 @@ duplicate person records. Run after the core/accounts/tenants seeders.
 import datetime
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import Employment, OrgUnit, Party, PartyRole, Tenant
 from apps.hrm.models import (
+    AssetAllocation,
     AttendanceRecord,
     Designation,
     EmployeeProfile,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
+    OnboardingDocument,
+    OnboardingProgram,
+    OnboardingTask,
+    OnboardingTemplate,
+    OnboardingTemplateTask,
+    OrientationSession,
     PublicHoliday,
     Shift,
     ShiftAssignment,
@@ -56,6 +64,37 @@ SHIFTS = [
     ("Night Shift", datetime.time(21, 0), datetime.time(6, 0), 30, False),
 ]
 
+# 3.3 Employee Onboarding — reusable templates. Each task line:
+# (title, task_category, assignee_role, due_offset_days, phase, is_mandatory).
+ONBOARDING_TEMPLATES = [
+    {
+        "name": "Engineering New Hire",
+        "description": "Standard onboarding checklist for engineering roles.",
+        "designation_index": 0,  # tie to the first designation (Software Engineer)
+        "tasks": [
+            ("Send welcome email", "hr_admin", "hr", -3, "preboarding", True),
+            ("Prepare workstation & accounts", "it_setup", "it", -2, "preboarding", True),
+            ("Sign employment contract", "document_sign", "new_hire", 0, "week_1", True),
+            ("Issue laptop & ID card", "equipment_request", "it", 0, "week_1", True),
+            ("Team introduction & office tour", "meet_greet", "manager", 1, "week_1", True),
+            ("Set up development environment", "it_setup", "new_hire", 2, "week_1", True),
+            ("30-day check-in", "manager_action", "manager", 30, "month_1", False),
+        ],
+    },
+    {
+        "name": "General Staff Onboarding",
+        "description": "Baseline onboarding for non-technical staff.",
+        "designation_index": None,
+        "tasks": [
+            ("Collect personal documents", "hr_admin", "hr", -2, "preboarding", True),
+            ("Office tour & orientation", "meet_greet", "hr", 0, "week_1", True),
+            ("Sign company policies", "document_sign", "new_hire", 1, "week_1", True),
+            ("Benefits enrollment", "hr_admin", "hr", 3, "week_1", True),
+            ("Manager 1:1 meeting", "manager_action", "manager", 14, "month_1", False),
+        ],
+    },
+]
+
 
 class Command(BaseCommand):
     help = "Seed HRM demo data (designations, employees, leave, attendance, shifts) — idempotent."
@@ -71,6 +110,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, flush=options["flush"])
+            self._seed_onboarding(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -78,7 +118,10 @@ class Command(BaseCommand):
     @transaction.atomic
     def _seed_tenant(self, tenant, *, flush):
         if flush:
-            for model in (AttendanceRecord, ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
+            # Children first (onboarding rows FK EmployeeProfile/Designation), then the masters.
+            for model in (OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
+                          OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
+                          AttendanceRecord, ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
                           LeaveType, PublicHoliday, EmployeeProfile, Designation):
                 model.objects.filter(tenant=tenant).delete()
 
@@ -206,6 +249,132 @@ class Command(BaseCommand):
             f"HRM seeded for '{tenant.name}': {len(employees)} employees, "
             f"{LeaveAllocation.objects.filter(tenant=tenant).count()} allocations, "
             f"{AttendanceRecord.objects.filter(tenant=tenant).count()} attendance rows."))
+
+    @transaction.atomic
+    def _seed_onboarding(self, tenant, *, flush):
+        """Seed 3.3 Employee Onboarding demo data. Guarded independently of the main HRM guard so a
+        tenant whose employees already exist (skipped by ``_seed_tenant``) still gets onboarding."""
+        if OnboardingTemplate.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Onboarding data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant)
+                         .select_related("party").order_by("number"))
+        if not employees:
+            self.stdout.write(self.style.WARNING(
+                f"No employees for '{tenant.name}' — skipping onboarding (run the HRM seed first)."))
+            return
+        designations = list(Designation.objects.filter(tenant=tenant).order_by("name"))
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        today = timezone.localdate()
+
+        def _mk_dt(d, hour):
+            dt = datetime.datetime.combine(d, datetime.time(hour, 0))
+            return timezone.make_aware(dt) if timezone.is_naive(dt) else dt
+
+        # --- Templates + their task lines ---
+        templates_by_name = {}
+        for spec in ONBOARDING_TEMPLATES:
+            desig = None
+            if spec["designation_index"] is not None and designations:
+                desig = designations[spec["designation_index"] % len(designations)]
+            tmpl, _ = OnboardingTemplate.objects.get_or_create(
+                tenant=tenant, name=spec["name"],
+                defaults={"description": spec["description"], "designation": desig})
+            templates_by_name[spec["name"]] = tmpl
+            for order, (title, cat, role, offset, phase, mand) in enumerate(spec["tasks"]):
+                OnboardingTemplateTask.objects.get_or_create(
+                    tenant=tenant, template=tmpl, title=title,
+                    defaults={"task_category": cat, "assignee_role": role, "due_offset_days": offset,
+                              "phase": phase, "order": order, "is_mandatory": mand})
+
+        # Canonical due-date logic (program.start_date + offset), reused so the seed matches the app.
+        from apps.hrm.views import _generate_tasks_from_template
+
+        # --- Program A: active, future start, with a buddy ---
+        emp_a = employees[0]
+        first_a = emp_a.party.name.split()[0] if emp_a.party_id else "there"
+        prog_a = OnboardingProgram.objects.create(
+            tenant=tenant, employee=emp_a, template=templates_by_name["Engineering New Hire"],
+            start_date=today + datetime.timedelta(days=7), status="active",
+            buddy=employees[1] if len(employees) > 1 else None,
+            welcome_message=f"Welcome aboard, {first_a}! The whole team is excited to have you.",
+            welcome_video_url="https://example.com/welcome",
+            first_day_notes="Arrive at 9:30 AM and ask for HR at the front desk. Bring a photo ID.")
+        _generate_tasks_from_template(prog_a)
+
+        # --- Program B: completed, past start, a few tasks ticked off ---
+        prog_b = None
+        if len(employees) > 1:
+            emp_b = employees[1]
+            first_b = emp_b.party.name.split()[0] if emp_b.party_id else "there"
+            prog_b = OnboardingProgram.objects.create(
+                tenant=tenant, employee=emp_b, template=templates_by_name["General Staff Onboarding"],
+                start_date=today - datetime.timedelta(days=30), status="completed",
+                completed_at=timezone.now(),
+                welcome_message=f"Welcome, {first_b}!",
+                first_day_notes="Orientation in Room 2 at 10 AM.")
+            _generate_tasks_from_template(prog_b)
+            for t in list(prog_b.tasks.order_by("phase", "order"))[:3]:
+                t.status = "completed"
+                t.completed_at = timezone.now()
+                t.completed_by = actor
+                t.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+
+        programs = [p for p in (prog_a, prog_b) if p is not None]
+
+        # --- Documents per program ---
+        for program in programs:
+            OnboardingDocument.objects.get_or_create(
+                tenant=tenant, program=program, title="Employment Contract",
+                defaults={"document_type": "employment_contract", "esign_required": True,
+                          "esign_status": "signed", "signed_at": timezone.now(),
+                          "external_ref": "DEMO-ENV-0001"})
+            OnboardingDocument.objects.get_or_create(
+                tenant=tenant, program=program, title="Government ID Proof",
+                defaults={"document_type": "id_proof", "esign_required": False,
+                          "esign_status": "pending", "due_date": program.start_date})
+            OnboardingDocument.objects.get_or_create(
+                tenant=tenant, program=program, title="Employee Handbook Acknowledgment",
+                defaults={"document_type": "policy_acknowledgment", "esign_required": False,
+                          "esign_status": "not_required"})
+
+        # --- Assets per program's employee ---
+        for program in programs:
+            for name, cat, status, serial in [
+                ('MacBook Pro 14"', "laptop", "issued", "C02-DEMO-001"),
+                ("Employee ID Card", "id_card", "issued", ""),
+                ("Building Access Card", "access_card", "pending", ""),
+            ]:
+                obj, created = AssetAllocation.objects.get_or_create(
+                    tenant=tenant, employee=program.employee, program=program, asset_name=name,
+                    defaults={"asset_category": cat, "status": status, "serial_number": serial})
+                if created and status == "issued":
+                    obj.issued_at = timezone.now()
+                    obj.issued_by = actor
+                    obj.save(update_fields=["issued_at", "issued_by", "updated_at"])
+
+        # --- Orientation sessions for the active program ---
+        OrientationSession.objects.get_or_create(
+            tenant=tenant, program=prog_a, employee=prog_a.employee, title="HR Orientation",
+            defaults={"session_type": "orientation", "facilitator": actor,
+                      "scheduled_at": _mk_dt(prog_a.start_date, 10), "duration_minutes": 60,
+                      "location": "Room A1", "attendance_status": "scheduled"})
+        OrientationSession.objects.get_or_create(
+            tenant=tenant, program=prog_a, employee=prog_a.employee, title="IT Setup Walk-through",
+            defaults={"session_type": "system_demo", "facilitator": actor,
+                      "scheduled_at": _mk_dt(prog_a.start_date + datetime.timedelta(days=1), 14),
+                      "duration_minutes": 45, "meeting_url": "https://example.com/it-setup",
+                      "attendance_status": "scheduled"})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Onboarding seeded for '{tenant.name}': "
+            f"{OnboardingTemplate.objects.filter(tenant=tenant).count()} templates, "
+            f"{len(programs)} programs, "
+            f"{OnboardingTask.objects.filter(tenant=tenant).count()} tasks, "
+            f"{OnboardingDocument.objects.filter(tenant=tenant).count()} docs, "
+            f"{AssetAllocation.objects.filter(tenant=tenant).count()} assets, "
+            f"{OrientationSession.objects.filter(tenant=tenant).count()} sessions."))
 
     @staticmethod
     def _last_workdays(end, count):
