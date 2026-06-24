@@ -822,7 +822,6 @@ def onboardingprogram_detail(request, pk):
         "documents": obj.documents.order_by("document_type", "title"),
         "assets": obj.assets.select_related("issued_by").order_by("-created_at"),
         "sessions": obj.orientation_sessions.select_related("facilitator").order_by("scheduled_at"),
-        "today": timezone.localdate(),
     })
 
 
@@ -946,7 +945,7 @@ def onboardingtask_detail(request, pk):
     obj = get_object_or_404(
         OnboardingTask.objects.select_related("program__employee__party", "assignee", "completed_by"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboardingtask_detail.html", {"obj": obj, "today": timezone.localdate()})
+    return render(request, "hrm/onboardingtask_detail.html", {"obj": obj})
 
 
 @login_required
