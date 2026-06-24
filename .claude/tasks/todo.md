@@ -3808,3 +3808,497 @@ reuses core Parties). Sub-modules 3.1/3.2/3.9/3.10/3.12 Live in the sidebar.
 **Deferred** (next HRM passes): payroll/payslip (FK into `accounting.PayrollRun`), recruiting/ATS, onboarding/
 offboarding, performance/goals, timesheets, statutory/tax, attendance regularization & geofencing, leave carry-
 forward/encashment batch, self-service portal + employee↔user linkage. See the "Later passes / deferred" list above.
+
+---
+
+# Module 3 Extension — HRM Sub-module 3.3: Employee Onboarding (hrm)  — plan from research-hrm-onboarding.md  (2026-06-25)
+
+> **Context:** Extension pass on the EXISTING `apps/hrm` app (3.1/3.2/3.9/3.10/3.12 complete,
+> 850+ tests green). No new Django app — every item below is added to the existing `apps/hrm/*`
+> files. Models use the same local abstract bases `TenantOwned` / `TenantNumbered` already in
+> `apps/hrm/models.py`. Every model FKs to `hrm.EmployeeProfile` (the anchor), never to
+> `core.Party` directly. Welcome Kit fields live on `OnboardingProgram` — no separate table.
+
+---
+
+## Models (add to `apps/hrm/models.py`)
+
+### Model 1 — `OnboardingTemplate` [ONBT-]
+- [ ] **`OnboardingTemplate`** — inherits `TenantNumbered`; reusable per-role onboarding checklist
+  - `NUMBER_PREFIX = "ONBT"`
+  - `name` CharField max_length=255 (e.g. "Engineering New Hire", "Sales Onboarding")
+  - `description` TextField blank=True
+  - `designation` FK→`"hrm.Designation"` SET_NULL null=True blank=True related_name=`"onboarding_templates"` (auto-suggest this template when onboarding that job title — driver: Personio/Rippling role-based template selection)
+  - `is_active` BooleanField default=True
+  - Meta: ordering=["name"]; unique_together=("tenant","number"); also unique_together=("tenant","name") to prevent duplicate template names
+  - Indexes: (tenant, is_active); (tenant, designation)
+  - `__str__`: `f"{self.number} · {self.name}"`
+  - Drivers: All 10 surveyed products (BambooHR, Workday, Rippling, HiBob, Personio, Gusto, Click Boarding, Enboarder, SAP SuccessFactors, Sapling) offer named reusable templates; the `designation` link implements role-based auto-suggestion seen in Rippling and Personio
+  - Reuses: `hrm.Designation` (FK for role-based suggestion); adds HRM-owned onboarding template table
+
+### Model 2 — `OnboardingTemplateTask` (child of template, no auto-number)
+- [ ] **`OnboardingTemplateTask`** — inherits `TenantOwned`; one task definition line in a template
+  - `template` FK→`"hrm.OnboardingTemplate"` CASCADE related_name=`"template_tasks"`
+  - `title` CharField max_length=255 (e.g. "Set up corporate email", "Complete I-9 form")
+  - `description` TextField blank=True
+  - `TASK_CATEGORY_CHOICES = [("hr_admin","HR Admin"),("it_setup","IT Setup"),("manager_action","Manager Action"),("buddy_action","Buddy Action"),("new_hire_action","New Hire Action"),("document_sign","Document Sign"),("equipment_request","Equipment Request"),("training","Training"),("meet_greet","Meet & Greet"),("custom","Custom")]`
+  - `task_category` CharField max_length=30 choices=TASK_CATEGORY_CHOICES default="custom" (driver: SAP SuccessFactors typed task categories; BambooHR/Gusto/Workable/HiBob custom task categories)
+  - `ASSIGNEE_ROLE_CHOICES = [("hr","HR"),("it","IT"),("manager","Manager"),("buddy","Buddy"),("new_hire","New Hire")]`
+  - `assignee_role` CharField max_length=20 choices=ASSIGNEE_ROLE_CHOICES default="hr" (driver: HiBob/SAP SuccessFactors/Personio/Click Boarding multi-stakeholder assignment — role rather than specific user)
+  - `due_offset_days` IntegerField default=0 (negative = before start date e.g. -3 = 3 days preboarding; 0 = start date; positive = after. Driver: Gusto "Before Day 1/Day 1/After Day 1"; Workable "days before start date")
+  - `PHASE_CHOICES = [("preboarding","Preboarding"),("week_1","Week 1"),("month_1","Month 1"),("month_2","Month 2"),("month_3","Month 3"),("ongoing","Ongoing")]`
+  - `phase` CharField max_length=20 choices=PHASE_CHOICES default="week_1" (driver: Enboarder 30-60-90 day plans; Rippling phased checklists; SAP SuccessFactors phased onboarding)
+  - `order` PositiveIntegerField default=0 (display sort order within the template/phase)
+  - `is_mandatory` BooleanField default=True (driver: Workday/HiBob distinguish required vs optional tasks)
+  - Meta: ordering=["template","phase","order","title"]; unique_together=("tenant","template","title") so a template cannot have duplicate task titles
+  - Indexes: (tenant, template); (tenant, template, phase)
+  - `__str__`: `f"{self.template} → {self.title}"`
+  - Drivers: Gusto segmentation, SAP SuccessFactors task types, HiBob multi-stakeholder assignment, Enboarder 30-60-90 phasing — all these fields derive from these product features
+  - Reuses: `hrm.OnboardingTemplate` (parent)
+
+### Model 3 — `OnboardingProgram` [ONB-]
+- [ ] **`OnboardingProgram`** — inherits `TenantNumbered`; one program instance per new hire
+  - `NUMBER_PREFIX = "ONB"`
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"onboarding_programs"` (the person being onboarded — the HRM anchor)
+  - `template` FK→`"hrm.OnboardingTemplate"` SET_NULL null=True blank=True related_name=`"programs"` (kept as a reference after tasks are generated; nullable so standalone programs without a template are allowed)
+  - `start_date` DateField (the hire's actual first day — drives all due_date calculations via `due_offset_days`)
+  - `STATUS_CHOICES = [("draft","Draft"),("active","Active"),("completed","Completed"),("cancelled","Cancelled")]`
+  - `status` CharField max_length=20 choices=STATUS_CHOICES default="draft"
+  - `buddy` FK→`"hrm.EmployeeProfile"` SET_NULL null=True blank=True related_name=`"buddy_for"` (peer mentor assignment — driver: HiBob/SAP SuccessFactors/Personio/Enboarder buddy assignment feature)
+  - `welcome_message` TextField blank=True (personalized welcome note — driver: Workable configurable welcome message; Personio welcome email; Enboarder/Appical digital welcome experience)
+  - `welcome_video_url` URLField blank=True (CEO/manager video embed URL — driver: Workable YouTube/Vimeo embed; Enboarder/Appical video welcome best practice)
+  - `first_day_notes` TextField blank=True (what to bring, parking, dress code, first-day schedule — driver: SAP SuccessFactors "Prepare for Day One"; Workable welcome message; Personio welcome email; BambooHR new hire packet)
+  - `completed_at` DateTimeField null=True blank=True editable=False (system-set when status moves to "completed"; never on the form)
+  - `notes` TextField blank=True (HR internal notes)
+  - Meta: ordering=["-start_date"]; unique_together=("tenant","number"); also unique_together=("tenant","employee") — one onboarding program per employee per tenant (enforced via clean() with a descriptive error if violated)
+  - Indexes: (tenant, employee); (tenant, status); (tenant, start_date)
+  - `clean()`: validate `end_date > start_date` does not apply (no end_date); validate unique employee-per-tenant via `clean()`; validate `status != "draft"` before allowing `generate_tasks` action
+  - `@property progress`: derived aggregate — `tasks = OnboardingTask.objects.filter(program=self)`; `total = tasks.count()`; return `int((tasks.filter(status="completed").count() / total) * 100) if total else 0` — NEVER stored (spine principle: derived-not-stored)
+  - `__str__`: `f"{self.number} · {self.employee}"`
+  - Drivers: Every surveyed product has a "program instance" anchored to employee + start date; welcome fields implement the Welcome Kit (NavERP 3.3.E) feature; buddy implements HiBob/SAP SuccessFactors/Personio/Enboarder buddy assignment; `progress` property implements BambooHR progress bar / Workday/HiBob/Personio completion dashboard
+  - Reuses: `hrm.EmployeeProfile` (anchor — twice: employee + buddy); `hrm.OnboardingTemplate` (source template)
+  - NOTE: Welcome Kit = `welcome_message` + `welcome_video_url` + `first_day_notes` on this model — no separate table needed. Policy documents reuse `OnboardingDocument(document_type="policy_acknowledgment")`.
+
+### Model 4 — `OnboardingTask` (concrete per-program task, no auto-number)
+- [ ] **`OnboardingTask`** — inherits `TenantOwned`; concrete task instance on one program
+  - `program` FK→`"hrm.OnboardingProgram"` CASCADE related_name=`"tasks"`
+  - `title` CharField max_length=255
+  - `description` TextField blank=True
+  - `task_category` CharField max_length=30 choices=TASK_CATEGORY_CHOICES default="custom" (same choices as `OnboardingTemplateTask.TASK_CATEGORY_CHOICES` — define as a module-level constant `TASK_CATEGORY_CHOICES` to avoid duplication)
+  - `assignee_role` CharField max_length=20 choices=ASSIGNEE_ROLE_CHOICES default="hr" (same module-level `ASSIGNEE_ROLE_CHOICES`)
+  - `assignee` FK→`settings.AUTH_USER_MODEL` SET_NULL null=True blank=True related_name=`"assigned_onboarding_tasks"` (the specific user resolved at instance creation; nullable — role alone is sufficient to show "IT should own this")
+  - `due_date` DateField null=True blank=True (calculated at generation time: `program.start_date + timedelta(days=template_task.due_offset_days)`; editable by HR after creation)
+  - `phase` CharField max_length=20 choices=PHASE_CHOICES default="week_1" (same module-level `PHASE_CHOICES`)
+  - `STATUS_CHOICES = [("pending","Pending"),("in_progress","In Progress"),("completed","Completed"),("skipped","Skipped")]`
+  - `status` CharField max_length=20 choices=STATUS_CHOICES default="pending"
+  - `is_mandatory` BooleanField default=True
+  - `completed_at` DateTimeField null=True blank=True editable=False (system-set on complete action — never on the form)
+  - `completed_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null=True blank=True related_name=`"completed_onboarding_tasks"` (system-set — who clicked Complete; audit trail driver: BambooHR/Workday task completion tracking)
+  - `order` PositiveIntegerField default=0
+  - `notes` TextField blank=True
+  - Meta: ordering=["program","phase","order","due_date"]; indexes: (tenant, program); (tenant, program, status); (tenant, program, phase)
+  - `__str__`: `f"{self.program} → {self.title}"`
+  - Drivers: BambooHR progress bar, Workday to-do lists, HiBob completion tracking, Workable task status (pending→in_progress→completed/skipped); `completed_by` satisfies audit requirement (who ticked it off); `assignee_role` kept alongside `assignee` so HR sees "IT should own this" even without a specific user
+
+### Model 5 — `OnboardingDocument` (per-program, no auto-number)
+- [ ] **`OnboardingDocument`** — inherits `TenantOwned`; document to collect or e-sign per program
+  - `program` FK→`"hrm.OnboardingProgram"` CASCADE related_name=`"documents"`
+  - `DOCUMENT_TYPE_CHOICES = [("employment_contract","Employment Contract"),("nda","NDA"),("offer_letter","Offer Letter"),("id_proof","ID Proof"),("tax_form","Tax Form"),("bank_details","Bank Details"),("policy_acknowledgment","Policy Acknowledgment"),("background_check","Background Check"),("custom","Custom")]`
+  - `document_type` CharField max_length=30 choices=DOCUMENT_TYPE_CHOICES default="custom" (driver: SAP SuccessFactors/BambooHR/TriNet/Zenefits document type taxonomy; policy docs reuse `policy_acknowledgment` — no separate table)
+  - `title` CharField max_length=255 (friendly display name, e.g. "Signed NDA", "W-4 Form")
+  - `description` TextField blank=True (instructions to the new hire)
+  - `file` FileField upload_to=`"hrm/onboarding/docs/%Y/%m/"` null=True blank=True (HR-uploaded template or collected file; SECURITY: validate in form — see `OnboardingDocumentForm.clean_file()`)
+  - `ESIGN_STATUS_CHOICES = [("not_required","Not Required"),("pending","Pending"),("sent","Sent"),("viewed","Viewed"),("signed","Signed"),("declined","Declined")]`
+  - `esign_required` BooleanField default=False (driver: BambooHR/Click Boarding/Rippling e-sign toggle)
+  - `esign_status` CharField max_length=20 choices=ESIGN_STATUS_CHOICES default="not_required" (driver: BambooHR/HiBob/SAP SuccessFactors/Click Boarding e-sign status lifecycle — tracks signing without requiring live DocuSign integration)
+  - `due_date` DateField null=True blank=True (driver: HiBob/SAP SuccessFactors/Click Boarding document collection deadline)
+  - `signed_at` DateTimeField null=True blank=True editable=False (system-set when e-sign status moves to "signed")
+  - `external_ref` CharField max_length=255 blank=True (DocuSign envelope ID stub for future integration — driver: BambooHR Mitratech/SAP DocuSign/Click Boarding API-first; keeps the integration hook without requiring it now)
+  - Meta: ordering=["program","document_type","title"]; indexes: (tenant, program); (tenant, program, esign_status)
+  - `__str__`: `f"{self.program} → {self.title}"`
+  - SECURITY NOTE: `OnboardingDocumentForm.clean_file()` must enforce an extension allowlist (`{".pdf",".doc",".docx",".jpg",".jpeg",".png"}`) and a size cap (10 MB) — mirror `EmployeeProfileForm.clean_photo()`; document in the form class
+  - Drivers: BambooHR e-sign (I-9/W-4/custom docs), Gusto document collection, SAP SuccessFactors document workflows, Click Boarding eSignature, TriNet/Zenefits paperless onboarding, Deel compliance document upload; `esign_status` tracks signing lifecycle without live integration now
+
+### Model 6 — `AssetAllocation` [AST-]
+- [ ] **`AssetAllocation`** — inherits `TenantNumbered`; physical asset issued to a new hire (or standalone)
+  - `NUMBER_PREFIX = "AST"`
+  - `program` FK→`"hrm.OnboardingProgram"` SET_NULL null=True blank=True related_name=`"assets"` (nullable so assets can exist without a program — e.g., ad-hoc issuance or offboarding return tracking)
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"asset_allocations"` (the recipient — required even when program is null)
+  - `asset_name` CharField max_length=255 (e.g. "MacBook Pro 14", "ID Card", "Locker Key")
+  - `ASSET_CATEGORY_CHOICES = [("laptop","Laptop"),("desktop","Desktop"),("phone","Phone"),("id_card","ID Card"),("access_card","Access Card"),("uniform","Uniform"),("vehicle","Vehicle"),("sim","SIM Card"),("other","Other")]`
+  - `asset_category` CharField max_length=30 choices=ASSET_CATEGORY_CHOICES default="other" (driver: SAP SuccessFactors "Request Equipment" task, Rippling device inventory, HiBob equipment task, BambooHR IT checklist)
+  - `serial_number` CharField max_length=100 blank=True (driver: Rippling tracks device serial; SAP SuccessFactors serial/tag)
+  - `asset_tag` CharField max_length=100 blank=True
+  - `STATUS_CHOICES = [("pending","Pending"),("issued","Issued"),("returned","Returned"),("lost","Lost"),("damaged","Damaged")]`
+  - `status` CharField max_length=20 choices=STATUS_CHOICES default="pending"
+  - `issued_at` DateTimeField null=True blank=True (driver: BambooHR/SAP SuccessFactors track issuance date for audit)
+  - `issued_by` FK→`settings.AUTH_USER_MODEL` SET_NULL null=True blank=True related_name=`"hrm_assets_issued"` (driver: audit trail — who issued it)
+  - `returned_at` DateTimeField null=True blank=True editable=False (system-set when status moves to "returned" via the return action; relevant for offboarding 3.4)
+  - `return_due_date` DateField null=True blank=True (for contract/offboarding use — driver: Rippling/TriNet)
+  - `notes` TextField blank=True
+  - `# asset_id_stub: nullable IntegerField (commented out) — placeholder for future FK to 'assets.Asset' (Module 11 Asset Management). Once Module 11 is built, add migration: asset_id = models.IntegerField(null=True, blank=True, db_index=True, help_text="FK stub for future assets.Asset link")`
+  - Meta: ordering=["-created_at"]; unique_together=("tenant","number"); indexes: (tenant, employee); (tenant, status); (tenant, program)
+  - `__str__`: `f"{self.number} · {self.asset_name} → {self.employee}"`
+  - Drivers: SAP SuccessFactors "Equipment List" + "Request Equipment" task types; Rippling device provisioning + inventory; HiBob equipment task; BambooHR IT checklist; TriNet app-provisioning; the `AST-` prefix was specified in research
+  - Reuses: `hrm.EmployeeProfile` (recipient anchor); `hrm.OnboardingProgram` (nullable link)
+
+### Model 7 — `OrientationSession` (per-program, no auto-number)
+- [ ] **`OrientationSession`** — inherits `TenantOwned`; a scheduled orientation meeting or training event
+  - `program` FK→`"hrm.OnboardingProgram"` SET_NULL null=True blank=True related_name=`"orientation_sessions"` (nullable — ad-hoc sessions outside a formal program are allowed)
+  - `employee` FK→`"hrm.EmployeeProfile"` CASCADE related_name=`"orientation_sessions"` (required: the new hire attending)
+  - `title` CharField max_length=255 (e.g. "HR Orientation", "IT Setup Walk-through", "Meet the Team Lunch")
+  - `SESSION_TYPE_CHOICES = [("orientation","Orientation"),("training","Training"),("meet_greet","Meet & Greet"),("policy_review","Policy Review"),("system_demo","System Demo"),("department_intro","Department Intro"),("social","Social / Team Lunch"),("custom","Custom")]`
+  - `session_type` CharField max_length=30 choices=SESSION_TYPE_CHOICES default="orientation" (driver: SAP SuccessFactors "Schedule Meeting" task; HiBob "meet & greet schedules"; Click Boarding orientation activity types)
+  - `facilitator` FK→`settings.AUTH_USER_MODEL` SET_NULL null=True blank=True related_name=`"facilitated_orientation_sessions"` (driver: SAP SuccessFactors/HiBob assign responsible user per session)
+  - `facilitator_name` CharField max_length=255 blank=True (free-text fallback for external trainers/speakers when no User record exists)
+  - `scheduled_at` DateTimeField null=True blank=True
+  - `duration_minutes` PositiveIntegerField null=True blank=True
+  - `location` CharField max_length=255 blank=True (room name, "Zoom Link Below", "Building A Room 3")
+  - `meeting_url` URLField blank=True (Zoom/Teams link — driver: Workable/Workday/Click Boarding virtual meeting link embedding)
+  - `ATTENDANCE_STATUS_CHOICES = [("scheduled","Scheduled"),("attended","Attended"),("missed","Missed"),("rescheduled","Rescheduled"),("cancelled","Cancelled")]`
+  - `attendance_status` CharField max_length=20 choices=ATTENDANCE_STATUS_CHOICES default="scheduled" (driver: Click Boarding engagement tracking; Enboarder completion analytics)
+  - `notes` TextField blank=True
+  - Meta: ordering=["scheduled_at"]; indexes: (tenant, employee); (tenant, program); (tenant, scheduled_at)
+  - `clean()`: if `scheduled_at` is provided and `program` is not null, warn (non-blocking) that `scheduled_at` should be on or after `program.start_date` — raise ValidationError if `scheduled_at.date() < program.start_date`
+  - `__str__`: `f"{self.title} @ {self.scheduled_at}" if self.scheduled_at else self.title`
+  - Drivers: SAP SuccessFactors "Schedule Meeting" task; HiBob meet-and-greet schedules; Click Boarding orientation activities; Workable virtual meeting portal; Sapling People page introductions; `meeting_url` supports virtual meeting pattern; `attendance_status` tracks completion without full calendar integration
+
+---
+
+## Backend — add to existing `apps/hrm/` files
+
+### `apps/hrm/models.py`
+- [ ] Add module-level constants above the new models: `TASK_CATEGORY_CHOICES`, `ASSIGNEE_ROLE_CHOICES`, `PHASE_CHOICES` (shared by both `OnboardingTemplateTask` and `OnboardingTask`)
+- [ ] Add all 7 model classes in order: `OnboardingTemplate`, `OnboardingTemplateTask`, `OnboardingProgram`, `OnboardingTask`, `OnboardingDocument`, `AssetAllocation`, `OrientationSession`
+- [ ] Ensure `ALLOWED_DOC_EXTENSIONS` and `MAX_DOC_BYTES` constants are defined here or in forms.py for file upload validation
+
+### `apps/hrm/forms.py`
+- [ ] **`OnboardingTemplateForm`** (`TenantModelForm`) — fields: `name`, `description`, `designation`, `is_active`; `__init__` scopes `designation` queryset to `tenant` ordered by name
+- [ ] **`OnboardingTemplateTaskForm`** (`TenantModelForm`) — fields: `template`, `title`, `description`, `task_category`, `assignee_role`, `due_offset_days`, `phase`, `order`, `is_mandatory`; `__init__` scopes `template` queryset to `tenant`; exclude `tenant`
+- [ ] **`OnboardingProgramForm`** (`TenantModelForm`) — fields: `employee`, `template`, `start_date`, `buddy`, `welcome_message`, `welcome_video_url`, `first_day_notes`, `notes`; SECURITY: exclude `status` (set only by workflow actions), `completed_at` (system-set); `__init__` scopes `employee` queryset to `EmployeeProfile.objects.filter(tenant=tenant)`, `template` to `OnboardingTemplate.objects.filter(tenant=tenant, is_active=True)`, `buddy` to `EmployeeProfile.objects.filter(tenant=tenant)` (exclude the employee being onboarded via runtime filtering in the view)
+- [ ] **`OnboardingTaskForm`** (`TenantModelForm`) — fields: `program`, `title`, `description`, `task_category`, `assignee_role`, `assignee`, `due_date`, `phase`, `is_mandatory`, `order`, `notes`; SECURITY: exclude `status` (set by workflow actions), `completed_at`, `completed_by` (system-set on complete action); `__init__` scopes `program` to tenant, `assignee` to `settings.AUTH_USER_MODEL` filtered by `profile__tenant=tenant` (or `User.objects.filter(tenant=tenant)` per the accounts app pattern)
+- [ ] **`OnboardingDocumentForm`** (`TenantModelForm`) — fields: `program`, `document_type`, `title`, `description`, `file`, `esign_required`, `esign_status`, `due_date`, `external_ref`; SECURITY: exclude `signed_at` (system-set); `__init__` scopes `program` to tenant; implement `clean_file()`: check extension against `{".pdf",".doc",".docx",".jpg",".jpeg",".png"}` + size cap of 10 MB (mirror `EmployeeProfileForm.clean_photo()`)
+- [ ] **`AssetAllocationForm`** (`TenantModelForm`) — fields: `program`, `employee`, `asset_name`, `asset_category`, `serial_number`, `asset_tag`, `status`, `issued_at`, `issued_by`, `return_due_date`, `notes`; SECURITY: exclude `returned_at` (system-set on return action), `number` (auto); `__init__` scopes `program` to tenant, `employee` to tenant, `issued_by` to tenant users
+- [ ] **`OrientationSessionForm`** (`TenantModelForm`) — fields: `program`, `employee`, `title`, `session_type`, `facilitator`, `facilitator_name`, `scheduled_at`, `duration_minutes`, `location`, `meeting_url`, `attendance_status`, `notes`; `__init__` scopes `program` to tenant, `employee` to tenant, `facilitator` to tenant users
+
+### `apps/hrm/views.py`
+All views: `@login_required`, `tenant=request.tenant` filter, full CRUD via `crud_list`/`crud_create`/`crud_edit`/`crud_delete` helpers + `write_audit_log`. Mirror existing leave/attendance patterns exactly.
+
+#### OnboardingTemplate CRUD
+- [ ] `onboardingtemplate_list` — `crud_list(OnboardingTemplate.objects.filter(tenant=...).select_related("designation"), "hrm/onboardingtemplate_list.html", search_fields=["number","name","designation__name"], filters=[("is_active","is_active",False),("designation","designation_id",True)], extra_context={"designations": Designation.objects.filter(tenant=...).order_by("name")})`
+- [ ] `onboardingtemplate_create` — `crud_create(OnboardingTemplateForm, "hrm/onboardingtemplate_form.html", "hrm:onboardingtemplate_list")`
+- [ ] `onboardingtemplate_detail` — GET `OnboardingTemplate` with related `template_tasks.order_by("phase","order")`; pass task list grouped by phase for display
+- [ ] `onboardingtemplate_edit` — `crud_edit(OnboardingTemplate, pk, OnboardingTemplateForm, "hrm/onboardingtemplate_form.html", "hrm:onboardingtemplate_list")`
+- [ ] `onboardingtemplate_delete` — `crud_delete(OnboardingTemplate, pk, "hrm:onboardingtemplate_list")` with guard: block if `programs` exist using this template (warn and redirect rather than 500)
+
+#### OnboardingTemplateTask CRUD
+- [ ] `onboardingtemplatetask_list` — filter by template (int FK) + phase + task_category; search `["title","description"]`; extra_context: `templates`, `phase_choices=PHASE_CHOICES`, `category_choices=TASK_CATEGORY_CHOICES`
+- [ ] `onboardingtemplatetask_create` — `crud_create(OnboardingTemplateTaskForm, "hrm/onboardingtemplatetask_form.html", "hrm:onboardingtemplatetask_list")`
+- [ ] `onboardingtemplatetask_detail` — read-only view of task definition
+- [ ] `onboardingtemplatetask_edit` — `crud_edit(...)`
+- [ ] `onboardingtemplatetask_delete` — `crud_delete(...)`
+
+#### OnboardingProgram CRUD + Workflow
+- [ ] `onboardingprogram_list` — filter by status + employee (int FK); search `["number","employee__party__name"]`; extra_context: `status_choices=OnboardingProgram.STATUS_CHOICES`, `employees=EmployeeProfile.objects.filter(tenant=...)`; annotate queryset with `tasks_total=Count("tasks")` and `tasks_done=Count("tasks", filter=Q(tasks__status="completed"))` for progress display on the list
+- [ ] `onboardingprogram_create` — `crud_create(OnboardingProgramForm, "hrm/onboardingprogram_form.html", "hrm:onboardingprogram_list")`
+- [ ] `onboardingprogram_detail` — rich detail page: program header (employee, start_date, status, buddy, welcome fields), progress bar (`obj.progress`), tasks grouped by phase (with complete/reopen POST buttons per task), documents list, assets list, orientation sessions list; sidebar: edit/delete/activate/complete/cancel action buttons
+- [ ] `onboardingprogram_edit` — `crud_edit(...)` (block if status == "completed" or "cancelled" — redirect with message)
+- [ ] `onboardingprogram_delete` — `crud_delete(...)` (block delete if status == "active" — warn and redirect; allow delete only when draft or cancelled)
+
+**Program workflow POST actions (mirror leave submit/approve/reject/cancel pattern):**
+- [ ] `onboardingprogram_activate` — `@require_POST`, `@login_required`; transitions draft→active; calls `_generate_tasks_from_template(program)` if template is set and no tasks exist yet; sets `status="active"`; writes audit log; redirects to detail
+- [ ] `onboardingprogram_generate_tasks` — `@require_POST`, `@login_required`; regenerates tasks from template (only if status == "draft" or "active" and tasks count == 0); calls `_generate_tasks_from_template(program)`; writes audit log; redirects to detail
+- [ ] `onboardingprogram_complete` — `@require_POST`, `@tenant_admin_required`; transitions active→completed; sets `completed_at=timezone.now()`; writes audit log; redirects to detail
+- [ ] `onboardingprogram_cancel` — `@require_POST`, `@tenant_admin_required`; transitions draft/active→cancelled; writes audit log; redirects to detail
+
+**Task workflow POST actions:**
+- [ ] `onboardingtask_complete` — `@require_POST`, `@login_required`; `OnboardingTask` GET: `get_object_or_404(OnboardingTask, pk=pk, program__tenant=request.tenant)`; sets `status="completed"`, `completed_at=timezone.now()`, `completed_by=request.user`; writes audit log; redirects to `hrm:onboardingprogram_detail` of the parent program
+- [ ] `onboardingtask_reopen` — `@require_POST`, `@login_required`; clears `status` back to `"pending"`, clears `completed_at`/`completed_by`; writes audit log; redirects to program detail
+- [ ] `onboardingtask_skip` — `@require_POST`, `@login_required`; sets `status="skipped"`; writes audit log; redirects to program detail
+
+**Task generation helper (not a view — private function in views.py):**
+- [ ] `_generate_tasks_from_template(program)` — private function; iterates `program.template.template_tasks.order_by("order")`; for each `OnboardingTemplateTask` creates an `OnboardingTask` with: `tenant=program.tenant`, `program=program`, `title=tt.title`, `description=tt.description`, `task_category=tt.task_category`, `assignee_role=tt.assignee_role`, `due_date=program.start_date + timedelta(days=tt.due_offset_days)`, `phase=tt.phase`, `is_mandatory=tt.is_mandatory`, `order=tt.order`; uses `get_or_create(tenant=..., program=..., title=..., defaults={...})` to be idempotent (calling it twice does not duplicate tasks)
+
+#### OnboardingTask CRUD (standalone, also embedded on program detail)
+- [ ] `onboardingtask_list` — filter by program (int FK) + status + phase + task_category; search `["title","description","assignee__username"]`; extra_context: `status_choices`, `phase_choices`, `category_choices`, `programs`; select_related `program`, `assignee`, `completed_by`
+- [ ] `onboardingtask_create` — `crud_create(OnboardingTaskForm, "hrm/onboardingtask_form.html", "hrm:onboardingtask_list")`
+- [ ] `onboardingtask_detail` — show all fields + completed_by/completed_at if done; sidebar: complete/reopen/skip/edit/delete
+- [ ] `onboardingtask_edit` — `crud_edit(...)` (block if status == "completed" via guard message)
+- [ ] `onboardingtask_delete` — `crud_delete(...)`
+
+#### OnboardingDocument CRUD
+- [ ] `onboardingdocument_list` — filter by program (int FK) + document_type + esign_status; search `["title","description","external_ref"]`; extra_context: `type_choices`, `esign_choices`, `programs`
+- [ ] `onboardingdocument_create` — `crud_create(OnboardingDocumentForm, "hrm/onboardingdocument_form.html", "hrm:onboardingdocument_list")`; template must use `enctype="multipart/form-data"`
+- [ ] `onboardingdocument_detail` — show file link, esign_status badge, due_date, external_ref stub note; sidebar: edit/delete + "Mark Signed" action button
+- [ ] `onboardingdocument_edit` — `crud_edit(...)` with `enctype="multipart/form-data"` on template
+- [ ] `onboardingdocument_delete` — `crud_delete(...)`
+- [ ] `onboardingdocument_mark_signed` — `@require_POST`, `@login_required`; sets `esign_status="signed"`, `signed_at=timezone.now()`; writes audit log; redirects to detail
+
+#### AssetAllocation CRUD
+- [ ] `assetallocation_list` — filter by employee (int FK) + status + asset_category; search `["number","asset_name","serial_number","asset_tag"]`; extra_context: `status_choices`, `category_choices`, `employees`; select_related `employee`, `program`, `issued_by`
+- [ ] `assetallocation_create` — `crud_create(AssetAllocationForm, "hrm/assetallocation_form.html", "hrm:assetallocation_list")`
+- [ ] `assetallocation_detail` — full asset record; sidebar: issue/return/edit/delete action buttons
+- [ ] `assetallocation_edit` — `crud_edit(...)`
+- [ ] `assetallocation_delete` — `crud_delete(...)` (block if status == "issued" — warn that asset must be returned first)
+- [ ] `assetallocation_issue` — `@require_POST`, `@login_required`; sets `status="issued"`, `issued_at=timezone.now()`, `issued_by=request.user`; writes audit log; redirects to detail
+- [ ] `assetallocation_return` — `@require_POST`, `@login_required`; sets `status="returned"`, `returned_at=timezone.now()`; writes audit log; redirects to detail
+
+#### OrientationSession CRUD
+- [ ] `orientationsession_list` — filter by employee (int FK) + session_type + attendance_status; search `["title","location","facilitator__username","facilitator_name"]`; extra_context: `type_choices`, `attendance_choices`, `employees`; select_related `employee`, `program`, `facilitator`
+- [ ] `orientationsession_create` — `crud_create(OrientationSessionForm, "hrm/orientationsession_form.html", "hrm:orientationsession_list")`
+- [ ] `orientationsession_detail` — meeting details, meeting_url link, attendance_status badge; sidebar: mark-attended/mark-missed/edit/delete
+- [ ] `orientationsession_edit` — `crud_edit(...)`
+- [ ] `orientationsession_delete` — `crud_delete(...)`
+- [ ] `orientationsession_mark_attended` — `@require_POST`, `@login_required`; sets `attendance_status="attended"`; writes audit log; redirects to detail
+- [ ] `orientationsession_mark_missed` — `@require_POST`, `@login_required`; sets `attendance_status="missed"`; writes audit log; redirects to detail
+
+### `apps/hrm/urls.py`
+Append to existing `urlpatterns` (keep `app_name = "hrm"`):
+
+- [ ] **OnboardingTemplate (3.3 — template admin):**
+  - `onboarding-templates/` → `onboardingtemplate_list`
+  - `onboarding-templates/add/` → `onboardingtemplate_create`
+  - `onboarding-templates/<int:pk>/` → `onboardingtemplate_detail`
+  - `onboarding-templates/<int:pk>/edit/` → `onboardingtemplate_edit`
+  - `onboarding-templates/<int:pk>/delete/` → `onboardingtemplate_delete`
+
+- [ ] **OnboardingTemplateTask (3.3 — template tasks):**
+  - `onboarding-template-tasks/` → `onboardingtemplatetask_list`
+  - `onboarding-template-tasks/add/` → `onboardingtemplatetask_create`
+  - `onboarding-template-tasks/<int:pk>/` → `onboardingtemplatetask_detail`
+  - `onboarding-template-tasks/<int:pk>/edit/` → `onboardingtemplatetask_edit`
+  - `onboarding-template-tasks/<int:pk>/delete/` → `onboardingtemplatetask_delete`
+
+- [ ] **OnboardingProgram (3.3 — program instances + workflow):**
+  - `onboarding/` → `onboardingprogram_list`
+  - `onboarding/add/` → `onboardingprogram_create`
+  - `onboarding/<int:pk>/` → `onboardingprogram_detail`
+  - `onboarding/<int:pk>/edit/` → `onboardingprogram_edit`
+  - `onboarding/<int:pk>/delete/` → `onboardingprogram_delete`
+  - `onboarding/<int:pk>/activate/` → `onboardingprogram_activate`
+  - `onboarding/<int:pk>/generate-tasks/` → `onboardingprogram_generate_tasks`
+  - `onboarding/<int:pk>/complete/` → `onboardingprogram_complete`
+  - `onboarding/<int:pk>/cancel/` → `onboardingprogram_cancel`
+
+- [ ] **OnboardingTask (3.3 — task instances + workflow):**
+  - `onboarding-tasks/` → `onboardingtask_list`
+  - `onboarding-tasks/add/` → `onboardingtask_create`
+  - `onboarding-tasks/<int:pk>/` → `onboardingtask_detail`
+  - `onboarding-tasks/<int:pk>/edit/` → `onboardingtask_edit`
+  - `onboarding-tasks/<int:pk>/delete/` → `onboardingtask_delete`
+  - `onboarding-tasks/<int:pk>/complete/` → `onboardingtask_complete`
+  - `onboarding-tasks/<int:pk>/reopen/` → `onboardingtask_reopen`
+  - `onboarding-tasks/<int:pk>/skip/` → `onboardingtask_skip`
+
+- [ ] **OnboardingDocument (3.3 — document collection):**
+  - `onboarding-documents/` → `onboardingdocument_list`
+  - `onboarding-documents/add/` → `onboardingdocument_create`
+  - `onboarding-documents/<int:pk>/` → `onboardingdocument_detail`
+  - `onboarding-documents/<int:pk>/edit/` → `onboardingdocument_edit`
+  - `onboarding-documents/<int:pk>/delete/` → `onboardingdocument_delete`
+  - `onboarding-documents/<int:pk>/mark-signed/` → `onboardingdocument_mark_signed`
+
+- [ ] **AssetAllocation (3.3 — asset issuance):**
+  - `assets/` → `assetallocation_list`
+  - `assets/add/` → `assetallocation_create`
+  - `assets/<int:pk>/` → `assetallocation_detail`
+  - `assets/<int:pk>/edit/` → `assetallocation_edit`
+  - `assets/<int:pk>/delete/` → `assetallocation_delete`
+  - `assets/<int:pk>/issue/` → `assetallocation_issue`
+  - `assets/<int:pk>/return/` → `assetallocation_return`
+
+- [ ] **OrientationSession (3.3 — orientation schedule):**
+  - `orientation/` → `orientationsession_list`
+  - `orientation/add/` → `orientationsession_create`
+  - `orientation/<int:pk>/` → `orientationsession_detail`
+  - `orientation/<int:pk>/edit/` → `orientationsession_edit`
+  - `orientation/<int:pk>/delete/` → `orientationsession_delete`
+  - `orientation/<int:pk>/mark-attended/` → `orientationsession_mark_attended`
+  - `orientation/<int:pk>/mark-missed/` → `orientationsession_mark_missed`
+
+### `apps/hrm/admin.py`
+- [ ] Register `OnboardingTemplate` — list_display: `number, name, designation, is_active, tenant`; list_filter: `is_active, designation`; readonly: `number, created_at, updated_at`
+- [ ] Register `OnboardingTemplateTask` — list_display: `template, title, task_category, assignee_role, phase, due_offset_days, is_mandatory`; list_filter: `task_category, assignee_role, phase`; raw_id_fields: `template`
+- [ ] Register `OnboardingProgram` — list_display: `number, employee, start_date, status, buddy, tenant`; list_filter: `status`; readonly: `number, completed_at, created_at, updated_at`
+- [ ] Register `OnboardingTask` — list_display: `program, title, task_category, phase, status, assignee, due_date`; list_filter: `status, phase, task_category`; readonly: `completed_at, completed_by`; raw_id_fields: `program`
+- [ ] Register `OnboardingDocument` — list_display: `program, title, document_type, esign_status, due_date`; list_filter: `document_type, esign_status`; readonly: `signed_at, created_at, updated_at`
+- [ ] Register `AssetAllocation` — list_display: `number, asset_name, asset_category, employee, status, issued_at, tenant`; list_filter: `status, asset_category`; readonly: `number, returned_at, created_at, updated_at`
+- [ ] Register `OrientationSession` — list_display: `title, session_type, employee, scheduled_at, attendance_status, facilitator`; list_filter: `session_type, attendance_status`
+
+---
+
+## Migration
+- [ ] `venv\Scripts\python.exe manage.py makemigrations hrm` — generates a single new migration (e.g. `apps/hrm/migrations/0002_onboardingtemplate_onboardingtemplatetask_onboardingprogram_onboardingtask_onboardingdocument_assetallocation_orientationsession.py`)
+- [ ] `venv\Scripts\python.exe manage.py sqlmigrate hrm 0002` — review SQL; confirm all FK references, unique_together constraints, and indexes render correctly on MariaDB 10.4
+- [ ] `venv\Scripts\python.exe manage.py migrate` — apply to `nav_erp`; confirm zero errors
+
+---
+
+## Seeder — extend `apps/hrm/management/commands/seed_hrm.py`
+- [ ] Add import for new models at top: `OnboardingTemplate, OnboardingTemplateTask, OnboardingProgram, OnboardingTask, OnboardingDocument, AssetAllocation, OrientationSession`
+- [ ] Add idempotency guard for each new model block: `if OnboardingTemplate.objects.filter(tenant=tenant).exists(): continue` (guard runs per-tenant before each model's seed block — print `"Onboarding data already exists for {tenant.slug} — skipping"` and continue to next tenant)
+- [ ] **Seed 2 `OnboardingTemplate` rows per tenant:** e.g. "Engineering New Hire" (linked to the Engineering/Software Engineer designation) and "General Staff Onboarding" (no designation); each with 5–7 `OnboardingTemplateTask` rows covering all phases (preboarding/week_1/month_1) and all task categories (hr_admin/it_setup/manager_action/document_sign/equipment_request); use `get_or_create(tenant=tenant, name=name)` on the template and `get_or_create(tenant=tenant, template=tmpl, title=title, defaults={...})` on each task
+- [ ] **Seed 2 `OnboardingProgram` rows per tenant:** one `active` (linked to employee #1 as the new hire, template = "Engineering New Hire", start_date = today + 7 days, buddy = employee #2) and one `completed` (employee #2, template = "General Staff Onboarding", start_date = today - 30 days, `completed_at` set); number guard: `existing = OnboardingProgram.objects.filter(tenant=tenant, employee=emp).first()`; skip if exists
+- [ ] **Seed `OnboardingTask` rows** by calling `_generate_tasks_from_template(program)` (or equivalent inline logic) for the two programs; mark 3 tasks on the `completed` program as `status="completed"` with `completed_at` and `completed_by` set; leave remaining tasks as `pending` or `in_progress`
+- [ ] **Seed 2–3 `OnboardingDocument` rows per program:** one `employment_contract` (esign_status="signed", signed_at set), one `id_proof` (esign_status="pending"), one `policy_acknowledgment` (esign_required=False, esign_status="not_required"); use `get_or_create(tenant=tenant, program=program, title=title, defaults={...})`
+- [ ] **Seed 2–3 `AssetAllocation` rows per program's employee:** e.g. laptop (status="issued", issued_at set, issued_by=tenant admin user), id_card (status="issued"), access_card (status="pending"); use `get_or_create(tenant=tenant, number=number, defaults={...})` pattern (check for existing number first, generate one if not exists)
+- [ ] **Seed 2 `OrientationSession` rows per active program:** one "HR Orientation" (session_type="orientation", scheduled_at=program.start_date + day 1, attendance_status="attended") and one "IT Setup Walk-through" (session_type="system_demo", scheduled_at=program.start_date + day 2, attendance_status="scheduled"); use `get_or_create(tenant=tenant, program=program, title=title, defaults={...})`
+- [ ] After seeding, print: `"Onboarding seeded for {tenant.slug}: 2 templates, {N} template tasks, 2 programs, {N} tasks, {N} docs, {N} assets, {N} sessions."` and re-print: `"Superuser 'admin' has no tenant — log in as admin_acme / password to see onboarding data."`
+
+---
+
+## Wire-up
+
+### `apps/core/navigation.py` — add `"3.3"` entry to `LIVE_LINKS`
+- [ ] Add the following block to `LIVE_LINKS` (after the `"3.2"` block, before `"3.9"`):
+  ```python
+  # 3.3 Employee Onboarding — uses exact NavERP.md bullet text as keys
+  "3.3": {
+      "Onboarding Tasks": "hrm:onboardingprogram_list",      # bullet — program list is the primary entry; tasks are accessed via program detail
+      "Document Collection": "hrm:onboardingdocument_list",   # bullet
+      "Asset Allocation": "hrm:assetallocation_list",         # bullet
+      "Orientation Schedule": "hrm:orientationsession_list",  # bullet
+      "Welcome Kit": "hrm:onboardingprogram_list",            # bullet — welcome fields live on program (no separate table)
+      "Onboarding Templates": "hrm:onboardingtemplate_list",  # extra — template management
+      "Onboarding Programs": "hrm:onboardingprogram_list",    # extra (explicit duplicate for clarity in nav)
+  },
+  ```
+- [ ] Verify the 5 NavERP.md 3.3 bullet labels ("Onboarding Tasks", "Document Collection", "Asset Allocation", "Orientation Schedule", "Welcome Kit") match exactly — check against `NavERP.md` grep results
+
+---
+
+## Templates (`templates/hrm/`)
+One file per template. Mirror `hrm/leaverequest_list.html` / `hrm/leaverequest_detail.html` / `hrm/leaverequest_form.html` conventions: extend `base.html`, use design-system classes (`page-header`, `card`, `table`, `badge`, `form-*`, `empty-state`), `partials/pagination.html`, search `q` + filter selects pre-filled from `request.GET`, FK filters compare `obj.pk|stringformat:"d"`, boolean filters use `"True"/"False"`, badges use exact model choice values with `{{ obj.get_<field>_display }}` fallback, every list has an Actions column (view/edit/delete POST+csrf+confirm).
+
+### OnboardingTemplate templates
+- [ ] `hrm/onboardingtemplate_list.html` — table: number, name, designation link (nullable), is_active badge, task count (annotated); filter bar: is_active dropdown + designation FK dropdown; Actions: view/edit/delete
+- [ ] `hrm/onboardingtemplate_detail.html` — template header (name, description, designation, is_active); tasks table grouped by phase (phase heading, then rows: order, title, category badge, assignee_role badge, due_offset_days, is_mandatory badge); "Apply Template to Employee" CTA link to `onboardingprogram_create?template=<pk>`; sidebar: edit/delete
+- [ ] `hrm/onboardingtemplate_form.html` — create/edit form; is_edit toggle for page title
+
+### OnboardingTemplateTask templates
+- [ ] `hrm/onboardingtemplatetask_list.html` — table: template link, title, category badge, assignee_role badge, phase badge, due_offset_days, is_mandatory badge; filter bar: template FK + phase + task_category dropdowns; Actions: view/edit/delete
+- [ ] `hrm/onboardingtemplatetask_detail.html` — all fields with badge display; sidebar: edit/delete
+- [ ] `hrm/onboardingtemplatetask_form.html` — create/edit form; `due_offset_days` with helper text "Negative = before start date (e.g. -3), 0 = start date, positive = after"
+
+### OnboardingProgram templates
+- [ ] `hrm/onboardingprogram_list.html` — table: number, employee link, start_date, status badge, buddy link (nullable), progress bar (annotated tasks_done/tasks_total), template link; filter bar: status dropdown + employee FK dropdown; Actions: view/edit/delete
+- [ ] `hrm/onboardingprogram_detail.html` — **rich detail page:**
+  - Program header card: number, employee, start_date, status badge, buddy, template, progress bar (`obj.progress`% with colour by threshold: <25=red, 25-74=yellow, 75+=green)
+  - Welcome Kit section: welcome_message (if set), welcome_video_url as embed/link (if set), first_day_notes
+  - Tasks section: tasks grouped by phase (preboarding/week_1/month_1/month_2/month_3); per task row: category badge, title, assignee_role badge, assignee username (nullable), due_date (coloured red if overdue), status badge; Actions column: "Complete" POST form (show if not completed), "Reopen" POST form (show if completed), "Skip" POST form (show if pending)
+  - Documents section: table of `OnboardingDocument` rows: type badge, title, esign_required, esign_status badge, due_date, file link (if uploaded), "Mark Signed" POST button (show if esign_status != "signed"); link to "Add Document"
+  - Assets section: table of `AssetAllocation` rows: AST- number, asset_name, category badge, serial_number, status badge, issued_at, "Issue" POST button (if pending), "Return" POST button (if issued); link to "Add Asset"
+  - Orientation Sessions section: table of sessions ordered by scheduled_at: title, session_type badge, facilitator (or facilitator_name), scheduled_at, meeting_url link (if set), attendance_status badge, "Mark Attended"/"Mark Missed" POST buttons; link to "Add Session"
+  - Sidebar: Edit (if not completed/cancelled), Delete (if draft/cancelled), Activate (if draft, `@login_required`), Generate Tasks (if active/draft and no tasks yet, `@login_required`), Complete (if active, `@tenant_admin_required`), Cancel (if draft/active, `@tenant_admin_required`)
+- [ ] `hrm/onboardingprogram_form.html` — create/edit form; note below buddy field: "Leave blank to assign later"; notes field below welcome section
+
+### OnboardingTask templates
+- [ ] `hrm/onboardingtask_list.html` — table: program link, title, category badge, phase badge, assignee_role badge, assignee (nullable), due_date (red if overdue), status badge; filter bar: program FK + status + phase + task_category dropdowns; Actions: view/edit/delete + quick Complete/Skip inline POST buttons in Actions column
+- [ ] `hrm/onboardingtask_detail.html` — all task fields, completed_by/completed_at display if done; sidebar: Complete/Reopen/Skip POST buttons + edit/delete
+- [ ] `hrm/onboardingtask_form.html` — create/edit form; exclude status/completed_at/completed_by (set by workflow)
+
+### OnboardingDocument templates
+- [ ] `hrm/onboardingdocument_list.html` — table: program link, type badge, title, esign_required bool, esign_status badge, due_date, file download link (if file set); filter bar: program FK + document_type + esign_status dropdowns; Actions: view/edit/delete + "Mark Signed" inline POST
+- [ ] `hrm/onboardingdocument_detail.html` — all fields; file download link (if file); external_ref stub label with note "DocuSign/eSign integration reference (future)"; sidebar: Mark Signed POST button (if esign_status != "signed") + edit/delete
+- [ ] `hrm/onboardingdocument_form.html` — create/edit form with `enctype="multipart/form-data"`; show currently-uploaded file name on edit; `clean_file()` enforces allowlist + size cap
+
+### AssetAllocation templates
+- [ ] `hrm/assetallocation_list.html` — table: number, asset_name, category badge, employee link, serial_number, status badge, issued_at; filter bar: employee FK + status + asset_category dropdowns; Actions: view/edit/delete + Issue/Return inline POST buttons (conditional on status)
+- [ ] `hrm/assetallocation_detail.html` — full asset record: number, asset_name, category, employee, program link (nullable), serial_number, asset_tag, status badge, issued_at, issued_by, return_due_date, returned_at (if returned), notes; stub note: "asset_id field reserved for future Module 11 Asset Management link"; sidebar: Issue POST (if pending), Return POST (if issued), edit/delete (guarded when issued)
+- [ ] `hrm/assetallocation_form.html` — create/edit form; exclude returned_at (system-set); note on return_due_date: "Optionally set a return deadline (e.g. contract end date)"
+
+### OrientationSession templates
+- [ ] `hrm/orientationsession_list.html` — table: title, session_type badge, employee link, scheduled_at (coloured if overdue), facilitator/facilitator_name, attendance_status badge; filter bar: employee FK + session_type + attendance_status dropdowns; Actions: view/edit/delete + Mark Attended/Missed POST inline
+- [ ] `hrm/orientationsession_detail.html` — all session fields; meeting_url rendered as clickable link with "Join Meeting" label if set; duration_minutes displayed as "X min"; sidebar: Mark Attended/Missed POST buttons (conditional on attendance_status) + edit/delete
+- [ ] `hrm/orientationsession_form.html` — create/edit form; `scheduled_at` uses `<input type="datetime-local">` widget; `meeting_url` with helper text "Paste Zoom/Teams/Meet link"
+
+---
+
+## Verify
+- [ ] `venv\Scripts\python.exe manage.py makemigrations hrm` — confirms a single new migration file
+- [ ] `venv\Scripts\python.exe manage.py migrate` — zero errors on `nav_erp`
+- [ ] `venv\Scripts\python.exe manage.py seed_hrm` (first run) — seeds all 7 onboarding model types; prints counts and login reminder
+- [ ] `venv\Scripts\python.exe manage.py seed_hrm` (second run) — prints "already exists — skipping" for every onboarding model block; zero duplicate rows created (idempotency proof)
+- [ ] `venv\Scripts\python.exe manage.py check` — zero errors, zero warnings
+- [ ] Write `temp/hrm_onboarding_smoke.py` — Django test-client sweep:
+  - Authenticate as `admin_acme` (tenant admin)
+  - Hit all new `hrm:*` onboarding URL names (all list/detail/create/edit/delete routes) → expect 200 or 302
+  - Check the onboardingprogram_list page HTML for absence of `{#` and `{% comment` (template-comment leak check)
+  - IDOR check: GET `hrm:onboardingprogram_detail` with a `pk` belonging to `admin_globex`'s tenant while authenticated as `admin_acme` → expect 404
+  - IDOR check: POST `hrm:assetallocation_issue` with a `pk` belonging to a different tenant → expect 404
+  - POST `hrm:onboardingprogram_activate` → confirm `status` changes to "active" and tasks are created
+  - POST `hrm:onboardingtask_complete` → confirm `completed_at` is set and `completed_by == request.user`
+  - POST `hrm:onboardingprogram_complete` as non-admin → expect 403 (tenant_admin_required gate)
+  - POST `hrm:assetallocation_delete` when status=="issued" → confirm redirect with warning (no delete)
+- [ ] Run `temp/hrm_onboarding_smoke.py` — all checks green
+- [ ] Sidebar check: sub-module 3.3 appears as **Live** with all 5 NavERP.md 3.3 bullets showing clickable hrefs (Onboarding Tasks, Document Collection, Asset Allocation, Orientation Schedule, Welcome Kit)
+
+---
+
+## Close-out
+- [ ] Run **`code-reviewer` agent** — apply findings; commit each changed file one at a time (PowerShell-safe, one file per commit)
+- [ ] Run **`explorer` agent** — apply findings; commit
+- [ ] Run **`frontend-reviewer` agent** — apply findings; commit
+- [ ] Run **`performance-reviewer` agent** — pay special attention to: N+1 on `onboardingprogram_detail` (tasks+documents+assets+sessions all loaded), `progress` property called per row on list vs. annotated aggregate, `_generate_tasks_from_template` bulk_create opportunity; commit
+- [ ] Run **`qa-smoke-tester` agent** — apply findings; commit
+- [ ] Run **`security-reviewer` agent** — flag: file upload extension/size allowlist in `OnboardingDocumentForm.clean_file()`; `@tenant_admin_required` on program complete/cancel; cross-tenant IDOR on all task/doc/asset/session workflow POST routes (scope via `program__tenant` / `employee__tenant`); commit
+- [ ] Run **`test-writer` agent** — add tests: model `clean()` validations, `_generate_tasks_from_template` idempotency, task complete/reopen state machine, `OnboardingDocument.clean_file()` allowlist enforcement, IDOR (404 on cross-tenant pk access), `@tenant_admin_required` gate on program complete/cancel (non-admin → 403), `progress` property accuracy; commit
+- [ ] Update **`.claude/skills/hrm/SKILL.md`** — add 3.3 models, URL names, workflow actions, LIVE_LINKS 3.3 entry, seeder additions, and the `_generate_tasks_from_template` helper; update description line to include "3.3 onboarding"; commit
+- [ ] Update **`README.md`** — mark sub-module 3.3 Employee Onboarding as Live in the module status table; add `seed_hrm` now includes onboarding data note; commit
+
+### Per-file commit list (PowerShell-safe, one file per commit)
+```
+git add 'apps\hrm\models.py'; git commit -m 'feat(hrm): add 3.3 onboarding models — OnboardingTemplate[ONBT-], OnboardingTemplateTask, OnboardingProgram[ONB-], OnboardingTask, OnboardingDocument, AssetAllocation[AST-], OrientationSession'
+git add 'apps\hrm\migrations\0002_onboardingtemplate_onboardingtemplatetask_onboardingprogram_onboardingtask_onboardingdocument_assetallocation_orientationsession.py'; git commit -m 'feat(hrm): migration 0002 — 3.3 onboarding tables'
+git add 'apps\hrm\forms.py'; git commit -m 'feat(hrm): forms for 3.3 onboarding models — OnboardingTemplateForm, OnboardingTemplateTaskForm, OnboardingProgramForm, OnboardingTaskForm, OnboardingDocumentForm (file allowlist+size), AssetAllocationForm, OrientationSessionForm'
+git add 'apps\hrm\views.py'; git commit -m 'feat(hrm): views for 3.3 onboarding — full CRUD + workflow actions (activate, generate_tasks, complete, cancel, task complete/reopen/skip, asset issue/return, doc mark-signed, session mark-attended/missed) + _generate_tasks_from_template helper'
+git add 'apps\hrm\urls.py'; git commit -m 'feat(hrm): URL patterns for 3.3 onboarding — template/task/program/task-instance/document/asset/session CRUD + workflow POST routes'
+git add 'apps\hrm\admin.py'; git commit -m 'feat(hrm): admin registration for 7 onboarding models'
+git add 'apps\hrm\management\commands\seed_hrm.py'; git commit -m 'feat(hrm): extend seed_hrm with 3.3 onboarding demo data — templates, template tasks, programs, tasks, documents, assets, orientation sessions (idempotent)'
+git add 'apps\core\navigation.py'; git commit -m 'feat(core/nav): wire LIVE_LINKS 3.3 Employee Onboarding — 5 bullets + 2 extras → hrm:onboarding*/asset*/orientation* routes'
+git add 'templates\hrm\onboardingtemplate_list.html'; git commit -m 'feat(hrm): onboarding template list with is_active/designation filters'
+git add 'templates\hrm\onboardingtemplate_detail.html'; git commit -m 'feat(hrm): onboarding template detail with phase-grouped task table and apply CTA'
+git add 'templates\hrm\onboardingtemplate_form.html'; git commit -m 'feat(hrm): onboarding template create/edit form'
+git add 'templates\hrm\onboardingtemplatetask_list.html'; git commit -m 'feat(hrm): onboarding template task list with template/phase/category filters'
+git add 'templates\hrm\onboardingtemplatetask_detail.html'; git commit -m 'feat(hrm): onboarding template task detail'
+git add 'templates\hrm\onboardingtemplatetask_form.html'; git commit -m 'feat(hrm): onboarding template task form with due_offset_days helper text'
+git add 'templates\hrm\onboardingprogram_list.html'; git commit -m 'feat(hrm): onboarding program list with status/employee filters and progress bar column'
+git add 'templates\hrm\onboardingprogram_detail.html'; git commit -m 'feat(hrm): onboarding program detail — rich page with tasks-by-phase, documents, assets, orientation sessions, and workflow sidebar actions'
+git add 'templates\hrm\onboardingprogram_form.html'; git commit -m 'feat(hrm): onboarding program create/edit form with welcome kit fields'
+git add 'templates\hrm\onboardingtask_list.html'; git commit -m 'feat(hrm): onboarding task list with program/status/phase/category filters and quick complete/skip actions'
+git add 'templates\hrm\onboardingtask_detail.html'; git commit -m 'feat(hrm): onboarding task detail with complete/reopen/skip sidebar'
+git add 'templates\hrm\onboardingtask_form.html'; git commit -m 'feat(hrm): onboarding task create/edit form'
+git add 'templates\hrm\onboardingdocument_list.html'; git commit -m 'feat(hrm): onboarding document list with program/type/esign_status filters'
+git add 'templates\hrm\onboardingdocument_detail.html'; git commit -m 'feat(hrm): onboarding document detail with esign stub and mark-signed action'
+git add 'templates\hrm\onboardingdocument_form.html'; git commit -m 'feat(hrm): onboarding document form with multipart file upload and clean_file enforcement'
+git add 'templates\hrm\assetallocation_list.html'; git commit -m 'feat(hrm): asset allocation list with employee/status/category filters and issue/return quick actions'
+git add 'templates\hrm\assetallocation_detail.html'; git commit -m 'feat(hrm): asset allocation detail with issue/return workflow and Module 11 stub note'
+git add 'templates\hrm\assetallocation_form.html'; git commit -m 'feat(hrm): asset allocation create/edit form'
+git add 'templates\hrm\orientationsession_list.html'; git commit -m 'feat(hrm): orientation session list with employee/type/attendance filters'
+git add 'templates\hrm\orientationsession_detail.html'; git commit -m 'feat(hrm): orientation session detail with meeting link, attended/missed actions'
+git add 'templates\hrm\orientationsession_form.html'; git commit -m 'feat(hrm): orientation session create/edit form with datetime-local widget'
+git add 'temp\hrm_onboarding_smoke.py'; git commit -m 'test(hrm): smoke test for 3.3 onboarding routes — 200/302, no leaks, IDOR 404, workflow transitions, admin-gate 403'
+git add '.claude\skills\hrm\SKILL.md'; git commit -m 'docs(skill/hrm): extend SKILL.md with 3.3 onboarding — 7 models, URL names, workflow actions, LIVE_LINKS 3.3, seeder additions'
+git add 'README.md'; git commit -m 'docs(readme): mark HRM 3.3 Employee Onboarding as Live in module status table'
+```
+
+---
+
+## Later passes / deferred
+
+- **Real e-signature API integration** (DocuSign, HelloSign, Adobe Sign) — `OnboardingDocument.esign_status` + `external_ref` stub are in place. The webhook/callback handler + API send-for-signature call is a later integration pass. Seen in: BambooHR (Mitratech), SAP SuccessFactors (DocuSign), Rippling (native eSign), Click Boarding (API-first).
+- **Preboarding before EmployeeProfile exists** — `OnboardingProgram` requires a pre-existing `EmployeeProfile` (created at offer acceptance in 3.8 Offer Management). True candidate-stage preboarding (offer accepted, no employee record yet) requires ATS/Recruiting modules 3.5–3.8 to be built first; deferred to the ATS pass.
+- **Employee Offboarding (3.4)** — `AssetAllocation.status="returned"` + `returned_at` stub the offboarding data model. Full offboarding workflows (resignation, clearance, F&F settlement) belong to sub-module 3.4 (deferred).
+- **Automated task reminder / nudge emails** — `OnboardingTask.due_date` data is present. The email dispatch (Celery `send_mail` scheduled job or Django signals) requires background task infrastructure. Deferred to a notifications pass. Seen in: Enboarder "manager nudges", HiBob/Rippling/Workday automated reminders.
+- **Calendar invite integration** (Google Calendar / Outlook / MS Teams) — `OrientationSession.meeting_url` stores the link. Actual iCal/CalDAV API calls + OAuth are an integration-later item. Seen in: HiBob, Enboarder, Workable, Click Boarding.
+- **IT system provisioning automation** — Rippling's hallmark: auto-provisioning Slack, email, Salesforce by role. `OnboardingTask(task_category="it_setup")` records the intent; the actual API calls to 500+ apps require each integration. Deferred.
+- **AI-generated 30-60-90 day plans** — Enboarder's differentiator: AI reads job description + resume to generate a personalized plan. The `phase` field on `OnboardingTask` supports phases. AI generation requires an LLM integration pass.
+- **New hire self-service portal** — A dedicated new-hire-facing view (separate from HR admin view) showing only the hire's own program, tasks, and documents to complete. The data model fully supports this. Deferred to an employee self-service (ESS) pass (NavERP 3.25 Personal Information). It is a template + view change only — no model change needed.
+- **Bulk / role-triggered auto-onboarding** — Auto-triggering an `OnboardingProgram` when a `core.Employment` is created with a specific `Designation`. Can be a Django signal or management command; deferred to a workflow automation pass.
+- **Custom digital form builder** — Structured forms for the new hire to fill in arbitrary data fields beyond `EmployeeProfile`. Gusto/BambooHR have this. Requires a form-builder model (dynamic fields). Deferred — out of scope for this pass.
+- **Background verification integration** — Deel, SAP SuccessFactors, Workable (3.8) mention BGV vendor integration. Belongs to the Offer Management (3.8) pass.
+- **Link `AssetAllocation` to Module 11 `assets.Asset`** — `asset_id_stub` comment in the model documents where the FK goes. Once Module 11 (Asset Management) is built, add migration: `asset_id = models.ForeignKey("assets.Asset", SET_NULL, null=True, blank=True)`.
+- **Policy acknowledgment workflow** — A richer version of tracking policy acknowledgment (timestamp, digital signature, version tracking, per-policy acknowledgment list). Currently modeled as `OnboardingDocument(document_type="policy_acknowledgment", esign_status="signed")`. A dedicated compliance pass is deferred.
+
+## Review notes
+(filled in at the end)
