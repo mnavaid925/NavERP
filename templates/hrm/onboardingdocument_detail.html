@@ -31,7 +31,7 @@
       <div class="detail-item"><dt>Due Date</dt><dd>{{ obj.due_date|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Signed At</dt><dd>{{ obj.signed_at|default:"—" }}</dd></div>
       <div class="detail-item"><dt>File</dt><dd>{% if obj.file %}<a href="{{ obj.file.url }}">{{ obj.title }}</a>{% else %}—{% endif %}</dd></div>
-      <div class="detail-item"><dt>External Ref</dt><dd>{{ obj.external_ref|default:"—" }}<div class="form-help">e-sign envelope reference (future integration)</div></dd></div>
+      <div class="detail-item"><dt>External Ref</dt><dd title="External e-sign envelope/reference id">{{ obj.external_ref|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
     </dl>
   </div></div>
