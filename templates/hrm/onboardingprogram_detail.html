@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:onboardingprogram_list' %}">Onboarding Programs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status != 'completed' and obj.status != 'cancelled' %}
+        <a href="{% url 'hrm:onboardingprogram_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:onboardingprogram_activate' obj.pk %}" onsubmit="return confirm('Activate this onboarding program?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Activate</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'active' %}
+        <form method="post" action="{% url 'hrm:onboardingprogram_generate_tasks' obj.pk %}" onsubmit="return confirm('Generate tasks from the chosen template?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="list-checks"></i> Generate Tasks</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'active' %}
+        <form method="post" action="{% url 'hrm:onboardingprogram_complete' obj.pk %}" onsubmit="return confirm('Mark this onboarding program as completed?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Complete</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'active' %}
+        <form method="post" action="{% url 'hrm:onboardingprogram_cancel' obj.pk %}" onsubmit="return confirm('Cancel this onboarding program?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'cancelled' %}
+        <form method="post" action="{% url 'hrm:onboardingprogram_delete' obj.pk %}" onsubmit="return confirm('Delete this onboarding program?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:employee_detail' obj.employee.pk %}">{{ obj.employee.party.name }}</a></dd></div>
+      <div class="detail-item"><dt>Start Date</dt><dd>{{ obj.start_date }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'draft' %}info{% elif obj.status == 'active' %}amber{% elif obj.status == 'completed' %}green{% elif obj.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Buddy</dt><dd>{{ obj.buddy.party.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Template</dt><dd>{% if obj.template %}<a href="{% url 'hrm:onboardingtemplate_detail' obj.template.pk %}">{{ obj.template.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Completed At</dt><dd>{{ obj.completed_at|default:"—" }}</dd></div>
+    </dl>
+    <div style="margin-top:1rem;">
+      <div class="progress"><div class="progress-bar" style="width: {{ progress }}%"></div></div>
+      {{ progress }}% ({{ task_count }} task{{ task_count|pluralize }})
+    </div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Welcome Kit</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Welcome Message</dt><dd>{{ obj.welcome_message|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Welcome Video</dt><dd>{% if obj.welcome_video_url %}<a href="{{ obj.welcome_video_url }}" target="_blank" rel="noopener">Watch</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>First-Day Notes</dt><dd>{{ obj.first_day_notes|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Tasks</h2>
+      <a href="{% url 'hrm:onboardingtask_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Add Task</a>
+    </div>
+    <div class="card-body">
+      {% for group in tasks_by_phase %}
+        <h3 class="card-title">{{ group.label }}</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Category</th><th>Title</th><th>Role</th><th>Assignee</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+            <tbody>
+              {% for t in group.tasks %}
+                <tr>
+                  <td><span class="badge badge-muted">{{ t.get_task_category_display }}</span></td>
+                  <td>{{ t.title }}</td>
+                  <td><span class="badge badge-muted">{{ t.get_assignee_role_display }}</span></td>
+                  <td>{{ t.assignee.username|default:"—" }}</td>
+                  <td>{% if t.is_overdue %}<span class="badge badge-red">{{ t.due_date|default:"—" }}</span>{% else %}{{ t.due_date|default:"—" }}{% endif %}</td>
+                  <td><span class="badge badge-{% if t.status == 'pending' %}info{% elif t.status == 'in_progress' %}amber{% elif t.status == 'completed' %}green{% elif t.status == 'skipped' %}muted{% else %}muted{% endif %}">{{ t.get_status_display }}</span></td>
+                  <td>
+                    <div class="table-actions">
+                      {% if t.status != 'completed' %}
+                        <form method="post" action="{% url 'hrm:onboardingtask_complete' t.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Complete"><i data-lucide="check"></i></button></form>
+                      {% endif %}
+                      {% if t.status == 'completed' or t.status == 'skipped' %}
+                        <form method="post" action="{% url 'hrm:onboardingtask_reopen' t.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Reopen"><i data-lucide="rotate-ccw"></i></button></form>
+                      {% endif %}
+                      {% if t.status == 'pending' or t.status == 'in_progress' %}
+                        <form method="post" action="{% url 'hrm:onboardingtask_skip' t.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Skip"><i data-lucide="skip-forward"></i></button></form>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% empty %}
+        <div class="empty-state"><i data-lucide="list-checks"></i><h3>No tasks yet</h3><p>Activate the program or Generate Tasks from its template.</p></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Documents</h2>
+      <a href="{% url 'hrm:onboardingdocument_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Add Document</a>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Type</th><th>Title</th><th>E-sign Required</th><th>E-sign Status</th><th>Due</th><th>File</th><th class="table-actions">Action</th></tr></thead>
+          <tbody>
+            {% for d in documents %}
+              <tr>
+                <td><span class="badge badge-info">{{ d.get_document_type_display }}</span></td>
+                <td><a href="{% url 'hrm:onboardingdocument_detail' d.pk %}">{{ d.title }}</a></td>
+                <td>{% if d.esign_required %}Yes{% else %}No{% endif %}</td>
+                <td><span class="badge badge-{% if d.esign_status == 'not_required' %}muted{% elif d.esign_status == 'pending' %}amber{% elif d.esign_status == 'sent' %}info{% elif d.esign_status == 'viewed' %}info{% elif d.esign_status == 'signed' %}green{% elif d.esign_status == 'declined' %}red{% else %}muted{% endif %}">{{ d.get_esign_status_display }}</span></td>
+                <td>{{ d.due_date|default:"—" }}</td>
+                <td>{% if d.file %}<a href="{{ d.file.url }}">Download</a>{% else %}—{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if d.esign_status != 'signed' %}
+                      <form method="post" action="{% url 'hrm:onboardingdocument_mark_signed' d.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Signed"><i data-lucide="pen-line"></i></button></form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="file-text"></i><h3>No documents yet</h3><p>Add a document for this onboarding program.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Assets</h2>
+      <a href="{% url 'hrm:assetallocation_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Add Asset</a>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Asset</th><th>Category</th><th>Serial</th><th>Status</th><th>Issued</th><th class="table-actions">Action</th></tr></thead>
+          <tbody>
+            {% for a in assets %}
+              <tr>
+                <td>{{ a.number }}</td>
+                <td>{{ a.asset_name }}</td>
+                <td><span class="badge badge-muted">{{ a.get_asset_category_display }}</span></td>
+                <td>{{ a.serial_number|default:"—" }}</td>
+                <td><span class="badge badge-{% if a.status == 'pending' %}info{% elif a.status == 'issued' %}green{% elif a.status == 'returned' %}muted{% elif a.status == 'lost' %}red{% elif a.status == 'damaged' %}amber{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
+                <td>{{ a.issued_at|default:"—" }}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if a.status == 'pending' %}
+                      <form method="post" action="{% url 'hrm:assetallocation_issue' a.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Issue"><i data-lucide="package-check"></i></button></form>
+                    {% endif %}
+                    {% if a.status == 'issued' %}
+                      <form method="post" action="{% url 'hrm:assetallocation_return' a.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Return"><i data-lucide="undo-2"></i></button></form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="package"></i><h3>No assets yet</h3><p>Allocate equipment for this new hire.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Orientation Sessions</h2>
+      <a href="{% url 'hrm:orientationsession_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Add Session</a>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Title</th><th>Type</th><th>Facilitator</th><th>When</th><th>Link</th><th>Attendance</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for s in sessions %}
+              <tr>
+                <td>{{ s.title }}</td>
+                <td><span class="badge badge-info">{{ s.get_session_type_display }}</span></td>
+                <td>{{ s.facilitator.username|default:s.facilitator_name|default:"—" }}</td>
+                <td>{{ s.scheduled_at|default:"—" }}</td>
+                <td>{% if s.meeting_url %}<a href="{{ s.meeting_url }}" target="_blank" rel="noopener">Join</a>{% else %}—{% endif %}</td>
+                <td><span class="badge badge-{% if s.attendance_status == 'scheduled' %}info{% elif s.attendance_status == 'attended' %}green{% elif s.attendance_status == 'missed' %}red{% elif s.attendance_status == 'rescheduled' %}amber{% elif s.attendance_status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ s.get_attendance_status_display }}</span></td>
+                <td>
+                  <div class="table-actions">
+                    {% if s.attendance_status != 'attended' %}
+                      <form method="post" action="{% url 'hrm:orientationsession_mark_attended' s.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Attended"><i data-lucide="user-check"></i></button></form>
+                    {% endif %}
+                    {% if s.attendance_status != 'missed' %}
+                      <form method="post" action="{% url 'hrm:orientationsession_mark_missed' s.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Missed"><i data-lucide="user-x"></i></button></form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="presentation"></i><h3>No sessions yet</h3><p>Schedule an orientation session for this program.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:onboardingprogram_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
