@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Onboarding Tasks{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Onboarding Tasks</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Onboarding Tasks</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:onboardingtask_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Task</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search tasks…">
+        </div>
+        <div class="form-group">
+          <select name="program" class="form-select">
+            <option value="">All programs</option>
+            {% for p in programs %}
+              <option value="{{ p.pk }}" {% if request.GET.program == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} · {{ p.employee.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="phase" class="form-select">
+            <option value="">All phases</option>
+            {% for val, label in phase_choices %}
+              <option value="{{ val }}" {% if request.GET.phase == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="task_category" class="form-select">
+            <option value="">All categories</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.task_category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:onboardingtask_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Program</th><th>Title</th><th>Category</th><th>Phase</th><th>Role</th><th>Assignee</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:onboardingprogram_detail' obj.program.pk %}" class="fw-600">{{ obj.program.number }}</a></td>
+              <td><a href="{% url 'hrm:onboardingtask_detail' obj.pk %}" class="fw-600">{{ obj.title }}</a></td>
+              <td><span class="badge badge-muted">{{ obj.get_task_category_display }}</span></td>
+              <td><span class="badge badge-info">{{ obj.get_phase_display }}</span></td>
+              <td><span class="badge badge-muted">{{ obj.get_assignee_role_display }}</span></td>
+              <td>{{ obj.assignee.username|default:"—" }}</td>
+              <td>{% if obj.due_date %}{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.due_date }}</span>{% else %}{{ obj.due_date }}{% endif %}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if obj.status == 'pending' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'completed' %}green{% elif obj.status == 'skipped' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:onboardingtask_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:onboardingtask_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if obj.status != 'completed' %}
+                    <form method="post" action="{% url 'hrm:onboardingtask_complete' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Complete"><i data-lucide="check"></i></button></form>
+                  {% endif %}
+                  {% if obj.status == 'pending' or obj.status == 'in_progress' %}
+                    <form method="post" action="{% url 'hrm:onboardingtask_skip' obj.pk %}" onsubmit="return confirm('Skip this task?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Skip"><i data-lucide="skip-forward"></i></button></form>
+                  {% endif %}
+                  <form method="post" action="{% url 'hrm:onboardingtask_delete' obj.pk %}" onsubmit="return confirm('Delete this onboarding task?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No onboarding tasks found</h3><p>Create your first onboarding task to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
