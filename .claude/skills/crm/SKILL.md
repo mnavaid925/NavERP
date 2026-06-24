@@ -90,7 +90,14 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
   profile/roles/addresses and SET_NULLs opportunities/cases, a cross-module blast radius, so it's
   admin-only and the delete buttons are hidden from non-admins in the templates.
 
-## Templates (`templates/crm/`)
+## Templates (`templates/crm/<submodule>/`)
+
+**One folder per sub-module** (CLAUDE.md "Template Folder Structure"): `directory/` (contact/account/lead),
+`sales/` (opportunity), `marketing/` (campaign), `service/` (case/knowledgearticle), `activities/` (task),
+`finance/` (expense), `projects/` (crmproject/crmmilestone/timesheet), `documents/` (contractdocument/doctemplate/
+sign_document), `workflow/` (workflowrule/approvalrequest/workflowlog), `success/` (onboardingplan/healthscore/
+health_config/survey/survey_respond), `vendor/` (crm_po/productstock/partnerportalaccess/portal_*). The module
+landing `overview.html` stays at the `templates/crm/` root. So a view renders e.g. `"crm/directory/lead_list.html"`.
 
 Extend `base.html`; use the `theme.css` design system. Per CRUD model: `<entity>_list.html`
 (filter-bar with `q` + status/FK selects reflecting `request.GET`, Actions column view/edit/delete-
