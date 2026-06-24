@@ -470,3 +470,342 @@ class AttendanceRecord(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.employee} · {self.date} · {self.get_status_display()}"
+
+
+# ---------------------------------------------------------------------------
+# 3.3 Employee Onboarding — Template → Program → Task + Documents / Assets /
+# Orientation. Everything FKs ``EmployeeProfile`` (the anchor), never ``core.Party``.
+# A reusable ``OnboardingTemplate`` (with typed ``OnboardingTemplateTask`` lines) is
+# applied to one new hire to produce an ``OnboardingProgram`` whose concrete
+# ``OnboardingTask`` rows are generated with due dates = start_date + offset. Welcome
+# Kit lives as fields on the program (no separate table). ``progress`` is derived.
+# ---------------------------------------------------------------------------
+
+# Shared choice sets — referenced by both the template task definition and the concrete
+# per-program task, so the taxonomy stays identical between the two (module-level = single source).
+TASK_CATEGORY_CHOICES = [
+    ("hr_admin", "HR Admin"),
+    ("it_setup", "IT Setup"),
+    ("manager_action", "Manager Action"),
+    ("buddy_action", "Buddy Action"),
+    ("new_hire_action", "New Hire Action"),
+    ("document_sign", "Document Sign"),
+    ("equipment_request", "Equipment Request"),
+    ("training", "Training"),
+    ("meet_greet", "Meet & Greet"),
+    ("custom", "Custom"),
+]
+ASSIGNEE_ROLE_CHOICES = [
+    ("hr", "HR"),
+    ("it", "IT"),
+    ("manager", "Manager"),
+    ("buddy", "Buddy"),
+    ("new_hire", "New Hire"),
+]
+PHASE_CHOICES = [
+    ("preboarding", "Preboarding"),
+    ("week_1", "Week 1"),
+    ("month_1", "Month 1"),
+    ("month_2", "Month 2"),
+    ("month_3", "Month 3"),
+    ("ongoing", "Ongoing"),
+]
+
+
+class OnboardingTemplate(TenantNumbered):
+    """A reusable onboarding checklist (3.3) — applied to a new hire to spin up a program.
+    Optionally tied to a ``Designation`` so HR can auto-suggest the right template per role."""
+
+    NUMBER_PREFIX = "ONBT"
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True, related_name="onboarding_templates")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = [("tenant", "number"), ("tenant", "name")]
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_onbt_tenant_active_idx"),
+            models.Index(fields=["tenant", "designation"], name="hrm_onbt_tenant_desig_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.name}" if self.number else self.name
+
+
+class OnboardingTemplateTask(TenantOwned):
+    """One task definition line inside an ``OnboardingTemplate`` (3.3). ``due_offset_days`` is
+    relative to the hire's start date (negative = preboarding, 0 = day one, positive = after)."""
+
+    template = models.ForeignKey("hrm.OnboardingTemplate", on_delete=models.CASCADE, related_name="template_tasks")
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    task_category = models.CharField(max_length=30, choices=TASK_CATEGORY_CHOICES, default="custom")
+    assignee_role = models.CharField(max_length=20, choices=ASSIGNEE_ROLE_CHOICES, default="hr")
+    due_offset_days = models.IntegerField(default=0, help_text="Days relative to start date (negative = before, 0 = first day, positive = after).")
+    phase = models.CharField(max_length=20, choices=PHASE_CHOICES, default="week_1")
+    order = models.PositiveIntegerField(default=0)
+    is_mandatory = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["template", "phase", "order", "title"]
+        unique_together = ("tenant", "template", "title")
+        indexes = [
+            models.Index(fields=["tenant", "template"], name="hrm_ontt_tenant_tmpl_idx"),
+            models.Index(fields=["tenant", "template", "phase"], name="hrm_ontt_tenant_tmpl_phase_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.template} → {self.title}"
+
+
+class OnboardingProgram(TenantNumbered):
+    """A template applied to one new hire (3.3) — the per-employee onboarding instance.
+    ``progress`` is derived from its tasks (spine principle: never stored). The Welcome Kit
+    (3.3) is the ``welcome_*`` / ``first_day_notes`` fields here — no separate table."""
+
+    NUMBER_PREFIX = "ONB"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="onboarding_programs")
+    template = models.ForeignKey("hrm.OnboardingTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="programs")
+    start_date = models.DateField(help_text="The new hire's first day — drives every task due date.")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    buddy = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="buddy_for")
+    welcome_message = models.TextField(blank=True)
+    welcome_video_url = models.URLField(blank=True)
+    first_day_notes = models.TextField(blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-start_date"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_onb_tenant_emp_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_onb_tenant_status_idx"),
+            models.Index(fields=["tenant", "start_date"], name="hrm_onb_tenant_start_idx"),
+        ]
+
+    @property
+    def progress(self):
+        """Percent of tasks resolved (0–100). Derived — never stored. Skipped tasks count as
+        resolved so an all-skipped program reads as 100% done, not stuck. Called once per detail
+        page; list views use the ``tasks_total``/``tasks_done`` annotations instead (no N+1)."""
+        total = self.tasks.count()
+        if not total:
+            return 0
+        done = self.tasks.filter(status__in=("completed", "skipped")).count()
+        return int(round(done / total * 100))
+
+    def __str__(self):
+        return f"{self.number} · {self.employee}" if self.number else str(self.employee)
+
+
+class OnboardingTask(TenantOwned):
+    """A concrete task on one ``OnboardingProgram`` (3.3). Generated from the template's task
+    lines (due_date = program.start_date + offset) or added ad-hoc. ``completed_at`` /
+    ``completed_by`` are system-set by the complete action, never on the form."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("skipped", "Skipped"),
+    ]
+
+    program = models.ForeignKey("hrm.OnboardingProgram", on_delete=models.CASCADE, related_name="tasks")
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    task_category = models.CharField(max_length=30, choices=TASK_CATEGORY_CHOICES, default="custom")
+    assignee_role = models.CharField(max_length=20, choices=ASSIGNEE_ROLE_CHOICES, default="hr")
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_onboarding_tasks")
+    due_date = models.DateField(null=True, blank=True)
+    phase = models.CharField(max_length=20, choices=PHASE_CHOICES, default="week_1")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    is_mandatory = models.BooleanField(default=True)
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="completed_onboarding_tasks", editable=False)
+    order = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["program", "phase", "order", "due_date"]
+        indexes = [
+            models.Index(fields=["tenant", "program"], name="hrm_ont_tenant_prog_idx"),
+            models.Index(fields=["tenant", "program", "status"], name="hrm_ont_tenant_prog_status_idx"),
+            models.Index(fields=["tenant", "program", "phase"], name="hrm_ont_tenant_prog_phase_idx"),
+        ]
+
+    def is_overdue(self):
+        """True when an unresolved task's due date has passed (display-only helper)."""
+        return bool(self.due_date and self.status in ("pending", "in_progress")
+                    and self.due_date < date.today())
+
+    def __str__(self):
+        return f"{self.program} → {self.title}"
+
+
+class OnboardingDocument(TenantOwned):
+    """A document to collect / e-sign for a program (3.3). ``esign_status`` tracks the signing
+    lifecycle without a live e-sign integration; ``external_ref`` stubs a future envelope id.
+    ``signed_at`` is system-set by the mark-signed action."""
+
+    DOCUMENT_TYPE_CHOICES = [
+        ("employment_contract", "Employment Contract"),
+        ("nda", "NDA"),
+        ("offer_letter", "Offer Letter"),
+        ("id_proof", "ID Proof"),
+        ("tax_form", "Tax Form"),
+        ("bank_details", "Bank Details"),
+        ("policy_acknowledgment", "Policy Acknowledgment"),
+        ("background_check", "Background Check"),
+        ("custom", "Custom"),
+    ]
+    ESIGN_STATUS_CHOICES = [
+        ("not_required", "Not Required"),
+        ("pending", "Pending"),
+        ("sent", "Sent"),
+        ("viewed", "Viewed"),
+        ("signed", "Signed"),
+        ("declined", "Declined"),
+    ]
+
+    program = models.ForeignKey("hrm.OnboardingProgram", on_delete=models.CASCADE, related_name="documents")
+    document_type = models.CharField(max_length=30, choices=DOCUMENT_TYPE_CHOICES, default="custom")
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    file = models.FileField(upload_to="hrm/onboarding/docs/%Y/%m/", null=True, blank=True)
+    esign_required = models.BooleanField(default=False)
+    esign_status = models.CharField(max_length=20, choices=ESIGN_STATUS_CHOICES, default="not_required")
+    due_date = models.DateField(null=True, blank=True)
+    signed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    external_ref = models.CharField(max_length=255, blank=True, help_text="External e-sign envelope/reference id (future integration).")
+
+    class Meta:
+        ordering = ["program", "document_type", "title"]
+        indexes = [
+            models.Index(fields=["tenant", "program"], name="hrm_ond_tenant_prog_idx"),
+            models.Index(fields=["tenant", "program", "esign_status"], name="hrm_ond_tenant_prog_esign_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.program} → {self.title}"
+
+
+class AssetAllocation(TenantNumbered):
+    """A physical asset issued to a new hire (3.3) — laptop, ID card, access card, etc.
+    ``returned_at`` is system-set by the return action. ``program`` is nullable so assets can be
+    issued/tracked outside a formal onboarding program (and reused for offboarding returns)."""
+
+    NUMBER_PREFIX = "AST"
+
+    ASSET_CATEGORY_CHOICES = [
+        ("laptop", "Laptop"),
+        ("desktop", "Desktop"),
+        ("phone", "Phone"),
+        ("id_card", "ID Card"),
+        ("access_card", "Access Card"),
+        ("uniform", "Uniform"),
+        ("vehicle", "Vehicle"),
+        ("sim", "SIM Card"),
+        ("other", "Other"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("issued", "Issued"),
+        ("returned", "Returned"),
+        ("lost", "Lost"),
+        ("damaged", "Damaged"),
+    ]
+
+    program = models.ForeignKey("hrm.OnboardingProgram", on_delete=models.SET_NULL, null=True, blank=True, related_name="assets")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="asset_allocations")
+    asset_name = models.CharField(max_length=255)
+    asset_category = models.CharField(max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other")
+    serial_number = models.CharField(max_length=100, blank=True)
+    asset_tag = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    issued_at = models.DateTimeField(null=True, blank=True)
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_assets_issued")
+    returned_at = models.DateTimeField(null=True, blank=True, editable=False)
+    return_due_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    # NOTE: a nullable FK to ``assets.Asset`` (Module 11 Asset Management) belongs here once that
+    # module exists — add ``asset = models.ForeignKey("assets.Asset", ...)`` in a later migration
+    # to link this issuance to the canonical fixed-asset register. Stubbed for now.
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_ast_tenant_emp_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ast_tenant_status_idx"),
+            models.Index(fields=["tenant", "program"], name="hrm_ast_tenant_prog_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.asset_name} → {self.employee}" if self.number else self.asset_name
+
+
+class OrientationSession(TenantOwned):
+    """A scheduled orientation / training / meet-and-greet for a new hire (3.3). ``program`` is
+    nullable for ad-hoc sessions. ``meeting_url`` supports virtual sessions; ``attendance_status``
+    tracks completion without full calendar integration."""
+
+    SESSION_TYPE_CHOICES = [
+        ("orientation", "Orientation"),
+        ("training", "Training"),
+        ("meet_greet", "Meet & Greet"),
+        ("policy_review", "Policy Review"),
+        ("system_demo", "System Demo"),
+        ("department_intro", "Department Intro"),
+        ("social", "Social / Team Lunch"),
+        ("custom", "Custom"),
+    ]
+    ATTENDANCE_STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("attended", "Attended"),
+        ("missed", "Missed"),
+        ("rescheduled", "Rescheduled"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    program = models.ForeignKey("hrm.OnboardingProgram", on_delete=models.SET_NULL, null=True, blank=True, related_name="orientation_sessions")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="orientation_sessions")
+    title = models.CharField(max_length=255)
+    session_type = models.CharField(max_length=30, choices=SESSION_TYPE_CHOICES, default="orientation")
+    facilitator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="facilitated_orientation_sessions")
+    facilitator_name = models.CharField(max_length=255, blank=True, help_text="Free-text fallback for an external trainer with no user account.")
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    meeting_url = models.URLField(blank=True)
+    attendance_status = models.CharField(max_length=20, choices=ATTENDANCE_STATUS_CHOICES, default="scheduled")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["scheduled_at"]
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_ors_tenant_emp_idx"),
+            models.Index(fields=["tenant", "program"], name="hrm_ors_tenant_prog_idx"),
+            models.Index(fields=["tenant", "scheduled_at"], name="hrm_ors_tenant_sched_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        # A program session can't be scheduled before the hire even starts.
+        if self.program_id and self.scheduled_at and self.program.start_date \
+                and self.scheduled_at.date() < self.program.start_date:
+            raise ValidationError({"scheduled_at": "Session cannot be scheduled before the program start date."})
+
+    def __str__(self):
+        return f"{self.title} @ {self.scheduled_at:%Y-%m-%d %H:%M}" if self.scheduled_at else self.title
