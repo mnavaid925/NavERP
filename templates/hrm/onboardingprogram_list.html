@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Onboarding Programs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Onboarding Programs</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Onboarding Programs</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:onboardingprogram_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Program</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search programs…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:onboardingprogram_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Start</th><th>Status</th><th>Buddy</th><th>Progress</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:onboardingprogram_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.start_date }}</td>
+              <td><span class="badge badge-{% if obj.status == 'draft' %}info{% elif obj.status == 'active' %}amber{% elif obj.status == 'completed' %}green{% elif obj.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.buddy.party.name|default:"—" }}</td>
+              <td>{% if obj.tasks_total %}<div class="progress"><div class="progress-bar" style="width: {% widthratio obj.tasks_done obj.tasks_total 100 %}%"></div></div> {% widthratio obj.tasks_done obj.tasks_total 100 %}%{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:onboardingprogram_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:onboardingprogram_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:onboardingprogram_delete' obj.pk %}" onsubmit="return confirm('Delete this onboarding program?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="user-plus"></i><h3>No onboarding programs found</h3><p>Create your first onboarding program to welcome a new hire.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
