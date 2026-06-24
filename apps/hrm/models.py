@@ -598,13 +598,17 @@ class OnboardingProgram(TenantNumbered):
     @property
     def progress(self):
         """Percent of tasks resolved (0–100). Derived — never stored. Skipped tasks count as
-        resolved so an all-skipped program reads as 100% done, not stuck. Called once per detail
-        page; list views use the ``tasks_total``/``tasks_done`` annotations instead (no N+1)."""
-        total = self.tasks.count()
-        if not total:
-            return 0
-        done = self.tasks.filter(status__in=("completed", "skipped")).count()
-        return int(round(done / total * 100))
+        resolved so an all-skipped program reads as 100% done, not stuck. List views use the
+        ``tasks_total``/``tasks_done`` annotations (no N+1); the detail view computes this from its
+        already-fetched task list. Memoised so an accidental second call doesn't re-query."""
+        if not hasattr(self, "_progress_cache"):
+            total = self.tasks.count()
+            if total:
+                done = self.tasks.filter(status__in=("completed", "skipped")).count()
+                self._progress_cache = int(round(done / total * 100))
+            else:
+                self._progress_cache = 0
+        return self._progress_cache
 
     def __str__(self):
         return f"{self.number} · {self.employee}" if self.number else str(self.employee)
@@ -798,14 +802,18 @@ class OrientationSession(TenantOwned):
             models.Index(fields=["tenant", "employee"], name="hrm_ors_tenant_emp_idx"),
             models.Index(fields=["tenant", "program"], name="hrm_ors_tenant_prog_idx"),
             models.Index(fields=["tenant", "scheduled_at"], name="hrm_ors_tenant_sched_idx"),
+            models.Index(fields=["tenant", "attendance_status"], name="hrm_ors_tenant_attst_idx"),
         ]
 
     def clean(self):
         super().clean()
-        # A program session can't be scheduled before the hire even starts.
-        if self.program_id and self.scheduled_at and self.program.start_date \
-                and self.scheduled_at.date() < self.program.start_date:
-            raise ValidationError({"scheduled_at": "Session cannot be scheduled before the program start date."})
+        # A program session can't be scheduled before the hire even starts. Fetch only the start
+        # date (not the whole program row) to keep this validation path light.
+        if self.program_id and self.scheduled_at:
+            start = (OnboardingProgram.objects.filter(pk=self.program_id)
+                     .values_list("start_date", flat=True).first())
+            if start and self.scheduled_at.date() < start:
+                raise ValidationError({"scheduled_at": "Session cannot be scheduled before the program start date."})
 
     def __str__(self):
         return f"{self.title} @ {self.scheduled_at:%Y-%m-%d %H:%M}" if self.scheduled_at else self.title
