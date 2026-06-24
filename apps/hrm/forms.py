@@ -178,11 +178,14 @@ class OnboardingTaskForm(TenantModelForm):
 
 
 class OnboardingDocumentForm(TenantModelForm):
-    # SECURITY: `signed_at` is excluded — set only by the mark-signed workflow action.
+    # SECURITY: `esign_status` and `signed_at` are excluded — both are workflow-owned. The model's
+    # save() derives the open esign_status from `esign_required` (not_required ↔ pending), and the
+    # mark-signed action advances pending → signed (stamping signed_at + an audit row). Exposing
+    # esign_status here would let any user self-sign a document via a crafted POST, with no audit.
     class Meta:
         model = OnboardingDocument
         fields = ["program", "document_type", "title", "description", "file", "esign_required",
-                  "esign_status", "due_date", "external_ref"]
+                  "due_date", "external_ref"]
 
     def clean_file(self):
         f = self.cleaned_data.get("file")
@@ -194,6 +197,10 @@ class OnboardingDocumentForm(TenantModelForm):
                     f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
             if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
                 raise forms.ValidationError("File exceeds the 10 MB limit.")
+            # WARNING: this is an extension allowlist only (mirrors core DocumentForm /
+            # EmployeeProfileForm.clean_photo). A renamed file passes — keep MEDIA_ROOT outside the
+            # web root (README) and serve uploads with Content-Disposition: attachment +
+            # X-Content-Type-Options: nosniff. Add MIME sniffing (python-magic) when that dep lands.
         return f
 
 
@@ -208,8 +215,10 @@ class AssetAllocationForm(TenantModelForm):
 
 
 class OrientationSessionForm(TenantModelForm):
+    # SECURITY: `attendance_status` is excluded — it's advanced only by the mark-attended /
+    # mark-missed workflow actions (which write an audit row). A session is created "scheduled";
+    # exposing the field would let attendance be set via a crafted POST with no audit trail.
     class Meta:
         model = OrientationSession
         fields = ["program", "employee", "title", "session_type", "facilitator", "facilitator_name",
-                  "scheduled_at", "duration_minutes", "location", "meeting_url",
-                  "attendance_status", "notes"]
+                  "scheduled_at", "duration_minutes", "location", "meeting_url", "notes"]
