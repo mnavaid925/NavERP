@@ -15,13 +15,24 @@ from apps.core.models import Party
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 
+# Onboarding document upload safety: contracts/forms/scans allowlist + cap (mirrors clean_photo).
+ALLOWED_ONBOARDING_DOC_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}
+MAX_ONBOARDING_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
+
 from .models import (
+    AssetAllocation,
     AttendanceRecord,
     Designation,
     EmployeeProfile,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
+    OnboardingDocument,
+    OnboardingProgram,
+    OnboardingTask,
+    OnboardingTemplate,
+    OnboardingTemplateTask,
+    OrientationSession,
     PublicHoliday,
     Shift,
     ShiftAssignment,
@@ -115,3 +126,92 @@ class AttendanceRecordForm(TenantModelForm):
             "check_in": forms.TimeInput(attrs={"type": "time", "class": "form-input"}),
             "check_out": forms.TimeInput(attrs={"type": "time", "class": "form-input"}),
         }
+
+
+# ----------------------------------------------------------------------- 3.3 Employee Onboarding
+class OnboardingTemplateForm(TenantModelForm):
+    class Meta:
+        model = OnboardingTemplate
+        fields = ["name", "description", "designation", "is_active"]
+
+
+class OnboardingTemplateTaskForm(TenantModelForm):
+    class Meta:
+        model = OnboardingTemplateTask
+        fields = ["template", "title", "description", "task_category", "assignee_role",
+                  "due_offset_days", "phase", "order", "is_mandatory"]
+
+
+class OnboardingProgramForm(TenantModelForm):
+    # SECURITY: `status` and `completed_at` are NOT form fields — a program starts at the model
+    # default "draft" and both are advanced only by the privileged workflow actions
+    # (activate/complete/cancel). Exposing them would let a crafted POST skip the workflow.
+    class Meta:
+        model = OnboardingProgram
+        fields = ["employee", "template", "start_date", "buddy", "welcome_message",
+                  "welcome_video_url", "first_day_notes", "notes"]
+
+    def clean(self):
+        cleaned = super().clean()
+        employee = cleaned.get("employee")
+        buddy = cleaned.get("buddy")
+        if employee and buddy and employee == buddy:
+            self.add_error("buddy", "An employee cannot be their own onboarding buddy.")
+        # One onboarding program per employee per tenant — the form holds the tenant (the view
+        # sets it on the instance only after save, so this guard lives here, not on the model).
+        if employee and self.tenant is not None:
+            dupes = OnboardingProgram.objects.filter(tenant=self.tenant, employee=employee)
+            if self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                self.add_error("employee", "This employee already has an onboarding program.")
+        return cleaned
+
+
+class OnboardingTaskForm(TenantModelForm):
+    # SECURITY: `status`, `completed_at`, `completed_by` are excluded — task status is advanced
+    # only by the complete/reopen/skip workflow actions (which stamp who/when).
+    class Meta:
+        model = OnboardingTask
+        fields = ["program", "title", "description", "task_category", "assignee_role", "assignee",
+                  "due_date", "phase", "is_mandatory", "order", "notes"]
+
+
+class OnboardingDocumentForm(TenantModelForm):
+    # SECURITY: `signed_at` is excluded — set only by the mark-signed workflow action.
+    class Meta:
+        model = OnboardingDocument
+        fields = ["program", "document_type", "title", "description", "file", "esign_required",
+                  "esign_status", "due_date", "external_ref"]
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        # Only validate a freshly-uploaded file (an existing FieldFile has no new size to re-check).
+        if f and hasattr(f, "name") and hasattr(f, "size"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
+                raise forms.ValidationError(
+                    f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
+            if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
+                raise forms.ValidationError("File exceeds the 10 MB limit.")
+        return f
+
+
+class AssetAllocationForm(TenantModelForm):
+    # SECURITY: `returned_at` (system-set on return) and the auto `number` are excluded.
+    class Meta:
+        model = AssetAllocation
+        fields = ["program", "employee", "asset_name", "asset_category", "serial_number",
+                  "asset_tag", "status", "issued_at", "issued_by", "return_due_date", "notes"]
+        widgets = {
+            "issued_at": forms.DateTimeInput(
+                attrs={"type": "datetime-local", "class": "form-input"}, format="%Y-%m-%dT%H:%M"),
+        }
+
+
+class OrientationSessionForm(TenantModelForm):
+    class Meta:
+        model = OrientationSession
+        fields = ["program", "employee", "title", "session_type", "facilitator", "facilitator_name",
+                  "scheduled_at", "duration_minutes", "location", "meeting_url",
+                  "attendance_status", "notes"]
