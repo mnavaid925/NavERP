@@ -77,4 +77,65 @@ urlpatterns = [
     path("attendance/<int:pk>/", views.attendancerecord_detail, name="attendancerecord_detail"),
     path("attendance/<int:pk>/edit/", views.attendancerecord_edit, name="attendancerecord_edit"),
     path("attendance/<int:pk>/delete/", views.attendancerecord_delete, name="attendancerecord_delete"),
+
+    # Onboarding Templates (3.3)
+    path("onboarding-templates/", views.onboardingtemplate_list, name="onboardingtemplate_list"),
+    path("onboarding-templates/add/", views.onboardingtemplate_create, name="onboardingtemplate_create"),
+    path("onboarding-templates/<int:pk>/", views.onboardingtemplate_detail, name="onboardingtemplate_detail"),
+    path("onboarding-templates/<int:pk>/edit/", views.onboardingtemplate_edit, name="onboardingtemplate_edit"),
+    path("onboarding-templates/<int:pk>/delete/", views.onboardingtemplate_delete, name="onboardingtemplate_delete"),
+
+    # Onboarding Template Tasks (3.3)
+    path("onboarding-template-tasks/", views.onboardingtemplatetask_list, name="onboardingtemplatetask_list"),
+    path("onboarding-template-tasks/add/", views.onboardingtemplatetask_create, name="onboardingtemplatetask_create"),
+    path("onboarding-template-tasks/<int:pk>/", views.onboardingtemplatetask_detail, name="onboardingtemplatetask_detail"),
+    path("onboarding-template-tasks/<int:pk>/edit/", views.onboardingtemplatetask_edit, name="onboardingtemplatetask_edit"),
+    path("onboarding-template-tasks/<int:pk>/delete/", views.onboardingtemplatetask_delete, name="onboardingtemplatetask_delete"),
+
+    # Onboarding Programs (3.3) — CRUD + workflow actions
+    path("onboarding/", views.onboardingprogram_list, name="onboardingprogram_list"),
+    path("onboarding/add/", views.onboardingprogram_create, name="onboardingprogram_create"),
+    path("onboarding/<int:pk>/", views.onboardingprogram_detail, name="onboardingprogram_detail"),
+    path("onboarding/<int:pk>/edit/", views.onboardingprogram_edit, name="onboardingprogram_edit"),
+    path("onboarding/<int:pk>/delete/", views.onboardingprogram_delete, name="onboardingprogram_delete"),
+    path("onboarding/<int:pk>/activate/", views.onboardingprogram_activate, name="onboardingprogram_activate"),
+    path("onboarding/<int:pk>/generate-tasks/", views.onboardingprogram_generate_tasks, name="onboardingprogram_generate_tasks"),
+    path("onboarding/<int:pk>/complete/", views.onboardingprogram_complete, name="onboardingprogram_complete"),
+    path("onboarding/<int:pk>/cancel/", views.onboardingprogram_cancel, name="onboardingprogram_cancel"),
+
+    # Onboarding Tasks (3.3) — CRUD + workflow actions
+    path("onboarding-tasks/", views.onboardingtask_list, name="onboardingtask_list"),
+    path("onboarding-tasks/add/", views.onboardingtask_create, name="onboardingtask_create"),
+    path("onboarding-tasks/<int:pk>/", views.onboardingtask_detail, name="onboardingtask_detail"),
+    path("onboarding-tasks/<int:pk>/edit/", views.onboardingtask_edit, name="onboardingtask_edit"),
+    path("onboarding-tasks/<int:pk>/delete/", views.onboardingtask_delete, name="onboardingtask_delete"),
+    path("onboarding-tasks/<int:pk>/complete/", views.onboardingtask_complete, name="onboardingtask_complete"),
+    path("onboarding-tasks/<int:pk>/reopen/", views.onboardingtask_reopen, name="onboardingtask_reopen"),
+    path("onboarding-tasks/<int:pk>/skip/", views.onboardingtask_skip, name="onboardingtask_skip"),
+
+    # Onboarding Documents (3.3) — CRUD + mark-signed
+    path("onboarding-documents/", views.onboardingdocument_list, name="onboardingdocument_list"),
+    path("onboarding-documents/add/", views.onboardingdocument_create, name="onboardingdocument_create"),
+    path("onboarding-documents/<int:pk>/", views.onboardingdocument_detail, name="onboardingdocument_detail"),
+    path("onboarding-documents/<int:pk>/edit/", views.onboardingdocument_edit, name="onboardingdocument_edit"),
+    path("onboarding-documents/<int:pk>/delete/", views.onboardingdocument_delete, name="onboardingdocument_delete"),
+    path("onboarding-documents/<int:pk>/mark-signed/", views.onboardingdocument_mark_signed, name="onboardingdocument_mark_signed"),
+
+    # Asset Allocations (3.3) — CRUD + issue/return
+    path("assets/", views.assetallocation_list, name="assetallocation_list"),
+    path("assets/add/", views.assetallocation_create, name="assetallocation_create"),
+    path("assets/<int:pk>/", views.assetallocation_detail, name="assetallocation_detail"),
+    path("assets/<int:pk>/edit/", views.assetallocation_edit, name="assetallocation_edit"),
+    path("assets/<int:pk>/delete/", views.assetallocation_delete, name="assetallocation_delete"),
+    path("assets/<int:pk>/issue/", views.assetallocation_issue, name="assetallocation_issue"),
+    path("assets/<int:pk>/return/", views.assetallocation_return, name="assetallocation_return"),
+
+    # Orientation Sessions (3.3) — CRUD + attendance
+    path("orientation/", views.orientationsession_list, name="orientationsession_list"),
+    path("orientation/add/", views.orientationsession_create, name="orientationsession_create"),
+    path("orientation/<int:pk>/", views.orientationsession_detail, name="orientationsession_detail"),
+    path("orientation/<int:pk>/edit/", views.orientationsession_edit, name="orientationsession_edit"),
+    path("orientation/<int:pk>/delete/", views.orientationsession_delete, name="orientationsession_delete"),
+    path("orientation/<int:pk>/mark-attended/", views.orientationsession_mark_attended, name="orientationsession_mark_attended"),
+    path("orientation/<int:pk>/mark-missed/", views.orientationsession_mark_missed, name="orientationsession_mark_missed"),
 ]
