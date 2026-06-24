@@ -23,8 +23,8 @@
       <div class="detail-item"><dt>Designation</dt><dd>{% if obj.designation %}<a href="{% url 'hrm:designation_detail' obj.designation.pk %}">{{ obj.designation.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Programs Using This</dt><dd>{{ program_count }}</dd></div>
     </dl>
-    <p style="margin-top:1rem;">Programs using this template: {{ program_count }}</p>
   </div></div>
 
   <div class="card">
