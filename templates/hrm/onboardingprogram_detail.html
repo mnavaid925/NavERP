@@ -94,17 +94,19 @@
                   <td>
                     <div class="table-actions">
                       {% if t.status != 'completed' %}
-                        <form method="post" action="{% url 'hrm:onboardingtask_complete' t.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Complete"><i data-lucide="check"></i></button></form>
+                        <form method="post" action="{% url 'hrm:onboardingtask_complete' t.pk %}" onsubmit="return confirm('Mark this task as completed?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Complete"><i data-lucide="check"></i></button></form>
                       {% endif %}
                       {% if t.status == 'completed' or t.status == 'skipped' %}
-                        <form method="post" action="{% url 'hrm:onboardingtask_reopen' t.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Reopen"><i data-lucide="rotate-ccw"></i></button></form>
+                        <form method="post" action="{% url 'hrm:onboardingtask_reopen' t.pk %}" onsubmit="return confirm('Reopen this task?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Reopen"><i data-lucide="rotate-ccw"></i></button></form>
                       {% endif %}
                       {% if t.status == 'pending' or t.status == 'in_progress' %}
-                        <form method="post" action="{% url 'hrm:onboardingtask_skip' t.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Skip"><i data-lucide="skip-forward"></i></button></form>
+                        <form method="post" action="{% url 'hrm:onboardingtask_skip' t.pk %}" onsubmit="return confirm('Skip this task?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Skip"><i data-lucide="skip-forward"></i></button></form>
                       {% endif %}
                     </div>
                   </td>
                 </tr>
+              {% empty %}
+                <tr><td colspan="7"><div class="empty-state"><p>No tasks in this phase.</p></div></td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -135,8 +137,8 @@
                 <td>{% if d.file %}<a href="{{ d.file.url }}">Download</a>{% else %}—{% endif %}</td>
                 <td>
                   <div class="table-actions">
-                    {% if d.esign_status != 'signed' %}
-                      <form method="post" action="{% url 'hrm:onboardingdocument_mark_signed' d.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Signed"><i data-lucide="pen-line"></i></button></form>
+                    {% if d.esign_status != 'signed' and d.esign_status != 'not_required' %}
+                      <form method="post" action="{% url 'hrm:onboardingdocument_mark_signed' d.pk %}" onsubmit="return confirm('Mark this document as signed?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Signed"><i data-lucide="pen-tool"></i></button></form>
                     {% endif %}
                   </div>
                 </td>
@@ -171,10 +173,10 @@
                 <td>
                   <div class="table-actions">
                     {% if a.status == 'pending' %}
-                      <form method="post" action="{% url 'hrm:assetallocation_issue' a.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Issue"><i data-lucide="package-check"></i></button></form>
+                      <form method="post" action="{% url 'hrm:assetallocation_issue' a.pk %}" onsubmit="return confirm('Issue this asset?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Issue"><i data-lucide="package-check"></i></button></form>
                     {% endif %}
                     {% if a.status == 'issued' %}
-                      <form method="post" action="{% url 'hrm:assetallocation_return' a.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Return"><i data-lucide="undo-2"></i></button></form>
+                      <form method="post" action="{% url 'hrm:assetallocation_return' a.pk %}" onsubmit="return confirm('Mark this asset returned?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Return"><i data-lucide="undo-2"></i></button></form>
                     {% endif %}
                   </div>
                 </td>
@@ -208,11 +210,11 @@
                 <td><span class="badge badge-{% if s.attendance_status == 'scheduled' %}info{% elif s.attendance_status == 'attended' %}green{% elif s.attendance_status == 'missed' %}red{% elif s.attendance_status == 'rescheduled' %}amber{% elif s.attendance_status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ s.get_attendance_status_display }}</span></td>
                 <td>
                   <div class="table-actions">
-                    {% if s.attendance_status != 'attended' %}
-                      <form method="post" action="{% url 'hrm:orientationsession_mark_attended' s.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Attended"><i data-lucide="user-check"></i></button></form>
+                    {% if s.attendance_status != 'attended' and s.attendance_status != 'cancelled' %}
+                      <form method="post" action="{% url 'hrm:orientationsession_mark_attended' s.pk %}" onsubmit="return confirm('Mark this session as attended?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Attended"><i data-lucide="user-check"></i></button></form>
                     {% endif %}
-                    {% if s.attendance_status != 'missed' %}
-                      <form method="post" action="{% url 'hrm:orientationsession_mark_missed' s.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Missed"><i data-lucide="user-x"></i></button></form>
+                    {% if s.attendance_status != 'missed' and s.attendance_status != 'cancelled' %}
+                      <form method="post" action="{% url 'hrm:orientationsession_mark_missed' s.pk %}" onsubmit="return confirm('Mark this session as missed?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Missed"><i data-lucide="user-x"></i></button></form>
                     {% endif %}
                   </div>
                 </td>
