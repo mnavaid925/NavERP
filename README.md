@@ -191,9 +191,9 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.9/3.10/3.12
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.9/3.10/3.12
 
-First HRM pass — **employee directory + leave + attendance**, reusing the core spine: an employee is a
+First HRM passes — **employee directory + onboarding + leave + attendance**, reusing the core spine: an employee is a
 `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`) anchor; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with `accounting.PayrollRun` (not duplicated here).
 
@@ -201,6 +201,12 @@ First HRM pass — **employee directory + leave + attendance**, reusing the core
   emergency-contact / photo, leave-balance + recent-attendance + recent-leave on the detail, and an HRM overview
   (headcount / today's attendance / pending leave / upcoming holidays).
 - **3.2 Organizational Structure** — `Designation` (job grade + salary band, linked to `core.OrgUnit`).
+- **3.3 Employee Onboarding** — a reusable `OnboardingTemplate` (`ONBT-`) of typed `OnboardingTemplateTask` lines
+  (category / assignee-role / phase / due-offset) applied to one new hire as an `OnboardingProgram` (`ONB-`,
+  draft→active→completed/cancelled) whose `OnboardingTask`s are auto-generated with `due_date = start_date + offset`
+  and a **derived** progress %; plus `OnboardingDocument` collection with an e-sign status lifecycle (allowlisted
+  uploads), `AssetAllocation` (`AST-`, laptop/ID/access-card issue→return), and `OrientationSession` scheduling
+  with attendance. Welcome Kit (welcome message/video/first-day notes + buddy) lives on the program.
 - **3.9 Attendance Management** — `AttendanceRecord` (`ATT-`, auto `hours_worked` incl. overnight, late-arrival
   badge, source/status), `Shift` (grace window) + `ShiftAssignment`.
 - **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
@@ -604,7 +610,7 @@ Before deploying:
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard + cash-forecast; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, recurring invoicing, payments + cash application, aging, payment schedule; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
-| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.9/3.10/3.12 built (employee directory + profiles on `core.Party`/`core.Employment`; designations + salary bands on `core.OrgUnit`; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`; 239-test suite) |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.9/3.10/3.12 built (employee directory + profiles on `core.Party`/`core.Employment`; designations + salary bands on `core.OrgUnit`; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`) |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
 | 6 | Procurement Management System | `procurement` | Roadmap |
