@@ -47,7 +47,7 @@ from .models import (
 def lead_list(request):
     return crud_list(
         request, Lead.objects.filter(tenant=request.tenant).select_related("owner"),
-        "crm/lead_list.html",
+        "crm/directory/lead_list.html",
         search_fields=["name", "company", "email", "number"],
         filters=[("status", "status", False), ("rating", "rating", False), ("source", "source", False)],
         extra_context={"status_choices": Lead.STATUS_CHOICES,
@@ -58,7 +58,7 @@ def lead_list(request):
 
 @login_required
 def lead_create(request):
-    return crud_create(request, form_class=LeadForm, template="crm/lead_form.html",
+    return crud_create(request, form_class=LeadForm, template="crm/directory/lead_form.html",
                        success_url="crm:lead_list")
 
 
@@ -66,7 +66,7 @@ def lead_create(request):
 def lead_detail(request, pk):
     obj = get_object_or_404(Lead.objects.select_related("owner", "converted_party"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "crm/lead_detail.html", {
+    return render(request, "crm/directory/lead_detail.html", {
         "obj": obj,
         # Explicit tenant scope (defense-in-depth) — never trust a reverse-FK manager alone.
         "opportunities": Opportunity.objects.filter(
@@ -77,7 +77,7 @@ def lead_detail(request, pk):
 @login_required
 def lead_edit(request, pk):
     return crud_edit(request, model=Lead, pk=pk, form_class=LeadForm,
-                     template="crm/lead_form.html", success_url="crm:lead_list")
+                     template="crm/directory/lead_form.html", success_url="crm:lead_list")
 
 
 @login_required
@@ -125,7 +125,7 @@ def lead_convert(request, pk):
 def opportunity_list(request):
     return crud_list(
         request, Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner"),
-        "crm/opportunity_list.html",
+        "crm/sales/opportunity_list.html",
         search_fields=["name", "number"],
         filters=[("stage", "stage", False), ("account", "account_id", True)],
         extra_context={"stage_choices": Opportunity.STAGE_CHOICES,
@@ -135,7 +135,7 @@ def opportunity_list(request):
 
 @login_required
 def opportunity_create(request):
-    return crud_create(request, form_class=OpportunityForm, template="crm/opportunity_form.html",
+    return crud_create(request, form_class=OpportunityForm, template="crm/sales/opportunity_form.html",
                        success_url="crm:opportunity_list")
 
 
@@ -144,7 +144,7 @@ def opportunity_detail(request, pk):
     obj = get_object_or_404(
         Opportunity.objects.select_related("account", "primary_contact", "owner", "source_lead", "campaign"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/opportunity_detail.html", {
+    return render(request, "crm/sales/opportunity_detail.html", {
         "obj": obj,
         "tasks": CrmTask.objects.filter(
             tenant=request.tenant, related_opportunity=obj).select_related("owner")[:20],
@@ -154,7 +154,7 @@ def opportunity_detail(request, pk):
 @login_required
 def opportunity_edit(request, pk):
     return crud_edit(request, model=Opportunity, pk=pk, form_class=OpportunityForm,
-                     template="crm/opportunity_form.html", success_url="crm:opportunity_list")
+                     template="crm/sales/opportunity_form.html", success_url="crm:opportunity_list")
 
 
 @login_required
@@ -168,7 +168,7 @@ def opportunity_delete(request, pk):
 def campaign_list(request):
     return crud_list(
         request, Campaign.objects.filter(tenant=request.tenant).select_related("owner"),
-        "crm/campaign_list.html",
+        "crm/marketing/campaign_list.html",
         search_fields=["name", "number"],
         filters=[("status", "status", False), ("type", "type", False)],
         extra_context={"status_choices": Campaign.STATUS_CHOICES,
@@ -178,14 +178,14 @@ def campaign_list(request):
 
 @login_required
 def campaign_create(request):
-    return crud_create(request, form_class=CampaignForm, template="crm/campaign_form.html",
+    return crud_create(request, form_class=CampaignForm, template="crm/marketing/campaign_form.html",
                        success_url="crm:campaign_list")
 
 
 @login_required
 def campaign_detail(request, pk):
     obj = get_object_or_404(Campaign.objects.select_related("owner"), pk=pk, tenant=request.tenant)
-    return render(request, "crm/campaign_detail.html", {
+    return render(request, "crm/marketing/campaign_detail.html", {
         "obj": obj,
         "opportunities": Opportunity.objects.filter(
             tenant=request.tenant, campaign=obj).select_related("account")[:20],
@@ -195,7 +195,7 @@ def campaign_detail(request, pk):
 @login_required
 def campaign_edit(request, pk):
     return crud_edit(request, model=Campaign, pk=pk, form_class=CampaignForm,
-                     template="crm/campaign_form.html", success_url="crm:campaign_list")
+                     template="crm/marketing/campaign_form.html", success_url="crm:campaign_list")
 
 
 @login_required
@@ -209,7 +209,7 @@ def campaign_delete(request, pk):
 def case_list(request):
     return crud_list(
         request, Case.objects.filter(tenant=request.tenant).select_related("account", "owner"),
-        "crm/case_list.html",
+        "crm/service/case_list.html",
         search_fields=["subject", "number"],
         filters=[("status", "status", False), ("priority", "priority", False), ("type", "type", False)],
         extra_context={"status_choices": Case.STATUS_CHOICES,
@@ -220,7 +220,7 @@ def case_list(request):
 
 @login_required
 def case_create(request):
-    return crud_create(request, form_class=CaseForm, template="crm/case_form.html",
+    return crud_create(request, form_class=CaseForm, template="crm/service/case_form.html",
                        success_url="crm:case_list")
 
 
@@ -228,13 +228,13 @@ def case_create(request):
 def case_detail(request, pk):
     obj = get_object_or_404(Case.objects.select_related("account", "contact", "owner"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "crm/case_detail.html", {"obj": obj})
+    return render(request, "crm/service/case_detail.html", {"obj": obj})
 
 
 @login_required
 def case_edit(request, pk):
     return crud_edit(request, model=Case, pk=pk, form_class=CaseForm,
-                     template="crm/case_form.html", success_url="crm:case_list")
+                     template="crm/service/case_form.html", success_url="crm:case_list")
 
 
 @login_required
@@ -248,7 +248,7 @@ def case_delete(request, pk):
 def knowledgearticle_list(request):
     return crud_list(
         request, KnowledgeArticle.objects.filter(tenant=request.tenant).defer("body"),
-        "crm/knowledgearticle_list.html",
+        "crm/service/knowledgearticle_list.html",
         search_fields=["title", "category", "number"],
         filters=[("status", "status", False), ("visibility", "visibility", False)],
         extra_context={"status_choices": KnowledgeArticle.STATUS_CHOICES,
@@ -259,7 +259,7 @@ def knowledgearticle_list(request):
 @login_required
 def knowledgearticle_create(request):
     return crud_create(request, form_class=KnowledgeArticleForm,
-                       template="crm/knowledgearticle_form.html",
+                       template="crm/service/knowledgearticle_form.html",
                        success_url="crm:knowledgearticle_list")
 
 
@@ -270,13 +270,13 @@ def knowledgearticle_detail(request, pk):
     KnowledgeArticle.objects.filter(pk=pk, tenant=request.tenant).update(views_count=F("views_count") + 1)
     obj = get_object_or_404(KnowledgeArticle.objects.select_related("owner"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "crm/knowledgearticle_detail.html", {"obj": obj})
+    return render(request, "crm/service/knowledgearticle_detail.html", {"obj": obj})
 
 
 @login_required
 def knowledgearticle_edit(request, pk):
     return crud_edit(request, model=KnowledgeArticle, pk=pk, form_class=KnowledgeArticleForm,
-                     template="crm/knowledgearticle_form.html",
+                     template="crm/service/knowledgearticle_form.html",
                      success_url="crm:knowledgearticle_list")
 
 
@@ -292,7 +292,7 @@ def knowledgearticle_delete(request, pk):
 def task_list(request):
     return crud_list(
         request, CrmTask.objects.filter(tenant=request.tenant).select_related("owner"),
-        "crm/task_list.html",
+        "crm/activities/task_list.html",
         search_fields=["subject", "number"],
         filters=[("status", "status", False), ("priority", "priority", False), ("type", "type", False)],
         extra_context={"status_choices": CrmTask.STATUS_CHOICES,
@@ -303,7 +303,7 @@ def task_list(request):
 
 @login_required
 def task_create(request):
-    return crud_create(request, form_class=CrmTaskForm, template="crm/task_form.html",
+    return crud_create(request, form_class=CrmTaskForm, template="crm/activities/task_form.html",
                        success_url="crm:task_list")
 
 
@@ -312,13 +312,13 @@ def task_detail(request, pk):
     obj = get_object_or_404(
         CrmTask.objects.select_related("owner", "party", "related_opportunity"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/task_detail.html", {"obj": obj})
+    return render(request, "crm/activities/task_detail.html", {"obj": obj})
 
 
 @login_required
 def task_edit(request, pk):
     return crud_edit(request, model=CrmTask, pk=pk, form_class=CrmTaskForm,
-                     template="crm/task_form.html", success_url="crm:task_list")
+                     template="crm/activities/task_form.html", success_url="crm:task_list")
 
 
 @login_required
@@ -338,7 +338,7 @@ def account_list(request):
         request,
         Party.objects.filter(tenant=request.tenant, kind="organization")
         .select_related("crm_account_profile", "crm_account_profile__owner"),
-        "crm/account_list.html", search_fields=["name", "tax_id"],
+        "crm/directory/account_list.html", search_fields=["name", "tax_id"],
         filters=[("industry", "crm_account_profile__industry", False),
                  ("source", "crm_account_profile__source", False)],
         extra_context={"industry_choices": INDUSTRY_CHOICES, "source_choices": Lead.SOURCE_CHOICES},
@@ -353,7 +353,7 @@ def account_detail(request, pk):
                         "crm_account_profile__parent_account")
         .prefetch_related("roles", "addresses", "contact_methods"),
         pk=pk)
-    return render(request, "crm/account_detail.html", {
+    return render(request, "crm/directory/account_detail.html", {
         "obj": obj,
         "profile": getattr(obj, "crm_account_profile", None),
         "opportunities": Opportunity.objects.filter(tenant=request.tenant, account=obj).select_related("owner")[:20],
@@ -384,7 +384,7 @@ def account_create(request):
             return redirect("crm:account_detail", pk=party.pk)
     else:
         form = AccountForm(tenant=request.tenant)
-    return render(request, "crm/account_form.html", {"form": form, "is_edit": False})
+    return render(request, "crm/directory/account_form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -408,7 +408,7 @@ def account_edit(request, pk):
         write_audit_log(request.user, party, "update")
         messages.success(request, "Account updated.")
         return redirect("crm:account_detail", pk=party.pk)
-    return render(request, "crm/account_form.html", {"form": form, "is_edit": True, "obj": party})
+    return render(request, "crm/directory/account_form.html", {"form": form, "is_edit": True, "obj": party})
 
 
 @tenant_admin_required  # deleting a shared core.Party identity is privileged (cross-module blast radius)
@@ -427,7 +427,7 @@ def contact_list(request):
         request,
         Party.objects.filter(tenant=request.tenant, kind="person")
         .select_related("crm_contact_profile", "crm_contact_profile__account"),
-        "crm/contact_list.html", search_fields=["name"],
+        "crm/directory/contact_list.html", search_fields=["name"],
         filters=[("source", "crm_contact_profile__source", False)],
         extra_context={"source_choices": Lead.SOURCE_CHOICES},
     )
@@ -441,7 +441,7 @@ def contact_detail(request, pk):
                         "crm_contact_profile__owner")
         .prefetch_related("roles", "contact_methods"),
         pk=pk)
-    return render(request, "crm/contact_detail.html", {
+    return render(request, "crm/directory/contact_detail.html", {
         "obj": obj,
         "profile": getattr(obj, "crm_contact_profile", None),
         "opportunities": Opportunity.objects.filter(tenant=request.tenant, primary_contact=obj).select_related("account")[:20],
@@ -469,7 +469,7 @@ def contact_create(request):
             return redirect("crm:contact_detail", pk=party.pk)
     else:
         form = ContactForm(tenant=request.tenant)
-    return render(request, "crm/contact_form.html", {"form": form, "is_edit": False})
+    return render(request, "crm/directory/contact_form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -490,7 +490,7 @@ def contact_edit(request, pk):
         write_audit_log(request.user, party, "update")
         messages.success(request, "Contact updated.")
         return redirect("crm:contact_detail", pk=party.pk)
-    return render(request, "crm/contact_form.html", {"form": form, "is_edit": True, "obj": party})
+    return render(request, "crm/directory/contact_form.html", {"form": form, "is_edit": True, "obj": party})
 
 
 @tenant_admin_required  # deleting a shared core.Party identity is privileged (cross-module blast radius)
@@ -611,7 +611,7 @@ def expense_list(request):
         request,
         Expense.objects.filter(tenant=request.tenant).select_related(
             "opportunity", "project", "submitted_by", "approved_by"),
-        "crm/expense_list.html",
+        "crm/finance/expense_list.html",
         search_fields=["number", "description", "opportunity__name"],
         filters=[("status", "status", False), ("category", "category", False)],
         extra_context={"status_choices": Expense.STATUS_CHOICES,
@@ -638,7 +638,7 @@ def expense_create(request):
             return redirect("crm:expense_list")
     else:
         form = ExpenseForm(tenant=request.tenant)
-    return render(request, "crm/expense_form.html", {"form": form, "is_edit": False})
+    return render(request, "crm/finance/expense_form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -646,13 +646,13 @@ def expense_detail(request, pk):
     obj = get_object_or_404(
         Expense.objects.select_related("opportunity", "project", "submitted_by", "approved_by"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/expense_detail.html", {"obj": obj})
+    return render(request, "crm/finance/expense_detail.html", {"obj": obj})
 
 
 @login_required
 def expense_edit(request, pk):
     return crud_edit(request, model=Expense, pk=pk, form_class=ExpenseForm,
-                     template="crm/expense_form.html", success_url="crm:expense_list")
+                     template="crm/finance/expense_form.html", success_url="crm:expense_list")
 
 
 @login_required
@@ -704,7 +704,7 @@ def crmproject_list(request):
         request,
         CrmProject.objects.filter(tenant=request.tenant).select_related(
             "account", "owner", "source_opportunity"),
-        "crm/crmproject_list.html",
+        "crm/projects/crmproject_list.html",
         search_fields=["number", "name", "account__name"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": CrmProject.STATUS_CHOICES},
@@ -713,7 +713,7 @@ def crmproject_list(request):
 
 @login_required
 def crmproject_create(request):
-    return crud_create(request, form_class=CrmProjectForm, template="crm/crmproject_form.html",
+    return crud_create(request, form_class=CrmProjectForm, template="crm/projects/crmproject_form.html",
                        success_url="crm:crmproject_list")
 
 
@@ -727,7 +727,7 @@ def crmproject_detail(request, pk):
                                  billable=Sum("hours", filter=Q(is_billable=True)))
     expense_total = Expense.objects.filter(
         tenant=request.tenant, project=obj, status="approved").aggregate(t=Sum("amount"))["t"] or 0
-    return render(request, "crm/crmproject_detail.html", {
+    return render(request, "crm/projects/crmproject_detail.html", {
         "obj": obj,
         "milestones": obj.milestones.filter(tenant=request.tenant).select_related("assignee"),
         "total_hours": hours["total"] or 0,
@@ -739,7 +739,7 @@ def crmproject_detail(request, pk):
 @login_required
 def crmproject_edit(request, pk):
     return crud_edit(request, model=CrmProject, pk=pk, form_class=CrmProjectForm,
-                     template="crm/crmproject_form.html", success_url="crm:crmproject_list")
+                     template="crm/projects/crmproject_form.html", success_url="crm:crmproject_list")
 
 
 @login_required
@@ -775,7 +775,7 @@ def crmmilestone_list(request):
     return crud_list(
         request,
         CrmMilestone.objects.filter(tenant=request.tenant).select_related("project", "assignee"),
-        "crm/crmmilestone_list.html",
+        "crm/projects/crmmilestone_list.html",
         search_fields=["number", "title"],
         filters=[("status", "status", False), ("project", "project_id", True)],
         extra_context={"status_choices": CrmMilestone.STATUS_CHOICES,
@@ -786,7 +786,7 @@ def crmmilestone_list(request):
 
 @login_required
 def crmmilestone_create(request):
-    return crud_create(request, form_class=CrmMilestoneForm, template="crm/crmmilestone_form.html",
+    return crud_create(request, form_class=CrmMilestoneForm, template="crm/projects/crmmilestone_form.html",
                        success_url="crm:crmmilestone_list")
 
 
@@ -795,7 +795,7 @@ def crmmilestone_detail(request, pk):
     obj = get_object_or_404(
         CrmMilestone.objects.select_related("project", "assignee", "parent"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/crmmilestone_detail.html", {
+    return render(request, "crm/projects/crmmilestone_detail.html", {
         "obj": obj,
         "subtasks": CrmMilestone.objects.filter(tenant=request.tenant, parent=obj).select_related("assignee"),
     })
@@ -804,7 +804,7 @@ def crmmilestone_detail(request, pk):
 @login_required
 def crmmilestone_edit(request, pk):
     return crud_edit(request, model=CrmMilestone, pk=pk, form_class=CrmMilestoneForm,
-                     template="crm/crmmilestone_form.html", success_url="crm:crmmilestone_list")
+                     template="crm/projects/crmmilestone_form.html", success_url="crm:crmmilestone_list")
 
 
 @login_required
@@ -820,7 +820,7 @@ def timesheet_list(request):
         request,
         Timesheet.objects.filter(tenant=request.tenant).select_related(
             "project", "employee", "milestone", "client"),
-        "crm/timesheet_list.html",
+        "crm/projects/timesheet_list.html",
         search_fields=["number", "description", "employee__username"],
         filters=[("status", "status", False), ("project", "project_id", True),
                  ("employee", "employee_id", True)],
@@ -832,7 +832,7 @@ def timesheet_list(request):
 
 @login_required
 def timesheet_create(request):
-    return crud_create(request, form_class=TimesheetForm, template="crm/timesheet_form.html",
+    return crud_create(request, form_class=TimesheetForm, template="crm/projects/timesheet_form.html",
                        success_url="crm:timesheet_list")
 
 
@@ -841,13 +841,13 @@ def timesheet_detail(request, pk):
     obj = get_object_or_404(
         Timesheet.objects.select_related("project", "employee", "milestone", "client", "approved_by"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/timesheet_detail.html", {"obj": obj})
+    return render(request, "crm/projects/timesheet_detail.html", {"obj": obj})
 
 
 @login_required
 def timesheet_edit(request, pk):
     return crud_edit(request, model=Timesheet, pk=pk, form_class=TimesheetForm,
-                     template="crm/timesheet_form.html", success_url="crm:timesheet_list")
+                     template="crm/projects/timesheet_form.html", success_url="crm:timesheet_list")
 
 
 @login_required
@@ -862,7 +862,7 @@ def doctemplate_list(request):
     return crud_list(
         request,
         DocTemplate.objects.filter(tenant=request.tenant).select_related("owner").defer("body"),
-        "crm/doctemplate_list.html",
+        "crm/documents/doctemplate_list.html",
         search_fields=["number", "name"],
         filters=[("template_type", "template_type", False), ("is_active", "is_active", False)],
         extra_context={"type_choices": DocTemplate.TYPE_CHOICES},
@@ -871,14 +871,14 @@ def doctemplate_list(request):
 
 @login_required
 def doctemplate_create(request):
-    return crud_create(request, form_class=DocTemplateForm, template="crm/doctemplate_form.html",
+    return crud_create(request, form_class=DocTemplateForm, template="crm/documents/doctemplate_form.html",
                        success_url="crm:doctemplate_list")
 
 
 @login_required
 def doctemplate_detail(request, pk):
     obj = get_object_or_404(DocTemplate.objects.select_related("owner"), pk=pk, tenant=request.tenant)
-    return render(request, "crm/doctemplate_detail.html", {
+    return render(request, "crm/documents/doctemplate_detail.html", {
         "obj": obj,
         "contract_count": ContractDocument.objects.filter(tenant=request.tenant, template=obj).count(),
     })
@@ -887,7 +887,7 @@ def doctemplate_detail(request, pk):
 @login_required
 def doctemplate_edit(request, pk):
     return crud_edit(request, model=DocTemplate, pk=pk, form_class=DocTemplateForm,
-                     template="crm/doctemplate_form.html", success_url="crm:doctemplate_list")
+                     template="crm/documents/doctemplate_form.html", success_url="crm:doctemplate_list")
 
 
 @login_required
@@ -903,7 +903,7 @@ def contractdocument_list(request):
         request,
         ContractDocument.objects.filter(tenant=request.tenant).select_related(
             "template", "opportunity", "account", "owner").defer("body_snapshot"),
-        "crm/contractdocument_list.html",
+        "crm/documents/contractdocument_list.html",
         search_fields=["number", "name", "account__name"],
         filters=[("status", "status", False), ("opportunity", "opportunity_id", True)],
         extra_context={"status_choices": ContractDocument.STATUS_CHOICES,
@@ -914,7 +914,7 @@ def contractdocument_list(request):
 @login_required
 def contractdocument_create(request):
     return crud_create(request, form_class=ContractDocumentForm,
-                       template="crm/contractdocument_form.html",
+                       template="crm/documents/contractdocument_form.html",
                        success_url="crm:contractdocument_list")
 
 
@@ -923,7 +923,7 @@ def contractdocument_detail(request, pk):
     obj = get_object_or_404(
         ContractDocument.objects.select_related("template", "opportunity", "account", "owner"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/contractdocument_detail.html", {
+    return render(request, "crm/documents/contractdocument_detail.html", {
         "obj": obj,
         "signers": obj.signers.select_related("signer_party").all(),
         "signer_form": SignerRecordForm(tenant=request.tenant),
@@ -933,7 +933,7 @@ def contractdocument_detail(request, pk):
 @login_required
 def contractdocument_edit(request, pk):
     return crud_edit(request, model=ContractDocument, pk=pk, form_class=ContractDocumentForm,
-                     template="crm/contractdocument_form.html", success_url="crm:contractdocument_list")
+                     template="crm/documents/contractdocument_form.html", success_url="crm:contractdocument_list")
 
 
 @login_required
@@ -982,7 +982,7 @@ def sign_document(request, token):
         if contract.status not in ("signed", "declined", "expired"):
             contract.status = "expired"
             contract.save(update_fields=["status", "updated_at"])
-        return render(request, "crm/sign_document.html",
+        return render(request, "crm/documents/sign_document.html",
                       {"signer": signer, "contract": contract, "already": True, "expired": True})
     already = signer.signed_at is not None or signer.declined_at is not None
     if request.method == "POST" and not already:
@@ -1013,7 +1013,7 @@ def sign_document(request, token):
     if signer.viewed_at is None:
         signer.viewed_at = timezone.now()
         signer.save(update_fields=["viewed_at"])
-    return render(request, "crm/sign_document.html",
+    return render(request, "crm/documents/sign_document.html",
                   {"signer": signer, "contract": contract, "already": already})
 
 
@@ -1023,7 +1023,7 @@ def workflowrule_list(request):
     return crud_list(
         request,
         WorkflowRule.objects.filter(tenant=request.tenant).select_related("owner"),
-        "crm/workflowrule_list.html",
+        "crm/workflow/workflowrule_list.html",
         search_fields=["number", "name"],
         filters=[("is_active", "is_active", False), ("trigger_entity", "trigger_entity", False)],
         extra_context={"entity_choices": WorkflowRule.ENTITY_CHOICES,
@@ -1033,14 +1033,14 @@ def workflowrule_list(request):
 
 @login_required
 def workflowrule_create(request):
-    return crud_create(request, form_class=WorkflowRuleForm, template="crm/workflowrule_form.html",
+    return crud_create(request, form_class=WorkflowRuleForm, template="crm/workflow/workflowrule_form.html",
                        success_url="crm:workflowrule_list")
 
 
 @login_required
 def workflowrule_detail(request, pk):
     obj = get_object_or_404(WorkflowRule.objects.select_related("owner"), pk=pk, tenant=request.tenant)
-    return render(request, "crm/workflowrule_detail.html", {
+    return render(request, "crm/workflow/workflowrule_detail.html", {
         "obj": obj,
         "logs": WorkflowLog.objects.filter(tenant=request.tenant, rule=obj)[:10],
     })
@@ -1049,7 +1049,7 @@ def workflowrule_detail(request, pk):
 @login_required
 def workflowrule_edit(request, pk):
     return crud_edit(request, model=WorkflowRule, pk=pk, form_class=WorkflowRuleForm,
-                     template="crm/workflowrule_form.html", success_url="crm:workflowrule_list")
+                     template="crm/workflow/workflowrule_form.html", success_url="crm:workflowrule_list")
 
 
 @login_required
@@ -1064,7 +1064,7 @@ def workflowlog_list(request):
     return crud_list(
         request,
         WorkflowLog.objects.filter(tenant=request.tenant).select_related("rule").defer("error_msg"),
-        "crm/workflowlog_list.html",
+        "crm/workflow/workflowlog_list.html",
         search_fields=["record_label", "error_msg"],
         filters=[("status", "status", False), ("rule", "rule_id", True)],
         extra_context={"status_choices": WorkflowLog.STATUS_CHOICES,
@@ -1075,7 +1075,7 @@ def workflowlog_list(request):
 @login_required
 def workflowlog_detail(request, pk):
     obj = get_object_or_404(WorkflowLog.objects.select_related("rule"), pk=pk, tenant=request.tenant)
-    return render(request, "crm/workflowlog_detail.html", {"obj": obj})
+    return render(request, "crm/workflow/workflowlog_detail.html", {"obj": obj})
 
 
 # ------------------------------------------------------------ 1.10 Approval requests
@@ -1085,7 +1085,7 @@ def approvalrequest_list(request):
         request,
         ApprovalRequest.objects.filter(tenant=request.tenant).select_related(
             "approver", "requested_by", "rule"),
-        "crm/approvalrequest_list.html",
+        "crm/workflow/approvalrequest_list.html",
         search_fields=["number", "subject", "record_label"],
         filters=[("status", "status", False), ("approver", "approver_id", True)],
         extra_context={"status_choices": ApprovalRequest.STATUS_CHOICES,
@@ -1096,7 +1096,7 @@ def approvalrequest_list(request):
 @login_required
 def approvalrequest_create(request):
     return crud_create(request, form_class=ApprovalRequestForm,
-                       template="crm/approvalrequest_form.html", success_url="crm:approvalrequest_list")
+                       template="crm/workflow/approvalrequest_form.html", success_url="crm:approvalrequest_list")
 
 
 @login_required
@@ -1104,13 +1104,13 @@ def approvalrequest_detail(request, pk):
     obj = get_object_or_404(
         ApprovalRequest.objects.select_related("approver", "requested_by", "rule"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/approvalrequest_detail.html", {"obj": obj})
+    return render(request, "crm/workflow/approvalrequest_detail.html", {"obj": obj})
 
 
 @login_required
 def approvalrequest_edit(request, pk):
     return crud_edit(request, model=ApprovalRequest, pk=pk, form_class=ApprovalRequestForm,
-                     template="crm/approvalrequest_form.html", success_url="crm:approvalrequest_list")
+                     template="crm/workflow/approvalrequest_form.html", success_url="crm:approvalrequest_list")
 
 
 @login_required
@@ -1153,7 +1153,7 @@ def onboardingplan_list(request):
     return crud_list(
         request,
         OnboardingPlan.objects.filter(tenant=request.tenant).select_related("account", "owner").prefetch_related("steps"),
-        "crm/onboardingplan_list.html",
+        "crm/success/onboardingplan_list.html",
         search_fields=["number", "name", "account__name"],
         filters=[("status", "status", False), ("account", "account_id", True)],
         extra_context={"status_choices": OnboardingPlan.STATUS_CHOICES,
@@ -1164,7 +1164,7 @@ def onboardingplan_list(request):
 @login_required
 def onboardingplan_create(request):
     return crud_create(request, form_class=OnboardingPlanForm,
-                       template="crm/onboardingplan_form.html", success_url="crm:onboardingplan_list")
+                       template="crm/success/onboardingplan_form.html", success_url="crm:onboardingplan_list")
 
 
 @login_required
@@ -1173,7 +1173,7 @@ def onboardingplan_detail(request, pk):
                             pk=pk, tenant=request.tenant)
     steps = list(obj.steps.select_related("assignee").all())
     done = sum(1 for s in steps if s.completed_at is not None)
-    return render(request, "crm/onboardingplan_detail.html", {
+    return render(request, "crm/success/onboardingplan_detail.html", {
         "obj": obj,
         "steps": steps,
         "progress_pct": round(done / len(steps) * 100) if steps else 0,  # from the already-fetched steps
@@ -1184,7 +1184,7 @@ def onboardingplan_detail(request, pk):
 @login_required
 def onboardingplan_edit(request, pk):
     return crud_edit(request, model=OnboardingPlan, pk=pk, form_class=OnboardingPlanForm,
-                     template="crm/onboardingplan_form.html", success_url="crm:onboardingplan_list")
+                     template="crm/success/onboardingplan_form.html", success_url="crm:onboardingplan_list")
 
 
 @login_required
@@ -1241,7 +1241,7 @@ def healthscore_list(request):
     return crud_list(
         request,
         HealthScore.objects.filter(tenant=request.tenant).select_related("account"),
-        "crm/healthscore_list.html",
+        "crm/success/healthscore_list.html",
         search_fields=["number", "account__name"],
         filters=[("tier", "tier", False)],
         extra_context={"tier_choices": HealthScore.TIER_CHOICES},
@@ -1250,20 +1250,20 @@ def healthscore_list(request):
 
 @login_required
 def healthscore_create(request):
-    return crud_create(request, form_class=HealthScoreForm, template="crm/healthscore_form.html",
+    return crud_create(request, form_class=HealthScoreForm, template="crm/success/healthscore_form.html",
                        success_url="crm:healthscore_list")
 
 
 @login_required
 def healthscore_detail(request, pk):
     obj = get_object_or_404(HealthScore.objects.select_related("account"), pk=pk, tenant=request.tenant)
-    return render(request, "crm/healthscore_detail.html", {"obj": obj})
+    return render(request, "crm/success/healthscore_detail.html", {"obj": obj})
 
 
 @login_required
 def healthscore_edit(request, pk):
     return crud_edit(request, model=HealthScore, pk=pk, form_class=HealthScoreForm,
-                     template="crm/healthscore_form.html", success_url="crm:healthscore_list")
+                     template="crm/success/healthscore_form.html", success_url="crm:healthscore_list")
 
 
 @login_required
@@ -1296,7 +1296,7 @@ def health_config_edit(request):
             return redirect("crm:healthscore_list")
     else:
         form = HealthScoreConfigForm(instance=config, tenant=request.tenant)
-    return render(request, "crm/health_config_form.html", {"form": form, "config": config})
+    return render(request, "crm/success/health_config_form.html", {"form": form, "config": config})
 
 
 # ------------------------------------------------------------ 1.11 Surveys
@@ -1305,7 +1305,7 @@ def survey_list(request):
     return crud_list(
         request,
         Survey.objects.filter(tenant=request.tenant).select_related("account", "contact", "related_case"),
-        "crm/survey_list.html",
+        "crm/success/survey_list.html",
         search_fields=["number", "feedback_text", "account__name"],
         filters=[("survey_type", "survey_type", False), ("classification", "classification", False),
                  ("account", "account_id", True)],
@@ -1317,7 +1317,7 @@ def survey_list(request):
 
 @login_required
 def survey_create(request):
-    return crud_create(request, form_class=SurveyForm, template="crm/survey_form.html",
+    return crud_create(request, form_class=SurveyForm, template="crm/success/survey_form.html",
                        success_url="crm:survey_list")
 
 
@@ -1325,13 +1325,13 @@ def survey_create(request):
 def survey_detail(request, pk):
     obj = get_object_or_404(Survey.objects.select_related("account", "contact", "related_case"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "crm/survey_detail.html", {"obj": obj})
+    return render(request, "crm/success/survey_detail.html", {"obj": obj})
 
 
 @login_required
 def survey_edit(request, pk):
     return crud_edit(request, model=Survey, pk=pk, form_class=SurveyForm,
-                     template="crm/survey_form.html", success_url="crm:survey_list")
+                     template="crm/success/survey_form.html", success_url="crm:survey_list")
 
 
 @login_required
@@ -1352,7 +1352,7 @@ def survey_respond(request, token):
         survey.responded_at = timezone.now()
         survey.save()  # save() auto-classifies NPS
         return redirect("crm:survey_respond", token=token)
-    return render(request, "crm/survey_respond.html", {"survey": survey})
+    return render(request, "crm/success/survey_respond.html", {"survey": survey})
 
 
 # ------------------------------------------------------------ 1.12 Product stock
@@ -1361,7 +1361,7 @@ def productstock_list(request):
     return crud_list(
         request,
         ProductStock.objects.filter(tenant=request.tenant),
-        "crm/productstock_list.html",
+        "crm/vendor/productstock_list.html",
         search_fields=["number", "name", "sku"],
         filters=[("is_active", "is_active", False)],
         extra_context={},
@@ -1370,20 +1370,20 @@ def productstock_list(request):
 
 @login_required
 def productstock_create(request):
-    return crud_create(request, form_class=ProductStockForm, template="crm/productstock_form.html",
+    return crud_create(request, form_class=ProductStockForm, template="crm/vendor/productstock_form.html",
                        success_url="crm:productstock_list")
 
 
 @login_required
 def productstock_detail(request, pk):
     obj = get_object_or_404(ProductStock, pk=pk, tenant=request.tenant)
-    return render(request, "crm/productstock_detail.html", {"obj": obj})
+    return render(request, "crm/vendor/productstock_detail.html", {"obj": obj})
 
 
 @login_required
 def productstock_edit(request, pk):
     return crud_edit(request, model=ProductStock, pk=pk, form_class=ProductStockForm,
-                     template="crm/productstock_form.html", success_url="crm:productstock_list")
+                     template="crm/vendor/productstock_form.html", success_url="crm:productstock_list")
 
 
 @login_required
@@ -1398,7 +1398,7 @@ def crm_po_list(request):
     return crud_list(
         request,
         PurchaseOrder.objects.filter(tenant=request.tenant).select_related("vendor", "owner"),
-        "crm/crm_po_list.html",
+        "crm/vendor/crm_po_list.html",
         search_fields=["number", "vendor__name", "notes"],
         filters=[("status", "status", False), ("vendor", "vendor_id", True)],
         extra_context={"status_choices": PurchaseOrder.STATUS_CHOICES,
@@ -1422,14 +1422,14 @@ def crm_po_create(request):
             return redirect("crm:crm_po_detail", pk=po.pk)
     else:
         form = PurchaseOrderForm(tenant=request.tenant)
-    return render(request, "crm/crm_po_form.html", {"form": form, "is_edit": False})
+    return render(request, "crm/vendor/crm_po_form.html", {"form": form, "is_edit": False})
 
 
 @login_required
 def crm_po_detail(request, pk):
     obj = get_object_or_404(PurchaseOrder.objects.select_related("vendor", "owner"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "crm/crm_po_detail.html", {
+    return render(request, "crm/vendor/crm_po_detail.html", {
         "obj": obj,
         "lines": obj.lines.select_related("product").all(),
         "line_form": PurchaseOrderLineForm(tenant=request.tenant),
@@ -1439,7 +1439,7 @@ def crm_po_detail(request, pk):
 @login_required
 def crm_po_edit(request, pk):
     return crud_edit(request, model=PurchaseOrder, pk=pk, form_class=PurchaseOrderForm,
-                     template="crm/crm_po_form.html", success_url="crm:crm_po_list")
+                     template="crm/vendor/crm_po_form.html", success_url="crm:crm_po_list")
 
 
 @login_required
@@ -1507,7 +1507,7 @@ def partnerportalaccess_list(request):
         request,
         PartnerPortalAccess.objects.filter(tenant=request.tenant).select_related(
             "partner_party", "portal_user"),
-        "crm/partnerportalaccess_list.html",
+        "crm/vendor/partnerportalaccess_list.html",
         search_fields=["number", "partner_party__name", "portal_user__username"],
         filters=[("is_active", "is_active", False), ("access_level", "access_level", False)],
         extra_context={"access_choices": PartnerPortalAccess.ACCESS_CHOICES},
@@ -1517,7 +1517,7 @@ def partnerportalaccess_list(request):
 @login_required
 def partnerportalaccess_create(request):
     return crud_create(request, form_class=PartnerPortalAccessForm,
-                       template="crm/partnerportalaccess_form.html",
+                       template="crm/vendor/partnerportalaccess_form.html",
                        success_url="crm:partnerportalaccess_list")
 
 
@@ -1526,13 +1526,13 @@ def partnerportalaccess_detail(request, pk):
     obj = get_object_or_404(
         PartnerPortalAccess.objects.select_related("partner_party", "portal_user"),
         pk=pk, tenant=request.tenant)
-    return render(request, "crm/partnerportalaccess_detail.html", {"obj": obj})
+    return render(request, "crm/vendor/partnerportalaccess_detail.html", {"obj": obj})
 
 
 @login_required
 def partnerportalaccess_edit(request, pk):
     return crud_edit(request, model=PartnerPortalAccess, pk=pk, form_class=PartnerPortalAccessForm,
-                     template="crm/partnerportalaccess_form.html",
+                     template="crm/vendor/partnerportalaccess_form.html",
                      success_url="crm:partnerportalaccess_list")
 
 
@@ -1560,7 +1560,7 @@ def portal_dashboard(request):
         messages.error(request, "You don't have partner portal access.")
         return redirect("dashboard:home")
     po_count = PurchaseOrder.objects.filter(tenant=request.tenant, vendor=access.partner_party).count()
-    return render(request, "crm/portal_dashboard.html", {"access": access, "po_count": po_count})
+    return render(request, "crm/vendor/portal_dashboard.html", {"access": access, "po_count": po_count})
 
 
 @login_required
@@ -1573,7 +1573,7 @@ def portal_po_list(request):
               .filter(tenant=request.tenant, vendor=access.partner_party)
               .order_by("-created_at"))
     page_obj = paginate(request, orders)
-    return render(request, "crm/portal_po_list.html",
+    return render(request, "crm/vendor/portal_po_list.html",
                   {"access": access, "object_list": page_obj.object_list, "page_obj": page_obj})
 
 
@@ -1585,5 +1585,5 @@ def portal_stock(request):
         return redirect("crm:portal_dashboard" if access else "dashboard:home")
     products = ProductStock.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
     page_obj = paginate(request, products)
-    return render(request, "crm/portal_stock.html",
+    return render(request, "crm/vendor/portal_stock.html",
                   {"access": access, "object_list": page_obj.object_list, "page_obj": page_obj})
