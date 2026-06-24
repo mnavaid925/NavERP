@@ -62,10 +62,10 @@
                 <div class="table-actions">
                   <a href="{% url 'hrm:orientationsession_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'hrm:orientationsession_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  {% if obj.attendance_status != 'attended' %}
+                  {% if obj.attendance_status != 'attended' and obj.attendance_status != 'cancelled' %}
                     <form method="post" action="{% url 'hrm:orientationsession_mark_attended' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Attended"><i data-lucide="check"></i></button></form>
                   {% endif %}
-                  {% if obj.attendance_status != 'missed' %}
+                  {% if obj.attendance_status != 'missed' and obj.attendance_status != 'cancelled' %}
                     <form method="post" action="{% url 'hrm:orientationsession_mark_missed' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Missed"><i data-lucide="x"></i></button></form>
                   {% endif %}
                   <form method="post" action="{% url 'hrm:orientationsession_delete' obj.pk %}" onsubmit="return confirm('Delete this orientation session?');">
