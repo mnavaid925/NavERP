@@ -8,12 +8,13 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
 from datetime import date as _date
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, OuterRef, Subquery, Sum
+from django.db.models import (Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -25,23 +26,39 @@ from apps.core.models import Employment, OrgUnit
 from apps.core.utils import write_audit_log
 
 from .forms import (
+    AssetAllocationForm,
     AttendanceRecordForm,
     DesignationForm,
     EmployeeProfileForm,
     LeaveAllocationForm,
     LeaveRequestForm,
     LeaveTypeForm,
+    OnboardingDocumentForm,
+    OnboardingProgramForm,
+    OnboardingTaskForm,
+    OnboardingTemplateForm,
+    OnboardingTemplateTaskForm,
+    OrientationSessionForm,
     PublicHolidayForm,
     ShiftAssignmentForm,
     ShiftForm,
 )
 from .models import (
+    PHASE_CHOICES,
+    TASK_CATEGORY_CHOICES,
+    AssetAllocation,
     AttendanceRecord,
     Designation,
     EmployeeProfile,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
+    OnboardingDocument,
+    OnboardingProgram,
+    OnboardingTask,
+    OnboardingTemplate,
+    OnboardingTemplateTask,
+    OrientationSession,
     PublicHoliday,
     Shift,
     ShiftAssignment,
@@ -651,3 +668,560 @@ def attendancerecord_edit(request, pk):
 @require_POST
 def attendancerecord_delete(request, pk):
     return crud_delete(request, model=AttendanceRecord, pk=pk, success_url="hrm:attendancerecord_list")
+
+
+# ============================================================ Onboarding Templates (3.3)
+@login_required
+def onboardingtemplate_list(request):
+    return crud_list(
+        request,
+        OnboardingTemplate.objects.filter(tenant=request.tenant).select_related("designation")
+        .annotate(task_count=Count("template_tasks")).order_by("name"),
+        "hrm/onboardingtemplate_list.html",
+        search_fields=["number", "name", "designation__name"],
+        filters=[("is_active", "is_active", False), ("designation", "designation_id", True)],
+        extra_context={"designations": Designation.objects.filter(tenant=request.tenant).order_by("name")},
+    )
+
+
+@login_required
+def onboardingtemplate_create(request):
+    return crud_create(request, form_class=OnboardingTemplateForm,
+                       template="hrm/onboardingtemplate_form.html",
+                       success_url="hrm:onboardingtemplate_list")
+
+
+@login_required
+def onboardingtemplate_detail(request, pk):
+    obj = get_object_or_404(
+        OnboardingTemplate.objects.select_related("designation"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/onboardingtemplate_detail.html", {
+        "obj": obj,
+        "tasks": obj.template_tasks.order_by("phase", "order", "title"),
+        "program_count": OnboardingProgram.objects.filter(tenant=request.tenant, template=obj).count(),
+    })
+
+
+@login_required
+def onboardingtemplate_edit(request, pk):
+    return crud_edit(request, model=OnboardingTemplate, pk=pk, form_class=OnboardingTemplateForm,
+                     template="hrm/onboardingtemplate_form.html",
+                     success_url="hrm:onboardingtemplate_list")
+
+
+@login_required
+@require_POST
+def onboardingtemplate_delete(request, pk):
+    obj = get_object_or_404(OnboardingTemplate, pk=pk, tenant=request.tenant)
+    # Guard: a template still referenced by programs is kept (SET_NULL would orphan the link).
+    if OnboardingProgram.objects.filter(tenant=request.tenant, template=obj).exists():
+        messages.error(request, "Cannot delete a template that has onboarding programs. "
+                                "Deactivate it instead.")
+        return redirect("hrm:onboardingtemplate_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Onboarding template deleted.")
+    return redirect("hrm:onboardingtemplate_list")
+
+
+# ============================================================ Onboarding Template Tasks (3.3)
+@login_required
+def onboardingtemplatetask_list(request):
+    return crud_list(
+        request,
+        OnboardingTemplateTask.objects.filter(tenant=request.tenant).select_related("template"),
+        "hrm/onboardingtemplatetask_list.html",
+        search_fields=["title", "description", "template__name"],
+        filters=[("template", "template_id", True), ("phase", "phase", False),
+                 ("task_category", "task_category", False)],
+        extra_context={"templates": OnboardingTemplate.objects.filter(tenant=request.tenant).order_by("name"),
+                       "phase_choices": PHASE_CHOICES,
+                       "category_choices": TASK_CATEGORY_CHOICES},
+    )
+
+
+@login_required
+def onboardingtemplatetask_create(request):
+    return crud_create(request, form_class=OnboardingTemplateTaskForm,
+                       template="hrm/onboardingtemplatetask_form.html",
+                       success_url="hrm:onboardingtemplatetask_list")
+
+
+@login_required
+def onboardingtemplatetask_detail(request, pk):
+    obj = get_object_or_404(
+        OnboardingTemplateTask.objects.select_related("template"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/onboardingtemplatetask_detail.html", {"obj": obj})
+
+
+@login_required
+def onboardingtemplatetask_edit(request, pk):
+    return crud_edit(request, model=OnboardingTemplateTask, pk=pk,
+                     form_class=OnboardingTemplateTaskForm,
+                     template="hrm/onboardingtemplatetask_form.html",
+                     success_url="hrm:onboardingtemplatetask_list")
+
+
+@login_required
+@require_POST
+def onboardingtemplatetask_delete(request, pk):
+    return crud_delete(request, model=OnboardingTemplateTask, pk=pk,
+                       success_url="hrm:onboardingtemplatetask_list")
+
+
+# ============================================================ Onboarding Programs (3.3)
+def _generate_tasks_from_template(program):
+    """Create concrete ``OnboardingTask`` rows from the program's template task lines, each with
+    ``due_date = program.start_date + due_offset_days``. Idempotent — ``get_or_create`` on the task
+    title means re-running never duplicates. Returns the count of newly-created tasks."""
+    if not program.template_id:
+        return 0
+    created = 0
+    for tt in program.template.template_tasks.order_by("phase", "order", "title"):
+        due = program.start_date + timedelta(days=tt.due_offset_days) if program.start_date else None
+        _, was_created = OnboardingTask.objects.get_or_create(
+            tenant=program.tenant, program=program, title=tt.title,
+            defaults={
+                "description": tt.description,
+                "task_category": tt.task_category,
+                "assignee_role": tt.assignee_role,
+                "due_date": due,
+                "phase": tt.phase,
+                "is_mandatory": tt.is_mandatory,
+                "order": tt.order,
+            })
+        created += 1 if was_created else 0
+    return created
+
+
+@login_required
+def onboardingprogram_list(request):
+    return crud_list(
+        request,
+        OnboardingProgram.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "buddy__party", "template")
+        .annotate(tasks_total=Count("tasks", distinct=True),
+                  tasks_done=Count("tasks", filter=Q(tasks__status__in=("completed", "skipped")),
+                                   distinct=True)),
+        "hrm/onboardingprogram_list.html",
+        search_fields=["number", "employee__party__name"],
+        filters=[("status", "status", False), ("employee", "employee_id", True)],
+        extra_context={"status_choices": OnboardingProgram.STATUS_CHOICES,
+                       "employees": EmployeeProfile.objects.filter(tenant=request.tenant)
+                       .select_related("party").order_by("party__name")},
+    )
+
+
+@login_required
+def onboardingprogram_create(request):
+    return crud_create(request, form_class=OnboardingProgramForm,
+                       template="hrm/onboardingprogram_form.html",
+                       success_url="hrm:onboardingprogram_list")
+
+
+@login_required
+def onboardingprogram_detail(request, pk):
+    obj = get_object_or_404(
+        OnboardingProgram.objects.select_related("employee__party", "buddy__party", "template"),
+        pk=pk, tenant=request.tenant)
+    tasks = list(obj.tasks.select_related("assignee").order_by("phase", "order", "due_date", "title"))
+    # Group tasks by phase, preserving the canonical PHASE_CHOICES order.
+    phase_labels = dict(PHASE_CHOICES)
+    grouped = {}
+    for t in tasks:
+        grouped.setdefault(t.phase, []).append(t)
+    tasks_by_phase = [{"phase": p, "label": phase_labels.get(p, p), "tasks": grouped[p]}
+                      for p, _ in PHASE_CHOICES if p in grouped]
+    return render(request, "hrm/onboardingprogram_detail.html", {
+        "obj": obj,
+        "progress": obj.progress,
+        "tasks_by_phase": tasks_by_phase,
+        "task_count": len(tasks),
+        "documents": obj.documents.order_by("document_type", "title"),
+        "assets": obj.assets.select_related("issued_by").order_by("-created_at"),
+        "sessions": obj.orientation_sessions.select_related("facilitator").order_by("scheduled_at"),
+        "today": timezone.localdate(),
+    })
+
+
+@login_required
+def onboardingprogram_edit(request, pk):
+    obj = get_object_or_404(OnboardingProgram, pk=pk, tenant=request.tenant)
+    if obj.status in ("completed", "cancelled"):
+        messages.error(request, "A completed or cancelled program cannot be edited.")
+        return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
+    return crud_edit(request, model=OnboardingProgram, pk=pk, form_class=OnboardingProgramForm,
+                     template="hrm/onboardingprogram_form.html",
+                     success_url="hrm:onboardingprogram_list")
+
+
+@login_required
+@require_POST
+def onboardingprogram_delete(request, pk):
+    obj = get_object_or_404(OnboardingProgram, pk=pk, tenant=request.tenant)
+    # Only a draft or cancelled program is deletable — an active/completed one has live records.
+    if obj.status not in ("draft", "cancelled"):
+        messages.error(request, "Only a draft or cancelled program can be deleted. Cancel it first.")
+        return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Onboarding program deleted.")
+    return redirect("hrm:onboardingprogram_list")
+
+
+@login_required
+@require_POST
+def onboardingprogram_activate(request, pk):
+    obj = get_object_or_404(OnboardingProgram, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        with transaction.atomic():
+            obj.status = "active"
+            obj.save(update_fields=["status", "updated_at"])
+            created = _generate_tasks_from_template(obj)
+        write_audit_log(request.user, obj, "update",
+                        {"action": "activate", "tasks_generated": created})
+        messages.success(request, f"Onboarding program {obj.number} activated"
+                         + (f" — {created} task(s) generated." if created else "."))
+    return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def onboardingprogram_generate_tasks(request, pk):
+    obj = get_object_or_404(OnboardingProgram, pk=pk, tenant=request.tenant)
+    if obj.status in ("draft", "active"):
+        if not obj.template_id:
+            messages.error(request, "This program has no template to generate tasks from.")
+        else:
+            created = _generate_tasks_from_template(obj)
+            write_audit_log(request.user, obj, "update",
+                            {"action": "generate_tasks", "tasks_generated": created})
+            if created:
+                messages.success(request, f"{created} task(s) generated from the template.")
+            else:
+                messages.info(request, "No new tasks — they were already generated.")
+    return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # closing out an onboarding is a privileged HR/admin action
+@require_POST
+def onboardingprogram_complete(request, pk):
+    obj = get_object_or_404(OnboardingProgram, pk=pk, tenant=request.tenant)
+    if obj.status == "active":
+        obj.status = "completed"
+        obj.completed_at = timezone.now()
+        obj.save(update_fields=["status", "completed_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, f"Onboarding program {obj.number} marked complete.")
+    return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # cancelling an onboarding is a privileged HR/admin action
+@require_POST
+def onboardingprogram_cancel(request, pk):
+    obj = get_object_or_404(OnboardingProgram, pk=pk, tenant=request.tenant)
+    if obj.status in ("draft", "active"):
+        obj.status = "cancelled"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "cancel"})
+        messages.success(request, f"Onboarding program {obj.number} cancelled.")
+    return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
+
+
+# ============================================================ Onboarding Tasks (3.3)
+@login_required
+def onboardingtask_list(request):
+    return crud_list(
+        request,
+        OnboardingTask.objects.filter(tenant=request.tenant)
+        .select_related("program__employee__party", "assignee"),
+        "hrm/onboardingtask_list.html",
+        search_fields=["title", "description", "assignee__username", "program__number"],
+        filters=[("program", "program_id", True), ("status", "status", False),
+                 ("phase", "phase", False), ("task_category", "task_category", False)],
+        extra_context={"status_choices": OnboardingTask.STATUS_CHOICES,
+                       "phase_choices": PHASE_CHOICES,
+                       "category_choices": TASK_CATEGORY_CHOICES,
+                       "programs": OnboardingProgram.objects.filter(tenant=request.tenant)
+                       .select_related("employee__party").order_by("-start_date")},
+        per_page=30,
+    )
+
+
+@login_required
+def onboardingtask_create(request):
+    return crud_create(request, form_class=OnboardingTaskForm,
+                       template="hrm/onboardingtask_form.html",
+                       success_url="hrm:onboardingtask_list")
+
+
+@login_required
+def onboardingtask_detail(request, pk):
+    obj = get_object_or_404(
+        OnboardingTask.objects.select_related("program__employee__party", "assignee", "completed_by"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/onboardingtask_detail.html", {"obj": obj, "today": timezone.localdate()})
+
+
+@login_required
+def onboardingtask_edit(request, pk):
+    obj = get_object_or_404(OnboardingTask, pk=pk, tenant=request.tenant)
+    if obj.status == "completed":
+        messages.error(request, "Reopen this task before editing it.")
+        return redirect("hrm:onboardingtask_detail", pk=obj.pk)
+    return crud_edit(request, model=OnboardingTask, pk=pk, form_class=OnboardingTaskForm,
+                     template="hrm/onboardingtask_form.html", success_url="hrm:onboardingtask_list")
+
+
+@login_required
+@require_POST
+def onboardingtask_delete(request, pk):
+    return crud_delete(request, model=OnboardingTask, pk=pk, success_url="hrm:onboardingtask_list")
+
+
+@login_required
+@require_POST
+def onboardingtask_complete(request, pk):
+    obj = get_object_or_404(OnboardingTask.objects.select_related("program"), pk=pk, tenant=request.tenant)
+    if obj.status != "completed":
+        obj.status = "completed"
+        obj.completed_at = timezone.now()
+        obj.completed_by = request.user
+        obj.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, f"Task '{obj.title}' marked complete.")
+    return redirect("hrm:onboardingprogram_detail", pk=obj.program_id)
+
+
+@login_required
+@require_POST
+def onboardingtask_reopen(request, pk):
+    obj = get_object_or_404(OnboardingTask.objects.select_related("program"), pk=pk, tenant=request.tenant)
+    if obj.status in ("completed", "skipped"):
+        obj.status = "pending"
+        obj.completed_at = None
+        obj.completed_by = None
+        obj.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reopen"})
+        messages.success(request, f"Task '{obj.title}' reopened.")
+    return redirect("hrm:onboardingprogram_detail", pk=obj.program_id)
+
+
+@login_required
+@require_POST
+def onboardingtask_skip(request, pk):
+    obj = get_object_or_404(OnboardingTask.objects.select_related("program"), pk=pk, tenant=request.tenant)
+    if obj.status in ("pending", "in_progress"):
+        obj.status = "skipped"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "skip"})
+        messages.success(request, f"Task '{obj.title}' skipped.")
+    return redirect("hrm:onboardingprogram_detail", pk=obj.program_id)
+
+
+# ============================================================ Onboarding Documents (3.3)
+@login_required
+def onboardingdocument_list(request):
+    return crud_list(
+        request,
+        OnboardingDocument.objects.filter(tenant=request.tenant)
+        .select_related("program__employee__party"),
+        "hrm/onboardingdocument_list.html",
+        search_fields=["title", "description", "external_ref", "program__number"],
+        filters=[("program", "program_id", True), ("document_type", "document_type", False),
+                 ("esign_status", "esign_status", False)],
+        extra_context={"type_choices": OnboardingDocument.DOCUMENT_TYPE_CHOICES,
+                       "esign_choices": OnboardingDocument.ESIGN_STATUS_CHOICES,
+                       "programs": OnboardingProgram.objects.filter(tenant=request.tenant)
+                       .select_related("employee__party").order_by("-start_date")},
+    )
+
+
+@login_required
+def onboardingdocument_create(request):
+    return crud_create(request, form_class=OnboardingDocumentForm,
+                       template="hrm/onboardingdocument_form.html",
+                       success_url="hrm:onboardingdocument_list")
+
+
+@login_required
+def onboardingdocument_detail(request, pk):
+    obj = get_object_or_404(
+        OnboardingDocument.objects.select_related("program__employee__party"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/onboardingdocument_detail.html", {"obj": obj})
+
+
+@login_required
+def onboardingdocument_edit(request, pk):
+    return crud_edit(request, model=OnboardingDocument, pk=pk, form_class=OnboardingDocumentForm,
+                     template="hrm/onboardingdocument_form.html",
+                     success_url="hrm:onboardingdocument_list")
+
+
+@login_required
+@require_POST
+def onboardingdocument_delete(request, pk):
+    return crud_delete(request, model=OnboardingDocument, pk=pk,
+                       success_url="hrm:onboardingdocument_list")
+
+
+@login_required
+@require_POST
+def onboardingdocument_mark_signed(request, pk):
+    obj = get_object_or_404(OnboardingDocument, pk=pk, tenant=request.tenant)
+    if obj.esign_status != "signed":
+        obj.esign_status = "signed"
+        obj.signed_at = timezone.now()
+        obj.save(update_fields=["esign_status", "signed_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_signed"})
+        messages.success(request, f"Document '{obj.title}' marked signed.")
+    return redirect("hrm:onboardingdocument_detail", pk=obj.pk)
+
+
+# ============================================================ Asset Allocations (3.3)
+@login_required
+def assetallocation_list(request):
+    return crud_list(
+        request,
+        AssetAllocation.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "program", "issued_by"),
+        "hrm/assetallocation_list.html",
+        search_fields=["number", "asset_name", "serial_number", "asset_tag"],
+        filters=[("employee", "employee_id", True), ("status", "status", False),
+                 ("asset_category", "asset_category", False)],
+        extra_context={"status_choices": AssetAllocation.STATUS_CHOICES,
+                       "category_choices": AssetAllocation.ASSET_CATEGORY_CHOICES,
+                       "employees": EmployeeProfile.objects.filter(tenant=request.tenant)
+                       .select_related("party").order_by("party__name")},
+    )
+
+
+@login_required
+def assetallocation_create(request):
+    return crud_create(request, form_class=AssetAllocationForm,
+                       template="hrm/assetallocation_form.html",
+                       success_url="hrm:assetallocation_list")
+
+
+@login_required
+def assetallocation_detail(request, pk):
+    obj = get_object_or_404(
+        AssetAllocation.objects.select_related("employee__party", "program", "issued_by"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/assetallocation_detail.html", {"obj": obj})
+
+
+@login_required
+def assetallocation_edit(request, pk):
+    return crud_edit(request, model=AssetAllocation, pk=pk, form_class=AssetAllocationForm,
+                     template="hrm/assetallocation_form.html", success_url="hrm:assetallocation_list")
+
+
+@login_required
+@require_POST
+def assetallocation_delete(request, pk):
+    obj = get_object_or_404(AssetAllocation, pk=pk, tenant=request.tenant)
+    # Guard: an issued asset should be returned before its allocation record is removed.
+    if obj.status == "issued":
+        messages.error(request, "Return this asset before deleting its allocation.")
+        return redirect("hrm:assetallocation_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Asset allocation deleted.")
+    return redirect("hrm:assetallocation_list")
+
+
+@login_required
+@require_POST
+def assetallocation_issue(request, pk):
+    obj = get_object_or_404(AssetAllocation, pk=pk, tenant=request.tenant)
+    if obj.status == "pending":
+        obj.status = "issued"
+        obj.issued_at = timezone.now()
+        obj.issued_by = request.user
+        obj.save(update_fields=["status", "issued_at", "issued_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "issue"})
+        messages.success(request, f"Asset {obj.number} issued.")
+    return redirect("hrm:assetallocation_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def assetallocation_return(request, pk):
+    obj = get_object_or_404(AssetAllocation, pk=pk, tenant=request.tenant)
+    if obj.status == "issued":
+        obj.status = "returned"
+        obj.returned_at = timezone.now()
+        obj.save(update_fields=["status", "returned_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "return"})
+        messages.success(request, f"Asset {obj.number} returned.")
+    return redirect("hrm:assetallocation_detail", pk=obj.pk)
+
+
+# ============================================================ Orientation Sessions (3.3)
+@login_required
+def orientationsession_list(request):
+    return crud_list(
+        request,
+        OrientationSession.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "program", "facilitator"),
+        "hrm/orientationsession_list.html",
+        search_fields=["title", "location", "facilitator__username", "facilitator_name"],
+        filters=[("employee", "employee_id", True), ("session_type", "session_type", False),
+                 ("attendance_status", "attendance_status", False)],
+        extra_context={"type_choices": OrientationSession.SESSION_TYPE_CHOICES,
+                       "attendance_choices": OrientationSession.ATTENDANCE_STATUS_CHOICES,
+                       "employees": EmployeeProfile.objects.filter(tenant=request.tenant)
+                       .select_related("party").order_by("party__name")},
+    )
+
+
+@login_required
+def orientationsession_create(request):
+    return crud_create(request, form_class=OrientationSessionForm,
+                       template="hrm/orientationsession_form.html",
+                       success_url="hrm:orientationsession_list")
+
+
+@login_required
+def orientationsession_detail(request, pk):
+    obj = get_object_or_404(
+        OrientationSession.objects.select_related("employee__party", "program", "facilitator"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/orientationsession_detail.html", {"obj": obj})
+
+
+@login_required
+def orientationsession_edit(request, pk):
+    return crud_edit(request, model=OrientationSession, pk=pk, form_class=OrientationSessionForm,
+                     template="hrm/orientationsession_form.html",
+                     success_url="hrm:orientationsession_list")
+
+
+@login_required
+@require_POST
+def orientationsession_delete(request, pk):
+    return crud_delete(request, model=OrientationSession, pk=pk,
+                       success_url="hrm:orientationsession_list")
+
+
+@login_required
+@require_POST
+def orientationsession_mark_attended(request, pk):
+    obj = get_object_or_404(OrientationSession, pk=pk, tenant=request.tenant)
+    obj.attendance_status = "attended"
+    obj.save(update_fields=["attendance_status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "mark_attended"})
+    messages.success(request, f"Session '{obj.title}' marked attended.")
+    return redirect("hrm:orientationsession_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def orientationsession_mark_missed(request, pk):
+    obj = get_object_or_404(OrientationSession, pk=pk, tenant=request.tenant)
+    obj.attendance_status = "missed"
+    obj.save(update_fields=["attendance_status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "mark_missed"})
+    messages.success(request, f"Session '{obj.title}' marked missed.")
+    return redirect("hrm:orientationsession_detail", pk=obj.pk)
