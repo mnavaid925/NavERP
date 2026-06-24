@@ -40,7 +40,7 @@
       <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Journal Entry</dt><dd>{% if obj.journal_entry %}<a href="{% url 'accounting:journal_entry_detail' obj.journal_entry.pk %}">{{ obj.journal_entry.number }}</a>{% else %}—{% endif %}</dd></div>
     </dl>
-    {% if obj.reference %}<p style="margin-top:1rem;">{{ obj.reference }}</p>{% endif %}
+    {% if obj.notes %}<p style="margin-top:1rem;"><strong>Notes:</strong> {{ obj.notes }}</p>{% endif %}
   </div></div>
 
   <div class="card">
