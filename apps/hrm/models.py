@@ -701,6 +701,16 @@ class OnboardingDocument(TenantOwned):
             models.Index(fields=["tenant", "program", "esign_status"], name="hrm_ond_tenant_prog_esign_idx"),
         ]
 
+    def save(self, *args, **kwargs):
+        # ``esign_status`` is workflow-owned (not a form field) — derive its open value from the
+        # ``esign_required`` toggle so it can't be hand-advanced via a crafted POST. A required doc
+        # enters the signing flow at ``pending``; an unrequired one is ``not_required``. The
+        # terminal ``signed`` (set by mark-signed) / ``declined`` states are never overwritten, and
+        # the e-sign-provider integration states (``sent``/``viewed``) are left untouched.
+        if self.esign_status not in ("signed", "declined", "sent", "viewed"):
+            self.esign_status = "pending" if self.esign_required else "not_required"
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.program} → {self.title}"
 
