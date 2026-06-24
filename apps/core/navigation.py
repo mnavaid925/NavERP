@@ -286,6 +286,7 @@ LIVE_LINKS = {
         "Orientation Schedule": "hrm:orientationsession_list",  # bullet
         "Welcome Kit": "hrm:onboardingprogram_list",            # bullet (welcome fields live on the program)
         "Onboarding Templates": "hrm:onboardingtemplate_list",  # extra (reusable checklist admin)
+        "Template Tasks": "hrm:onboardingtemplatetask_list",    # extra (cross-template task catalog)
     },
     # 3.9 Attendance Management
     "3.9": {
