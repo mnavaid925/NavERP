@@ -820,7 +820,7 @@ def onboardingprogram_detail(request, pk):
         "tasks_by_phase": tasks_by_phase,
         "task_count": len(tasks),
         "documents": obj.documents.order_by("document_type", "title"),
-        "assets": obj.assets.select_related("issued_by").order_by("-created_at"),
+        "assets": obj.assets.order_by("-created_at"),  # sub-table shows issued_at, not issued_by
         "sessions": obj.orientation_sessions.select_related("facilitator").order_by("scheduled_at"),
     })
 
@@ -919,7 +919,7 @@ def onboardingtask_list(request):
     return crud_list(
         request,
         OnboardingTask.objects.filter(tenant=request.tenant)
-        .select_related("program__employee__party", "assignee"),
+        .select_related("program", "assignee"),  # rows show program.number + assignee.username only
         "hrm/onboardingtask_list.html",
         search_fields=["title", "description", "assignee__username", "program__number"],
         filters=[("program", "program_id", True), ("status", "status", False),
@@ -1010,7 +1010,7 @@ def onboardingdocument_list(request):
     return crud_list(
         request,
         OnboardingDocument.objects.filter(tenant=request.tenant)
-        .select_related("program__employee__party"),
+        .select_related("program"),  # rows show program.number only
         "hrm/onboardingdocument_list.html",
         search_fields=["title", "description", "external_ref", "program__number"],
         filters=[("program", "program_id", True), ("document_type", "document_type", False),
