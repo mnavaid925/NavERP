@@ -2,12 +2,19 @@
 from django.contrib import admin
 
 from .models import (
+    AssetAllocation,
     AttendanceRecord,
     Designation,
     EmployeeProfile,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
+    OnboardingDocument,
+    OnboardingProgram,
+    OnboardingTask,
+    OnboardingTemplate,
+    OnboardingTemplateTask,
+    OrientationSession,
     PublicHoliday,
     Shift,
     ShiftAssignment,
@@ -90,3 +97,74 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     search_fields = ("number", "employee__party__name")
     readonly_fields = ("number", "hours_worked", "created_at", "updated_at")
     raw_id_fields = ("employee", "shift")
+
+
+# ----------------------------------------------------------------- 3.3 Employee Onboarding
+class OnboardingTemplateTaskInline(admin.TabularInline):
+    model = OnboardingTemplateTask
+    extra = 0
+    raw_id_fields = ()
+
+
+@admin.register(OnboardingTemplate)
+class OnboardingTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "designation", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+    raw_id_fields = ("designation",)
+    inlines = [OnboardingTemplateTaskInline]
+
+
+@admin.register(OnboardingTemplateTask)
+class OnboardingTemplateTaskAdmin(admin.ModelAdmin):
+    list_display = ("template", "title", "task_category", "assignee_role", "phase", "due_offset_days", "is_mandatory", "tenant")
+    list_filter = ("task_category", "assignee_role", "phase", "is_mandatory", "tenant")
+    search_fields = ("title", "template__name")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("template",)
+
+
+@admin.register(OnboardingProgram)
+class OnboardingProgramAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "start_date", "status", "buddy", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "employee__party__name")
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "template", "buddy")
+
+
+@admin.register(OnboardingTask)
+class OnboardingTaskAdmin(admin.ModelAdmin):
+    list_display = ("program", "title", "task_category", "phase", "status", "assignee", "due_date", "tenant")
+    list_filter = ("status", "phase", "task_category", "tenant")
+    search_fields = ("title", "program__number")
+    readonly_fields = ("completed_at", "completed_by", "created_at", "updated_at")
+    raw_id_fields = ("program", "assignee")
+
+
+@admin.register(OnboardingDocument)
+class OnboardingDocumentAdmin(admin.ModelAdmin):
+    list_display = ("program", "title", "document_type", "esign_required", "esign_status", "due_date", "tenant")
+    list_filter = ("document_type", "esign_status", "esign_required", "tenant")
+    search_fields = ("title", "program__number", "external_ref")
+    readonly_fields = ("signed_at", "created_at", "updated_at")
+    raw_id_fields = ("program",)
+
+
+@admin.register(AssetAllocation)
+class AssetAllocationAdmin(admin.ModelAdmin):
+    list_display = ("number", "asset_name", "asset_category", "employee", "status", "issued_at", "tenant")
+    list_filter = ("status", "asset_category", "tenant")
+    search_fields = ("number", "asset_name", "serial_number", "asset_tag", "employee__party__name")
+    readonly_fields = ("number", "returned_at", "created_at", "updated_at")
+    raw_id_fields = ("program", "employee", "issued_by")
+
+
+@admin.register(OrientationSession)
+class OrientationSessionAdmin(admin.ModelAdmin):
+    list_display = ("title", "session_type", "employee", "scheduled_at", "attendance_status", "facilitator", "tenant")
+    list_filter = ("session_type", "attendance_status", "tenant")
+    search_fields = ("title", "location", "employee__party__name", "facilitator_name")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("program", "employee", "facilitator")
