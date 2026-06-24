@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:onboardingtask_list' %}">Onboarding Tasks</a><span class="sep">›</span><span>{{ obj.title }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status != 'completed' %}
+        <form method="post" action="{% url 'hrm:onboardingtask_complete' obj.pk %}" onsubmit="return confirm('Mark this task as completed?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Complete</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'completed' or obj.status == 'skipped' %}
+        <form method="post" action="{% url 'hrm:onboardingtask_reopen' obj.pk %}" onsubmit="return confirm('Reopen this task?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Reopen</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'pending' or obj.status == 'in_progress' %}
+        <form method="post" action="{% url 'hrm:onboardingtask_skip' obj.pk %}" onsubmit="return confirm('Skip this task?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="skip-forward"></i> Skip</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'hrm:onboardingtask_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:onboardingtask_delete' obj.pk %}" onsubmit="return confirm('Delete this onboarding task?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Program</dt><dd><a href="{% url 'hrm:onboardingprogram_detail' obj.program.pk %}">{{ obj.program.number }}</a></dd></div>
+      <div class="detail-item"><dt>Title</dt><dd>{{ obj.title|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd><span class="badge badge-muted">{{ obj.get_task_category_display }}</span></dd></div>
+      <div class="detail-item"><dt>Phase</dt><dd><span class="badge badge-info">{{ obj.get_phase_display }}</span></dd></div>
+      <div class="detail-item"><dt>Assignee Role</dt><dd><span class="badge badge-muted">{{ obj.get_assignee_role_display }}</span></dd></div>
+      <div class="detail-item"><dt>Assignee</dt><dd>{{ obj.assignee.username|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Due Date</dt><dd>{% if obj.due_date %}{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.due_date }}</span>{% else %}{{ obj.due_date }}{% endif %}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'pending' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'completed' %}green{% elif obj.status == 'skipped' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Mandatory</dt><dd>{% if obj.is_mandatory %}<span class="badge badge-info">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Completed At</dt><dd>{{ obj.completed_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Completed By</dt><dd>{{ obj.completed_by.username|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Order</dt><dd>{{ obj.order|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:onboardingtask_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
