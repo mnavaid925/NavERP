@@ -85,10 +85,14 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   attendance actions reject `cancelled`. Task generation lives in **`apps/hrm/services.py`** (not views) so the
   seeder/tests can import it without the view layer.
 
-## Templates (`templates/hrm/`)
-49 files: `hrm_overview.html` + list/detail/form per model (incl. the 21 onboarding templates —
-`onboarding{template,templatetask,program,task,document}_*`, `assetallocation_*`, `orientationsession_*`; the
-`onboardingprogram_detail` is the rich multi-section hub, `onboardingdocument_form` is multipart). Extend
+## Templates (`templates/hrm/<submodule>/`)
+49 files, **one folder per sub-module** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — `list/detail/
+form`), `designation/` (3.2), `onboarding/` (3.3 — `template_*`, `templatetask_*`, `program_*` [the rich
+multi-section hub], `task_*`, `document_*` [`document_form` is multipart], `assetallocation_*`,
+`orientationsession_*`), `attendance/` (3.9 — `shift_*`, `shiftassignment_*`, `record_*`), `leave/` (3.10 —
+`type_*`, `allocation_*`, `request_*`), `holiday/` (3.12 — `publicholiday_*`). The landing `hrm_overview.html`
+stays at the `templates/hrm/` root. A view renders e.g. `"hrm/onboarding/document_list.html"`,
+`"hrm/leave/request_list.html"`, `"hrm/attendance/record_list.html"`. Extend
 `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
 selects pre-filled from `request.GET`; FK filters compare `obj.pk|stringformat:"d"`; boolean filters use
