@@ -8,7 +8,6 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
 from datetime import date as _date
-from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -24,6 +23,8 @@ from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list
 from apps.core.decorators import tenant_admin_required
 from apps.core.models import Employment, OrgUnit
 from apps.core.utils import write_audit_log
+
+from .services import generate_tasks_from_template
 
 from .forms import (
     AssetAllocationForm,
@@ -770,30 +771,6 @@ def onboardingtemplatetask_delete(request, pk):
 
 
 # ============================================================ Onboarding Programs (3.3)
-def _generate_tasks_from_template(program):
-    """Create concrete ``OnboardingTask`` rows from the program's template task lines, each with
-    ``due_date = program.start_date + due_offset_days``. Idempotent — ``get_or_create`` on the task
-    title means re-running never duplicates. Returns the count of newly-created tasks."""
-    if not program.template_id:
-        return 0
-    created = 0
-    for tt in program.template.template_tasks.order_by("phase", "order", "title"):
-        due = program.start_date + timedelta(days=tt.due_offset_days) if program.start_date else None
-        _, was_created = OnboardingTask.objects.get_or_create(
-            tenant=program.tenant, program=program, title=tt.title,
-            defaults={
-                "description": tt.description,
-                "task_category": tt.task_category,
-                "assignee_role": tt.assignee_role,
-                "due_date": due,
-                "phase": tt.phase,
-                "is_mandatory": tt.is_mandatory,
-                "order": tt.order,
-            })
-        created += 1 if was_created else 0
-    return created
-
-
 @login_required
 def onboardingprogram_list(request):
     return crud_list(
@@ -833,9 +810,13 @@ def onboardingprogram_detail(request, pk):
         grouped.setdefault(t.phase, []).append(t)
     tasks_by_phase = [{"phase": p, "label": phase_labels.get(p, p), "tasks": grouped[p]}
                       for p, _ in PHASE_CHOICES if p in grouped]
+    # Progress from the already-fetched list (matches OnboardingProgram.progress) — avoids the two
+    # extra COUNT queries the model property would run on a page that has the tasks in hand.
+    done = sum(1 for t in tasks if t.status in ("completed", "skipped"))
+    progress = int(round(done / len(tasks) * 100)) if tasks else 0
     return render(request, "hrm/onboardingprogram_detail.html", {
         "obj": obj,
-        "progress": obj.progress,
+        "progress": progress,
         "tasks_by_phase": tasks_by_phase,
         "task_count": len(tasks),
         "documents": obj.documents.order_by("document_type", "title"),
@@ -878,11 +859,14 @@ def onboardingprogram_activate(request, pk):
         with transaction.atomic():
             obj.status = "active"
             obj.save(update_fields=["status", "updated_at"])
-            created = _generate_tasks_from_template(obj)
+            created = generate_tasks_from_template(obj)
         write_audit_log(request.user, obj, "update",
                         {"action": "activate", "tasks_generated": created})
         messages.success(request, f"Onboarding program {obj.number} activated"
                          + (f" — {created} task(s) generated." if created else "."))
+        # A program with no template (and so no generated tasks) starts empty — nudge HR to add some.
+        if not created and not obj.template_id:
+            messages.warning(request, "No template attached — add onboarding tasks manually.")
     return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
 
 
@@ -894,7 +878,8 @@ def onboardingprogram_generate_tasks(request, pk):
         if not obj.template_id:
             messages.error(request, "This program has no template to generate tasks from.")
         else:
-            created = _generate_tasks_from_template(obj)
+            with transaction.atomic():
+                created = generate_tasks_from_template(obj)
             write_audit_log(request.user, obj, "update",
                             {"action": "generate_tasks", "tasks_generated": created})
             if created:
@@ -1070,7 +1055,10 @@ def onboardingdocument_delete(request, pk):
 @require_POST
 def onboardingdocument_mark_signed(request, pk):
     obj = get_object_or_404(OnboardingDocument, pk=pk, tenant=request.tenant)
-    if obj.esign_status != "signed":
+    # A document that needs no signature can't be "signed" — keeps the e-sign trail meaningful.
+    if obj.esign_status == "not_required":
+        messages.error(request, "This document does not require a signature.")
+    elif obj.esign_status != "signed":
         obj.esign_status = "signed"
         obj.signed_at = timezone.now()
         obj.save(update_fields=["esign_status", "signed_at", "updated_at"])
@@ -1210,10 +1198,14 @@ def orientationsession_delete(request, pk):
 @require_POST
 def orientationsession_mark_attended(request, pk):
     obj = get_object_or_404(OrientationSession, pk=pk, tenant=request.tenant)
-    obj.attendance_status = "attended"
-    obj.save(update_fields=["attendance_status", "updated_at"])
-    write_audit_log(request.user, obj, "update", {"action": "mark_attended"})
-    messages.success(request, f"Session '{obj.title}' marked attended.")
+    # A cancelled session is immutable — don't let attendance be back-filled onto it.
+    if obj.attendance_status == "cancelled":
+        messages.error(request, "A cancelled session cannot be marked attended.")
+    elif obj.attendance_status != "attended":
+        obj.attendance_status = "attended"
+        obj.save(update_fields=["attendance_status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_attended"})
+        messages.success(request, f"Session '{obj.title}' marked attended.")
     return redirect("hrm:orientationsession_detail", pk=obj.pk)
 
 
@@ -1221,8 +1213,11 @@ def orientationsession_mark_attended(request, pk):
 @require_POST
 def orientationsession_mark_missed(request, pk):
     obj = get_object_or_404(OrientationSession, pk=pk, tenant=request.tenant)
-    obj.attendance_status = "missed"
-    obj.save(update_fields=["attendance_status", "updated_at"])
-    write_audit_log(request.user, obj, "update", {"action": "mark_missed"})
-    messages.success(request, f"Session '{obj.title}' marked missed.")
+    if obj.attendance_status == "cancelled":
+        messages.error(request, "A cancelled session cannot be marked missed.")
+    elif obj.attendance_status != "missed":
+        obj.attendance_status = "missed"
+        obj.save(update_fields=["attendance_status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_missed"})
+        messages.success(request, f"Session '{obj.title}' marked missed.")
     return redirect("hrm:orientationsession_detail", pk=obj.pk)
