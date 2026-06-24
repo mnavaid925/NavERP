@@ -289,7 +289,7 @@ class Command(BaseCommand):
                               "phase": phase, "order": order, "is_mandatory": mand})
 
         # Canonical due-date logic (program.start_date + offset), reused so the seed matches the app.
-        from apps.hrm.views import _generate_tasks_from_template
+        from apps.hrm.services import generate_tasks_from_template
 
         # --- Program A: active, future start, with a buddy ---
         emp_a = employees[0]
@@ -301,7 +301,7 @@ class Command(BaseCommand):
             welcome_message=f"Welcome aboard, {first_a}! The whole team is excited to have you.",
             welcome_video_url="https://example.com/welcome",
             first_day_notes="Arrive at 9:30 AM and ask for HR at the front desk. Bring a photo ID.")
-        _generate_tasks_from_template(prog_a)
+        generate_tasks_from_template(prog_a)
 
         # --- Program B: completed, past start, a few tasks ticked off ---
         prog_b = None
@@ -314,7 +314,7 @@ class Command(BaseCommand):
                 completed_at=timezone.now(),
                 welcome_message=f"Welcome, {first_b}!",
                 first_day_notes="Orientation in Room 2 at 10 AM.")
-            _generate_tasks_from_template(prog_b)
+            generate_tasks_from_template(prog_b)
             for t in list(prog_b.tasks.order_by("phase", "order"))[:3]:
                 t.status = "completed"
                 t.completed_at = timezone.now()
