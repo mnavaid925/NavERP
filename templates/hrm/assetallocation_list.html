@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Asset Allocations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Asset Allocations</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Asset Allocations</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:assetallocation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Allocation</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search allocations…">
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="asset_category" class="form-select">
+            <option value="">All categories</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.asset_category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:assetallocation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Asset</th><th>Category</th><th>Employee</th><th>Serial</th><th>Status</th><th>Issued</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:assetallocation_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.asset_name }}</td>
+              <td><span class="badge badge-muted">{{ obj.get_asset_category_display }}</span></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.serial_number|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.status == 'pending' %}info{% elif obj.status == 'issued' %}green{% elif obj.status == 'returned' %}muted{% elif obj.status == 'lost' %}red{% elif obj.status == 'damaged' %}amber{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.issued_at|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:assetallocation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:assetallocation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if obj.status == 'pending' %}
+                    <form method="post" action="{% url 'hrm:assetallocation_issue' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Issue"><i data-lucide="package-check"></i></button></form>
+                  {% endif %}
+                  {% if obj.status == 'issued' %}
+                    <form method="post" action="{% url 'hrm:assetallocation_return' obj.pk %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Return"><i data-lucide="undo-2"></i></button></form>
+                  {% endif %}
+                  <form method="post" action="{% url 'hrm:assetallocation_delete' obj.pk %}" onsubmit="return confirm('Delete this asset allocation?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="laptop"></i><h3>No asset allocations found</h3><p>Allocate an asset to a new hire to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
