@@ -53,7 +53,7 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'hrm:designation_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
-              <td>{% if obj.job_grade %}<span class="badge badge-info">{{ obj.job_grade.name }}</span>{% elif obj.grade %}{{ obj.grade }}{% else %}—{% endif %}</td>
+              <td>{% if obj.job_grade %}<span class="badge badge-info">{{ obj.job_grade.name }}</span>{% elif obj.grade %}<span class="badge badge-muted">{{ obj.grade }}</span>{% else %}—{% endif %}</td>
               <td>{{ obj.department.name|default:"—" }}</td>
               <td>{{ obj.min_salary|default:"—" }} – {{ obj.max_salary|default:"—" }}</td>
               <td>{{ obj.budgeted_headcount|default:"—" }}</td>
