@@ -4889,4 +4889,32 @@ git add 'README.md'; git commit -m 'docs(readme): mark HRM 3.4 Employee Offboard
 - **Rehire-eligible flag** — `would_rejoin` on `ExitInterview` is the data source. A separate `rehire_eligible` field on `SeparationCase` and a "Rehire Pool" list view would surface this for future recruiting. Deferred to the ATS pass (3.5–3.8).
 
 ## Review notes
-(filled in after delivery)
+**Delivered 2026-06-25.** Built all 4 models (`SeparationCase`/`ExitInterview`/`ClearanceItem`/`FinalSettlement`),
+services (`generate_clearance_checklist`, `compute_leave_encashment`), forms, full CRUD + 14 workflow actions, 14
+templates under `templates/hrm/offboarding/`, `LIVE_LINKS["3.4"]`, migrations 0004–0006, and an idempotent
+`_seed_offboarding`. `manage.py check` clean; smoke + full lifecycle verified; **169 new tests, 603 HRM / 1665
+project-wide passing**.
+
+Ran the full review-agent sequence (one at a time, committed between each):
+- **code-reviewer** — fixed: persist recomputed `expected_last_working_day` on `update_fields` saves; corrected the
+  inverted `clearanceitem_reject` guard (pending/in_progress only); guard asset-return to the case employee; audit
+  approve inside the txn + audit the case→settled transition; `_RATING_VALIDATORS` → tuple. (Kept draft→hr_approve
+  initially; later tightened — see security.)
+- **explorer** — dropped the unreachable `"approved"` status choice + its dead badge branches; removed a dead
+  `rating_fields` context key; fixed the clearance breadcrumb to use `department_display`.
+- **frontend-reviewer** — added `.text-right` utility; moved the net-payable stat-card into a `stat-grid` (no
+  card-in-card); fixed csrf-before-button; removed the reasonless quick-Reject footgun; `aria-disabled` on the
+  gated Mark-Cleared; dropped unused `{% load static %}`; added a case filter to the clearance list.
+- **performance-reviewer** — `compute_leave_encashment` now a single correlated subquery (was 1+K); added
+  `(tenant, department)` and `(tenant, mode)` filter indexes.
+- **qa-smoke-tester** — 63/63 checks pass, no bugs.
+- **security-reviewer** — gated clearance mark-cleared/na + exit-interview complete/skip with
+  `@tenant_admin_required`; `finalsettlement_hr_approve` now requires `computed`. (Resignation-letter `/media/`
+  exposure is the pre-existing project-wide pattern — production mitigation documented.)
+- **test-writer** — 169 tests covering model invariants, services, full lifecycle, cross-tenant IDOR (404),
+  admin-gate (403), and form workflow-field exclusion.
+
+Then updated `.claude/skills/hrm/SKILL.md` and `README.md`. **Deferred** (see the Deferred section above): live GL
+posting (`gl_posted` stub), PDF/email letters, dynamic questionnaire builder, per-asset clearance auto-gen,
+itemized FnF + statutory components, attrition analytics, no-dues certificate, rehire pool, per-department
+clearance roles.
