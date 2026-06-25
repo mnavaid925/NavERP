@@ -18,6 +18,31 @@ urlpatterns = [
     path("designations/<int:pk>/edit/", views.designation_edit, name="designation_edit"),
     path("designations/<int:pk>/delete/", views.designation_delete, name="designation_delete"),
 
+    # Job Grades (3.2)
+    path("job-grades/", views.jobgrade_list, name="jobgrade_list"),
+    path("job-grades/add/", views.jobgrade_create, name="jobgrade_create"),
+    path("job-grades/<int:pk>/", views.jobgrade_detail, name="jobgrade_detail"),
+    path("job-grades/<int:pk>/edit/", views.jobgrade_edit, name="jobgrade_edit"),
+    path("job-grades/<int:pk>/delete/", views.jobgrade_delete, name="jobgrade_delete"),
+
+    # Departments (3.2 — core.OrgUnit companion)
+    path("departments/", views.department_list, name="department_list"),
+    path("departments/add/", views.department_create, name="department_create"),
+    path("departments/<int:pk>/", views.department_detail, name="department_detail"),
+    path("departments/<int:pk>/edit/", views.department_edit, name="department_edit"),
+    path("departments/<int:pk>/delete/", views.department_delete, name="department_delete"),
+
+    # Cost Centers (3.2 — core.OrgUnit companion)
+    path("cost-centers/", views.costcenter_list, name="costcenter_list"),
+    path("cost-centers/add/", views.costcenter_create, name="costcenter_create"),
+    path("cost-centers/<int:pk>/", views.costcenter_detail, name="costcenter_detail"),
+    path("cost-centers/<int:pk>/edit/", views.costcenter_edit, name="costcenter_edit"),
+    path("cost-centers/<int:pk>/delete/", views.costcenter_delete, name="costcenter_delete"),
+
+    # Org Chart & Company Setup (3.2 — derived, no model)
+    path("org-chart/", views.org_chart, name="org_chart"),
+    path("company-setup/", views.company_setup, name="company_setup"),
+
     # Employees (3.1)
     path("employees/", views.employee_list, name="employee_list"),
     path("employees/add/", views.employee_create, name="employee_create"),
