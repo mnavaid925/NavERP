@@ -323,10 +323,22 @@ class EmployeeProfile(TenantNumbered):
     def name(self):
         return self.party.name if self.party_id else ""
 
+    @staticmethod
+    def _mask_last4(value):
+        v = value or ""
+        return f"••••{v[-4:]}" if len(v) >= 4 else ("••••" if v else "")
+
     def masked_bank_account(self):
         """Last-4 view of the account number (never render the full value)."""
-        acct = self.bank_account or ""
-        return f"••••{acct[-4:]}" if len(acct) >= 4 else ("••••" if acct else "")
+        return self._mask_last4(self.bank_account)
+
+    def masked_national_id(self):
+        """Last-4 view of the national ID (sensitive PII — never render the full value)."""
+        return self._mask_last4(self.national_id)
+
+    def masked_passport_number(self):
+        """Last-4 view of the passport number (sensitive PII — never render the full value)."""
+        return self._mask_last4(self.passport_number)
 
     def __str__(self):
         return f"{self.number} · {self.party.name}" if self.party_id else self.number
