@@ -4,8 +4,11 @@ from django.contrib import admin
 from .models import (
     AssetAllocation,
     AttendanceRecord,
+    ClearanceItem,
     Designation,
     EmployeeProfile,
+    ExitInterview,
+    FinalSettlement,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -16,6 +19,7 @@ from .models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    SeparationCase,
     Shift,
     ShiftAssignment,
 )
@@ -168,3 +172,49 @@ class OrientationSessionAdmin(admin.ModelAdmin):
     search_fields = ("title", "location", "employee__party__name", "facilitator_name")
     readonly_fields = ("created_at", "updated_at")
     raw_id_fields = ("program", "employee", "facilitator")
+
+
+# ----------------------------------------------------------------- 3.4 Employee Offboarding
+@admin.register(SeparationCase)
+class SeparationCaseAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "separation_type", "status", "expected_last_working_day",
+                    "actual_last_working_day", "tenant")
+    list_filter = ("status", "separation_type", "tenant")
+    search_fields = ("number", "employee__party__name")
+    readonly_fields = ("number", "submitted_at", "expected_last_working_day", "approver",
+                       "approved_at", "relieving_letter_generated_at", "relieving_letter_generated_by",
+                       "experience_letter_generated_at", "experience_letter_generated_by",
+                       "created_at", "updated_at")
+    raw_id_fields = ("employee", "approver")
+
+
+@admin.register(ExitInterview)
+class ExitInterviewAdmin(admin.ModelAdmin):
+    list_display = ("number", "case", "mode", "status", "scheduled_at", "interviewer", "tenant")
+    list_filter = ("status", "mode", "tenant")
+    search_fields = ("number", "case__number", "case__employee__party__name")
+    readonly_fields = ("number", "status", "conducted_at", "created_at", "updated_at")
+    raw_id_fields = ("case", "interviewer")
+
+
+@admin.register(ClearanceItem)
+class ClearanceItemAdmin(admin.ModelAdmin):
+    list_display = ("case", "department", "description", "is_mandatory", "status", "cleared_at", "tenant")
+    list_filter = ("status", "department", "is_mandatory", "tenant")
+    search_fields = ("description", "case__number", "case__employee__party__name")
+    readonly_fields = ("status", "cleared_by", "cleared_at", "created_at", "updated_at")
+    raw_id_fields = ("case", "assigned_to", "cleared_by", "asset_allocation")
+
+
+@admin.register(FinalSettlement)
+class FinalSettlementAdmin(admin.ModelAdmin):
+    list_display = ("number", "case", "status", "net_payable_display", "paid_at", "tenant")
+    list_filter = ("status", "gl_posted", "tenant")
+    search_fields = ("number", "case__number", "case__employee__party__name")
+    readonly_fields = ("number", "status", "hr_approved_by", "hr_approved_at", "finance_approved_by",
+                       "finance_approved_at", "paid_at", "gl_posted", "created_at", "updated_at")
+    raw_id_fields = ("case", "hr_approved_by", "finance_approved_by")
+
+    @admin.display(description="Net Payable")
+    def net_payable_display(self, obj):
+        return obj.net_payable
