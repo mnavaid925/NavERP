@@ -273,10 +273,16 @@ LIVE_LINKS = {
         "Employment Details": "hrm:employee_list",        # bullet (job/dept/manager on the profile)
         "HRM Overview": "hrm:hrm_overview",               # extra (module landing/dashboard)
     },
-    # 3.2 Organizational Structure — Designations are HRM-owned; departments reuse core.OrgUnit.
+    # 3.2 Organizational Structure — rebuilt with the full entity set. Departments/cost-centers are
+    # canonical core.OrgUnit nodes enriched by HRM companion profiles (head/owner/budget/code);
+    # the org chart is derived from Employment.manager; Company Setup reads OrgUnit + branding.
     "3.2": {
-        "Designation/Job Titles": "hrm:designation_list",  # bullet
-        "Department Management": "core:orgunit_list",      # bullet (OrgUnit reuse)
+        "Company Setup": "hrm:company_setup",              # bullet (company OrgUnit + branding)
+        "Department Management": "hrm:department_list",    # bullet (OrgUnit + HRM dept profile/head)
+        "Designation/Job Titles": "hrm:designation_list",  # bullet (job grade + salary band + JD)
+        "Organization Chart": "hrm:org_chart",             # bullet (reporting-line / by-department)
+        "Cost Centers": "hrm:costcenter_list",             # bullet (budget allocation + owner)
+        "Job Grades": "hrm:jobgrade_list",                 # extra (grade catalog for designations)
     },
     # 3.3 Employee Onboarding — template→program→task model; Welcome Kit fields live on the program.
     "3.3": {
