@@ -157,7 +157,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Employee Documents</h2>
-      <div>
+      <div class="page-actions">
         <a href="{% url 'hrm:employee_document_create' %}?employee={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add Document</a>
         <a href="{% url 'hrm:employee_document_list' %}?employee={{ obj.pk }}" class="btn btn-outline">View All</a>
       </div>
@@ -187,7 +187,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Employment Lifecycle</h2>
-      <div>
+      <div class="page-actions">
         <a href="{% url 'hrm:employee_lifecycle_create' %}?employee={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add Event</a>
         <a href="{% url 'hrm:employee_lifecycle_list' %}?employee={{ obj.pk }}" class="btn btn-outline">View Full Timeline</a>
       </div>
@@ -199,7 +199,7 @@
           {% for ev in lifecycle_events %}
             <tr>
               <td>{{ ev.effective_date }}</td>
-              <td><span class="badge badge-{% if ev.event_type == 'hire' %}green{% elif ev.event_type == 'promotion' %}info{% elif ev.event_type == 'demotion' %}red{% elif ev.event_type == 'separation' %}slate{% elif ev.event_type == 'salary_revision' %}amber{% else %}muted{% endif %}">{{ ev.get_event_type_display }}</span></td>
+              <td><span class="badge badge-{% if ev.event_type == 'hire' or ev.event_type == 'confirmation' or ev.event_type == 'reinstatement' %}green{% elif ev.event_type == 'promotion' or ev.event_type == 'transfer' or ev.event_type == 'contract_renewal' %}info{% elif ev.event_type == 'salary_revision' or ev.event_type == 're_designation' or ev.event_type == 'location_change' or ev.event_type == 'reporting_change' %}amber{% elif ev.event_type == 'demotion' or ev.event_type == 'suspension' %}red{% elif ev.event_type == 'separation' %}slate{% else %}muted{% endif %}">{{ ev.get_event_type_display }}</span></td>
               <td>{% if ev.from_designation or ev.to_designation %}{{ ev.from_designation.name|default:"—" }} → {{ ev.to_designation.name|default:"—" }}{% elif ev.from_location or ev.to_location %}{{ ev.from_location|default:"—" }} → {{ ev.to_location|default:"—" }}{% elif ev.from_salary or ev.to_salary %}{{ ev.from_salary|default:"—" }} → {{ ev.to_salary|default:"—" }}{% else %}—{% endif %}</td>
               <td>{{ ev.reason|truncatechars:50|default:"—" }}</td>
               <td><div class="table-actions"><a href="{% url 'hrm:employee_lifecycle_detail' ev.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
