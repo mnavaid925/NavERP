@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="badge badge-slate">L{{ obj.level_order }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:jobgrade_list' %}">Job Grades</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:jobgrade_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:jobgrade_delete' obj.pk %}" onsubmit="return confirm('Delete this job grade?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"{% if designation_count %} disabled title="In use by {{ designation_count }} designation(s)"{% endif %}><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Level Order</dt><dd>{{ obj.level_order }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+    </dl>
+    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.description }}</p></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Designations at this grade ({{ designation_count }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Department</th><th>Salary Band</th></tr></thead>
+        <tbody>
+          {% for d in designations %}
+            <tr>
+              <td><a href="{% url 'hrm:designation_detail' d.pk %}" class="fw-600">{{ d.name }}</a></td>
+              <td>{{ d.department.name|default:"—" }}</td>
+              <td>{{ d.min_salary|default:"—" }} – {{ d.max_salary|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="briefcase"></i><p>No designations use this grade yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:jobgrade_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
