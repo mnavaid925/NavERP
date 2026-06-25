@@ -6,6 +6,8 @@ the view layer (a layering violation). Pure model logic only; no request/respons
 from datetime import timedelta
 from decimal import Decimal
 
+from django.db.models import DecimalField, OuterRef, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import (
@@ -13,6 +15,7 @@ from .models import (
     AssetAllocation,
     ClearanceItem,
     LeaveAllocation,
+    LeaveRequest,
     OnboardingTask,
 )
 
@@ -105,14 +108,25 @@ def compute_leave_encashment(employee):
     salary-structure sub-module (3.13) lands.
     """
     year = timezone.localdate().year
+    # Push the per-allocation "approved days used" aggregate into one correlated subquery so the whole
+    # computation is a single SQL pass (mirrors hrm.views._used_days_subquery; inlined here to avoid a
+    # services->views import). Using ``alloc.balance`` in the loop would instead fire one aggregate per
+    # encashable allocation (N+1).
+    _dec = DecimalField(max_digits=7, decimal_places=2)
+    used_subq = (LeaveRequest.objects
+                 .filter(tenant=OuterRef("tenant"), employee=OuterRef("employee"),
+                         leave_type=OuterRef("leave_type"), status="approved",
+                         start_date__year=OuterRef("year"))
+                 .values("employee").annotate(s=Sum("days")).values("s"))
     allocations = (LeaveAllocation.objects
                    .filter(tenant=employee.tenant, employee=employee, year=year,
                            status="active", leave_type__encashable=True)
-                   .select_related("leave_type"))
+                   .annotate(used_db=Coalesce(Subquery(used_subq, output_field=_dec),
+                                              Decimal("0"), output_field=_dec)))
     days = ZERO
     for alloc in allocations:
-        bal = alloc.balance  # derived (allocated − used); only positive balances are encashed
-        if bal and bal > ZERO:
+        bal = (alloc.allocated_days or ZERO) - alloc.used_db  # only positive balances are encashed
+        if bal > ZERO:
             days += bal
     basic_salary = ZERO
     if employee.designation_id and employee.designation and employee.designation.min_salary:
