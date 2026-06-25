@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Company Setup{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Company Setup</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Organizational Structure</span><span class="sep">›</span><span>Company Setup</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:orgunit_list' %}" class="btn btn-outline"><i data-lucide="sitemap"></i> Manage Org Units</a>
+      <a href="{% url 'tenants:brandingsetting_list' %}" class="btn btn-primary"><i data-lucide="palette"></i> Edit Branding</a>
+    </div>
+  </div>
+
+  <div class="stat-cards" style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+    <div class="stat-card"><div class="stat-label">Departments</div><div class="stat-value">{{ departments }}</div></div>
+    <div class="stat-card"><div class="stat-label">Cost Centers</div><div class="stat-value">{{ cost_centers }}</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Company</h2></div>
+    <div class="card-body">
+      {% if company_unit %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Company Name</dt><dd>{{ company_unit.name }}</dd></div>
+          <div class="detail-item"><dt>Kind</dt><dd>{{ company_unit.get_kind_display }}</dd></div>
+          <div class="detail-item"><dt>Parent</dt><dd>{{ company_unit.parent.name|default:"—" }}</dd></div>
+        </dl>
+      {% else %}
+        <div class="empty-state"><i data-lucide="building"></i><p>No company org unit found. Create one (kind "company") in <a href="{% url 'core:orgunit_list' %}">Org Units</a>.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Branding</h2></div>
+    <div class="card-body">
+      {% if branding %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Logo</dt><dd>{% if branding.logo %}<img src="{{ branding.logo.url }}" alt="Logo" style="max-height:48px;">{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Primary Color</dt><dd><span class="badge" style="background:{{ branding.primary_color }}; color:#fff;">{{ branding.primary_color }}</span></dd></div>
+          <div class="detail-item"><dt>Accent Color</dt><dd><span class="badge" style="background:{{ branding.accent_color }}; color:#fff;">{{ branding.accent_color }}</span></dd></div>
+          <div class="detail-item"><dt>Email From</dt><dd>{{ branding.email_from_name|default:"—" }}</dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">Branding is managed in the Tenants module. <a href="{% url 'tenants:brandingsetting_list' %}">Edit branding →</a></p>
+      {% else %}
+        <div class="empty-state"><i data-lucide="palette"></i><p>No branding configured. Set it up in <a href="{% url 'tenants:brandingsetting_list' %}">Tenant Branding</a>.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
