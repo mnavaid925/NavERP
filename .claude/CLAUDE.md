@@ -244,7 +244,9 @@ Templates MUST be organized **one folder per sub-module, then one folder per ent
    sub-module folder (the old `clearanceitem_detail.html` shape is banned).
 
 2. **Two folder levels: sub-module → entity.** The sub-module folder uses a short slug (e.g. HRM:
-   `employee/ designation/ onboarding/ offboarding/ attendance/ leave/ holiday/`; Accounting:
+   `employee/ organization/ onboarding/ offboarding/ attendance/ leave/ holiday/` — 3.2 is the multi-entity
+   `organization/` folder: `organization/designation/ organization/jobgrade/ organization/department/
+   organization/costcenter/`; Accounting:
    `ledger/ payable/ receivable/ cash/ assets/ costing/ payroll/ projects/ intercompany/ tax/ reports/ budget/
    audit/ integration/`; CRM: `directory/ sales/ marketing/ service/ activities/ finance/ projects/ documents/
    workflow/ success/ vendor/`). **Inside it, each model/entity gets its own folder** (`offboarding/separationcase/`,
@@ -252,10 +254,12 @@ Templates MUST be organized **one folder per sub-module, then one folder per ent
    `list.html` / `detail.html` / `form.html`.
 
 3. **Single-entity sub-modules: the sub-module folder doubles as the entity folder** — do NOT double-nest. When a
-   sub-module owns one main entity whose slug equals the folder (e.g. HRM `designation`, `employee`; Accounting
-   `budget`, `integration`, `intercompany`), keep `designation/list.html`, `employee/form.html`, `budget/detail.html`
-   — NOT `designation/designation/list.html`. A child entity added later still gets its own folder under the
-   sub-module (e.g. `budget/line/form.html` alongside the page-only `budget/list.html`).
+   sub-module owns one main entity whose slug equals the folder (e.g. HRM `employee`; Accounting
+   `budget`, `integration`, `intercompany`), keep `employee/form.html`, `budget/detail.html`
+   — NOT `employee/employee/list.html`. A child entity added later still gets its own folder under the
+   sub-module (e.g. `budget/line/form.html` alongside the page-only `budget/list.html`). (When a single-entity
+   sub-module later grows to multiple entities it graduates to the rule-2 two-level form — e.g. HRM 3.2 moved from
+   the flat `designation/` to `organization/designation/ organization/jobgrade/ …`.)
 
 4. **Foundation apps (Module 0: core / accounts / tenants / dashboard) are flat — no sub-module level**, so the
    entity folder sits at the app root: `templates/core/party/list.html`, `templates/accounts/user/form.html`,
