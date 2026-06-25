@@ -45,7 +45,7 @@ KEY_REVEAL_SESSION = "_key_reveal"
 def subscription_list(request):
     return crud_list(
         request, Subscription.objects.filter(tenant=request.tenant),
-        "tenants/subscription_list.html",
+        "tenants/subscription/list.html",
         search_fields=["plan", "status"],
         filters=[("status", "status", False), ("plan", "plan", False)],
         extra_context={"status_choices": Subscription.STATUS_CHOICES,
@@ -56,14 +56,14 @@ def subscription_list(request):
 
 @tenant_admin_required
 def subscription_create(request):
-    return crud_create(request, form_class=SubscriptionForm, template="tenants/subscription_form.html",
+    return crud_create(request, form_class=SubscriptionForm, template="tenants/subscription/form.html",
                        success_url="tenants:subscription_list")
 
 
 @tenant_admin_required
 def subscription_detail(request, pk):
     obj = get_object_or_404(Subscription, pk=pk, tenant=request.tenant)
-    return render(request, "tenants/subscription_detail.html", {
+    return render(request, "tenants/subscription/detail.html", {
         "obj": obj,
         "invoices": obj.invoices.order_by("-issued_on")[:50],  # cap embedded list
         "stripe_enabled": stripe_utils.is_enabled(),
@@ -73,7 +73,7 @@ def subscription_detail(request, pk):
 @tenant_admin_required
 def subscription_edit(request, pk):
     return crud_edit(request, model=Subscription, pk=pk, form_class=SubscriptionForm,
-                     template="tenants/subscription_form.html", success_url="tenants:subscription_list")
+                     template="tenants/subscription/form.html", success_url="tenants:subscription_list")
 
 
 @tenant_admin_required
@@ -194,7 +194,7 @@ def stripe_webhook(request):
 def subscriptioninvoice_list(request):
     return crud_list(
         request, SubscriptionInvoice.objects.filter(tenant=request.tenant).select_related("subscription"),
-        "tenants/subscriptioninvoice_list.html",
+        "tenants/subscriptioninvoice/list.html",
         search_fields=["number"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": SubscriptionInvoice.STATUS_CHOICES},
@@ -204,7 +204,7 @@ def subscriptioninvoice_list(request):
 @tenant_admin_required
 def subscriptioninvoice_create(request):
     return crud_create(request, form_class=SubscriptionInvoiceForm,
-                       template="tenants/subscriptioninvoice_form.html",
+                       template="tenants/subscriptioninvoice/form.html",
                        success_url="tenants:subscriptioninvoice_list")
 
 
@@ -212,13 +212,13 @@ def subscriptioninvoice_create(request):
 def subscriptioninvoice_detail(request, pk):
     obj = get_object_or_404(SubscriptionInvoice.objects.select_related("subscription"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "tenants/subscriptioninvoice_detail.html", {"obj": obj})
+    return render(request, "tenants/subscriptioninvoice/detail.html", {"obj": obj})
 
 
 @tenant_admin_required
 def subscriptioninvoice_edit(request, pk):
     return crud_edit(request, model=SubscriptionInvoice, pk=pk, form_class=SubscriptionInvoiceForm,
-                     template="tenants/subscriptioninvoice_form.html",
+                     template="tenants/subscriptioninvoice/form.html",
                      success_url="tenants:subscriptioninvoice_list")
 
 
@@ -234,7 +234,7 @@ def subscriptioninvoice_delete(request, pk):
 def brandingsetting_list(request):
     return crud_list(
         request, BrandingSetting.objects.filter(tenant=request.tenant),
-        "tenants/brandingsetting_list.html", search_fields=["email_from_name"],
+        "tenants/brandingsetting/list.html", search_fields=["email_from_name"],
     )
 
 
@@ -244,20 +244,20 @@ def brandingsetting_create(request):
     if existing:  # OneToOne — edit the existing record instead of failing on the unique constraint
         return redirect("tenants:brandingsetting_edit", pk=existing.pk)
     return crud_create(request, form_class=BrandingSettingForm,
-                       template="tenants/brandingsetting_form.html",
+                       template="tenants/brandingsetting/form.html",
                        success_url="tenants:brandingsetting_list")
 
 
 @tenant_admin_required
 def brandingsetting_detail(request, pk):
     obj = get_object_or_404(BrandingSetting, pk=pk, tenant=request.tenant)
-    return render(request, "tenants/brandingsetting_detail.html", {"obj": obj})
+    return render(request, "tenants/brandingsetting/detail.html", {"obj": obj})
 
 
 @tenant_admin_required
 def brandingsetting_edit(request, pk):
     return crud_edit(request, model=BrandingSetting, pk=pk, form_class=BrandingSettingForm,
-                     template="tenants/brandingsetting_form.html",
+                     template="tenants/brandingsetting/form.html",
                      success_url="tenants:brandingsetting_list")
 
 
@@ -272,7 +272,7 @@ def brandingsetting_delete(request, pk):
 def encryptionkey_list(request):
     return crud_list(
         request, EncryptionKey.objects.filter(tenant=request.tenant),
-        "tenants/encryptionkey_list.html",
+        "tenants/encryptionkey/list.html",
         search_fields=["name", "prefix"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": EncryptionKey.STATUS_CHOICES},
@@ -296,7 +296,7 @@ def encryptionkey_create(request):
             return redirect("tenants:encryptionkey_detail", pk=key.pk)
     else:
         form = EncryptionKeyForm(tenant=request.tenant)
-    return render(request, "tenants/encryptionkey_form.html", {"form": form, "is_edit": False})
+    return render(request, "tenants/encryptionkey/form.html", {"form": form, "is_edit": False})
 
 
 @tenant_admin_required
@@ -304,14 +304,14 @@ def encryptionkey_detail(request, pk):
     obj = get_object_or_404(EncryptionKey, pk=pk, tenant=request.tenant)
     reveal = request.session.pop(KEY_REVEAL_SESSION, None)
     plaintext_once = reveal["secret"] if reveal and reveal.get("pk") == obj.pk else None
-    return render(request, "tenants/encryptionkey_detail.html",
+    return render(request, "tenants/encryptionkey/detail.html",
                   {"obj": obj, "plaintext_once": plaintext_once})
 
 
 @tenant_admin_required
 def encryptionkey_edit(request, pk):
     return crud_edit(request, model=EncryptionKey, pk=pk, form_class=EncryptionKeyForm,
-                     template="tenants/encryptionkey_form.html",
+                     template="tenants/encryptionkey/form.html",
                      success_url="tenants:encryptionkey_list")
 
 
@@ -341,7 +341,7 @@ def encryptionkey_delete(request, pk):
 def healthmetric_list(request):
     return crud_list(
         request, HealthMetric.objects.filter(tenant=request.tenant),
-        "tenants/healthmetric_list.html",
+        "tenants/healthmetric/list.html",
         search_fields=["metric"],
         filters=[("metric", "metric", False), ("status", "status", False)],
         extra_context={"metric_choices": HealthMetric.METRIC_CHOICES,
@@ -351,20 +351,20 @@ def healthmetric_list(request):
 
 @tenant_admin_required
 def healthmetric_create(request):
-    return crud_create(request, form_class=HealthMetricForm, template="tenants/healthmetric_form.html",
+    return crud_create(request, form_class=HealthMetricForm, template="tenants/healthmetric/form.html",
                        success_url="tenants:healthmetric_list")
 
 
 @tenant_admin_required
 def healthmetric_detail(request, pk):
     obj = get_object_or_404(HealthMetric, pk=pk, tenant=request.tenant)
-    return render(request, "tenants/healthmetric_detail.html", {"obj": obj})
+    return render(request, "tenants/healthmetric/detail.html", {"obj": obj})
 
 
 @tenant_admin_required
 def healthmetric_edit(request, pk):
     return crud_edit(request, model=HealthMetric, pk=pk, form_class=HealthMetricForm,
-                     template="tenants/healthmetric_form.html", success_url="tenants:healthmetric_list")
+                     template="tenants/healthmetric/form.html", success_url="tenants:healthmetric_list")
 
 
 @tenant_admin_required
