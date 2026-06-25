@@ -18,7 +18,7 @@
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
       <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
-      <div class="detail-item"><dt>Job Grade</dt><dd>{% if obj.job_grade %}<a href="{% url 'hrm:jobgrade_detail' obj.job_grade.pk %}"><span class="badge badge-info">{{ obj.job_grade.name }}</span></a>{% elif obj.grade %}{{ obj.grade }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Job Grade</dt><dd>{% if obj.job_grade %}<a href="{% url 'hrm:jobgrade_detail' obj.job_grade.pk %}"><span class="badge badge-info">{{ obj.job_grade.name }}</span></a>{% elif obj.grade %}<span class="badge badge-muted">{{ obj.grade }}</span>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Department</dt><dd>{{ obj.department.name|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Min Salary</dt><dd>{{ obj.min_salary|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Mid Salary</dt><dd>{{ obj.mid_salary|default:"—" }}</dd></div>
@@ -28,8 +28,8 @@
       <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
     </dl>
-    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Job Description</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.description }}</p></div>{% endif %}
-    {% if obj.requirements %}<div style="margin-top:1rem;"><h3 class="card-title">Requirements</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.requirements }}</p></div>{% endif %}
+    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Job Description</h3><p class="text-muted" style="white-space:pre-line; overflow-wrap:break-word;">{{ obj.description }}</p></div>{% endif %}
+    {% if obj.requirements %}<div style="margin-top:1rem;"><h3 class="card-title">Requirements</h3><p class="text-muted" style="white-space:pre-line; overflow-wrap:break-word;">{{ obj.requirements }}</p></div>{% endif %}
   </div></div>
 
   <div class="card">
