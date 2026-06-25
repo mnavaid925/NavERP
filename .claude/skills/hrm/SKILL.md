@@ -17,7 +17,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 20 tables (9 core HRM + 7 onboarding + 4 offboarding)
+## Models (`apps/hrm/models.py`) — 23 tables (12 core HRM + 7 onboarding + 4 offboarding)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -25,7 +25,10 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 
 | Model | Number | Key fields | Reuses core / notes |
 |-------|--------|-----------|---------------------|
-| `Designation` | — | name, grade, department→`core.OrgUnit`, min/max_salary, is_active | `clean()`: min_salary ≤ max_salary. `unique_together=(tenant,name)` |
+| `JobGrade` (3.2) | — | name, level_order(int, 1=most junior), description, is_active | Orderable grade catalog (G1/G2/M1…); `__str__`="name (Ln)"; `unique_together=(tenant,name)`. Designations FK here. |
+| `Designation` (3.2) | — | name, **job_grade→`JobGrade`**, grade(free-text fallback), department→`core.OrgUnit`, **description, requirements**, min/**mid**/max_salary, **budgeted_headcount**, is_active | `clean()`: min≤max and min≤mid≤max. `__str__` prefers `job_grade.name` over free-text `grade`. `unique_together=(tenant,name)`; indexes (tenant,is_active)/(tenant,department)/(tenant,job_grade) |
+| `DepartmentProfile` (3.2) | — | **org_unit→`core.OrgUnit`(1:1, kind=department)**, code, description, head→`EmployeeProfile`, cost_center→`core.OrgUnit`(kind=cost_center), is_active | HRM companion to a department OrgUnit (adds head/code/CC core can't hold; name/parent stay on OrgUnit). `clean()` rejects non-department org_unit + non-cc cost_center. `unique_together=(tenant,org_unit)`; indexes (tenant,is_active)/(tenant,head)/(tenant,cost_center) |
+| `CostCenterProfile` (3.2) | — | **org_unit→`core.OrgUnit`(1:1, kind=cost_center)**, code, description, owner→`EmployeeProfile`, budget_annual, budget_year, is_active | HRM companion to a cost-center OrgUnit (budget/owner). `clean()` rejects non-cc org_unit. `unique_together=(tenant,org_unit)`. Budget-vs-actuals reporting deferred to Accounting. |
 | `EmployeeProfile` | `EMP-` | party→`core.Party`(1:1), employment→`core.Employment`(1:1), designation→`Designation`, employee_type, gender, dob, blood_group, nationality, personal_email, mobile, bank_*, probation_end_date, confirmed_on, emergency_*, photo, notes | **The anchor — every other HRM model FKs here, not to core.Party.** Props: `department`/`manager` (via employment), `name` (party.name), `masked_bank_account()` |
 | `LeaveType` | — | name, code, is_paid, accrual_rule(none/monthly/annual), accrual_days, max_balance, max_carry_forward, encashable, is_active | `clean()`: accrual_days>0 when accruing. `unique_together=(tenant,code)` |
 | `LeaveAllocation` | `LA-` | employee, leave_type, year, allocated_days, note, status(draft/active/expired) | `used_days`/`balance` are **derived properties** (sum of approved requests); `unique_together` also on (tenant,employee,leave_type,year) |
@@ -69,11 +72,18 @@ properties.
 
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
-- Per model `<entity>` in {`designation`, `employee`, `leavetype`, `leaveallocation`, `leaverequest`,
-  `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`, **`onboardingtemplate`,
-  `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`, `assetallocation`,
-  `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`, `finalsettlement`**}:
-  `<entity>_list/_create/_detail/_edit/_delete`.
+- Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
+  `leaveallocation`, `leaverequest`, `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
+  **`onboardingtemplate`, `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`,
+  `assetallocation`, `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`,
+  `finalsettlement`**}: `<entity>_list/_create/_detail/_edit/_delete`.
+- **Org-structure derived pages (3.2, no model):** `hrm:org_chart` (`/hrm/org-chart/`, `?view=reporting|department`
+  toggle — reporting-line tree from `core.Employment.manager` / by-department grouping; excludes terminated
+  employees; capped at 500) and `hrm:company_setup` (`/hrm/company-setup/`, read-only — company `OrgUnit` +
+  `tenants.BrandingSetting`, links out to `core:orgunit_list` and `tenants:brandingsetting_list`).
+- `department`/`costcenter` are **HRM companion profiles** over `core.OrgUnit` nodes — the OrgUnit nodes themselves
+  are created/managed in `core:orgunit_list`; the HRM pages enrich them (head/owner/budget/code). Delete removes
+  only the companion row, never the OrgUnit.
 - Leave workflow extras: `hrm:leaverequest_submit/_approve/_reject/_cancel` (all POST-only).
 - **Onboarding workflow extras (all POST-only):** `onboardingprogram_activate/_generate_tasks/_complete/_cancel`
   (complete + cancel are `@tenant_admin_required`), `onboardingtask_complete/_reopen/_skip`,
@@ -121,9 +131,12 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   `pending`/`in_progress`; settlement editable in `draft`/`computed`, deletable only in `draft`.
 
 ## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
-63 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+76 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
 filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — single-entity, so `employee/list.html` etc.),
-`designation/` (3.2 — `designation/list.html`), `onboarding/` (3.3 — entity folders `template/ templatetask/
+**`organization/` (3.2 — multi-entity: entity folders `designation/ jobgrade/ department/ costcenter/` each with
+`list/detail/form.html`, plus the standalone derived pages `organization/org_chart.html` and
+`organization/company_setup.html`)** — note 3.2 moved from the old flat `designation/` folder to `organization/`
+when it became multi-entity, `onboarding/` (3.3 — entity folders `template/ templatetask/
 program/` [the rich multi-section hub] `task/ document/` [`document/form.html` is multipart] `assetallocation/
 orientationsession/`), **`offboarding/` (3.4 — entity folders `separationcase/` [the hub], `exitinterview/
 clearanceitem/ finalsettlement/`, plus the standalone pages `offboarding/letters.html` [the letters landing list]
@@ -160,7 +173,11 @@ allowlists pdf/doc/docx/jpg/png + 10 MB. `ExitInterviewForm` excludes status/con
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
 has `EmployeeProfile` rows). Per tenant: 3 designations, up to 5 employees **reusing existing `core.Party`
 persons** (tops up with unique names if too few), 4 leave types + allocations, 2 leave requests (1 approved/1
-pending), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee. **Onboarding** is seeded by a separate
+pending), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee. **Org structure (3.2)** is seeded by a
+separate `_seed_org_structure(tenant)` (guarded by its own `JobGrade.exists()` check): 5 job grades (G1–M2), links
+the seeded designations to grades + fills mid-salary/budgeted-headcount, creates 2 **cost-center `core.OrgUnit`
+nodes** (core seeds none) with `CostCenterProfile`s (budget + owner), and a `DepartmentProfile` (code + head) over
+each seeded department OrgUnit. **Onboarding** is seeded by a separate
 `_seed_onboarding(tenant)` (guarded by its own `OnboardingTemplate.exists()` check, so an already-HRM-seeded tenant
 still gets it): 2 templates (12 task lines), 2 programs (1 active/1 completed) with generated tasks, 6 documents,
 6 assets, 2 orientation sessions per tenant. **Offboarding** is seeded by `_seed_offboarding(tenant)` (guarded by
@@ -171,7 +188,9 @@ HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `
 
 ## Sidebar wiring (`apps/core/navigation.py` `LIVE_LINKS`)
 - 3.1: Employee Directory/Profile/Employment Details → `hrm:employee_list`; + HRM Overview → `hrm:hrm_overview`.
-- 3.2: Designation/Job Titles → `hrm:designation_list`; Department Management → `core:orgunit_list`.
+- 3.2 (all 5 bullets live): Company Setup → `hrm:company_setup`; Department Management → `hrm:department_list`;
+  Designation/Job Titles → `hrm:designation_list`; Organization Chart → `hrm:org_chart`; Cost Centers →
+  `hrm:costcenter_list`; + extra Job Grades → `hrm:jobgrade_list`.
 - 3.3: Onboarding Tasks + Welcome Kit → `hrm:onboardingprogram_list`; Document Collection →
   `hrm:onboardingdocument_list`; Asset Allocation → `hrm:assetallocation_list`; Orientation Schedule →
   `hrm:orientationsession_list`; + extras Onboarding Templates → `hrm:onboardingtemplate_list`, Template Tasks →
@@ -191,6 +210,16 @@ HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `
 - `EmployeeProfile.department`/`manager` are read-only properties off the linked Employment — set them on the
   Employment, not the profile.
 - `core.Employment` has a `(tenant, status)` index (added for `employee_list` status filtering).
+- **3.2 companion-profile pattern:** `DepartmentProfile`/`CostCenterProfile` are 1:1 companions on `core.OrgUnit`
+  (kind department/cost_center) — like `EmployeeProfile` extends `core.Party`. The OrgUnit owns name/parent/
+  hierarchy; the profile adds HR fields HRM can't put on core (head/owner/budget/code). Create the OrgUnit in
+  `core:orgunit_list` first, then enrich it here. The model `clean()` validates `org_unit.kind` and (defense-in-depth)
+  tenant; the **real cross-tenant guard is the form FK queryset scoping** (tenant is set in the view after
+  `form.is_valid()`, so the model's tenant check is skipped during form-create). The seeder must create the
+  cost-center OrgUnit nodes itself — the core seeder makes only company + department units.
+- **3.2 org chart is derived** (no model) from `core.Employment.manager` (single-parent reporting chain, cycle-
+  guarded iterative DFS) + `core.OrgUnit.parent`; capped at 500 employees with a banner. Terminated employees are
+  excluded. A matrix/multi-manager structure would need a join table (deferred).
 - Sensitive fields (`bank_account`, `bank_routing`) are redacted from `AuditLog.changes` via
   `core.crud._SENSITIVE_AUDIT_FIELDS`; still plaintext at rest (documented WARNING — encrypt in a later pass).
 
