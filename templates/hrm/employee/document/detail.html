@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employee_list' %}">Employees</a><span class="sep">›</span><a href="{% url 'hrm:employee_detail' obj.employee_id %}">{{ obj.employee.party.name }}</a><span class="sep">›</span><a href="{% url 'hrm:employee_document_list' %}">Documents</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.verification_status == 'pending' %}
+        <form method="post" action="{% url 'hrm:employee_document_mark_verified' obj.pk %}" onsubmit="return confirm('Mark this document as verified?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Mark Verified</button></form>
+      {% endif %}
+      {% if obj.verification_status == 'pending' or obj.verification_status == 'verified' %}
+        <form method="post" action="{% url 'hrm:employee_document_reject' obj.pk %}" onsubmit="return confirm('Reject this document?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Reject</button></form>
+      {% endif %}
+      {% if obj.verification_status != 'verified' %}
+        <a href="{% url 'hrm:employee_document_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:employee_document_delete' obj.pk %}" onsubmit="return confirm('Delete this document?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Document Info</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:employee_detail' obj.employee_id %}">{{ obj.employee.party.name }}</a></dd></div>
+        <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-info">{{ obj.get_document_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+        <div class="detail-item"><dt>Document Number</dt><dd>{{ obj.document_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Issuing Authority</dt><dd>{{ obj.issuing_authority|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Issuing Country</dt><dd>{{ obj.issuing_country|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Issued On</dt><dd>{{ obj.issued_on|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Expires On</dt><dd>{% if obj.expires_on %}{% if obj.is_expired %}<span class="badge badge-red">{{ obj.expires_on }} (expired)</span>{% elif obj.is_expiring_soon %}<span class="badge badge-amber">{{ obj.expires_on }} (expiring soon)</span>{% else %}{{ obj.expires_on }}{% endif %}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Confidential</dt><dd>{% if obj.is_confidential %}<span class="badge badge-amber">Confidential</span>{% else %}No{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Verification</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.verification_status == 'pending' %}amber{% elif obj.verification_status == 'verified' %}green{% elif obj.verification_status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_verification_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Verified By</dt><dd>{% if obj.verified_by %}{{ obj.verified_by.get_full_name|default:obj.verified_by.username }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Verified At</dt><dd>{{ obj.verified_at|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">File</h2></div>
+    <div class="card-body">
+      {% if obj.file %}<a href="{{ obj.file.url }}" class="btn btn-outline" target="_blank" rel="noopener"><i data-lucide="download"></i> Download</a>{% else %}<span class="text-muted">No file uploaded.</span>{% endif %}
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:employee_detail' obj.employee_id %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to employee</a>
+{% endblock %}
