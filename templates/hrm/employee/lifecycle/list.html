@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Employee Lifecycle Events{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Employment Lifecycle</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employee_list' %}">Employees</a><span class="sep">›</span><span>Lifecycle</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:employee_lifecycle_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Event</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, employee or reason…">
+        </div>
+        <div class="form-group">
+          <select name="event_type" class="form-select">
+            <option value="">All event types</option>
+            {% for val, label in event_type_choices %}
+              <option value="{{ val }}" {% if request.GET.event_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:employee_lifecycle_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Event</th><th>Effective</th><th>Change</th><th>Reason</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:employee_lifecycle_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td><span class="badge badge-{% if obj.event_type == 'hire' %}green{% elif obj.event_type == 'promotion' %}info{% elif obj.event_type == 'demotion' %}red{% elif obj.event_type == 'separation' %}slate{% elif obj.event_type == 'salary_revision' %}amber{% else %}muted{% endif %}">{{ obj.get_event_type_display }}</span></td>
+              <td>{{ obj.effective_date }}</td>
+              <td>{% if obj.from_designation or obj.to_designation %}{{ obj.from_designation.name|default:"—" }} → {{ obj.to_designation.name|default:"—" }}{% elif obj.from_location or obj.to_location %}{{ obj.from_location|default:"—" }} → {{ obj.to_location|default:"—" }}{% elif obj.from_salary or obj.to_salary %}{{ obj.from_salary|default:"—" }} → {{ obj.to_salary|default:"—" }}{% else %}—{% endif %}</td>
+              <td>{{ obj.reason|truncatechars:60|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:employee_lifecycle_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:employee_lifecycle_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:employee_lifecycle_delete' obj.pk %}" onsubmit="return confirm('Delete this lifecycle event?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="git-commit-horizontal"></i><h3>No lifecycle events found</h3><p>Record hires, transfers, promotions, salary revisions and separations.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
