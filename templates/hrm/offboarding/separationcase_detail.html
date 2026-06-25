@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:separationcase_list' %}">Offboarding</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:separationcase_submit' obj.pk %}" onsubmit="return confirm('Submit this separation for approval?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button></form>
+      {% endif %}
+      {% if obj.status == 'pending_approval' %}
+        <form method="post" action="{% url 'hrm:separationcase_approve' obj.pk %}" onsubmit="return confirm('Approve this separation? A clearance checklist will be generated.');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button></form>
+      {% endif %}
+      {% if obj.status == 'in_clearance' %}
+        <form method="post" action="{% url 'hrm:separationcase_mark_cleared' obj.pk %}" onsubmit="return confirm('Mark this case fully cleared?');">{% csrf_token %}<button class="btn btn-primary" type="submit" {% if not all_mandatory_cleared %}disabled title="All mandatory clearance items must be cleared first."{% endif %}><i data-lucide="shield-check"></i> Mark Cleared</button></form>
+      {% endif %}
+      {% if obj.status == 'cleared' or obj.status == 'settled' %}
+        <form method="post" action="{% url 'hrm:separationcase_complete' obj.pk %}" onsubmit="return confirm('Mark this separation completed?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Complete</button></form>
+        <form method="post" action="{% url 'hrm:separationcase_relieving_letter' obj.pk %}"><button class="btn btn-outline" type="submit"><i data-lucide="file-text"></i> Relieving Letter</button>{% csrf_token %}</form>
+        <form method="post" action="{% url 'hrm:separationcase_experience_letter' obj.pk %}"><button class="btn btn-outline" type="submit"><i data-lucide="award"></i> Experience Letter</button>{% csrf_token %}</form>
+      {% endif %}
+      {% if obj.status == 'completed' %}
+        <form method="post" action="{% url 'hrm:separationcase_relieving_letter' obj.pk %}"><button class="btn btn-outline" type="submit"><i data-lucide="file-text"></i> Relieving Letter</button>{% csrf_token %}</form>
+        <form method="post" action="{% url 'hrm:separationcase_experience_letter' obj.pk %}"><button class="btn btn-outline" type="submit"><i data-lucide="award"></i> Experience Letter</button>{% csrf_token %}</form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'pending_approval' %}
+        <a href="{% url 'hrm:separationcase_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:separationcase_withdraw' obj.pk %}" onsubmit="return confirm('Withdraw this separation case?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="undo-2"></i> Withdraw</button></form>
+      {% endif %}
+      {% if obj.status == 'pending_approval' %}
+        <form method="post" action="{% url 'hrm:separationcase_reject' obj.pk %}" onsubmit="return confirm('Reject this separation case?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button></form>
+      {% endif %}
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:separationcase_delete' obj.pk %}" onsubmit="return confirm('Delete this separation case?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:employee_detail' obj.employee.pk %}">{{ obj.employee.party.name }}</a> <span class="text-muted">({{ obj.employee.number }})</span></dd></div>
+      <div class="detail-item"><dt>Designation</dt><dd>{{ obj.employee.designation.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Separation Type</dt><dd><span class="badge badge-muted">{{ obj.get_separation_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'draft' %}info{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}info{% elif obj.status == 'in_clearance' %}amber{% elif obj.status == 'cleared' %}green{% elif obj.status == 'settled' %}green{% elif obj.status == 'completed' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'withdrawn' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Exit Reason</dt><dd>{% if obj.exit_reason %}{{ obj.get_exit_reason_display }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notice Start</dt><dd>{{ obj.notice_start_date|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notice Period</dt><dd>{{ obj.notice_period_days }} days</dd></div>
+      <div class="detail-item"><dt>Expected LWD</dt><dd>{{ obj.expected_last_working_day|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Actual LWD</dt><dd>{{ obj.actual_last_working_day|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notice Buyout</dt><dd>{{ obj.get_notice_buyout_type_display }}</dd></div>
+      <div class="detail-item"><dt>Submitted</dt><dd>{{ obj.submitted_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Approved By</dt><dd>{% if obj.approver %}{{ obj.approver.get_full_name|default:obj.approver.username }} · {{ obj.approved_at }}{% else %}—{% endif %}</dd></div>
+      {% if obj.resignation_letter %}<div class="detail-item"><dt>Resignation Letter</dt><dd><a href="{{ obj.resignation_letter.url }}">Download</a></dd></div>{% endif %}
+      {% if obj.rejection_reason %}<div class="detail-item"><dt>Rejection Reason</dt><dd>{{ obj.rejection_reason }}</dd></div>{% endif %}
+      {% if obj.withdrawal_reason %}<div class="detail-item"><dt>Withdrawal Reason</dt><dd>{{ obj.withdrawal_reason }}</dd></div>{% endif %}
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  {% if obj.status == 'pending_approval' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Reject with Reason</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'hrm:separationcase_reject' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_reject_reason">Reason (optional)</label>
+            <textarea id="id_reject_reason" name="reason" class="form-textarea" placeholder="Reason for rejection…"></textarea>
+          </div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Clearance Process</h2>
+      <a href="{% url 'hrm:clearanceitem_create' %}?case={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add Item</a>
+    </div>
+    <div class="card-body">
+      <div style="margin-bottom:1rem;">
+        <div class="progress"><div class="progress-bar" style="width: {{ clearance_progress }}%"></div></div>
+        {{ clearance_progress }}% — {{ clearance_done }} of {{ clearance_total }} item{{ clearance_total|pluralize }} cleared
+        {% if all_mandatory_cleared and clearance_total %}<span class="badge badge-green">All mandatory cleared</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Department</th><th>Task</th><th>Mandatory</th><th>Assigned</th><th>Status</th><th>Cleared</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for c in clearance_items %}
+              <tr>
+                <td><span class="badge badge-info">{{ c.department_display }}</span></td>
+                <td><a href="{% url 'hrm:clearanceitem_detail' c.pk %}">{{ c.description }}</a>{% if c.asset_allocation %}<br><span class="text-muted">↳ {{ c.asset_allocation.asset_name }}</span>{% endif %}</td>
+                <td>{% if c.is_mandatory %}<span class="badge badge-amber">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+                <td>{{ c.assigned_to.username|default:"—" }}</td>
+                <td><span class="badge badge-{% if c.status == 'pending' %}info{% elif c.status == 'in_progress' %}amber{% elif c.status == 'cleared' %}green{% elif c.status == 'not_applicable' %}muted{% elif c.status == 'rejected' %}red{% else %}muted{% endif %}">{{ c.get_status_display }}</span></td>
+                <td>{% if c.cleared_at %}{{ c.cleared_by.username|default:"—" }}<br><span class="text-muted">{{ c.cleared_at|date:"Y-m-d" }}</span>{% else %}—{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if c.status == 'pending' or c.status == 'in_progress' %}
+                      <form method="post" action="{% url 'hrm:clearanceitem_mark_cleared' c.pk %}" onsubmit="return confirm('Mark this item cleared?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Cleared"><i data-lucide="check"></i></button></form>
+                      <form method="post" action="{% url 'hrm:clearanceitem_mark_na' c.pk %}" onsubmit="return confirm('Mark this item not applicable?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Not Applicable"><i data-lucide="minus-circle"></i></button></form>
+                    {% endif %}
+                    {% if c.status != 'cleared' %}
+                      <form method="post" action="{% url 'hrm:clearanceitem_reject' c.pk %}" onsubmit="return confirm('Reject this clearance item?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject"><i data-lucide="x"></i></button></form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>No clearance items yet</h3><p>Approve the case to auto-generate the department clearance checklist.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Exit Interview</h2>
+      {% if not exit_interview %}<a href="{% url 'hrm:exitinterview_create' %}?case={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Schedule</a>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if exit_interview %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Interview</dt><dd><a href="{% url 'hrm:exitinterview_detail' exit_interview.pk %}">{{ exit_interview.number }}</a></dd></div>
+          <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if exit_interview.status == 'scheduled' %}info{% elif exit_interview.status == 'completed' %}green{% elif exit_interview.status == 'skipped' %}muted{% elif exit_interview.status == 'no_show' %}red{% else %}muted{% endif %}">{{ exit_interview.get_status_display }}</span></dd></div>
+          <div class="detail-item"><dt>Mode</dt><dd>{{ exit_interview.get_mode_display }}</dd></div>
+          <div class="detail-item"><dt>Scheduled</dt><dd>{{ exit_interview.scheduled_at|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Average Rating</dt><dd>{{ exit_interview.average_rating|default:"—" }} / 5</dd></div>
+          <div class="detail-item"><dt>Primary Reason</dt><dd>{% if exit_interview.primary_reason %}{{ exit_interview.get_primary_reason_display }}{% else %}—{% endif %}</dd></div>
+        </dl>
+      {% else %}
+        <div class="empty-state"><i data-lucide="message-square"></i><h3>No exit interview</h3><p>Schedule an exit interview to capture departure feedback.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Final Settlement (F&amp;F)</h2>
+      {% if not settlement %}<a href="{% url 'hrm:finalsettlement_create' %}?case={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Create</a>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if settlement %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Settlement</dt><dd><a href="{% url 'hrm:finalsettlement_detail' settlement.pk %}">{{ settlement.number }}</a></dd></div>
+          <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if settlement.status == 'draft' %}info{% elif settlement.status == 'computed' %}amber{% elif settlement.status == 'hr_approved' %}info{% elif settlement.status == 'finance_approved' %}info{% elif settlement.status == 'paid' %}green{% elif settlement.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ settlement.get_status_display }}</span></dd></div>
+          <div class="detail-item"><dt>Total Earnings</dt><dd>{{ settlement.total_earnings }}</dd></div>
+          <div class="detail-item"><dt>Total Deductions</dt><dd>{{ settlement.total_deductions }}</dd></div>
+          <div class="detail-item"><dt>Net Payable</dt><dd class="fw-600">{{ settlement.net_payable }}</dd></div>
+          <div class="detail-item"><dt>Paid At</dt><dd>{{ settlement.paid_at|default:"—" }}</dd></div>
+        </dl>
+      {% else %}
+        <div class="empty-state"><i data-lucide="calculator"></i><h3>No settlement</h3><p>Create the full &amp; final settlement once clearance is underway.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Letters</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Relieving Letter</dt><dd>{% if obj.relieving_letter_generated_at %}<span class="badge badge-green">Generated</span> {{ obj.relieving_letter_generated_at|date:"Y-m-d H:i" }}{% else %}<span class="badge badge-muted">Not generated</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Experience Letter</dt><dd>{% if obj.experience_letter_generated_at %}<span class="badge badge-green">Generated</span> {{ obj.experience_letter_generated_at|date:"Y-m-d H:i" }}{% else %}<span class="badge badge-muted">Not generated</span>{% endif %}</dd></div>
+      </dl>
+      <p class="form-help">Letters can be generated once the case is cleared (use the buttons in the header).</p>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:separationcase_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
