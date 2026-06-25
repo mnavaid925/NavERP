@@ -22,8 +22,11 @@ MAX_ONBOARDING_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
 from .models import (
     AssetAllocation,
     AttendanceRecord,
+    ClearanceItem,
     Designation,
     EmployeeProfile,
+    ExitInterview,
+    FinalSettlement,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -34,6 +37,7 @@ from .models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    SeparationCase,
     Shift,
     ShiftAssignment,
 )
@@ -222,3 +226,103 @@ class OrientationSessionForm(TenantModelForm):
         model = OrientationSession
         fields = ["program", "employee", "title", "session_type", "facilitator", "facilitator_name",
                   "scheduled_at", "duration_minutes", "location", "meeting_url", "notes"]
+
+
+# ----------------------------------------------------------------------- 3.4 Employee Offboarding
+class SeparationCaseForm(TenantModelForm):
+    # SECURITY: every lifecycle field is excluded — `status`, `submitted_at`, `approver`,
+    # `approved_at`, `rejection_reason`/`withdrawal_reason`, both letter-generated stamps, and the
+    # derived `expected_last_working_day` (computed in save()). They're advanced only by the audited
+    # workflow actions; exposing them would let a crafted POST skip approval/clearance.
+    class Meta:
+        model = SeparationCase
+        fields = ["employee", "separation_type", "exit_reason", "resignation_letter",
+                  "notice_period_days", "notice_start_date", "actual_last_working_day",
+                  "notice_buyout_type", "requires_kt", "notes"]
+
+    def clean_resignation_letter(self):
+        f = self.cleaned_data.get("resignation_letter")
+        # Only validate a freshly-uploaded file (an existing FieldFile has no new size to re-check).
+        if f and hasattr(f, "name") and hasattr(f, "size"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
+                raise forms.ValidationError(
+                    f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
+            if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
+                raise forms.ValidationError("File exceeds the 10 MB limit.")
+            # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve with
+            # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
+        return f
+
+
+class ExitInterviewForm(TenantModelForm):
+    # SECURITY: `status` and `conducted_at` are excluded — both are advanced only by the complete /
+    # skip workflow actions (which stamp/audit). A crafted POST must not be able to mark an interview
+    # "completed" without going through the action.
+    class Meta:
+        model = ExitInterview
+        fields = ["case", "interviewer", "scheduled_at", "mode",
+                  "rating_job_satisfaction", "rating_management", "rating_compensation",
+                  "rating_work_environment", "rating_growth_opportunities",
+                  "rating_work_life_balance", "rating_culture", "rating_overall",
+                  "primary_reason", "would_recommend", "would_rejoin",
+                  "what_went_well", "what_to_improve", "additional_comments"]
+
+    def clean(self):
+        cleaned = super().clean()
+        case = cleaned.get("case")
+        # One exit interview per case (form-level — a skipped/no-show one can be superseded by
+        # deleting it first). The tenant lives on the form, so this guard belongs here, not on the model.
+        if case and self.tenant is not None:
+            dupes = ExitInterview.objects.filter(tenant=self.tenant, case=case)
+            if self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                self.add_error("case", "An exit interview already exists for this separation case.")
+        return cleaned
+
+
+class ClearanceItemForm(TenantModelForm):
+    # SECURITY: `status`, `cleared_by`, `cleared_at` are excluded — set only by the mark-cleared /
+    # mark-na / reject workflow actions (the mark-cleared action also returns the linked asset).
+    class Meta:
+        model = ClearanceItem
+        fields = ["case", "department", "department_label", "description", "is_mandatory",
+                  "assigned_to", "due_date", "asset_allocation", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only an issued asset can be the subject of a return-clearance line.
+        if self.tenant is not None:
+            self.fields["asset_allocation"].queryset = (
+                AssetAllocation.objects.filter(tenant=self.tenant, status="issued")
+                .select_related("employee__party").order_by("-issued_at"))
+
+
+class FinalSettlementForm(TenantModelForm):
+    # SECURITY: `status`, the HR/finance approval stamps, `paid_at`, and `gl_posted` are excluded —
+    # advanced only by the compute / hr-approve / finance-approve / mark-paid actions. `net_payable`
+    # is a derived property (no column). Earnings/deductions are editable so HR can adjust the
+    # service-computed figures before approval.
+    class Meta:
+        model = FinalSettlement
+        fields = ["case", "settlement_date",
+                  "prorata_salary", "leave_encashment_days", "leave_encashment_amount",
+                  "gratuity_eligible", "gratuity_amount", "bonus_amount",
+                  "reimbursement_amount", "other_income",
+                  "notice_recovery_amount", "loan_recovery", "asset_deduction",
+                  "advance_recovery", "tax_deduction", "professional_tax", "other_deduction",
+                  "notes"]
+
+    def clean(self):
+        cleaned = super().clean()
+        case = cleaned.get("case")
+        # One settlement per case (also DB-enforced via unique_together) — surface a friendly error
+        # rather than an IntegrityError 500.
+        if case and self.tenant is not None:
+            dupes = FinalSettlement.objects.filter(tenant=self.tenant, case=case)
+            if self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                self.add_error("case", "A settlement already exists for this separation case.")
+        return cleaned
