@@ -77,13 +77,13 @@
     </div>
   </div>
 
-  <div class="card"><div class="card-body">
+  <div class="stat-grid">
     <div class="stat-card">
       <div class="stat-label">Net Payable</div>
       <div class="stat-value">{{ obj.net_payable }}</div>
     </div>
-    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
-  </div></div>
+  </div>
+  {% if obj.notes %}<div class="card"><div class="card-header"><h2 class="card-title">Notes</h2></div><div class="card-body">{{ obj.notes|linebreaksbr }}</div></div>{% endif %}
 
   <a href="{% url 'hrm:finalsettlement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
