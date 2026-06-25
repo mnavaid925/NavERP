@@ -129,6 +129,7 @@ def crud_delete(request, *, model, pk, success_url, audit=True):
 # (e.g. bank/account/routing numbers, secrets). Redacted to a placeholder instead.
 _SENSITIVE_AUDIT_FIELDS = frozenset({
     "bank_account", "bank_routing", "password", "token", "secret", "api_key",
+    "national_id", "passport_number",
 })
 
 
