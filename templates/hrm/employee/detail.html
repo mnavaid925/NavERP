@@ -60,8 +60,8 @@
         <div class="detail-item"><dt>Probation End</dt><dd>{{ obj.probation_end_date|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Confirmed On</dt><dd>{{ obj.confirmed_on|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Notice Period</dt><dd>{% if obj.notice_period_days %}{{ obj.notice_period_days }} days{% else %}—{% endif %}</dd></div>
-        <div class="detail-item"><dt>National ID</dt><dd>{{ obj.national_id|default:"—" }}{% if obj.national_id_type %} ({{ obj.national_id_type }}){% endif %}</dd></div>
-        <div class="detail-item"><dt>Passport No.</dt><dd>{{ obj.passport_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>National ID</dt><dd>{{ obj.masked_national_id|default:"—" }}{% if obj.national_id_type %} ({{ obj.national_id_type }}){% endif %}</dd></div>
+        <div class="detail-item"><dt>Passport No.</dt><dd>{{ obj.masked_passport_number|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Passport Expiry</dt><dd>{{ obj.passport_expiry|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Bank Name</dt><dd>{{ obj.bank_name|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Account</dt><dd>{{ obj.masked_bank_account|default:"—" }}</dd></div>
