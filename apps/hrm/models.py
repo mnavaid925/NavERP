@@ -332,6 +332,10 @@ class EmployeeProfile(TenantNumbered):
         """Last-4 view of the account number (never render the full value)."""
         return self._mask_last4(self.bank_account)
 
+    def masked_bank_routing(self):
+        """Last-4 view of the routing number (never render the full value)."""
+        return self._mask_last4(self.bank_routing)
+
     def masked_national_id(self):
         """Last-4 view of the national ID (sensitive PII — never render the full value)."""
         return self._mask_last4(self.national_id)
