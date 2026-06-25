@@ -2149,6 +2149,10 @@ def _employee_child_create(request, form_class, template, *, stamp_initiated_by=
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before creating records.")
         return redirect("dashboard:home")
+    # Validate the ?employee= pk once so the template's Cancel link can't NoReverseMatch on
+    # crafted input (e.g. ?employee=abc).
+    emp_pk = request.GET.get("employee", "").strip()
+    cancel_employee = emp_pk if emp_pk.isdigit() else None
     if request.method == "POST":
         form = form_class(request.POST, request.FILES, tenant=request.tenant)
         if form.is_valid():
@@ -2161,12 +2165,10 @@ def _employee_child_create(request, form_class, template, *, stamp_initiated_by=
             messages.success(request, "Created successfully.")
             return redirect("hrm:employee_detail", pk=obj.employee_id)
     else:
-        initial = {}
-        emp_pk = request.GET.get("employee", "").strip()
-        if emp_pk.isdigit():
-            initial["employee"] = emp_pk
-        form = form_class(tenant=request.tenant, initial=initial or None)
-    return render(request, template, {"form": form, "is_edit": False})
+        form = form_class(tenant=request.tenant,
+                          initial={"employee": emp_pk} if cancel_employee else None)
+    return render(request, template, {"form": form, "is_edit": False,
+                                      "cancel_employee": cancel_employee})
 
 
 # ---------------------------------------------------------- Employee Documents (3.1)
