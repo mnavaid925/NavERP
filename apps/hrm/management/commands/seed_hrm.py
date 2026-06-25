@@ -599,7 +599,7 @@ class Command(BaseCommand):
                 expires_on=today + datetime.timedelta(days=180))
             # Appointment letter — verified.
             al = EmployeeDocument.objects.create(
-                tenant=tenant, employee=emp, document_type="employment_contract",
+                tenant=tenant, employee=emp, document_type="appointment_letter",
                 title="Appointment Letter")
             al.verification_status = "verified"
             al.verified_by = actor
