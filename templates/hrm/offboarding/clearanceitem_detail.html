@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">{{ obj.description }}</h1>
-      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:clearanceitem_list' %}">Clearance</a><span class="sep">›</span><span>{{ obj.get_department_display }}</span></div>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:clearanceitem_list' %}">Clearance</a><span class="sep">›</span><span>{{ obj.department_display }}</span></div>
     </div>
     <div class="page-actions">
       {% if obj.status == 'pending' or obj.status == 'in_progress' %}
