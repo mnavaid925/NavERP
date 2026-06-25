@@ -12,6 +12,10 @@
     </div>
   </div>
 
+  {% if capped %}
+    <div class="card" style="border-left:3px solid var(--warn,#d97706);"><div class="card-body text-muted"><i data-lucide="alert-triangle"></i> Showing the first {{ cap }} employees. Use Employee Management to view the full directory.</div></div>
+  {% endif %}
+
   <div class="card"><div class="card-body" style="overflow-x:auto;">
     {% if total == 0 %}
       <div class="empty-state"><i data-lucide="users"></i><h3>No employees found</h3><p>Add employees in <a href="{% url 'hrm:employee_list' %}">Employee Management</a> to see the org chart.</p></div>
