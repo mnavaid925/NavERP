@@ -138,4 +138,49 @@ urlpatterns = [
     path("orientation/<int:pk>/delete/", views.orientationsession_delete, name="orientationsession_delete"),
     path("orientation/<int:pk>/mark-attended/", views.orientationsession_mark_attended, name="orientationsession_mark_attended"),
     path("orientation/<int:pk>/mark-missed/", views.orientationsession_mark_missed, name="orientationsession_mark_missed"),
+
+    # Separation Cases (3.4) — CRUD + workflow + letters
+    path("separations/", views.separationcase_list, name="separationcase_list"),
+    path("separations/add/", views.separationcase_create, name="separationcase_create"),
+    path("separations/<int:pk>/", views.separationcase_detail, name="separationcase_detail"),
+    path("separations/<int:pk>/edit/", views.separationcase_edit, name="separationcase_edit"),
+    path("separations/<int:pk>/delete/", views.separationcase_delete, name="separationcase_delete"),
+    path("separations/<int:pk>/submit/", views.separationcase_submit, name="separationcase_submit"),
+    path("separations/<int:pk>/approve/", views.separationcase_approve, name="separationcase_approve"),
+    path("separations/<int:pk>/reject/", views.separationcase_reject, name="separationcase_reject"),
+    path("separations/<int:pk>/withdraw/", views.separationcase_withdraw, name="separationcase_withdraw"),
+    path("separations/<int:pk>/mark-cleared/", views.separationcase_mark_cleared, name="separationcase_mark_cleared"),
+    path("separations/<int:pk>/complete/", views.separationcase_complete, name="separationcase_complete"),
+    path("separations/<int:pk>/relieving-letter/", views.separationcase_generate_relieving_letter, name="separationcase_relieving_letter"),
+    path("separations/<int:pk>/experience-letter/", views.separationcase_generate_experience_letter, name="separationcase_experience_letter"),
+
+    # Exit Interviews (3.4) — CRUD + workflow
+    path("exit-interviews/", views.exitinterview_list, name="exitinterview_list"),
+    path("exit-interviews/add/", views.exitinterview_create, name="exitinterview_create"),
+    path("exit-interviews/<int:pk>/", views.exitinterview_detail, name="exitinterview_detail"),
+    path("exit-interviews/<int:pk>/edit/", views.exitinterview_edit, name="exitinterview_edit"),
+    path("exit-interviews/<int:pk>/delete/", views.exitinterview_delete, name="exitinterview_delete"),
+    path("exit-interviews/<int:pk>/complete/", views.exitinterview_complete, name="exitinterview_complete"),
+    path("exit-interviews/<int:pk>/skip/", views.exitinterview_skip, name="exitinterview_skip"),
+
+    # Clearance Items (3.4) — CRUD + workflow
+    path("clearance/", views.clearanceitem_list, name="clearanceitem_list"),
+    path("clearance/add/", views.clearanceitem_create, name="clearanceitem_create"),
+    path("clearance/<int:pk>/", views.clearanceitem_detail, name="clearanceitem_detail"),
+    path("clearance/<int:pk>/edit/", views.clearanceitem_edit, name="clearanceitem_edit"),
+    path("clearance/<int:pk>/delete/", views.clearanceitem_delete, name="clearanceitem_delete"),
+    path("clearance/<int:pk>/mark-cleared/", views.clearanceitem_mark_cleared, name="clearanceitem_mark_cleared"),
+    path("clearance/<int:pk>/mark-na/", views.clearanceitem_mark_na, name="clearanceitem_mark_na"),
+    path("clearance/<int:pk>/reject/", views.clearanceitem_reject, name="clearanceitem_reject"),
+
+    # Final Settlements (3.4) — CRUD + workflow
+    path("settlements/", views.finalsettlement_list, name="finalsettlement_list"),
+    path("settlements/add/", views.finalsettlement_create, name="finalsettlement_create"),
+    path("settlements/<int:pk>/", views.finalsettlement_detail, name="finalsettlement_detail"),
+    path("settlements/<int:pk>/edit/", views.finalsettlement_edit, name="finalsettlement_edit"),
+    path("settlements/<int:pk>/delete/", views.finalsettlement_delete, name="finalsettlement_delete"),
+    path("settlements/<int:pk>/compute/", views.finalsettlement_compute, name="finalsettlement_compute"),
+    path("settlements/<int:pk>/hr-approve/", views.finalsettlement_hr_approve, name="finalsettlement_hr_approve"),
+    path("settlements/<int:pk>/finance-approve/", views.finalsettlement_finance_approve, name="finalsettlement_finance_approve"),
+    path("settlements/<int:pk>/mark-paid/", views.finalsettlement_mark_paid, name="finalsettlement_mark_paid"),
 ]
