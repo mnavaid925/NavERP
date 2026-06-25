@@ -200,9 +200,15 @@ anchor; departments reuse `core.OrgUnit`. Payroll GL posting stays with `account
 here). Request-free domain logic (task generation, clearance-checklist generation, leave-encashment computation)
 lives in `apps/hrm/services.py` so the seeder and tests can call it without the view layer.
 
-- **3.1 Employee Management** — `EmployeeProfile` directory with personal/employment/bank (masked account) /
-  emergency-contact / photo, leave-balance + recent-attendance + recent-leave on the detail, and an HRM overview
-  (headcount / today's attendance / pending leave / upcoming holidays).
+- **3.1 Employee Management** — `EmployeeProfile` directory with a full personnel file (personal / employment /
+  marital status / national-ID + passport / addresses / two emergency contacts / bank — sensitive IDs & bank fields
+  **masked** in the UI and redacted from the audit log), plus two child records: an **`EmployeeDocument`** (`EDOC-`)
+  vault (ID proofs, certificates, contracts, NDAs with issue/expiry dates, an expiring-soon/expired badge, an HR
+  verify/reject workflow, and an enforced **confidential** flag that hides the doc from non-admins) and an
+  **`EmployeeLifecycleEvent`** (`ELC-`) job-history timeline (hire / confirmation / transfer / promotion /
+  salary-revision / separation as dated from→to events, admin-managed). The employee detail page is the hub —
+  leave balances, recent attendance, recent leave, a Documents card and an Employment-Lifecycle card — plus an HRM
+  overview (headcount / today's attendance / pending leave / upcoming holidays).
 - **3.2 Organizational Structure** — a `JobGrade` catalog (orderable seniority levels) bands the enriched
   `Designation` (job grade + min/mid/max salary + description/requirements + budgeted headcount, linked to
   `core.OrgUnit`); `DepartmentProfile` and `CostCenterProfile` are HRM 1:1 **companions** on `core.OrgUnit`
@@ -230,9 +236,10 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **728-test** HRM suite
-(**1,790 project-wide**). Leave/approver and offboarding workflow/approval fields are workflow-set (never
-form-set); sensitive bank fields are redacted from the audit trail.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and an **844-test** HRM suite
+(**1,906 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
+redacted from the audit trail.
 
 ---
 
@@ -425,7 +432,7 @@ backend) — copy the link from there.
 | Module 0.1 | `/tenants/` | `/tenants/subscriptions/`, `/tenants/subscription-invoices/`, `/tenants/branding/`, `/tenants/encryption-keys/`, `/tenants/health/`, `/tenants/onboarding/`, `/tenants/stripe/webhook/` |
 | Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/campaigns/`, `/crm/cases/`, `/crm/knowledge/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/`, `/crm/expenses/`, `/crm/projects/`, `/crm/milestones/`, `/crm/timesheets/`, `/crm/doc-templates/`, `/crm/contracts/`, `/crm/workflows/`, `/crm/approvals/`, `/crm/onboarding/`, `/crm/health-scores/`, `/crm/surveys/`, `/crm/stock/`, `/crm/purchase-orders/`, `/crm/partner-portal/`, `/crm/portal/` (partner-facing); public `/crm/sign/<token>/`, `/crm/surveys/<token>/respond/` |
 | Module 2 (Accounting) | `/accounting/` | `/accounting/` (dashboard), `/accounting/glaccounts/`, `/accounting/journal-entries/`, `/accounting/fiscal-periods/`, `/accounting/currencies/`, `/accounting/exchange-rates/`, `/accounting/vendor-profiles/`, `/accounting/bills/`, `/accounting/customer-profiles/`, `/accounting/invoices/`, `/accounting/recurring-invoices/`, `/accounting/payments/`, `/accounting/allocations/`, `/accounting/bank-accounts/`, `/accounting/bank-transactions/`, `/accounting/reconciliation/`, `/accounting/fixed-assets/`, `/accounting/asset-disposals/`, `/accounting/cost-allocations/`, `/accounting/payroll-runs/`, `/accounting/projects/`, `/accounting/intercompany/`, `/accounting/tax-codes/`, `/accounting/tax-returns/`, `/accounting/budgets/`, `/accounting/controls/`, `/accounting/integrations/`; reports `/accounting/reports/{trial-balance,cash-forecast,payment-schedule,ar-aging,ap-aging,balance-sheet,profit-and-loss,budget-variance}/` |
-| Module 3 (HRM) | `/hrm/` | `/hrm/` (overview), `/hrm/employees/`, `/hrm/designations/`; **onboarding** `/hrm/onboarding-templates/`, `/hrm/onboarding-template-tasks/`, `/hrm/onboarding/`, `/hrm/onboarding-tasks/`, `/hrm/onboarding-documents/`, `/hrm/assets/`, `/hrm/orientation/`; **offboarding** `/hrm/separations/`, `/hrm/exit-interviews/`, `/hrm/clearance/`, `/hrm/settlements/`, `/hrm/letters/` (letters landing; + POST `…/separations/<pk>/{relieving,experience}-letter/`); **time** `/hrm/leave-types/`, `/hrm/leave-allocations/`, `/hrm/leave-requests/`, `/hrm/holidays/`, `/hrm/shifts/`, `/hrm/shift-assignments/`, `/hrm/attendance/` |
+| Module 3 (HRM) | `/hrm/` | `/hrm/` (overview), `/hrm/employees/`, `/hrm/employee-documents/`, `/hrm/lifecycle-events/`, `/hrm/designations/`; **onboarding** `/hrm/onboarding-templates/`, `/hrm/onboarding-template-tasks/`, `/hrm/onboarding/`, `/hrm/onboarding-tasks/`, `/hrm/onboarding-documents/`, `/hrm/assets/`, `/hrm/orientation/`; **offboarding** `/hrm/separations/`, `/hrm/exit-interviews/`, `/hrm/clearance/`, `/hrm/settlements/`, `/hrm/letters/` (letters landing; + POST `…/separations/<pk>/{relieving,experience}-letter/`); **time** `/hrm/leave-types/`, `/hrm/leave-allocations/`, `/hrm/leave-requests/`, `/hrm/holidays/`, `/hrm/shifts/`, `/hrm/shift-assignments/`, `/hrm/attendance/` |
 | Django admin | `/admin/` | `/admin/` |
 
 Each CRUD resource follows the pattern: list (`/`), create (`/add/`), detail (`/<pk>/`), edit (`/<pk>/edit/`),
@@ -637,7 +644,7 @@ Before deploying:
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard + cash-forecast; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, recurring invoicing, payments + cash application, aging, payment schedule; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
-| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.9/3.10/3.12 built — 7 of 41 sub-modules (employee directory + profiles on `core.Party`/`core.Employment`; **organizational structure** — job grades + designations (salary bands/JD), department & cost-center companion profiles (head/owner/budget) on `core.OrgUnit`, a derived org chart + company-setup view; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.5 Job Requisition |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.9/3.10/3.12 built — 7 of 41 sub-modules (**employee management** — full personnel-file profiles on `core.Party`/`core.Employment` with a document vault [verify/reject + expiry + confidential] and a dated lifecycle/job-history timeline; **organizational structure** — job grades + designations (salary bands/JD), department & cost-center companion profiles (head/owner/budget) on `core.OrgUnit`, a derived org chart + company-setup view; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.5 Job Requisition |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
 | 6 | Procurement Management System | `procurement` | Roadmap |
