@@ -104,7 +104,7 @@
                       <form method="post" action="{% url 'hrm:clearanceitem_mark_cleared' c.pk %}" onsubmit="return confirm('Mark this item cleared?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Mark Cleared"><i data-lucide="check"></i></button></form>
                       <form method="post" action="{% url 'hrm:clearanceitem_mark_na' c.pk %}" onsubmit="return confirm('Mark this item not applicable?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Not Applicable"><i data-lucide="minus-circle"></i></button></form>
                     {% endif %}
-                    {% if c.status != 'cleared' %}
+                    {% if c.status == 'pending' or c.status == 'in_progress' %}
                       <form method="post" action="{% url 'hrm:clearanceitem_reject' c.pk %}" onsubmit="return confirm('Reject this clearance item?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject"><i data-lucide="x"></i></button></form>
                     {% endif %}
                   </div>
