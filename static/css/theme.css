@@ -350,6 +350,7 @@ html:not([data-preloader="on"]) #preloader { display: none; }
 .text-red    { color: var(--bad) !important; }
 .text-ok     { color: var(--ok) !important; }
 .fw-600 { font-weight: 600; }
+.text-right { text-align: right; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .nowrap { white-space: nowrap; }
 .flex { display: flex; } .items-center { align-items: center; } .gap-2 { gap: .5rem; }
