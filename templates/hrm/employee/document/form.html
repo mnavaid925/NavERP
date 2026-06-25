@@ -25,7 +25,7 @@
       <div class="form-help" style="margin-bottom:1rem;">Allowed file types: PDF, DOC, DOCX, JPG, PNG (max 10 MB). Verification is done by HR from the document's detail page.</div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
-        {% if request.GET.employee %}<a href="{% url 'hrm:employee_detail' request.GET.employee %}" class="btn btn-outline">Cancel</a>{% else %}<a href="{% url 'hrm:employee_document_list' %}" class="btn btn-outline">Cancel</a>{% endif %}
+        {% if cancel_employee %}<a href="{% url 'hrm:employee_detail' cancel_employee %}" class="btn btn-outline">Cancel</a>{% else %}<a href="{% url 'hrm:employee_document_list' %}" class="btn btn-outline">Cancel</a>{% endif %}
       </div>
     </form>
   </div></div>
