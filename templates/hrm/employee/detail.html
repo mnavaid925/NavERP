@@ -65,7 +65,7 @@
         <div class="detail-item"><dt>Passport Expiry</dt><dd>{{ obj.passport_expiry|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Bank Name</dt><dd>{{ obj.bank_name|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Account</dt><dd>{{ obj.masked_bank_account|default:"—" }}</dd></div>
-        <div class="detail-item"><dt>Routing</dt><dd>{{ obj.bank_routing|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Routing</dt><dd>{{ obj.masked_bank_routing|default:"—" }}</dd></div>
       </dl>
     </div>
   </div>
@@ -188,7 +188,7 @@
     <div class="card-header">
       <h2 class="card-title">Employment Lifecycle</h2>
       <div class="page-actions">
-        <a href="{% url 'hrm:employee_lifecycle_create' %}?employee={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add Event</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}<a href="{% url 'hrm:employee_lifecycle_create' %}?employee={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add Event</a>{% endif %}
         <a href="{% url 'hrm:employee_lifecycle_list' %}?employee={{ obj.pk }}" class="btn btn-outline">View Full Timeline</a>
       </div>
     </div>
