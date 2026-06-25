@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:exitinterview_list' %}">Exit Interviews</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'scheduled' %}
+        <form method="post" action="{% url 'hrm:exitinterview_complete' obj.pk %}" onsubmit="return confirm('Mark this exit interview completed?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Complete</button></form>
+        <form method="post" action="{% url 'hrm:exitinterview_skip' obj.pk %}" onsubmit="return confirm('Skip this exit interview?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="skip-forward"></i> Skip</button></form>
+      {% endif %}
+      {% if obj.status != 'completed' %}
+        <a href="{% url 'hrm:exitinterview_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:exitinterview_delete' obj.pk %}" onsubmit="return confirm('Delete this exit interview?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:separationcase_detail' obj.case_id %}">{{ obj.case.employee.party.name }}</a> <span class="text-muted">({{ obj.case.number }})</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'scheduled' %}info{% elif obj.status == 'completed' %}green{% elif obj.status == 'skipped' %}muted{% elif obj.status == 'no_show' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Mode</dt><dd>{{ obj.get_mode_display }}</dd></div>
+      <div class="detail-item"><dt>Interviewer</dt><dd>{% if obj.interviewer %}{{ obj.interviewer.get_full_name|default:obj.interviewer.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Scheduled At</dt><dd>{{ obj.scheduled_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Conducted At</dt><dd>{{ obj.conducted_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Primary Reason</dt><dd>{% if obj.primary_reason %}<span class="badge badge-info">{{ obj.get_primary_reason_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Would Recommend</dt><dd>{{ obj.would_recommend|yesno:"Yes,No,—" }}</dd></div>
+      <div class="detail-item"><dt>Would Rejoin</dt><dd>{{ obj.would_rejoin|yesno:"Yes,No,—" }}</dd></div>
+      <div class="detail-item"><dt>Average Rating</dt><dd>{{ obj.average_rating|default:"—" }} / 5</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ratings (1–5)</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Dimension</th><th>Rating</th></tr></thead>
+          <tbody>
+            {% for label, value in ratings %}
+              <tr>
+                <td>{{ label }}</td>
+                <td>{% if value %}<span class="badge badge-{% if value >= 4 %}green{% elif value == 3 %}amber{% else %}red{% endif %}">{{ value }} / 5</span>{% else %}<span class="text-muted">Not answered</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Feedback</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>What Went Well</dt><dd>{{ obj.what_went_well|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>What To Improve</dt><dd>{{ obj.what_to_improve|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Additional Comments</dt><dd>{{ obj.additional_comments|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:exitinterview_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
