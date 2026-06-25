@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.org_unit.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.org_unit.name }}{% if obj.code %} <span class="badge badge-slate">{{ obj.code }}</span>{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:department_list' %}">Departments</a><span class="sep">›</span><span>{{ obj.org_unit.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:department_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:department_delete' obj.pk %}" onsubmit="return confirm('Delete this department profile? The org unit itself is kept.');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Department</dt><dd>{{ obj.org_unit.name }}</dd></div>
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Parent Unit</dt><dd>{{ obj.org_unit.parent.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Department Head</dt><dd>{% if obj.head %}<a href="{% url 'hrm:employee_detail' obj.head.pk %}">{{ obj.head.party.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Cost Center</dt><dd>{{ obj.cost_center.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.description }}</p></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Designations</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Grade</th><th>Salary Band</th></tr></thead>
+        <tbody>
+          {% for d in designations %}
+            <tr>
+              <td><a href="{% url 'hrm:designation_detail' d.pk %}" class="fw-600">{{ d.name }}</a></td>
+              <td>{% if d.job_grade %}{{ d.job_grade.name }}{% else %}{{ d.grade|default:"—" }}{% endif %}</td>
+              <td>{{ d.min_salary|default:"—" }} – {{ d.max_salary|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="briefcase"></i><p>No designations in this department.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Employees</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Designation</th></tr></thead>
+        <tbody>
+          {% for e in employees %}
+            <tr>
+              <td><a href="{% url 'hrm:employee_detail' e.pk %}" class="fw-600">{{ e.number }}</a></td>
+              <td>{{ e.party.name }}</td>
+              <td>{{ e.designation.name|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="users"></i><p>No employees posted to this department.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:department_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
