@@ -120,7 +120,7 @@ class EmployeeProfileForm(TenantModelForm):
             "work_location", "notice_period_days", "father_name", "spouse_name",
             "national_id", "national_id_type", "passport_number", "passport_expiry",
             "current_address", "permanent_address", "bank_name", "bank_account", "bank_routing",
-            "probation_end_date", "emergency_contact_name", "emergency_contact_phone",
+            "probation_end_date", "confirmed_on", "emergency_contact_name", "emergency_contact_phone",
             "emergency_contact_relation", "emergency_contact_2_name", "emergency_contact_2_phone",
             "emergency_contact_2_relation", "photo", "notes",
         ]
