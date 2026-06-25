@@ -45,7 +45,7 @@ def _parties(request):
 def orgunit_list(request):
     return crud_list(
         request, OrgUnit.objects.filter(tenant=request.tenant).select_related("parent"),
-        "core/orgunit_list.html",
+        "core/orgunit/list.html",
         search_fields=["name"],
         filters=[("kind", "kind", False), ("parent", "parent_id", True)],
         extra_context={"kind_choices": OrgUnit.KIND_CHOICES,
@@ -55,20 +55,20 @@ def orgunit_list(request):
 
 @login_required
 def orgunit_create(request):
-    return crud_create(request, form_class=OrgUnitForm, template="core/orgunit_form.html",
+    return crud_create(request, form_class=OrgUnitForm, template="core/orgunit/form.html",
                        success_url="core:orgunit_list")
 
 
 @login_required
 def orgunit_detail(request, pk):
-    return crud_detail(request, model=OrgUnit, pk=pk, template="core/orgunit_detail.html",
+    return crud_detail(request, model=OrgUnit, pk=pk, template="core/orgunit/detail.html",
                        select_related=["parent"])
 
 
 @login_required
 def orgunit_edit(request, pk):
     return crud_edit(request, model=OrgUnit, pk=pk, form_class=OrgUnitForm,
-                     template="core/orgunit_form.html", success_url="core:orgunit_list")
+                     template="core/orgunit/form.html", success_url="core:orgunit_list")
 
 
 @login_required
@@ -82,7 +82,7 @@ def orgunit_delete(request, pk):
 def party_list(request):
     return crud_list(
         request, Party.objects.filter(tenant=request.tenant),
-        "core/party_list.html",
+        "core/party/list.html",
         search_fields=["name", "tax_id"],
         filters=[("kind", "kind", False)],
         extra_context={"kind_choices": Party.KIND_CHOICES},
@@ -91,20 +91,20 @@ def party_list(request):
 
 @login_required
 def party_create(request):
-    return crud_create(request, form_class=PartyForm, template="core/party_form.html",
+    return crud_create(request, form_class=PartyForm, template="core/party/form.html",
                        success_url="core:party_list")
 
 
 @login_required
 def party_detail(request, pk):
-    return crud_detail(request, model=Party, pk=pk, template="core/party_detail.html",
+    return crud_detail(request, model=Party, pk=pk, template="core/party/detail.html",
                        extra_context=None)
 
 
 @login_required
 def party_edit(request, pk):
     return crud_edit(request, model=Party, pk=pk, form_class=PartyForm,
-                     template="core/party_form.html", success_url="core:party_list")
+                     template="core/party/form.html", success_url="core:party_list")
 
 
 @login_required
@@ -118,7 +118,7 @@ def party_delete(request, pk):
 def partyrole_list(request):
     return crud_list(
         request, PartyRole.objects.filter(tenant=request.tenant).select_related("party"),
-        "core/partyrole_list.html",
+        "core/partyrole/list.html",
         search_fields=["party__name"],
         filters=[("role", "role", False), ("status", "status", False), ("party", "party_id", True)],
         extra_context={"role_choices": PartyRole.ROLE_CHOICES,
@@ -128,20 +128,20 @@ def partyrole_list(request):
 
 @login_required
 def partyrole_create(request):
-    return crud_create(request, form_class=PartyRoleForm, template="core/partyrole_form.html",
+    return crud_create(request, form_class=PartyRoleForm, template="core/partyrole/form.html",
                        success_url="core:partyrole_list")
 
 
 @login_required
 def partyrole_detail(request, pk):
-    return crud_detail(request, model=PartyRole, pk=pk, template="core/partyrole_detail.html",
+    return crud_detail(request, model=PartyRole, pk=pk, template="core/partyrole/detail.html",
                        select_related=["party"])
 
 
 @login_required
 def partyrole_edit(request, pk):
     return crud_edit(request, model=PartyRole, pk=pk, form_class=PartyRoleForm,
-                     template="core/partyrole_form.html", success_url="core:partyrole_list")
+                     template="core/partyrole/form.html", success_url="core:partyrole_list")
 
 
 @login_required
@@ -155,7 +155,7 @@ def partyrole_delete(request, pk):
 def address_list(request):
     return crud_list(
         request, Address.objects.filter(tenant=request.tenant).select_related("party"),
-        "core/address_list.html",
+        "core/address/list.html",
         search_fields=["line1", "city", "country"],
         filters=[("kind", "kind", False), ("party", "party_id", True)],
         extra_context={"kind_choices": Address.KIND_CHOICES, "parties": _parties(request)},
@@ -164,20 +164,20 @@ def address_list(request):
 
 @login_required
 def address_create(request):
-    return crud_create(request, form_class=AddressForm, template="core/address_form.html",
+    return crud_create(request, form_class=AddressForm, template="core/address/form.html",
                        success_url="core:address_list")
 
 
 @login_required
 def address_detail(request, pk):
-    return crud_detail(request, model=Address, pk=pk, template="core/address_detail.html",
+    return crud_detail(request, model=Address, pk=pk, template="core/address/detail.html",
                        select_related=["party"])
 
 
 @login_required
 def address_edit(request, pk):
     return crud_edit(request, model=Address, pk=pk, form_class=AddressForm,
-                     template="core/address_form.html", success_url="core:address_list")
+                     template="core/address/form.html", success_url="core:address_list")
 
 
 @login_required
@@ -191,7 +191,7 @@ def address_delete(request, pk):
 def contactmethod_list(request):
     return crud_list(
         request, ContactMethod.objects.filter(tenant=request.tenant).select_related("party"),
-        "core/contactmethod_list.html",
+        "core/contactmethod/list.html",
         search_fields=["value"],
         filters=[("kind", "kind", False), ("party", "party_id", True)],
         extra_context={"kind_choices": ContactMethod.KIND_CHOICES, "parties": _parties(request)},
@@ -200,20 +200,20 @@ def contactmethod_list(request):
 
 @login_required
 def contactmethod_create(request):
-    return crud_create(request, form_class=ContactMethodForm, template="core/contactmethod_form.html",
+    return crud_create(request, form_class=ContactMethodForm, template="core/contactmethod/form.html",
                        success_url="core:contactmethod_list")
 
 
 @login_required
 def contactmethod_detail(request, pk):
-    return crud_detail(request, model=ContactMethod, pk=pk, template="core/contactmethod_detail.html",
+    return crud_detail(request, model=ContactMethod, pk=pk, template="core/contactmethod/detail.html",
                        select_related=["party"])
 
 
 @login_required
 def contactmethod_edit(request, pk):
     return crud_edit(request, model=ContactMethod, pk=pk, form_class=ContactMethodForm,
-                     template="core/contactmethod_form.html", success_url="core:contactmethod_list")
+                     template="core/contactmethod/form.html", success_url="core:contactmethod_list")
 
 
 @login_required
@@ -228,7 +228,7 @@ def partyrelationship_list(request):
     return crud_list(
         request,
         PartyRelationship.objects.filter(tenant=request.tenant).select_related("from_party", "to_party"),
-        "core/partyrelationship_list.html",
+        "core/partyrelationship/list.html",
         search_fields=["from_party__name", "to_party__name"],
         filters=[("kind", "kind", False)],
         extra_context={"kind_choices": PartyRelationship.KIND_CHOICES, "parties": _parties(request)},
@@ -238,21 +238,21 @@ def partyrelationship_list(request):
 @login_required
 def partyrelationship_create(request):
     return crud_create(request, form_class=PartyRelationshipForm,
-                       template="core/partyrelationship_form.html",
+                       template="core/partyrelationship/form.html",
                        success_url="core:partyrelationship_list")
 
 
 @login_required
 def partyrelationship_detail(request, pk):
     return crud_detail(request, model=PartyRelationship, pk=pk,
-                       template="core/partyrelationship_detail.html",
+                       template="core/partyrelationship/detail.html",
                        select_related=["from_party", "to_party"])
 
 
 @login_required
 def partyrelationship_edit(request, pk):
     return crud_edit(request, model=PartyRelationship, pk=pk, form_class=PartyRelationshipForm,
-                     template="core/partyrelationship_form.html",
+                     template="core/partyrelationship/form.html",
                      success_url="core:partyrelationship_list")
 
 
@@ -269,7 +269,7 @@ def employment_list(request):
     return crud_list(
         request,
         Employment.objects.filter(tenant=request.tenant).select_related("party", "org_unit", "manager"),
-        "core/employment_list.html",
+        "core/employment/list.html",
         search_fields=["party__name", "job_title"],
         filters=[("status", "status", False), ("org_unit", "org_unit_id", True)],
         extra_context={"status_choices": Employment.STATUS_CHOICES,
@@ -280,20 +280,20 @@ def employment_list(request):
 
 @login_required
 def employment_create(request):
-    return crud_create(request, form_class=EmploymentForm, template="core/employment_form.html",
+    return crud_create(request, form_class=EmploymentForm, template="core/employment/form.html",
                        success_url="core:employment_list")
 
 
 @login_required
 def employment_detail(request, pk):
-    return crud_detail(request, model=Employment, pk=pk, template="core/employment_detail.html",
+    return crud_detail(request, model=Employment, pk=pk, template="core/employment/detail.html",
                        select_related=["party", "org_unit", "manager"])
 
 
 @login_required
 def employment_edit(request, pk):
     return crud_edit(request, model=Employment, pk=pk, form_class=EmploymentForm,
-                     template="core/employment_form.html", success_url="core:employment_list")
+                     template="core/employment/form.html", success_url="core:employment_list")
 
 
 @login_required
@@ -307,7 +307,7 @@ def employment_delete(request, pk):
 def activity_list(request):
     return crud_list(
         request, Activity.objects.filter(tenant=request.tenant).select_related("owner", "party"),
-        "core/activity_list.html",
+        "core/activity/list.html",
         search_fields=["subject"],
         filters=[("kind", "kind", False), ("status", "status", False), ("owner", "owner_id", True)],
         extra_context={"kind_choices": Activity.KIND_CHOICES,
@@ -320,20 +320,20 @@ def activity_list(request):
 
 @login_required
 def activity_create(request):
-    return crud_create(request, form_class=ActivityForm, template="core/activity_form.html",
+    return crud_create(request, form_class=ActivityForm, template="core/activity/form.html",
                        success_url="core:activity_list")
 
 
 @login_required
 def activity_detail(request, pk):
-    return crud_detail(request, model=Activity, pk=pk, template="core/activity_detail.html",
+    return crud_detail(request, model=Activity, pk=pk, template="core/activity/detail.html",
                        select_related=["owner", "party"])
 
 
 @login_required
 def activity_edit(request, pk):
     return crud_edit(request, model=Activity, pk=pk, form_class=ActivityForm,
-                     template="core/activity_form.html", success_url="core:activity_list")
+                     template="core/activity/form.html", success_url="core:activity_list")
 
 
 @login_required
@@ -347,7 +347,7 @@ def activity_delete(request, pk):
 def document_list(request):
     return crud_list(
         request, Document.objects.filter(tenant=request.tenant),
-        "core/document_list.html",
+        "core/document/list.html",
         search_fields=["name"],
         filters=[("classification", "classification", False)],
         extra_context={"classification_choices": Document.CLASSIFICATION_CHOICES},
@@ -356,19 +356,19 @@ def document_list(request):
 
 @login_required
 def document_create(request):
-    return crud_create(request, form_class=DocumentForm, template="core/document_form.html",
+    return crud_create(request, form_class=DocumentForm, template="core/document/form.html",
                        success_url="core:document_list")
 
 
 @login_required
 def document_detail(request, pk):
-    return crud_detail(request, model=Document, pk=pk, template="core/document_detail.html")
+    return crud_detail(request, model=Document, pk=pk, template="core/document/detail.html")
 
 
 @login_required
 def document_edit(request, pk):
     return crud_edit(request, model=Document, pk=pk, form_class=DocumentForm,
-                     template="core/document_form.html", success_url="core:document_list")
+                     template="core/document/form.html", success_url="core:document_list")
 
 
 @login_required
@@ -382,7 +382,7 @@ def document_delete(request, pk):
 def auditlog_list(request):
     return crud_list(
         request, AuditLog.objects.filter(tenant=request.tenant).select_related("user"),
-        "core/auditlog_list.html",
+        "core/auditlog/list.html",
         search_fields=["target"],
         filters=[("action", "action", False)],
         extra_context={"action_choices": AuditLog.ACTION_CHOICES,
@@ -394,4 +394,4 @@ def auditlog_list(request):
 @tenant_admin_required
 def auditlog_detail(request, pk):
     obj = get_object_or_404(AuditLog.objects.select_related("user"), pk=pk, tenant=request.tenant)
-    return render(request, "core/auditlog_detail.html", {"obj": obj})
+    return render(request, "core/auditlog/detail.html", {"obj": obj})
