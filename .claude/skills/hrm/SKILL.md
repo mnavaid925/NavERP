@@ -17,7 +17,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 23 tables (12 core HRM + 7 onboarding + 4 offboarding)
+## Models (`apps/hrm/models.py`) — 25 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -29,7 +29,7 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 | `Designation` (3.2) | — | name, **job_grade→`JobGrade`**, grade(free-text fallback), department→`core.OrgUnit`, **description, requirements**, min/**mid**/max_salary, **budgeted_headcount**, is_active | `clean()`: min≤max and min≤mid≤max. `__str__` prefers `job_grade.name` over free-text `grade`. `unique_together=(tenant,name)`; indexes (tenant,is_active)/(tenant,department)/(tenant,job_grade) |
 | `DepartmentProfile` (3.2) | — | **org_unit→`core.OrgUnit`(1:1, kind=department)**, code, description, head→`EmployeeProfile`, cost_center→`core.OrgUnit`(kind=cost_center), is_active | HRM companion to a department OrgUnit (adds head/code/CC core can't hold; name/parent stay on OrgUnit). `clean()` rejects non-department org_unit + non-cc cost_center. `unique_together=(tenant,org_unit)`; indexes (tenant,is_active)/(tenant,head)/(tenant,cost_center) |
 | `CostCenterProfile` (3.2) | — | **org_unit→`core.OrgUnit`(1:1, kind=cost_center)**, code, description, owner→`EmployeeProfile`, budget_annual, budget_year, is_active | HRM companion to a cost-center OrgUnit (budget/owner). `clean()` rejects non-cc org_unit. `unique_together=(tenant,org_unit)`. Budget-vs-actuals reporting deferred to Accounting. |
-| `EmployeeProfile` | `EMP-` | party→`core.Party`(1:1), employment→`core.Employment`(1:1), designation→`Designation`, employee_type, gender, dob, blood_group, nationality, personal_email, mobile, bank_*, probation_end_date, confirmed_on, emergency_*, photo, notes | **The anchor — every other HRM model FKs here, not to core.Party.** Props: `department`/`manager` (via employment), `name` (party.name), `masked_bank_account()` |
+| `EmployeeProfile` | `EMP-` | party→`core.Party`(1:1), employment→`core.Employment`(1:1), designation→`Designation`, employee_type, gender, dob, blood_group, marital_status, nationality, personal_email, work_email, mobile, work_location, notice_period_days, father_name, spouse_name, national_id(+_type), passport_number/_expiry, current/permanent_address, bank_*, probation_end_date, confirmed_on, emergency_*(×2), photo, notes | **The anchor — every other HRM model FKs here, not to core.Party.** Props: `department`/`manager` (via employment), `name` (party.name). **Masked PII accessors — always use in templates, never the raw field:** `masked_bank_account()`/`masked_bank_routing()`/`masked_national_id()`/`masked_passport_number()` (last-4 via `_mask_last4`). `national_id`/`passport_number` (+ bank_*) redacted from AuditLog via `core.crud._SENSITIVE_AUDIT_FIELDS`; plaintext at rest (WARNING — encrypt later). |
 | `LeaveType` | — | name, code, is_paid, accrual_rule(none/monthly/annual), accrual_days, max_balance, max_carry_forward, encashable, is_active | `clean()`: accrual_days>0 when accruing. `unique_together=(tenant,code)` |
 | `LeaveAllocation` | `LA-` | employee, leave_type, year, allocated_days, note, status(draft/active/expired) | `used_days`/`balance` are **derived properties** (sum of approved requests); `unique_together` also on (tenant,employee,leave_type,year) |
 | `LeaveRequest` | `LR-` | employee, leave_type, start_date, end_date, **days**(editable=False), reason, status(draft/pending/approved/rejected/cancelled), approver, approved_at, rejected_reason, cancelled_reason | `save()` recomputes `days` from range minus non-optional holidays; `clean()`: end ≥ start. `OPEN_STATUSES=(draft,pending)` |
@@ -70,6 +70,15 @@ properties.
 
 **Offboarding services (`apps/hrm/services.py`):** `generate_clearance_checklist(case)` — idempotent ((department,description)-keyed `bulk_create`) 6-line department checklist, links one issued `AssetAllocation` to the IT line, respects `requires_kt` for the manager line. `compute_leave_encashment(employee)` — sums encashable active `LeaveAllocation` balances via a **single correlated subquery** (no N+1), values them at `designation.min_salary / 30` per day; returns `(days, amount)`.
 
+### 3.1 Employee records (2 tables) — personnel-file vault + job-history timeline (children of `EmployeeProfile`)
+
+| Model | Number | Key fields | Reuses core / notes |
+|-------|--------|-----------|---------------------|
+| `EmployeeDocument` | `EDOC-` | employee→`EmployeeProfile`, document_type(19 choices: national_id/passport/visa/work_permit/degree_certificate/employment_contract/nda/…), title, document_number, issuing_authority/_country, issued_on, expires_on, is_confidential, file(upload, allowlist pdf/doc/docx/jpg/png + 10 MB), **verification_status**(pending/verified/rejected, editable=False), verified_by/verified_at(editable=False), notes | Personnel-file vault — distinct from `OnboardingDocument` (program e-sign) and `core.Document` (generic). `is_expired`/`is_expiring_soon` (≤30 days) **derived props**. **`is_confidential` is enforced** — confidential docs are admin-only on detail/edit/delete and excluded from the non-admin list/hub. Verify/reject are workflow-owned (`@tenant_admin_required`). |
+| `EmployeeLifecycleEvent` | `ELC-` | employee→`EmployeeProfile`, event_type(`LIFECYCLE_EVENT_TYPE_CHOICES`: hire/confirmation/transfer/promotion/demotion/salary_revision/separation/…, module-level), effective_date, reason, from/to pairs (designation→`Designation`, department→`core.OrgUnit`, location, job_title, salary, manager→`EmployeeProfile`, employee_type — all `related_name="+"`), notes, initiated_by→`User`(editable=False) | Append-only job-history timeline. v1 records events only — does NOT auto-mutate `core.Employment`/`EmployeeProfile` (deferred). Ordering `-effective_date`. **Create/edit/delete are `@tenant_admin_required`** (authoritative HR records carrying salary); list/detail are view-only for members. `initiated_by` stamped from `request.user`. |
+
+**Employee-records views (`apps/hrm/views.py`, the `3.1 … (completion)` section):** full CRUD for both via `crud_*`; `_employee_child_create` (the `?employee=<pk>` pre-fill helper, validates the pk → `cancel_employee`); `employee_document_mark_verified`/`_reject` (`@tenant_admin_required`); `_is_hr_admin(user)` helper (superuser or `is_tenant_admin`) gates confidential docs. `employee_detail` is the hub — adds **Documents** + **Employment Lifecycle** section cards (confidential docs filtered for non-admins). The employee form renders the new personnel-file fields via its generic `{% for field in form %}` loop (no template edit needed). Seeded by `_seed_employee_records` (see Seeder).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -77,6 +86,10 @@ properties.
   **`onboardingtemplate`, `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`,
   `assetallocation`, `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`,
   `finalsettlement`**}: `<entity>_list/_create/_detail/_edit/_delete`.
+- **Employee records (3.1):** `employee_document_list/_create/_detail/_edit/_delete` (`/hrm/employee-documents/`) +
+  POST `employee_document_mark_verified`/`employee_document_reject` (`@tenant_admin_required`);
+  `employee_lifecycle_list/_create/_detail/_edit/_delete` (`/hrm/lifecycle-events/`; create/edit/delete are
+  `@tenant_admin_required`). Both create pages honor `?employee=<pk>` to pre-fill + redirect to the employee hub.
 - **Org-structure derived pages (3.2, no model):** `hrm:org_chart` (`/hrm/org-chart/`, `?view=reporting|department`
   toggle — reporting-line tree from `core.Employment.manager` / by-department grouping; excludes terminated
   employees; capped at 500) and `hrm:company_setup` (`/hrm/company-setup/`, read-only — company `OrgUnit` +
@@ -131,8 +144,10 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   `pending`/`in_progress`; settlement editable in `draft`/`computed`, deletable only in `draft`.
 
 ## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
-76 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
-filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — single-entity, so `employee/list.html` etc.),
+82 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — the main employee is single-entity so
+`employee/list.html` etc.; its child entities get their own folders `employee/document/{list,detail,form}.html` and
+`employee/lifecycle/{list,detail,form}.html` — the `budget/line/` child-entity precedent),
 **`organization/` (3.2 — multi-entity: entity folders `designation/ jobgrade/ department/ costcenter/` each with
 `list/detail/form.html`, plus the standalone derived pages `organization/org_chart.html` and
 `organization/company_setup.html`)** — note 3.2 moved from the old flat `designation/` folder to `organization/`
@@ -168,6 +183,12 @@ allowlists pdf/doc/docx/jpg/png + 10 MB. `ExitInterviewForm` excludes status/con
 `ClearanceItemForm` excludes status/cleared_by/cleared_at and scopes `asset_allocation` to `status="issued"`.
 `FinalSettlementForm` excludes status/hr+finance approval stamps/paid_at/gl_posted + 1:1-per-case guard
 (also DB `unique_together`).
+**Employee-records form security (3.1):** `EmployeeProfileForm` now carries the 15 personnel-file fields
+(marital_status/work_email/work_location/notice_period_days/national_id(+type)/passport_number(+expiry)/father+
+spouse_name/current+permanent_address/emergency_contact_2_*) + `confirmed_on`. `EmployeeDocumentForm` excludes
+`verification_status`/`verified_by`/`verified_at` (workflow-owned) and `clean_file` allowlists pdf/doc/docx/jpg/png
++ 10 MB. `EmployeeLifecycleEventForm` excludes `initiated_by` and scopes all FK querysets (employee/managers/
+designations/departments) to the tenant.
 
 ## Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
@@ -183,11 +204,17 @@ still gets it): 2 templates (12 task lines), 2 programs (1 active/1 completed) w
 6 assets, 2 orientation sessions per tenant. **Offboarding** is seeded by `_seed_offboarding(tenant)` (guarded by
 its own `SeparationCase.exists()` check; the offboarding models are also in the `--flush` delete list): 2 separation
 cases per tenant (1 completed + fully-cleared + paid settlement + completed exit interview; 1 in-clearance with the
-HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `admin_acme` / `admin_globex`
-(password `password`); superuser `admin` has no tenant and sees nothing.
+HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. **Employee records (3.1)** are seeded by
+`_seed_employee_records(tenant)` (guarded by its own `EmployeeDocument.exists()` check; both models in the `--flush`
+list): for the first 3 employees — 3 `EmployeeDocument`s each (national_id [verified], passport [pending, expires in
+~180 days = expiring-soon], appointment_letter [verified]) + a `hire` (and `confirmation` if confirmed)
+`EmployeeLifecycleEvent`. Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
+tenant and sees nothing.
 
 ## Sidebar wiring (`apps/core/navigation.py` `LIVE_LINKS`)
-- 3.1: Employee Directory/Profile/Employment Details → `hrm:employee_list`; + HRM Overview → `hrm:hrm_overview`.
+- 3.1 (all 5 bullets live): Employee Directory/Profile/Employment Details → `hrm:employee_list`; Document Management
+  → `hrm:employee_document_list`; Employee Lifecycle → `hrm:employee_lifecycle_list`; + HRM Overview →
+  `hrm:hrm_overview`.
 - 3.2 (all 5 bullets live): Company Setup → `hrm:company_setup`; Department Management → `hrm:department_list`;
   Designation/Job Titles → `hrm:designation_list`; Organization Chart → `hrm:org_chart`; Cost Centers →
   `hrm:costcenter_list`; + extra Job Grades → `hrm:jobgrade_list`.
@@ -240,6 +267,16 @@ HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `
   natural key; keep it idempotent and reuse core Parties.
 
 ## Deferred (later HRM passes — see `.claude/tasks/todo.md`)
+**3.1 employee-records deferrals:** lifecycle event → `core.Employment`/`EmployeeProfile` auto-sync (v1 records the
+timeline only), document expiry email/push reminders (needs Celery/SMTP), normalized `EmployeeAddress` table (v1 is
+free-text), OCR/AI document extraction + e-signature on personnel docs, `work_location` FK→`core.OrgUnit(branch)`.
+**Two security items are deferred as project-wide patterns** (not 3.1-specific): (a) the employee **edit form** still
+shows raw `national_id`/`passport_number`/`bank_*` to any `@login_required` member (same as the pre-existing
+`bank_account` treatment — masking only protects the read-only detail render; gating the whole employee CRUD or
+splitting a sensitive-fields sub-form behind `@tenant_admin_required` is a Module-0 decision); (b) uploaded
+`EmployeeDocument` files are served via the dev `/media/` helper with no auth gate (same as onboarding docs/photos/
+resignation letters — keep `MEDIA_ROOT` outside the web root in production, or add a protected `X-Accel-Redirect`
+serve view project-wide).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), recruiting/ATS
 (3.5–3.8), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), attendance regularization & geofencing, optional-holiday selection, leave
