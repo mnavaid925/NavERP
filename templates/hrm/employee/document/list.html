@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Employee Documents{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Employee Documents</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employee_list' %}">Employees</a><span class="sep">›</span><span>Documents</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:employee_document_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Document</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, title, doc # or employee…">
+        </div>
+        <div class="form-group">
+          <select name="document_type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in document_type_choices %}
+              <option value="{{ val }}" {% if request.GET.document_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="verification_status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in verification_status_choices %}
+              <option value="{{ val }}" {% if request.GET.verification_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:employee_document_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Type</th><th>Title</th><th>Doc #</th><th>Expires</th><th>Verification</th><th></th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:employee_document_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td><span class="badge badge-info">{{ obj.get_document_type_display }}</span></td>
+              <td>{{ obj.title }}</td>
+              <td>{{ obj.document_number|default:"—" }}</td>
+              <td>{% if obj.expires_on %}{% if obj.is_expired %}<span class="badge badge-red">{{ obj.expires_on }}</span>{% elif obj.is_expiring_soon %}<span class="badge badge-amber">{{ obj.expires_on }}</span>{% else %}{{ obj.expires_on }}{% endif %}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if obj.verification_status == 'pending' %}amber{% elif obj.verification_status == 'verified' %}green{% elif obj.verification_status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_verification_status_display }}</span></td>
+              <td>{% if obj.is_confidential %}<i data-lucide="lock" title="Confidential"></i>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:employee_document_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.verification_status != 'verified' %}
+                    <a href="{% url 'hrm:employee_document_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:employee_document_delete' obj.pk %}" onsubmit="return confirm('Delete this document?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="folder"></i><h3>No documents found</h3><p>Add an employee's ID proofs, certificates, contracts and NDAs.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
