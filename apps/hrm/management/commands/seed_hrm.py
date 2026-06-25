@@ -17,10 +17,13 @@ from apps.hrm.models import (
     AssetAllocation,
     AttendanceRecord,
     ClearanceItem,
+    CostCenterProfile,
+    DepartmentProfile,
     Designation,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    JobGrade,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -43,6 +46,26 @@ DESIGNATIONS = [
     ("Software Engineer", "L2", Decimal("60000"), Decimal("90000")),
     ("Senior Engineer", "L3", Decimal("90000"), Decimal("130000")),
     ("Engineering Manager", "M1", Decimal("130000"), Decimal("180000")),
+]
+
+# 3.2 Organizational Structure — orderable grade catalog. (name, level_order, description)
+JOB_GRADES = [
+    ("G1 — Junior", 1, "Entry-level individual contributor."),
+    ("G2 — Mid", 2, "Developing individual contributor."),
+    ("G3 — Senior", 3, "Senior individual contributor."),
+    ("M1 — Manager", 4, "First-level people manager."),
+    ("M2 — Director", 5, "Department or function director."),
+]
+# Designation name -> (job-grade index, mid_salary, budgeted_headcount).
+DESIGNATION_GRADE_MAP = {
+    "Software Engineer": (1, Decimal("75000"), 3),
+    "Senior Engineer": (2, Decimal("110000"), 2),
+    "Engineering Manager": (3, Decimal("155000"), 1),
+}
+# Cost-center OrgUnit nodes HRM seeds (none exist in core). (name, code, annual budget)
+COST_CENTERS = [
+    ("Engineering Cost Center", "ENGC", Decimal("1200000")),
+    ("Operations Cost Center", "OPSC", Decimal("750000")),
 ]
 EMPLOYEE_TYPES = ["full_time", "full_time", "part_time", "contract", "full_time"]
 GENDERS = ["female", "male", "female", "male", "female"]
@@ -114,6 +137,7 @@ class Command(BaseCommand):
             return
         for tenant in tenants:
             self._seed_tenant(tenant, flush=options["flush"])
+            self._seed_org_structure(tenant, flush=options["flush"])
             self._seed_onboarding(tenant, flush=options["flush"])
             self._seed_offboarding(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
@@ -127,8 +151,9 @@ class Command(BaseCommand):
             for model in (FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
                           OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
                           OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
+                          CostCenterProfile, DepartmentProfile,
                           AttendanceRecord, ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
-                          LeaveType, PublicHoliday, EmployeeProfile, Designation):
+                          LeaveType, PublicHoliday, EmployeeProfile, Designation, JobGrade):
                 model.objects.filter(tenant=tenant).delete()
 
         if EmployeeProfile.objects.filter(tenant=tenant).exists():
@@ -255,6 +280,75 @@ class Command(BaseCommand):
             f"HRM seeded for '{tenant.name}': {len(employees)} employees, "
             f"{LeaveAllocation.objects.filter(tenant=tenant).count()} allocations, "
             f"{AttendanceRecord.objects.filter(tenant=tenant).count()} attendance rows."))
+
+    @transaction.atomic
+    def _seed_org_structure(self, tenant, *, flush):
+        """Seed 3.2 Organizational Structure demo data — job grades, department profiles, and cost
+        centers (with their OrgUnit nodes, since core seeds none). Guarded independently of the main
+        HRM guard so a tenant whose employees already exist still gets the org-structure rows."""
+        if JobGrade.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Org-structure data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+        today = timezone.localdate()
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant)
+                         .select_related("party").order_by("number"))
+
+        # --- Job grades (orderable catalog) ---
+        grades = []
+        for name, order, desc in JOB_GRADES:
+            g, _ = JobGrade.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"level_order": order, "description": desc})
+            grades.append(g)
+
+        # --- Link designations -> grades + fill mid-salary / budgeted headcount (only if unset) ---
+        for desig in Designation.objects.filter(tenant=tenant):
+            mapping = DESIGNATION_GRADE_MAP.get(desig.name)
+            if not mapping:
+                continue
+            grade_idx, mid, headcount = mapping
+            changed = []
+            if desig.job_grade_id is None and grade_idx < len(grades):
+                desig.job_grade = grades[grade_idx]
+                changed.append("job_grade")
+            if desig.mid_salary is None:
+                desig.mid_salary = mid
+                changed.append("mid_salary")
+            if desig.budgeted_headcount is None:
+                desig.budgeted_headcount = headcount
+                changed.append("budgeted_headcount")
+            if changed:
+                desig.save(update_fields=changed + ["updated_at"])
+
+        # --- Cost-center OrgUnit nodes (none exist in core) + their HRM profiles ---
+        company = OrgUnit.objects.filter(tenant=tenant, kind="company").first()
+        cost_centers = []
+        for idx, (name, code, budget) in enumerate(COST_CENTERS):
+            unit, _ = OrgUnit.objects.get_or_create(
+                tenant=tenant, kind="cost_center", name=name, defaults={"parent": company})
+            CostCenterProfile.objects.get_or_create(
+                tenant=tenant, org_unit=unit,
+                defaults={"code": code, "budget_annual": budget, "budget_year": today.year,
+                          "owner": employees[idx % len(employees)] if employees else None,
+                          "description": f"{name} — personnel budget pool."})
+            cost_centers.append(unit)
+
+        # --- Department profiles over the existing department OrgUnits ---
+        dept_units = list(OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("name"))
+        for idx, unit in enumerate(dept_units):
+            DepartmentProfile.objects.get_or_create(
+                tenant=tenant, org_unit=unit,
+                defaults={"code": unit.name[:3].upper(),
+                          "head": employees[idx % len(employees)] if employees else None,
+                          "cost_center": cost_centers[idx % len(cost_centers)] if cost_centers else None,
+                          "description": f"{unit.name} department."})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Org-structure seeded for '{tenant.name}': "
+            f"{JobGrade.objects.filter(tenant=tenant).count()} grades, "
+            f"{DepartmentProfile.objects.filter(tenant=tenant).count()} department profiles, "
+            f"{CostCenterProfile.objects.filter(tenant=tenant).count()} cost centers."))
 
     @transaction.atomic
     def _seed_onboarding(self, tenant, *, flush):
