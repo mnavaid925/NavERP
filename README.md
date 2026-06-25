@@ -207,6 +207,14 @@ First HRM passes — **employee directory + onboarding + leave + attendance**, r
   and a **derived** progress %; plus `OnboardingDocument` collection with an e-sign status lifecycle (allowlisted
   uploads), `AssetAllocation` (`AST-`, laptop/ID/access-card issue→return), and `OrientationSession` scheduling
   with attendance. Welcome Kit (welcome message/video/first-day notes + buddy) lives on the program.
+- **3.4 Employee Offboarding** — a `SeparationCase` (`SEP-`) hub driving resignation→approval→clearance→F&F→
+  completion (status `draft→pending_approval→in_clearance→cleared→settled→completed`, with **derived**
+  `expected_last_working_day` and an `all_mandatory_cleared` gate); on approval a `generate_clearance_checklist`
+  service auto-builds the per-department `ClearanceItem` lines (clearing an IT line **returns the linked issued
+  `AssetAllocation`** in the same txn); an `ExitInterview` (`EI-`) with 8 Likert ratings + coded reason; a
+  `FinalSettlement` (`FNF-`) with earnings/deductions and a **derived** `net_payable`, `Compute` auto-fills leave
+  encashment + gratuity, then HR→Finance approve→paid; and auto-generated relieving/experience letters
+  (print views). GL posting deferred (`gl_posted` stub → `accounting.PayrollRun`).
 - **3.9 Attendance Management** — `AttendanceRecord` (`ATT-`, auto `hours_worked` incl. overnight, late-arrival
   badge, source/status), `Shift` (grace window) + `ShiftAssignment`.
 - **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
@@ -214,9 +222,9 @@ First HRM passes — **employee directory + onboarding + leave + attendance**, r
   cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **239-test** HRM suite
-(**1301 project-wide**). Leave/approver fields are workflow-set (never form-set); sensitive bank fields are redacted
-from the audit trail.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **603-test** HRM suite
+(**1665 project-wide**). Leave/approver and offboarding workflow/approval fields are workflow-set (never
+form-set); sensitive bank fields are redacted from the audit trail.
 
 ---
 
