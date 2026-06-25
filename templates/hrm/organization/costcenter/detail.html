@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.org_unit.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.org_unit.name }}{% if obj.code %} <span class="badge badge-slate">{{ obj.code }}</span>{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:costcenter_list' %}">Cost Centers</a><span class="sep">›</span><span>{{ obj.org_unit.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:costcenter_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:costcenter_delete' obj.pk %}" onsubmit="return confirm('Delete this cost center profile? The org unit itself is kept.');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Cost Center</dt><dd>{{ obj.org_unit.name }}</dd></div>
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Parent Unit</dt><dd>{{ obj.org_unit.parent.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Budget Owner</dt><dd>{% if obj.owner %}<a href="{% url 'hrm:employee_detail' obj.owner.pk %}">{{ obj.owner.party.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Annual Budget</dt><dd>{{ obj.budget_annual|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Budget Year</dt><dd>{{ obj.budget_year|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.description }}</p></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Mapped Departments</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Department</th><th>Code</th><th>Head</th></tr></thead>
+        <tbody>
+          {% for d in mapped_departments %}
+            <tr>
+              <td><a href="{% url 'hrm:department_detail' d.pk %}" class="fw-600">{{ d.org_unit.name }}</a></td>
+              <td>{{ d.code|default:"—" }}</td>
+              <td>{% if d.head %}{{ d.head.party.name }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="building-2"></i><p>No departments map to this cost center.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:costcenter_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
