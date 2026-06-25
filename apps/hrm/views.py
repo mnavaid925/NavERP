@@ -263,7 +263,7 @@ def leavetype_list(request):
     return crud_list(
         request,
         LeaveType.objects.filter(tenant=request.tenant),
-        "hrm/leave/type_list.html",
+        "hrm/leave/type/list.html",
         search_fields=["name", "code"],
         filters=[("is_active", "is_active", False), ("is_paid", "is_paid", False),
                  ("accrual_rule", "accrual_rule", False)],
@@ -273,7 +273,7 @@ def leavetype_list(request):
 
 @login_required
 def leavetype_create(request):
-    return crud_create(request, form_class=LeaveTypeForm, template="hrm/leave/type_form.html",
+    return crud_create(request, form_class=LeaveTypeForm, template="hrm/leave/type/form.html",
                        success_url="hrm:leavetype_list")
 
 
@@ -281,7 +281,7 @@ def leavetype_create(request):
 def leavetype_detail(request, pk):
     obj = get_object_or_404(LeaveType, pk=pk, tenant=request.tenant)
     year = timezone.localdate().year
-    return render(request, "hrm/leave/type_detail.html", {
+    return render(request, "hrm/leave/type/detail.html", {
         "obj": obj,
         "year": year,
         "allocation_count": LeaveAllocation.objects.filter(
@@ -293,7 +293,7 @@ def leavetype_detail(request, pk):
 @login_required
 def leavetype_edit(request, pk):
     return crud_edit(request, model=LeaveType, pk=pk, form_class=LeaveTypeForm,
-                     template="hrm/leave/type_form.html", success_url="hrm:leavetype_list")
+                     template="hrm/leave/type/form.html", success_url="hrm:leavetype_list")
 
 
 @login_required
@@ -322,7 +322,7 @@ def leaveallocation_list(request):
         .select_related("employee__party", "leave_type")
         .annotate(used_days_db=used_subq)
         .annotate(balance_db=ExpressionWrapper(F("allocated_days") - F("used_days_db"), output_field=_DEC)),
-        "hrm/leave/allocation_list.html",
+        "hrm/leave/allocation/list.html",
         search_fields=["number", "employee__party__name", "leave_type__name"],
         filters=[("status", "status", False), ("year", "year", True),
                  ("employee", "employee_id", True), ("leave_type", "leave_type_id", True)],
@@ -337,7 +337,7 @@ def leaveallocation_list(request):
 @login_required
 def leaveallocation_create(request):
     return crud_create(request, form_class=LeaveAllocationForm,
-                       template="hrm/leave/allocation_form.html", success_url="hrm:leaveallocation_list")
+                       template="hrm/leave/allocation/form.html", success_url="hrm:leaveallocation_list")
 
 
 @login_required
@@ -345,7 +345,7 @@ def leaveallocation_detail(request, pk):
     obj = get_object_or_404(
         LeaveAllocation.objects.select_related("employee__party", "leave_type"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/leave/allocation_detail.html", {
+    return render(request, "hrm/leave/allocation/detail.html", {
         "obj": obj,
         "requests": LeaveRequest.objects.filter(
             tenant=request.tenant, employee=obj.employee, leave_type=obj.leave_type,
@@ -356,7 +356,7 @@ def leaveallocation_detail(request, pk):
 @login_required
 def leaveallocation_edit(request, pk):
     return crud_edit(request, model=LeaveAllocation, pk=pk, form_class=LeaveAllocationForm,
-                     template="hrm/leave/allocation_form.html", success_url="hrm:leaveallocation_list")
+                     template="hrm/leave/allocation/form.html", success_url="hrm:leaveallocation_list")
 
 
 @login_required
@@ -372,7 +372,7 @@ def leaverequest_list(request):
         request,
         LeaveRequest.objects.filter(tenant=request.tenant)
         .select_related("employee__party", "leave_type", "approver"),
-        "hrm/leave/request_list.html",
+        "hrm/leave/request/list.html",
         search_fields=["number", "employee__party__name", "reason"],
         filters=[("status", "status", False), ("employee", "employee_id", True),
                  ("leave_type", "leave_type_id", True)],
@@ -385,7 +385,7 @@ def leaverequest_list(request):
 
 @login_required
 def leaverequest_create(request):
-    return crud_create(request, form_class=LeaveRequestForm, template="hrm/leave/request_form.html",
+    return crud_create(request, form_class=LeaveRequestForm, template="hrm/leave/request/form.html",
                        success_url="hrm:leaverequest_list")
 
 
@@ -397,7 +397,7 @@ def leaverequest_detail(request, pk):
     allocation = LeaveAllocation.objects.filter(
         tenant=request.tenant, employee=obj.employee, leave_type=obj.leave_type,
         year=obj.start_date.year).first()
-    return render(request, "hrm/leave/request_detail.html", {
+    return render(request, "hrm/leave/request/detail.html", {
         "obj": obj,
         "allocation": allocation,
     })
@@ -411,7 +411,7 @@ def leaverequest_edit(request, pk):
         messages.error(request, "Only a draft or pending leave request can be edited.")
         return redirect("hrm:leaverequest_detail", pk=obj.pk)
     return crud_edit(request, model=LeaveRequest, pk=pk, form_class=LeaveRequestForm,
-                     template="hrm/leave/request_form.html", success_url="hrm:leaverequest_list")
+                     template="hrm/leave/request/form.html", success_url="hrm:leaverequest_list")
 
 
 @login_required
@@ -511,7 +511,7 @@ def publicholiday_list(request):
             years.append(y)
     years = sorted(set(years), reverse=True)
     return crud_list(
-        request, qs, "hrm/holiday/publicholiday_list.html",
+        request, qs, "hrm/holiday/publicholiday/list.html",
         search_fields=["name"],
         filters=[("is_optional", "is_optional", False)],
         extra_context={"year_choices": years},
@@ -521,19 +521,19 @@ def publicholiday_list(request):
 @login_required
 def publicholiday_create(request):
     return crud_create(request, form_class=PublicHolidayForm,
-                       template="hrm/holiday/publicholiday_form.html", success_url="hrm:publicholiday_list")
+                       template="hrm/holiday/publicholiday/form.html", success_url="hrm:publicholiday_list")
 
 
 @login_required
 def publicholiday_detail(request, pk):
     obj = get_object_or_404(PublicHoliday, pk=pk, tenant=request.tenant)
-    return render(request, "hrm/holiday/publicholiday_detail.html", {"obj": obj})
+    return render(request, "hrm/holiday/publicholiday/detail.html", {"obj": obj})
 
 
 @login_required
 def publicholiday_edit(request, pk):
     return crud_edit(request, model=PublicHoliday, pk=pk, form_class=PublicHolidayForm,
-                     template="hrm/holiday/publicholiday_form.html", success_url="hrm:publicholiday_list")
+                     template="hrm/holiday/publicholiday/form.html", success_url="hrm:publicholiday_list")
 
 
 @login_required
@@ -549,7 +549,7 @@ def shift_list(request):
         request,
         Shift.objects.filter(tenant=request.tenant)
         .annotate(assignment_count=Count("assignments")).order_by("name"),
-        "hrm/attendance/shift_list.html",
+        "hrm/attendance/shift/list.html",
         search_fields=["name"],
         filters=[("is_active", "is_active", False)],
         extra_context={},
@@ -558,14 +558,14 @@ def shift_list(request):
 
 @login_required
 def shift_create(request):
-    return crud_create(request, form_class=ShiftForm, template="hrm/attendance/shift_form.html",
+    return crud_create(request, form_class=ShiftForm, template="hrm/attendance/shift/form.html",
                        success_url="hrm:shift_list")
 
 
 @login_required
 def shift_detail(request, pk):
     obj = get_object_or_404(Shift, pk=pk, tenant=request.tenant)
-    return render(request, "hrm/attendance/shift_detail.html", {
+    return render(request, "hrm/attendance/shift/detail.html", {
         "obj": obj,
         "assignments": ShiftAssignment.objects.filter(tenant=request.tenant, shift=obj)
         .select_related("employee__party").order_by("-effective_from")[:50],
@@ -575,7 +575,7 @@ def shift_detail(request, pk):
 @login_required
 def shift_edit(request, pk):
     return crud_edit(request, model=Shift, pk=pk, form_class=ShiftForm,
-                     template="hrm/attendance/shift_form.html", success_url="hrm:shift_list")
+                     template="hrm/attendance/shift/form.html", success_url="hrm:shift_list")
 
 
 @login_required
@@ -598,7 +598,7 @@ def shiftassignment_list(request):
         request,
         ShiftAssignment.objects.filter(tenant=request.tenant)
         .select_related("employee__party", "shift"),
-        "hrm/attendance/shiftassignment_list.html",
+        "hrm/attendance/shiftassignment/list.html",
         search_fields=["employee__party__name", "shift__name"],
         filters=[("shift", "shift_id", True), ("employee", "employee_id", True)],
         extra_context={"shifts": Shift.objects.filter(tenant=request.tenant).order_by("name"),
@@ -610,20 +610,20 @@ def shiftassignment_list(request):
 @login_required
 def shiftassignment_create(request):
     return crud_create(request, form_class=ShiftAssignmentForm,
-                       template="hrm/attendance/shiftassignment_form.html", success_url="hrm:shiftassignment_list")
+                       template="hrm/attendance/shiftassignment/form.html", success_url="hrm:shiftassignment_list")
 
 
 @login_required
 def shiftassignment_detail(request, pk):
     obj = get_object_or_404(
         ShiftAssignment.objects.select_related("employee__party", "shift"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/attendance/shiftassignment_detail.html", {"obj": obj})
+    return render(request, "hrm/attendance/shiftassignment/detail.html", {"obj": obj})
 
 
 @login_required
 def shiftassignment_edit(request, pk):
     return crud_edit(request, model=ShiftAssignment, pk=pk, form_class=ShiftAssignmentForm,
-                     template="hrm/attendance/shiftassignment_form.html", success_url="hrm:shiftassignment_list")
+                     template="hrm/attendance/shiftassignment/form.html", success_url="hrm:shiftassignment_list")
 
 
 @login_required
@@ -646,7 +646,7 @@ def attendancerecord_list(request):
     if date_to:
         qs = qs.filter(date__lte=date_to)
     return crud_list(
-        request, qs, "hrm/attendance/record_list.html",
+        request, qs, "hrm/attendance/record/list.html",
         search_fields=["number", "employee__party__name", "notes"],
         filters=[("status", "status", False), ("source", "source", False),
                  ("employee", "employee_id", True)],
@@ -661,20 +661,20 @@ def attendancerecord_list(request):
 @login_required
 def attendancerecord_create(request):
     return crud_create(request, form_class=AttendanceRecordForm,
-                       template="hrm/attendance/record_form.html", success_url="hrm:attendancerecord_list")
+                       template="hrm/attendance/record/form.html", success_url="hrm:attendancerecord_list")
 
 
 @login_required
 def attendancerecord_detail(request, pk):
     obj = get_object_or_404(
         AttendanceRecord.objects.select_related("employee__party", "shift"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/attendance/record_detail.html", {"obj": obj})
+    return render(request, "hrm/attendance/record/detail.html", {"obj": obj})
 
 
 @login_required
 def attendancerecord_edit(request, pk):
     return crud_edit(request, model=AttendanceRecord, pk=pk, form_class=AttendanceRecordForm,
-                     template="hrm/attendance/record_form.html", success_url="hrm:attendancerecord_list")
+                     template="hrm/attendance/record/form.html", success_url="hrm:attendancerecord_list")
 
 
 @login_required
@@ -690,7 +690,7 @@ def onboardingtemplate_list(request):
         request,
         OnboardingTemplate.objects.filter(tenant=request.tenant).select_related("designation")
         .annotate(task_count=Count("template_tasks")).order_by("name"),
-        "hrm/onboarding/template_list.html",
+        "hrm/onboarding/template/list.html",
         search_fields=["number", "name", "designation__name"],
         filters=[("is_active", "is_active", False), ("designation", "designation_id", True)],
         extra_context={"designations": Designation.objects.filter(tenant=request.tenant).order_by("name")},
@@ -700,7 +700,7 @@ def onboardingtemplate_list(request):
 @login_required
 def onboardingtemplate_create(request):
     return crud_create(request, form_class=OnboardingTemplateForm,
-                       template="hrm/onboarding/template_form.html",
+                       template="hrm/onboarding/template/form.html",
                        success_url="hrm:onboardingtemplate_list")
 
 
@@ -708,7 +708,7 @@ def onboardingtemplate_create(request):
 def onboardingtemplate_detail(request, pk):
     obj = get_object_or_404(
         OnboardingTemplate.objects.select_related("designation"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboarding/template_detail.html", {
+    return render(request, "hrm/onboarding/template/detail.html", {
         "obj": obj,
         "tasks": obj.template_tasks.order_by("phase", "order", "title"),
         "program_count": OnboardingProgram.objects.filter(tenant=request.tenant, template=obj).count(),
@@ -718,7 +718,7 @@ def onboardingtemplate_detail(request, pk):
 @login_required
 def onboardingtemplate_edit(request, pk):
     return crud_edit(request, model=OnboardingTemplate, pk=pk, form_class=OnboardingTemplateForm,
-                     template="hrm/onboarding/template_form.html",
+                     template="hrm/onboarding/template/form.html",
                      success_url="hrm:onboardingtemplate_list")
 
 
@@ -743,7 +743,7 @@ def onboardingtemplatetask_list(request):
     return crud_list(
         request,
         OnboardingTemplateTask.objects.filter(tenant=request.tenant).select_related("template"),
-        "hrm/onboarding/templatetask_list.html",
+        "hrm/onboarding/templatetask/list.html",
         search_fields=["title", "description", "template__name"],
         filters=[("template", "template_id", True), ("phase", "phase", False),
                  ("task_category", "task_category", False)],
@@ -756,7 +756,7 @@ def onboardingtemplatetask_list(request):
 @login_required
 def onboardingtemplatetask_create(request):
     return crud_create(request, form_class=OnboardingTemplateTaskForm,
-                       template="hrm/onboarding/templatetask_form.html",
+                       template="hrm/onboarding/templatetask/form.html",
                        success_url="hrm:onboardingtemplatetask_list")
 
 
@@ -764,14 +764,14 @@ def onboardingtemplatetask_create(request):
 def onboardingtemplatetask_detail(request, pk):
     obj = get_object_or_404(
         OnboardingTemplateTask.objects.select_related("template"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboarding/templatetask_detail.html", {"obj": obj})
+    return render(request, "hrm/onboarding/templatetask/detail.html", {"obj": obj})
 
 
 @login_required
 def onboardingtemplatetask_edit(request, pk):
     return crud_edit(request, model=OnboardingTemplateTask, pk=pk,
                      form_class=OnboardingTemplateTaskForm,
-                     template="hrm/onboarding/templatetask_form.html",
+                     template="hrm/onboarding/templatetask/form.html",
                      success_url="hrm:onboardingtemplatetask_list")
 
 
@@ -793,7 +793,7 @@ def onboardingprogram_list(request):
                   tasks_done=Count("tasks", filter=Q(tasks__status__in=("completed", "skipped")),
                                    distinct=True))
         .order_by("-start_date"),  # explicit — aggregate annotation drops Meta ordering (pagination guard)
-        "hrm/onboarding/program_list.html",
+        "hrm/onboarding/program/list.html",
         search_fields=["number", "employee__party__name"],
         filters=[("status", "status", False), ("employee", "employee_id", True)],
         extra_context={"status_choices": OnboardingProgram.STATUS_CHOICES,
@@ -805,7 +805,7 @@ def onboardingprogram_list(request):
 @login_required
 def onboardingprogram_create(request):
     return crud_create(request, form_class=OnboardingProgramForm,
-                       template="hrm/onboarding/program_form.html",
+                       template="hrm/onboarding/program/form.html",
                        success_url="hrm:onboardingprogram_list")
 
 
@@ -826,7 +826,7 @@ def onboardingprogram_detail(request, pk):
     # extra COUNT queries the model property would run on a page that has the tasks in hand.
     done = sum(1 for t in tasks if t.status in ("completed", "skipped"))
     progress = int(round(done / len(tasks) * 100)) if tasks else 0
-    return render(request, "hrm/onboarding/program_detail.html", {
+    return render(request, "hrm/onboarding/program/detail.html", {
         "obj": obj,
         "progress": progress,
         "tasks_by_phase": tasks_by_phase,
@@ -844,7 +844,7 @@ def onboardingprogram_edit(request, pk):
         messages.error(request, "A completed or cancelled program cannot be edited.")
         return redirect("hrm:onboardingprogram_detail", pk=obj.pk)
     return crud_edit(request, model=OnboardingProgram, pk=pk, form_class=OnboardingProgramForm,
-                     template="hrm/onboarding/program_form.html",
+                     template="hrm/onboarding/program/form.html",
                      success_url="hrm:onboardingprogram_list")
 
 
@@ -932,7 +932,7 @@ def onboardingtask_list(request):
         request,
         OnboardingTask.objects.filter(tenant=request.tenant)
         .select_related("program", "assignee"),  # rows show program.number + assignee.username only
-        "hrm/onboarding/task_list.html",
+        "hrm/onboarding/task/list.html",
         search_fields=["title", "description", "assignee__username", "program__number"],
         filters=[("program", "program_id", True), ("status", "status", False),
                  ("phase", "phase", False), ("task_category", "task_category", False)],
@@ -948,7 +948,7 @@ def onboardingtask_list(request):
 @login_required
 def onboardingtask_create(request):
     return crud_create(request, form_class=OnboardingTaskForm,
-                       template="hrm/onboarding/task_form.html",
+                       template="hrm/onboarding/task/form.html",
                        success_url="hrm:onboardingtask_list")
 
 
@@ -957,7 +957,7 @@ def onboardingtask_detail(request, pk):
     obj = get_object_or_404(
         OnboardingTask.objects.select_related("program__employee__party", "assignee", "completed_by"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboarding/task_detail.html", {"obj": obj})
+    return render(request, "hrm/onboarding/task/detail.html", {"obj": obj})
 
 
 @login_required
@@ -967,7 +967,7 @@ def onboardingtask_edit(request, pk):
         messages.error(request, "Reopen this task before editing it.")
         return redirect("hrm:onboardingtask_detail", pk=obj.pk)
     return crud_edit(request, model=OnboardingTask, pk=pk, form_class=OnboardingTaskForm,
-                     template="hrm/onboarding/task_form.html", success_url="hrm:onboardingtask_list")
+                     template="hrm/onboarding/task/form.html", success_url="hrm:onboardingtask_list")
 
 
 @login_required
@@ -1023,7 +1023,7 @@ def onboardingdocument_list(request):
         request,
         OnboardingDocument.objects.filter(tenant=request.tenant)
         .select_related("program"),  # rows show program.number only
-        "hrm/onboarding/document_list.html",
+        "hrm/onboarding/document/list.html",
         search_fields=["title", "description", "external_ref", "program__number"],
         filters=[("program", "program_id", True), ("document_type", "document_type", False),
                  ("esign_status", "esign_status", False)],
@@ -1037,7 +1037,7 @@ def onboardingdocument_list(request):
 @login_required
 def onboardingdocument_create(request):
     return crud_create(request, form_class=OnboardingDocumentForm,
-                       template="hrm/onboarding/document_form.html",
+                       template="hrm/onboarding/document/form.html",
                        success_url="hrm:onboardingdocument_list")
 
 
@@ -1045,13 +1045,13 @@ def onboardingdocument_create(request):
 def onboardingdocument_detail(request, pk):
     obj = get_object_or_404(
         OnboardingDocument.objects.select_related("program__employee__party"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboarding/document_detail.html", {"obj": obj})
+    return render(request, "hrm/onboarding/document/detail.html", {"obj": obj})
 
 
 @login_required
 def onboardingdocument_edit(request, pk):
     return crud_edit(request, model=OnboardingDocument, pk=pk, form_class=OnboardingDocumentForm,
-                     template="hrm/onboarding/document_form.html",
+                     template="hrm/onboarding/document/form.html",
                      success_url="hrm:onboardingdocument_list")
 
 
@@ -1085,7 +1085,7 @@ def assetallocation_list(request):
         request,
         AssetAllocation.objects.filter(tenant=request.tenant)
         .select_related("employee__party", "program", "issued_by"),
-        "hrm/onboarding/assetallocation_list.html",
+        "hrm/onboarding/assetallocation/list.html",
         search_fields=["number", "asset_name", "serial_number", "asset_tag"],
         filters=[("employee", "employee_id", True), ("status", "status", False),
                  ("asset_category", "asset_category", False)],
@@ -1099,7 +1099,7 @@ def assetallocation_list(request):
 @login_required
 def assetallocation_create(request):
     return crud_create(request, form_class=AssetAllocationForm,
-                       template="hrm/onboarding/assetallocation_form.html",
+                       template="hrm/onboarding/assetallocation/form.html",
                        success_url="hrm:assetallocation_list")
 
 
@@ -1108,13 +1108,13 @@ def assetallocation_detail(request, pk):
     obj = get_object_or_404(
         AssetAllocation.objects.select_related("employee__party", "program", "issued_by"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboarding/assetallocation_detail.html", {"obj": obj})
+    return render(request, "hrm/onboarding/assetallocation/detail.html", {"obj": obj})
 
 
 @login_required
 def assetallocation_edit(request, pk):
     return crud_edit(request, model=AssetAllocation, pk=pk, form_class=AssetAllocationForm,
-                     template="hrm/onboarding/assetallocation_form.html", success_url="hrm:assetallocation_list")
+                     template="hrm/onboarding/assetallocation/form.html", success_url="hrm:assetallocation_list")
 
 
 @login_required
@@ -1165,7 +1165,7 @@ def orientationsession_list(request):
         request,
         OrientationSession.objects.filter(tenant=request.tenant)
         .select_related("employee__party", "program", "facilitator"),
-        "hrm/onboarding/orientationsession_list.html",
+        "hrm/onboarding/orientationsession/list.html",
         search_fields=["title", "location", "facilitator__username", "facilitator_name"],
         filters=[("employee", "employee_id", True), ("session_type", "session_type", False),
                  ("attendance_status", "attendance_status", False)],
@@ -1179,7 +1179,7 @@ def orientationsession_list(request):
 @login_required
 def orientationsession_create(request):
     return crud_create(request, form_class=OrientationSessionForm,
-                       template="hrm/onboarding/orientationsession_form.html",
+                       template="hrm/onboarding/orientationsession/form.html",
                        success_url="hrm:orientationsession_list")
 
 
@@ -1188,13 +1188,13 @@ def orientationsession_detail(request, pk):
     obj = get_object_or_404(
         OrientationSession.objects.select_related("employee__party", "program", "facilitator"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/onboarding/orientationsession_detail.html", {"obj": obj})
+    return render(request, "hrm/onboarding/orientationsession/detail.html", {"obj": obj})
 
 
 @login_required
 def orientationsession_edit(request, pk):
     return crud_edit(request, model=OrientationSession, pk=pk, form_class=OrientationSessionForm,
-                     template="hrm/onboarding/orientationsession_form.html",
+                     template="hrm/onboarding/orientationsession/form.html",
                      success_url="hrm:orientationsession_list")
 
 
@@ -1272,7 +1272,7 @@ def separationcase_list(request):
         request,
         SeparationCase.objects.filter(tenant=request.tenant)
         .select_related("employee__party", "approver"),
-        "hrm/offboarding/separationcase_list.html",
+        "hrm/offboarding/separationcase/list.html",
         search_fields=["number", "employee__party__name"],
         filters=[("status", "status", False), ("separation_type", "separation_type", False),
                  ("employee", "employee_id", True)],
@@ -1286,7 +1286,7 @@ def separationcase_list(request):
 @login_required
 def separationcase_create(request):
     return _offboarding_create(
-        request, SeparationCaseForm, "hrm/offboarding/separationcase_form.html",
+        request, SeparationCaseForm, "hrm/offboarding/separationcase/form.html",
         lambda obj: ("hrm:separationcase_detail", obj.pk))
 
 
@@ -1306,7 +1306,7 @@ def separationcase_detail(request, pk):
     # all-mandatory-cleared computed from the already-fetched list (avoids the property's extra query)
     all_mandatory_cleared = not any(
         c.is_mandatory and c.status not in ClearanceItem.RESOLVED_STATUSES for c in clearance_items)
-    return render(request, "hrm/offboarding/separationcase_detail.html", {
+    return render(request, "hrm/offboarding/separationcase/detail.html", {
         "obj": obj,
         "clearance_items": clearance_items,
         "clearance_total": clearance_total,
@@ -1325,7 +1325,7 @@ def separationcase_edit(request, pk):
         messages.error(request, "Only a draft or pending separation case can be edited.")
         return redirect("hrm:separationcase_detail", pk=obj.pk)
     return crud_edit(request, model=SeparationCase, pk=pk, form_class=SeparationCaseForm,
-                     template="hrm/offboarding/separationcase_form.html",
+                     template="hrm/offboarding/separationcase/form.html",
                      success_url="hrm:separationcase_list")
 
 
@@ -1499,7 +1499,7 @@ def exitinterview_list(request):
         request,
         ExitInterview.objects.filter(tenant=request.tenant)
         .select_related("case__employee__party", "interviewer"),
-        "hrm/offboarding/exitinterview_list.html",
+        "hrm/offboarding/exitinterview/list.html",
         search_fields=["number", "case__employee__party__name", "case__number"],
         filters=[("status", "status", False), ("mode", "mode", False)],
         extra_context={"status_choices": ExitInterview.EI_STATUS_CHOICES,
@@ -1510,7 +1510,7 @@ def exitinterview_list(request):
 @login_required
 def exitinterview_create(request):
     return _offboarding_create(
-        request, ExitInterviewForm, "hrm/offboarding/exitinterview_form.html",
+        request, ExitInterviewForm, "hrm/offboarding/exitinterview/form.html",
         lambda obj: ("hrm:separationcase_detail", obj.case_id))
 
 
@@ -1520,7 +1520,7 @@ def exitinterview_detail(request, pk):
         ExitInterview.objects.select_related("case__employee__party", "interviewer"),
         pk=pk, tenant=request.tenant)
     ratings = [(label, getattr(obj, field)) for field, label in ExitInterview.RATING_FIELDS]
-    return render(request, "hrm/offboarding/exitinterview_detail.html",
+    return render(request, "hrm/offboarding/exitinterview/detail.html",
                   {"obj": obj, "ratings": ratings})
 
 
@@ -1531,7 +1531,7 @@ def exitinterview_edit(request, pk):
         messages.error(request, "A completed exit interview cannot be edited.")
         return redirect("hrm:exitinterview_detail", pk=obj.pk)
     return crud_edit(request, model=ExitInterview, pk=pk, form_class=ExitInterviewForm,
-                     template="hrm/offboarding/exitinterview_form.html",
+                     template="hrm/offboarding/exitinterview/form.html",
                      success_url="hrm:exitinterview_list")
 
 
@@ -1584,7 +1584,7 @@ def clearanceitem_list(request):
         request,
         ClearanceItem.objects.filter(tenant=request.tenant)
         .select_related("case__employee__party", "assigned_to", "cleared_by"),
-        "hrm/offboarding/clearanceitem_list.html",
+        "hrm/offboarding/clearanceitem/list.html",
         search_fields=["description", "case__employee__party__name", "case__number"],
         filters=[("status", "status", False), ("department", "department", False),
                  ("case", "case_id", True)],
@@ -1598,7 +1598,7 @@ def clearanceitem_list(request):
 @login_required
 def clearanceitem_create(request):
     return _offboarding_create(
-        request, ClearanceItemForm, "hrm/offboarding/clearanceitem_form.html",
+        request, ClearanceItemForm, "hrm/offboarding/clearanceitem/form.html",
         lambda obj: ("hrm:separationcase_detail", obj.case_id))
 
 
@@ -1608,7 +1608,7 @@ def clearanceitem_detail(request, pk):
         ClearanceItem.objects.select_related(
             "case__employee__party", "assigned_to", "cleared_by", "asset_allocation"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/offboarding/clearanceitem_detail.html", {"obj": obj})
+    return render(request, "hrm/offboarding/clearanceitem/detail.html", {"obj": obj})
 
 
 @login_required
@@ -1618,7 +1618,7 @@ def clearanceitem_edit(request, pk):
         messages.error(request, "Only a pending clearance item can be edited.")
         return redirect("hrm:clearanceitem_detail", pk=obj.pk)
     return crud_edit(request, model=ClearanceItem, pk=pk, form_class=ClearanceItemForm,
-                     template="hrm/offboarding/clearanceitem_form.html",
+                     template="hrm/offboarding/clearanceitem/form.html",
                      success_url="hrm:clearanceitem_list")
 
 
@@ -1706,7 +1706,7 @@ def finalsettlement_list(request):
         request,
         FinalSettlement.objects.filter(tenant=request.tenant)
         .select_related("case__employee__party"),
-        "hrm/offboarding/finalsettlement_list.html",
+        "hrm/offboarding/finalsettlement/list.html",
         search_fields=["number", "case__employee__party__name", "case__number"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": FinalSettlement.FNF_STATUS_CHOICES},
@@ -1716,7 +1716,7 @@ def finalsettlement_list(request):
 @login_required
 def finalsettlement_create(request):
     return _offboarding_create(
-        request, FinalSettlementForm, "hrm/offboarding/finalsettlement_form.html",
+        request, FinalSettlementForm, "hrm/offboarding/finalsettlement/form.html",
         lambda obj: ("hrm:separationcase_detail", obj.case_id))
 
 
@@ -1724,7 +1724,7 @@ def finalsettlement_create(request):
 def finalsettlement_detail(request, pk):
     obj = get_object_or_404(
         FinalSettlement.objects.select_related("case__employee__party"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/offboarding/finalsettlement_detail.html", {"obj": obj})
+    return render(request, "hrm/offboarding/finalsettlement/detail.html", {"obj": obj})
 
 
 @login_required
@@ -1734,7 +1734,7 @@ def finalsettlement_edit(request, pk):
         messages.error(request, "Only a draft or computed settlement can be edited.")
         return redirect("hrm:finalsettlement_detail", pk=obj.pk)
     return crud_edit(request, model=FinalSettlement, pk=pk, form_class=FinalSettlementForm,
-                     template="hrm/offboarding/finalsettlement_form.html",
+                     template="hrm/offboarding/finalsettlement/form.html",
                      success_url="hrm:finalsettlement_list")
 
 
