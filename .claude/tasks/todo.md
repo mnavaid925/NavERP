@@ -616,6 +616,716 @@ in sidebar + Back to List link. Filter bar reflects `request.GET` state.
 
 ---
 
+## Review notes (build complete — 2026-06-26)
+
+**Delivered (rebuild of HRM 3.2 Organizational Structure):** `JobGrade` + `DepartmentProfile` + `CostCenterProfile`
+models, enhanced `Designation` (job_grade FK, description/requirements, mid_salary, budgeted_headcount, band
+validation), derived `org_chart` (reporting-line/by-department) + read-only `company_setup` views, full CRUD with
+delete guards, templates moved/added under `templates/hrm/organization/`, `LIVE_LINKS["3.2"]` lighting all 5
+NavERP.md bullets + a Job Grades leaf, idempotent `_seed_org_structure` seeder, migrations 0007/0008. Verified:
+`manage.py check` clean, seeder idempotent, smoke sweep of every 3.2 route 200/302, cross-tenant IDOR → 404, no
+template-comment leaks. New test module `apps/hrm/tests/test_org_structure.py` (119 tests; HRM suite 728, project
+1,790 — all green).
+
+**Review agents run (Module Creation Sequence):** code-reviewer → explorer → frontend-reviewer →
+performance-reviewer → qa-smoke-tester → security-reviewer → test-writer, each applied + committed.
+- *code-reviewer:* iterative DFS in org_chart (no RecursionError), exclude terminated employees, active-only
+  department headcount, cost_center tenant guard, clarified clean() docstrings, simplified `__str__`.
+- *frontend-reviewer:* `.stat-grid` (not invented `.stat-cards`), branding color swatches (not dotted badges),
+  org-chart `--border`/`--text-muted` vars + overflow-x, `overflow-wrap` on descriptions, guarded job-grade delete.
+- *performance-reviewer:* killed costcenter_detail `head__party` N+1, collapsed detail count+slice into one
+  annotate, capped org_chart at 500, added `(tenant, cost_center)` index (migration 0008).
+- *explorer / qa-smoke-tester:* no changes needed — all route/template/context chains consistent, 44/44 smoke PASS.
+
+**Flagged app-wide (NOT changed — L18):** the security review suggested gating 3.2 *write* views with
+`@tenant_admin_required`. Left at `@login_required` to stay consistent with the rest of HRM's master-data CRUD
+(leave types, shifts, holidays, designation are all `@login_required`; only lifecycle/approval *actions* are
+tenant-admin-gated). Whether HR master-data config (incl. department-head/cost-center-budget) should be
+tenant-admin-gated is an **app-wide policy decision** worth a dedicated pass, not a one-sub-module fork.
+
+**Deferred (see plan above):** job families/tracks, position slots, effective-dated reorg, work-site registry,
+budget-vs-actuals (needs Accounting), org-chart export, matrix reporting, a `CompanyProfile` companion.
+
+---
+
+# Module 3 Completion — HRM Sub-module 3.1: Employee Management (hrm) — plan from research-hrm-employee.md  (2026-06-26)
+
+> **Context:** Completion pass on sub-module 3.1 in the existing `apps/hrm` app (NOT a new app). The
+> Employee Directory / Profile / Employment Details views are already built and passing (see Module 3
+> HRM build outcome in the prior todo history). This plan closes two **priority gaps** — Document
+> Management and Employee Lifecycle — and enriches `EmployeeProfile` with 15 missing personal/contact/
+> compliance fields. Two new models are added to `apps/hrm/models.py`. The app is already wired into
+> `config/settings.py`, `config/urls.py`, and `navigation.py`; only `LIVE_LINKS["3.1"]` needs two
+> new bullet entries. No new app; no new `apps.py`. All models follow the exact same
+> `TenantOwned`/`TenantNumbered` abstract bases already in `apps/hrm/models.py`.
+
+---
+
+## 1. `EmployeeProfile` field additions (edit existing model — NO new model)
+
+These 15 fields are missing from `EmployeeProfile` per the competitive research. All are nullable/
+blank/defaulted so the incremental migration is non-destructive (existing rows unaffected).
+
+- [ ] **`marital_status`** — `CharField(max_length=20, blank=True)` with class-level constant
+  `MARITAL_STATUS_CHOICES`:
+  `("single","Single"), ("married","Married"), ("divorced","Divorced"), ("widowed","Widowed"),
+  ("other","Other")`. Add alongside existing `EMPLOYEE_TYPE_CHOICES`/`GENDER_CHOICES`/
+  `BLOOD_GROUP_CHOICES` on `EmployeeProfile`. Drivers: Workday, SAP SuccessFactors, greytHR, HiBob,
+  Zoho People — statutory benefits/tax compliance.
+
+- [ ] **`work_email`** — `EmailField(blank=True)`. Professional email distinct from `personal_email`
+  (which is already on the model). Drivers: Workday, HiBob, Rippling, BambooHR — required for
+  active-directory provisioning and HR communications.
+
+- [ ] **`work_location`** — `CharField(max_length=255, blank=True)`. Office/site/remote assignment
+  (free-text in v1; upgrade to FK→`core.OrgUnit(kind=branch)` deferred). Drivers: HiBob, greytHR,
+  Keka, Rippling — mandatory field in all modern HRIS for location-based payroll and headcount.
+
+- [ ] **`notice_period_days`** — `PositiveSmallIntegerField(null=True, blank=True)`. Contract-default
+  notice period in days. Note: `SeparationCase` already carries its own `notice_period_days` (the
+  case-specific override); this field is the **profile-level default** that the SeparationCase form
+  should pre-fill from. Drivers: greytHR, HiBob, Personio.
+
+- [ ] **`national_id`** — `CharField(max_length=100, blank=True)`. The national identifier value
+  (Aadhaar no., SSN, NRIC, NID, PAN, etc.). Stored directly on the profile for quick search/filter
+  without joining the document vault. Drivers: Workday Government IDs, greytHR Aadhaar/PAN, HiBob
+  Identification.
+
+- [ ] **`national_id_type`** — `CharField(max_length=50, blank=True)`. The label for `national_id`
+  (e.g. `"Aadhaar"`, `"SSN"`, `"NRIC"`, `"PAN"`). Paired with `national_id`.
+
+- [ ] **`passport_number`** — `CharField(max_length=50, blank=True)`. Passport number for quick access
+  (full passport document lives in `EmployeeDocument`). Drivers: greytHR passport page, Workday
+  immigration, Keka document types.
+
+- [ ] **`passport_expiry`** — `DateField(null=True, blank=True)`. Quick expiry reference on the profile.
+  Drivers: greytHR "Valid Till", Workday expiration date.
+
+- [ ] **`father_name`** — `CharField(max_length=255, blank=True)`. Statutory field for PF, ESI, and
+  gratuity nomination in South Asia and GCC. Drivers: greytHR, Darwinbox, Keka.
+
+- [ ] **`spouse_name`** — `CharField(max_length=255, blank=True)`. Family details for dependents/
+  nominations. Drivers: greytHR family details section.
+
+- [ ] **`current_address`** — `TextField(blank=True)`. Present/current residential address (freeform
+  in v1; upgrade to a normalized `EmployeeAddress` table deferred). Drivers: greytHR "Present
+  Address", HiBob address table, Gusto home address.
+
+- [ ] **`permanent_address`** — `TextField(blank=True)`. Permanent/hometown address (distinct from
+  current address — required for PF/ESI correspondence). Drivers: greytHR "Permanent Address",
+  Workday mailing address.
+
+- [ ] **`emergency_contact_2_name`** — `CharField(max_length=255, blank=True)`. Second emergency
+  contact name. Drivers: almost all 10 surveyed products support ≥2 emergency contacts.
+
+- [ ] **`emergency_contact_2_phone`** — `CharField(max_length=30, blank=True)`.
+
+- [ ] **`emergency_contact_2_relation`** — `CharField(max_length=100, blank=True)`.
+
+- [ ] Add all 15 new fields to `EmployeeProfileForm.fields` in `apps/hrm/forms.py`. None are
+  computed/workflow fields so all belong in the form.
+
+- [ ] `makemigrations hrm` for the profile field additions (one migration, non-destructive).
+
+---
+
+## 2. `EmployeeDocument` model [EDOC-] (new — add to `apps/hrm/models.py`)
+
+Personnel-file document vault. One row per document per employee. Distinct from `OnboardingDocument`
+(program e-sign) and `core.Document` (generic attachment). Inherits `TenantNumbered`; `NUMBER_PREFIX = "EDOC"`.
+
+- [ ] **Fields:**
+  - `employee` — `FK("hrm.EmployeeProfile", CASCADE, related_name="documents")`. NOT `core.Party` —
+    all HRM FKs go to `EmployeeProfile`.
+  - `document_type` — `CharField(max_length=30)` with `DOCUMENT_TYPE_CHOICES` (19 choices):
+    `("national_id","National ID / Aadhaar / NRIC")`,
+    `("passport","Passport")`,
+    `("driving_license","Driving License")`,
+    `("address_proof","Address Proof")`,
+    `("visa","Visa")`,
+    `("work_permit","Work Permit")`,
+    `("degree_certificate","Degree / Diploma Certificate")`,
+    `("professional_cert","Professional Certification")`,
+    `("appointment_letter","Appointment Letter")`,
+    `("employment_contract","Employment Contract")`,
+    `("nda","Non-Disclosure Agreement")`,
+    `("non_compete","Non-Compete Agreement")`,
+    `("tax_form","Tax Form (W-4 / Form 16 / TDS)")`,
+    `("bank_proof","Bank Account Proof")`,
+    `("pf_nomination","PF / Pension Nomination")`,
+    `("medical_cert","Medical / Fitness Certificate")`,
+    `("background_check","Background Check Report")`,
+    `("experience_certificate","Previous Employment / Experience Letter")`,
+    `("other","Other")`.
+    Drivers: Workday doc categories, BambooHR, greytHR, Keka, Personio, Darwinbox.
+  - `title` — `CharField(max_length=255)`.
+  - `document_number` — `CharField(max_length=100, blank=True)`. The alphanumeric ID on the document
+    itself (passport no., PAN, license no., visa no.). Drivers: greytHR passport/visa no., Darwinbox.
+  - `issuing_authority` — `CharField(max_length=255, blank=True)`. Drivers: greytHR Issue Place,
+    Workday immigration.
+  - `issuing_country` — `CharField(max_length=100, blank=True)`. Drivers: greytHR Country, Workday.
+  - `issued_on` — `DateField(null=True, blank=True)`. Drivers: greytHR issue date, Zoho People.
+  - `expires_on` — `DateField(null=True, blank=True)`. null = no expiry. Drivers: greytHR "Valid Till",
+    Workday Expiration Date, Keka alerts, Zoho People.
+  - `verification_status` — `CharField(max_length=20, editable=False)` with
+    `VERIFICATION_STATUS_CHOICES`:
+    `("pending","Pending")`, `("verified","Verified")`, `("rejected","Rejected")`.
+    Default `"pending"`. **editable=False** — workflow-owned; set only by `mark_verified`/`reject`
+    POST actions, never via the form. Drivers: Keka 3-bucket verification, BambooHR, Darwinbox.
+  - `verified_by` — `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+    related_name="hrm_verified_documents", editable=False)`. Set by `mark_verified` action only.
+  - `verified_at` — `DateTimeField(null=True, blank=True, editable=False)`. Stamped by `mark_verified`.
+  - `is_confidential` — `BooleanField(default=False)`. HR-only visibility flag. Drivers: Workday
+    restricted doc categories, BambooHR padlock icon, Keka confidential access control.
+  - `file` — `FileField(upload_to="hrm/employee_docs/%Y/%m/", null=True, blank=True)`.
+  - `notes` — `TextField(blank=True)`.
+  **Derived properties (never stored):**
+  - `is_expired` — `@property`: `expires_on is not None and expires_on < date.today()`.
+  - `is_expiring_soon` — `@property`: `expires_on is not None` and `0 < (expires_on − date.today()).days ≤ 30`.
+    Drivers: Keka 60/30/7-day GCC visa alert, Workday auto-alerts.
+  **Meta:** `unique_together = ("tenant", "number")`; `ordering = ["-created_at"]`.
+  **Indexes:**
+  - `(tenant, employee)` — `hrm_edoc_tenant_emp_idx`
+  - `(tenant, document_type)` — `hrm_edoc_tenant_type_idx`
+  - `(tenant, verification_status)` — `hrm_edoc_tenant_vstatus_idx`
+  - `(tenant, expires_on)` — `hrm_edoc_tenant_expiry_idx`
+  **`__str__`:** `f"{self.number} · {self.title}"`.
+
+---
+
+## 3. `EmployeeLifecycleEvent` model [ELC-] (new — add to `apps/hrm/models.py`)
+
+Append-only, auditable log of every dated job-change event. One row per event per employee.
+Inherits `TenantNumbered`; `NUMBER_PREFIX = "ELC"`. Driven by: Workday Change Job process, SAP
+SuccessFactors jobInfo event types + reason codes, BambooHR jobInfo/compensation historical tables,
+greytHR position history, HiBob Work/Employment/Lifecycle/Salary tables, Personio Employee History.
+
+- [ ] **Add module-level constant** `LIFECYCLE_EVENT_TYPE_CHOICES` (alongside existing
+  `TASK_CATEGORY_CHOICES`/`PHASE_CHOICES`):
+  `("hire","Hire")`,
+  `("confirmation","Confirmation (Probation End)")`,
+  `("transfer","Transfer")`,
+  `("promotion","Promotion")`,
+  `("demotion","Demotion")`,
+  `("salary_revision","Salary Revision")`,
+  `("re_designation","Re-designation")`,
+  `("location_change","Location Change")`,
+  `("reporting_change","Reporting Manager Change")`,
+  `("suspension","Suspension")`,
+  `("reinstatement","Reinstatement")`,
+  `("contract_renewal","Contract Renewal")`,
+  `("separation","Separation")`,
+  `("other","Other")`.
+
+- [ ] **Fields:**
+  - `employee` — `FK("hrm.EmployeeProfile", CASCADE, related_name="lifecycle_events")`.
+  - `event_type` — `CharField(max_length=30, choices=LIFECYCLE_EVENT_TYPE_CHOICES)`.
+  - `effective_date` — `DateField()`. When the change takes effect. Table-stakes across all 10
+    surveyed products.
+  - `reason` — `TextField(blank=True)`. Free-text change reason. Drivers: Workday reason codes, SAP SF
+    event reasons, BambooHR compensation `reason`, Personio reason columns.
+  - **From/To capture** (all null/blank; populate only the fields relevant to the event type):
+    - `from_designation` — `FK("hrm.Designation", SET_NULL, null=True, blank=True, related_name="+")`.
+    - `to_designation` — `FK("hrm.Designation", SET_NULL, null=True, blank=True, related_name="+")`.
+    - `from_department` — `FK("core.OrgUnit", SET_NULL, null=True, blank=True, related_name="+")`.
+    - `to_department` — `FK("core.OrgUnit", SET_NULL, null=True, blank=True, related_name="+")`.
+    - `from_location` — `CharField(max_length=255, blank=True)`.
+    - `to_location` — `CharField(max_length=255, blank=True)`.
+    - `from_job_title` — `CharField(max_length=255, blank=True)`.
+    - `to_job_title` — `CharField(max_length=255, blank=True)`.
+    - `from_salary` — `DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)`.
+      Drivers: BambooHR compensation table, HiBob Salary table.
+    - `to_salary` — `DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)`.
+    - `from_manager` — `FK("hrm.EmployeeProfile", SET_NULL, null=True, blank=True, related_name="+")`.
+    - `to_manager` — `FK("hrm.EmployeeProfile", SET_NULL, null=True, blank=True, related_name="+")`.
+    - `from_employee_type` — `CharField(max_length=20, blank=True)`.
+    - `to_employee_type` — `CharField(max_length=20, blank=True)`.
+    Drivers: Workday new org/position, SAP SF new vs. old jobInfo row, Personio old/new value columns,
+    HiBob effective rows vs. prior rows.
+  - `notes` — `TextField(blank=True)`.
+  - `initiated_by` — `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+    related_name="hrm_initiated_lifecycle_events", editable=False)`. Set in the create view
+    (`form.instance.initiated_by = request.user`), NOT a form field. Drivers: Personio editor
+    column, Workday initiating user.
+  **v1 design note:** This model records events for the timeline only. It does NOT auto-mutate
+  `core.Employment` or `EmployeeProfile` on save. That bidirectional auto-sync is a deferred
+  enhancement (see Later Passes section).
+  **Meta:** `unique_together = ("tenant", "number")`; `ordering = ["-effective_date", "-created_at"]`.
+  **Indexes:**
+  - `(tenant, employee, effective_date)` — `hrm_elc_tenant_emp_date_idx`
+  - `(tenant, event_type)` — `hrm_elc_tenant_type_idx`
+  - `(tenant, employee, event_type)` — `hrm_elc_tenant_emp_type_idx`
+  - `(tenant, effective_date)` — `hrm_elc_tenant_effdate_idx`
+  **`__str__`:** `f"{self.number} · {self.employee.name} — {self.get_event_type_display()} ({self.effective_date})"`.
+
+---
+
+## 4. Forms (`apps/hrm/forms.py`)
+
+- [ ] **`EmployeeProfileForm`** — extend `fields` list with 15 new fields, grouped logically:
+  personal→`marital_status`; work→`work_email`, `work_location`, `notice_period_days`; IDs→
+  `national_id`, `national_id_type`, `passport_number`, `passport_expiry`; family→`father_name`,
+  `spouse_name`; addresses→`current_address`, `permanent_address`; emergency2→
+  `emergency_contact_2_name`, `emergency_contact_2_phone`, `emergency_contact_2_relation`.
+
+- [ ] **`EmployeeDocumentForm(TenantModelForm)`** — new form.
+  - `model = EmployeeDocument`.
+  - `fields = ["employee", "document_type", "title", "document_number", "issuing_authority",
+    "issuing_country", "issued_on", "expires_on", "is_confidential", "file", "notes"]`.
+  - **Excluded**: `tenant`, `number`, `verification_status`, `verified_by`, `verified_at`
+    (workflow-owned / system fields — never settable via form POST).
+  - `__init__`: scope `employee` queryset →
+    `EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party").order_by("party__name")`.
+  - `clean_file` — **mirror `OnboardingDocumentForm.clean_file` exactly**:
+    allowlist `{".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}`, size cap 10 MB, fresh-upload
+    check, WARNING comment re: extension-only allowlist.
+
+- [ ] **`EmployeeLifecycleEventForm(TenantModelForm)`** — new form.
+  - `model = EmployeeLifecycleEvent`.
+  - `fields = ["employee", "event_type", "effective_date", "reason", "from_designation",
+    "to_designation", "from_department", "to_department", "from_location", "to_location",
+    "from_job_title", "to_job_title", "from_salary", "to_salary", "from_manager", "to_manager",
+    "from_employee_type", "to_employee_type", "notes"]`.
+  - **Excluded**: `tenant`, `number`, `initiated_by` (set to `request.user` in the create view).
+  - `__init__`: scope `employee` → tenant-filtered `EmployeeProfile`; `from_designation`/
+    `to_designation` → `Designation.objects.filter(tenant=self.tenant, is_active=True)`; `from_department`/
+    `to_department` → `OrgUnit.objects.filter(tenant=self.tenant)`; `from_manager`/`to_manager` →
+    tenant-filtered `EmployeeProfile.select_related("party")`.
+
+- [ ] Add `EmployeeDocument` and `EmployeeLifecycleEvent` to the `from .models import (...)` block.
+
+---
+
+## 5. Views (`apps/hrm/views.py`)
+
+### 5.1 `EmployeeDocument` CRUD + workflow
+
+- [ ] **`employee_document_list`** — `crud_list(...)`:
+  - Queryset: `EmployeeDocument.objects.filter(tenant=request.tenant).select_related("employee__party")`.
+  - `template="hrm/employee/document/list.html"`.
+  - `search_fields=["number", "title", "document_number", "employee__party__name"]`.
+  - `filters=[("document_type","document_type",False), ("verification_status","verification_status",False)]`.
+  - `extra_context={"document_type_choices": EmployeeDocument.DOCUMENT_TYPE_CHOICES,
+    "verification_status_choices": EmployeeDocument.VERIFICATION_STATUS_CHOICES}`.
+
+- [ ] **`employee_document_create`** — `crud_create(...)`:
+  - `form_class=EmployeeDocumentForm`, `template="hrm/employee/document/form.html"`.
+  - Honor `?employee=<pk>` pre-fill: extract `request.GET.get("employee")` and pass as `initial`.
+  - After save, redirect to `hrm:employee_detail pk=obj.employee.pk` (returns user to the hub).
+
+- [ ] **`employee_document_detail`** — `get_object_or_404(EmployeeDocument, pk=pk, tenant=request.tenant)`;
+  `render(request, "hrm/employee/document/detail.html", {"obj": obj})`.
+
+- [ ] **`employee_document_edit`** — `crud_edit(...)`:
+  - `model=EmployeeDocument`, `form_class=EmployeeDocumentForm`,
+    `template="hrm/employee/document/form.html"`, `success_url="hrm:employee_document_list"`.
+  - Guard: if `obj.verification_status == "verified"`, `messages.warning(request,
+    "Verified documents cannot be edited. Reject first.")` → redirect to detail.
+
+- [ ] **`employee_document_delete`** — `@require_POST`; tenant-scoped fetch. Guard: block deletion
+  of `"verified"` documents (`messages.error` + redirect to detail). On POST: `write_audit_log`,
+  `obj.delete()`, `messages.success`, redirect to `hrm:employee_document_list`.
+
+- [ ] **`employee_document_mark_verified`** — `@tenant_admin_required`, `@require_POST`.
+  - Guard: `verification_status` must be `"pending"` (error + redirect if not).
+  - Set `obj.verification_status = "verified"`, `obj.verified_by = request.user`,
+    `obj.verified_at = timezone.now()`.
+  - `obj.save(update_fields=["verification_status","verified_by","verified_at","updated_at"])`.
+  - `write_audit_log(request.user, obj, "update", {"action": "mark_verified"})`.
+  - `messages.success`. Redirect to `hrm:employee_document_detail pk=obj.pk`.
+
+- [ ] **`employee_document_reject`** — `@tenant_admin_required`, `@require_POST`.
+  - Guard: `verification_status` must be `"pending"` or `"verified"` (error if already `"rejected"`).
+  - Set `obj.verification_status = "rejected"`.
+  - `obj.save(update_fields=["verification_status","updated_at"])`.
+  - `write_audit_log(request.user, obj, "update", {"action": "reject"})`.
+  - `messages.success`. Redirect to `hrm:employee_document_detail pk=obj.pk`.
+
+### 5.2 `EmployeeLifecycleEvent` CRUD
+
+- [ ] **`employee_lifecycle_list`** — `crud_list(...)`:
+  - Queryset: `EmployeeLifecycleEvent.objects.filter(tenant=request.tenant).select_related(
+    "employee__party","from_designation","to_designation")`.
+  - `template="hrm/employee/lifecycle/list.html"`.
+  - `search_fields=["number","employee__party__name","reason","notes"]`.
+  - `filters=[("event_type","event_type",False), ("employee","employee_id",True)]`.
+  - `extra_context={"event_type_choices": LIFECYCLE_EVENT_TYPE_CHOICES,
+    "employees": EmployeeProfile.objects.filter(tenant=request.tenant).select_related("party")
+    .order_by("party__name")}`.
+
+- [ ] **`employee_lifecycle_create`** — `crud_create(...)`:
+  - `form_class=EmployeeLifecycleEventForm`, `template="hrm/employee/lifecycle/form.html"`.
+  - Honor `?employee=<pk>` pre-fill (same `initial` pattern as `employee_document_create`).
+  - Stamp `initiated_by = request.user` on `form.instance` before `form.save()`. If `crud_create`
+    does not support a pre-save hook, write the view manually (mirror `crud_create` logic with the
+    extra stamp step).
+  - After save, redirect to `hrm:employee_detail pk=obj.employee.pk`.
+
+- [ ] **`employee_lifecycle_detail`** — `get_object_or_404(EmployeeLifecycleEvent, pk=pk,
+  tenant=request.tenant)` with full `select_related` on designation/department/manager FKs;
+  `render(request, "hrm/employee/lifecycle/detail.html", {"obj": obj})`.
+
+- [ ] **`employee_lifecycle_edit`** — `crud_edit(...)`:
+  - `model=EmployeeLifecycleEvent`, `form_class=EmployeeLifecycleEventForm`,
+    `template="hrm/employee/lifecycle/form.html"`, `success_url="hrm:employee_lifecycle_list"`.
+
+- [ ] **`employee_lifecycle_delete`** — `@require_POST`; tenant-scoped fetch; `write_audit_log`;
+  `obj.delete()`; `messages.success`; redirect to `hrm:employee_lifecycle_list`.
+
+### 5.3 Extend `employee_detail` view
+
+- [ ] Add to the context passed by `employee_detail(request, pk)`:
+  - `"documents"`: `EmployeeDocument.objects.filter(tenant=request.tenant, employee=obj)
+    .order_by("-created_at")[:10]`.
+  - `"lifecycle_events"`: `EmployeeLifecycleEvent.objects.filter(tenant=request.tenant, employee=obj)
+    .select_related("from_designation","to_designation","from_department","to_department")
+    .order_by("-effective_date")[:10]`.
+- [ ] Add `EmployeeDocument`, `EmployeeLifecycleEvent` to the `from .models import (...)` block.
+- [ ] Add `EmployeeDocumentForm`, `EmployeeLifecycleEventForm` to the `from .forms import (...)` block.
+
+---
+
+## 6. URLs (`apps/hrm/urls.py`)
+
+Add the following path() entries (all existing patterns untouched):
+
+- [ ] **`EmployeeDocument` (5 CRUD + 2 workflow):**
+  ```
+  "employee-documents/"                    → employee_document_list        (name="employee_document_list")
+  "employee-documents/add/"               → employee_document_create       (name="employee_document_create")
+  "employee-documents/<int:pk>/"          → employee_document_detail       (name="employee_document_detail")
+  "employee-documents/<int:pk>/edit/"     → employee_document_edit         (name="employee_document_edit")
+  "employee-documents/<int:pk>/delete/"   → employee_document_delete       (name="employee_document_delete")
+  "employee-documents/<int:pk>/verify/"   → employee_document_mark_verified (name="employee_document_mark_verified")
+  "employee-documents/<int:pk>/reject/"   → employee_document_reject       (name="employee_document_reject")
+  ```
+
+- [ ] **`EmployeeLifecycleEvent` (5 CRUD):**
+  ```
+  "lifecycle-events/"                     → employee_lifecycle_list        (name="employee_lifecycle_list")
+  "lifecycle-events/add/"                 → employee_lifecycle_create      (name="employee_lifecycle_create")
+  "lifecycle-events/<int:pk>/"            → employee_lifecycle_detail      (name="employee_lifecycle_detail")
+  "lifecycle-events/<int:pk>/edit/"       → employee_lifecycle_edit        (name="employee_lifecycle_edit")
+  "lifecycle-events/<int:pk>/delete/"     → employee_lifecycle_delete      (name="employee_lifecycle_delete")
+  ```
+
+---
+
+## 7. Admin (`apps/hrm/admin.py`)
+
+- [ ] Register `EmployeeDocument`:
+  - `list_display = ["number","employee","document_type","title","verification_status","expires_on",
+    "is_confidential","created_at"]`.
+  - `list_filter = ["document_type","verification_status","is_confidential"]`.
+  - `search_fields = ["number","title","document_number","employee__party__name"]`.
+  - `readonly_fields = ["number","tenant","verification_status","verified_by","verified_at",
+    "created_at","updated_at"]`.
+
+- [ ] Register `EmployeeLifecycleEvent`:
+  - `list_display = ["number","employee","event_type","effective_date","from_designation",
+    "to_designation","initiated_by","created_at"]`.
+  - `list_filter = ["event_type"]`.
+  - `search_fields = ["number","employee__party__name","reason","notes"]`.
+  - `readonly_fields = ["number","tenant","initiated_by","created_at","updated_at"]`.
+
+- [ ] Add both models to the admin imports.
+
+---
+
+## 8. Templates (`templates/hrm/employee/`)
+
+Template folder rule: sub-module folder `employee/` doubles as the `EmployeeProfile` entity folder
+(single-entity rule from SKILL.md / CLAUDE.md). The two new child entities get their own sub-folders:
+`templates/hrm/employee/document/` and `templates/hrm/employee/lifecycle/`. Existing
+`employee/list.html`, `employee/detail.html`, `employee/form.html` STAY in place (no move needed).
+
+### 8.1 `EmployeeDocument` templates
+
+- [ ] **`templates/hrm/employee/document/list.html`** — extends `base.html`.
+  - Page header + "Add Document" button (→ `hrm:employee_document_create`).
+  - Filter bar: search `q`, `document_type` `<select>` (pre-filled from `request.GET.document_type`,
+    exact string compare), `verification_status` `<select>` (pre-filled from `request.GET.
+    verification_status`, exact string compare). Pass both choice lists via `extra_context`.
+  - Table columns: Number, Employee, Type (badge), Title, Doc Number, Issued, Expires
+    (+ `badge-red` if `obj.is_expired`, `badge-amber` if `obj.is_expiring_soon`), Verification
+    (badge: `badge-amber` pending, `badge-green` verified, `badge-red` rejected), Confidential
+    (lock icon if `is_confidential`), Actions (view/edit/delete-POST+confirm+csrf).
+  - Empty-state + `{% include "partials/pagination.html" %}`.
+
+- [ ] **`templates/hrm/employee/document/detail.html`** — extends `base.html`.
+  - Breadcrumb: HRM › Employees › `{obj.employee.name}` › Documents › `{obj.number}`.
+  - Page actions: Edit (if `verification_status != "verified"`), Delete (POST+confirm, blocked if
+    verified), Back to Employee (`hrm:employee_detail obj.employee.pk`).
+  - Cards:
+    1. **Document Info** (`detail-grid`): Number, Type, Title, Document Number, Issuing Authority,
+       Issuing Country, Issued On, Expires On (+ expiry badge), Confidential flag.
+    2. **Verification** card: Status badge, Verified By, Verified At, Notes.
+    3. **File** card: download link `<a href="{{ obj.file.url }}" target="_blank" rel="noopener">
+       Download</a>` (if `obj.file`), else "No file uploaded".
+  - Workflow buttons (POST forms; show only if current user is tenant admin — server enforces):
+    "Mark Verified" → `hrm:employee_document_mark_verified` (show if `status == "pending"`).
+    "Reject" → `hrm:employee_document_reject` (show if `status == "pending"` or `"verified"`).
+    Each wrapped in `<form method="post" ...>{% csrf_token %}<button ...></form>`.
+
+- [ ] **`templates/hrm/employee/document/form.html`** — extends `base.html`.
+  - `<form enctype="multipart/form-data" ...>` (required for file upload).
+  - Breadcrumb: HRM › Employees › Documents › Add / Edit.
+  - All `EmployeeDocumentForm` fields. Date inputs for `issued_on`/`expires_on` (`type="date"`).
+  - Hint text below file input: "Allowed: PDF, DOC, DOCX, JPG, PNG. Max 10 MB."
+  - Submit + Cancel (→ `hrm:employee_document_list`) buttons.
+
+### 8.2 `EmployeeLifecycleEvent` templates
+
+- [ ] **`templates/hrm/employee/lifecycle/list.html`** — extends `base.html`.
+  - Page header + "Add Event" button (→ `hrm:employee_lifecycle_create`).
+  - Filter bar: search `q`, `event_type` `<select>` (exact string compare), `employee` `<select>`
+    (FK filter — compare `emp.pk|stringformat:"d"` vs `request.GET.employee`).
+  - Table columns: Number, Employee, Event Type (badge — hire=green, promotion=info, demotion=red,
+    separation=slate, salary_revision=amber, others=muted), Effective Date, From→To summary
+    (compact: show first populated from/to pair — designation, location, or salary), Reason
+    (truncated 60 chars), Actions (view/edit/delete-POST+confirm+csrf).
+  - Empty-state + pagination.
+
+- [ ] **`templates/hrm/employee/lifecycle/detail.html`** — extends `base.html`.
+  - Breadcrumb: HRM › Employees › `{obj.employee.name}` › Lifecycle › `{obj.number}`.
+  - Page actions: Edit, Delete (POST+confirm), Back to Employee.
+  - Cards:
+    1. **Event** card: Number, Event Type badge, Effective Date, Reason, Notes, Initiated By,
+       Created At.
+    2. **Change Details** card (`detail-grid`): render each from/to pair only when at least one
+       side is populated:
+       Designation (from → to), Department (from → to), Location (from → to), Job Title (from → to),
+       Salary (from → to, `.text-right`), Manager (from → to), Employee Type (from → to).
+       Guard each row: `{% if obj.from_designation or obj.to_designation %}`.
+
+- [ ] **`templates/hrm/employee/lifecycle/form.html`** — extends `base.html`.
+  - Breadcrumb: HRM › Employees › Lifecycle Events › Add / Edit.
+  - Two `<fieldset>` groups:
+    1. **Core**: `event_type`, `employee`, `effective_date`, `reason`, `notes`.
+    2. **Change Details**: all `from_*`/`to_*` fields with hint:
+       "Fill only the fields relevant to this event type."
+  - Submit + Cancel (→ `hrm:employee_lifecycle_list`).
+
+### 8.3 Extend `templates/hrm/employee/detail.html` (existing file — edit in place)
+
+- [ ] **"Personal Information" card** — add after `mobile`:
+  - Marital Status: `{{ obj.get_marital_status_display|default:"—" }}`.
+  - Work Email: `{{ obj.work_email|default:"—" }}`.
+  - Work Location: `{{ obj.work_location|default:"—" }}`.
+  - After the emergency contact row: second emergency contact (render name/phone/relation in the same
+    compact style — only if any of the three `emergency_contact_2_*` fields is non-empty).
+  - Father's Name: `{{ obj.father_name|default:"—" }}`.
+  - Spouse Name: `{{ obj.spouse_name|default:"—" }}`.
+
+- [ ] **"Employment" card** — add after `confirmed_on`:
+  - Notice Period: `{{ obj.notice_period_days|default:"—" }} days`.
+  - After `bank_routing`: National ID: `{{ obj.national_id|default:"—" }}`, ID Type:
+    `{{ obj.national_id_type|default:"—" }}`, Passport No.: `{{ obj.passport_number|default:"—" }}`,
+    Passport Expiry: `{{ obj.passport_expiry|default:"—" }}`.
+
+- [ ] **Add "Addresses" card** (new `<div class="card">` after the Employment card):
+  - Current Address: `{{ obj.current_address|linebreaksbr|default:"—" }}`.
+  - Permanent Address: `{{ obj.permanent_address|linebreaksbr|default:"—" }}`.
+  - Wrap the entire card in `{% if obj.current_address or obj.permanent_address %}...{% endif %}`.
+
+- [ ] **Add "Employee Documents" card** (after the Addresses card):
+  - Header: "Employee Documents" + "Add Document" button → `hrm:employee_document_create` with
+    `?employee={{ obj.pk }}`.
+  - Table from `documents` context: Type badge, Title, Doc Number, Issued/Expiry (+ expiry badges),
+    Verification badge, File download link, Actions (View + workflow verify/reject if admin).
+  - "View All" link → `hrm:employee_document_list`.
+  - Empty-state: "No documents on file. Add the first document."
+
+- [ ] **Add "Employment Lifecycle" card** (after the Documents card):
+  - Header: "Employment Lifecycle" + "Add Event" button → `hrm:employee_lifecycle_create` with
+    `?employee={{ obj.pk }}`.
+  - Timeline table from `lifecycle_events` context (ordered `-effective_date`): Effective Date,
+    Event Type badge, compact From→To summary, Reason (truncated), View detail link.
+  - "View Full Timeline" link → `hrm:employee_lifecycle_list`.
+  - Empty-state: "No lifecycle events recorded yet."
+
+### 8.4 Extend `templates/hrm/employee/form.html` (existing file — edit in place)
+
+- [ ] Add the 15 new `EmployeeProfile` form fields, grouped:
+  - Personal: `marital_status` (`<select>`), `work_email` (`type="email"`), `work_location`
+    (`type="text"`), `notice_period_days` (`type="number"`).
+  - Family: `father_name`, `spouse_name`.
+  - Identity: `national_id`, `national_id_type`, `passport_number`, `passport_expiry`
+    (`type="date"`).
+  - Addresses: `current_address` (`<textarea>`), `permanent_address` (`<textarea>`).
+  - Second Emergency Contact: `emergency_contact_2_name`, `emergency_contact_2_phone`,
+    `emergency_contact_2_relation`.
+
+---
+
+## 9. Wire-up (`apps/core/navigation.py`)
+
+- [ ] In `LIVE_LINKS["3.1"]`, **add two new entries** (keep the existing three unchanged):
+  ```python
+  "Document Management": "hrm:employee_document_list",   # bullet — closes gap 3.1.D
+  "Employee Lifecycle":  "hrm:employee_lifecycle_list",  # bullet — closes gap 3.1.E
+  ```
+  After this change, all 5 NavERP.md 3.1 bullets are Live. Do NOT touch any other `LIVE_LINKS` entry.
+
+---
+
+## 10. Migration
+
+- [ ] `python manage.py makemigrations hrm` — one incremental migration adding the 15 `EmployeeProfile`
+  fields and creating the two new tables. Verify all 15 new fields are nullable/blank/have defaults
+  (non-destructive to existing rows).
+- [ ] `python manage.py migrate` — apply to `nav_erp` database.
+- [ ] `python manage.py check` — 0 issues.
+
+---
+
+## 11. Seed (`apps/hrm/management/commands/seed_hrm.py`)
+
+- [ ] Add a `_seed_employee_records(tenant)` function. Call it from `handle()` after the existing
+  `_seed_offboarding(tenant)` block.
+
+- [ ] **Idempotent guard at top of `_seed_employee_records`:**
+  ```python
+  if EmployeeDocument.objects.filter(tenant=tenant).exists():
+      self.stdout.write(f"  [skip] Employee records already seeded for {tenant.slug}")
+      return
+  ```
+
+- [ ] **For each of the first 3 seeded employees** (`EmployeeProfile.objects.filter(tenant=tenant)
+  .order_by("created_at")[:3]`), create:
+  - **`EmployeeDocument` rows (2–3 per employee):**
+    1. `document_type="national_id"`, `title="National ID"` — create, then set
+       `obj.verification_status = "verified"; obj.save(update_fields=["verification_status",
+       "updated_at"])` (direct model update bypasses the editable=False restriction, permitted in
+       management commands).
+    2. `document_type="passport"`, `title="Passport"`, `issued_on = date.today() - timedelta(3650)`,
+       `expires_on = date.today() + timedelta(180)` (shows as expiring-soon), `verification_status`
+       stays `"pending"` (default, no extra save needed).
+    3. `document_type="employment_contract"`, `title="Appointment Letter"` — create, then set
+       `obj.verification_status = "verified"` (direct model update as above).
+  - **`EmployeeLifecycleEvent` rows (1–2 per employee):**
+    1. `event_type="hire"`, `effective_date = emp.employment.hired_on if emp.employment_id else
+       date.today() - timedelta(365)`, `reason="Initial hire"`, `initiated_by=None`.
+    2. If `emp.confirmed_on` is set: `event_type="confirmation"`, `effective_date=emp.confirmed_on`,
+       `reason="Probation successfully completed"`, `initiated_by=None`.
+
+- [ ] Add `EmployeeDocument`, `EmployeeLifecycleEvent` to the seeder's `--flush` delete list.
+
+- [ ] Add imports to the seeder: `from .models import EmployeeDocument, EmployeeLifecycleEvent`
+  (alongside the existing model imports).
+
+- [ ] Run seeder twice to verify idempotency (second run must print skip message, no extra rows).
+
+---
+
+## 12. Verify
+
+- [ ] `manage.py check` — 0 issues.
+- [ ] `manage.py migrate` — clean on `nav_erp` MariaDB.
+- [ ] **Seed twice** — second run skips `_seed_employee_records` (idempotent guard fires).
+- [ ] **Smoke sweep (`temp/` script)** — all new named URLs 200/302:
+  - `hrm:employee_document_list` → 200.
+  - `hrm:employee_document_create` → 200.
+  - `hrm:employee_document_detail pk=<seeded>` → 200.
+  - `hrm:employee_document_edit pk=<seeded>` → 200.
+  - `hrm:employee_document_mark_verified pk=<seeded>` → POST → 302.
+  - `hrm:employee_document_reject pk=<seeded>` → POST → 302.
+  - `hrm:employee_lifecycle_list` → 200.
+  - `hrm:employee_lifecycle_create` → 200.
+  - `hrm:employee_lifecycle_detail pk=<seeded>` → 200.
+  - `hrm:employee_lifecycle_edit pk=<seeded>` → 200.
+  - `hrm:employee_detail pk=<seeded>` → 200 (two new hub cards render without TemplateDoesNotExist).
+- [ ] **No template comment leaks** — scan all new `.html` files for `{#` or `{% comment`.
+- [ ] **Cross-tenant IDOR → 404** — `employee_document_detail` and `employee_lifecycle_detail` with
+  pk from tenant B, logged in as tenant A → 404 (enforced by `tenant=request.tenant` in
+  `get_object_or_404`).
+- [ ] **Workflow gate** — `employee_document_mark_verified` as a regular member → 403 (enforced by
+  `@tenant_admin_required`).
+- [ ] **Sidebar** — log in as `admin_acme`; open HRM → Employee Management (3.1) → confirm
+  "Document Management" and "Employee Lifecycle" both show as **Live** (not "On the roadmap").
+- [ ] **Employee detail hub** — open any employee record → confirm "Employee Documents" card and
+  "Employment Lifecycle" card render with seeded data.
+- [ ] **Expiry badge** — the seeded passport doc (`expires_on = today + 180 days`) shows
+  `is_expiring_soon=True` (amber badge) on list and detail — NOT `is_expired` (red badge).
+
+---
+
+## 13. Close-out
+
+- [ ] **code-reviewer** agent — apply findings, one commit per file.
+- [ ] **explorer** agent — apply findings, one commit per file.
+- [ ] **frontend-reviewer** agent — apply findings, one commit per file.
+- [ ] **performance-reviewer** agent — focus: `employee_detail` two new querysets use `select_related`;
+  `is_expired`/`is_expiring_soon` not called per-row in the list view (compute in Python loop or
+  annotate via `ExpressionWrapper`); document list `select_related("employee__party")` sufficient.
+- [ ] **qa-smoke-tester** agent — apply findings, one commit per file.
+- [ ] **security-reviewer** agent — focus: `mark_verified`/`reject` gate (`@tenant_admin_required`);
+  file-upload allowlist (`clean_file`); cross-tenant IDOR; `verification_status`/`initiated_by` not
+  settable via crafted POST.
+- [ ] **test-writer** agent — tests for: `EmployeeDocument` model props (`is_expired`,
+  `is_expiring_soon`, `__str__`, auto-number); `EmployeeLifecycleEvent` (`__str__`, auto-number,
+  ordering); form exclusions (POST with `verification_status` or `initiated_by` → field ignored);
+  CRUD views 200/302; `mark_verified` + `reject` workflow (guard + state transitions); member-403
+  on admin-gated actions; IDOR 404 for both new models; seeder idempotency.
+- [ ] **Update `.claude/skills/hrm/SKILL.md`** — add `EmployeeDocument` and `EmployeeLifecycleEvent`
+  to the Models table; add the 12 new url names to the URLs section; add the two new entity folders
+  (`employee/document/`, `employee/lifecycle/`) to the Templates section; update the Seeder section
+  with `_seed_employee_records`; update the Sidebar wiring section for the two new `LIVE_LINKS["3.1"]`
+  entries; update the EmployeeProfile field list.
+- [ ] **`README.md`** — update HRM feature list + seeding instructions to mention Document Management
+  and Employee Lifecycle.
+
+---
+
+## Later passes / deferred
+
+- **Expiry email/push notifications** — Celery/management-command background task emailing HR when
+  `EmployeeDocument.expires_on < today + N days`. The `expires_on` data is in place; delivery
+  mechanism (SMTP/Celery) is an integration pass. Add `expiry_alert_sent_at DateTimeField` to prevent
+  duplicate sends. Drivers: Keka 60/30/7-day GCC Iqama alerts, Workday auto-alerts (research 3.1.D).
+
+- **Auto-sync lifecycle event → `EmployeeProfile`/`core.Employment`** — when a `promotion` or
+  `transfer` event is saved, auto-update `EmployeeProfile.designation` and `core.Employment.org_unit`
+  to the `to_*` values. v1 records the event only. Auto-sync deferred to avoid complexity + data-
+  integrity risk. Requires careful `update_fields` + audit.
+
+- **Multi-field `EmployeeAddress` table** — normalized table with `address_type`
+  (current/permanent/contact/emergency), `line1`/`line2`/`city`/`state`/`postal`/`country`. v1 uses
+  `current_address`/`permanent_address` TextFields. Deferred. Drivers: greytHR, Workday (research 3.1.B).
+
+- **Second emergency contact as a normalized table** — `EmployeeEmergencyContact` table when >2
+  contacts per employee are needed. v1 uses flat `_2_*` fields.
+
+- **Document OCR / AI extraction** — Darwinbox-style AI OCR to auto-populate `document_number`,
+  `issued_on`, `expires_on` from scanned images. Requires Tesseract/AWS Textract/Google Vision.
+
+- **E-signature on personnel documents** — Zoho Sign/DocuSign/Adobe Sign integration. `OnboardingDocument`
+  already handles e-sign for onboarding. Extending to the personnel vault is a later integration pass.
+
+- **Document retention policy / GDPR auto-purge** — scheduled deletion past retention window. Add
+  `retention_until DateField` to `EmployeeDocument` when this ships (research 3.1.D).
+
+- **Dedicated Passport/Visa sub-model** — greytHR-style `EmployeePassport`/`EmployeeVisa` tables with
+  family-member tracking and immigration-system integration. v1 covers via `document_type` on
+  `EmployeeDocument`.
+
+- **Background check workflow integration** — vendor API calls, status webhooks. v1: `document_type=
+  "background_check"` + `is_confidential=True` is the data stub.
+
+- **`work_location` FK upgrade** — upgrade from `CharField` to FK→`core.OrgUnit(kind=branch)` when
+  a branch/location master is populated.
+
+- **Languages / skills inventory** — `EmployeeSkill`/`EmployeeLanguage` table. Deferred to Talent
+  Management (3.38).
+
+- **Org chart view** — visual reporting-structure tree. Deferred to the 3.2 Organizational Structure
+  pass.
+
+- **Custom document types / fields** — admin-defined document types and per-type metadata fields.
+  Requires the Module 0.10 Custom Fields engine.
+
+---
+
 ## Review notes
 
-(filled in at the end of the build pass)
+(To be filled in after the build + review agents complete.)
