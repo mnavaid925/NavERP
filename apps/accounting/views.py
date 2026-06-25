@@ -417,7 +417,7 @@ def payment_schedule(request):
             totals["outstanding"] += outstanding
             totals["discount"] += discount
             totals["net"] += net
-    return render(request, "accounting/payable/payment_schedule.html",
+    return render(request, "accounting/payable/payment/schedule.html",
                   {"rows": rows, "totals": totals, "today": timezone.localdate()})
 
 
@@ -428,7 +428,7 @@ def recurringinvoice_list(request):
         request,
         RecurringInvoice.objects.filter(tenant=request.tenant)
         .select_related("party", "currency", "payment_terms"),
-        "accounting/receivable/recurringinvoice_list.html",
+        "accounting/receivable/recurringinvoice/list.html",
         search_fields=["number", "description", "party__name"],
         filters=[("status", "status", False), ("cadence", "cadence", False)],
         extra_context={"status_choices": RecurringInvoice.STATUS_CHOICES,
@@ -439,7 +439,7 @@ def recurringinvoice_list(request):
 @login_required
 def recurringinvoice_create(request):
     return crud_create(request, form_class=RecurringInvoiceForm,
-                       template="accounting/receivable/recurringinvoice_form.html",
+                       template="accounting/receivable/recurringinvoice/form.html",
                        success_url="accounting:recurringinvoice_list")
 
 
@@ -450,14 +450,14 @@ def recurringinvoice_detail(request, pk):
         pk=pk, tenant=request.tenant)
     generated = (Invoice.objects.filter(tenant=request.tenant, recurring_invoice=obj)
                  .order_by("-issue_date", "-id")[:20])
-    return render(request, "accounting/receivable/recurringinvoice_detail.html",
+    return render(request, "accounting/receivable/recurringinvoice/detail.html",
                   {"obj": obj, "generated": generated})
 
 
 @login_required
 def recurringinvoice_edit(request, pk):
     return crud_edit(request, model=RecurringInvoice, pk=pk, form_class=RecurringInvoiceForm,
-                     template="accounting/receivable/recurringinvoice_form.html",
+                     template="accounting/receivable/recurringinvoice/form.html",
                      success_url="accounting:recurringinvoice_list")
 
 
@@ -502,7 +502,7 @@ def recurringinvoice_generate(request, pk):
 def glaccount_list(request):
     return crud_list(
         request, GLAccount.objects.filter(tenant=request.tenant).select_related("parent"),
-        "accounting/ledger/glaccount_list.html",
+        "accounting/ledger/glaccount/list.html",
         search_fields=["code", "name"],
         filters=[("account_type", "account_type", False), ("is_active", "is_active", False)],
         extra_context={"account_type_choices": GLAccount.ACCOUNT_TYPE_CHOICES},
@@ -511,14 +511,14 @@ def glaccount_list(request):
 
 @login_required
 def glaccount_create(request):
-    return crud_create(request, form_class=GLAccountForm, template="accounting/ledger/glaccount_form.html",
+    return crud_create(request, form_class=GLAccountForm, template="accounting/ledger/glaccount/form.html",
                        success_url="accounting:glaccount_list")
 
 
 @login_required
 def glaccount_detail(request, pk):
     obj = get_object_or_404(GLAccount.objects.select_related("parent"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/ledger/glaccount_detail.html", {
+    return render(request, "accounting/ledger/glaccount/detail.html", {
         "obj": obj,
         "children": obj.children.all(),
         "balance": obj.balance(),
@@ -529,7 +529,7 @@ def glaccount_detail(request, pk):
 @login_required
 def glaccount_edit(request, pk):
     return crud_edit(request, model=GLAccount, pk=pk, form_class=GLAccountForm,
-                     template="accounting/ledger/glaccount_form.html", success_url="accounting:glaccount_list")
+                     template="accounting/ledger/glaccount/form.html", success_url="accounting:glaccount_list")
 
 
 @login_required
@@ -547,7 +547,7 @@ def glaccount_delete(request, pk):
 def fiscal_period_list(request):
     return crud_list(
         request, FiscalPeriod.objects.filter(tenant=request.tenant),
-        "accounting/ledger/fiscal_period_list.html",
+        "accounting/ledger/fiscal_period/list.html",
         search_fields=["name"],
         filters=[("status", "status", False), ("period_type", "period_type", False)],
         extra_context={"status_choices": FiscalPeriod.STATUS_CHOICES,
@@ -557,14 +557,14 @@ def fiscal_period_list(request):
 
 @login_required
 def fiscal_period_create(request):
-    return crud_create(request, form_class=FiscalPeriodForm, template="accounting/ledger/fiscal_period_form.html",
+    return crud_create(request, form_class=FiscalPeriodForm, template="accounting/ledger/fiscal_period/form.html",
                        success_url="accounting:fiscal_period_list")
 
 
 @login_required
 def fiscal_period_detail(request, pk):
     obj = get_object_or_404(FiscalPeriod.objects.select_related("closed_by"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/ledger/fiscal_period_detail.html", {
+    return render(request, "accounting/ledger/fiscal_period/detail.html", {
         "obj": obj,
         "entry_count": obj.journal_entries.count(),
     })
@@ -573,7 +573,7 @@ def fiscal_period_detail(request, pk):
 @login_required
 def fiscal_period_edit(request, pk):
     return crud_edit(request, model=FiscalPeriod, pk=pk, form_class=FiscalPeriodForm,
-                     template="accounting/ledger/fiscal_period_form.html", success_url="accounting:fiscal_period_list")
+                     template="accounting/ledger/fiscal_period/form.html", success_url="accounting:fiscal_period_list")
 
 
 @login_required
@@ -607,7 +607,7 @@ def fiscal_period_close(request, pk):
 def journal_entry_list(request):
     return crud_list(
         request, JournalEntry.objects.filter(tenant=request.tenant),
-        "accounting/ledger/journal_entry_list.html",
+        "accounting/ledger/journal_entry/list.html",
         search_fields=["number", "description", "reference"],
         filters=[("status", "status", False), ("entry_type", "entry_type", False)],
         extra_context={"status_choices": JournalEntry.STATUS_CHOICES,
@@ -636,7 +636,7 @@ def journal_entry_create(request):
     else:
         form = JournalEntryForm(tenant=request.tenant)
         formset = JournalLineFormSet(form_kwargs={"tenant": request.tenant})
-    return render(request, "accounting/ledger/journal_entry_form.html",
+    return render(request, "accounting/ledger/journal_entry/form.html",
                   {"form": form, "formset": formset, "is_edit": False})
 
 
@@ -648,7 +648,7 @@ def journal_entry_detail(request, pk):
     )
     lines = obj.lines.select_related("gl_account", "party", "org_unit", "currency")
     debit_total, credit_total = obj.totals()
-    return render(request, "accounting/ledger/journal_entry_detail.html", {
+    return render(request, "accounting/ledger/journal_entry/detail.html", {
         "obj": obj, "lines": lines, "debit_total": debit_total, "credit_total": credit_total,
         "balanced": obj.is_balanced(),
     })
@@ -673,7 +673,7 @@ def journal_entry_edit(request, pk):
     else:
         form = JournalEntryForm(instance=entry, tenant=request.tenant)
         formset = JournalLineFormSet(instance=entry, form_kwargs={"tenant": request.tenant})
-    return render(request, "accounting/ledger/journal_entry_form.html",
+    return render(request, "accounting/ledger/journal_entry/form.html",
                   {"form": form, "formset": formset, "is_edit": True, "obj": entry})
 
 
@@ -727,7 +727,7 @@ def journal_entry_void(request, pk):
 @login_required
 def currency_list(request):
     return crud_list(
-        request, Currency.objects.all(), "accounting/ledger/currency_list.html",
+        request, Currency.objects.all(), "accounting/ledger/currency/list.html",
         search_fields=["code", "name"],
         filters=[("is_active", "is_active", False)],
     )
@@ -744,13 +744,13 @@ def currency_create(request):
             return redirect("accounting:currency_list")
     else:
         form = CurrencyForm()
-    return render(request, "accounting/ledger/currency_form.html", {"form": form, "is_edit": False})
+    return render(request, "accounting/ledger/currency/form.html", {"form": form, "is_edit": False})
 
 
 @login_required
 def currency_detail(request, pk):
     obj = get_object_or_404(Currency, pk=pk)
-    return render(request, "accounting/ledger/currency_detail.html", {"obj": obj})
+    return render(request, "accounting/ledger/currency/detail.html", {"obj": obj})
 
 
 @tenant_admin_required
@@ -765,7 +765,7 @@ def currency_edit(request, pk):
             return redirect("accounting:currency_list")
     else:
         form = CurrencyForm(instance=obj)
-    return render(request, "accounting/ledger/currency_form.html", {"form": form, "obj": obj, "is_edit": True})
+    return render(request, "accounting/ledger/currency/form.html", {"form": form, "obj": obj, "is_edit": True})
 
 
 @tenant_admin_required
@@ -783,7 +783,7 @@ def currency_delete(request, pk):
 def exchange_rate_list(request):
     return crud_list(
         request, ExchangeRate.objects.filter(tenant=request.tenant).select_related("currency"),
-        "accounting/ledger/exchange_rate_list.html",
+        "accounting/ledger/exchange_rate/list.html",
         search_fields=["currency__code"],
         filters=[("currency", "currency_id", True), ("source", "source", False)],
         extra_context={"currencies": Currency.objects.filter(is_active=True),
@@ -793,20 +793,20 @@ def exchange_rate_list(request):
 
 @login_required
 def exchange_rate_create(request):
-    return crud_create(request, form_class=ExchangeRateForm, template="accounting/ledger/exchange_rate_form.html",
+    return crud_create(request, form_class=ExchangeRateForm, template="accounting/ledger/exchange_rate/form.html",
                        success_url="accounting:exchange_rate_list")
 
 
 @login_required
 def exchange_rate_detail(request, pk):
     obj = get_object_or_404(ExchangeRate.objects.select_related("currency"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/ledger/exchange_rate_detail.html", {"obj": obj})
+    return render(request, "accounting/ledger/exchange_rate/detail.html", {"obj": obj})
 
 
 @login_required
 def exchange_rate_edit(request, pk):
     return crud_edit(request, model=ExchangeRate, pk=pk, form_class=ExchangeRateForm,
-                     template="accounting/ledger/exchange_rate_form.html", success_url="accounting:exchange_rate_list")
+                     template="accounting/ledger/exchange_rate/form.html", success_url="accounting:exchange_rate_list")
 
 
 @login_required
@@ -820,7 +820,7 @@ def exchange_rate_delete(request, pk):
 def payment_term_list(request):
     return crud_list(
         request, PaymentTerm.objects.filter(tenant=request.tenant),
-        "accounting/payable/payment_term_list.html",
+        "accounting/payable/payment_term/list.html",
         search_fields=["name"],
         filters=[("is_active", "is_active", False)],
     )
@@ -828,20 +828,20 @@ def payment_term_list(request):
 
 @login_required
 def payment_term_create(request):
-    return crud_create(request, form_class=PaymentTermForm, template="accounting/payable/payment_term_form.html",
+    return crud_create(request, form_class=PaymentTermForm, template="accounting/payable/payment_term/form.html",
                        success_url="accounting:payment_term_list")
 
 
 @login_required
 def payment_term_detail(request, pk):
     obj = get_object_or_404(PaymentTerm, pk=pk, tenant=request.tenant)
-    return render(request, "accounting/payable/payment_term_detail.html", {"obj": obj})
+    return render(request, "accounting/payable/payment_term/detail.html", {"obj": obj})
 
 
 @login_required
 def payment_term_edit(request, pk):
     return crud_edit(request, model=PaymentTerm, pk=pk, form_class=PaymentTermForm,
-                     template="accounting/payable/payment_term_form.html", success_url="accounting:payment_term_list")
+                     template="accounting/payable/payment_term/form.html", success_url="accounting:payment_term_list")
 
 
 @login_required
@@ -856,7 +856,7 @@ def vendor_profile_list(request):
     return crud_list(
         request, VendorProfile.objects.filter(tenant=request.tenant)
         .select_related("party", "payment_terms", "currency"),
-        "accounting/payable/vendor_profile_list.html",
+        "accounting/payable/vendor_profile/list.html",
         search_fields=["party__name"],
         filters=[("payment_terms", "payment_terms_id", True), ("is_1099", "is_1099", False),
                  ("is_active", "is_active", False)],
@@ -866,7 +866,7 @@ def vendor_profile_list(request):
 
 @login_required
 def vendor_profile_create(request):
-    return crud_create(request, form_class=VendorProfileForm, template="accounting/payable/vendor_profile_form.html",
+    return crud_create(request, form_class=VendorProfileForm, template="accounting/payable/vendor_profile/form.html",
                        success_url="accounting:vendor_profile_list")
 
 
@@ -878,13 +878,13 @@ def vendor_profile_detail(request, pk):
     )
     bills = (Bill.objects.filter(tenant=request.tenant, party=obj.party)
              .order_by("-bill_date")[:5])
-    return render(request, "accounting/payable/vendor_profile_detail.html", {"obj": obj, "bills": bills})
+    return render(request, "accounting/payable/vendor_profile/detail.html", {"obj": obj, "bills": bills})
 
 
 @login_required
 def vendor_profile_edit(request, pk):
     return crud_edit(request, model=VendorProfile, pk=pk, form_class=VendorProfileForm,
-                     template="accounting/payable/vendor_profile_form.html", success_url="accounting:vendor_profile_list")
+                     template="accounting/payable/vendor_profile/form.html", success_url="accounting:vendor_profile_list")
 
 
 @login_required
@@ -898,7 +898,7 @@ def vendor_profile_delete(request, pk):
 def bill_list(request):
     return crud_list(
         request, Bill.objects.filter(tenant=request.tenant).select_related("party", "currency"),
-        "accounting/payable/bill_list.html",
+        "accounting/payable/bill/list.html",
         search_fields=["number", "party__name"],
         filters=[("status", "status", False), ("party", "party_id", True)],
         extra_context={"status_choices": Bill.STATUS_CHOICES, "parties": _vendor_parties(request.tenant)},
@@ -940,7 +940,7 @@ def _bill_form(request, instance):
     else:
         form = BillForm(instance=instance, tenant=request.tenant)
         formset = BillLineFormSet(instance=instance, form_kwargs={"tenant": request.tenant})
-    return render(request, "accounting/payable/bill_form.html",
+    return render(request, "accounting/payable/bill/form.html",
                   {"form": form, "formset": formset, "is_edit": is_edit, "obj": instance})
 
 
@@ -950,7 +950,7 @@ def bill_detail(request, pk):
         Bill.objects.select_related("party", "payment_terms", "currency", "approved_by", "document"),
         pk=pk, tenant=request.tenant,
     )
-    return render(request, "accounting/payable/bill_detail.html", {
+    return render(request, "accounting/payable/bill/detail.html", {
         "obj": obj,
         "lines": obj.lines.select_related("gl_account"),
         "allocations": obj.allocations.select_related("payment"),
@@ -990,7 +990,7 @@ def customer_profile_list(request):
     return crud_list(
         request, CustomerProfile.objects.filter(tenant=request.tenant)
         .select_related("party", "payment_terms", "currency"),
-        "accounting/receivable/customer_profile_list.html",
+        "accounting/receivable/customer_profile/list.html",
         search_fields=["party__name"],
         filters=[("payment_terms", "payment_terms_id", True), ("credit_on_hold", "credit_on_hold", False),
                  ("is_active", "is_active", False)],
@@ -1000,7 +1000,7 @@ def customer_profile_list(request):
 
 @login_required
 def customer_profile_create(request):
-    return crud_create(request, form_class=CustomerProfileForm, template="accounting/receivable/customer_profile_form.html",
+    return crud_create(request, form_class=CustomerProfileForm, template="accounting/receivable/customer_profile/form.html",
                        success_url="accounting:customer_profile_list")
 
 
@@ -1015,7 +1015,7 @@ def customer_profile_detail(request, pk):
     outstanding = (Invoice.objects.filter(tenant=request.tenant, party=obj.party,
                                           status__in=Invoice.OPEN_STATUSES)
                    .aggregate(s=Sum("total"))["s"] or ZERO)
-    return render(request, "accounting/receivable/customer_profile_detail.html", {
+    return render(request, "accounting/receivable/customer_profile/detail.html", {
         "obj": obj, "invoices": invoices, "outstanding": outstanding,
         "over_limit": obj.credit_limit and outstanding > obj.credit_limit,
     })
@@ -1024,7 +1024,7 @@ def customer_profile_detail(request, pk):
 @login_required
 def customer_profile_edit(request, pk):
     return crud_edit(request, model=CustomerProfile, pk=pk, form_class=CustomerProfileForm,
-                     template="accounting/receivable/customer_profile_form.html", success_url="accounting:customer_profile_list")
+                     template="accounting/receivable/customer_profile/form.html", success_url="accounting:customer_profile_list")
 
 
 @login_required
@@ -1038,7 +1038,7 @@ def customer_profile_delete(request, pk):
 def invoice_list(request):
     return crud_list(
         request, Invoice.objects.filter(tenant=request.tenant).select_related("party", "currency"),
-        "accounting/receivable/invoice_list.html",
+        "accounting/receivable/invoice/list.html",
         search_fields=["number", "party__name"],
         filters=[("status", "status", False), ("kind", "kind", False), ("party", "party_id", True)],
         extra_context={"status_choices": Invoice.STATUS_CHOICES, "kind_choices": Invoice.KIND_CHOICES,
@@ -1082,7 +1082,7 @@ def _invoice_form(request, instance):
     else:
         form = InvoiceForm(instance=instance, tenant=request.tenant)
         formset = InvoiceLineFormSet(instance=instance, form_kwargs={"tenant": request.tenant})
-    return render(request, "accounting/receivable/invoice_form.html",
+    return render(request, "accounting/receivable/invoice/form.html",
                   {"form": form, "formset": formset, "is_edit": is_edit, "obj": instance,
                    "over_limit": over_limit})
 
@@ -1100,7 +1100,7 @@ def invoice_detail(request, pk):
                                               status__in=Invoice.OPEN_STATUSES)
                        .aggregate(s=Sum("total"))["s"] or ZERO)
         over_limit = outstanding > profile.credit_limit
-    return render(request, "accounting/receivable/invoice_detail.html", {
+    return render(request, "accounting/receivable/invoice/detail.html", {
         "obj": obj,
         "lines": obj.lines.select_related("gl_account"),
         "allocations": obj.allocations.select_related("payment"),
@@ -1161,7 +1161,7 @@ def invoice_post(request, pk):
 def payment_list(request):
     return crud_list(
         request, Payment.objects.filter(tenant=request.tenant).select_related("party", "bank_account"),
-        "accounting/payable/payment_list.html",
+        "accounting/payable/payment/list.html",
         search_fields=["number", "party__name"],
         filters=[("direction", "direction", False), ("status", "status", False),
                  ("payment_method", "payment_method", False)],
@@ -1173,7 +1173,7 @@ def payment_list(request):
 
 @login_required
 def payment_create(request):
-    return crud_create(request, form_class=PaymentForm, template="accounting/payable/payment_form.html",
+    return crud_create(request, form_class=PaymentForm, template="accounting/payable/payment/form.html",
                        success_url="accounting:payment_list")
 
 
@@ -1183,7 +1183,7 @@ def payment_detail(request, pk):
         Payment.objects.select_related("party", "bank_account", "currency", "journal_entry"),
         pk=pk, tenant=request.tenant,
     )
-    return render(request, "accounting/payable/payment_detail.html", {
+    return render(request, "accounting/payable/payment/detail.html", {
         "obj": obj,
         "allocations": obj.allocations.select_related("invoice", "bill"),
         "unallocated": obj.unallocated(),
@@ -1197,7 +1197,7 @@ def payment_edit(request, pk):
         messages.error(request, "A confirmed or void payment cannot be edited.")
         return redirect("accounting:payment_detail", pk=pk)
     return crud_edit(request, model=Payment, pk=pk, form_class=PaymentForm,
-                     template="accounting/payable/payment_form.html", success_url="accounting:payment_list")
+                     template="accounting/payable/payment/form.html", success_url="accounting:payment_list")
 
 
 @login_required
@@ -1284,7 +1284,7 @@ def allocation_list(request):
     return crud_list(
         request, PaymentAllocation.objects.filter(payment__tenant=request.tenant)
         .select_related("payment", "invoice", "bill"),
-        "accounting/receivable/allocation_list.html",
+        "accounting/receivable/allocation/list.html",
         search_fields=["payment__number", "invoice__number", "bill__number"],
         filters=[("payment", "payment_id", True)],
         extra_context={"payments": Payment.objects.filter(tenant=request.tenant)},
@@ -1305,7 +1305,7 @@ def allocation_create(request):
             return redirect("accounting:allocation_list")
     else:
         form = PaymentAllocationForm(tenant=request.tenant)
-    return render(request, "accounting/receivable/allocation_form.html", {"form": form, "is_edit": False})
+    return render(request, "accounting/receivable/allocation/form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -1314,7 +1314,7 @@ def allocation_detail(request, pk):
         PaymentAllocation.objects.select_related("payment", "invoice", "bill"),
         pk=pk, payment__tenant=request.tenant,
     )
-    return render(request, "accounting/receivable/allocation_detail.html", {"obj": obj})
+    return render(request, "accounting/receivable/allocation/detail.html", {"obj": obj})
 
 
 @login_required
@@ -1330,7 +1330,7 @@ def allocation_edit(request, pk):
             return redirect("accounting:allocation_list")
     else:
         form = PaymentAllocationForm(instance=obj, tenant=request.tenant)
-    return render(request, "accounting/receivable/allocation_form.html", {"form": form, "obj": obj, "is_edit": True})
+    return render(request, "accounting/receivable/allocation/form.html", {"form": form, "obj": obj, "is_edit": True})
 
 
 @login_required
@@ -1350,7 +1350,7 @@ def allocation_delete(request, pk):
 def bank_account_list(request):
     return crud_list(
         request, BankAccount.objects.filter(tenant=request.tenant).select_related("currency", "gl_account"),
-        "accounting/cash/bank_account_list.html",
+        "accounting/cash/bank_account/list.html",
         search_fields=["name", "bank_name"],
         filters=[("currency", "currency_id", True), ("is_active", "is_active", False)],
         extra_context={"currencies": Currency.objects.filter(is_active=True)},
@@ -1359,7 +1359,7 @@ def bank_account_list(request):
 
 @login_required
 def bank_account_create(request):
-    return crud_create(request, form_class=BankAccountForm, template="accounting/cash/bank_account_form.html",
+    return crud_create(request, form_class=BankAccountForm, template="accounting/cash/bank_account/form.html",
                        success_url="accounting:bank_account_list")
 
 
@@ -1367,7 +1367,7 @@ def bank_account_create(request):
 def bank_account_detail(request, pk):
     obj = get_object_or_404(BankAccount.objects.select_related("currency", "gl_account"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "accounting/cash/bank_account_detail.html", {
+    return render(request, "accounting/cash/bank_account/detail.html", {
         "obj": obj,
         "transactions": obj.transactions.all()[:10],
         "current_balance": obj.current_balance(),
@@ -1377,7 +1377,7 @@ def bank_account_detail(request, pk):
 @login_required
 def bank_account_edit(request, pk):
     return crud_edit(request, model=BankAccount, pk=pk, form_class=BankAccountForm,
-                     template="accounting/cash/bank_account_form.html", success_url="accounting:bank_account_list")
+                     template="accounting/cash/bank_account/form.html", success_url="accounting:bank_account_list")
 
 
 @login_required
@@ -1391,7 +1391,7 @@ def bank_account_delete(request, pk):
 def bank_transaction_list(request):
     return crud_list(
         request, BankTransaction.objects.filter(tenant=request.tenant).select_related("bank_account"),
-        "accounting/cash/bank_transaction_list.html",
+        "accounting/cash/bank_transaction/list.html",
         search_fields=["description", "external_ref"],
         filters=[("bank_account", "bank_account_id", True), ("direction", "direction", False),
                  ("status", "status", False)],
@@ -1403,14 +1403,14 @@ def bank_transaction_list(request):
 
 @login_required
 def bank_transaction_create(request):
-    return crud_create(request, form_class=BankTransactionForm, template="accounting/cash/bank_transaction_form.html",
+    return crud_create(request, form_class=BankTransactionForm, template="accounting/cash/bank_transaction/form.html",
                        success_url="accounting:bank_transaction_list")
 
 
 @login_required
 def bank_transaction_detail(request, pk):
     obj = get_object_or_404(BankTransaction.objects.select_related("bank_account"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/cash/bank_transaction_detail.html", {
+    return render(request, "accounting/cash/bank_transaction/detail.html", {
         "obj": obj,
         "match": obj.matches.select_related("payment", "journal_line", "matched_by").first(),
     })
@@ -1419,7 +1419,7 @@ def bank_transaction_detail(request, pk):
 @login_required
 def bank_transaction_edit(request, pk):
     return crud_edit(request, model=BankTransaction, pk=pk, form_class=BankTransactionForm,
-                     template="accounting/cash/bank_transaction_form.html", success_url="accounting:bank_transaction_list")
+                     template="accounting/cash/bank_transaction/form.html", success_url="accounting:bank_transaction_list")
 
 
 @login_required
@@ -1496,7 +1496,7 @@ def bank_transaction_import_csv(request):
             return redirect("accounting:bank_transaction_list")
     else:
         form = CsvImportForm(tenant=request.tenant)
-    return render(request, "accounting/cash/bank_transaction_import.html", {"form": form})
+    return render(request, "accounting/cash/bank_transaction/import.html", {"form": form})
 
 
 # ============================================================== 2.5 Cash — Reconciliation
@@ -1505,7 +1505,7 @@ def reconciliation_list(request):
     return crud_list(
         request, ReconciliationMatch.objects.filter(tenant=request.tenant)
         .select_related("bank_transaction", "payment", "matched_by"),
-        "accounting/cash/reconciliation_list.html",
+        "accounting/cash/reconciliation/list.html",
         search_fields=["bank_transaction__description"],
         filters=[("is_confirmed", "is_confirmed", False)],
     )
@@ -1513,7 +1513,7 @@ def reconciliation_list(request):
 
 @login_required
 def reconciliation_create(request):
-    return crud_create(request, form_class=ReconciliationMatchForm, template="accounting/cash/reconciliation_form.html",
+    return crud_create(request, form_class=ReconciliationMatchForm, template="accounting/cash/reconciliation/form.html",
                        success_url="accounting:reconciliation_list")
 
 
@@ -1524,13 +1524,13 @@ def reconciliation_detail(request, pk):
             "bank_transaction", "payment", "journal_line", "journal_line__entry", "matched_by"),
         pk=pk, tenant=request.tenant,
     )
-    return render(request, "accounting/cash/reconciliation_detail.html", {"obj": obj})
+    return render(request, "accounting/cash/reconciliation/detail.html", {"obj": obj})
 
 
 @login_required
 def reconciliation_edit(request, pk):
     return crud_edit(request, model=ReconciliationMatch, pk=pk, form_class=ReconciliationMatchForm,
-                     template="accounting/cash/reconciliation_form.html", success_url="accounting:reconciliation_list")
+                     template="accounting/cash/reconciliation/form.html", success_url="accounting:reconciliation_list")
 
 
 @login_required
