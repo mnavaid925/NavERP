@@ -24,13 +24,20 @@ from apps.core.decorators import tenant_admin_required
 from apps.core.models import Employment, OrgUnit
 from apps.core.utils import write_audit_log
 
-from .services import generate_tasks_from_template
+from .services import (
+    compute_leave_encashment,
+    generate_clearance_checklist,
+    generate_tasks_from_template,
+)
 
 from .forms import (
     AssetAllocationForm,
     AttendanceRecordForm,
+    ClearanceItemForm,
     DesignationForm,
     EmployeeProfileForm,
+    ExitInterviewForm,
+    FinalSettlementForm,
     LeaveAllocationForm,
     LeaveRequestForm,
     LeaveTypeForm,
@@ -41,6 +48,7 @@ from .forms import (
     OnboardingTemplateTaskForm,
     OrientationSessionForm,
     PublicHolidayForm,
+    SeparationCaseForm,
     ShiftAssignmentForm,
     ShiftForm,
 )
@@ -49,8 +57,11 @@ from .models import (
     TASK_CATEGORY_CHOICES,
     AssetAllocation,
     AttendanceRecord,
+    ClearanceItem,
     Designation,
     EmployeeProfile,
+    ExitInterview,
+    FinalSettlement,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -61,6 +72,7 @@ from .models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    SeparationCase,
     Shift,
     ShiftAssignment,
 )
@@ -1220,3 +1232,595 @@ def orientationsession_mark_missed(request, pk):
         write_audit_log(request.user, obj, "update", {"action": "mark_missed"})
         messages.success(request, f"Session '{obj.title}' marked missed.")
     return redirect("hrm:orientationsession_detail", pk=obj.pk)
+
+
+# ============================================================ 3.4 Employee Offboarding
+def _offboarding_create(request, form_class, template, redirect_resolver):
+    """Shared create for the offboarding models: tenant guard, ``?case=<pk>`` pre-fill (the child
+    create pages are reached from the case hub), save + audit, then redirect via
+    ``redirect_resolver(obj)`` → ``(view_name, pk)``. Mirrors ``apps.core.crud.crud_create`` but adds
+    the initial-case pre-fill and a pk-aware redirect (crud_create can only redirect to a bare name)."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = form_class(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Created successfully.")
+            view_name, pk = redirect_resolver(obj)
+            return redirect(view_name, pk=pk)
+    else:
+        initial = {}
+        case_pk = request.GET.get("case", "").strip()
+        if case_pk.isdigit():
+            initial["case"] = case_pk
+        form = form_class(tenant=request.tenant, initial=initial or None)
+    return render(request, template, {"form": form, "is_edit": False})
+
+
+# ---------------------------------------------------------- Separation Cases (3.4)
+@login_required
+def separationcase_list(request):
+    return crud_list(
+        request,
+        SeparationCase.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "approver"),
+        "hrm/offboarding/separationcase_list.html",
+        search_fields=["number", "employee__party__name"],
+        filters=[("status", "status", False), ("separation_type", "separation_type", False),
+                 ("employee", "employee_id", True)],
+        extra_context={"status_choices": SeparationCase.STATUS_CHOICES,
+                       "separation_type_choices": SeparationCase.SEPARATION_TYPE_CHOICES,
+                       "employees": EmployeeProfile.objects.filter(tenant=request.tenant)
+                       .select_related("party").order_by("party__name")},
+    )
+
+
+@login_required
+def separationcase_create(request):
+    return _offboarding_create(
+        request, SeparationCaseForm, "hrm/offboarding/separationcase_form.html",
+        lambda obj: ("hrm:separationcase_detail", obj.pk))
+
+
+@login_required
+def separationcase_detail(request, pk):
+    obj = get_object_or_404(
+        SeparationCase.objects.select_related(
+            "employee__party", "employee__employment", "employee__employment__org_unit",
+            "employee__designation", "approver"),
+        pk=pk, tenant=request.tenant)
+    clearance_items = list(obj.clearance_items
+                           .select_related("assigned_to", "cleared_by", "asset_allocation"))
+    clearance_total = len(clearance_items)
+    clearance_done = sum(1 for c in clearance_items
+                         if c.status in ClearanceItem.RESOLVED_STATUSES)
+    clearance_progress = int(round(clearance_done / clearance_total * 100)) if clearance_total else 0
+    # all-mandatory-cleared computed from the already-fetched list (avoids the property's extra query)
+    all_mandatory_cleared = not any(
+        c.is_mandatory and c.status not in ClearanceItem.RESOLVED_STATUSES for c in clearance_items)
+    return render(request, "hrm/offboarding/separationcase_detail.html", {
+        "obj": obj,
+        "clearance_items": clearance_items,
+        "clearance_total": clearance_total,
+        "clearance_done": clearance_done,
+        "clearance_progress": clearance_progress,
+        "all_mandatory_cleared": all_mandatory_cleared,
+        "exit_interview": obj.exit_interviews.select_related("interviewer").first(),
+        "settlement": obj.final_settlements.first(),
+        "rating_fields": ExitInterview.RATING_FIELDS,
+    })
+
+
+@login_required
+def separationcase_edit(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status not in ("draft", "pending_approval"):
+        messages.error(request, "Only a draft or pending separation case can be edited.")
+        return redirect("hrm:separationcase_detail", pk=obj.pk)
+    return crud_edit(request, model=SeparationCase, pk=pk, form_class=SeparationCaseForm,
+                     template="hrm/offboarding/separationcase_form.html",
+                     success_url="hrm:separationcase_list")
+
+
+@login_required
+@require_POST
+def separationcase_delete(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    # Only a draft case is deletable — a submitted one is withdrawn (keeps the audit trail).
+    if obj.status != "draft":
+        messages.error(request, "Only a draft separation case can be deleted. Withdraw it instead.")
+        return redirect("hrm:separationcase_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Separation case deleted.")
+    return redirect("hrm:separationcase_list")
+
+
+@login_required
+@require_POST
+def separationcase_submit(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "pending_approval"
+        if obj.submitted_at is None:
+            obj.submitted_at = timezone.now()
+        obj.save(update_fields=["status", "submitted_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Separation case {obj.number} submitted for approval.")
+    else:
+        messages.error(request, "Only a draft case can be submitted.")
+    return redirect("hrm:separationcase_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # approving a separation is a privileged HR/admin action
+@require_POST
+def separationcase_approve(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status == "pending_approval":
+        with transaction.atomic():
+            obj.status = "in_clearance"
+            obj.approver = request.user
+            obj.approved_at = timezone.now()
+            obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
+            created = generate_clearance_checklist(obj)  # auto-build the department checklist
+        write_audit_log(request.user, obj, "update", {"action": "approve", "clearance_items": created})
+        messages.success(request, f"Separation case {obj.number} approved — "
+                         f"{created} clearance item(s) created.")
+    else:
+        messages.error(request, "Only a case pending approval can be approved.")
+    return redirect("hrm:separationcase_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def separationcase_reject(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status == "pending_approval":
+        obj.status = "rejected"
+        obj.rejection_reason = request.POST.get("reason", "").strip()[:2000]
+        obj.save(update_fields=["status", "rejection_reason", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject"})
+        messages.success(request, f"Separation case {obj.number} rejected.")
+    else:
+        messages.error(request, "Only a case pending approval can be rejected.")
+    return redirect("hrm:separationcase_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def separationcase_withdraw(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status in ("draft", "pending_approval"):
+        obj.status = "withdrawn"
+        obj.withdrawal_reason = request.POST.get("reason", "").strip()[:2000]
+        obj.save(update_fields=["status", "withdrawal_reason", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "withdraw"})
+        messages.success(request, f"Separation case {obj.number} withdrawn.")
+    else:
+        messages.error(request, "Only a draft or pending case can be withdrawn.")
+    return redirect("hrm:separationcase_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def separationcase_mark_cleared(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status != "in_clearance":
+        messages.error(request, "Only a case in clearance can be marked cleared.")
+    elif not obj.all_mandatory_cleared:
+        messages.error(request, "All mandatory clearance items must be cleared or marked N/A first.")
+    else:
+        obj.status = "cleared"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_cleared"})
+        messages.success(request, f"Separation case {obj.number} fully cleared.")
+    return redirect("hrm:separationcase_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def separationcase_complete(request, pk):
+    obj = get_object_or_404(SeparationCase, pk=pk, tenant=request.tenant)
+    if obj.status in ("cleared", "settled"):
+        obj.status = "completed"
+        if obj.actual_last_working_day is None:
+            posted = _parse_iso_date(request.POST.get("actual_last_working_day", "").strip())
+            obj.actual_last_working_day = (posted or obj.expected_last_working_day
+                                           or timezone.localdate())
+        obj.save(update_fields=["status", "actual_last_working_day", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, f"Separation case {obj.number} completed.")
+    else:
+        messages.error(request, "A case must be cleared (and settled) before completion.")
+    return redirect("hrm:separationcase_detail", pk=obj.pk)
+
+
+def _generate_letter(request, pk, *, kind, template):
+    """Shared relieving/experience letter generator: gate on a cleared case, stamp the
+    generated-at/by once, then render the print-ready letter (Content-Disposition: inline)."""
+    obj = get_object_or_404(
+        SeparationCase.objects.select_related(
+            "employee__party", "employee__employment", "employee__employment__org_unit",
+            "employee__designation"),
+        pk=pk, tenant=request.tenant)
+    if obj.status not in SeparationCase.LETTER_READY_STATUSES:
+        messages.error(request, "Letters can only be generated once the case is cleared.")
+        return redirect("hrm:separationcase_detail", pk=obj.pk)
+    if kind == "relieving" and obj.relieving_letter_generated_at is None:
+        obj.relieving_letter_generated_at = timezone.now()
+        obj.relieving_letter_generated_by = request.user
+        obj.save(update_fields=["relieving_letter_generated_at",
+                                "relieving_letter_generated_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "generate_relieving_letter"})
+    elif kind == "experience" and obj.experience_letter_generated_at is None:
+        obj.experience_letter_generated_at = timezone.now()
+        obj.experience_letter_generated_by = request.user
+        obj.save(update_fields=["experience_letter_generated_at",
+                                "experience_letter_generated_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "generate_experience_letter"})
+    emp = obj.employee
+    response = render(request, template, {
+        "case": obj,
+        "employee": emp,
+        "employment": emp.employment if emp.employment_id else None,
+        "tenant": request.tenant,
+        "today": timezone.localdate(),
+    })
+    response["Content-Disposition"] = "inline"
+    return response
+
+
+@login_required
+@require_POST
+def separationcase_generate_relieving_letter(request, pk):
+    return _generate_letter(request, pk, kind="relieving",
+                            template="hrm/offboarding/relieving_letter.html")
+
+
+@login_required
+@require_POST
+def separationcase_generate_experience_letter(request, pk):
+    return _generate_letter(request, pk, kind="experience",
+                            template="hrm/offboarding/experience_letter.html")
+
+
+# ---------------------------------------------------------- Exit Interviews (3.4)
+@login_required
+def exitinterview_list(request):
+    return crud_list(
+        request,
+        ExitInterview.objects.filter(tenant=request.tenant)
+        .select_related("case__employee__party", "interviewer"),
+        "hrm/offboarding/exitinterview_list.html",
+        search_fields=["number", "case__employee__party__name", "case__number"],
+        filters=[("status", "status", False), ("mode", "mode", False)],
+        extra_context={"status_choices": ExitInterview.EI_STATUS_CHOICES,
+                       "mode_choices": ExitInterview.MODE_CHOICES},
+    )
+
+
+@login_required
+def exitinterview_create(request):
+    return _offboarding_create(
+        request, ExitInterviewForm, "hrm/offboarding/exitinterview_form.html",
+        lambda obj: ("hrm:separationcase_detail", obj.case_id))
+
+
+@login_required
+def exitinterview_detail(request, pk):
+    obj = get_object_or_404(
+        ExitInterview.objects.select_related("case__employee__party", "interviewer"),
+        pk=pk, tenant=request.tenant)
+    ratings = [(label, getattr(obj, field)) for field, label in ExitInterview.RATING_FIELDS]
+    return render(request, "hrm/offboarding/exitinterview_detail.html",
+                  {"obj": obj, "ratings": ratings})
+
+
+@login_required
+def exitinterview_edit(request, pk):
+    obj = get_object_or_404(ExitInterview, pk=pk, tenant=request.tenant)
+    if obj.status == "completed":
+        messages.error(request, "A completed exit interview cannot be edited.")
+        return redirect("hrm:exitinterview_detail", pk=obj.pk)
+    return crud_edit(request, model=ExitInterview, pk=pk, form_class=ExitInterviewForm,
+                     template="hrm/offboarding/exitinterview_form.html",
+                     success_url="hrm:exitinterview_list")
+
+
+@login_required
+@require_POST
+def exitinterview_delete(request, pk):
+    obj = get_object_or_404(ExitInterview, pk=pk, tenant=request.tenant)
+    if obj.status == "completed":
+        messages.error(request, "A completed exit interview cannot be deleted.")
+        return redirect("hrm:exitinterview_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Exit interview deleted.")
+    return redirect("hrm:exitinterview_list")
+
+
+@login_required
+@require_POST
+def exitinterview_complete(request, pk):
+    obj = get_object_or_404(ExitInterview, pk=pk, tenant=request.tenant)
+    if obj.status == "scheduled":
+        obj.status = "completed"
+        obj.conducted_at = timezone.now()
+        obj.save(update_fields=["status", "conducted_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, f"Exit interview {obj.number} marked completed.")
+    else:
+        messages.error(request, "Only a scheduled interview can be completed.")
+    return redirect("hrm:exitinterview_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def exitinterview_skip(request, pk):
+    obj = get_object_or_404(ExitInterview, pk=pk, tenant=request.tenant)
+    if obj.status == "scheduled":
+        obj.status = "skipped"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "skip"})
+        messages.success(request, f"Exit interview {obj.number} skipped.")
+    else:
+        messages.error(request, "Only a scheduled interview can be skipped.")
+    return redirect("hrm:exitinterview_detail", pk=obj.pk)
+
+
+# ---------------------------------------------------------- Clearance Items (3.4)
+@login_required
+def clearanceitem_list(request):
+    return crud_list(
+        request,
+        ClearanceItem.objects.filter(tenant=request.tenant)
+        .select_related("case__employee__party", "assigned_to", "cleared_by"),
+        "hrm/offboarding/clearanceitem_list.html",
+        search_fields=["description", "case__employee__party__name", "case__number"],
+        filters=[("status", "status", False), ("department", "department", False)],
+        extra_context={"status_choices": ClearanceItem.CLEARANCE_STATUS_CHOICES,
+                       "dept_choices": ClearanceItem.CLEARANCE_DEPT_CHOICES},
+    )
+
+
+@login_required
+def clearanceitem_create(request):
+    return _offboarding_create(
+        request, ClearanceItemForm, "hrm/offboarding/clearanceitem_form.html",
+        lambda obj: ("hrm:separationcase_detail", obj.case_id))
+
+
+@login_required
+def clearanceitem_detail(request, pk):
+    obj = get_object_or_404(
+        ClearanceItem.objects.select_related(
+            "case__employee__party", "assigned_to", "cleared_by", "asset_allocation"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/offboarding/clearanceitem_detail.html", {"obj": obj})
+
+
+@login_required
+def clearanceitem_edit(request, pk):
+    obj = get_object_or_404(ClearanceItem, pk=pk, tenant=request.tenant)
+    if obj.status not in ("pending", "in_progress"):
+        messages.error(request, "Only a pending clearance item can be edited.")
+        return redirect("hrm:clearanceitem_detail", pk=obj.pk)
+    return crud_edit(request, model=ClearanceItem, pk=pk, form_class=ClearanceItemForm,
+                     template="hrm/offboarding/clearanceitem_form.html",
+                     success_url="hrm:clearanceitem_list")
+
+
+@login_required
+@require_POST
+def clearanceitem_delete(request, pk):
+    obj = get_object_or_404(ClearanceItem, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending clearance item can be deleted.")
+        return redirect("hrm:clearanceitem_detail", pk=obj.pk)
+    case_id = obj.case_id
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Clearance item deleted.")
+    return redirect("hrm:separationcase_detail", pk=case_id)
+
+
+@login_required
+@require_POST
+def clearanceitem_mark_cleared(request, pk):
+    obj = get_object_or_404(
+        ClearanceItem.objects.select_related("case", "asset_allocation"), pk=pk, tenant=request.tenant)
+    if obj.status in ("pending", "in_progress"):
+        with transaction.atomic():
+            obj.status = "cleared"
+            obj.cleared_by = request.user
+            obj.cleared_at = timezone.now()
+            obj.save(update_fields=["status", "cleared_by", "cleared_at", "updated_at"])
+            # Returning the linked asset is part of clearing its line — keep the two in one txn.
+            returned = None
+            if obj.asset_allocation_id and obj.asset_allocation.status == "issued":
+                obj.asset_allocation.status = "returned"
+                obj.asset_allocation.returned_at = timezone.now()
+                obj.asset_allocation.save(update_fields=["status", "returned_at", "updated_at"])
+                returned = obj.asset_allocation.number
+        write_audit_log(request.user, obj, "update",
+                        {"action": "mark_cleared", "asset_returned": returned})
+        messages.success(request, "Clearance item cleared."
+                         + (f" Asset {returned} returned." if returned else ""))
+    else:
+        messages.error(request, "This clearance item cannot be cleared in its current state.")
+    return redirect("hrm:separationcase_detail", pk=obj.case_id)
+
+
+@login_required
+@require_POST
+def clearanceitem_mark_na(request, pk):
+    obj = get_object_or_404(ClearanceItem.objects.select_related("case"), pk=pk, tenant=request.tenant)
+    if obj.status in ("pending", "in_progress"):
+        obj.status = "not_applicable"
+        obj.cleared_by = request.user
+        obj.cleared_at = timezone.now()
+        obj.save(update_fields=["status", "cleared_by", "cleared_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_na"})
+        messages.success(request, "Clearance item marked not applicable.")
+    else:
+        messages.error(request, "This clearance item cannot be changed in its current state.")
+    return redirect("hrm:separationcase_detail", pk=obj.case_id)
+
+
+@tenant_admin_required  # rejecting a clearance line is a privileged action (blocks the gate)
+@require_POST
+def clearanceitem_reject(request, pk):
+    obj = get_object_or_404(ClearanceItem.objects.select_related("case"), pk=pk, tenant=request.tenant)
+    if obj.status != "cleared":
+        obj.status = "rejected"
+        obj.cleared_by = None
+        obj.cleared_at = None
+        obj.save(update_fields=["status", "cleared_by", "cleared_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject"})
+        messages.success(request, "Clearance item rejected.")
+    else:
+        messages.error(request, "A cleared item cannot be rejected.")
+    return redirect("hrm:separationcase_detail", pk=obj.case_id)
+
+
+# ---------------------------------------------------------- Final Settlements (3.4)
+@login_required
+def finalsettlement_list(request):
+    return crud_list(
+        request,
+        FinalSettlement.objects.filter(tenant=request.tenant)
+        .select_related("case__employee__party"),
+        "hrm/offboarding/finalsettlement_list.html",
+        search_fields=["number", "case__employee__party__name", "case__number"],
+        filters=[("status", "status", False)],
+        extra_context={"status_choices": FinalSettlement.FNF_STATUS_CHOICES},
+    )
+
+
+@login_required
+def finalsettlement_create(request):
+    return _offboarding_create(
+        request, FinalSettlementForm, "hrm/offboarding/finalsettlement_form.html",
+        lambda obj: ("hrm:separationcase_detail", obj.case_id))
+
+
+@login_required
+def finalsettlement_detail(request, pk):
+    obj = get_object_or_404(
+        FinalSettlement.objects.select_related("case__employee__party"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/offboarding/finalsettlement_detail.html", {"obj": obj})
+
+
+@login_required
+def finalsettlement_edit(request, pk):
+    obj = get_object_or_404(FinalSettlement, pk=pk, tenant=request.tenant)
+    if obj.status not in ("draft", "computed"):
+        messages.error(request, "Only a draft or computed settlement can be edited.")
+        return redirect("hrm:finalsettlement_detail", pk=obj.pk)
+    return crud_edit(request, model=FinalSettlement, pk=pk, form_class=FinalSettlementForm,
+                     template="hrm/offboarding/finalsettlement_form.html",
+                     success_url="hrm:finalsettlement_list")
+
+
+@login_required
+@require_POST
+def finalsettlement_delete(request, pk):
+    obj = get_object_or_404(FinalSettlement, pk=pk, tenant=request.tenant)
+    if obj.status != "draft":
+        messages.error(request, "Only a draft settlement can be deleted.")
+        return redirect("hrm:finalsettlement_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Settlement deleted.")
+    return redirect("hrm:finalsettlement_list")
+
+
+@tenant_admin_required  # computing F&F (pulling leave/gratuity) is a privileged HR/finance action
+@require_POST
+def finalsettlement_compute(request, pk):
+    obj = get_object_or_404(
+        FinalSettlement.objects.select_related("case__employee__designation",
+                                               "case__employee__employment"),
+        pk=pk, tenant=request.tenant)
+    if obj.status != "draft":
+        messages.error(request, "Only a draft settlement can be computed.")
+        return redirect("hrm:finalsettlement_detail", pk=obj.pk)
+    employee = obj.case.employee
+    days, amount = compute_leave_encashment(employee)
+    obj.leave_encashment_days = days
+    obj.leave_encashment_amount = amount
+    # Gratuity: ≥5 years of service (best-effort from employment.hired_on + designation band).
+    employment = employee.employment if employee.employment_id else None
+    if (employment and employment.hired_on and employee.designation_id
+            and employee.designation and employee.designation.min_salary):
+        years = (timezone.localdate() - employment.hired_on).days / 365.25
+        if years >= 5:
+            obj.gratuity_eligible = True
+            basic = employee.designation.min_salary
+            obj.gratuity_amount = (basic * Decimal("15") * Decimal(str(round(years, 2)))
+                                   / Decimal("26")).quantize(Decimal("0.01"))
+    obj.status = "computed"
+    obj.save(update_fields=["leave_encashment_days", "leave_encashment_amount",
+                            "gratuity_eligible", "gratuity_amount", "status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "compute"})
+    messages.success(request, f"Settlement {obj.number} computed — net payable {obj.net_payable}.")
+    return redirect("hrm:finalsettlement_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def finalsettlement_hr_approve(request, pk):
+    obj = get_object_or_404(FinalSettlement, pk=pk, tenant=request.tenant)
+    if obj.status in ("computed", "draft"):
+        obj.status = "hr_approved"
+        obj.hr_approved_by = request.user
+        obj.hr_approved_at = timezone.now()
+        obj.save(update_fields=["status", "hr_approved_by", "hr_approved_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "hr_approve"})
+        messages.success(request, f"Settlement {obj.number} HR-approved.")
+    else:
+        messages.error(request, "Only a draft or computed settlement can be HR-approved.")
+    return redirect("hrm:finalsettlement_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def finalsettlement_finance_approve(request, pk):
+    obj = get_object_or_404(FinalSettlement, pk=pk, tenant=request.tenant)
+    if obj.status == "hr_approved":
+        obj.status = "finance_approved"
+        obj.finance_approved_by = request.user
+        obj.finance_approved_at = timezone.now()
+        obj.save(update_fields=["status", "finance_approved_by", "finance_approved_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "finance_approve"})
+        messages.success(request, f"Settlement {obj.number} finance-approved.")
+    else:
+        messages.error(request, "Only an HR-approved settlement can be finance-approved.")
+    return redirect("hrm:finalsettlement_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def finalsettlement_mark_paid(request, pk):
+    obj = get_object_or_404(FinalSettlement.objects.select_related("case"), pk=pk, tenant=request.tenant)
+    if obj.status in ("hr_approved", "finance_approved"):
+        with transaction.atomic():
+            obj.status = "paid"
+            obj.paid_at = timezone.localdate()
+            obj.save(update_fields=["status", "paid_at", "updated_at"])
+            # Mark the parent case settled once its F&F is paid (only advances from 'cleared').
+            case = obj.case
+            if case.status == "cleared":
+                case.status = "settled"
+                case.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_paid"})
+        messages.success(request, f"Settlement {obj.number} marked paid.")
+    else:
+        messages.error(request, "Only an approved settlement can be marked paid.")
+    return redirect("hrm:finalsettlement_detail", pk=obj.pk)
