@@ -138,7 +138,7 @@ class Designation(TenantOwned):
                 raise ValidationError({"mid_salary": "Midpoint salary must not exceed the maximum."})
 
     def __str__(self):
-        label = self.job_grade.name if self.job_grade_id and self.job_grade else self.grade
+        label = self.job_grade.name if self.job_grade else self.grade
         return f"{self.name} ({label})" if label else self.name
 
 
@@ -166,14 +166,21 @@ class DepartmentProfile(TenantOwned):
 
     def clean(self):
         super().clean()
+        # NOTE: the PRIMARY cross-tenant defense is the form's FK queryset scoping (org_unit/
+        # cost_center are limited to the active tenant in DepartmentProfileForm). These model-level
+        # tenant checks are defense-in-depth for direct ``model.save()`` (admin/shell): the view sets
+        # ``tenant`` only AFTER ``form.is_valid()``, so ``tenant_id`` is None during form validation
+        # and the tenant branch is skipped then (the queryset guard already covers that path).
         if self.org_unit_id:
             if self.org_unit.kind != "department":
                 raise ValidationError({"org_unit": "Linked unit must be a Department."})
-            # Cross-tenant IDOR guard (only checkable once tenant is set — create sets it in the view).
             if self.tenant_id and self.org_unit.tenant_id != self.tenant_id:
                 raise ValidationError({"org_unit": "Department belongs to another tenant."})
-        if self.cost_center_id and self.cost_center.kind != "cost_center":
-            raise ValidationError({"cost_center": "Linked unit must be a Cost Center."})
+        if self.cost_center_id:
+            if self.cost_center.kind != "cost_center":
+                raise ValidationError({"cost_center": "Linked unit must be a Cost Center."})
+            if self.tenant_id and self.cost_center.tenant_id != self.tenant_id:
+                raise ValidationError({"cost_center": "Cost Center belongs to another tenant."})
 
     def __str__(self):
         return f"{self.org_unit.name} ({self.code})" if self.code else self.org_unit.name
@@ -202,6 +209,8 @@ class CostCenterProfile(TenantOwned):
 
     def clean(self):
         super().clean()
+        # Defense-in-depth (see DepartmentProfile.clean): the form queryset is the primary guard;
+        # the tenant branch fires only on direct model.save() once tenant is set.
         if self.org_unit_id:
             if self.org_unit.kind != "cost_center":
                 raise ValidationError({"org_unit": "Linked unit must be a Cost Center."})
