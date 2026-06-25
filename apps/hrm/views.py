@@ -1548,7 +1548,7 @@ def exitinterview_delete(request, pk):
     return redirect("hrm:exitinterview_list")
 
 
-@login_required
+@tenant_admin_required  # closing out an exit interview is a privileged HR action (terminal + audited)
 @require_POST
 def exitinterview_complete(request, pk):
     obj = get_object_or_404(ExitInterview, pk=pk, tenant=request.tenant)
@@ -1563,7 +1563,7 @@ def exitinterview_complete(request, pk):
     return redirect("hrm:exitinterview_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # skipping an exit interview is a privileged HR action
 @require_POST
 def exitinterview_skip(request, pk):
     obj = get_object_or_404(ExitInterview, pk=pk, tenant=request.tenant)
@@ -1636,8 +1636,8 @@ def clearanceitem_delete(request, pk):
     return redirect("hrm:separationcase_detail", pk=case_id)
 
 
-@login_required
-@require_POST
+@tenant_admin_required  # resolving a clearance line gates the case — privileged HR action (no
+@require_POST           # per-department role yet, so admin-only mirrors clearanceitem_reject)
 def clearanceitem_mark_cleared(request, pk):
     obj = get_object_or_404(
         ClearanceItem.objects.select_related("case", "asset_allocation"), pk=pk, tenant=request.tenant)
@@ -1666,7 +1666,7 @@ def clearanceitem_mark_cleared(request, pk):
     return redirect("hrm:separationcase_detail", pk=obj.case_id)
 
 
-@login_required
+@tenant_admin_required  # marking a clearance line N/A also gates the case — privileged HR action
 @require_POST
 def clearanceitem_mark_na(request, pk):
     obj = get_object_or_404(ClearanceItem.objects.select_related("case"), pk=pk, tenant=request.tenant)
@@ -1787,7 +1787,9 @@ def finalsettlement_compute(request, pk):
 @require_POST
 def finalsettlement_hr_approve(request, pk):
     obj = get_object_or_404(FinalSettlement, pk=pk, tenant=request.tenant)
-    if obj.status in ("computed", "draft"):
+    # Require a computed settlement — approving a raw draft would formally rubber-stamp un-computed
+    # (often zero) leave-encashment/gratuity figures. Run Compute first (then edit other lines).
+    if obj.status == "computed":
         obj.status = "hr_approved"
         obj.hr_approved_by = request.user
         obj.hr_approved_at = timezone.now()
@@ -1795,7 +1797,7 @@ def finalsettlement_hr_approve(request, pk):
         write_audit_log(request.user, obj, "update", {"action": "hr_approve"})
         messages.success(request, f"Settlement {obj.number} HR-approved.")
     else:
-        messages.error(request, "Only a draft or computed settlement can be HR-approved.")
+        messages.error(request, "Run Compute first — only a computed settlement can be HR-approved.")
     return redirect("hrm:finalsettlement_detail", pk=obj.pk)
 
 
