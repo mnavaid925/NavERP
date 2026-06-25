@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import (Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
@@ -507,7 +508,11 @@ def employee_detail(request, pk):
         .select_related("shift").order_by("-effective_from").first(),
         "recent_leaves": LeaveRequest.objects.filter(tenant=request.tenant, employee=obj)
         .select_related("leave_type").order_by("-start_date")[:10],
-        "documents": EmployeeDocument.objects.filter(tenant=request.tenant, employee=obj)
+        # Confidential documents only surface on the hub for tenant admins.
+        "documents": (EmployeeDocument.objects.filter(tenant=request.tenant, employee=obj)
+                      if _is_hr_admin(request.user)
+                      else EmployeeDocument.objects.filter(tenant=request.tenant, employee=obj,
+                                                           is_confidential=False))
         .order_by("-created_at")[:10],
         "lifecycle_events": EmployeeLifecycleEvent.objects.filter(tenant=request.tenant, employee=obj)
         .select_related("from_designation", "to_designation", "from_department", "to_department")
@@ -2140,6 +2145,11 @@ def finalsettlement_mark_paid(request, pk):
 
 
 # ============================================================ 3.1 Employee Management (completion)
+def _is_hr_admin(user):
+    """A tenant admin (or superuser) may view confidential personnel documents."""
+    return user.is_superuser or getattr(user, "is_tenant_admin", False)
+
+
 def _employee_child_create(request, form_class, template, *, stamp_initiated_by=False):
     """Shared create for the employee child entities (documents / lifecycle events): tenant guard,
     ``?employee=<pk>`` pre-fill (these pages are reached from the employee detail hub), save + audit,
@@ -2174,9 +2184,13 @@ def _employee_child_create(request, form_class, template, *, stamp_initiated_by=
 # ---------------------------------------------------------- Employee Documents (3.1)
 @login_required
 def employee_document_list(request):
+    qs = EmployeeDocument.objects.filter(tenant=request.tenant).select_related("employee__party")
+    # Confidential documents are visible only to tenant admins.
+    if not _is_hr_admin(request.user):
+        qs = qs.exclude(is_confidential=True)
     return crud_list(
         request,
-        EmployeeDocument.objects.filter(tenant=request.tenant).select_related("employee__party"),
+        qs,
         "hrm/employee/document/list.html",
         search_fields=["number", "title", "document_number", "employee__party__name"],
         filters=[("document_type", "document_type", False),
@@ -2199,12 +2213,16 @@ def employee_document_detail(request, pk):
     obj = get_object_or_404(
         EmployeeDocument.objects.select_related("employee__party", "verified_by"),
         pk=pk, tenant=request.tenant)
+    if obj.is_confidential and not _is_hr_admin(request.user):
+        raise PermissionDenied("This document is marked confidential.")
     return render(request, "hrm/employee/document/detail.html", {"obj": obj})
 
 
 @login_required
 def employee_document_edit(request, pk):
     obj = get_object_or_404(EmployeeDocument, pk=pk, tenant=request.tenant)
+    if obj.is_confidential and not _is_hr_admin(request.user):
+        raise PermissionDenied("This document is marked confidential.")
     # A verified document is locked — reject it first to re-open for editing.
     if obj.verification_status == "verified":
         messages.error(request, "A verified document cannot be edited. Reject it first.")
@@ -2217,6 +2235,8 @@ def employee_document_edit(request, pk):
 @require_POST
 def employee_document_delete(request, pk):
     obj = get_object_or_404(EmployeeDocument, pk=pk, tenant=request.tenant)
+    if obj.is_confidential and not _is_hr_admin(request.user):
+        raise PermissionDenied("This document is marked confidential.")
     if obj.verification_status == "verified":
         messages.error(request, "A verified document cannot be deleted. Reject it first.")
         return redirect("hrm:employee_document_detail", pk=obj.pk)
@@ -2274,7 +2294,7 @@ def employee_lifecycle_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # lifecycle events are authoritative HR records (promotion/salary/separation)
 def employee_lifecycle_create(request):
     return _employee_child_create(request, EmployeeLifecycleEventForm,
                                   "hrm/employee/lifecycle/form.html", stamp_initiated_by=True)
@@ -2290,7 +2310,7 @@ def employee_lifecycle_detail(request, pk):
     return render(request, "hrm/employee/lifecycle/detail.html", {"obj": obj})
 
 
-@login_required
+@tenant_admin_required
 def employee_lifecycle_edit(request, pk):
     return crud_edit(request, model=EmployeeLifecycleEvent, pk=pk,
                      form_class=EmployeeLifecycleEventForm,
@@ -2298,7 +2318,7 @@ def employee_lifecycle_edit(request, pk):
                      success_url="hrm:employee_lifecycle_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def employee_lifecycle_delete(request, pk):
     return crud_delete(request, model=EmployeeLifecycleEvent, pk=pk,
