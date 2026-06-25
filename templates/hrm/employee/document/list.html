@@ -48,18 +48,17 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Employee</th><th>Type</th><th>Title</th><th>Doc #</th><th>Expires</th><th>Verification</th><th></th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Number</th><th>Employee</th><th>Type</th><th>Title</th><th>Doc #</th><th>Expires</th><th>Verification</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'hrm:employee_document_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.employee.party.name }}</td>
               <td><span class="badge badge-info">{{ obj.get_document_type_display }}</span></td>
-              <td>{{ obj.title }}</td>
+              <td>{{ obj.title }}{% if obj.is_confidential %} <i data-lucide="lock" title="Confidential"></i>{% endif %}</td>
               <td>{{ obj.document_number|default:"—" }}</td>
               <td>{% if obj.expires_on %}{% if obj.is_expired %}<span class="badge badge-red">{{ obj.expires_on }}</span>{% elif obj.is_expiring_soon %}<span class="badge badge-amber">{{ obj.expires_on }}</span>{% else %}{{ obj.expires_on }}{% endif %}{% else %}—{% endif %}</td>
               <td><span class="badge badge-{% if obj.verification_status == 'pending' %}amber{% elif obj.verification_status == 'verified' %}green{% elif obj.verification_status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_verification_status_display }}</span></td>
-              <td>{% if obj.is_confidential %}<i data-lucide="lock" title="Confidential"></i>{% endif %}</td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'hrm:employee_document_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
@@ -71,7 +70,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="9"><div class="empty-state"><i data-lucide="folder"></i><h3>No documents found</h3><p>Add an employee's ID proofs, certificates, contracts and NDAs.</p></div></td></tr>
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="folder"></i><h3>No documents found</h3><p>Add an employee's ID proofs, certificates, contracts and NDAs.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
