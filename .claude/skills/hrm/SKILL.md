@@ -86,6 +86,10 @@ properties.
   _mark_na/_reject` (all `@tenant_admin_required`); `finalsettlement_compute/_hr_approve/_finance_approve/_mark_paid`
   (all `@tenant_admin_required`). The two letter names are `hrm:separationcase_relieving_letter` /
   `hrm:separationcase_experience_letter`. Create pages honor `?case=<pk>` to pre-fill the parent case.
+- **Offboarding letters landing page:** `hrm:offboarding_letters` (`/hrm/letters/`, `@login_required`,
+  `offboarding_letters` view) — a standalone list of cases in `LETTER_READY_STATUSES` (cleared/settled/completed)
+  with per-row relieving/experience letter buttons + a "generated on" indicator. This is what the **"Experience
+  Letter" sidebar bullet** points at (the letters themselves are per-case print views, not records).
 
 ## Views (`apps/hrm/views.py`)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
@@ -122,8 +126,9 @@ filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — single-
 `designation/` (3.2 — `designation/list.html`), `onboarding/` (3.3 — entity folders `template/ templatetask/
 program/` [the rich multi-section hub] `task/ document/` [`document/form.html` is multipart] `assetallocation/
 orientationsession/`), **`offboarding/` (3.4 — entity folders `separationcase/` [the hub], `exitinterview/
-clearanceitem/ finalsettlement/`, plus the two standalone print pages `offboarding/relieving_letter.html` /
-`offboarding/experience_letter.html` which stay at the sub-module level and do NOT extend base.html)**,
+clearanceitem/ finalsettlement/`, plus the standalone pages `offboarding/letters.html` [the letters landing list]
+and the two print pages `offboarding/relieving_letter.html` / `offboarding/experience_letter.html` [which stay at
+the sub-module level and do NOT extend base.html])**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
@@ -171,9 +176,9 @@ HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `
   `hrm:onboardingdocument_list`; Asset Allocation → `hrm:assetallocation_list`; Orientation Schedule →
   `hrm:orientationsession_list`; + extras Onboarding Templates → `hrm:onboardingtemplate_list`, Template Tasks →
   `hrm:onboardingtemplatetask_list`.
-- 3.4: Resignation Management + Experience Letter → `hrm:separationcase_list`; Exit Interview →
-  `hrm:exitinterview_list`; Clearance Process → `hrm:clearanceitem_list`; F&F Settlement →
-  `hrm:finalsettlement_list`.
+- 3.4: Resignation Management → `hrm:separationcase_list`; Exit Interview → `hrm:exitinterview_list`; Clearance
+  Process → `hrm:clearanceitem_list`; F&F Settlement → `hrm:finalsettlement_list`; Experience Letter →
+  `hrm:offboarding_letters` (the letters landing page).
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
   + Shift Assignments → `hrm:shiftassignment_list`.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
