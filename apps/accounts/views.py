@@ -134,7 +134,7 @@ def reset_password_view(request, uidb64, token):
 def user_list(request):
     return crud_list(
         request, UserModel.objects.filter(tenant=request.tenant).select_related("role"),
-        "accounts/user_list.html",
+        "accounts/user/list.html",
         search_fields=["email", "username", "first_name", "last_name"],
         filters=[("status", "status", False), ("role", "role_id", True)],
         extra_context={"status_choices": UserModel.STATUS_CHOICES,
@@ -144,7 +144,7 @@ def user_list(request):
 
 @tenant_admin_required
 def user_create(request):
-    return crud_create(request, form_class=UserForm, template="accounts/user_form.html",
+    return crud_create(request, form_class=UserForm, template="accounts/user/form.html",
                        success_url="accounts:user_list")
 
 
@@ -152,13 +152,13 @@ def user_create(request):
 def user_detail(request, pk):
     user_obj = get_object_or_404(UserModel.objects.select_related("role", "party"),
                                  pk=pk, tenant=request.tenant)
-    return render(request, "accounts/user_detail.html", {"user_obj": user_obj})
+    return render(request, "accounts/user/detail.html", {"user_obj": user_obj})
 
 
 @tenant_admin_required
 def user_edit(request, pk):
     return crud_edit(request, model=UserModel, pk=pk, form_class=UserForm,
-                     template="accounts/user_form.html", success_url="accounts:user_list")
+                     template="accounts/user/form.html", success_url="accounts:user_list")
 
 
 @tenant_admin_required
@@ -180,26 +180,26 @@ def role_list(request):
     return crud_list(
         request,
         Role.objects.filter(tenant=request.tenant).annotate(perm_count=Count("permissions")).order_by("name"),
-        "accounts/role_list.html", search_fields=["name", "description"],
+        "accounts/role/list.html", search_fields=["name", "description"],
     )
 
 
 @tenant_admin_required
 def role_create(request):
-    return crud_create(request, form_class=RoleForm, template="accounts/role_form.html",
+    return crud_create(request, form_class=RoleForm, template="accounts/role/form.html",
                        success_url="accounts:role_list")
 
 
 @tenant_admin_required
 def role_detail(request, pk):
     role = get_object_or_404(Role.objects.prefetch_related("permissions"), pk=pk, tenant=request.tenant)
-    return render(request, "accounts/role_detail.html", {"obj": role})
+    return render(request, "accounts/role/detail.html", {"obj": role})
 
 
 @tenant_admin_required
 def role_edit(request, pk):
     return crud_edit(request, model=Role, pk=pk, form_class=RoleForm,
-                     template="accounts/role_form.html", success_url="accounts:role_list")
+                     template="accounts/role/form.html", success_url="accounts:role_list")
 
 
 @tenant_admin_required
@@ -220,7 +220,7 @@ def role_delete(request, pk):
 def invite_list(request):
     return crud_list(
         request, UserInvite.objects.filter(tenant=request.tenant).select_related("role", "invited_by"),
-        "accounts/userinvite_list.html",
+        "accounts/userinvite/list.html",
         search_fields=["email"],
         filters=[("status", "status", False), ("role", "role_id", True)],
         extra_context={"status_choices": UserInvite.STATUS_CHOICES,
@@ -253,7 +253,7 @@ def invite_create(request):
             return redirect("accounts:invite_list")
     else:
         form = UserInviteForm(tenant=request.tenant)
-    return render(request, "accounts/userinvite_form.html", {"form": form, "is_edit": False})
+    return render(request, "accounts/userinvite/form.html", {"form": form, "is_edit": False})
 
 
 @tenant_admin_required
