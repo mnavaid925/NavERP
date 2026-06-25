@@ -1009,6 +1009,7 @@ class ExitInterview(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "case"], name="hrm_ei_tenant_case_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_ei_tenant_status_idx"),
+            models.Index(fields=["tenant", "mode"], name="hrm_ei_tenant_mode_idx"),
         ]
 
     @property
@@ -1068,6 +1069,7 @@ class ClearanceItem(TenantOwned):
             models.Index(fields=["tenant", "case"], name="hrm_ci_tenant_case_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_ci_tenant_status_idx"),
             models.Index(fields=["tenant", "case", "status"], name="hrm_ci_tenant_case_st_idx"),
+            models.Index(fields=["tenant", "department"], name="hrm_ci_tenant_dept_idx"),
         ]
 
     @property
