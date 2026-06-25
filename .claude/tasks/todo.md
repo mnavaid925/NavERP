@@ -1328,4 +1328,22 @@ Template folder rule: sub-module folder `employee/` doubles as the `EmployeeProf
 
 ## Review notes
 
-(To be filled in after the build + review agents complete.)
+**Delivered (3.1 completion).** Added the two missing NavERP.md 3.1 bullets on top of the existing `EmployeeProfile`
+anchor (kept intact — 16+ HRM models FK it): **`EmployeeDocument`** (`EDOC-` personnel-file vault, verify/reject
+workflow, expiry props, enforced `is_confidential`) + **`EmployeeLifecycleEvent`** (`ELC-` dated job-history
+timeline) + 15 personnel-file fields on `EmployeeProfile` (incl. masked national_id/passport/bank_routing). Wired
+`LIVE_LINKS["3.1"]` so all 5 bullets are Live; migration `0009`; `_seed_employee_records`; Documents + Lifecycle
+hub cards on the employee detail. `manage.py check` clean; **844 HRM / 1,906 project-wide tests pass**.
+
+> Coordination note: this ran in parallel with a separate agent rebuilding **3.2 Organizational Structure**. To
+> avoid clobbering shared `apps/hrm/*` files + a clashing `0007` migration, 3.1 **waited** for 3.2 to land, then
+> built cleanly on top (3.1 is migration `0009`, appended after 3.2's `0007`/`0008`).
+
+Ran the full review-agent sequence (committed between each): **code-reviewer** (masked national_id/passport;
+confirmed_on→form; seeder doc-type; cancel back-link), **explorer** (consistent), **frontend-reviewer** (expanded
+14-type lifecycle badge map; folded confidential column; validated `?employee` cancel pk; page-actions on hub),
+**performance-reviewer** (no N+1s — clean), **qa-smoke-tester** (49/49), **security-reviewer** (enforced
+`is_confidential` admin-only; gated lifecycle writes to admin; masked bank_routing), **test-writer** (116 tests).
+**Deferred (documented in SKILL.md):** lifecycle→Employment auto-sync, address normalization, expiry reminders,
+and two project-wide security items (raw PII in the employee *edit form* — same as the pre-existing bank_account
+treatment; unauthenticated `/media/` doc serving — same as onboarding docs/photos, mitigated by MEDIA_ROOT placement).
