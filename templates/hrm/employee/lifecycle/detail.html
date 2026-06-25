@@ -18,7 +18,7 @@
       <dl class="detail-grid">
         <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
         <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:employee_detail' obj.employee_id %}">{{ obj.employee.party.name }}</a></dd></div>
-        <div class="detail-item"><dt>Event Type</dt><dd><span class="badge badge-{% if obj.event_type == 'hire' %}green{% elif obj.event_type == 'promotion' %}info{% elif obj.event_type == 'demotion' %}red{% elif obj.event_type == 'separation' %}slate{% elif obj.event_type == 'salary_revision' %}amber{% else %}muted{% endif %}">{{ obj.get_event_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Event Type</dt><dd><span class="badge badge-{% if obj.event_type == 'hire' or obj.event_type == 'confirmation' or obj.event_type == 'reinstatement' %}green{% elif obj.event_type == 'promotion' or obj.event_type == 'transfer' or obj.event_type == 'contract_renewal' %}info{% elif obj.event_type == 'salary_revision' or obj.event_type == 're_designation' or obj.event_type == 'location_change' or obj.event_type == 'reporting_change' %}amber{% elif obj.event_type == 'demotion' or obj.event_type == 'suspension' %}red{% elif obj.event_type == 'separation' %}slate{% else %}muted{% endif %}">{{ obj.get_event_type_display }}</span></dd></div>
         <div class="detail-item"><dt>Effective Date</dt><dd>{{ obj.effective_date }}</dd></div>
         <div class="detail-item"><dt>Reason</dt><dd>{{ obj.reason|default:"—"|linebreaksbr }}</dd></div>
         <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
@@ -36,7 +36,7 @@
         {% if obj.from_department or obj.to_department %}<div class="detail-item"><dt>Department</dt><dd>{{ obj.from_department.name|default:"—" }} → {{ obj.to_department.name|default:"—" }}</dd></div>{% endif %}
         {% if obj.from_location or obj.to_location %}<div class="detail-item"><dt>Location</dt><dd>{{ obj.from_location|default:"—" }} → {{ obj.to_location|default:"—" }}</dd></div>{% endif %}
         {% if obj.from_job_title or obj.to_job_title %}<div class="detail-item"><dt>Job Title</dt><dd>{{ obj.from_job_title|default:"—" }} → {{ obj.to_job_title|default:"—" }}</dd></div>{% endif %}
-        {% if obj.from_salary or obj.to_salary %}<div class="detail-item"><dt>Salary</dt><dd class="text-right">{{ obj.from_salary|default:"—" }} → {{ obj.to_salary|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_salary or obj.to_salary %}<div class="detail-item"><dt>Salary</dt><dd>{{ obj.from_salary|default:"—" }} → {{ obj.to_salary|default:"—" }}</dd></div>{% endif %}
         {% if obj.from_manager or obj.to_manager %}<div class="detail-item"><dt>Manager</dt><dd>{{ obj.from_manager.party.name|default:"—" }} → {{ obj.to_manager.party.name|default:"—" }}</dd></div>{% endif %}
         {% if obj.from_employee_type or obj.to_employee_type %}<div class="detail-item"><dt>Employee Type</dt><dd>{{ obj.from_employee_type|default:"—" }} → {{ obj.to_employee_type|default:"—" }}</dd></div>{% endif %}
       </dl>
