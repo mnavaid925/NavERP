@@ -46,7 +46,7 @@
             <tr>
               <td><a href="{% url 'hrm:employee_lifecycle_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.employee.party.name }}</td>
-              <td><span class="badge badge-{% if obj.event_type == 'hire' %}green{% elif obj.event_type == 'promotion' %}info{% elif obj.event_type == 'demotion' %}red{% elif obj.event_type == 'separation' %}slate{% elif obj.event_type == 'salary_revision' %}amber{% else %}muted{% endif %}">{{ obj.get_event_type_display }}</span></td>
+              <td><span class="badge badge-{% if obj.event_type == 'hire' or obj.event_type == 'confirmation' or obj.event_type == 'reinstatement' %}green{% elif obj.event_type == 'promotion' or obj.event_type == 'transfer' or obj.event_type == 'contract_renewal' %}info{% elif obj.event_type == 'salary_revision' or obj.event_type == 're_designation' or obj.event_type == 'location_change' or obj.event_type == 'reporting_change' %}amber{% elif obj.event_type == 'demotion' or obj.event_type == 'suspension' %}red{% elif obj.event_type == 'separation' %}slate{% else %}muted{% endif %}">{{ obj.get_event_type_display }}</span></td>
               <td>{{ obj.effective_date }}</td>
               <td>{% if obj.from_designation or obj.to_designation %}{{ obj.from_designation.name|default:"—" }} → {{ obj.to_designation.name|default:"—" }}{% elif obj.from_location or obj.to_location %}{{ obj.from_location|default:"—" }} → {{ obj.to_location|default:"—" }}{% elif obj.from_salary or obj.to_salary %}{{ obj.from_salary|default:"—" }} → {{ obj.to_salary|default:"—" }}{% else %}—{% endif %}</td>
               <td>{{ obj.reason|truncatechars:60|default:"—" }}</td>
