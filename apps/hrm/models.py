@@ -248,6 +248,13 @@ class EmployeeProfile(TenantNumbered):
         ("A+", "A+"), ("A-", "A-"), ("B+", "B+"), ("B-", "B-"),
         ("AB+", "AB+"), ("AB-", "AB-"), ("O+", "O+"), ("O-", "O-"),
     ]
+    MARITAL_STATUS_CHOICES = [
+        ("single", "Single"),
+        ("married", "Married"),
+        ("divorced", "Divorced"),
+        ("widowed", "Widowed"),
+        ("other", "Other"),
+    ]
 
     party = models.OneToOneField("core.Party", on_delete=models.CASCADE, related_name="employee_profile")
     employment = models.OneToOneField("core.Employment", on_delete=models.SET_NULL, null=True, blank=True, related_name="employee_profile")
@@ -268,9 +275,30 @@ class EmployeeProfile(TenantNumbered):
     bank_routing = models.CharField(max_length=20, blank=True)
     probation_end_date = models.DateField(null=True, blank=True)
     confirmed_on = models.DateField(null=True, blank=True)
+    notice_period_days = models.PositiveSmallIntegerField(null=True, blank=True,
+        help_text="Profile-default notice period; a SeparationCase can override it per departure.")
     emergency_contact_name = models.CharField(max_length=255, blank=True)
     emergency_contact_phone = models.CharField(max_length=30, blank=True)
     emergency_contact_relation = models.CharField(max_length=100, blank=True)
+    # Second emergency contact (most HRIS products support ≥2).
+    emergency_contact_2_name = models.CharField(max_length=255, blank=True)
+    emergency_contact_2_phone = models.CharField(max_length=30, blank=True)
+    emergency_contact_2_relation = models.CharField(max_length=100, blank=True)
+    # Personnel-file fields (3.1 completion — competitive HRIS parity).
+    marital_status = models.CharField(max_length=20, choices=MARITAL_STATUS_CHOICES, blank=True)
+    work_email = models.EmailField(blank=True, help_text="Company email, distinct from personal_email.")
+    work_location = models.CharField(max_length=255, blank=True, help_text="Office / site / remote assignment.")
+    father_name = models.CharField(max_length=255, blank=True)
+    spouse_name = models.CharField(max_length=255, blank=True)
+    # WARNING: national_id / passport_number are sensitive PII stored in plaintext for the demo —
+    # encrypt at rest in production (mirror the bank_account note above). The full ID documents live
+    # in EmployeeDocument; these are the quick-reference values on the profile.
+    national_id = models.CharField(max_length=100, blank=True)
+    national_id_type = models.CharField(max_length=50, blank=True, help_text="e.g. Aadhaar, SSN, NRIC, PAN.")
+    passport_number = models.CharField(max_length=50, blank=True)
+    passport_expiry = models.DateField(null=True, blank=True)
+    current_address = models.TextField(blank=True)
+    permanent_address = models.TextField(blank=True)
     photo = models.ImageField(upload_to="hrm/photos/%Y/%m/", null=True, blank=True)
     notes = models.TextField(blank=True)
 
@@ -1278,3 +1306,150 @@ class FinalSettlement(TenantNumbered):
     def __str__(self):
         name = self.case.employee.name if self.case_id and self.case.employee_id else "—"
         return f"{self.number} · FnF for {name} [{self.get_status_display()}]"
+
+
+# ---------------------------------------------------------------------------
+# 3.1 Employee Management (completion) — EmployeeDocument (personnel-file vault) +
+# EmployeeLifecycleEvent (dated job-history timeline). Both FK ``EmployeeProfile``
+# (the anchor) — distinct from ``OnboardingDocument`` (program e-sign) and the generic
+# ``core.Document``. Children of the employee, not co-equal sub-module entities.
+# ---------------------------------------------------------------------------
+class EmployeeDocument(TenantNumbered):
+    """A personnel-file document for one employee (3.1 Document Management) — ID proof, passport,
+    visa, certificate, contract, NDA, etc. ``verification_status`` is workflow-owned (HR verifies/
+    rejects); ``is_expired``/``is_expiring_soon`` are derived from ``expires_on``."""
+
+    NUMBER_PREFIX = "EDOC"
+
+    DOCUMENT_TYPE_CHOICES = [
+        ("national_id", "National ID / Aadhaar / NRIC"),
+        ("passport", "Passport"),
+        ("driving_license", "Driving License"),
+        ("address_proof", "Address Proof"),
+        ("visa", "Visa"),
+        ("work_permit", "Work Permit"),
+        ("degree_certificate", "Degree / Diploma Certificate"),
+        ("professional_cert", "Professional Certification"),
+        ("appointment_letter", "Appointment Letter"),
+        ("employment_contract", "Employment Contract"),
+        ("nda", "Non-Disclosure Agreement"),
+        ("non_compete", "Non-Compete Agreement"),
+        ("tax_form", "Tax Form (W-4 / Form 16 / TDS)"),
+        ("bank_proof", "Bank Account Proof"),
+        ("pf_nomination", "PF / Pension Nomination"),
+        ("medical_cert", "Medical / Fitness Certificate"),
+        ("background_check", "Background Check Report"),
+        ("experience_certificate", "Previous Employment / Experience Letter"),
+        ("other", "Other"),
+    ]
+    VERIFICATION_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("verified", "Verified"),
+        ("rejected", "Rejected"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="documents")
+    document_type = models.CharField(max_length=30, choices=DOCUMENT_TYPE_CHOICES, default="other")
+    title = models.CharField(max_length=255)
+    document_number = models.CharField(max_length=100, blank=True, help_text="The alphanumeric ID on the document itself (passport no., PAN, licence no.).")
+    issuing_authority = models.CharField(max_length=255, blank=True)
+    issuing_country = models.CharField(max_length=100, blank=True)
+    issued_on = models.DateField(null=True, blank=True)
+    expires_on = models.DateField(null=True, blank=True, help_text="Leave blank for documents that do not expire.")
+    is_confidential = models.BooleanField(default=False, help_text="HR-only visibility flag.")
+    file = models.FileField(upload_to="hrm/employee_docs/%Y/%m/", null=True, blank=True)
+    # Workflow-owned — set only by the mark-verified / reject POST actions, never on the form.
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS_CHOICES, default="pending", editable=False)
+    verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_verified_documents", editable=False)
+    verified_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_edoc_tenant_emp_idx"),
+            models.Index(fields=["tenant", "document_type"], name="hrm_edoc_tenant_type_idx"),
+            models.Index(fields=["tenant", "verification_status"], name="hrm_edoc_tenant_vstat_idx"),
+            models.Index(fields=["tenant", "expires_on"], name="hrm_edoc_tenant_expiry_idx"),
+        ]
+
+    @property
+    def is_expired(self):
+        """True when the document has an expiry that is already in the past."""
+        return self.expires_on is not None and self.expires_on < date.today()
+
+    @property
+    def is_expiring_soon(self):
+        """True when the document expires within the next 30 days (and is not already expired)."""
+        if self.expires_on is None:
+            return False
+        days = (self.expires_on - date.today()).days
+        return 0 <= days <= 30
+
+    def __str__(self):
+        return f"{self.number} · {self.title}"
+
+
+# Module-level so the form, views and templates share one source for the event taxonomy.
+LIFECYCLE_EVENT_TYPE_CHOICES = [
+    ("hire", "Hire"),
+    ("confirmation", "Confirmation (Probation End)"),
+    ("transfer", "Transfer"),
+    ("promotion", "Promotion"),
+    ("demotion", "Demotion"),
+    ("salary_revision", "Salary Revision"),
+    ("re_designation", "Re-designation"),
+    ("location_change", "Location Change"),
+    ("reporting_change", "Reporting Manager Change"),
+    ("suspension", "Suspension"),
+    ("reinstatement", "Reinstatement"),
+    ("contract_renewal", "Contract Renewal"),
+    ("separation", "Separation"),
+    ("other", "Other"),
+]
+
+
+class EmployeeLifecycleEvent(TenantNumbered):
+    """An append-only, dated record of a single job-change event (3.1 Employee Lifecycle) — hire,
+    confirmation, transfer, promotion, salary revision, separation, etc. Populate only the from→to
+    fields relevant to the event type. v1 records the timeline; it does NOT auto-mutate
+    ``core.Employment``/``EmployeeProfile`` (a deferred bidirectional-sync enhancement)."""
+
+    NUMBER_PREFIX = "ELC"
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="lifecycle_events")
+    event_type = models.CharField(max_length=30, choices=LIFECYCLE_EVENT_TYPE_CHOICES, default="other")
+    effective_date = models.DateField()
+    reason = models.TextField(blank=True)
+    # From / To capture — all nullable/blank; fill only what the event changes.
+    from_designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    to_designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    from_department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    to_department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    from_location = models.CharField(max_length=255, blank=True)
+    to_location = models.CharField(max_length=255, blank=True)
+    from_job_title = models.CharField(max_length=255, blank=True)
+    to_job_title = models.CharField(max_length=255, blank=True)
+    from_salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    to_salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    from_manager = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    to_manager = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    from_employee_type = models.CharField(max_length=20, blank=True)
+    to_employee_type = models.CharField(max_length=20, blank=True)
+    notes = models.TextField(blank=True)
+    initiated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_initiated_lifecycle_events", editable=False)
+
+    class Meta:
+        ordering = ["-effective_date", "-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "effective_date"], name="hrm_elc_tenant_emp_date_idx"),
+            models.Index(fields=["tenant", "event_type"], name="hrm_elc_tenant_type_idx"),
+            models.Index(fields=["tenant", "employee", "event_type"], name="hrm_elc_tenant_emp_type_idx"),
+            models.Index(fields=["tenant", "effective_date"], name="hrm_elc_tenant_effdate_idx"),
+        ]
+
+    def __str__(self):
+        name = self.employee.name if self.employee_id else "—"
+        return f"{self.number} · {name} — {self.get_event_type_display()} ({self.effective_date})"
