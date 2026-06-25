@@ -43,7 +43,8 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
   (e.g. `models.ForeignKey('core.Party', ...)`). Your module owns only its domain-specific tables.
 - **App layout:** `apps/<slug>/`, AppConfig `name = 'apps.<slug>'`. Register in `config/settings.py`
   `INSTALLED_APPS` and add `path('<slug>/', include('apps.<slug>.urls'))` to `config/urls.py`.
-- **Templates:** project-level `templates/<slug>/<submodule>/...` (**one folder per sub-module — MANDATORY**, see
+- **Templates:** project-level `templates/<slug>/<submodule>/<entity>/<page>.html` (**one folder per sub-module,
+  then one folder per entity, with a bare `list/detail/form.html` page filename — MANDATORY**, see
   CLAUDE.md "Template Folder Structure"; landing page stays at `templates/<slug>/` root), **extend
   `templates/base.html`**, use the design-system
   classes from `static/css/theme.css`: `.page-header .page-title .breadcrumb .page-actions`, `.card .card-header
@@ -211,15 +212,18 @@ app, "create" means "append to the existing file"):
   shows that sub-module as **Live** instead of the roadmap placeholder. Do NOT change `MODULE_CATALOG` (names from
   NavERP.md are already correct) and do NOT touch other sub-modules' `LIVE_LINKS` entries.
 
-### 2c. Frontend (`templates/<slug>/<submodule>/`)
-- **One folder per sub-module (MANDATORY — see CLAUDE.md "Template Folder Structure").** Templates live at
-  `templates/<slug>/<submodule>/<entity>_<page>.html`, grouped by the NavERP.md sub-module that owns each model —
-  never flat `templates/<slug>/<entity>_<page>.html`. The view's `render()`/`crud_*` `template=` uses that full
-  path (e.g. `"hrm/onboarding/document_list.html"`). The module landing/overview page stays at the app root
-  (`templates/<slug>/<slug>_overview.html` or `overview.html`/`dashboard.html`).
-- For each new model in the sub-module's folder: `<entity>_list.html`, `<entity>_detail.html`, `<entity>_form.html`
-  (shared create/edit). Drop a redundant leading sub-module prefix from the filename
-  (`onboardingdocument_list.html` → `onboarding/document_list.html`); otherwise keep the entity name.
+### 2c. Frontend (`templates/<slug>/<submodule>/<entity>/<page>.html`)
+- **One folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page filename
+  (MANDATORY — see CLAUDE.md "Template Folder Structure").** Templates live at
+  `templates/<slug>/<submodule>/<entity>/<page>.html`, grouped by the NavERP.md sub-module that owns each model —
+  never a flat `templates/<slug>/<submodule>/<entity>_<page>.html` file. The view's `render()`/`crud_*`
+  `template=` uses that full path (e.g. `"hrm/offboarding/clearanceitem/detail.html"`). The module
+  landing/overview page stays at the app root (`templates/<slug>/<slug>_overview.html` or `overview.html`/
+  `dashboard.html`); standalone reports/letters/wizards stay at the sub-module level (no entity folder).
+- For each new model, an entity folder under the sub-module with `list.html`, `detail.html`, `form.html`
+  (shared create/edit). For a single-entity sub-module the sub-module folder doubles as the entity folder — keep
+  `designation/list.html`, NOT `designation/designation/list.html`. A secondary entity-action page goes inside the
+  entity folder (`cash/bank_transaction/import.html`).
 - Extend `base.html`; use the design-system classes; list pages get a GET filter form (search `q` + status/FK
   selects reflecting `request.GET`), an Actions column (view/edit/delete POST+confirm+csrf), pagination, and an
   `.empty-state`. Badges use the model's exact choice values + `{{ obj.get_<field>_display }}` fallback. If the
