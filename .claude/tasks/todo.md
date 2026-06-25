@@ -4326,3 +4326,567 @@ under `config.settings_test` (MySQL/XAMPP was down) via throwaway smoke scripts 
 **Deferred (unchanged from the plan):** live e-sign API, preboarding pre-EmployeeProfile (ATS 3.5–3.8), offboarding
 (3.4), reminders/calendar/IT-provisioning automation, AI 30-60-90 plans, ESS portal, Module 11 `assets.Asset` FK,
 and onboarding session reschedule/cancel actions (reachable only via Django admin for now).
+
+---
+
+# Module 3 Extension — HRM Sub-module 3.4: Employee Offboarding (hrm)  — plan from research-hrm-offboarding.md  (2026-06-25)
+
+> **Context:** Extension pass on the existing `apps/hrm` app. Sub-modules 3.1, 3.2, 3.3, 3.9, 3.10, and
+> 3.12 are complete (434 HRM tests passing). This plan adds 4 new offboarding models — `SeparationCase`,
+> `ExitInterview`, `ClearanceItem`, `FinalSettlement` — to `apps/hrm/models.py`, alongside new services,
+> forms, views, URL names, and templates under `templates/hrm/offboarding/`. The app is already wired into
+> `config/settings.py` and `config/urls.py`; only `navigation.py` requires a new `"3.4"` entry.
+> All new models use the same `TenantOwned`/`TenantNumbered` abstract bases already in `apps/hrm/models.py`.
+> Services go in `apps/hrm/services.py` (alongside the existing `generate_tasks_from_template`).
+
+---
+
+## Models (add to `apps/hrm/models.py`)
+
+### `SeparationCase` [SEP-] — master offboarding record (one per departure event)
+
+- [ ] **`SeparationCase`** extends `TenantNumbered`; `NUMBER_PREFIX = "SEP"`.
+  **Fields:**
+  - `employee` — FK→`"hrm.EmployeeProfile"` `on_delete=CASCADE` `related_name="separation_cases"` (the departing employee; NOT `core.Party` directly — all HRM FKs go to `EmployeeProfile`)
+  - `separation_type` — CharField max_length=20 choices `SEPARATION_TYPE_CHOICES`:
+    `("resignation","Resignation")`, `("termination","Termination")`, `("layoff","Layoff")`,
+    `("retirement","Retirement")`, `("contract_end","End of Contract")`, `("deceased","Deceased")`.
+    Driver: Zoho People + Keka + greytHR + Rippling separation taxonomies (research 3.4.1).
+  - `exit_reason` — CharField max_length=30 blank choices `EXIT_REASON_CHOICES`:
+    `("better_opportunity","Better Opportunity")`, `("compensation","Compensation")`,
+    `("career_growth","Career Growth")`, `("relocation","Relocation")`, `("health","Health")`,
+    `("personal","Personal")`, `("retirement","Retirement")`, `("performance","Performance")`,
+    `("policy_violation","Policy Violation")`, `("other","Other")`.
+    Driver: Keka/Darwinbox exit reason codes feeding attrition analytics (research 3.4.1).
+  - `submitted_at` — DateTimeField null=True blank=True (set when employee submits; form-owned via create; NOT a workflow-advanced field but informational — coder may expose in form or stamp in submit action)
+  - `resignation_letter` — FileField upload_to=`"hrm/offboarding/letters/%Y/%m/"` null=True blank=True (resignation letter scan/upload). Driver: all 10 products; research 3.4.1.
+  - `notice_period_days` — PositiveIntegerField default=30 (configured per company/designation; HR can override). Driver: Keka Day-1 notice rule, greytHR shortfall auto-calc (research 3.4.1).
+  - `notice_start_date` — DateField null=True blank=True (Day 1 of notice — typically the resignation_date itself per Keka). Driver: research 3.4.1.
+  - `expected_last_working_day` — DateField null=True blank=True **editable=False** — **computed in `save()`: `notice_start_date + timedelta(days=notice_period_days)` when both are set; never hand-edited**. Driver: greytHR/Freshteam/Darwinbox LWD auto-calc.
+  - `actual_last_working_day` — DateField null=True blank=True (HR-confirmed last working day; set manually or by the `complete` workflow action).
+  - `notice_buyout_type` — CharField max_length=20 choices `NOTICE_BUYOUT_CHOICES`:
+    `("none","None")`, `("pay_in_lieu","Pay in Lieu of Notice")`, `("recover","Recover Shortfall")`.
+    Default `"none"`. Driver: Keka notice-buyout toggle, greytHR shortfall deduction (research 3.4.1).
+  - `requires_kt` — BooleanField default=True (flags a Knowledge Transfer clearance item should be auto-created; handled in the `approve` action via service). Driver: SAP SuccessFactors/Workday/BambooHR KT task (research 3.4.1).
+  - `status` — CharField max_length=20 choices `STATUS_CHOICES` **editable=False** (workflow-owned; excluded from form):
+    `("draft","Draft")`, `("pending_approval","Pending Approval")`, `("approved","Approved")`,
+    `("in_clearance","In Clearance")`, `("cleared","Cleared")`, `("settled","Settled")`,
+    `("completed","Completed")`, `("rejected","Rejected")`, `("withdrawn","Withdrawn")`.
+    Default `"draft"`. Driver: greytHR 3-stage exit, SAP SuccessFactors/Darwinbox state machine (research 3.4.1 + 3.4.3).
+  - `approver` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_approved_separations"` **editable=False** (set by `approve` action only).
+  - `approved_at` — DateTimeField null=True blank=True **editable=False** (set by `approve` action).
+  - `rejection_reason` — TextField blank=True (set by `reject` action; editable=False or excluded from main form — set only via reject POST).
+  - `withdrawal_reason` — TextField blank=True (set by `withdraw` action; excluded from form). Driver: greytHR/Keka withdrawal (research 3.4.1).
+  - `relieving_letter_generated_at` — DateTimeField null=True blank=True **editable=False** (stamped by `generate_relieving_letter` action; never form-set). Driver: greytHR auto-stamp + Zoho People download log (research 3.4.5).
+  - `relieving_letter_generated_by` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_relieving_letters_generated"` **editable=False**.
+  - `experience_letter_generated_at` — DateTimeField null=True blank=True **editable=False** (stamped by `generate_experience_letter` action). Driver: research 3.4.5.
+  - `experience_letter_generated_by` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_experience_letters_generated"` **editable=False**.
+  - `notes` — TextField blank=True.
+  **Derived property (not stored):**
+  - `all_mandatory_cleared` — `@property`: `True` when every `ClearanceItem` linked to this case with `is_mandatory=True` has `status` in `("cleared","not_applicable")`. Computed from the related manager, no extra column. Driver: Darwinbox/greytHR FnF-release gate (research 3.4.3).
+  **`save()` override:** when `notice_start_date` and `notice_period_days` are both set, recompute `expected_last_working_day = notice_start_date + timedelta(days=notice_period_days)` before calling `super().save()`.
+  **`unique_together`:** `("tenant", "number")` (inherited from `TenantNumbered`).
+  **Indexes:** `(tenant, status)`, `(tenant, employee)`, `(tenant, separation_type)`.
+  **`__str__`:** `f"{self.number} · {self.employee.name} ({self.get_status_display()})"`.
+
+### `ExitInterview` [EI-] — one interview per `SeparationCase`
+
+- [ ] **`ExitInterview`** extends `TenantNumbered`; `NUMBER_PREFIX = "EI"`.
+  **Fields:**
+  - `case` — FK→`"hrm.SeparationCase"` `on_delete=CASCADE` `related_name="exit_interviews"` (one-to-one in practice; enforced in form `clean()`).
+  - `interviewer` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_exit_interviews_conducted"` (HR user conducting the interview). Driver: SAP SuccessFactors/Darwinbox/Zoho People interviewer scheduling (research 3.4.2).
+  - `scheduled_at` — DateTimeField null=True blank=True. Driver: SAP/Darwinbox/Zoho scheduling fields (research 3.4.2).
+  - `conducted_at` — DateTimeField null=True blank=True **editable=False** (stamped when status transitions to `completed` via the `complete` action on the interview; or can be form-set on the form — coder's call; mark as workflow-set by the `complete_interview` view if built, otherwise editable on the form).
+  - `mode` — CharField max_length=20 choices `MODE_CHOICES`:
+    `("in_person","In Person")`, `("video","Video Call")`, `("phone","Phone")`, `("form","Self-Service Form")`.
+    Driver: SAP SuccessFactors/Zoho/Darwinbox interview modes (research 3.4.2).
+  - `status` — CharField max_length=20 choices `EI_STATUS_CHOICES`:
+    `("scheduled","Scheduled")`, `("completed","Completed")`, `("skipped","Skipped")`, `("no_show","No Show")`.
+    Default `"scheduled"`. **editable=False** (workflow-owned; excluded from form; set by `complete_interview` / `skip_interview` POST-only actions).
+  - **Structured Likert rating fields (1–5 integer; null=not answered)** — all `SmallIntegerField(null=True, blank=True)`. Driver: Workday/Rippling/greytHR Likert exit survey (research 3.4.2):
+    - `rating_job_satisfaction` — overall satisfaction with the role
+    - `rating_management` — manager/leadership effectiveness
+    - `rating_compensation` — pay and benefits adequacy
+    - `rating_work_environment` — physical/cultural environment
+    - `rating_growth_opportunities` — career development prospects
+    - `rating_work_life_balance` — balance of work and personal life
+    - `rating_culture` — company culture and values
+    - `rating_overall` — overall impression of the company
+  - `primary_reason` — CharField max_length=30 blank choices identical to `SeparationCase.EXIT_REASON_CHOICES` (coded primary reason for leaving; feeds attrition analytics). Driver: all 10 products (research 3.4.2).
+  - `would_recommend` — BooleanField null=True blank=True (would recommend the company as a workplace). Driver: Rippling/Workday NPS-style question (research 3.4.2).
+  - `would_rejoin` — BooleanField null=True blank=True (would consider returning). Driver: Darwinbox/Keka rehire flag (research 3.4.2).
+  - `what_went_well` — TextField blank=True. Driver: open-text sections in Zoho People/Rippling/Workday (research 3.4.2).
+  - `what_to_improve` — TextField blank=True.
+  - `additional_comments` — TextField blank=True.
+  **`unique_together`:** `("tenant", "number")`.
+  **Indexes:** `(tenant, case)`, `(tenant, status)`.
+  **`__str__`:** `f"{self.number} · Exit Interview for {self.case.employee.name}"`.
+  **Form guard:** `ExitInterviewForm.clean()` must raise `ValidationError` if another `ExitInterview` already exists for the same `case` (1:1-per-case enforced at the form layer; not a DB constraint so that cancelled/skipped ones can be superseded if needed).
+
+### `ClearanceItem` — one clearance task per department/case (no number prefix — child of case)
+
+- [ ] **`ClearanceItem`** extends `TenantOwned` (NOT `TenantNumbered` — no human-readable number needed for a child line item).
+  **Fields:**
+  - `case` — FK→`"hrm.SeparationCase"` `on_delete=CASCADE` `related_name="clearance_items"`.
+  - `department` — CharField max_length=20 choices `CLEARANCE_DEPT_CHOICES`:
+    `("it","IT")`, `("finance","Finance")`, `("hr","HR")`, `("admin","Admin")`,
+    `("manager","Manager / KT")`, `("legal","Legal")`, `("security","Security")`,
+    `("library","Library")`, `("custom","Custom")`.
+    Driver: Zoho People/Keka/Darwinbox department clearance catalog (research 3.4.3).
+  - `department_label` — CharField max_length=100 blank=True (free-text label used when `department="custom"`; otherwise display the choice label). Driver: Darwinbox configurable depts.
+  - `description` — CharField max_length=255 (task description, e.g. "Return company laptop", "Revoke email access"). Driver: BambooHR/greytHR/Zoho checklist description.
+  - `is_mandatory` — BooleanField default=True (if True, must be cleared/NA before FnF can be approved; checked by `SeparationCase.all_mandatory_cleared`). Driver: SAP SuccessFactors clearance gates, Darwinbox/greytHR mandatory items (research 3.4.3).
+  - `assigned_to` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_clearance_items_assigned"` (the clearance item owner). Driver: BambooHR/Freshteam task-category/assignee pattern.
+  - `due_date` — DateField null=True blank=True. Driver: BambooHR/Freshteam task due dates.
+  - `status` — CharField max_length=20 choices `CLEARANCE_STATUS_CHOICES`:
+    `("pending","Pending")`, `("in_progress","In Progress")`, `("cleared","Cleared")`,
+    `("not_applicable","Not Applicable")`, `("rejected","Rejected")`.
+    Default `"pending"`. **editable=False** (workflow-owned; excluded from form; set by `clearanceitem_mark_cleared`, `clearanceitem_mark_na`, `clearanceitem_reject` POST-only actions only).
+  - `cleared_by` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_clearance_items_cleared"` **editable=False** (stamped by `clearanceitem_mark_cleared` action).
+  - `cleared_at` — DateTimeField null=True blank=True **editable=False** (stamped by `clearanceitem_mark_cleared` action).
+  - `asset_allocation` — FK→`"hrm.AssetAllocation"` `SET_NULL` null=True blank=True `related_name="clearance_items"` (optional link; for asset-return clearance lines the service auto-links the employee's issued `AssetAllocation`). Driver: SAP SuccessFactors/Darwinbox/Keka/greytHR/BambooHR/Rippling asset return clearance (research 3.4.3). **Side effect in `clearanceitem_mark_cleared` view:** when `asset_allocation` is set and `status` → `"cleared"`, also set `asset_allocation.status = "returned"` and `asset_allocation.returned_at = now()` in the same `transaction.atomic()` block.
+  - `notes` — TextField blank=True.
+  **Indexes:** `(tenant, case)`, `(tenant, status)`, `(tenant, case, status)` (for the `all_mandatory_cleared` filter).
+  **`__str__`:** `f"{self.get_department_display()} — {self.description} [{self.get_status_display()}]"`.
+
+### `FinalSettlement` [FNF-] — one F&F settlement per `SeparationCase`
+
+- [ ] **`FinalSettlement`** extends `TenantNumbered`; `NUMBER_PREFIX = "FNF"`.
+  **Fields:**
+  - `case` — FK→`"hrm.SeparationCase"` `on_delete=CASCADE` `related_name="final_settlements"` **unique=True** (one settlement per case; enforced at DB level).
+  - `settlement_date` — DateField null=True blank=True (target payment date). Driver: Keka/greytHR/Darwinbox payment date field (research 3.4.4).
+  - **Payable components** — all `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))`:
+    - `prorata_salary` — earned salary for the partial final month `= (gross_salary / 26) × days_worked`. Driver: greytHR/Keka/Gusto/Darwinbox pro-rata (research 3.4.4).
+    - `leave_encashment_days` — `DecimalField(max_digits=5, decimal_places=2, default=0)` — encashable unused leave days (sourced from `hrm.LeaveAllocation` balance by the `compute` service; NOT recalculated from form). Driver: Keka/greytHR/Darwinbox/Zoho Payroll leave encashment (research 3.4.4).
+    - `leave_encashment_amount` — `DecimalField(14, 2, default=0)` — `leave_encashment_days × (basic_salary / 30)`. Driver: same as above.
+    - `gratuity_eligible` — BooleanField default=False (True if service ≥ 5 years; computed by the `compute` service, not the form). Driver: Keka/greytHR/Darwinbox/Zoho Payroll/HROne gratuity (research 3.4.4).
+    - `gratuity_amount` — `DecimalField(14, 2, default=0)` — `last_drawn_salary × 15 × service_years / 26`; zero if not eligible. Driver: India-primary ERP mandatory component (research 3.4.4).
+    - `bonus_amount` — `DecimalField(14, 2, default=0)` — pending performance bonus / ex-gratia. Driver: greytHR/Keka/Darwinbox (research 3.4.4).
+    - `reimbursement_amount` — `DecimalField(14, 2, default=0)` — pending expense reimbursements.
+    - `other_income` — `DecimalField(14, 2, default=0)` — any other taxable addition.
+  - **Deduction components** — all `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))`:
+    - `notice_recovery_amount` — positive = amount deducted for unserved notice days; negative = amount paid for notice buyout by employer. Driver: Keka notice-buyout, greytHR shortfall (research 3.4.4).
+    - `loan_recovery` — outstanding salary advance / loan. Driver: Keka/greytHR/Zoho Payroll (research 3.4.4).
+    - `asset_deduction` — cost of unreturned or damaged assets. Driver: Rippling/greytHR (research 3.4.4).
+    - `advance_recovery` — other advance recoveries.
+    - `tax_deduction` — TDS / income-tax withholding. Driver: greytHR/Keka/Zoho Payroll (research 3.4.4).
+    - `professional_tax` — statutory professional tax (India). Driver: greytHR/Keka (research 3.4.4).
+    - `other_deduction` — `DecimalField(14, 2, default=0)` — any other deduction.
+  - **`@property net_payable`** (derived, NEVER stored):
+    `prorata_salary + leave_encashment_amount + gratuity_amount + bonus_amount + reimbursement_amount + other_income − notice_recovery_amount − loan_recovery − asset_deduction − advance_recovery − tax_deduction − professional_tax − other_deduction`.
+    Driver: all 10 products; research 3.4.4.
+  - `status` — CharField max_length=20 choices `FNF_STATUS_CHOICES` **editable=False** (workflow-owned; excluded from form):
+    `("draft","Draft")`, `("computed","Computed")`, `("hr_approved","HR Approved")`,
+    `("finance_approved","Finance Approved")`, `("paid","Paid")`, `("cancelled","Cancelled")`.
+    Default `"draft"`. Driver: Keka/Darwinbox/HROne FnF approval chain (research 3.4.4).
+  - `hr_approved_by` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_fnf_hr_approved"` **editable=False**.
+  - `hr_approved_at` — DateTimeField null=True blank=True **editable=False**.
+  - `finance_approved_by` — FK→`settings.AUTH_USER_MODEL` `SET_NULL` null=True blank=True `related_name="hrm_fnf_finance_approved"` **editable=False**.
+  - `finance_approved_at` — DateTimeField null=True blank=True **editable=False**.
+  - `paid_at` — DateField null=True blank=True **editable=False** (stamped by `finalsettlement_mark_paid` action).
+  - `notes` — TextField blank=True.
+  - `gl_posted` — BooleanField default=False **editable=False** (GL-integration stub; deferred to `accounting.PayrollRun` integration pass; never True in v1). Driver: HROne/Darwinbox/greytHR GL stub (research 3.4.4 COULD item).
+  **`unique_together`:** `("tenant", "number")` AND `("tenant", "case")` — one settlement per case per tenant.
+  **Indexes:** `(tenant, status)`, `(tenant, case)`.
+  **`__str__`:** `f"{self.number} · FnF for {self.case.employee.name} [{self.get_status_display()}]"`.
+  **Form guard:** `FinalSettlementForm.clean()` must raise `ValidationError` if another (non-cancelled) `FinalSettlement` already exists for the same `case` (1:1 enforced at form layer; DB `unique_together` also guards).
+
+---
+
+## Derived / workflow-owned fields — coder must NOT expose these on any ModelForm
+
+| Model | Field | Owned by |
+|-------|-------|----------|
+| `SeparationCase` | `status` | `separationcase_submit` / `_approve` / `_reject` / `_withdraw` / `_mark_cleared` / `_complete` views |
+| `SeparationCase` | `approver`, `approved_at` | `separationcase_approve` view |
+| `SeparationCase` | `rejection_reason` | `separationcase_reject` view (POST body param) |
+| `SeparationCase` | `withdrawal_reason` | `separationcase_withdraw` view (POST body param) |
+| `SeparationCase` | `relieving_letter_generated_at`, `_by` | `separationcase_generate_relieving_letter` view |
+| `SeparationCase` | `experience_letter_generated_at`, `_by` | `separationcase_generate_experience_letter` view |
+| `SeparationCase` | `expected_last_working_day` | `SeparationCase.save()` override (computed) |
+| `ExitInterview` | `status` | `exitinterview_complete` / `_skip` views |
+| `ExitInterview` | `conducted_at` | `exitinterview_complete` view |
+| `ClearanceItem` | `status` | `clearanceitem_mark_cleared` / `_mark_na` / `_reject` views |
+| `ClearanceItem` | `cleared_by`, `cleared_at` | `clearanceitem_mark_cleared` view |
+| `FinalSettlement` | `status` | `finalsettlement_compute` / `_hr_approve` / `_finance_approve` / `_mark_paid` / `_cancel` views |
+| `FinalSettlement` | `hr_approved_by`, `hr_approved_at` | `finalsettlement_hr_approve` view |
+| `FinalSettlement` | `finance_approved_by`, `finance_approved_at` | `finalsettlement_finance_approve` view |
+| `FinalSettlement` | `paid_at` | `finalsettlement_mark_paid` view |
+| `FinalSettlement` | `gl_posted` | Deferred (never set in v1) |
+| `FinalSettlement` | `net_payable` | `@property` — not a DB column at all |
+
+---
+
+## Services (add to `apps/hrm/services.py`)
+
+- [ ] **`generate_clearance_checklist(case)`** — idempotent service to auto-create standard `ClearanceItem` rows for a `SeparationCase`. Mirror `generate_tasks_from_template` (title-keyed pre-check + `bulk_create`). Default lines to generate:
+  - `department="it"`, description=`"Return IT equipment and access cards"`, is_mandatory=True — links to any `issued` `AssetAllocation` for `asset_category` in `("laptop","desktop","phone","access_card","id_card")` if one exists (FK `asset_allocation`).
+  - `department="hr"`, description=`"Complete HR exit formalities and documentation"`, is_mandatory=True.
+  - `department="finance"`, description=`"Clear outstanding dues and expense claims"`, is_mandatory=True.
+  - `department="admin"`, description=`"Return admin assets (uniform, SIM, vehicle keys)"`, is_mandatory=False.
+  - `department="manager"`, description=`"Complete knowledge transfer to successor"`, is_mandatory=`case.requires_kt`.
+  - `department="legal"`, description=`"Sign NDA / non-compete acknowledgment"`, is_mandatory=False.
+  Idempotency key: `(tenant, case, department, description)` — check existing titles before `bulk_create`.
+  Called by: `separationcase_approve` view + `_seed_offboarding` seeder.
+  Driver: Zoho People IT/HR/Admin clearance, greytHR, Darwinbox, SAP SuccessFactors department clearance (research 3.4.3).
+
+- [ ] **`compute_leave_encashment(employee, settlement)`** — best-effort helper. Queries `LeaveAllocation.objects.filter(tenant=employee.tenant, employee=employee, status="active")` for `LeaveType` rows where `encashable=True`. Sums the `balance` property across those allocations (or uses the `used_days_db` annotation pattern from `_used_days_subquery` in views for accuracy). Returns `(days: Decimal, amount: Decimal)` using `basic_salary=Decimal("0")` if no salary data is present (leave encashment formula: `days × (basic_salary / 30)`). Note in docstring: `basic_salary` must be passed in or estimated from `EmployeeProfile.designation.min_salary` as a best-effort until a salary structure module exists. Called by `finalsettlement_compute` view. Driver: Keka/greytHR/Darwinbox/Zoho Payroll leave encashment sourced from `LeaveAllocation` (research 3.4.4).
+
+---
+
+## Forms (add to `apps/hrm/forms.py`)
+
+- [ ] **`SeparationCaseForm(TenantModelForm)`**
+  - `model = SeparationCase`
+  - `fields`:
+    `["employee", "separation_type", "exit_reason", "submitted_at", "resignation_letter",
+      "notice_period_days", "notice_start_date", "actual_last_working_day",
+      "notice_buyout_type", "requires_kt", "notes"]`
+  - Excludes (form must NOT include): `tenant`, `number`, `status`, `approver`, `approved_at`,
+    `rejection_reason`, `withdrawal_reason`, `expected_last_working_day` (computed),
+    `relieving_letter_generated_at`, `relieving_letter_generated_by`,
+    `experience_letter_generated_at`, `experience_letter_generated_by`.
+  - Widget: `resignation_letter` FileField — add `enctype="multipart/form-data"` on the template `<form>` tag.
+
+- [ ] **`ExitInterviewForm(TenantModelForm)`**
+  - `model = ExitInterview`
+  - `fields`:
+    `["case", "interviewer", "scheduled_at", "mode",
+      "rating_job_satisfaction", "rating_management", "rating_compensation",
+      "rating_work_environment", "rating_growth_opportunities", "rating_work_life_balance",
+      "rating_culture", "rating_overall",
+      "primary_reason", "would_recommend", "would_rejoin",
+      "what_went_well", "what_to_improve", "additional_comments"]`
+  - Excludes: `tenant`, `number`, `status`, `conducted_at`.
+  - `clean()`: query `ExitInterview.objects.filter(tenant=self.tenant, case=self.cleaned_data.get("case")).exclude(pk=self.instance.pk if self.instance.pk else None)`. If any exist, raise `ValidationError("An exit interview already exists for this separation case.")`.
+  - On the create view, optionally pre-set `case` from a query-string param `?case=<pk>` and make the `case` field read-only (set `self.fields["case"].disabled = True` in `__init__` when `initial["case"]` is set).
+
+- [ ] **`ClearanceItemForm(TenantModelForm)`**
+  - `model = ClearanceItem`
+  - `fields`:
+    `["case", "department", "department_label", "description", "is_mandatory",
+      "assigned_to", "due_date", "asset_allocation", "notes"]`
+  - Excludes: `tenant`, `status`, `cleared_by`, `cleared_at`.
+  - `asset_allocation` queryset in `__init__`: `AssetAllocation.objects.filter(tenant=self.tenant, status="issued")` — only show issued assets (they're what need to be returned).
+
+- [ ] **`FinalSettlementForm(TenantModelForm)`**
+  - `model = FinalSettlement`
+  - `fields`:
+    `["case", "settlement_date",
+      "prorata_salary", "leave_encashment_days", "leave_encashment_amount",
+      "gratuity_eligible", "gratuity_amount", "bonus_amount",
+      "reimbursement_amount", "other_income",
+      "notice_recovery_amount", "loan_recovery", "asset_deduction",
+      "advance_recovery", "tax_deduction", "professional_tax", "other_deduction",
+      "notes"]`
+  - Excludes: `tenant`, `number`, `status`, `hr_approved_by`, `hr_approved_at`,
+    `finance_approved_by`, `finance_approved_at`, `paid_at`, `gl_posted`.
+  - `clean()`: query `FinalSettlement.objects.filter(tenant=self.tenant, case=self.cleaned_data.get("case")).exclude(status="cancelled").exclude(pk=self.instance.pk if self.instance.pk else None)`. If any exist, raise `ValidationError("A settlement already exists for this separation case.")`.
+
+---
+
+## Backend (`apps/hrm/views.py` — add offboarding views)
+
+### Full CRUD views (via `crud_*` helpers)
+
+- [ ] **`separationcase_list`** — `crud_list` on `SeparationCase.objects.filter(tenant=request.tenant).select_related("employee__party", "approver")`. Search fields: `["number", "employee__party__name", "employee__number"]`. Filters: `[("status", "status", False), ("separation_type", "separation_type", False)]`. Extra context: `status_choices=SeparationCase.STATUS_CHOICES`, `separation_type_choices=SeparationCase.SEPARATION_TYPE_CHOICES`. Template: `"hrm/offboarding/separationcase_list.html"`.
+
+- [ ] **`separationcase_create`** — `crud_create` with `SeparationCaseForm`, template `"hrm/offboarding/separationcase_form.html"`, success to `"hrm:separationcase_detail"` (redirect to detail, passing the pk, so user can then submit/manage). The template `<form>` must be `enctype="multipart/form-data"`.
+
+- [ ] **`separationcase_detail`** (`pk`) — the rich multi-section hub page. Fetch the case with `select_related("employee__party", "employee__employment", "employee__designation", "approver")`. Prefetch `clearance_items.select_related("assigned_to","cleared_by","asset_allocation")`, `exit_interviews.select_related("interviewer")`, `final_settlements`. Compute `clearance_total = case.clearance_items.count()`, `clearance_done = case.clearance_items.filter(status__in=["cleared","not_applicable"]).count()`, `clearance_progress = int((clearance_done / clearance_total) * 100) if clearance_total else 0`. Also compute `all_mandatory_cleared = case.all_mandatory_cleared` (property). Pass FnF and exit interview objects (first of each). Template: `"hrm/offboarding/separationcase_detail.html"`.
+
+- [ ] **`separationcase_edit`** (`pk`) — `crud_edit` with `SeparationCaseForm`, template `"hrm/offboarding/separationcase_form.html"`, guard: only allow edit when `status in ("draft", "pending_approval")`, else redirect with error message.
+
+- [ ] **`separationcase_delete`** (`pk`, POST-only) — guard: only allow delete when `status == "draft"`, else redirect to detail with error. On DELETE: `write_audit_log`, delete, redirect to `hrm:separationcase_list`.
+
+- [ ] **`exitinterview_list`** — `crud_list` on `ExitInterview.objects.filter(tenant=request.tenant).select_related("case__employee__party", "interviewer")`. Search: `["number", "case__employee__party__name"]`. Filters: `[("status", "status", False), ("mode", "mode", False)]`. Extra context: `status_choices=ExitInterview.EI_STATUS_CHOICES`, `mode_choices=ExitInterview.MODE_CHOICES`. Template: `"hrm/offboarding/exitinterview_list.html"`.
+
+- [ ] **`exitinterview_create`** — `crud_create` with `ExitInterviewForm`, template `"hrm/offboarding/exitinterview_form.html"`, success to `"hrm:exitinterview_detail"`. Honor `?case=<pk>` in `request.GET` to pre-populate the `case` field via `initial={"case": request.GET.get("case")}`.
+
+- [ ] **`exitinterview_detail`** (`pk`) — detail page. Template: `"hrm/offboarding/exitinterview_detail.html"`.
+
+- [ ] **`exitinterview_edit`** (`pk`) — `crud_edit`, guard: only allow when `status != "completed"`. Template: `"hrm/offboarding/exitinterview_form.html"`.
+
+- [ ] **`exitinterview_delete`** (`pk`, POST-only) — guard: only when `status == "scheduled"`.
+
+- [ ] **`clearanceitem_list`** — `crud_list` on `ClearanceItem.objects.filter(tenant=request.tenant).select_related("case__employee__party", "assigned_to", "cleared_by")`. Search: `["description", "case__employee__party__name", "case__number"]`. Filters: `[("status", "status", False), ("department", "department", False)]`. Extra context: `status_choices=ClearanceItem.CLEARANCE_STATUS_CHOICES`, `dept_choices=ClearanceItem.CLEARANCE_DEPT_CHOICES`. Template: `"hrm/offboarding/clearanceitem_list.html"`.
+
+- [ ] **`clearanceitem_create`** — `crud_create` with `ClearanceItemForm`, template `"hrm/offboarding/clearanceitem_form.html"`, success to `"hrm:separationcase_detail"` (pk from the created item's `case.pk`). Honor `?case=<pk>` to pre-populate.
+
+- [ ] **`clearanceitem_detail`** (`pk`) — detail page (can be simple; most interaction happens on the case hub). Template: `"hrm/offboarding/clearanceitem_detail.html"`.
+
+- [ ] **`clearanceitem_edit`** (`pk`) — `crud_edit`, guard: only when `status in ("pending","in_progress")`. Template: `"hrm/offboarding/clearanceitem_form.html"`.
+
+- [ ] **`clearanceitem_delete`** (`pk`, POST-only) — guard: only when `status == "pending"`.
+
+- [ ] **`finalsettlement_list`** — `crud_list` on `FinalSettlement.objects.filter(tenant=request.tenant).select_related("case__employee__party")`. Search: `["number", "case__employee__party__name", "case__number"]`. Filters: `[("status", "status", False)]`. Extra context: `status_choices=FinalSettlement.FNF_STATUS_CHOICES`. Template: `"hrm/offboarding/finalsettlement_list.html"`.
+
+- [ ] **`finalsettlement_create`** — `crud_create` with `FinalSettlementForm`, template `"hrm/offboarding/finalsettlement_form.html"`, success to `"hrm:finalsettlement_detail"`. Honor `?case=<pk>` to pre-populate.
+
+- [ ] **`finalsettlement_detail`** (`pk`) — detail page showing all earnings components, deductions, and the computed `net_payable` property. Template: `"hrm/offboarding/finalsettlement_detail.html"`.
+
+- [ ] **`finalsettlement_edit`** (`pk`) — `crud_edit`, guard: only when `status in ("draft","computed")`. Template: `"hrm/offboarding/finalsettlement_form.html"`.
+
+- [ ] **`finalsettlement_delete`** (`pk`, POST-only) — guard: only when `status == "draft"`.
+
+### POST-only workflow actions (all `@login_required @require_POST`)
+
+- [ ] **`separationcase_submit`** (`pk`) — guard source `status == "draft"`. Set `status = "pending_approval"`, `submitted_at = timezone.now()` (if blank). `save(update_fields=["status","submitted_at","updated_at"])`. `write_audit_log`. Redirect to `hrm:separationcase_detail`. Driver: Freshteam/greytHR resignation submission flow.
+
+- [ ] **`separationcase_approve`** (`pk`, `@tenant_admin_required`) — guard source `status == "pending_approval"`. Set `status = "in_clearance"`, `approver = request.user`, `approved_at = timezone.now()`. `save(update_fields=[...])`. Call `generate_clearance_checklist(case)` from services to auto-create department clearance items. `write_audit_log`. Redirect to detail. Driver: greytHR/Zoho/Keka multi-level approval; research 3.4.1.
+
+- [ ] **`separationcase_reject`** (`pk`, `@tenant_admin_required`) — guard `status == "pending_approval"`. Read `reason` from `request.POST.get("reason","")`. Set `status="rejected"`, `rejection_reason=reason`. `save`. `write_audit_log`. Redirect to detail.
+
+- [ ] **`separationcase_withdraw`** (`pk`) — guard `status in ("draft","pending_approval")`. Read `reason` from POST. Set `status="withdrawn"`, `withdrawal_reason=reason`. `save`. `write_audit_log`. Redirect to detail. Driver: greytHR/Keka withdrawal feature; research 3.4.1.
+
+- [ ] **`separationcase_mark_cleared`** (`pk`, `@tenant_admin_required`) — guard `status == "in_clearance"` AND `case.all_mandatory_cleared == True`. Set `status = "cleared"`. `save`. `write_audit_log`. Redirect to detail. Driver: Darwinbox/greytHR clearance gate; research 3.4.3.
+
+- [ ] **`separationcase_complete`** (`pk`, `@tenant_admin_required`) — guard `status == "settled"` (FnF must be paid first) OR `status == "cleared"` (allow completion without FnF for certain separation types). Optionally check `actual_last_working_day` is set; if not, read from POST and set. Set `status = "completed"`. `save`. `write_audit_log`. Redirect to detail.
+
+- [ ] **`separationcase_generate_relieving_letter`** (`pk`) — guard `case.status in ("completed","settled","cleared")`. Stamp `relieving_letter_generated_at = timezone.now()`, `relieving_letter_generated_by = request.user` if not already set. `save(update_fields=[...])`. Render template `"hrm/offboarding/relieving_letter.html"` with full case/employee/employment context. Set `Content-Disposition: inline` header (browser print). Driver: greytHR auto-stamp + Zoho download log; research 3.4.5.
+
+- [ ] **`separationcase_generate_experience_letter`** (`pk`) — same gating as relieving letter. Stamp `experience_letter_generated_at / _by`. Render `"hrm/offboarding/experience_letter.html"`. Driver: Zoho/greytHR/Darwinbox/Keka; research 3.4.5.
+
+- [ ] **`clearanceitem_mark_cleared`** (`pk`, `@login_required`) — guard `status in ("pending","in_progress")`. In `transaction.atomic()`: set `status="cleared"`, `cleared_by=request.user`, `cleared_at=timezone.now()`. If `item.asset_allocation_id` is set, also update `item.asset_allocation.status="returned"`, `item.asset_allocation.returned_at=timezone.now()`, `item.asset_allocation.save(update_fields=["status","returned_at","updated_at"])`. `write_audit_log`. Redirect to `hrm:separationcase_detail` (`pk=item.case.pk`).
+
+- [ ] **`clearanceitem_mark_na`** (`pk`, `@login_required`) — guard `status in ("pending","in_progress")`. Set `status="not_applicable"`, `cleared_by=request.user`, `cleared_at=timezone.now()`. `save`. Redirect to case detail.
+
+- [ ] **`clearanceitem_reject`** (`pk`, `@tenant_admin_required`) — guard `status != "cleared"`. Set `status="rejected"`. `save`. Redirect to case detail.
+
+- [ ] **`finalsettlement_compute`** (`pk`, `@tenant_admin_required`) — guard `status == "draft"`. Call `compute_leave_encashment(case.employee, settlement)` to fill `leave_encashment_days` and `leave_encashment_amount`. Optionally compute basic gratuity eligibility from `core.Employment.date_of_joining` (if available) — set `gratuity_eligible = True` if service years ≥ 5. Set `status = "computed"`. `save`. `write_audit_log`. Redirect to `hrm:finalsettlement_detail`.
+
+- [ ] **`finalsettlement_hr_approve`** (`pk`, `@tenant_admin_required`) — guard `status in ("computed","draft")`. Set `status="hr_approved"`, `hr_approved_by=request.user`, `hr_approved_at=timezone.now()`. `save`. When this step transitions the parent `SeparationCase` to `"settled"`, also update `case.status="settled"` and `case.save(update_fields=["status","updated_at"])`. `write_audit_log`. Redirect to detail.
+
+- [ ] **`finalsettlement_finance_approve`** (`pk`, `@tenant_admin_required`) — guard `status == "hr_approved"`. Set `status="finance_approved"`, `finance_approved_by=request.user`, `finance_approved_at=timezone.now()`. `save`. `write_audit_log`.
+
+- [ ] **`finalsettlement_mark_paid`** (`pk`, `@tenant_admin_required`) — guard `status in ("hr_approved","finance_approved")`. Set `status="paid"`, `paid_at=timezone.localdate()`. Update parent `case.status="settled"` if not already. `save`. `write_audit_log`.
+
+---
+
+## URLs (add to `apps/hrm/urls.py`)
+
+`app_name = "hrm"` already set. Add the following paths:
+
+- [ ] **`SeparationCase` CRUD + workflow:**
+  ```
+  path("separations/",                                    views.separationcase_list,                    name="separationcase_list"),
+  path("separations/add/",                                views.separationcase_create,                  name="separationcase_create"),
+  path("separations/<int:pk>/",                           views.separationcase_detail,                  name="separationcase_detail"),
+  path("separations/<int:pk>/edit/",                      views.separationcase_edit,                    name="separationcase_edit"),
+  path("separations/<int:pk>/delete/",                    views.separationcase_delete,                  name="separationcase_delete"),
+  path("separations/<int:pk>/submit/",                    views.separationcase_submit,                  name="separationcase_submit"),
+  path("separations/<int:pk>/approve/",                   views.separationcase_approve,                 name="separationcase_approve"),
+  path("separations/<int:pk>/reject/",                    views.separationcase_reject,                  name="separationcase_reject"),
+  path("separations/<int:pk>/withdraw/",                  views.separationcase_withdraw,                name="separationcase_withdraw"),
+  path("separations/<int:pk>/mark-cleared/",              views.separationcase_mark_cleared,            name="separationcase_mark_cleared"),
+  path("separations/<int:pk>/complete/",                  views.separationcase_complete,                name="separationcase_complete"),
+  path("separations/<int:pk>/relieving-letter/",          views.separationcase_generate_relieving_letter, name="separationcase_relieving_letter"),
+  path("separations/<int:pk>/experience-letter/",         views.separationcase_generate_experience_letter, name="separationcase_experience_letter"),
+  ```
+
+- [ ] **`ExitInterview` CRUD + workflow:**
+  ```
+  path("exit-interviews/",                                views.exitinterview_list,                     name="exitinterview_list"),
+  path("exit-interviews/add/",                            views.exitinterview_create,                   name="exitinterview_create"),
+  path("exit-interviews/<int:pk>/",                       views.exitinterview_detail,                   name="exitinterview_detail"),
+  path("exit-interviews/<int:pk>/edit/",                  views.exitinterview_edit,                     name="exitinterview_edit"),
+  path("exit-interviews/<int:pk>/delete/",                views.exitinterview_delete,                   name="exitinterview_delete"),
+  path("exit-interviews/<int:pk>/complete/",              views.exitinterview_complete,                  name="exitinterview_complete"),
+  path("exit-interviews/<int:pk>/skip/",                  views.exitinterview_skip,                     name="exitinterview_skip"),
+  ```
+
+- [ ] **`ClearanceItem` CRUD + workflow:**
+  ```
+  path("clearance/",                                      views.clearanceitem_list,                     name="clearanceitem_list"),
+  path("clearance/add/",                                  views.clearanceitem_create,                   name="clearanceitem_create"),
+  path("clearance/<int:pk>/",                             views.clearanceitem_detail,                   name="clearanceitem_detail"),
+  path("clearance/<int:pk>/edit/",                        views.clearanceitem_edit,                     name="clearanceitem_edit"),
+  path("clearance/<int:pk>/delete/",                      views.clearanceitem_delete,                   name="clearanceitem_delete"),
+  path("clearance/<int:pk>/mark-cleared/",                views.clearanceitem_mark_cleared,             name="clearanceitem_mark_cleared"),
+  path("clearance/<int:pk>/mark-na/",                     views.clearanceitem_mark_na,                  name="clearanceitem_mark_na"),
+  path("clearance/<int:pk>/reject/",                      views.clearanceitem_reject,                   name="clearanceitem_reject"),
+  ```
+
+- [ ] **`FinalSettlement` CRUD + workflow:**
+  ```
+  path("settlements/",                                    views.finalsettlement_list,                   name="finalsettlement_list"),
+  path("settlements/add/",                                views.finalsettlement_create,                 name="finalsettlement_create"),
+  path("settlements/<int:pk>/",                           views.finalsettlement_detail,                 name="finalsettlement_detail"),
+  path("settlements/<int:pk>/edit/",                      views.finalsettlement_edit,                   name="finalsettlement_edit"),
+  path("settlements/<int:pk>/delete/",                    views.finalsettlement_delete,                 name="finalsettlement_delete"),
+  path("settlements/<int:pk>/compute/",                   views.finalsettlement_compute,                name="finalsettlement_compute"),
+  path("settlements/<int:pk>/hr-approve/",                views.finalsettlement_hr_approve,             name="finalsettlement_hr_approve"),
+  path("settlements/<int:pk>/finance-approve/",           views.finalsettlement_finance_approve,        name="finalsettlement_finance_approve"),
+  path("settlements/<int:pk>/mark-paid/",                 views.finalsettlement_mark_paid,              name="finalsettlement_mark_paid"),
+  ```
+
+---
+
+## Admin (`apps/hrm/admin.py`)
+
+- [ ] Register `SeparationCase` with `list_display=["number","employee","separation_type","status","expected_last_working_day","actual_last_working_day"]`, `list_filter=["status","separation_type"]`, `search_fields=["number","employee__party__name"]`.
+- [ ] Register `ExitInterview` with `list_display=["number","case","mode","status","scheduled_at"]`, `list_filter=["status","mode"]`.
+- [ ] Register `ClearanceItem` with `list_display=["case","department","description","is_mandatory","status","cleared_at"]`, `list_filter=["status","department"]`.
+- [ ] Register `FinalSettlement` with `list_display=["number","case","status","net_payable_display","paid_at"]`, `list_filter=["status"]`, add a `net_payable_display` method.
+
+---
+
+## Templates (`templates/hrm/offboarding/`) — new sub-module folder
+
+All templates extend `base.html`, use design-system classes (`page-header/card/table/badge/form-*/empty-state`), `{% include "partials/pagination.html" %}`, and the same filter-bar conventions as existing HRM templates (search `q` + filter selects pre-filled from `request.GET`; FK filters compare `obj.pk|stringformat:"d"`; status badges use exact choice values with `{{ obj.get_<field>_display }}` fallback; every list has an Actions column with view/edit/delete; every detail has an Actions sidebar).
+
+- [ ] **`templates/hrm/offboarding/separationcase_list.html`** — table: Number, Employee, Type, Status badge, Expected LWD, Submitted, Actions (view/edit/delete-POST+confirm). Filter bar: status dropdown (pass `status_choices`), separation_type dropdown (pass `separation_type_choices`), search `q`. Empty state.
+
+- [ ] **`templates/hrm/offboarding/separationcase_form.html`** — create/edit form. `enctype="multipart/form-data"` on the `<form>` tag (resignation letter file upload). Show `{{ form.as_p }}` or field-by-field. Title switches "Add Separation Case" / "Edit Separation Case" based on `obj`.
+
+- [ ] **`templates/hrm/offboarding/separationcase_detail.html`** — rich multi-section hub:
+  - **Header card:** employee name, number, separation type badge, status badge, expected/actual LWD, notice period, notice buyout type, submitted_at.
+  - **Actions sidebar (right):** conditional workflow buttons as POST forms with `{% csrf_token %}` and `onclick="return confirm('...')"`:
+    - `draft` → Submit button (`hrm:separationcase_submit`)
+    - `pending_approval` → Approve button (`@tenant_admin_required`, `hrm:separationcase_approve`) + Reject button (with reason text area, `hrm:separationcase_reject`) + Withdraw button (`hrm:separationcase_withdraw`)
+    - `in_clearance` → Mark Cleared button (only visible if `all_mandatory_cleared`, `hrm:separationcase_mark_cleared`)
+    - `cleared` or `settled` → Complete button (`hrm:separationcase_complete`) + Generate Relieving Letter link/button (`hrm:separationcase_relieving_letter`) + Generate Experience Letter link/button (`hrm:separationcase_experience_letter`)
+    - Edit link (only `draft` or `pending_approval`) + Delete button (only `draft`)
+    - Back to List link.
+  - **Clearance Progress section:** progress bar `clearance_progress`%, clearance items table (department, description, mandatory, assigned_to, due_date, status badge, cleared_by, cleared_at, inline action buttons — Mark Cleared / Mark N/A / Reject POSTs + Add Clearance Item link `?case=<pk>`).
+  - **Exit Interview section:** if `exit_interview` exists show status/mode/scheduled_at/ratings summary; else show "Schedule Exit Interview" button linking to `hrm:exitinterview_create?case=<pk>`.
+  - **Final Settlement section:** if `settlement` exists show status/net_payable/components summary + workflow action buttons (Compute / HR Approve / Finance Approve / Mark Paid); else show "Create Settlement" link `hrm:finalsettlement_create?case=<pk>`.
+  - **Letter tracking:** show `relieving_letter_generated_at` / `experience_letter_generated_at` if set.
+
+- [ ] **`templates/hrm/offboarding/exitinterview_list.html`** — table: Number, Employee (via case), Mode, Status badge, Scheduled At, Interviewer, Actions. Filter bar: status, mode, search `q`.
+
+- [ ] **`templates/hrm/offboarding/exitinterview_form.html`** — create/edit form. Group the 8 rating fields visually (e.g., "Satisfaction Ratings" fieldset). Boolean `would_recommend`/`would_rejoin` as checkboxes. Conditional read-only `case` display when `case` field is `disabled`.
+
+- [ ] **`templates/hrm/offboarding/exitinterview_detail.html`** — detail showing ratings as visual 1–5 indicators (e.g. star or number), primary_reason badge, open-text sections, Actions sidebar (Complete / Skip workflow buttons; Edit when not completed; Delete when scheduled; Back to List).
+
+- [ ] **`templates/hrm/offboarding/clearanceitem_list.html`** — table: Case number, Department badge, Description, Mandatory, Assigned To, Due Date, Status badge, Cleared By/At, Actions. Filter bar: status, department, search `q`.
+
+- [ ] **`templates/hrm/offboarding/clearanceitem_form.html`** — create/edit form. Show `department_label` field only when `department == "custom"` (can use JS toggle or always show).
+
+- [ ] **`templates/hrm/offboarding/clearanceitem_detail.html`** — detail page with inline workflow action buttons (Mark Cleared / Mark N/A / Reject) as POST forms. Show asset allocation link if set.
+
+- [ ] **`templates/hrm/offboarding/finalsettlement_list.html`** — table: Number, Employee (via case), Status badge, Net Payable (computed in view or template property call), Settlement Date, Actions. Filter bar: status, search `q`.
+
+- [ ] **`templates/hrm/offboarding/finalsettlement_form.html`** — create/edit form. Group earningfields under "Earnings" and deduction fields under "Deductions". Show computed `net_payable` as a read-only display (template property via `{{ obj.net_payable }}` when editing).
+
+- [ ] **`templates/hrm/offboarding/finalsettlement_detail.html`** — earnings table, deductions table, net payable total (prominent), workflow action buttons (Compute/HR Approve/Finance Approve/Mark Paid), `gl_posted` stub indicator.
+
+- [ ] **`templates/hrm/offboarding/relieving_letter.html`** — print-ready HTML letter (no base.html extends or sidebar — use a minimal print layout). Content: company letterhead (from `Tenant.name`/branding), employee name, employee number, designation, department, date of joining, last working day (`actual_last_working_day`), relief confirmation statement, generated date, HR signatory block. `Content-Disposition: inline` set in the view. Note: wkhtmltopdf/WeasyPrint PDF generation deferred — v1 is HTML browser-print. Driver: greytHR/Zoho/Darwinbox/Keka; research 3.4.5.
+
+- [ ] **`templates/hrm/offboarding/experience_letter.html`** — print-ready HTML letter. Same layout as relieving_letter but includes a positive-tenor experience paragraph (role title, department, key responsibility statement, "served with dedication" boilerplate). Driver: Zoho People/greytHR/Darwinbox/Keka; research 3.4.5.
+
+---
+
+## Wire-up (`apps/core/navigation.py`)
+
+- [ ] Add `"3.4"` entry to `LIVE_LINKS` in `apps/core/navigation.py`. Use the **exact** NavERP.md 3.4 bullet text as keys:
+  ```python
+  # 3.4 Employee Offboarding — uses exact NavERP.md 3.4 bullet text as keys
+  "3.4": {
+      "Resignation Management": "hrm:separationcase_list",   # bullet
+      "Exit Interview":         "hrm:exitinterview_list",    # bullet
+      "Clearance Process":      "hrm:clearanceitem_list",    # bullet
+      "F&F Settlement":         "hrm:finalsettlement_list",  # bullet
+      "Experience Letter":      "hrm:separationcase_list",   # bullet (letter generated from case detail)
+  },
+  ```
+  Do NOT touch `config/settings.py` or `config/urls.py` — `apps.hrm` is already installed and `/hrm/` is already included.
+
+---
+
+## Migrate + Seed
+
+- [ ] Run `python manage.py makemigrations hrm` — generates `apps/hrm/migrations/000N_separationcase_exitinterview_clearanceitem_finalsettlement.py` (incremental migration, not a new 0001; the exact number will be 0004 or 0005 depending on current state — coder confirms with `showmigrations hrm`).
+- [ ] Run `python manage.py migrate` — apply new tables to `nav_erp`.
+- [ ] **Extend `apps/hrm/management/commands/seed_hrm.py`** — add an idempotent `_seed_offboarding(tenant)` function:
+  - Guard at the top: `if SeparationCase.objects.filter(tenant=tenant).exists(): print("Offboarding already seeded."); return`.
+  - Fetch 2 existing `EmployeeProfile` rows for the tenant (those created by the base seeder).
+  - **Case 1 — voluntary resignation (completed):** `SeparationCase(separation_type="resignation", exit_reason="better_opportunity", notice_period_days=30, notice_start_date=today-60 days, status="completed", actual_last_working_day=today-30 days, requires_kt=True, ...)`. Generate clearance checklist via `generate_clearance_checklist(case)`. Mark all clearance items as `cleared`. Create one `ExitInterview` (status=`completed`, mode=`in_person`, all ratings=4, primary_reason=`better_opportunity`, would_recommend=True, would_rejoin=False). Create one `FinalSettlement` (status=`paid`, prorata_salary=15000, leave_encashment_days=5, leave_encashment_amount=5000, gratuity_eligible=False, tax_deduction=2000, paid_at=today-28 days).
+  - **Case 2 — pending resignation (in_clearance):** `SeparationCase(separation_type="resignation", exit_reason="career_growth", notice_period_days=30, notice_start_date=today-15 days, status="in_clearance", requires_kt=False, ...)`. Generate clearance checklist. Leave 2 clearance items `pending`, 1 `cleared`. No exit interview or settlement yet.
+  - Idempotency: use `get_or_create` keyed on `(tenant, number)` for `FinalSettlement` and `ExitInterview`; for `SeparationCase` use `get_or_create(tenant=tenant, employee=employee, status__in=["in_clearance","completed"])` or check by number.
+  - Print: `"Seeded 2 separation cases, clearance checklists, 1 exit interview, 1 settlement for {tenant.slug}"`.
+  - Print login reminder: `"Log in as admin_acme / admin_globex (password: password) to see offboarding data."`.
+  - Import `generate_clearance_checklist` from `apps.hrm.services` at the top of the seed file.
+  - Call `_seed_offboarding(tenant)` at the bottom of the `handle()` method (after existing `_seed_onboarding`).
+- [ ] Run seeder: `python manage.py seed_hrm` — first run seeds offboarding data.
+- [ ] Run seeder again: `python manage.py seed_hrm` — second run must print "Offboarding already seeded." and make zero DB changes (idempotency verified).
+- [ ] Run `python manage.py check` — must be clean (0 errors, 0 warnings).
+
+---
+
+## Verify
+
+- [ ] **Migration check:** `python manage.py showmigrations hrm` — confirms the new migration is applied (`[X]`).
+- [ ] **Smoke script (`temp/hrm_offboarding_smoke.py`)** — extend the pattern from `temp/hrm_onboarding_smoke.py`:
+  - 200/302 sweep over all new `hrm:separationcase_*`, `hrm:exitinterview_*`, `hrm:clearanceitem_*`, `hrm:finalsettlement_*` URL names (list / detail / create / edit / relieving-letter / experience-letter routes).
+  - No `{#` or `{% comment` template leaks in any response body.
+  - Cross-tenant IDOR check: tenant A's `SeparationCase` pk → 404 when requesting as tenant B user.
+  - Workflow action gates: POST `separationcase_approve` when `status=="draft"` → redirects with error (not a 500).
+  - Admin gate: POST `separationcase_approve` as a non-admin tenant member → 403.
+- [ ] **Sidebar Live check:** sub-module 3.4 appears in the sidebar as **Live** with all 5 NavERP.md 3.4 bullets showing clickable hrefs (Resignation Management, Exit Interview, Clearance Process, F&F Settlement, Experience Letter).
+
+---
+
+## Close-out
+
+- [ ] Run **`code-reviewer` agent** — apply findings, commit each changed file separately.
+- [ ] Run **`explorer` agent** — apply findings, commit.
+- [ ] Run **`frontend-reviewer` agent** — apply findings, commit.
+- [ ] Run **`performance-reviewer` agent** — apply findings (likely: `select_related` on list views, index on `(tenant, case)` for `ClearanceItem` sub-queries, N+1 on `net_payable` computation in list), commit.
+- [ ] Run **`qa-smoke-tester` agent** — apply findings, commit.
+- [ ] Run **`security-reviewer` agent** — apply findings (check: workflow-owned fields excluded from all forms, resignation_letter upload allowlist + size cap, letter views don't leak cross-tenant data, IDOR on clearance items / settlement), commit.
+- [ ] Run **`test-writer` agent** — apply output, commit.
+- [ ] Update **`.claude/skills/hrm/SKILL.md`** — extend with 3.4 offboarding models, URL names, workflow actions, `LIVE_LINKS["3.4"]` entry, seeder additions, `generate_clearance_checklist` + `compute_leave_encashment` services; update `description` line to include "3.4 offboarding"; commit.
+- [ ] Update **`README.md`** — mark sub-module 3.4 Employee Offboarding as Live in the module status table; add note that `seed_hrm` now includes offboarding demo data; commit.
+
+### One-file-per-commit sequence (PowerShell-safe)
+
+```powershell
+git add 'apps\hrm\models.py'; git commit -m 'feat(hrm): add 3.4 offboarding models — SeparationCase[SEP-], ExitInterview[EI-], ClearanceItem, FinalSettlement[FNF-] with choices, derived properties, save() LWD computation, and all_mandatory_cleared property'
+git add 'apps\hrm\migrations\000N_offboarding_separationcase_exitinterview_clearanceitem_finalsettlement.py'; git commit -m 'feat(hrm): migration 000N — 3.4 offboarding tables (SeparationCase, ExitInterview, ClearanceItem, FinalSettlement)'
+git add 'apps\hrm\services.py'; git commit -m 'feat(hrm): add offboarding services — generate_clearance_checklist (idempotent dept checklist) and compute_leave_encashment (encashable LeaveAllocation balance) for 3.4'
+git add 'apps\hrm\forms.py'; git commit -m 'feat(hrm): add 3.4 offboarding forms — SeparationCaseForm (file upload), ExitInterviewForm (1:1 guard), ClearanceItemForm (issued-asset queryset), FinalSettlementForm (1:1 guard); all exclude workflow/derived fields'
+git add 'apps\hrm\views.py'; git commit -m 'feat(hrm): add 3.4 offboarding views — full CRUD for 4 models + 14 POST-only workflow actions (submit/approve/reject/withdraw/mark_cleared/complete/letters, clearance mark_cleared/na/reject, settlement compute/hr_approve/finance_approve/mark_paid), separationcase_detail hub'
+git add 'apps\hrm\urls.py'; git commit -m 'feat(hrm): add 3.4 offboarding URL patterns — CRUD + workflow routes for separationcase/exitinterview/clearanceitem/finalsettlement (41 new url names)'
+git add 'apps\hrm\admin.py'; git commit -m 'feat(hrm): register 3.4 offboarding models in admin (SeparationCase, ExitInterview, ClearanceItem, FinalSettlement)'
+git add 'apps\hrm\management\commands\seed_hrm.py'; git commit -m 'feat(hrm): extend seed_hrm with 3.4 offboarding demo data — _seed_offboarding: 2 separation cases, clearance checklists via service, 1 exit interview, 1 settlement (idempotent)'
+git add 'apps\core\navigation.py'; git commit -m 'feat(core/nav): wire LIVE_LINKS 3.4 Employee Offboarding — 5 bullets → hrm:separationcase_list/exitinterview_list/clearanceitem_list/finalsettlement_list routes'
+git add 'templates\hrm\offboarding\separationcase_list.html'; git commit -m 'feat(hrm): offboarding separation case list template — status/type filters, progress indicator, actions column'
+git add 'templates\hrm\offboarding\separationcase_form.html'; git commit -m 'feat(hrm): offboarding separation case form template — multipart for resignation letter upload'
+git add 'templates\hrm\offboarding\separationcase_detail.html'; git commit -m 'feat(hrm): offboarding separation case detail hub — clearance progress, exit interview section, FnF section, letter tracking, all workflow action buttons'
+git add 'templates\hrm\offboarding\exitinterview_list.html'; git commit -m 'feat(hrm): offboarding exit interview list template — status/mode filters, rating summary'
+git add 'templates\hrm\offboarding\exitinterview_form.html'; git commit -m 'feat(hrm): offboarding exit interview form template — Likert rating fieldset, boolean fields, pre-populated case'
+git add 'templates\hrm\offboarding\exitinterview_detail.html'; git commit -m 'feat(hrm): offboarding exit interview detail template — rating visual display, open-text sections, workflow buttons'
+git add 'templates\hrm\offboarding\clearanceitem_list.html'; git commit -m 'feat(hrm): offboarding clearance item list template — dept/status filters, mandatory badge, actions'
+git add 'templates\hrm\offboarding\clearanceitem_form.html'; git commit -m 'feat(hrm): offboarding clearance item form template — custom dept label field, issued-asset FK filter'
+git add 'templates\hrm\offboarding\clearanceitem_detail.html'; git commit -m 'feat(hrm): offboarding clearance item detail template — mark cleared/na/reject inline workflow, asset link'
+git add 'templates\hrm\offboarding\finalsettlement_list.html'; git commit -m 'feat(hrm): offboarding final settlement list template — status filter, net payable column, actions'
+git add 'templates\hrm\offboarding\finalsettlement_form.html'; git commit -m 'feat(hrm): offboarding final settlement form template — earnings/deductions grouped fieldsets, net payable read-only display'
+git add 'templates\hrm\offboarding\finalsettlement_detail.html'; git commit -m 'feat(hrm): offboarding final settlement detail template — earnings table, deductions table, net payable total, workflow buttons, GL stub'
+git add 'templates\hrm\offboarding\relieving_letter.html'; git commit -m 'feat(hrm): offboarding relieving letter print template — minimal print layout, tenant letterhead, employment dates, relief statement'
+git add 'templates\hrm\offboarding\experience_letter.html'; git commit -m 'feat(hrm): offboarding experience letter print template — minimal print layout, positive-tenor experience paragraph, role/dept/tenure details'
+git add 'temp\hrm_offboarding_smoke.py'; git commit -m 'test(hrm): smoke test for 3.4 offboarding routes — 200/302, no leaks, IDOR 404, workflow gate checks, admin-gate 403'
+git add '.claude\skills\hrm\SKILL.md'; git commit -m 'docs(skill/hrm): extend SKILL.md with 3.4 offboarding — 4 models, URL names, 14 workflow actions, LIVE_LINKS 3.4, seeder additions, services'
+git add 'README.md'; git commit -m 'docs(readme): mark HRM 3.4 Employee Offboarding as Live in module status table'
+```
+
+---
+
+## Later passes / deferred
+
+- **Live GL journal posting** — `FinalSettlement.gl_posted` is a stub (always False in v1). When `accounting.PayrollRun` is built (Module 2 later pass), add a nullable `payroll_run` FK to `FinalSettlement` and implement the debit/credit posting in `finalsettlement_mark_paid`. Do NOT add this in 3.4. Seen in: HROne/Darwinbox/greytHR auto-credits (research 3.4.4 COULD).
+- **Dynamic exit interview questionnaire builder** — Admin-configurable question sets (vs. the 8 fixed Likert fields). Requires a normalized `ExitQuestion`/`ExitQuestionResponse` model. Too complex for this pass; the flat model covers 80% of use cases. Seen in: Zoho People custom forms, SAP SuccessFactors MDF objects (research 3.4.2).
+- **Automated clearance item generation from `AssetAllocation`** — On `SeparationCase` creation (or approval), auto-create one `ClearanceItem` per `issued` `AssetAllocation` for that employee via a Django `post_save` signal. `generate_clearance_checklist` currently creates a single IT line; per-asset granularity requires a signal or a more detailed service loop. Deferred (research 3.4.3).
+- **PDF generation (wkhtmltopdf / WeasyPrint)** — v1 ships an HTML browser-print view for relieving/experience letters. Proper PDF binary (for email attachment or download link) requires a PDF library dependency. Deferred to an integration pass. Seen in: Zoho People download, greytHR email on LWD (research 3.4.5).
+- **Email dispatch of letters** — Auto-email relieving/experience letter to employee's personal email on `case.status == "completed"`. Requires email integration (Celery + `send_mail`). Deferred. Seen in: greytHR letter-emailed-on-LWD (research 3.4.5).
+- **Custom letter templates** — HR-editable letterhead, tone, and variable substitution (like Zoho Writer / Darwinbox). v1 uses a fixed Django template file. Deferred to a template-engine admin pass (research 3.4.5 COULD).
+- **FnF itemized settlement lines** — Normalized `FnFLine` child model for granular per-line-item audit trail (vs. the flat Decimal fields in v1). Seen in: Darwinbox/greytHR itemized FnF. v1 flat fields cover 80% of use cases. Deferred.
+- **Statutory compliance components** — EPF/PF withdrawal initiation, ESI settlement, ESOP vesting/forfeiture on exit. Require statutory integrations with government portals. Deferred to Module 3.13–3.17 statutory pass.
+- **Attrition analytics dashboard** — Aggregated `ExitInterview.primary_reason` trends by department and period. The data is in place. Deferred to Module 10 BI/Analytics pass (research 3.4.2 COULD).
+- **IT system de-provisioning integration** — Auto-revoke AD/SSO/Google Workspace access when `ClearanceItem(department="it")` is marked cleared. Requires Module 13 integration hooks. Rippling/HROne-style. Deferred (research 3.4.3 integration).
+- **Multi-level manager → HR approval chain** — The plan uses a simplified single-approver flow (`pending_approval` → `approved`). greytHR/SAP SuccessFactors support 1–3 approval levels. Deferred to a workflow-engine pass.
+- **No-dues certificate** — A separate printable certificate once all clearance items are cleared. `SeparationCase.all_mandatory_cleared` is the data gate; the template is a 1-hour add-on. Low priority; deferred.
+- **Rehire-eligible flag** — `would_rejoin` on `ExitInterview` is the data source. A separate `rehire_eligible` field on `SeparationCase` and a "Rehire Pool" list view would surface this for future recruiting. Deferred to the ATS pass (3.5–3.8).
+
+## Review notes
+(filled in after delivery)
