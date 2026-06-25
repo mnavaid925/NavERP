@@ -34,10 +34,13 @@ from .forms import (
     AssetAllocationForm,
     AttendanceRecordForm,
     ClearanceItemForm,
+    CostCenterProfileForm,
+    DepartmentProfileForm,
     DesignationForm,
     EmployeeProfileForm,
     ExitInterviewForm,
     FinalSettlementForm,
+    JobGradeForm,
     LeaveAllocationForm,
     LeaveRequestForm,
     LeaveTypeForm,
@@ -58,10 +61,13 @@ from .models import (
     AssetAllocation,
     AttendanceRecord,
     ClearanceItem,
+    CostCenterProfile,
+    DepartmentProfile,
     Designation,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    JobGrade,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -136,36 +142,44 @@ def hrm_overview(request):
 def designation_list(request):
     return crud_list(
         request,
-        Designation.objects.filter(tenant=request.tenant).select_related("department")
+        Designation.objects.filter(tenant=request.tenant).select_related("department", "job_grade")
         .annotate(employee_count=Count("employees")).order_by("name"),
-        "hrm/designation/list.html",
-        search_fields=["name", "grade", "department__name"],
-        filters=[("is_active", "is_active", False), ("department", "department_id", True)],
-        extra_context={"departments": OrgUnit.objects.filter(tenant=request.tenant).order_by("name")},
+        "hrm/organization/designation/list.html",
+        search_fields=["name", "grade", "job_grade__name", "department__name"],
+        filters=[("is_active", "is_active", False), ("department", "department_id", True),
+                 ("job_grade", "job_grade_id", True)],
+        extra_context={
+            "departments": OrgUnit.objects.filter(tenant=request.tenant, kind="department").order_by("name"),
+            "job_grades": JobGrade.objects.filter(tenant=request.tenant, is_active=True).order_by("level_order", "name"),
+        },
     )
 
 
 @login_required
 def designation_create(request):
-    return crud_create(request, form_class=DesignationForm, template="hrm/designation/form.html",
+    return crud_create(request, form_class=DesignationForm,
+                       template="hrm/organization/designation/form.html",
                        success_url="hrm:designation_list")
 
 
 @login_required
 def designation_detail(request, pk):
-    obj = get_object_or_404(Designation.objects.select_related("department"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/designation/detail.html", {
+    obj = get_object_or_404(
+        Designation.objects.select_related("department", "job_grade"), pk=pk, tenant=request.tenant)
+    employee_count = EmployeeProfile.objects.filter(tenant=request.tenant, designation=obj).count()
+    return render(request, "hrm/organization/designation/detail.html", {
         "obj": obj,
         "employees": EmployeeProfile.objects.filter(tenant=request.tenant, designation=obj)
         .select_related("party")[:50],
-        "employee_count": EmployeeProfile.objects.filter(tenant=request.tenant, designation=obj).count(),
+        "employee_count": employee_count,
     })
 
 
 @login_required
 def designation_edit(request, pk):
     return crud_edit(request, model=Designation, pk=pk, form_class=DesignationForm,
-                     template="hrm/designation/form.html", success_url="hrm:designation_list")
+                     template="hrm/organization/designation/form.html",
+                     success_url="hrm:designation_list")
 
 
 @login_required
@@ -181,6 +195,250 @@ def designation_delete(request, pk):
     obj.delete()
     messages.success(request, "Designation deleted.")
     return redirect("hrm:designation_list")
+
+
+# ============================================================ Job Grades (3.2)
+@login_required
+def jobgrade_list(request):
+    return crud_list(
+        request,
+        JobGrade.objects.filter(tenant=request.tenant)
+        .annotate(designation_count=Count("designations")).order_by("level_order", "name"),
+        "hrm/organization/jobgrade/list.html",
+        search_fields=["name", "description"],
+        filters=[("is_active", "is_active", False)],
+    )
+
+
+@login_required
+def jobgrade_create(request):
+    return crud_create(request, form_class=JobGradeForm,
+                       template="hrm/organization/jobgrade/form.html",
+                       success_url="hrm:jobgrade_list")
+
+
+@login_required
+def jobgrade_detail(request, pk):
+    obj = get_object_or_404(JobGrade, pk=pk, tenant=request.tenant)
+    return render(request, "hrm/organization/jobgrade/detail.html", {
+        "obj": obj,
+        "designations": Designation.objects.filter(tenant=request.tenant, job_grade=obj)
+        .select_related("department")[:50],
+        "designation_count": Designation.objects.filter(tenant=request.tenant, job_grade=obj).count(),
+    })
+
+
+@login_required
+def jobgrade_edit(request, pk):
+    return crud_edit(request, model=JobGrade, pk=pk, form_class=JobGradeForm,
+                     template="hrm/organization/jobgrade/form.html",
+                     success_url="hrm:jobgrade_list")
+
+
+@login_required
+@require_POST
+def jobgrade_delete(request, pk):
+    obj = get_object_or_404(JobGrade, pk=pk, tenant=request.tenant)
+    if Designation.objects.filter(tenant=request.tenant, job_grade=obj).exists():
+        messages.error(request, "Cannot delete a grade assigned to designations. "
+                                "Deactivate it instead.")
+        return redirect("hrm:jobgrade_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Job grade deleted.")
+    return redirect("hrm:jobgrade_list")
+
+
+# ============================================================ Departments (3.2 — OrgUnit companion)
+@login_required
+def department_list(request):
+    return crud_list(
+        request,
+        DepartmentProfile.objects.filter(tenant=request.tenant)
+        .select_related("org_unit", "org_unit__parent", "head__party", "cost_center")
+        .annotate(employee_count=Count("org_unit__employments")).order_by("org_unit__name"),
+        "hrm/organization/department/list.html",
+        search_fields=["org_unit__name", "code", "description"],
+        filters=[("is_active", "is_active", False)],
+    )
+
+
+@login_required
+def department_create(request):
+    return crud_create(request, form_class=DepartmentProfileForm,
+                       template="hrm/organization/department/form.html",
+                       success_url="hrm:department_list")
+
+
+@login_required
+def department_detail(request, pk):
+    obj = get_object_or_404(
+        DepartmentProfile.objects.select_related(
+            "org_unit", "org_unit__parent", "head__party", "cost_center"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/organization/department/detail.html", {
+        "obj": obj,
+        "designations": Designation.objects.filter(tenant=request.tenant, department=obj.org_unit)
+        .select_related("job_grade")[:50],
+        "employees": EmployeeProfile.objects.filter(
+            tenant=request.tenant, employment__org_unit=obj.org_unit)
+        .select_related("party", "designation")[:50],
+    })
+
+
+@login_required
+def department_edit(request, pk):
+    return crud_edit(request, model=DepartmentProfile, pk=pk, form_class=DepartmentProfileForm,
+                     template="hrm/organization/department/form.html",
+                     success_url="hrm:department_list")
+
+
+@login_required
+@require_POST
+def department_delete(request, pk):
+    obj = get_object_or_404(DepartmentProfile, pk=pk, tenant=request.tenant)
+    # Guard: don't strip a department's HR profile while staff are still posted to the OrgUnit.
+    if Employment.objects.filter(tenant=request.tenant, org_unit=obj.org_unit, status="active").exists():
+        messages.error(request, "Cannot delete a department profile while employees are assigned. "
+                                "Deactivate it instead.")
+        return redirect("hrm:department_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()  # removes only the HRM companion; the core.OrgUnit node is untouched.
+    messages.success(request, "Department profile deleted.")
+    return redirect("hrm:department_list")
+
+
+# ============================================================ Cost Centers (3.2 — OrgUnit companion)
+@login_required
+def costcenter_list(request):
+    return crud_list(
+        request,
+        CostCenterProfile.objects.filter(tenant=request.tenant)
+        .select_related("org_unit", "org_unit__parent", "owner__party").order_by("org_unit__name"),
+        "hrm/organization/costcenter/list.html",
+        search_fields=["org_unit__name", "code", "description"],
+        filters=[("is_active", "is_active", False)],
+    )
+
+
+@login_required
+def costcenter_create(request):
+    return crud_create(request, form_class=CostCenterProfileForm,
+                       template="hrm/organization/costcenter/form.html",
+                       success_url="hrm:costcenter_list")
+
+
+@login_required
+def costcenter_detail(request, pk):
+    obj = get_object_or_404(
+        CostCenterProfile.objects.select_related("org_unit", "org_unit__parent", "owner__party"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/organization/costcenter/detail.html", {
+        "obj": obj,
+        "mapped_departments": DepartmentProfile.objects.filter(
+            tenant=request.tenant, cost_center=obj.org_unit).select_related("org_unit")[:50],
+    })
+
+
+@login_required
+def costcenter_edit(request, pk):
+    return crud_edit(request, model=CostCenterProfile, pk=pk, form_class=CostCenterProfileForm,
+                     template="hrm/organization/costcenter/form.html",
+                     success_url="hrm:costcenter_list")
+
+
+@login_required
+@require_POST
+def costcenter_delete(request, pk):
+    obj = get_object_or_404(CostCenterProfile, pk=pk, tenant=request.tenant)
+    if DepartmentProfile.objects.filter(tenant=request.tenant, cost_center=obj.org_unit).exists():
+        messages.error(request, "Cannot delete a cost center mapped to departments. "
+                                "Unmap them or deactivate it instead.")
+        return redirect("hrm:costcenter_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Cost center profile deleted.")
+    return redirect("hrm:costcenter_list")
+
+
+# ============================================================ Org Chart & Company Setup (3.2 — derived)
+@login_required
+def org_chart(request):
+    """Reporting-line / department-grouped org chart, DERIVED from ``core.Employment.manager``
+    (single-parent chain) and ``OrgUnit`` — no model. ``?view=reporting|department`` toggles mode."""
+    tenant = request.tenant
+    view_mode = "department" if request.GET.get("view") == "department" else "reporting"
+    tree_nodes, dept_groups, total = [], [], 0
+    if tenant is not None:
+        employees = list(
+            EmployeeProfile.objects.filter(tenant=tenant)
+            .select_related("party", "employment", "employment__org_unit", "employment__manager",
+                            "designation", "designation__job_grade")
+            .order_by("party__name"))
+        total = len(employees)
+        # Map a manager Party -> the EmployeeProfile rows that report to it.
+        by_party = {e.party_id: e for e in employees}
+        children = {}
+        roots = []
+        for e in employees:
+            mgr_party = e.employment.manager_id if e.employment_id else None
+            if mgr_party and mgr_party in by_party and by_party[mgr_party].pk != e.pk:
+                children.setdefault(mgr_party, []).append(e)
+            else:
+                roots.append(e)
+        # DFS into a flat (employee, depth) list (cycle-guarded) for a recursion-free template.
+        seen = set()
+
+        def _walk(emp, depth):
+            if emp.pk in seen:
+                return
+            seen.add(emp.pk)
+            tree_nodes.append({"emp": emp, "depth": depth})
+            for child in children.get(emp.party_id, []):
+                _walk(child, depth + 1)
+
+        for root in roots:
+            _walk(root, 0)
+        # Any employee not reached (cycle) is appended at depth 0 so none are dropped.
+        for e in employees:
+            if e.pk not in seen:
+                tree_nodes.append({"emp": e, "depth": 0})
+
+        # Department-grouped mode.
+        groups = {}
+        for e in employees:
+            unit = e.employment.org_unit if e.employment_id else None
+            key = unit.name if unit else "Unassigned"
+            groups.setdefault(key, []).append(e)
+        dept_groups = [{"name": name, "employees": groups[name]} for name in sorted(groups)]
+    return render(request, "hrm/organization/org_chart.html", {
+        "tree_nodes": tree_nodes,
+        "dept_groups": dept_groups,
+        "view_mode": view_mode,
+        "total": total,
+    })
+
+
+@login_required
+def company_setup(request):
+    """Read-only company overview (3.2 Company Setup) — the company ``OrgUnit`` node plus the
+    branding the Tenants module (Module 0) owns. Branding edits stay in ``tenants:brandingsetting_list``."""
+    from apps.tenants.models import BrandingSetting
+
+    tenant = request.tenant
+    company_unit = branding = None
+    departments = cost_centers = 0
+    if tenant is not None:
+        company_unit = OrgUnit.objects.filter(tenant=tenant, kind="company").first()
+        branding = BrandingSetting.objects.filter(tenant=tenant).first()
+        departments = OrgUnit.objects.filter(tenant=tenant, kind="department").count()
+        cost_centers = OrgUnit.objects.filter(tenant=tenant, kind="cost_center").count()
+    return render(request, "hrm/organization/company_setup.html", {
+        "company_unit": company_unit,
+        "branding": branding,
+        "departments": departments,
+        "cost_centers": cost_centers,
+    })
 
 
 # ============================================================ Employee Profiles (3.1)
