@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Organization Chart{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Organization Chart</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Organizational Structure</span><span class="sep">›</span><span>Organization Chart</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="?view=reporting" class="btn {% if view_mode == 'reporting' %}btn-primary{% else %}btn-outline{% endif %}"><i data-lucide="git-fork"></i> Reporting Lines</a>
+      <a href="?view=department" class="btn {% if view_mode == 'department' %}btn-primary{% else %}btn-outline{% endif %}"><i data-lucide="building-2"></i> By Department</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if total == 0 %}
+      <div class="empty-state"><i data-lucide="users"></i><h3>No employees found</h3><p>Add employees in <a href="{% url 'hrm:employee_list' %}">Employee Management</a> to see the org chart.</p></div>
+    {% elif view_mode == 'reporting' %}
+      <p class="text-muted" style="margin-bottom:1rem;">Reporting lines derived from each employee's manager. {{ total }} employee(s).</p>
+      {% for node in tree_nodes %}
+        <div class="org-node" style="margin-left: calc({{ node.depth }} * 1.75rem); display:flex; align-items:center; gap:.75rem; padding:.6rem .8rem; margin-bottom:.4rem; border:1px solid var(--border, #e5e7eb); border-radius:.5rem;">
+          {% if node.depth %}<i data-lucide="corner-down-right" style="color:var(--muted,#94a3b8);"></i>{% endif %}
+          <span class="avatar-initial">{{ node.emp.party.name|first|upper }}</span>
+          <div>
+            <a href="{% url 'hrm:employee_detail' node.emp.pk %}" class="fw-600">{{ node.emp.party.name }}</a>
+            <div class="text-muted" style="font-size:.85rem;">
+              {{ node.emp.designation.name|default:"—" }}{% if node.emp.designation.job_grade %} · <span class="badge badge-info">{{ node.emp.designation.job_grade.name }}</span>{% endif %}
+              {% if node.emp.department %} · {{ node.emp.department.name }}{% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted" style="margin-bottom:1rem;">Employees grouped by department. {{ total }} employee(s).</p>
+      {% for group in dept_groups %}
+        <div style="margin-bottom:1.25rem;">
+          <h3 class="card-title" style="display:flex; align-items:center; gap:.5rem;"><i data-lucide="building-2"></i> {{ group.name }} <span class="badge badge-muted">{{ group.employees|length }}</span></h3>
+          <div style="display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.6rem;">
+            {% for e in group.employees %}
+              <div style="display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem; border:1px solid var(--border,#e5e7eb); border-radius:.5rem; min-width:220px;">
+                <span class="avatar-initial">{{ e.party.name|first|upper }}</span>
+                <div>
+                  <a href="{% url 'hrm:employee_detail' e.pk %}" class="fw-600">{{ e.party.name }}</a>
+                  <div class="text-muted" style="font-size:.85rem;">{{ e.designation.name|default:"—" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div></div>
+{% endblock %}
