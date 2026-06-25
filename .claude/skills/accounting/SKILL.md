@@ -57,15 +57,20 @@ Per CRUD model: `<base>_list / _create / _detail / _edit / _delete`. Bases: `gla
 
 **`RecurringInvoice` model** [RINV-, `models.py`]: party (customer)/description/amount/currency/payment_terms/cadence (weekly/monthly/quarterly/annually)/start_date/next_run_date/status (active/paused/ended) + system `last_generated_at`/`occurrences_generated`. `run_date_for(n)` gives the anchored date of the n-th occurrence (re-derived from `start_date` via `models.add_months`, day-clamped — no month-end drift); `advance()` sets `next_run_date = run_date_for(occurrences_generated)`. Generated invoices link back via the `Invoice.recurring_invoice` FK (`obj.generated_invoices`).
 
-## Templates (`templates/accounting/<submodule>/`, 99 files)
-**One folder per sub-module** (CLAUDE.md "Template Folder Structure"): `ledger/` (glaccount/journal_entry/
-fiscal_period/exchange_rate/currency/trial_balance/gl_account_ledger), `payable/` (vendor_profile/bill/payment/
-payment_term/payment_schedule/ap_aging), `receivable/` (customer_profile/invoice/recurringinvoice/allocation/
-ar_aging), `cash/` (bank_account/bank_transaction/reconciliation/forecast), `assets/` (fixed_asset/asset_disposal),
-`costing/` (cost_allocation), `payroll/` (run_*), `projects/` (project/job_cost_entry), `intercompany/`, `tax/`
-(code_*/return_*), `reports/` (balance_sheet/profit_and_loss/scheduled_report), `budget/`, `audit/`
-(internal_control), `integration/`. The module landing `dashboard.html` stays at the `templates/accounting/` root.
-A view renders e.g. `"accounting/ledger/journal_entry_list.html"`, `"accounting/tax/code_list.html"`.
+## Templates (`templates/accounting/<submodule>/<entity>/<page>.html`, 99 files)
+**One folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page filename**
+(CLAUDE.md "Template Folder Structure"): `ledger/` (entity folders `glaccount/ journal_entry/ fiscal_period/
+exchange_rate/ currency/` + standalone reports `trial_balance.html`/`gl_account_ledger.html`), `payable/`
+(`vendor_profile/ bill/ payment/ payment_term/` + folded action `payment/schedule.html` + standalone
+`ap_aging.html`), `receivable/` (`customer_profile/ invoice/ recurringinvoice/ allocation/` + standalone
+`ar_aging.html`), `cash/` (`bank_account/ bank_transaction/` [with folded `bank_transaction/import.html`]
+`reconciliation/` + standalone `forecast.html`), `assets/` (`fixed_asset/ asset_disposal/`), `costing/`
+(`cost_allocation/`), `payroll/` (`run/`), `projects/` (`project/ job_cost_entry/`), `intercompany/` (single-entity:
+`intercompany/list.html`), `tax/` (`code/ return/`), `reports/` (`scheduled_report/` + standalone
+`balance_sheet.html`/`profit_and_loss.html`), `budget/` (single-entity `budget/list.html` + child `budget/line/
+form.html` + standalone `budget/variance.html`), `audit/` (`internal_control/`), `integration/` (single-entity).
+The module landing `dashboard.html` stays at the `templates/accounting/` root. A view renders e.g.
+`"accounting/ledger/journal_entry/list.html"`, `"accounting/tax/code/list.html"`.
 Extend `base.html`, design-system classes only (`.card/.btn/.badge badge-green|red|amber|info|muted|slate/.stat-card/.detail-grid/.form-grid/.filter-bar/.table-actions/.empty-state`). Lists: GET filter-bar reflecting `request.GET` + Actions column + `{% include "partials/pagination.html" %}`. Context contract (from `core.crud`): list → `object_list`/`page_obj`/`q`; detail/edit → `obj`; forms → `form`/`is_edit` (+ `formset` for JE/Invoice/Bill). `dashboard.html` uses `json_script` + Chart.js (mirror `crm/overview.html`). Admin-gated action buttons are wrapped `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 
 ## Seeder
