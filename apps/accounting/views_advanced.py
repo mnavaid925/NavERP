@@ -82,7 +82,7 @@ def _post_journal_entry(tenant, user, description, legs, *, reference="", entry_
 def fixed_asset_list(request):
     return crud_list(
         request, FixedAsset.objects.filter(tenant=request.tenant).select_related("location"),
-        "accounting/assets/fixed_asset_list.html",
+        "accounting/assets/fixed_asset/list.html",
         search_fields=["number", "name", "category"],
         filters=[("status", "status", False), ("method", "method", False)],
         extra_context={"status_choices": FixedAsset.STATUS_CHOICES, "method_choices": FixedAsset.METHOD_CHOICES},
@@ -91,7 +91,7 @@ def fixed_asset_list(request):
 
 @login_required
 def fixed_asset_create(request):
-    return crud_create(request, form_class=FixedAssetForm, template="accounting/assets/fixed_asset_form.html",
+    return crud_create(request, form_class=FixedAssetForm, template="accounting/assets/fixed_asset/form.html",
                        success_url="accounting:fixed_asset_list")
 
 
@@ -101,7 +101,7 @@ def fixed_asset_detail(request, pk):
         FixedAsset.objects.select_related("custodian", "location", "asset_account",
                                           "accumulated_account", "expense_account"),
         pk=pk, tenant=request.tenant)
-    return render(request, "accounting/assets/fixed_asset_detail.html", {
+    return render(request, "accounting/assets/fixed_asset/detail.html", {
         "obj": obj,
         "book_value": obj.book_value(),
         "next_depreciation": obj.period_depreciation(),
@@ -112,7 +112,7 @@ def fixed_asset_detail(request, pk):
 @login_required
 def fixed_asset_edit(request, pk):
     return crud_edit(request, model=FixedAsset, pk=pk, form_class=FixedAssetForm,
-                     template="accounting/assets/fixed_asset_form.html", success_url="accounting:fixed_asset_list")
+                     template="accounting/assets/fixed_asset/form.html", success_url="accounting:fixed_asset_list")
 
 
 @login_required
@@ -167,7 +167,7 @@ def fixed_asset_depreciate(request, pk):
 def asset_disposal_list(request):
     return crud_list(
         request, AssetDisposal.objects.filter(tenant=request.tenant).select_related("asset"),
-        "accounting/assets/asset_disposal_list.html",
+        "accounting/assets/asset_disposal/list.html",
         search_fields=["number", "asset__name"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": AssetDisposal.STATUS_CHOICES},
@@ -176,7 +176,7 @@ def asset_disposal_list(request):
 
 @login_required
 def asset_disposal_create(request):
-    return crud_create(request, form_class=AssetDisposalForm, template="accounting/assets/asset_disposal_form.html",
+    return crud_create(request, form_class=AssetDisposalForm, template="accounting/assets/asset_disposal/form.html",
                        success_url="accounting:asset_disposal_list")
 
 
@@ -184,7 +184,7 @@ def asset_disposal_create(request):
 def asset_disposal_detail(request, pk):
     obj = get_object_or_404(AssetDisposal.objects.select_related("asset", "journal_entry"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "accounting/assets/asset_disposal_detail.html", {
+    return render(request, "accounting/assets/asset_disposal/detail.html", {
         "obj": obj, "computed_gain_loss": obj.computed_gain_loss() if obj.status == "draft" else obj.gain_loss,
     })
 
@@ -196,7 +196,7 @@ def asset_disposal_edit(request, pk):
         messages.error(request, "A posted disposal cannot be edited.")
         return redirect("accounting:asset_disposal_detail", pk=pk)
     return crud_edit(request, model=AssetDisposal, pk=pk, form_class=AssetDisposalForm,
-                     template="accounting/assets/asset_disposal_form.html", success_url="accounting:asset_disposal_list")
+                     template="accounting/assets/asset_disposal/form.html", success_url="accounting:asset_disposal_list")
 
 
 @login_required
@@ -261,7 +261,7 @@ def cost_allocation_list(request):
     return crud_list(
         request, CostAllocation.objects.filter(tenant=request.tenant)
         .select_related("source_account", "target_account", "target_org_unit"),
-        "accounting/costing/cost_allocation_list.html",
+        "accounting/costing/cost_allocation/list.html",
         search_fields=["number", "description"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": CostAllocation.STATUS_CHOICES},
@@ -270,7 +270,7 @@ def cost_allocation_list(request):
 
 @login_required
 def cost_allocation_create(request):
-    return crud_create(request, form_class=CostAllocationForm, template="accounting/costing/cost_allocation_form.html",
+    return crud_create(request, form_class=CostAllocationForm, template="accounting/costing/cost_allocation/form.html",
                        success_url="accounting:cost_allocation_list")
 
 
@@ -279,7 +279,7 @@ def cost_allocation_detail(request, pk):
     obj = get_object_or_404(
         CostAllocation.objects.select_related("source_account", "target_account", "target_org_unit", "journal_entry"),
         pk=pk, tenant=request.tenant)
-    return render(request, "accounting/costing/cost_allocation_detail.html", {"obj": obj})
+    return render(request, "accounting/costing/cost_allocation/detail.html", {"obj": obj})
 
 
 @login_required
@@ -289,7 +289,7 @@ def cost_allocation_edit(request, pk):
         messages.error(request, "A posted allocation cannot be edited.")
         return redirect("accounting:cost_allocation_detail", pk=pk)
     return crud_edit(request, model=CostAllocation, pk=pk, form_class=CostAllocationForm,
-                     template="accounting/costing/cost_allocation_form.html", success_url="accounting:cost_allocation_list")
+                     template="accounting/costing/cost_allocation/form.html", success_url="accounting:cost_allocation_list")
 
 
 @login_required
@@ -334,7 +334,7 @@ def cost_allocation_post(request, pk):
 def payroll_run_list(request):
     return crud_list(
         request, PayrollRun.objects.filter(tenant=request.tenant),
-        "accounting/payroll/run_list.html",
+        "accounting/payroll/run/list.html",
         search_fields=["number"],
         filters=[("status", "status", False)],
         extra_context={"status_choices": PayrollRun.STATUS_CHOICES},
@@ -343,14 +343,14 @@ def payroll_run_list(request):
 
 @login_required
 def payroll_run_create(request):
-    return crud_create(request, form_class=PayrollRunForm, template="accounting/payroll/run_form.html",
+    return crud_create(request, form_class=PayrollRunForm, template="accounting/payroll/run/form.html",
                        success_url="accounting:payroll_run_list")
 
 
 @login_required
 def payroll_run_detail(request, pk):
     obj = get_object_or_404(PayrollRun.objects.select_related("journal_entry"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/payroll/run_detail.html", {"obj": obj})
+    return render(request, "accounting/payroll/run/detail.html", {"obj": obj})
 
 
 @login_required
@@ -360,7 +360,7 @@ def payroll_run_edit(request, pk):
         messages.error(request, "A posted payroll run cannot be edited.")
         return redirect("accounting:payroll_run_detail", pk=pk)
     return crud_edit(request, model=PayrollRun, pk=pk, form_class=PayrollRunForm,
-                     template="accounting/payroll/run_form.html", success_url="accounting:payroll_run_list")
+                     template="accounting/payroll/run/form.html", success_url="accounting:payroll_run_list")
 
 
 @login_required
@@ -413,7 +413,7 @@ def payroll_run_post(request, pk):
 def project_list(request):
     return crud_list(
         request, Project.objects.filter(tenant=request.tenant).select_related("client", "org_unit"),
-        "accounting/projects/project_list.html",
+        "accounting/projects/project/list.html",
         search_fields=["number", "name"],
         filters=[("status", "status", False), ("billing_method", "billing_method", False)],
         extra_context={"status_choices": Project.STATUS_CHOICES, "billing_choices": Project.BILLING_CHOICES},
@@ -422,7 +422,7 @@ def project_list(request):
 
 @login_required
 def project_create(request):
-    return crud_create(request, form_class=ProjectForm, template="accounting/projects/project_form.html",
+    return crud_create(request, form_class=ProjectForm, template="accounting/projects/project/form.html",
                        success_url="accounting:project_list")
 
 
@@ -433,7 +433,7 @@ def project_detail(request, pk):
     sums = {r["kind"]: r["total"] or ZERO
             for r in obj.cost_entries.filter(status="posted").values("kind").annotate(total=Sum("amount"))}
     actual_cost, actual_revenue = sums.get("cost", ZERO), sums.get("revenue", ZERO)
-    return render(request, "accounting/projects/project_detail.html", {
+    return render(request, "accounting/projects/project/detail.html", {
         "obj": obj,
         "cost_entries": obj.cost_entries.all()[:20],
         "actual_cost": actual_cost, "actual_revenue": actual_revenue,
@@ -445,7 +445,7 @@ def project_detail(request, pk):
 @login_required
 def project_edit(request, pk):
     return crud_edit(request, model=Project, pk=pk, form_class=ProjectForm,
-                     template="accounting/projects/project_form.html", success_url="accounting:project_list")
+                     template="accounting/projects/project/form.html", success_url="accounting:project_list")
 
 
 @login_required
@@ -459,7 +459,7 @@ def project_delete(request, pk):
 def job_cost_entry_list(request):
     return crud_list(
         request, JobCostEntry.objects.filter(tenant=request.tenant).select_related("project", "gl_account"),
-        "accounting/projects/job_cost_entry_list.html",
+        "accounting/projects/job_cost_entry/list.html",
         search_fields=["number", "description", "project__name"],
         filters=[("status", "status", False), ("kind", "kind", False), ("project", "project_id", True)],
         extra_context={"status_choices": JobCostEntry.STATUS_CHOICES, "kind_choices": JobCostEntry.KIND_CHOICES,
@@ -469,7 +469,7 @@ def job_cost_entry_list(request):
 
 @login_required
 def job_cost_entry_create(request):
-    return crud_create(request, form_class=JobCostEntryForm, template="accounting/projects/job_cost_entry_form.html",
+    return crud_create(request, form_class=JobCostEntryForm, template="accounting/projects/job_cost_entry/form.html",
                        success_url="accounting:job_cost_entry_list")
 
 
@@ -477,7 +477,7 @@ def job_cost_entry_create(request):
 def job_cost_entry_detail(request, pk):
     obj = get_object_or_404(JobCostEntry.objects.select_related("project", "gl_account", "journal_entry"),
                             pk=pk, tenant=request.tenant)
-    return render(request, "accounting/projects/job_cost_entry_detail.html", {"obj": obj})
+    return render(request, "accounting/projects/job_cost_entry/detail.html", {"obj": obj})
 
 
 @login_required
@@ -487,7 +487,7 @@ def job_cost_entry_edit(request, pk):
         messages.error(request, "A posted cost entry cannot be edited.")
         return redirect("accounting:job_cost_entry_detail", pk=pk)
     return crud_edit(request, model=JobCostEntry, pk=pk, form_class=JobCostEntryForm,
-                     template="accounting/projects/job_cost_entry_form.html", success_url="accounting:job_cost_entry_list")
+                     template="accounting/projects/job_cost_entry/form.html", success_url="accounting:job_cost_entry_list")
 
 
 @login_required
@@ -631,7 +631,7 @@ def intercompany_toggle_eliminated(request, pk):
 def tax_code_list(request):
     return crud_list(
         request, TaxCode.objects.filter(tenant=request.tenant),
-        "accounting/tax/code_list.html",
+        "accounting/tax/code/list.html",
         search_fields=["name", "jurisdiction"],
         filters=[("tax_type", "tax_type", False), ("is_active", "is_active", False)],
         extra_context={"tax_type_choices": TaxCode.TAX_TYPE_CHOICES},
@@ -640,20 +640,20 @@ def tax_code_list(request):
 
 @login_required
 def tax_code_create(request):
-    return crud_create(request, form_class=TaxCodeForm, template="accounting/tax/code_form.html",
+    return crud_create(request, form_class=TaxCodeForm, template="accounting/tax/code/form.html",
                        success_url="accounting:tax_code_list")
 
 
 @login_required
 def tax_code_detail(request, pk):
     obj = get_object_or_404(TaxCode.objects.select_related("payable_account"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/tax/code_detail.html", {"obj": obj, "returns": obj.returns.all()[:5]})
+    return render(request, "accounting/tax/code/detail.html", {"obj": obj, "returns": obj.returns.all()[:5]})
 
 
 @login_required
 def tax_code_edit(request, pk):
     return crud_edit(request, model=TaxCode, pk=pk, form_class=TaxCodeForm,
-                     template="accounting/tax/code_form.html", success_url="accounting:tax_code_list")
+                     template="accounting/tax/code/form.html", success_url="accounting:tax_code_list")
 
 
 @login_required
@@ -666,7 +666,7 @@ def tax_code_delete(request, pk):
 def tax_return_list(request):
     return crud_list(
         request, TaxReturn.objects.filter(tenant=request.tenant).select_related("tax_code"),
-        "accounting/tax/return_list.html",
+        "accounting/tax/return/list.html",
         search_fields=["number", "tax_code__name"],
         filters=[("status", "status", False), ("tax_code", "tax_code_id", True)],
         extra_context={"status_choices": TaxReturn.STATUS_CHOICES,
@@ -676,20 +676,20 @@ def tax_return_list(request):
 
 @login_required
 def tax_return_create(request):
-    return crud_create(request, form_class=TaxReturnForm, template="accounting/tax/return_form.html",
+    return crud_create(request, form_class=TaxReturnForm, template="accounting/tax/return/form.html",
                        success_url="accounting:tax_return_list")
 
 
 @login_required
 def tax_return_detail(request, pk):
     obj = get_object_or_404(TaxReturn.objects.select_related("tax_code"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/tax/return_detail.html", {"obj": obj})
+    return render(request, "accounting/tax/return/detail.html", {"obj": obj})
 
 
 @tenant_admin_required
 def tax_return_edit(request, pk):
     return crud_edit(request, model=TaxReturn, pk=pk, form_class=TaxReturnForm,
-                     template="accounting/tax/return_form.html", success_url="accounting:tax_return_list")
+                     template="accounting/tax/return/form.html", success_url="accounting:tax_return_list")
 
 
 @tenant_admin_required
@@ -759,7 +759,7 @@ def profit_and_loss(request):
 def scheduled_report_list(request):
     return crud_list(
         request, ScheduledReport.objects.filter(tenant=request.tenant),
-        "accounting/reports/scheduled_report_list.html",
+        "accounting/reports/scheduled_report/list.html",
         search_fields=["name"],
         filters=[("report_type", "report_type", False), ("frequency", "frequency", False),
                  ("is_active", "is_active", False)],
@@ -770,20 +770,20 @@ def scheduled_report_list(request):
 
 @login_required
 def scheduled_report_create(request):
-    return crud_create(request, form_class=ScheduledReportForm, template="accounting/reports/scheduled_report_form.html",
+    return crud_create(request, form_class=ScheduledReportForm, template="accounting/reports/scheduled_report/form.html",
                        success_url="accounting:scheduled_report_list")
 
 
 @login_required
 def scheduled_report_detail(request, pk):
     obj = get_object_or_404(ScheduledReport, pk=pk, tenant=request.tenant)
-    return render(request, "accounting/reports/scheduled_report_detail.html", {"obj": obj})
+    return render(request, "accounting/reports/scheduled_report/detail.html", {"obj": obj})
 
 
 @login_required
 def scheduled_report_edit(request, pk):
     return crud_edit(request, model=ScheduledReport, pk=pk, form_class=ScheduledReportForm,
-                     template="accounting/reports/scheduled_report_form.html", success_url="accounting:scheduled_report_list")
+                     template="accounting/reports/scheduled_report/form.html", success_url="accounting:scheduled_report_list")
 
 
 @login_required
@@ -852,7 +852,7 @@ def budget_line_create(request):
             return redirect("accounting:budget_detail", pk=obj.budget_id)
     else:
         form = BudgetLineForm(tenant=request.tenant, initial=initial)
-    return render(request, "accounting/budget/line_form.html", {"form": form, "is_edit": False})
+    return render(request, "accounting/budget/line/form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -867,7 +867,7 @@ def budget_line_edit(request, pk):
             return redirect("accounting:budget_detail", pk=obj.budget_id)
     else:
         form = BudgetLineForm(instance=line, tenant=request.tenant)
-    return render(request, "accounting/budget/line_form.html", {"form": form, "obj": line, "is_edit": True})
+    return render(request, "accounting/budget/line/form.html", {"form": form, "obj": line, "is_edit": True})
 
 
 @login_required
@@ -914,7 +914,7 @@ def budget_variance(request):
 def internal_control_list(request):
     return crud_list(
         request, InternalControl.objects.filter(tenant=request.tenant),
-        "accounting/audit/internal_control_list.html",
+        "accounting/audit/internal_control/list.html",
         search_fields=["code", "name"],
         filters=[("control_type", "control_type", False), ("risk_level", "risk_level", False),
                  ("status", "status", False), ("last_result", "last_result", False)],
@@ -927,20 +927,20 @@ def internal_control_list(request):
 
 @login_required
 def internal_control_create(request):
-    return crud_create(request, form_class=InternalControlForm, template="accounting/audit/internal_control_form.html",
+    return crud_create(request, form_class=InternalControlForm, template="accounting/audit/internal_control/form.html",
                        success_url="accounting:internal_control_list")
 
 
 @login_required
 def internal_control_detail(request, pk):
     obj = get_object_or_404(InternalControl.objects.select_related("owner"), pk=pk, tenant=request.tenant)
-    return render(request, "accounting/audit/internal_control_detail.html", {"obj": obj})
+    return render(request, "accounting/audit/internal_control/detail.html", {"obj": obj})
 
 
 @login_required
 def internal_control_edit(request, pk):
     return crud_edit(request, model=InternalControl, pk=pk, form_class=InternalControlForm,
-                     template="accounting/audit/internal_control_form.html", success_url="accounting:internal_control_list")
+                     template="accounting/audit/internal_control/form.html", success_url="accounting:internal_control_list")
 
 
 @login_required
