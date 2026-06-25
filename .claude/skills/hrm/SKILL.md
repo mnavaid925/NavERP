@@ -116,22 +116,23 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   (else withdraw), only `draft`/`pending_approval` editable; clearance line editable/deletable only while
   `pending`/`in_progress`; settlement editable in `draft`/`computed`, deletable only in `draft`.
 
-## Templates (`templates/hrm/<submodule>/`)
-63 files, **one folder per sub-module** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — `list/detail/
-form`), `designation/` (3.2), `onboarding/` (3.3 — `template_*`, `templatetask_*`, `program_*` [the rich
-multi-section hub], `task_*`, `document_*` [`document_form` is multipart], `assetallocation_*`,
-`orientationsession_*`), **`offboarding/` (3.4 — `separationcase_list/form/detail` [the hub], `exitinterview_*`,
-`clearanceitem_*`, `finalsettlement_*`, plus the two standalone print pages `relieving_letter.html` /
-`experience_letter.html` which do NOT extend base.html)**, `attendance/` (3.9 — `shift_*`, `shiftassignment_*`,
-`record_*`), `leave/` (3.10 — `type_*`, `allocation_*`, `request_*`), `holiday/` (3.12 — `publicholiday_*`). The
-landing `hrm_overview.html` stays at the `templates/hrm/` root. A view renders e.g. `"hrm/onboarding/document_list.html"`,
-`"hrm/leave/request_list.html"`, `"hrm/attendance/record_list.html"`. Extend
-`base.html`, use the design-system classes
+## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
+63 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — single-entity, so `employee/list.html` etc.),
+`designation/` (3.2 — `designation/list.html`), `onboarding/` (3.3 — entity folders `template/ templatetask/
+program/` [the rich multi-section hub] `task/ document/` [`document/form.html` is multipart] `assetallocation/
+orientationsession/`), **`offboarding/` (3.4 — entity folders `separationcase/` [the hub], `exitinterview/
+clearanceitem/ finalsettlement/`, plus the two standalone print pages `offboarding/relieving_letter.html` /
+`offboarding/experience_letter.html` which stay at the sub-module level and do NOT extend base.html)**,
+`attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
+`holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
+renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
+`"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
 selects pre-filled from `request.GET`; FK filters compare `obj.pk|stringformat:"d"`; boolean filters use
 `"True"/"False"`; badges use exact model choice values with `{{ obj.get_<field>_display }}` fallback; every list
 has an Actions column (view/edit/delete-POST+csrf+confirm). **Never render raw `bank_account` — use
-`masked_bank_account`.** `employee_form.html` (photo) and `offboarding/separationcase_form.html` (resignation
+`masked_bank_account`.** `employee/form.html` (photo) and `offboarding/separationcase/form.html` (resignation
 letter) are `multipart/form-data`. Right-align numeric cells with the `.text-right` utility.
 
 ## Forms (`apps/hrm/forms.py`)
@@ -190,7 +191,7 @@ HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `
 
 ## Common tasks
 - **Add a field to a model:** edit `models.py` → add to the relevant `forms.py` `fields` (unless computed) → render
-  in `_detail.html`/`_form.html` → `makemigrations hrm` + `migrate` → extend `seed_hrm` if useful → add a test.
+  in the entity's `detail.html`/`form.html` → `makemigrations hrm` + `migrate` → extend `seed_hrm` if useful → add a test.
 - **Add a new model + CRUD:** model (inherit `TenantOwned`/`TenantNumbered`) → form → 5 views via `crud_*` helpers
   → 5 url names → admin → 3 templates → `LIVE_LINKS` entry → seeder → tests.
 - **Add a workflow/status action** (mirror onboarding's activate/complete or leave submit/approve): write a
