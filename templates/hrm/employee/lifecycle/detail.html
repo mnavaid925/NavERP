@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_event_type_display }} · {{ obj.employee.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employee_list' %}">Employees</a><span class="sep">›</span><a href="{% url 'hrm:employee_detail' obj.employee_id %}">{{ obj.employee.party.name }}</a><span class="sep">›</span><a href="{% url 'hrm:employee_lifecycle_list' %}">Lifecycle</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:employee_lifecycle_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:employee_lifecycle_delete' obj.pk %}" onsubmit="return confirm('Delete this lifecycle event?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Event</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:employee_detail' obj.employee_id %}">{{ obj.employee.party.name }}</a></dd></div>
+        <div class="detail-item"><dt>Event Type</dt><dd><span class="badge badge-{% if obj.event_type == 'hire' %}green{% elif obj.event_type == 'promotion' %}info{% elif obj.event_type == 'demotion' %}red{% elif obj.event_type == 'separation' %}slate{% elif obj.event_type == 'salary_revision' %}amber{% else %}muted{% endif %}">{{ obj.get_event_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Effective Date</dt><dd>{{ obj.effective_date }}</dd></div>
+        <div class="detail-item"><dt>Reason</dt><dd>{{ obj.reason|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Initiated By</dt><dd>{% if obj.initiated_by %}{{ obj.initiated_by.get_full_name|default:obj.initiated_by.username }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"Y-m-d H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Change Details</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        {% if obj.from_designation or obj.to_designation %}<div class="detail-item"><dt>Designation</dt><dd>{{ obj.from_designation.name|default:"—" }} → {{ obj.to_designation.name|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_department or obj.to_department %}<div class="detail-item"><dt>Department</dt><dd>{{ obj.from_department.name|default:"—" }} → {{ obj.to_department.name|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_location or obj.to_location %}<div class="detail-item"><dt>Location</dt><dd>{{ obj.from_location|default:"—" }} → {{ obj.to_location|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_job_title or obj.to_job_title %}<div class="detail-item"><dt>Job Title</dt><dd>{{ obj.from_job_title|default:"—" }} → {{ obj.to_job_title|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_salary or obj.to_salary %}<div class="detail-item"><dt>Salary</dt><dd class="text-right">{{ obj.from_salary|default:"—" }} → {{ obj.to_salary|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_manager or obj.to_manager %}<div class="detail-item"><dt>Manager</dt><dd>{{ obj.from_manager.party.name|default:"—" }} → {{ obj.to_manager.party.name|default:"—" }}</dd></div>{% endif %}
+        {% if obj.from_employee_type or obj.to_employee_type %}<div class="detail-item"><dt>Employee Type</dt><dd>{{ obj.from_employee_type|default:"—" }} → {{ obj.to_employee_type|default:"—" }}</dd></div>{% endif %}
+      </dl>
+      {% if not obj.from_designation and not obj.to_designation and not obj.from_department and not obj.to_department and not obj.from_location and not obj.to_location and not obj.from_job_title and not obj.to_job_title and not obj.from_salary and not obj.to_salary and not obj.from_manager and not obj.to_manager and not obj.from_employee_type and not obj.to_employee_type %}
+        <div class="empty-state"><p>No from→to changes recorded for this event.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:employee_detail' obj.employee_id %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to employee</a>
+{% endblock %}
