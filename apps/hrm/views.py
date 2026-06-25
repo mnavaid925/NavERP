@@ -165,13 +165,13 @@ def designation_create(request):
 @login_required
 def designation_detail(request, pk):
     obj = get_object_or_404(
-        Designation.objects.select_related("department", "job_grade"), pk=pk, tenant=request.tenant)
-    employee_count = EmployeeProfile.objects.filter(tenant=request.tenant, designation=obj).count()
+        Designation.objects.select_related("department", "job_grade")
+        .annotate(employee_count=Count("employees")), pk=pk, tenant=request.tenant)
     return render(request, "hrm/organization/designation/detail.html", {
         "obj": obj,
         "employees": EmployeeProfile.objects.filter(tenant=request.tenant, designation=obj)
         .select_related("party")[:50],
-        "employee_count": employee_count,
+        "employee_count": obj.employee_count,
     })
 
 
@@ -219,12 +219,14 @@ def jobgrade_create(request):
 
 @login_required
 def jobgrade_detail(request, pk):
-    obj = get_object_or_404(JobGrade, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        JobGrade.objects.annotate(designation_count=Count("designations")),
+        pk=pk, tenant=request.tenant)
     return render(request, "hrm/organization/jobgrade/detail.html", {
         "obj": obj,
         "designations": Designation.objects.filter(tenant=request.tenant, job_grade=obj)
         .select_related("department")[:50],
-        "designation_count": Designation.objects.filter(tenant=request.tenant, job_grade=obj).count(),
+        "designation_count": obj.designation_count,
     })
 
 
@@ -339,7 +341,8 @@ def costcenter_detail(request, pk):
     return render(request, "hrm/organization/costcenter/detail.html", {
         "obj": obj,
         "mapped_departments": DepartmentProfile.objects.filter(
-            tenant=request.tenant, cost_center=obj.org_unit).select_related("org_unit")[:50],
+            tenant=request.tenant, cost_center=obj.org_unit)
+        .select_related("org_unit", "head__party")[:50],
     })
 
 
@@ -371,14 +374,18 @@ def org_chart(request):
     (single-parent chain) and ``OrgUnit`` — no model. ``?view=reporting|department`` toggles mode."""
     tenant = request.tenant
     view_mode = "department" if request.GET.get("view") == "department" else "reporting"
-    tree_nodes, dept_groups, total = [], [], 0
+    CAP = 500  # an org chart loads ALL employees (no pagination); guard against a runaway tenant.
+    tree_nodes, dept_groups, total, capped = [], [], 0, False
     if tenant is not None:
         employees = list(
             EmployeeProfile.objects.filter(tenant=tenant)
             .exclude(employment__status="terminated")  # keep active/on-leave/unassigned, drop exited
             .select_related("party", "employment", "employment__org_unit", "employment__manager",
                             "designation", "designation__job_grade")
-            .order_by("party__name"))
+            .order_by("party__name")[:CAP + 1])
+        capped = len(employees) > CAP
+        if capped:
+            employees = employees[:CAP]
         total = len(employees)
         # Map a manager Party -> the EmployeeProfile rows that report to it.
         by_party = {e.party_id: e for e in employees}
@@ -419,6 +426,8 @@ def org_chart(request):
         "dept_groups": dept_groups,
         "view_mode": view_mode,
         "total": total,
+        "capped": capped,
+        "cap": CAP,
     })
 
 
