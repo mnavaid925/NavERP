@@ -271,6 +271,8 @@ LIVE_LINKS = {
         "Employee Directory": "hrm:employee_list",       # bullet
         "Employee Profile": "hrm:employee_list",         # bullet (rich profile = detail page)
         "Employment Details": "hrm:employee_list",        # bullet (job/dept/manager on the profile)
+        "Document Management": "hrm:employee_document_list",   # bullet (personnel-file vault)
+        "Employee Lifecycle": "hrm:employee_lifecycle_list",  # bullet (dated job-history timeline)
         "HRM Overview": "hrm:hrm_overview",               # extra (module landing/dashboard)
     },
     # 3.2 Organizational Structure — rebuilt with the full entity set. Departments/cost-centers are
