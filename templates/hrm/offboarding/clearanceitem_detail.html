@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Clearance — {{ obj.description }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.description }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:clearanceitem_list' %}">Clearance</a><span class="sep">›</span><span>{{ obj.get_department_display }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'pending' or obj.status == 'in_progress' %}
+        <form method="post" action="{% url 'hrm:clearanceitem_mark_cleared' obj.pk %}" onsubmit="return confirm('Mark this item cleared?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Mark Cleared</button></form>
+        <form method="post" action="{% url 'hrm:clearanceitem_mark_na' obj.pk %}" onsubmit="return confirm('Mark this item not applicable?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="minus-circle"></i> N/A</button></form>
+        <a href="{% url 'hrm:clearanceitem_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.status != 'cleared' %}
+        <form method="post" action="{% url 'hrm:clearanceitem_reject' obj.pk %}" onsubmit="return confirm('Reject this clearance item?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Reject</button></form>
+      {% endif %}
+      {% if obj.status == 'pending' %}
+        <form method="post" action="{% url 'hrm:clearanceitem_delete' obj.pk %}" onsubmit="return confirm('Delete this clearance item?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Case</dt><dd><a href="{% url 'hrm:separationcase_detail' obj.case_id %}">{{ obj.case.number }}</a> — {{ obj.case.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Department</dt><dd><span class="badge badge-info">{{ obj.department_display }}</span></dd></div>
+      <div class="detail-item"><dt>Task</dt><dd>{{ obj.description }}</dd></div>
+      <div class="detail-item"><dt>Mandatory</dt><dd>{% if obj.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'pending' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'cleared' %}green{% elif obj.status == 'not_applicable' %}muted{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Assigned To</dt><dd>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Due Date</dt><dd>{{ obj.due_date|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Linked Asset</dt><dd>{% if obj.asset_allocation %}<a href="{% url 'hrm:assetallocation_detail' obj.asset_allocation_id %}">{{ obj.asset_allocation.number }} · {{ obj.asset_allocation.asset_name }}</a> <span class="badge badge-muted">{{ obj.asset_allocation.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Cleared By</dt><dd>{% if obj.cleared_by %}{{ obj.cleared_by.get_full_name|default:obj.cleared_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Cleared At</dt><dd>{{ obj.cleared_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:separationcase_detail' obj.case_id %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to case</a>
+{% endblock %}
