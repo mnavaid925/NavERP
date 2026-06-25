@@ -837,8 +837,9 @@ class OrientationSession(TenantOwned):
 # table). F&F GL posting stays with ``accounting.PayrollRun`` (``gl_posted`` is a stub).
 # ---------------------------------------------------------------------------
 
-# 1–5 Likert bound, reused across the exit-interview rating fields.
-_RATING_VALIDATORS = [MinValueValidator(1), MaxValueValidator(5)]
+# 1–5 Likert bound, reused across the exit-interview rating fields. A tuple so an accidental
+# append in a test/migration can't leak an extra validator onto all eight fields.
+_RATING_VALIDATORS = (MinValueValidator(1), MaxValueValidator(5))
 
 
 class SeparationCase(TenantNumbered):
@@ -931,11 +932,16 @@ class SeparationCase(TenantNumbered):
                     .exclude(status__in=("cleared", "not_applicable")).exists())
 
     def save(self, *args, **kwargs):
-        # Expected LWD is always derived from the notice window — never hand-edited.
+        # Expected LWD is always derived from the notice window — never hand-edited. Workflow actions
+        # save with an explicit ``update_fields`` list; make sure the recomputed value is persisted
+        # (and not silently dropped) by adding the column to that list when it isn't already there.
         if self.notice_start_date and self.notice_period_days:
             self.expected_last_working_day = self.notice_start_date + timedelta(days=self.notice_period_days)
         else:
             self.expected_last_working_day = None
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "expected_last_working_day" not in update_fields:
+            kwargs["update_fields"] = list(update_fields) + ["expected_last_working_day"]
         return super().save(*args, **kwargs)
 
     def __str__(self):
