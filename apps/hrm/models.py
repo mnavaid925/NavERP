@@ -16,11 +16,12 @@ recomputed in ``save()`` from their dates/times, never hand-edited on the form.
 Payroll/GL posting is **owned by ``accounting.PayrollRun`` (PRUN-…)** — HRM does NOT duplicate
 it. The HRM payroll/payslip layer (FKing into ``accounting.PayrollRun``) is a later pass.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import IntegrityError, models, transaction
 from django.db.models import Sum
 
@@ -827,3 +828,322 @@ class OrientationSession(TenantOwned):
 
     def __str__(self):
         return f"{self.title} @ {self.scheduled_at:%Y-%m-%d %H:%M}" if self.scheduled_at else self.title
+
+
+# ---------------------------------------------------------------------------
+# 3.4 Employee Offboarding — SeparationCase → ExitInterview / ClearanceItem /
+# FinalSettlement. Everything FKs ``EmployeeProfile`` (the anchor) and reuses the
+# existing ``AssetAllocation`` for asset-return clearance lines (no duplicate asset
+# table). F&F GL posting stays with ``accounting.PayrollRun`` (``gl_posted`` is a stub).
+# ---------------------------------------------------------------------------
+
+# 1–5 Likert bound, reused across the exit-interview rating fields.
+_RATING_VALIDATORS = [MinValueValidator(1), MaxValueValidator(5)]
+
+
+class SeparationCase(TenantNumbered):
+    """The master offboarding record (3.4) — one per departure event. Drives the
+    resignation → approval → clearance → settlement → completion lifecycle.
+    ``expected_last_working_day`` is derived in ``save()`` (notice_start_date + notice_period_days);
+    ``all_mandatory_cleared`` gates the F&F release. The relieving/experience letters are generated
+    from this record's fields (no separate table) and only stamp the generated-at timestamp."""
+
+    NUMBER_PREFIX = "SEP"
+
+    SEPARATION_TYPE_CHOICES = [
+        ("resignation", "Resignation"),
+        ("termination", "Termination"),
+        ("layoff", "Layoff"),
+        ("retirement", "Retirement"),
+        ("contract_end", "End of Contract"),
+        ("deceased", "Deceased"),
+    ]
+    EXIT_REASON_CHOICES = [
+        ("better_opportunity", "Better Opportunity"),
+        ("compensation", "Compensation"),
+        ("career_growth", "Career Growth"),
+        ("relocation", "Relocation"),
+        ("health", "Health"),
+        ("personal", "Personal"),
+        ("retirement", "Retirement"),
+        ("performance", "Performance"),
+        ("policy_violation", "Policy Violation"),
+        ("other", "Other"),
+    ]
+    NOTICE_BUYOUT_CHOICES = [
+        ("none", "None"),
+        ("pay_in_lieu", "Pay in Lieu of Notice"),
+        ("recover", "Recover Shortfall"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_approval", "Pending Approval"),
+        ("approved", "Approved"),
+        ("in_clearance", "In Clearance"),
+        ("cleared", "Cleared"),
+        ("settled", "Settled"),
+        ("completed", "Completed"),
+        ("rejected", "Rejected"),
+        ("withdrawn", "Withdrawn"),
+    ]
+    # Statuses at which the relieving/experience letters may be generated (clearance done).
+    LETTER_READY_STATUSES = ("cleared", "settled", "completed")
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="separation_cases")
+    separation_type = models.CharField(max_length=20, choices=SEPARATION_TYPE_CHOICES, default="resignation")
+    exit_reason = models.CharField(max_length=30, choices=EXIT_REASON_CHOICES, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    resignation_letter = models.FileField(upload_to="hrm/offboarding/letters/%Y/%m/", null=True, blank=True)
+    notice_period_days = models.PositiveIntegerField(default=30)
+    notice_start_date = models.DateField(null=True, blank=True, help_text="Day 1 of the notice period (usually the resignation date).")
+    # Derived in save() — never hand-edited.
+    expected_last_working_day = models.DateField(null=True, blank=True, editable=False)
+    actual_last_working_day = models.DateField(null=True, blank=True, help_text="HR-confirmed last working day.")
+    notice_buyout_type = models.CharField(max_length=20, choices=NOTICE_BUYOUT_CHOICES, default="none")
+    requires_kt = models.BooleanField(default=True, help_text="Adds a Knowledge-Transfer clearance line on approval.")
+    # Workflow-owned (set only by the audited workflow actions, never on the form).
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft", editable=False)
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_approved_separations", editable=False)
+    approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    rejection_reason = models.TextField(blank=True)
+    withdrawal_reason = models.TextField(blank=True)
+    relieving_letter_generated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    relieving_letter_generated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_relieving_letters_generated", editable=False)
+    experience_letter_generated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    experience_letter_generated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_experience_letters_generated", editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_sep_tenant_status_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_sep_tenant_emp_idx"),
+            models.Index(fields=["tenant", "separation_type"], name="hrm_sep_tenant_type_idx"),
+        ]
+
+    @property
+    def all_mandatory_cleared(self):
+        """True when every *mandatory* clearance line is cleared/NA — the gate for marking the case
+        cleared and generating letters. A case with no mandatory lines reads as cleared (nothing
+        blocks)."""
+        return not (self.clearance_items.filter(is_mandatory=True)
+                    .exclude(status__in=("cleared", "not_applicable")).exists())
+
+    def save(self, *args, **kwargs):
+        # Expected LWD is always derived from the notice window — never hand-edited.
+        if self.notice_start_date and self.notice_period_days:
+            self.expected_last_working_day = self.notice_start_date + timedelta(days=self.notice_period_days)
+        else:
+            self.expected_last_working_day = None
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        name = self.employee.name if self.employee_id else "—"
+        return f"{self.number} · {name} ({self.get_status_display()})"
+
+
+class ExitInterview(TenantNumbered):
+    """A structured exit interview tied to a ``SeparationCase`` (3.4). One per case (form-guarded —
+    not a DB constraint, so a skipped/no-show one can be superseded). Eight 1–5 Likert ratings + a
+    coded ``primary_reason`` feed attrition insight. ``status``/``conducted_at`` are workflow-owned
+    (set by the complete/skip actions, never on the form)."""
+
+    NUMBER_PREFIX = "EI"
+
+    MODE_CHOICES = [
+        ("in_person", "In Person"),
+        ("video", "Video Call"),
+        ("phone", "Phone"),
+        ("form", "Self-Service Form"),
+    ]
+    EI_STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("completed", "Completed"),
+        ("skipped", "Skipped"),
+        ("no_show", "No Show"),
+    ]
+    # (field, label) pairs — drives the form fieldset and the detail rating display.
+    RATING_FIELDS = [
+        ("rating_job_satisfaction", "Job Satisfaction"),
+        ("rating_management", "Management"),
+        ("rating_compensation", "Compensation"),
+        ("rating_work_environment", "Work Environment"),
+        ("rating_growth_opportunities", "Growth Opportunities"),
+        ("rating_work_life_balance", "Work-Life Balance"),
+        ("rating_culture", "Culture"),
+        ("rating_overall", "Overall"),
+    ]
+
+    case = models.ForeignKey("hrm.SeparationCase", on_delete=models.CASCADE, related_name="exit_interviews")
+    interviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_exit_interviews_conducted")
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    conducted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default="in_person")
+    status = models.CharField(max_length=20, choices=EI_STATUS_CHOICES, default="scheduled", editable=False)
+    rating_job_satisfaction = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_management = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_compensation = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_work_environment = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_growth_opportunities = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_work_life_balance = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_culture = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    rating_overall = models.SmallIntegerField(null=True, blank=True, validators=_RATING_VALIDATORS)
+    primary_reason = models.CharField(max_length=30, choices=SeparationCase.EXIT_REASON_CHOICES, blank=True)
+    would_recommend = models.BooleanField(null=True, blank=True)
+    would_rejoin = models.BooleanField(null=True, blank=True)
+    what_went_well = models.TextField(blank=True)
+    what_to_improve = models.TextField(blank=True)
+    additional_comments = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "case"], name="hrm_ei_tenant_case_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ei_tenant_status_idx"),
+        ]
+
+    @property
+    def average_rating(self):
+        """Mean of the answered Likert ratings (1 decimal), or None if none answered."""
+        vals = [getattr(self, f) for f, _ in self.RATING_FIELDS if getattr(self, f) is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    def __str__(self):
+        name = self.case.employee.name if self.case_id and self.case.employee_id else "—"
+        return f"{self.number} · Exit Interview for {name}"
+
+
+class ClearanceItem(TenantOwned):
+    """One department clearance line on a ``SeparationCase`` (3.4). Asset-return lines link the
+    employee's issued ``AssetAllocation``; marking such a line cleared also returns that asset (in the
+    same transaction — see ``views.clearanceitem_mark_cleared``). ``status``/``cleared_by``/
+    ``cleared_at`` are workflow-owned."""
+
+    CLEARANCE_DEPT_CHOICES = [
+        ("it", "IT"),
+        ("finance", "Finance"),
+        ("hr", "HR"),
+        ("admin", "Admin"),
+        ("manager", "Manager / KT"),
+        ("legal", "Legal"),
+        ("security", "Security"),
+        ("library", "Library"),
+        ("custom", "Custom"),
+    ]
+    CLEARANCE_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("cleared", "Cleared"),
+        ("not_applicable", "Not Applicable"),
+        ("rejected", "Rejected"),
+    ]
+    # Terminal/resolved states that satisfy the all-mandatory-cleared gate.
+    RESOLVED_STATUSES = ("cleared", "not_applicable")
+
+    case = models.ForeignKey("hrm.SeparationCase", on_delete=models.CASCADE, related_name="clearance_items")
+    department = models.CharField(max_length=20, choices=CLEARANCE_DEPT_CHOICES, default="hr")
+    department_label = models.CharField(max_length=100, blank=True, help_text="Free-text label when department is Custom.")
+    description = models.CharField(max_length=255)
+    is_mandatory = models.BooleanField(default=True)
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_clearance_items_assigned")
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=CLEARANCE_STATUS_CHOICES, default="pending", editable=False)
+    cleared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_clearance_items_cleared", editable=False)
+    cleared_at = models.DateTimeField(null=True, blank=True, editable=False)
+    asset_allocation = models.ForeignKey("hrm.AssetAllocation", on_delete=models.SET_NULL, null=True, blank=True, related_name="clearance_items", help_text="Issued asset this line covers (returned when the line is cleared).")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["case", "department", "description"]
+        indexes = [
+            models.Index(fields=["tenant", "case"], name="hrm_ci_tenant_case_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ci_tenant_status_idx"),
+            models.Index(fields=["tenant", "case", "status"], name="hrm_ci_tenant_case_st_idx"),
+        ]
+
+    @property
+    def department_display(self):
+        """The custom label when department == 'custom' (and one is set), else the choice label."""
+        if self.department == "custom" and self.department_label:
+            return self.department_label
+        return self.get_department_display()
+
+    def __str__(self):
+        return f"{self.get_department_display()} — {self.description} [{self.get_status_display()}]"
+
+
+class FinalSettlement(TenantNumbered):
+    """The full-and-final settlement for a ``SeparationCase`` (3.4) — one per case (DB-enforced).
+    Earnings minus deductions give the derived ``net_payable`` (never stored). ``status`` runs
+    draft → computed → hr_approved → finance_approved → paid (+ cancelled). ``gl_posted`` is a stub:
+    GL posting stays with ``accounting.PayrollRun`` (a later integration pass)."""
+
+    NUMBER_PREFIX = "FNF"
+
+    FNF_STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("computed", "Computed"),
+        ("hr_approved", "HR Approved"),
+        ("finance_approved", "Finance Approved"),
+        ("paid", "Paid"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    case = models.ForeignKey("hrm.SeparationCase", on_delete=models.CASCADE, related_name="final_settlements")
+    settlement_date = models.DateField(null=True, blank=True, help_text="Target payment date.")
+    # --- Earnings ---
+    prorata_salary = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    leave_encashment_days = models.DecimalField(max_digits=6, decimal_places=2, default=ZERO)
+    leave_encashment_amount = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    gratuity_eligible = models.BooleanField(default=False)
+    gratuity_amount = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    bonus_amount = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    reimbursement_amount = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    other_income = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    # --- Deductions ---
+    notice_recovery_amount = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO, help_text="Recovery for unserved notice (or a negative value for an employer buyout payout).")
+    loan_recovery = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    asset_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    advance_recovery = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    tax_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    professional_tax = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    other_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    # --- Workflow-owned ---
+    status = models.CharField(max_length=20, choices=FNF_STATUS_CHOICES, default="draft", editable=False)
+    hr_approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_fnf_hr_approved", editable=False)
+    hr_approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    finance_approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_fnf_finance_approved", editable=False)
+    finance_approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    paid_at = models.DateField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+    gl_posted = models.BooleanField(default=False, editable=False, help_text="GL-posting stub — always False in v1 (posting deferred to accounting.PayrollRun).")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = [("tenant", "number"), ("tenant", "case")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_fnf_tenant_status_idx"),
+            models.Index(fields=["tenant", "case"], name="hrm_fnf_tenant_case_idx"),
+        ]
+
+    @property
+    def total_earnings(self):
+        return (self.prorata_salary + self.leave_encashment_amount + self.gratuity_amount
+                + self.bonus_amount + self.reimbursement_amount + self.other_income)
+
+    @property
+    def total_deductions(self):
+        return (self.notice_recovery_amount + self.loan_recovery + self.asset_deduction
+                + self.advance_recovery + self.tax_deduction + self.professional_tax
+                + self.other_deduction)
+
+    @property
+    def net_payable(self):
+        """Derived — never stored. Total earnings minus total deductions."""
+        return self.total_earnings - self.total_deductions
+
+    def __str__(self):
+        name = self.case.employee.name if self.case_id and self.case.employee_id else "—"
+        return f"{self.number} · FnF for {name} [{self.get_status_display()}]"
