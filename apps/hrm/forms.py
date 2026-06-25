@@ -27,6 +27,8 @@ from .models import (
     CostCenterProfile,
     DepartmentProfile,
     Designation,
+    EmployeeDocument,
+    EmployeeLifecycleEvent,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
@@ -114,9 +116,13 @@ class EmployeeProfileForm(TenantModelForm):
         model = EmployeeProfile
         fields = [
             "party", "employment", "designation", "employee_type", "gender", "date_of_birth",
-            "blood_group", "nationality", "personal_email", "mobile", "bank_name",
-            "bank_account", "bank_routing", "probation_end_date", "emergency_contact_name",
-            "emergency_contact_phone", "emergency_contact_relation", "photo", "notes",
+            "blood_group", "marital_status", "nationality", "personal_email", "work_email", "mobile",
+            "work_location", "notice_period_days", "father_name", "spouse_name",
+            "national_id", "national_id_type", "passport_number", "passport_expiry",
+            "current_address", "permanent_address", "bank_name", "bank_account", "bank_routing",
+            "probation_end_date", "emergency_contact_name", "emergency_contact_phone",
+            "emergency_contact_relation", "emergency_contact_2_name", "emergency_contact_2_phone",
+            "emergency_contact_2_relation", "photo", "notes",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -136,6 +142,64 @@ class EmployeeProfileForm(TenantModelForm):
             if f.size and f.size > MAX_PHOTO_BYTES:
                 raise forms.ValidationError("Photo exceeds the 5 MB limit.")
         return f
+
+
+class EmployeeDocumentForm(TenantModelForm):
+    # SECURITY: `verification_status`, `verified_by`, `verified_at` are excluded — set only by the
+    # mark-verified / reject workflow actions (which stamp who/when + an audit row). Exposing them
+    # would let any user self-verify a document via a crafted POST.
+    class Meta:
+        model = EmployeeDocument
+        fields = ["employee", "document_type", "title", "document_number", "issuing_authority",
+                  "issuing_country", "issued_on", "expires_on", "is_confidential", "file", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["employee"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant)
+                .select_related("party").order_by("party__name"))
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        # Only validate a freshly-uploaded file (an existing FieldFile has no new size to re-check).
+        if f and hasattr(f, "name") and hasattr(f, "size"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
+                raise forms.ValidationError(
+                    f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
+            if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
+                raise forms.ValidationError("File exceeds the 10 MB limit.")
+            # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve with
+            # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
+        return f
+
+
+class EmployeeLifecycleEventForm(TenantModelForm):
+    # SECURITY: `initiated_by` is excluded — stamped from request.user in the create view, never
+    # settable via the form.
+    class Meta:
+        model = EmployeeLifecycleEvent
+        fields = ["employee", "event_type", "effective_date", "reason",
+                  "from_designation", "to_designation", "from_department", "to_department",
+                  "from_location", "to_location", "from_job_title", "to_job_title",
+                  "from_salary", "to_salary", "from_manager", "to_manager",
+                  "from_employee_type", "to_employee_type", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            employees = (EmployeeProfile.objects.filter(tenant=self.tenant)
+                         .select_related("party").order_by("party__name"))
+            for fld in ("employee", "from_manager", "to_manager"):
+                self.fields[fld].queryset = employees
+            designations = (Designation.objects.filter(tenant=self.tenant, is_active=True)
+                            .order_by("name"))
+            for fld in ("from_designation", "to_designation"):
+                self.fields[fld].queryset = designations
+            departments = OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name")
+            for fld in ("from_department", "to_department"):
+                self.fields[fld].queryset = departments
 
 
 class LeaveTypeForm(TenantModelForm):
