@@ -162,6 +162,7 @@ class DepartmentProfile(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "is_active"], name="hrm_dp_tenant_active_idx"),
             models.Index(fields=["tenant", "head"], name="hrm_dp_tenant_head_idx"),
+            models.Index(fields=["tenant", "cost_center"], name="hrm_dp_tenant_cc_idx"),
         ]
 
     def clean(self):
