@@ -47,8 +47,9 @@ model so that customers, vendors, employees, items, money, and stock are never d
 
 This repository currently delivers the **Module 0 foundation** (System Admin & Security —
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
-**Module 2 — Accounting & Finance** (2.1–2.15), and the first pass of **Module 3 — HRM** (employees, leave,
-attendance). The remaining functional modules (4–13) are planned and scaffolded against the same core.
+**Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, onboarding, offboarding, leave,
+attendance, holidays — 7 of 41 sub-modules). The remaining functional modules (4–13) are planned and scaffolded
+against the same core. The suite stands at **1,665 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -152,7 +153,7 @@ Three design ideas hold the whole platform together:
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite.
 
-### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.5
+### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.15
 
 The first domain module to **own the GL ledger spine** (no core ledger existed — see lesson L28). Double-entry
 throughout: journal entries post only when debits equal credits, posted entries are immutable (corrected via a
@@ -191,11 +192,13 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.9/3.10/3.12
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.9/3.10/3.12
 
-First HRM passes — **employee directory + onboarding + leave + attendance**, reusing the core spine: an employee is a
-`core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`) anchor; departments reuse
-`core.OrgUnit`. Payroll GL posting stays with `accounting.PayrollRun` (not duplicated here).
+HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + holidays**, reusing the
+core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
+anchor; departments reuse `core.OrgUnit`. Payroll GL posting stays with `accounting.PayrollRun` (not duplicated
+here). Request-free domain logic (task generation, clearance-checklist generation, leave-encashment computation)
+lives in `apps/hrm/services.py` so the seeder and tests can call it without the view layer.
 
 - **3.1 Employee Management** — `EmployeeProfile` directory with personal/employment/bank (masked account) /
   emergency-contact / photo, leave-balance + recent-attendance + recent-leave on the detail, and an HRM overview
@@ -223,7 +226,7 @@ First HRM passes — **employee directory + onboarding + leave + attendance**, r
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **603-test** HRM suite
-(**1665 project-wide**). Leave/approver and offboarding workflow/approval fields are workflow-set (never
+(**1,665 project-wide**). Leave/approver and offboarding workflow/approval fields are workflow-set (never
 form-set); sensitive bank fields are redacted from the audit trail.
 
 ---
@@ -369,7 +372,10 @@ checkout appears; otherwise the UI shows a "configure Stripe" state and a manual
 Seeding creates two demo tenants (**Acme Inc** `acme`, **Globex Corporation** `globex`) with parties, org units,
 employments, activities, subscriptions, invoices, branding, encryption keys, and health metrics — plus the domain
 demo data: **CRM** (leads/opportunities/cases/…), **Accounting** (GL accounts, invoices/bills/payments, bank
-transactions, a recurring-invoice schedule), and **HRM** (employees, leave allocations/requests, attendance).
+transactions, a recurring-invoice schedule), and **HRM** (employees, designations, leave allocations/requests,
+attendance, holidays, shifts; **onboarding** templates → programs with generated tasks/documents/assets/orientation;
+**offboarding** separation cases with generated clearance checklists, an exit interview, and a paid final
+settlement).
 
 | Role | Username | Password | Notes |
 |------|----------|----------|-------|
@@ -414,7 +420,7 @@ backend) — copy the link from there.
 | Module 0.1 | `/tenants/` | `/tenants/subscriptions/`, `/tenants/subscription-invoices/`, `/tenants/branding/`, `/tenants/encryption-keys/`, `/tenants/health/`, `/tenants/onboarding/`, `/tenants/stripe/webhook/` |
 | Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/campaigns/`, `/crm/cases/`, `/crm/knowledge/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/`, `/crm/expenses/`, `/crm/projects/`, `/crm/milestones/`, `/crm/timesheets/`, `/crm/doc-templates/`, `/crm/contracts/`, `/crm/workflows/`, `/crm/approvals/`, `/crm/onboarding/`, `/crm/health-scores/`, `/crm/surveys/`, `/crm/stock/`, `/crm/purchase-orders/`, `/crm/partner-portal/`, `/crm/portal/` (partner-facing); public `/crm/sign/<token>/`, `/crm/surveys/<token>/respond/` |
 | Module 2 (Accounting) | `/accounting/` | `/accounting/` (dashboard), `/accounting/glaccounts/`, `/accounting/journal-entries/`, `/accounting/fiscal-periods/`, `/accounting/currencies/`, `/accounting/exchange-rates/`, `/accounting/vendor-profiles/`, `/accounting/bills/`, `/accounting/customer-profiles/`, `/accounting/invoices/`, `/accounting/recurring-invoices/`, `/accounting/payments/`, `/accounting/allocations/`, `/accounting/bank-accounts/`, `/accounting/bank-transactions/`, `/accounting/reconciliation/`, `/accounting/fixed-assets/`, `/accounting/asset-disposals/`, `/accounting/cost-allocations/`, `/accounting/payroll-runs/`, `/accounting/projects/`, `/accounting/intercompany/`, `/accounting/tax-codes/`, `/accounting/tax-returns/`, `/accounting/budgets/`, `/accounting/controls/`, `/accounting/integrations/`; reports `/accounting/reports/{trial-balance,cash-forecast,payment-schedule,ar-aging,ap-aging,balance-sheet,profit-and-loss,budget-variance}/` |
-| Module 3 (HRM) | `/hrm/` | `/hrm/` (overview), `/hrm/employees/`, `/hrm/designations/`, `/hrm/leave-types/`, `/hrm/leave-allocations/`, `/hrm/leave-requests/`, `/hrm/holidays/`, `/hrm/shifts/`, `/hrm/shift-assignments/`, `/hrm/attendance/` |
+| Module 3 (HRM) | `/hrm/` | `/hrm/` (overview), `/hrm/employees/`, `/hrm/designations/`; **onboarding** `/hrm/onboarding-templates/`, `/hrm/onboarding-template-tasks/`, `/hrm/onboarding/`, `/hrm/onboarding-tasks/`, `/hrm/onboarding-documents/`, `/hrm/assets/`, `/hrm/orientation/`; **offboarding** `/hrm/separations/`, `/hrm/exit-interviews/`, `/hrm/clearance/`, `/hrm/settlements/` (+ POST `…/separations/<pk>/{relieving,experience}-letter/`); **time** `/hrm/leave-types/`, `/hrm/leave-allocations/`, `/hrm/leave-requests/`, `/hrm/holidays/`, `/hrm/shifts/`, `/hrm/shift-assignments/`, `/hrm/attendance/` |
 | Django admin | `/admin/` | `/admin/` |
 
 Each CRUD resource follows the pattern: list (`/`), create (`/add/`), detail (`/<pk>/`), edit (`/<pk>/edit/`),
@@ -453,15 +459,17 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **1301 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
-  the MySQL dev database. Per-module suites include foundation (`core`/`accounts`/`tenants`), **CRM 552**,
-  **Accounting 212**, and **HRM 239**.
+- **1,665 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+  the MySQL dev database. Per-module suites: **core 95**, **accounts 95**, **tenants 108**, **CRM 552**,
+  **Accounting 212**, **HRM 603**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
   (member → 403), forgot-password non-enumeration, invite token/expiry, encryption-key secrecy, branding hex
   validation, the Stripe webhook signature rejection, **double-entry GL invariants + posting/void workflows**
-  (Accounting), the **leave-request approval state machine + derived balances** (HRM), and the recurring-invoice
-  cadence/generation + cash-forecast projection.
+  (Accounting), the **leave-request approval state machine + derived balances** (HRM), the recurring-invoice
+  cadence/generation + cash-forecast projection, and the **offboarding lifecycle** (separation→clearance→F&F→letters
+  state machine, derived `net_payable`/`all_mandatory_cleared`, the idempotent clearance-checklist + bounded-query
+  leave-encashment services, and `@tenant_admin_required` gating on every workflow action).
 
 ---
 
@@ -495,12 +503,18 @@ NavERP/
 │  │  ├─ models.py  models_advanced.py  views.py  views_advanced.py  forms.py  urls.py  admin.py
 │  │  ├─ management/commands/seed_accounting.py
 │  │  └─ tests/
-│  └─ hrm/                  Module 3 — employees, leave, attendance
+│  └─ hrm/                  Module 3 — employees, onboarding, offboarding, leave, attendance, holidays
+│     ├─ models.py  forms.py  views.py  urls.py  admin.py
+│     ├─ services.py        request-free domain logic (task/clearance generation, leave encashment)
+│     ├─ management/commands/seed_hrm.py
+│     └─ tests/
 ├─ templates/
 │  ├─ base.html  base_auth.html
 │  ├─ partials/             sidebar, topbar, footer, messages, pagination, customizer
 │  ├─ registration/         login, register, forgot/reset password, invite accept
-│  ├─ core/ accounts/ tenants/ dashboard/ crm/ accounting/ hrm/   per-model CRUD pages
+│  ├─ core/ accounts/ tenants/ dashboard/   foundation CRUD pages (entity-folder layout, flat at app root)
+│  └─ crm/ accounting/ hrm/                  domain CRUD pages, one folder per sub-module → per entity:
+│                                            <app>/<submodule>/<entity>/<page>.html (page = list/detail/form)
 ├─ static/
 │  ├─ css/theme.css         design system (component classes, dark mode, layout variants)
 │  ├─ js/layout.js          layout customizer (persists to localStorage)
@@ -618,7 +632,7 @@ Before deploying:
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard + cash-forecast; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, recurring invoicing, payments + cash application, aging, payment schedule; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
-| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.9/3.10/3.12 built (employee directory + profiles on `core.Party`/`core.Employment`; designations + salary bands on `core.OrgUnit`; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`) |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.9/3.10/3.12 built — 7 of 41 sub-modules (employee directory + profiles on `core.Party`/`core.Employment`; designations + salary bands on `core.OrgUnit`; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.5 Job Requisition |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
 | 6 | Procurement Management System | `procurement` | Roadmap |
@@ -642,6 +656,10 @@ anchors) and **adds** only its own domain tables — see the coverage map in [`N
 - **Filters**: pass choices/querysets from the view; guard integer-FK filters; preserve filters across pagination.
 - **Templates**: use the `theme.css` component classes; multi-line notes use `{% comment %}…{% endcomment %}`
   (a multi-line `{# #}` would render as visible text).
+- **Template folder layout**: one folder per sub-module, then one folder per entity, with a bare
+  `list/detail/form.html` page filename — `templates/<app>/<submodule>/<entity>/<page>.html` (foundation apps are
+  flat, so the entity folder sits at the app root). Standalone pages (reports, letters, wizards, landing/overview)
+  stay at the sub-module/app level. See the project `CLAUDE.md` "Template Folder Structure" rule.
 - **Seeders** are idempotent and print the demo logins.
 - **Migrations** are committed alongside model changes.
 - **Commits**: one file per commit with a descriptive message; work lands on `main` and is pushed manually.
