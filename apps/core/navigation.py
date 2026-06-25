@@ -302,14 +302,14 @@ LIVE_LINKS = {
         "Leave Application": "hrm:leaverequest_list",    # bullet
         "Leave Calendar": "hrm:leaverequest_list",       # bullet (request list as calendar source)
     },
-    # 3.4 Employee Offboarding — resignation→clearance→F&F→letters. Letters are generated from the
-    # case detail hub, so Experience Letter deep-links to the separation case list.
+    # 3.4 Employee Offboarding — resignation→clearance→F&F→letters. Experience Letter opens the
+    # dedicated letters landing page (eligible cases + relieving/experience letter actions).
     "3.4": {
         "Resignation Management": "hrm:separationcase_list",   # bullet
         "Exit Interview": "hrm:exitinterview_list",            # bullet
         "Clearance Process": "hrm:clearanceitem_list",         # bullet
         "F&F Settlement": "hrm:finalsettlement_list",          # bullet
-        "Experience Letter": "hrm:separationcase_list",        # bullet (generated from the case hub)
+        "Experience Letter": "hrm:offboarding_letters",        # bullet (relieving + experience letters)
     },
     # 3.12 Holiday Management
     "3.12": {
