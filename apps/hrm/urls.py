@@ -153,6 +153,7 @@ urlpatterns = [
     path("separations/<int:pk>/complete/", views.separationcase_complete, name="separationcase_complete"),
     path("separations/<int:pk>/relieving-letter/", views.separationcase_generate_relieving_letter, name="separationcase_relieving_letter"),
     path("separations/<int:pk>/experience-letter/", views.separationcase_generate_experience_letter, name="separationcase_experience_letter"),
+    path("letters/", views.offboarding_letters, name="offboarding_letters"),
 
     # Exit Interviews (3.4) — CRUD + workflow
     path("exit-interviews/", views.exitinterview_list, name="exitinterview_list"),
