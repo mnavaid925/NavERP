@@ -24,7 +24,7 @@
       <div class="detail-item"><dt>Cost Center</dt><dd>{{ obj.cost_center.name|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
     </dl>
-    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.description }}</p></div>{% endif %}
+    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line; overflow-wrap:break-word;">{{ obj.description }}</p></div>{% endif %}
   </div></div>
 
   <div class="card">
