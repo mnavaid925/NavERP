@@ -16,8 +16,11 @@ from apps.core.models import Employment, OrgUnit, Party, PartyRole, Tenant
 from apps.hrm.models import (
     AssetAllocation,
     AttendanceRecord,
+    ClearanceItem,
     Designation,
     EmployeeProfile,
+    ExitInterview,
+    FinalSettlement,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -28,6 +31,7 @@ from apps.hrm.models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    SeparationCase,
     Shift,
     ShiftAssignment,
 )
@@ -111,6 +115,7 @@ class Command(BaseCommand):
         for tenant in tenants:
             self._seed_tenant(tenant, flush=options["flush"])
             self._seed_onboarding(tenant, flush=options["flush"])
+            self._seed_offboarding(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -118,8 +123,9 @@ class Command(BaseCommand):
     @transaction.atomic
     def _seed_tenant(self, tenant, *, flush):
         if flush:
-            # Children first (onboarding rows FK EmployeeProfile/Designation), then the masters.
-            for model in (OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
+            # Children first (onboarding/offboarding rows FK EmployeeProfile/Designation), then masters.
+            for model in (FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
+                          OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
                           OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
                           AttendanceRecord, ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
                           LeaveType, PublicHoliday, EmployeeProfile, Designation):
@@ -375,6 +381,87 @@ class Command(BaseCommand):
             f"{OnboardingDocument.objects.filter(tenant=tenant).count()} docs, "
             f"{AssetAllocation.objects.filter(tenant=tenant).count()} assets, "
             f"{OrientationSession.objects.filter(tenant=tenant).count()} sessions."))
+
+    @transaction.atomic
+    def _seed_offboarding(self, tenant, *, flush):
+        """Seed 3.4 Employee Offboarding demo data. Guarded independently of the main HRM guard so a
+        tenant whose employees already exist still gets offboarding. On --flush the rows are wiped by
+        ``_seed_tenant`` (they're in its delete list), so this only needs the existence guard."""
+        from apps.hrm.services import generate_clearance_checklist
+
+        if SeparationCase.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Offboarding data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant)
+                         .select_related("party", "designation", "employment").order_by("number"))
+        if not employees:
+            self.stdout.write(self.style.WARNING(
+                f"No employees for '{tenant.name}' — skipping offboarding (run the HRM seed first)."))
+            return
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        today = timezone.localdate()
+        now = timezone.now()
+
+        # --- Case 1: completed voluntary resignation, fully cleared + settled ---
+        emp1 = employees[0]
+        case1 = SeparationCase.objects.create(
+            tenant=tenant, employee=emp1, separation_type="resignation",
+            exit_reason="better_opportunity", notice_period_days=30,
+            notice_start_date=today - datetime.timedelta(days=60),
+            actual_last_working_day=today - datetime.timedelta(days=30),
+            notice_buyout_type="none", requires_kt=True, status="completed",
+            submitted_at=now, approver=actor, approved_at=now,
+            notes="Voluntary resignation — joined a new organization.")
+        generate_clearance_checklist(case1)
+        for ci in case1.clearance_items.all():
+            ci.status = "cleared"
+            ci.cleared_by = actor
+            ci.cleared_at = now
+            ci.save(update_fields=["status", "cleared_by", "cleared_at", "updated_at"])
+        ExitInterview.objects.create(
+            tenant=tenant, case=case1, interviewer=actor, scheduled_at=now, conducted_at=now,
+            mode="in_person", status="completed",
+            rating_job_satisfaction=4, rating_management=4, rating_compensation=3,
+            rating_work_environment=4, rating_growth_opportunities=3, rating_work_life_balance=4,
+            rating_culture=5, rating_overall=4, primary_reason="better_opportunity",
+            would_recommend=True, would_rejoin=False,
+            what_went_well="Supportive team and good mentorship.",
+            what_to_improve="Clearer growth paths and faster promotions.",
+            additional_comments="Grateful for the experience.")
+        FinalSettlement.objects.create(
+            tenant=tenant, case=case1, settlement_date=today - datetime.timedelta(days=28),
+            prorata_salary=Decimal("15000"), leave_encashment_days=Decimal("5"),
+            leave_encashment_amount=Decimal("5000"), tax_deduction=Decimal("2000"),
+            status="paid", hr_approved_by=actor, hr_approved_at=now,
+            finance_approved_by=actor, finance_approved_at=now,
+            paid_at=today - datetime.timedelta(days=28),
+            notes="Settled and paid via bank transfer.")
+
+        # --- Case 2: resignation in progress, clearance underway (HR line cleared) ---
+        if len(employees) > 1:
+            emp2 = employees[1]
+            case2 = SeparationCase.objects.create(
+                tenant=tenant, employee=emp2, separation_type="resignation",
+                exit_reason="career_growth", notice_period_days=30,
+                notice_start_date=today - datetime.timedelta(days=15),
+                notice_buyout_type="none", requires_kt=False, status="in_clearance",
+                submitted_at=now, approver=actor, approved_at=now,
+                notes="Pursuing a senior role elsewhere.")
+            generate_clearance_checklist(case2)
+            hr_line = case2.clearance_items.filter(department="hr").first()
+            if hr_line:
+                hr_line.status = "cleared"
+                hr_line.cleared_by = actor
+                hr_line.cleared_at = now
+                hr_line.save(update_fields=["status", "cleared_by", "cleared_at", "updated_at"])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Offboarding seeded for '{tenant.name}': "
+            f"{SeparationCase.objects.filter(tenant=tenant).count()} cases, "
+            f"{ClearanceItem.objects.filter(tenant=tenant).count()} clearance items, "
+            f"{ExitInterview.objects.filter(tenant=tenant).count()} exit interview(s), "
+            f"{FinalSettlement.objects.filter(tenant=tenant).count()} settlement(s)."))
 
     @staticmethod
     def _last_workdays(end, count):
