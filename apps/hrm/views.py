@@ -1586,9 +1586,12 @@ def clearanceitem_list(request):
         .select_related("case__employee__party", "assigned_to", "cleared_by"),
         "hrm/offboarding/clearanceitem_list.html",
         search_fields=["description", "case__employee__party__name", "case__number"],
-        filters=[("status", "status", False), ("department", "department", False)],
+        filters=[("status", "status", False), ("department", "department", False),
+                 ("case", "case_id", True)],
         extra_context={"status_choices": ClearanceItem.CLEARANCE_STATUS_CHOICES,
-                       "dept_choices": ClearanceItem.CLEARANCE_DEPT_CHOICES},
+                       "dept_choices": ClearanceItem.CLEARANCE_DEPT_CHOICES,
+                       "cases": SeparationCase.objects.filter(tenant=request.tenant)
+                       .select_related("employee__party").order_by("-created_at")},
     )
 
 
