@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:finalsettlement_list' %}">Settlements</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:finalsettlement_compute' obj.pk %}" onsubmit="return confirm('Auto-compute leave encashment and gratuity?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="calculator"></i> Compute</button></form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'computed' %}
+        <a href="{% url 'hrm:finalsettlement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:finalsettlement_hr_approve' obj.pk %}" onsubmit="return confirm('HR-approve this settlement?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="user-check"></i> HR Approve</button></form>
+      {% endif %}
+      {% if obj.status == 'hr_approved' %}
+        <form method="post" action="{% url 'hrm:finalsettlement_finance_approve' obj.pk %}" onsubmit="return confirm('Finance-approve this settlement?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Finance Approve</button></form>
+      {% endif %}
+      {% if obj.status == 'hr_approved' or obj.status == 'finance_approved' %}
+        <form method="post" action="{% url 'hrm:finalsettlement_mark_paid' obj.pk %}" onsubmit="return confirm('Mark this settlement paid?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Paid</button></form>
+      {% endif %}
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:finalsettlement_delete' obj.pk %}" onsubmit="return confirm('Delete this settlement?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd><a href="{% url 'hrm:separationcase_detail' obj.case_id %}">{{ obj.case.employee.party.name }}</a> <span class="text-muted">({{ obj.case.number }})</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'draft' %}info{% elif obj.status == 'computed' %}amber{% elif obj.status == 'hr_approved' %}info{% elif obj.status == 'finance_approved' %}info{% elif obj.status == 'paid' %}green{% elif obj.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Settlement Date</dt><dd>{{ obj.settlement_date|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>HR Approved</dt><dd>{% if obj.hr_approved_at %}{{ obj.hr_approved_by.get_full_name|default:obj.hr_approved_by.username }} · {{ obj.hr_approved_at }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Finance Approved</dt><dd>{% if obj.finance_approved_at %}{{ obj.finance_approved_by.get_full_name|default:obj.finance_approved_by.username }} · {{ obj.finance_approved_at }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Paid At</dt><dd>{{ obj.paid_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>GL Posted</dt><dd>{% if obj.gl_posted %}<span class="badge badge-green">Posted</span>{% else %}<span class="badge badge-muted">Not posted (deferred)</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Earnings</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <tbody>
+            <tr><td>Pro-rata Salary</td><td class="text-right">{{ obj.prorata_salary }}</td></tr>
+            <tr><td>Leave Encashment ({{ obj.leave_encashment_days }} days)</td><td class="text-right">{{ obj.leave_encashment_amount }}</td></tr>
+            <tr><td>Gratuity {% if obj.gratuity_eligible %}<span class="badge badge-green">Eligible</span>{% else %}<span class="badge badge-muted">Not eligible</span>{% endif %}</td><td class="text-right">{{ obj.gratuity_amount }}</td></tr>
+            <tr><td>Bonus / Ex-gratia</td><td class="text-right">{{ obj.bonus_amount }}</td></tr>
+            <tr><td>Reimbursements</td><td class="text-right">{{ obj.reimbursement_amount }}</td></tr>
+            <tr><td>Other Income</td><td class="text-right">{{ obj.other_income }}</td></tr>
+            <tr class="fw-600"><td>Total Earnings</td><td class="text-right">{{ obj.total_earnings }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Deductions</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <tbody>
+            <tr><td>Notice Recovery</td><td class="text-right">{{ obj.notice_recovery_amount }}</td></tr>
+            <tr><td>Loan Recovery</td><td class="text-right">{{ obj.loan_recovery }}</td></tr>
+            <tr><td>Asset Recovery</td><td class="text-right">{{ obj.asset_deduction }}</td></tr>
+            <tr><td>Advance Recovery</td><td class="text-right">{{ obj.advance_recovery }}</td></tr>
+            <tr><td>Tax (TDS)</td><td class="text-right">{{ obj.tax_deduction }}</td></tr>
+            <tr><td>Professional Tax</td><td class="text-right">{{ obj.professional_tax }}</td></tr>
+            <tr><td>Other Deductions</td><td class="text-right">{{ obj.other_deduction }}</td></tr>
+            <tr class="fw-600"><td>Total Deductions</td><td class="text-right">{{ obj.total_deductions }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="stat-card">
+      <div class="stat-label">Net Payable</div>
+      <div class="stat-value">{{ obj.net_payable }}</div>
+    </div>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'hrm:finalsettlement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
