@@ -130,16 +130,16 @@ git commit -m 'some example changes'.
 
 **STRICT — ONE FILE PER COMMIT (no exceptions):**
 
-* **Never** combine multiple files into a single `git add` / `git commit` pair, **even if they're in the same folder, share a feature, or look like a "set"** (e.g. `lead_list.html` + `lead_form.html` + `lead_detail.html` of the same module).
+* **Never** combine multiple files into a single `git add` / `git commit` pair, **even if they're in the same folder, share a feature, or look like a "set"** (e.g. `directory/lead/list.html` + `directory/lead/form.html` + `directory/lead/detail.html` of the same model).
 * **Wrong** (this is what NOT to do):
   ```
-  git add 'templates/crm/lead_list.html' 'templates/crm/lead_form.html' 'templates/crm/lead_detail.html'; git commit -m 'feat(crm): lead templates'
+  git add 'templates/crm/directory/lead/list.html' 'templates/crm/directory/lead/form.html' 'templates/crm/directory/lead/detail.html'; git commit -m 'feat(crm): lead templates'
   ```
 * **Right** — one `git add` + one `git commit` per file, every time:
   ```
-  git add 'templates/crm/lead_list.html'; git commit -m 'feat(crm): lead list template'
-  git add 'templates/crm/lead_form.html'; git commit -m 'feat(crm): lead form template'
-  git add 'templates/crm/lead_detail.html'; git commit -m 'feat(crm): lead detail template with activity timeline'
+  git add 'templates/crm/directory/lead/list.html'; git commit -m 'feat(crm): lead list template'
+  git add 'templates/crm/directory/lead/form.html'; git commit -m 'feat(crm): lead form template'
+  git add 'templates/crm/directory/lead/detail.html'; git commit -m 'feat(crm): lead detail template with activity timeline'
   ```
 * Each commit message should be specific to that one file's content — don't reuse the same message across multiple commits.
 * If a change spans 30+ files, the snippet block IS 30+ commits. Length is fine — bundling is not.
