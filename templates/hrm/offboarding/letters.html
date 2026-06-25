@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Offboarding Letters{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Offboarding Letters</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:separationcase_list' %}">Offboarding</a><span class="sep">›</span><span>Letters</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="form-help" style="margin-bottom:1rem;">Relieving and experience letters are generated per separation case once it is <strong>cleared</strong>, <strong>settled</strong>, or <strong>completed</strong>. Only those cases appear below — open a letter to print or save it as a PDF.</p>
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by case # or employee…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All eligible statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:offboarding_letters' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Case</th><th>Employee</th><th>Status</th><th>Last Working Day</th><th>Relieving Letter</th><th>Experience Letter</th><th class="table-actions">Case</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:separationcase_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}{% if obj.employee.designation %}<br><span class="text-muted">{{ obj.employee.designation.name }}</span>{% endif %}</td>
+              <td><span class="badge badge-{% if obj.status == 'cleared' %}green{% elif obj.status == 'settled' %}green{% elif obj.status == 'completed' %}green{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.actual_last_working_day|default:obj.expected_last_working_day|default:"—" }}</td>
+              <td>
+                <form method="post" action="{% url 'hrm:separationcase_relieving_letter' obj.pk %}">
+                  {% csrf_token %}<button class="btn btn-outline btn-sm" type="submit"><i data-lucide="file-text"></i> {% if obj.relieving_letter_generated_at %}Open{% else %}Generate{% endif %}</button>
+                </form>
+                {% if obj.relieving_letter_generated_at %}<span class="text-muted" style="font-size:.8rem;">Generated {{ obj.relieving_letter_generated_at|date:"Y-m-d" }}</span>{% endif %}
+              </td>
+              <td>
+                <form method="post" action="{% url 'hrm:separationcase_experience_letter' obj.pk %}">
+                  {% csrf_token %}<button class="btn btn-outline btn-sm" type="submit"><i data-lucide="award"></i> {% if obj.experience_letter_generated_at %}Open{% else %}Generate{% endif %}</button>
+                </form>
+                {% if obj.experience_letter_generated_at %}<span class="text-muted" style="font-size:.8rem;">Generated {{ obj.experience_letter_generated_at|date:"Y-m-d" }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:separationcase_detail' obj.pk %}" class="btn-icon" title="Open case"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="award"></i><h3>No letters available yet</h3><p>A case must reach Cleared, Settled, or Completed before its relieving / experience letter can be generated.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
