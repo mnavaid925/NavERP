@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Job Grades{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Job Grades</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Organizational Structure</span><span class="sep">›</span><span>Job Grades</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:jobgrade_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Job Grade</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search grades…">
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select" aria-label="Status">
+            <option value="" {% if request.GET.is_active == "" %}selected{% endif %}>All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:jobgrade_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Level</th><th>Name</th><th>Description</th><th>Designations</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="badge badge-slate">L{{ obj.level_order }}</span></td>
+              <td><a href="{% url 'hrm:jobgrade_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>{{ obj.description|truncatechars:60|default:"—" }}</td>
+              <td>{{ obj.designation_count }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:jobgrade_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:jobgrade_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:jobgrade_delete' obj.pk %}" onsubmit="return confirm('Delete this job grade?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="layers"></i><h3>No job grades found</h3><p>Create grades (G1, G2, …) to band your designations by seniority.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
