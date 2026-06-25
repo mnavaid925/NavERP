@@ -20,6 +20,8 @@ from apps.hrm.models import (
     CostCenterProfile,
     DepartmentProfile,
     Designation,
+    EmployeeDocument,
+    EmployeeLifecycleEvent,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
@@ -140,6 +142,7 @@ class Command(BaseCommand):
             self._seed_org_structure(tenant, flush=options["flush"])
             self._seed_onboarding(tenant, flush=options["flush"])
             self._seed_offboarding(tenant, flush=options["flush"])
+            self._seed_employee_records(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -556,6 +559,69 @@ class Command(BaseCommand):
             f"{ClearanceItem.objects.filter(tenant=tenant).count()} clearance items, "
             f"{ExitInterview.objects.filter(tenant=tenant).count()} exit interview(s), "
             f"{FinalSettlement.objects.filter(tenant=tenant).count()} settlement(s)."))
+
+    @transaction.atomic
+    def _seed_employee_records(self, tenant, *, flush):
+        """Seed 3.1 Employee Management completion demo data — personnel-file documents + lifecycle
+        events for the first few seeded employees. Guarded independently (its own EmployeeDocument
+        existence check), so a tenant whose employees already exist still gets these records."""
+        if flush:
+            EmployeeLifecycleEvent.objects.filter(tenant=tenant).delete()
+            EmployeeDocument.objects.filter(tenant=tenant).delete()
+        if EmployeeDocument.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Employee records already exist for '{tenant.name}'. Use --flush to re-seed."))
+            return
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant)
+                         .select_related("party", "employment").order_by("created_at")[:3])
+        if not employees:
+            self.stdout.write(self.style.WARNING(
+                f"No employees for '{tenant.name}' — skipping employee records."))
+            return
+        today = timezone.localdate()
+        now = timezone.now()
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+
+        for emp in employees:
+            # National ID — verified.
+            nid = EmployeeDocument.objects.create(
+                tenant=tenant, employee=emp, document_type="national_id", title="National ID",
+                document_number=f"NID-{emp.pk:06d}", issuing_country="—", is_confidential=True)
+            nid.verification_status = "verified"
+            nid.verified_by = actor
+            nid.verified_at = now
+            nid.save(update_fields=["verification_status", "verified_by", "verified_at", "updated_at"])
+            # Passport — pending, expiring soon (today + 180 days).
+            EmployeeDocument.objects.create(
+                tenant=tenant, employee=emp, document_type="passport", title="Passport",
+                document_number=f"P{emp.pk:07d}", issuing_authority="Passport Office",
+                issued_on=today - datetime.timedelta(days=3650),
+                expires_on=today + datetime.timedelta(days=180))
+            # Appointment letter — verified.
+            al = EmployeeDocument.objects.create(
+                tenant=tenant, employee=emp, document_type="employment_contract",
+                title="Appointment Letter")
+            al.verification_status = "verified"
+            al.verified_by = actor
+            al.verified_at = now
+            al.save(update_fields=["verification_status", "verified_by", "verified_at", "updated_at"])
+
+            # Lifecycle: a hire event (on the employment's hired_on), + a confirmation if confirmed.
+            hired = emp.employment.hired_on if emp.employment_id and emp.employment.hired_on \
+                else today - datetime.timedelta(days=365)
+            EmployeeLifecycleEvent.objects.create(
+                tenant=tenant, employee=emp, event_type="hire", effective_date=hired,
+                reason="Initial hire", to_designation=emp.designation,
+                to_job_title=emp.designation.name if emp.designation_id else "")
+            if emp.confirmed_on:
+                EmployeeLifecycleEvent.objects.create(
+                    tenant=tenant, employee=emp, event_type="confirmation",
+                    effective_date=emp.confirmed_on, reason="Probation successfully completed")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Employee records seeded for '{tenant.name}': "
+            f"{EmployeeDocument.objects.filter(tenant=tenant).count()} documents, "
+            f"{EmployeeLifecycleEvent.objects.filter(tenant=tenant).count()} lifecycle event(s)."))
 
     @staticmethod
     def _last_workdays(end, count):
