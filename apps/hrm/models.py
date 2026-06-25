@@ -876,10 +876,11 @@ class SeparationCase(TenantNumbered):
         ("pay_in_lieu", "Pay in Lieu of Notice"),
         ("recover", "Recover Shortfall"),
     ]
+    # Lifecycle: approving a case generates its clearance checklist and moves it straight to
+    # ``in_clearance`` (there is no standalone "approved" holding state).
     STATUS_CHOICES = [
         ("draft", "Draft"),
         ("pending_approval", "Pending Approval"),
-        ("approved", "Approved"),
         ("in_clearance", "In Clearance"),
         ("cleared", "Cleared"),
         ("settled", "Settled"),
