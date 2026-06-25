@@ -55,7 +55,7 @@
               <td><a href="{% url 'hrm:separationcase_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.employee.party.name }}</td>
               <td><span class="badge badge-muted">{{ obj.get_separation_type_display }}</span></td>
-              <td><span class="badge badge-{% if obj.status == 'draft' %}info{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}info{% elif obj.status == 'in_clearance' %}amber{% elif obj.status == 'cleared' %}green{% elif obj.status == 'settled' %}green{% elif obj.status == 'completed' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'withdrawn' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'draft' %}info{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'in_clearance' %}amber{% elif obj.status == 'cleared' %}green{% elif obj.status == 'settled' %}green{% elif obj.status == 'completed' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'withdrawn' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.expected_last_working_day|default:"—" }}</td>
               <td>{{ obj.submitted_at|default:"—" }}</td>
               <td>
