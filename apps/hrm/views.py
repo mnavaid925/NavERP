@@ -256,7 +256,9 @@ def department_list(request):
         request,
         DepartmentProfile.objects.filter(tenant=request.tenant)
         .select_related("org_unit", "org_unit__parent", "head__party", "cost_center")
-        .annotate(employee_count=Count("org_unit__employments")).order_by("org_unit__name"),
+        .annotate(employee_count=Count(
+            "org_unit__employments",
+            filter=Q(org_unit__employments__status="active"))).order_by("org_unit__name"),
         "hrm/organization/department/list.html",
         search_fields=["org_unit__name", "code", "description"],
         filters=[("is_active", "is_active", False)],
@@ -280,8 +282,9 @@ def department_detail(request, pk):
         "obj": obj,
         "designations": Designation.objects.filter(tenant=request.tenant, department=obj.org_unit)
         .select_related("job_grade")[:50],
+        # Only currently-employed staff count as "in" the department (matches the delete guard).
         "employees": EmployeeProfile.objects.filter(
-            tenant=request.tenant, employment__org_unit=obj.org_unit)
+            tenant=request.tenant, employment__org_unit=obj.org_unit, employment__status="active")
         .select_related("party", "designation")[:50],
     })
 
@@ -372,6 +375,7 @@ def org_chart(request):
     if tenant is not None:
         employees = list(
             EmployeeProfile.objects.filter(tenant=tenant)
+            .exclude(employment__status="terminated")  # keep active/on-leave/unassigned, drop exited
             .select_related("party", "employment", "employment__org_unit", "employment__manager",
                             "designation", "designation__job_grade")
             .order_by("party__name"))
@@ -386,19 +390,18 @@ def org_chart(request):
                 children.setdefault(mgr_party, []).append(e)
             else:
                 roots.append(e)
-        # DFS into a flat (employee, depth) list (cycle-guarded) for a recursion-free template.
+        # Iterative DFS into a flat (employee, depth) list — cycle-guarded AND recursion-free in
+        # Python too, so a very deep manager chain can't raise RecursionError (review C1).
         seen = set()
-
-        def _walk(emp, depth):
+        stack = [(root, 0) for root in reversed(roots)]
+        while stack:
+            emp, depth = stack.pop()
             if emp.pk in seen:
-                return
+                continue
             seen.add(emp.pk)
             tree_nodes.append({"emp": emp, "depth": depth})
-            for child in children.get(emp.party_id, []):
-                _walk(child, depth + 1)
-
-        for root in roots:
-            _walk(root, 0)
+            for child in reversed(children.get(emp.party_id, [])):
+                stack.append((child, depth + 1))
         # Any employee not reached (cycle) is appended at depth 0 so none are dropped.
         for e in employees:
             if e.pk not in seen:
