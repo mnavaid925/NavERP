@@ -232,35 +232,51 @@ Every new module MUST include all CRUD operations from the start. Never ship a m
 
 ### Template Folder Structure (MANDATORY)
 
-Templates MUST be organized **one folder per sub-module**, never flat. A module's templates live under
-`templates/<app>/<submodule>/<page>.html` — grouped by the NavERP.md sub-module that owns each model.
+Templates MUST be organized **one folder per sub-module, then one folder per entity** — never flat. The page
+(`list` / `detail` / `form` / a secondary action) is the **bare filename**. A model's CRUD pages live under
+`templates/<app>/<submodule>/<entity>/<page>.html`, grouped by the NavERP.md sub-module that owns the model.
 
-1. **Path shape:** `templates/<app>/<submodule>/<entity>_<page>.html` (e.g.
-   `templates/hrm/onboarding/document_list.html`, `templates/accounting/ledger/journal_entry_list.html`,
-   `templates/crm/directory/lead_list.html`). The view's `render()` / `crud_*` `template=` argument uses that
-   full path: `render(request, "hrm/onboarding/document_list.html", ...)`.
+1. **Path shape:** `templates/<app>/<submodule>/<entity>/<page>.html` where `<page>` ∈ {`list`, `detail`, `form`,
+   … a secondary action like `import`}. e.g. `templates/hrm/offboarding/clearanceitem/detail.html`,
+   `templates/accounting/ledger/journal_entry/list.html`, `templates/crm/directory/lead/form.html`. The view's
+   `render()` / `crud_*` `template=` argument uses that full path: `render(request,
+   "hrm/offboarding/clearanceitem/detail.html", ...)`. **Never** ship a flat `<entity>_<page>.html` file inside a
+   sub-module folder (the old `clearanceitem_detail.html` shape is banned).
 
-2. **Folder = sub-module.** All of a sub-module's models share ONE folder named with a short, clear slug for that
-   sub-module (e.g. HRM: `employee/ designation/ onboarding/ attendance/ leave/ holiday/`; Accounting:
+2. **Two folder levels: sub-module → entity.** The sub-module folder uses a short slug (e.g. HRM:
+   `employee/ designation/ onboarding/ offboarding/ attendance/ leave/ holiday/`; Accounting:
    `ledger/ payable/ receivable/ cash/ assets/ costing/ payroll/ projects/ intercompany/ tax/ reports/ budget/
    audit/ integration/`; CRM: `directory/ sales/ marketing/ service/ activities/ finance/ projects/ documents/
-   workflow/ success/ vendor/`). Do NOT create a folder per model.
+   workflow/ success/ vendor/`). **Inside it, each model/entity gets its own folder** (`offboarding/separationcase/`,
+   `offboarding/exitinterview/`, `cash/bank_account/`, `cash/bank_transaction/`). The page file is just
+   `list.html` / `detail.html` / `form.html`.
 
-3. **Filename — drop a redundant sub-module prefix.** If the model/template name begins with the folder slug,
-   strip that leading token: `onboardingdocument_list.html` → `onboarding/document_list.html`,
-   `leavetype_list.html` → `leave/type_list.html`, `tax_code_list.html` → `tax/code_list.html`,
-   `budget_list.html` → `budget/list.html`. Otherwise keep the entity name as-is inside the folder:
-   `onboarding/assetallocation_list.html`, `cash/bank_account_list.html`, `directory/contact_list.html`. Never
-   leave a leading underscore or an empty name — keep the full name in that case.
+3. **Single-entity sub-modules: the sub-module folder doubles as the entity folder** — do NOT double-nest. When a
+   sub-module owns one main entity whose slug equals the folder (e.g. HRM `designation`, `employee`; Accounting
+   `budget`, `integration`, `intercompany`), keep `designation/list.html`, `employee/form.html`, `budget/detail.html`
+   — NOT `designation/designation/list.html`. A child entity added later still gets its own folder under the
+   sub-module (e.g. `budget/line/form.html` alongside the page-only `budget/list.html`).
 
-4. **Module landing page stays at the app root** (it is not a sub-module): `templates/hrm/hrm_overview.html`,
-   `templates/crm/overview.html`, `templates/accounting/dashboard.html`.
+4. **Foundation apps (Module 0: core / accounts / tenants / dashboard) are flat — no sub-module level**, so the
+   entity folder sits at the app root: `templates/core/party/list.html`, `templates/accounts/user/form.html`,
+   `templates/tenants/subscription/detail.html`.
 
-5. **New modules (via `/next-module`)** MUST follow this from the start — create the sub-module folders and place
-   each model's `list/detail/form` templates inside the owning sub-module's folder. Never ship flat
-   `templates/<app>/<entity>_<page>.html` files.
+5. **Secondary entity-action pages go inside the entity folder** (page = the action name):
+   `cash/bank_transaction/import.html` sits next to `cash/bank_transaction/list.html`. Fold a non-CRUD page into
+   `<entity>/<action>.html` only when it begins with `<entity>_` for an entity that already has a CRUD triple in
+   that directory (longest-entity-stem match — so `gl_account_ledger.html` is **not** folded into `glaccount/`).
 
-6. **`{% extends %}` / `{% include %}` are unaffected** by the folder — keep `{% extends "base.html" %}` and
+6. **Standalone pages stay at the sub-module / app root** (no entity folder): module landing/overview
+   (`templates/hrm/hrm_overview.html`, `templates/crm/overview.html`, `templates/accounting/dashboard.html`),
+   reports (`accounting/reports/balance_sheet.html`, `accounting/ledger/trial_balance.html`,
+   `accounting/payable/ap_aging.html`), print letters (`hrm/offboarding/relieving_letter.html`), wizards
+   (`tenants/onboarding_wizard.html`), and other single-purpose pages that aren't an entity's list/detail/form.
+
+7. **New modules (via `/next-module`)** MUST follow this from the start — create
+   `templates/<app>/<submodule>/<entity>/{list,detail,form}.html`. Never ship flat
+   `templates/<app>/<submodule>/<entity>_<page>.html` files.
+
+8. **`{% extends %}` / `{% include %}` are unaffected** by the folders — keep `{% extends "base.html" %}` and
    `{% include "partials/..." %}` (base + partials live at the templates root, not inside a module).
 
 ---
