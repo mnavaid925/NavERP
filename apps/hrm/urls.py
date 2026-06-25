@@ -50,6 +50,22 @@ urlpatterns = [
     path("employees/<int:pk>/edit/", views.employee_edit, name="employee_edit"),
     path("employees/<int:pk>/delete/", views.employee_delete, name="employee_delete"),
 
+    # Employee Documents (3.1 — personnel-file vault) — CRUD + verify/reject
+    path("employee-documents/", views.employee_document_list, name="employee_document_list"),
+    path("employee-documents/add/", views.employee_document_create, name="employee_document_create"),
+    path("employee-documents/<int:pk>/", views.employee_document_detail, name="employee_document_detail"),
+    path("employee-documents/<int:pk>/edit/", views.employee_document_edit, name="employee_document_edit"),
+    path("employee-documents/<int:pk>/delete/", views.employee_document_delete, name="employee_document_delete"),
+    path("employee-documents/<int:pk>/verify/", views.employee_document_mark_verified, name="employee_document_mark_verified"),
+    path("employee-documents/<int:pk>/reject/", views.employee_document_reject, name="employee_document_reject"),
+
+    # Employee Lifecycle Events (3.1 — dated job-history timeline) — CRUD
+    path("lifecycle-events/", views.employee_lifecycle_list, name="employee_lifecycle_list"),
+    path("lifecycle-events/add/", views.employee_lifecycle_create, name="employee_lifecycle_create"),
+    path("lifecycle-events/<int:pk>/", views.employee_lifecycle_detail, name="employee_lifecycle_detail"),
+    path("lifecycle-events/<int:pk>/edit/", views.employee_lifecycle_edit, name="employee_lifecycle_edit"),
+    path("lifecycle-events/<int:pk>/delete/", views.employee_lifecycle_delete, name="employee_lifecycle_delete"),
+
     # Leave Types (3.10)
     path("leave-types/", views.leavetype_list, name="leavetype_list"),
     path("leave-types/add/", views.leavetype_create, name="leavetype_create"),
