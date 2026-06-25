@@ -5,10 +5,13 @@ from .models import (
     AssetAllocation,
     AttendanceRecord,
     ClearanceItem,
+    CostCenterProfile,
+    DepartmentProfile,
     Designation,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    JobGrade,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -25,12 +28,41 @@ from .models import (
 )
 
 
+@admin.register(JobGrade)
+class JobGradeAdmin(admin.ModelAdmin):
+    list_display = ("name", "level_order", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("name", "description")
+    ordering = ("level_order", "name")
+    readonly_fields = ("created_at", "updated_at")
+
+
 @admin.register(Designation)
 class DesignationAdmin(admin.ModelAdmin):
-    list_display = ("name", "grade", "department", "min_salary", "max_salary", "is_active", "tenant")
-    list_filter = ("is_active", "tenant")
-    search_fields = ("name", "grade")
+    list_display = ("name", "job_grade", "grade", "department", "min_salary", "max_salary",
+                    "budgeted_headcount", "is_active", "tenant")
+    list_filter = ("is_active", "job_grade", "tenant")
+    search_fields = ("name", "grade", "job_grade__name")
     readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("job_grade", "department")
+
+
+@admin.register(DepartmentProfile)
+class DepartmentProfileAdmin(admin.ModelAdmin):
+    list_display = ("org_unit", "code", "head", "cost_center", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("org_unit__name", "code")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("org_unit", "head", "cost_center")
+
+
+@admin.register(CostCenterProfile)
+class CostCenterProfileAdmin(admin.ModelAdmin):
+    list_display = ("org_unit", "code", "owner", "budget_annual", "budget_year", "is_active", "tenant")
+    list_filter = ("is_active", "budget_year", "tenant")
+    search_fields = ("org_unit__name", "code")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("org_unit", "owner")
 
 
 @admin.register(EmployeeProfile)
