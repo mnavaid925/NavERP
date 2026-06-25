@@ -71,16 +71,51 @@ class TenantNumbered(TenantOwned):
 
 
 # ---------------------------------------------------------------------------
-# 3.2 Organizational Structure — Designation (reuses core.OrgUnit for department)
+# 3.2 Organizational Structure — JobGrade + Designation + Department/CostCenter
+# companions to ``core.OrgUnit``. Departments and cost-centers are canonical
+# ``core.OrgUnit`` nodes (name/parent/hierarchy live there); HRM never duplicates
+# them — it adds a thin tenant-scoped companion table (head/owner/budget/code) that
+# core cannot hold, mirroring how ``EmployeeProfile`` extends ``core.Party``. The org
+# chart is DERIVED from ``core.Employment.manager`` + ``OrgUnit.parent`` (a view, no model).
 # ---------------------------------------------------------------------------
+class JobGrade(TenantOwned):
+    """Orderable job-grade / level catalog (3.2). ``level_order`` ranks seniority (1 = most
+    junior) for hierarchy display and org-chart level-coloring. Replaces the free-text
+    ``Designation.grade`` CharField as the primary grade reference (the CharField is kept for
+    back-compat). Small per-tenant catalog identified by name — not auto-numbered."""
+
+    name = models.CharField(max_length=50)
+    level_order = models.PositiveSmallIntegerField(default=1)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["level_order", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_jg_tenant_active_idx"),
+            models.Index(fields=["tenant", "level_order"], name="hrm_jg_tenant_order_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} (L{self.level_order})" if self.level_order else self.name
+
+
 class Designation(TenantOwned):
-    """Job title / grade with a salary band (3.2). Department is reused from ``core.OrgUnit``."""
+    """Job title with a job-grade, description and salary band (3.2). Department is reused from
+    ``core.OrgUnit``; the grade is reused from ``hrm.JobGrade`` (the free-text ``grade`` stays
+    as a fallback). ``budgeted_headcount`` is the lightweight position-slot proxy."""
 
     name = models.CharField(max_length=255)
+    job_grade = models.ForeignKey("hrm.JobGrade", on_delete=models.SET_NULL, null=True, blank=True, related_name="designations")
     grade = models.CharField(max_length=50, blank=True)
     department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="designations")
+    description = models.TextField(blank=True)
+    requirements = models.TextField(blank=True)
     min_salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    mid_salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     max_salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    budgeted_headcount = models.PositiveSmallIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -89,15 +124,92 @@ class Designation(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "is_active"], name="hrm_desig_tenant_active_idx"),
             models.Index(fields=["tenant", "department"], name="hrm_desig_tenant_dept_idx"),
+            models.Index(fields=["tenant", "job_grade"], name="hrm_desig_tenant_jg_idx"),
         ]
 
     def clean(self):
         super().clean()
         if self.min_salary is not None and self.max_salary is not None and self.min_salary > self.max_salary:
             raise ValidationError({"max_salary": "Maximum salary must be greater than or equal to the minimum."})
+        if self.mid_salary is not None:
+            if self.min_salary is not None and self.mid_salary < self.min_salary:
+                raise ValidationError({"mid_salary": "Midpoint salary must be at least the minimum."})
+            if self.max_salary is not None and self.mid_salary > self.max_salary:
+                raise ValidationError({"mid_salary": "Midpoint salary must not exceed the maximum."})
 
     def __str__(self):
-        return f"{self.name} ({self.grade})" if self.grade else self.name
+        label = self.job_grade.name if self.job_grade_id and self.job_grade else self.grade
+        return f"{self.name} ({label})" if label else self.name
+
+
+class DepartmentProfile(TenantOwned):
+    """HRM companion to ``core.OrgUnit(kind="department")`` (3.2). Adds the HR fields core cannot
+    hold — department head, cost-center mapping, mnemonic code — without duplicating the OrgUnit
+    node (name/parent/hierarchy stay on OrgUnit). The ``head`` drives future approval chains."""
+
+    org_unit = models.OneToOneField("core.OrgUnit", on_delete=models.CASCADE, related_name="department_profile")
+    code = models.CharField(max_length=20, blank=True)
+    description = models.TextField(blank=True)
+    head = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="headed_departments")
+    cost_center = models.ForeignKey(
+        "core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="department_cost_mappings", limit_choices_to={"kind": "cost_center"})
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["org_unit__name"]
+        unique_together = ("tenant", "org_unit")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_dp_tenant_active_idx"),
+            models.Index(fields=["tenant", "head"], name="hrm_dp_tenant_head_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.org_unit_id:
+            if self.org_unit.kind != "department":
+                raise ValidationError({"org_unit": "Linked unit must be a Department."})
+            # Cross-tenant IDOR guard (only checkable once tenant is set — create sets it in the view).
+            if self.tenant_id and self.org_unit.tenant_id != self.tenant_id:
+                raise ValidationError({"org_unit": "Department belongs to another tenant."})
+        if self.cost_center_id and self.cost_center.kind != "cost_center":
+            raise ValidationError({"cost_center": "Linked unit must be a Cost Center."})
+
+    def __str__(self):
+        return f"{self.org_unit.name} ({self.code})" if self.code else self.org_unit.name
+
+
+class CostCenterProfile(TenantOwned):
+    """HRM companion to ``core.OrgUnit(kind="cost_center")`` (3.2). Adds the budget owner, annual
+    budget and code core cannot hold. The CC node + its parent roll-up hierarchy live on OrgUnit;
+    budget-vs-actuals reporting (against payroll spend) waits on the Accounting module."""
+
+    org_unit = models.OneToOneField("core.OrgUnit", on_delete=models.CASCADE, related_name="cost_center_profile")
+    code = models.CharField(max_length=20, blank=True)
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_cost_centers")
+    budget_annual = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    budget_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["org_unit__name"]
+        unique_together = ("tenant", "org_unit")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_cc_tenant_active_idx"),
+            models.Index(fields=["tenant", "owner"], name="hrm_cc_tenant_owner_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.org_unit_id:
+            if self.org_unit.kind != "cost_center":
+                raise ValidationError({"org_unit": "Linked unit must be a Cost Center."})
+            if self.tenant_id and self.org_unit.tenant_id != self.tenant_id:
+                raise ValidationError({"org_unit": "Cost Center belongs to another tenant."})
+
+    def __str__(self):
+        return f"{self.org_unit.name} ({self.code})" if self.code else self.org_unit.name
 
 
 # ---------------------------------------------------------------------------
