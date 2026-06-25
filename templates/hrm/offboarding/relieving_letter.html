@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relieving Letter — {{ employee.party.name }}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 48px 56px; line-height: 1.7; }
+    .letterhead { text-align: center; border-bottom: 2px solid #1f3a8a; padding-bottom: 16px; margin-bottom: 32px; }
+    .letterhead h1 { margin: 0; font-size: 24px; color: #1f3a8a; letter-spacing: 1px; }
+    .letterhead p { margin: 4px 0 0; font-size: 13px; color: #555; }
+    .meta { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 28px; }
+    h2.doc-title { text-align: center; text-transform: uppercase; letter-spacing: 2px; font-size: 16px; margin: 24px 0; text-decoration: underline; }
+    .sign { margin-top: 56px; }
+    .toolbar { text-align: center; margin-bottom: 24px; }
+    .toolbar button, .toolbar a { font-family: system-ui, sans-serif; font-size: 13px; padding: 8px 16px; border: 1px solid #1f3a8a; background: #1f3a8a; color: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; }
+    .toolbar a { background: #fff; color: #1f3a8a; margin-left: 8px; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <a href="{% url 'hrm:separationcase_detail' case.pk %}">Back to case</a>
+  </div>
+
+  <div class="letterhead">
+    <h1>{{ tenant.name|default:"Company" }}</h1>
+    <p>Human Resources Department</p>
+  </div>
+
+  <div class="meta">
+    <span>Ref: REL/{{ case.number }}</span>
+    <span>Date: {{ today|date:"F j, Y" }}</span>
+  </div>
+
+  <h2 class="doc-title">Relieving Letter</h2>
+
+  <p>To Whom It May Concern,</p>
+
+  <p>This is to certify that <strong>{{ employee.party.name }}</strong>
+    (Employee ID: {{ employee.number }}){% if employment.job_title %}, who served as
+    <strong>{{ employment.job_title }}</strong>{% elif employee.designation %}, who served as
+    <strong>{{ employee.designation.name }}</strong>{% endif %}{% if employment.org_unit %} in the
+    {{ employment.org_unit.name }} department{% endif %}, has been relieved from the services of
+    {{ tenant.name|default:"the company" }}{% if case.actual_last_working_day %} with effect from the close of
+    business on <strong>{{ case.actual_last_working_day|date:"F j, Y" }}</strong>{% elif case.expected_last_working_day %}
+    with effect from the close of business on <strong>{{ case.expected_last_working_day|date:"F j, Y" }}</strong>{% endif %}.</p>
+
+  {% if employment.hired_on %}
+    <p>{{ employee.party.name }} was associated with the organization from
+      <strong>{{ employment.hired_on|date:"F j, Y" }}</strong>{% if case.actual_last_working_day %} to
+      <strong>{{ case.actual_last_working_day|date:"F j, Y" }}</strong>{% endif %}.</p>
+  {% endif %}
+
+  <p>All company dues and clearances have been settled. We confirm that there are no outstanding obligations
+    pending against the employee as on the date of relieving.</p>
+
+  <p>We thank {{ employee.party.name }} for the services rendered and wish them success in their future
+    endeavours.</p>
+
+  <div class="sign">
+    <p>For {{ tenant.name|default:"the Company" }},</p>
+    <br><br>
+    <p>__________________________<br>
+       Authorized Signatory<br>
+       Human Resources</p>
+  </div>
+</body>
+</html>
