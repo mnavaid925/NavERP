@@ -1,13 +1,14 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
 
 NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix `/hrm/`
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
-3.3 Employee Onboarding, 3.9 Attendance Management, 3.10 Leave Management, 3.12 Holiday Management.** Reuses the
+3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.9 Attendance Management, 3.10 Leave Management,
+3.12 Holiday Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -16,7 +17,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 16 tables (9 core HRM + 7 onboarding)
+## Models (`apps/hrm/models.py`) — 20 tables (9 core HRM + 7 onboarding + 4 offboarding)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -53,17 +54,38 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 the `used_days_db`/`balance_db` annotations from `views._used_days_subquery()` (avoids per-row N+1), not the model
 properties.
 
+### 3.4 Employee Offboarding (4 tables) — case → exit-interview / clearance / final-settlement → letters
+
+| Model | Number | Key fields | Reuses core / notes |
+|-------|--------|-----------|---------------------|
+| `SeparationCase` | `SEP-` | employee→`EmployeeProfile`, separation_type(resignation/termination/layoff/retirement/contract_end/deceased), exit_reason(coded), resignation_letter(upload), notice_period_days, notice_start_date, **expected_last_working_day**(editable=False, computed), actual_last_working_day, notice_buyout_type(none/pay_in_lieu/recover), requires_kt, **status**(draft→pending_approval→in_clearance→cleared→settled→completed +rejected/withdrawn), approver/approved_at, rejection_reason, withdrawal_reason, relieving/experience_letter_generated_at/_by, submitted_at | **The offboarding hub** — every other 3.4 model FKs here. `save()` derives `expected_last_working_day = notice_start_date + notice_period_days` (added to `update_fields` when missing so workflow saves persist it). `all_mandatory_cleared` property (gates Mark-Cleared + letters). No standalone "approved" state — approve goes straight to `in_clearance`. `LETTER_READY_STATUSES = (cleared, settled, completed)`. |
+| `ExitInterview` | `EI-` | case→`SeparationCase`, interviewer→`User`, scheduled_at, conducted_at(editable=False), mode(in_person/video/phone/form), **status**(scheduled/completed/skipped/no_show, editable=False), 8×`rating_*` SmallIntegerField(1–5, `_RATING_VALIDATORS`), primary_reason(coded), would_recommend, would_rejoin, what_went_well/what_to_improve/additional_comments | One per case (form-guarded, not DB). `RATING_FIELDS` class list drives the form fieldset + detail table. `average_rating` property. |
+| `ClearanceItem` | — | case→`SeparationCase`, department(it/finance/hr/admin/manager/legal/security/library/custom), department_label, description, is_mandatory, assigned_to→`User`, due_date, **status**(pending/in_progress/cleared/not_applicable/rejected, editable=False), cleared_by/cleared_at(editable=False), **asset_allocation→`AssetAllocation`(SET_NULL)** | Child clearance lines (no number). `RESOLVED_STATUSES = (cleared, not_applicable)`. `department_display` property (custom label fallback). Marking a line cleared **returns its linked issued asset** (same txn, employee-ownership-guarded). |
+| `FinalSettlement` | `FNF-` | case→`SeparationCase`, settlement_date, 6 earnings DecimalFields (prorata_salary, leave_encashment_days+amount, gratuity_eligible+amount, bonus_amount, reimbursement_amount, other_income), 7 deduction DecimalFields (notice_recovery_amount, loan_recovery, asset_deduction, advance_recovery, tax_deduction, professional_tax, other_deduction), **status**(draft→computed→hr_approved→finance_approved→paid +cancelled, editable=False), hr/finance_approved_by/_at(editable=False), paid_at(editable=False), gl_posted(stub) | One per case (`unique_together(tenant,case)`). `net_payable`/`total_earnings`/`total_deductions` are **derived properties** (never stored). `gl_posted` always False — GL posting deferred to `accounting.PayrollRun`. |
+
+**Offboarding flow:** create `SeparationCase` (draft) → **Submit** (draft→pending_approval, stamps submitted_at) → **Approve** (admin; →in_clearance, `generate_clearance_checklist` auto-creates the 6 department lines) → clear/NA/reject each `ClearanceItem` (admin; cleared returns the linked asset) → **Mark Cleared** (admin; gated on `all_mandatory_cleared`) → create `FinalSettlement` → **Compute** (admin; `compute_leave_encashment` fills leave encashment + gratuity-if-≥5yrs) → **HR Approve** (requires `computed`) → **Finance Approve** → **Mark Paid** (case→settled) → **Complete** (admin) → **Generate Relieving/Experience Letter** (print view, stamps generated_at). An `ExitInterview` is scheduled off the case and marked completed/skipped (admin). **Workflow-owned fields are excluded from every form** (status/approver/timestamps/letter stamps) — set only by the audited POST actions.
+
+**Offboarding services (`apps/hrm/services.py`):** `generate_clearance_checklist(case)` — idempotent ((department,description)-keyed `bulk_create`) 6-line department checklist, links one issued `AssetAllocation` to the IT line, respects `requires_kt` for the manager line. `compute_leave_encashment(employee)` — sums encashable active `LeaveAllocation` balances via a **single correlated subquery** (no N+1), values them at `designation.min_salary / 30` per day; returns `(days, amount)`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, `employee`, `leavetype`, `leaveallocation`, `leaverequest`,
   `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`, **`onboardingtemplate`,
   `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`, `assetallocation`,
-  `orientationsession`**}: `<entity>_list/_create/_detail/_edit/_delete`.
+  `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`, `finalsettlement`**}:
+  `<entity>_list/_create/_detail/_edit/_delete`.
 - Leave workflow extras: `hrm:leaverequest_submit/_approve/_reject/_cancel` (all POST-only).
 - **Onboarding workflow extras (all POST-only):** `onboardingprogram_activate/_generate_tasks/_complete/_cancel`
   (complete + cancel are `@tenant_admin_required`), `onboardingtask_complete/_reopen/_skip`,
   `onboardingdocument_mark_signed`, `assetallocation_issue/_return`,
   `orientationsession_mark_attended/_mark_missed`.
+- **Offboarding (3.4) workflow extras (all POST-only):** `separationcase_submit` (`@login_required`),
+  `separationcase_approve/_reject/_mark_cleared/_complete` (`@tenant_admin_required`), `separationcase_withdraw`
+  (`@login_required`), `separationcase_relieving_letter/_experience_letter` (`@login_required`, render a print
+  view + stamp generated_at); `exitinterview_complete/_skip` (`@tenant_admin_required`); `clearanceitem_mark_cleared/
+  _mark_na/_reject` (all `@tenant_admin_required`); `finalsettlement_compute/_hr_approve/_finance_approve/_mark_paid`
+  (all `@tenant_admin_required`). The two letter names are `hrm:separationcase_relieving_letter` /
+  `hrm:separationcase_experience_letter`. Create pages honor `?case=<pk>` to pre-fill the parent case.
 
 ## Views (`apps/hrm/views.py`)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
@@ -84,21 +106,33 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   Workflow actions mirror the leave pattern (status guards + audit log); mark-signed rejects `not_required`,
   attendance actions reject `cancelled`. Task generation lives in **`apps/hrm/services.py`** (not views) so the
   seeder/tests can import it without the view layer.
+- **Offboarding (3.4):** `separationcase_detail` is the hub — embeds the clearance checklist (progress bar +
+  inline mark-cleared/na/reject), the exit-interview summary, and the F&F settlement summary, with conditional
+  workflow buttons by status; `all_mandatory_cleared` + clearance progress are computed from the already-fetched
+  clearance list (no extra query). The four create views go through `_offboarding_create` (a `crud_create` variant
+  that pre-fills `?case=` and redirects to the parent case hub with the new pk). The two letter views
+  (`_generate_letter`) gate on `LETTER_READY_STATUSES`, stamp generated_at/by once, then `render()` a standalone
+  print template with `Content-Disposition: inline`. Delete/edit guards: only a `draft` case is deletable
+  (else withdraw), only `draft`/`pending_approval` editable; clearance line editable/deletable only while
+  `pending`/`in_progress`; settlement editable in `draft`/`computed`, deletable only in `draft`.
 
 ## Templates (`templates/hrm/<submodule>/`)
-49 files, **one folder per sub-module** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — `list/detail/
+63 files, **one folder per sub-module** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — `list/detail/
 form`), `designation/` (3.2), `onboarding/` (3.3 — `template_*`, `templatetask_*`, `program_*` [the rich
 multi-section hub], `task_*`, `document_*` [`document_form` is multipart], `assetallocation_*`,
-`orientationsession_*`), `attendance/` (3.9 — `shift_*`, `shiftassignment_*`, `record_*`), `leave/` (3.10 —
-`type_*`, `allocation_*`, `request_*`), `holiday/` (3.12 — `publicholiday_*`). The landing `hrm_overview.html`
-stays at the `templates/hrm/` root. A view renders e.g. `"hrm/onboarding/document_list.html"`,
+`orientationsession_*`), **`offboarding/` (3.4 — `separationcase_list/form/detail` [the hub], `exitinterview_*`,
+`clearanceitem_*`, `finalsettlement_*`, plus the two standalone print pages `relieving_letter.html` /
+`experience_letter.html` which do NOT extend base.html)**, `attendance/` (3.9 — `shift_*`, `shiftassignment_*`,
+`record_*`), `leave/` (3.10 — `type_*`, `allocation_*`, `request_*`), `holiday/` (3.12 — `publicholiday_*`). The
+landing `hrm_overview.html` stays at the `templates/hrm/` root. A view renders e.g. `"hrm/onboarding/document_list.html"`,
 `"hrm/leave/request_list.html"`, `"hrm/attendance/record_list.html"`. Extend
 `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
 selects pre-filled from `request.GET`; FK filters compare `obj.pk|stringformat:"d"`; boolean filters use
 `"True"/"False"`; badges use exact model choice values with `{{ obj.get_<field>_display }}` fallback; every list
 has an Actions column (view/edit/delete-POST+csrf+confirm). **Never render raw `bank_account` — use
-`masked_bank_account`.** `employee_form.html` is `multipart/form-data` (photo).
+`masked_bank_account`.** `employee_form.html` (photo) and `offboarding/separationcase_form.html` (resignation
+letter) are `multipart/form-data`. Right-align numeric cells with the `.text-right` utility.
 
 ## Forms (`apps/hrm/forms.py`)
 `TenantModelForm` subclasses (auto tenant-scope FK querysets, theme widgets). Exclude `tenant`, auto `number`, and
@@ -109,6 +143,12 @@ photo (`clean_photo`: jpg/jpeg/png/webp/gif allowlist + 5 MB cap). **Onboarding 
 pdf/doc/docx/jpg/png + 10 MB. `OrientationSessionForm` excludes `attendance_status`. `AssetAllocationForm` excludes
 `issued_at`/`issued_by`/`returned_at`. `OnboardingProgramForm.clean()` blocks a 2nd program per employee + a
 self-buddy. (All "advance the state" fields are owned by the audited workflow actions, never form-set.)
+**Offboarding form security (3.4):** `SeparationCaseForm` excludes status/submitted_at/approver/approved_at/
+rejection_reason/withdrawal_reason/expected_last_working_day/both letter stamps; `clean_resignation_letter`
+allowlists pdf/doc/docx/jpg/png + 10 MB. `ExitInterviewForm` excludes status/conducted_at + 1:1-per-case guard.
+`ClearanceItemForm` excludes status/cleared_by/cleared_at and scopes `asset_allocation` to `status="issued"`.
+`FinalSettlementForm` excludes status/hr+finance approval stamps/paid_at/gl_posted + 1:1-per-case guard
+(also DB `unique_together`).
 
 ## Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
@@ -117,8 +157,11 @@ persons** (tops up with unique names if too few), 4 leave types + allocations, 2
 pending), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee. **Onboarding** is seeded by a separate
 `_seed_onboarding(tenant)` (guarded by its own `OnboardingTemplate.exists()` check, so an already-HRM-seeded tenant
 still gets it): 2 templates (12 task lines), 2 programs (1 active/1 completed) with generated tasks, 6 documents,
-6 assets, 2 orientation sessions per tenant. Login as `admin_acme` / `admin_globex` (password `password`);
-superuser `admin` has no tenant and sees nothing.
+6 assets, 2 orientation sessions per tenant. **Offboarding** is seeded by `_seed_offboarding(tenant)` (guarded by
+its own `SeparationCase.exists()` check; the offboarding models are also in the `--flush` delete list): 2 separation
+cases per tenant (1 completed + fully-cleared + paid settlement + completed exit interview; 1 in-clearance with the
+HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. Login as `admin_acme` / `admin_globex`
+(password `password`); superuser `admin` has no tenant and sees nothing.
 
 ## Sidebar wiring (`apps/core/navigation.py` `LIVE_LINKS`)
 - 3.1: Employee Directory/Profile/Employment Details → `hrm:employee_list`; + HRM Overview → `hrm:hrm_overview`.
@@ -127,6 +170,9 @@ superuser `admin` has no tenant and sees nothing.
   `hrm:onboardingdocument_list`; Asset Allocation → `hrm:assetallocation_list`; Orientation Schedule →
   `hrm:orientationsession_list`; + extras Onboarding Templates → `hrm:onboardingtemplate_list`, Template Tasks →
   `hrm:onboardingtemplatetask_list`.
+- 3.4: Resignation Management + Experience Letter → `hrm:separationcase_list`; Exit Interview →
+  `hrm:exitinterview_list`; Clearance Process → `hrm:clearanceitem_list`; F&F Settlement →
+  `hrm:finalsettlement_list`.
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
   + Shift Assignments → `hrm:shiftassignment_list`.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
@@ -160,13 +206,20 @@ superuser `admin` has no tenant and sees nothing.
 
 ## Deferred (later HRM passes — see `.claude/tasks/todo.md`)
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), recruiting/ATS
-(3.5–3.8), **offboarding (3.4)** — `AssetAllocation.status="returned"` already stubs asset return,
-performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`), statutory/tax (3.13–3.17),
-attendance regularization & geofencing, optional-holiday selection, leave carry-forward/encashment batch, employee
-self-service portal, and a per-employee↔user link for ownership-scoped leave actions (currently any tenant member
-can submit/cancel; approve/reject are admin-only).
+(3.5–3.8), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
+statutory/tax (3.13–3.17), attendance regularization & geofencing, optional-holiday selection, leave
+carry-forward/encashment batch, employee self-service portal, and a per-employee↔user link for ownership-scoped
+leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
 **3.3 onboarding deferrals:** live e-sign API (DocuSign/HelloSign — `external_ref` is the stub), preboarding
 before an `EmployeeProfile` exists (needs ATS 3.5–3.8), automated task reminders / calendar invites, IT
 provisioning automation, AI 30-60-90-day plan generation, a new-hire self-service portal, and a real FK to the
 Module 11 `assets.Asset` register (reserved on `AssetAllocation`). Onboarding session reschedule/cancel actions
 aren't built — `OrientationSession.attendance_status` reschedule/cancel are reachable only via Django admin.
+**3.4 offboarding deferrals:** live GL posting (`FinalSettlement.gl_posted` is a stub — defer to
+`accounting.PayrollRun`), PDF/email letter delivery (v1 is an HTML browser-print view), a dynamic exit-interview
+questionnaire builder (the 8 Likert fields are fixed), per-asset clearance auto-generation via signal (the IT line
+links one issued asset), itemized FnF lines + statutory PF/ESI components, attrition analytics over
+`ExitInterview.primary_reason`, a no-dues certificate, a `rehire_eligible` pool from `would_rejoin`, multi-level
+approval chains, and per-department clearance roles (clearance resolution is currently `@tenant_admin_required`).
+Private uploads (`resignation_letter`, onboarding docs, photos) are served via the dev `/media/` helper — keep
+`MEDIA_ROOT` outside the web root in production (project-wide WARNING).
