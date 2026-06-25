@@ -8,10 +8,14 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'hrm:jobgrade_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
-      <form method="post" action="{% url 'hrm:jobgrade_delete' obj.pk %}" onsubmit="return confirm('Delete this job grade?');">
-        {% csrf_token %}
-        <button class="btn btn-danger" type="submit"{% if designation_count %} disabled title="In use by {{ designation_count }} designation(s)"{% endif %}><i data-lucide="trash-2"></i> Delete</button>
-      </form>
+      {% if designation_count %}
+        <button class="btn btn-danger" type="button" disabled title="In use by {{ designation_count }} designation(s) — deactivate instead"><i data-lucide="trash-2"></i> Delete</button>
+      {% else %}
+        <form method="post" action="{% url 'hrm:jobgrade_delete' obj.pk %}" onsubmit="return confirm('Delete this job grade?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 
@@ -22,7 +26,7 @@
       <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
     </dl>
-    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line;">{{ obj.description }}</p></div>{% endif %}
+    {% if obj.description %}<div style="margin-top:1rem;"><h3 class="card-title">Description</h3><p class="text-muted" style="white-space:pre-line; overflow-wrap:break-word;">{{ obj.description }}</p></div>{% endif %}
   </div></div>
 
   <div class="card">
