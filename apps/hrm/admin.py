@@ -8,6 +8,8 @@ from .models import (
     CostCenterProfile,
     DepartmentProfile,
     Designation,
+    EmployeeDocument,
+    EmployeeLifecycleEvent,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
@@ -72,6 +74,28 @@ class EmployeeProfileAdmin(admin.ModelAdmin):
     search_fields = ("number", "party__name", "personal_email", "mobile")
     readonly_fields = ("number", "created_at", "updated_at")
     raw_id_fields = ("party", "employment", "designation")
+
+
+@admin.register(EmployeeDocument)
+class EmployeeDocumentAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "document_type", "title", "verification_status",
+                    "expires_on", "is_confidential", "created_at", "tenant")
+    list_filter = ("document_type", "verification_status", "is_confidential", "tenant")
+    search_fields = ("number", "title", "document_number", "employee__party__name")
+    readonly_fields = ("number", "verification_status", "verified_by", "verified_at",
+                       "created_at", "updated_at")
+    raw_id_fields = ("employee", "verified_by")
+
+
+@admin.register(EmployeeLifecycleEvent)
+class EmployeeLifecycleEventAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "event_type", "effective_date", "to_designation",
+                    "initiated_by", "created_at", "tenant")
+    list_filter = ("event_type", "tenant")
+    search_fields = ("number", "employee__party__name", "reason", "notes")
+    readonly_fields = ("number", "initiated_by", "created_at", "updated_at")
+    raw_id_fields = ("employee", "from_designation", "to_designation", "from_department",
+                     "to_department", "from_manager", "to_manager", "initiated_by")
 
 
 @admin.register(LeaveType)
