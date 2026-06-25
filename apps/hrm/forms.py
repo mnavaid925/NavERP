@@ -7,9 +7,10 @@ system-computed fields (``days``, ``hours_worked``, ``approved_at``, ``confirmed
 import os
 
 from django import forms
+from django.db.models import Q
 
 from apps.core.forms import TenantModelForm
-from apps.core.models import Party
+from apps.core.models import OrgUnit, Party
 
 # Photo upload safety: rasterizable-image allowlist + size cap (mirrors core DocumentForm).
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -23,10 +24,13 @@ from .models import (
     AssetAllocation,
     AttendanceRecord,
     ClearanceItem,
+    CostCenterProfile,
+    DepartmentProfile,
     Designation,
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    JobGrade,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -43,10 +47,66 @@ from .models import (
 )
 
 
+# ----------------------------------------------------------------------- 3.2 Organizational Structure
+class JobGradeForm(TenantModelForm):
+    class Meta:
+        model = JobGrade
+        fields = ["name", "level_order", "description", "is_active"]
+
+
 class DesignationForm(TenantModelForm):
     class Meta:
         model = Designation
-        fields = ["name", "grade", "department", "min_salary", "max_salary", "is_active"]
+        fields = ["name", "job_grade", "department", "min_salary", "mid_salary", "max_salary",
+                  "grade", "budgeted_headcount", "is_active", "description", "requirements"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Offer only active grades for selection (base form already scopes to tenant).
+        if self.tenant is not None:
+            self.fields["job_grade"].queryset = (
+                JobGrade.objects.filter(tenant=self.tenant, is_active=True)
+                .order_by("level_order", "name"))
+            self.fields["department"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+
+
+class DepartmentProfileForm(TenantModelForm):
+    class Meta:
+        model = DepartmentProfile
+        fields = ["org_unit", "code", "description", "head", "cost_center", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            # Only department OrgUnits that don't already have a profile (plus this row's own).
+            self.fields["org_unit"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant, kind="department")
+                .filter(Q(department_profile__isnull=True) | Q(pk=self.instance.org_unit_id))
+                .order_by("name"))
+            self.fields["head"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant)
+                .select_related("party").order_by("party__name"))
+            self.fields["cost_center"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant, kind="cost_center").order_by("name"))
+
+
+class CostCenterProfileForm(TenantModelForm):
+    class Meta:
+        model = CostCenterProfile
+        fields = ["org_unit", "code", "description", "owner", "budget_annual", "budget_year",
+                  "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["org_unit"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant, kind="cost_center")
+                .filter(Q(cost_center_profile__isnull=True) | Q(pk=self.instance.org_unit_id))
+                .order_by("name"))
+            self.fields["owner"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant)
+                .select_related("party").order_by("party__name"))
 
 
 class EmployeeProfileForm(TenantModelForm):
