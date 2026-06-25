@@ -1239,7 +1239,10 @@ def _offboarding_create(request, form_class, template, redirect_resolver):
     """Shared create for the offboarding models: tenant guard, ``?case=<pk>`` pre-fill (the child
     create pages are reached from the case hub), save + audit, then redirect via
     ``redirect_resolver(obj)`` → ``(view_name, pk)``. Mirrors ``apps.core.crud.crud_create`` but adds
-    the initial-case pre-fill and a pk-aware redirect (crud_create can only redirect to a bare name)."""
+    the initial-case pre-fill and a pk-aware redirect (crud_create can only redirect to a bare name).
+
+    Contract: every caller MUST be ``@login_required`` (this helper writes an audit row with
+    ``request.user`` and assumes an authenticated session)."""
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before creating records.")
         return redirect("dashboard:home")
@@ -1368,7 +1371,8 @@ def separationcase_approve(request, pk):
             obj.approved_at = timezone.now()
             obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
             created = generate_clearance_checklist(obj)  # auto-build the department checklist
-        write_audit_log(request.user, obj, "update", {"action": "approve", "clearance_items": created})
+            write_audit_log(request.user, obj, "update",
+                            {"action": "approve", "clearance_items": created})
         messages.success(request, f"Separation case {obj.number} approved — "
                          f"{created} clearance item(s) created.")
     else:
@@ -1642,8 +1646,11 @@ def clearanceitem_mark_cleared(request, pk):
             obj.cleared_at = timezone.now()
             obj.save(update_fields=["status", "cleared_by", "cleared_at", "updated_at"])
             # Returning the linked asset is part of clearing its line — keep the two in one txn.
+            # Only return an asset that actually belongs to this case's employee (guard against a
+            # mis-linked allocation from another employee being silently marked returned).
             returned = None
-            if obj.asset_allocation_id and obj.asset_allocation.status == "issued":
+            if (obj.asset_allocation_id and obj.asset_allocation.status == "issued"
+                    and obj.asset_allocation.employee_id == obj.case.employee_id):
                 obj.asset_allocation.status = "returned"
                 obj.asset_allocation.returned_at = timezone.now()
                 obj.asset_allocation.save(update_fields=["status", "returned_at", "updated_at"])
@@ -1677,7 +1684,8 @@ def clearanceitem_mark_na(request, pk):
 @require_POST
 def clearanceitem_reject(request, pk):
     obj = get_object_or_404(ClearanceItem.objects.select_related("case"), pk=pk, tenant=request.tenant)
-    if obj.status != "cleared":
+    # Only an open line can be rejected (failed clearance) — a resolved one stays resolved.
+    if obj.status in ("pending", "in_progress"):
         obj.status = "rejected"
         obj.cleared_by = None
         obj.cleared_at = None
@@ -1685,7 +1693,7 @@ def clearanceitem_reject(request, pk):
         write_audit_log(request.user, obj, "update", {"action": "reject"})
         messages.success(request, "Clearance item rejected.")
     else:
-        messages.error(request, "A cleared item cannot be rejected.")
+        messages.error(request, "Only a pending or in-progress clearance item can be rejected.")
     return redirect("hrm:separationcase_detail", pk=obj.case_id)
 
 
@@ -1819,7 +1827,9 @@ def finalsettlement_mark_paid(request, pk):
             if case.status == "cleared":
                 case.status = "settled"
                 case.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, obj, "update", {"action": "mark_paid"})
+                write_audit_log(request.user, case, "update",
+                                {"action": "settled_via_fnf", "settlement": obj.number})
+            write_audit_log(request.user, obj, "update", {"action": "mark_paid"})
         messages.success(request, f"Settlement {obj.number} marked paid.")
     else:
         messages.error(request, "Only an approved settlement can be marked paid.")
