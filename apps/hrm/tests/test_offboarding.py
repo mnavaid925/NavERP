@@ -886,6 +886,38 @@ class TestSeparationCaseLetters:
         assert sep_cleared_a.relieving_letter_generated_by_id == admin_user.pk
 
 
+class TestOffboardingLettersPage:
+    """The dedicated Letters landing page (`hrm:offboarding_letters`) — the 'Experience Letter'
+    sidebar bullet. Lists only letter-ready cases (cleared/settled/completed)."""
+
+    def test_page_200(self, client_a):
+        resp = client_a.get(reverse("hrm:offboarding_letters"))
+        assert resp.status_code == 200
+
+    def test_lists_letter_ready_case(self, client_a, sep_cleared_a):
+        resp = client_a.get(reverse("hrm:offboarding_letters"))
+        assert sep_cleared_a.number.encode() in resp.content
+
+    def test_excludes_non_ready_case(self, client_a, sep_draft_a):
+        # a draft case is not letter-ready and must not appear on the letters page
+        resp = client_a.get(reverse("hrm:offboarding_letters"))
+        assert sep_draft_a.number.encode() not in resp.content
+
+    def test_status_filter(self, client_a, sep_cleared_a):
+        resp = client_a.get(reverse("hrm:offboarding_letters"), {"status": "cleared"})
+        assert resp.status_code == 200
+        assert sep_cleared_a.number.encode() in resp.content
+
+    def test_excludes_other_tenant(self, client_a, sep_b):
+        # sep_b belongs to tenant_b — must never appear for a tenant_a user
+        resp = client_a.get(reverse("hrm:offboarding_letters"))
+        assert sep_b.number.encode() not in resp.content
+
+    def test_requires_login(self, client):
+        resp = client.get(reverse("hrm:offboarding_letters"))
+        assert resp.status_code == 302  # @login_required → redirect to login
+
+
 class TestExitInterviewViews:
     """CRUD list/create/detail/edit/delete + complete/skip workflow."""
 
