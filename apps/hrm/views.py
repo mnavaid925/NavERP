@@ -1315,7 +1315,6 @@ def separationcase_detail(request, pk):
         "all_mandatory_cleared": all_mandatory_cleared,
         "exit_interview": obj.exit_interviews.select_related("interviewer").first(),
         "settlement": obj.final_settlements.first(),
-        "rating_fields": ExitInterview.RATING_FIELDS,
     })
 
 
