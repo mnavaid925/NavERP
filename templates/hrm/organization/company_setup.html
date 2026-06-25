@@ -12,9 +12,9 @@
     </div>
   </div>
 
-  <div class="stat-cards" style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
-    <div class="stat-card"><div class="stat-label">Departments</div><div class="stat-value">{{ departments }}</div></div>
-    <div class="stat-card"><div class="stat-label">Cost Centers</div><div class="stat-value">{{ cost_centers }}</div></div>
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-value">{{ departments }}</div><div class="stat-label">Departments</div></div>
+    <div class="stat-card"><div class="stat-value">{{ cost_centers }}</div><div class="stat-label">Cost Centers</div></div>
   </div>
 
   <div class="card">
@@ -37,9 +37,9 @@
     <div class="card-body">
       {% if branding %}
         <dl class="detail-grid">
-          <div class="detail-item"><dt>Logo</dt><dd>{% if branding.logo %}<img src="{{ branding.logo.url }}" alt="Logo" style="max-height:48px;">{% else %}—{% endif %}</dd></div>
-          <div class="detail-item"><dt>Primary Color</dt><dd><span class="badge" style="background:{{ branding.primary_color }}; color:#fff;">{{ branding.primary_color }}</span></dd></div>
-          <div class="detail-item"><dt>Accent Color</dt><dd><span class="badge" style="background:{{ branding.accent_color }}; color:#fff;">{{ branding.accent_color }}</span></dd></div>
+          <div class="detail-item"><dt>Logo</dt><dd>{% if branding.logo %}<img src="{{ branding.logo.url }}" alt="Logo" style="max-height:48px; width:auto;">{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Primary Color</dt><dd><span style="display:inline-flex; align-items:center; gap:.5rem;"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:{{ branding.primary_color }}; border:1px solid var(--border);"></span>{{ branding.primary_color }}</span></dd></div>
+          <div class="detail-item"><dt>Accent Color</dt><dd><span style="display:inline-flex; align-items:center; gap:.5rem;"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:{{ branding.accent_color }}; border:1px solid var(--border);"></span>{{ branding.accent_color }}</span></dd></div>
           <div class="detail-item"><dt>Email From</dt><dd>{{ branding.email_from_name|default:"—" }}</dd></div>
         </dl>
         <p class="text-muted" style="margin-top:.75rem;">Branding is managed in the Tenants module. <a href="{% url 'tenants:brandingsetting_list' %}">Edit branding →</a></p>
