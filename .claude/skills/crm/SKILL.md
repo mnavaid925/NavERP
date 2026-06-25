@@ -90,21 +90,23 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
   profile/roles/addresses and SET_NULLs opportunities/cases, a cross-module blast radius, so it's
   admin-only and the delete buttons are hidden from non-admins in the templates.
 
-## Templates (`templates/crm/<submodule>/`)
+## Templates (`templates/crm/<submodule>/<entity>/<page>.html`)
 
-**One folder per sub-module** (CLAUDE.md "Template Folder Structure"): `directory/` (contact/account/lead),
-`sales/` (opportunity), `marketing/` (campaign), `service/` (case/knowledgearticle), `activities/` (task),
-`finance/` (expense), `projects/` (crmproject/crmmilestone/timesheet), `documents/` (contractdocument/doctemplate/
-sign_document), `workflow/` (workflowrule/approvalrequest/workflowlog), `success/` (onboardingplan/healthscore/
-health_config/survey/survey_respond), `vendor/` (crm_po/productstock/partnerportalaccess/portal_*). The module
-landing `overview.html` stays at the `templates/crm/` root. So a view renders e.g. `"crm/directory/lead_list.html"`.
+**One folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page filename**
+(CLAUDE.md "Template Folder Structure"): `directory/` (entity folders `contact/ account/ lead/`), `sales/`
+(`opportunity/`), `marketing/` (`campaign/`), `service/` (`case/ knowledgearticle/`), `activities/` (`task/`),
+`finance/` (`expense/`), `projects/` (`crmproject/ crmmilestone/ timesheet/`), `documents/` (`contractdocument/
+doctemplate/` + standalone `sign_document.html`), `workflow/` (`workflowrule/ approvalrequest/ workflowlog/`),
+`success/` (`onboardingplan/ healthscore/ survey/` + standalone `survey_respond.html`/`health_config`), `vendor/`
+(`crm_po/ productstock/ partnerportalaccess/` + standalone `portal_dashboard.html`/`portal_stock.html`). The module
+landing `overview.html` stays at the `templates/crm/` root. So a view renders e.g. `"crm/directory/lead/list.html"`.
 
-Extend `base.html`; use the `theme.css` design system. Per CRUD model: `<entity>_list.html`
+Extend `base.html`; use the `theme.css` design system. Per CRUD model, an entity folder with `list.html`
 (filter-bar with `q` + status/FK selects reflecting `request.GET`, Actions column view/edit/delete-
-POST+confirm+csrf, pagination via `partials/pagination.html`, empty-state), `<entity>_detail.html`
-(`detail-grid` + actions + back link), `<entity>_form.html` (shared create/edit, generic
-`{% for field in form %}` in `.form-grid`). Plus `account_list/detail/form`,
-`contact_list/detail/form` (Party + profile; CRM-native New/Edit/Delete; delete buttons wrapped in
+POST+confirm+csrf, pagination via `partials/pagination.html`, empty-state), `detail.html`
+(`detail-grid` + actions + back link), `form.html` (shared create/edit, generic
+`{% for field in form %}` in `.form-grid`). Plus `account/{list,detail,form}`,
+`contact/{list,detail,form}` (Party + profile; CRM-native New/Edit/Delete; delete buttons wrapped in
 `{% if request.user.is_superuser or request.user.is_tenant_admin %}`; "View in Core" →
 `core:party_detail`), and `overview.html`. Badges use exact model choice values with
 `{{ obj.get_<field>_display }}` fallback text. The opportunity list FK filter compares
@@ -150,7 +152,7 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
 ## Common tasks
 
 - **Add a field to a model:** edit `apps/crm/models.py`; add to the matching `Meta.fields` in
-  `forms.py` (unless system-set); surface in the `*_detail.html`/`*_form.html`/`*_list.html`;
+  `forms.py` (unless system-set); surface in the entity's `detail.html`/`form.html`/`list.html`;
   `makemigrations crm` + `migrate`. Commit one file per commit.
 - **Add a filter:** pass the choices/queryset in the view's `crud_list` `extra_context` and add a
   `<select>` to the list template reflecting `request.GET` (pk filters use `|stringformat:"d"` + the
