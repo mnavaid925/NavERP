@@ -438,7 +438,9 @@ def emailcampaign_send(request, pk):
 def landingpage_list(request):
     return crud_list(
         request,
-        LandingPage.objects.filter(tenant=request.tenant).select_related("campaign", "routing_owner"),
+        # defer the large HTML body — it's never shown on the list.
+        LandingPage.objects.filter(tenant=request.tenant).select_related(
+            "campaign", "routing_owner").defer("body"),
         "crm/marketing/landingpage/list.html",
         search_fields=["number", "name", "headline", "slug"],
         filters=[("status", "status", False), ("campaign", "campaign_id", True)],
@@ -461,7 +463,8 @@ def landingpage_detail(request, pk):
     return render(request, "crm/marketing/landingpage/detail.html", {
         "obj": obj,
         "submissions": FormSubmission.objects.filter(
-            tenant=request.tenant, landing_page=obj).select_related("converted_lead")[:20],
+            tenant=request.tenant, landing_page=obj).select_related(
+            "converted_lead").defer("message")[:20],  # message not shown in the panel
     })
 
 
