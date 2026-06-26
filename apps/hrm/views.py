@@ -2463,7 +2463,7 @@ def jobrequisition_detail(request, pk):
         "current_step": current_step,
         "approval_form": RequisitionApprovalForm(tenant=request.tenant),
         "jd_templates": JobDescriptionTemplate.objects.filter(tenant=request.tenant, is_active=True)
-        .order_by("name"),
+        .only("id", "name").order_by("name"),  # dropdown uses pk+name only (skip the jd_* TEXT cols)
         "can_submit": obj.status in ("draft", "rejected"),
         "can_approve": obj.status == "pending_approval",
         "can_post": obj.status == "approved",
