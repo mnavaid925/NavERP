@@ -23,6 +23,13 @@ from .models import (
     LandingPage,
     Lead,
     Opportunity,
+    OpportunitySplit,
+    PriceBook,
+    Product,
+    Quote,
+    QuoteLine,
+    SalesQuota,
+    Territory,
 )
 
 
@@ -36,8 +43,71 @@ class LeadForm(TenantModelForm):
 class OpportunityForm(TenantModelForm):
     class Meta:
         model = Opportunity
-        fields = ["name", "account", "primary_contact", "stage", "amount", "probability",
-                  "close_date", "owner", "source_lead", "campaign", "next_step", "description"]
+        # lost_at + stage_changed_at are system-stamped in Opportunity.save() — excluded.
+        fields = ["name", "account", "primary_contact", "stage", "forecast_category", "amount",
+                  "probability", "close_date", "competitor", "loss_reason", "territory", "owner",
+                  "source_lead", "campaign", "next_step", "description"]
+
+
+# ===== 1.2 Sales Force Automation (recreated) ===============================
+class TerritoryForm(TenantModelForm):
+    class Meta:
+        model = Territory
+        fields = ["name", "region", "segment", "parent", "manager", "is_active", "description"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A territory can't be its own parent.
+        if self.instance and self.instance.pk:
+            self.fields["parent"].queryset = self.fields["parent"].queryset.exclude(pk=self.instance.pk)
+
+
+class ProductForm(TenantModelForm):
+    class Meta:
+        model = Product
+        fields = ["name", "sku", "product_type", "unit_price", "cost", "tax_pct",
+                  "is_active", "description"]
+
+
+class PriceBookForm(TenantModelForm):
+    class Meta:
+        model = PriceBook
+        fields = ["name", "currency_code", "region", "tier", "price_adjustment_pct",
+                  "is_default", "is_active", "description"]
+
+
+class QuoteForm(TenantModelForm):
+    class Meta:
+        model = Quote
+        # WARNING: status + subtotal/tax_total/total + sent_at/accepted_at are system-managed
+        # (set only by recalc_totals() and the quote_send/_accept/_decline actions). Excluded so a
+        # member can't forge a total, back-date a send, or self-accept a quote via POST.
+        fields = ["name", "opportunity", "account", "price_book", "valid_until",
+                  "currency_code", "discount_pct", "terms", "owner"]
+        widgets = {"terms": forms.Textarea(attrs={"rows": 4})}
+
+
+class QuoteLineForm(TenantModelForm):
+    """Inline on the quote detail page; tenant/quote/order set in the view."""
+
+    class Meta:
+        model = QuoteLine
+        fields = ["product", "description", "quantity", "unit_price", "discount_pct", "tax_pct"]
+
+
+class OpportunitySplitForm(TenantModelForm):
+    """Inline on the opportunity detail page; tenant/opportunity set in the view."""
+
+    class Meta:
+        model = OpportunitySplit
+        fields = ["user", "split_type", "percentage", "notes"]
+
+
+class SalesQuotaForm(TenantModelForm):
+    class Meta:
+        model = SalesQuota
+        fields = ["owner", "territory", "period_type", "period_year", "period_number",
+                  "target_amount", "notes"]
 
 
 class CampaignForm(TenantModelForm):
