@@ -4,6 +4,7 @@ from .models import (
     AccountProfile,
     ApprovalRequest,
     Campaign,
+    CampaignMember,
     Case,
     ContactProfile,
     ContractDocument,
@@ -11,10 +12,14 @@ from .models import (
     CrmProject,
     CrmTask,
     DocTemplate,
+    EmailCampaign,
+    EmailTemplate,
     Expense,
+    FormSubmission,
     HealthScore,
     HealthScoreConfig,
     KnowledgeArticle,
+    LandingPage,
     Lead,
     OnboardingPlan,
     OnboardingStep,
@@ -49,10 +54,59 @@ class OpportunityAdmin(admin.ModelAdmin):
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = ("number", "name", "type", "status", "budget_actual", "owner", "tenant")
-    list_filter = ("type", "status", "tenant")
+    list_display = ("number", "name", "type", "objective", "status", "budget_actual", "owner", "tenant")
+    list_filter = ("type", "objective", "status", "tenant")
     search_fields = ("number", "name")
+    raw_id_fields = ("parent_campaign",)
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+# ===== 1.3 Marketing Automation (recreated) =================================
+@admin.register(CampaignMember)
+class CampaignMemberAdmin(admin.ModelAdmin):
+    list_display = ("member_name", "campaign", "status", "member_email", "responded_at", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("member_name", "member_email", "campaign__name")
+    raw_id_fields = ("campaign", "party", "lead")
+    readonly_fields = ("responded_at", "created_at", "updated_at")
+
+
+@admin.register(EmailTemplate)
+class EmailTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "category", "subject", "is_active", "owner", "tenant")
+    list_filter = ("category", "is_active", "tenant")
+    search_fields = ("number", "name", "subject")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(EmailCampaign)
+class EmailCampaignAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "campaign", "send_type", "status", "sent_count",
+                    "opened_count", "clicked_count", "tenant")
+    list_filter = ("status", "send_type", "is_ab_test", "tenant")
+    search_fields = ("number", "name", "campaign__name")
+    raw_id_fields = ("campaign", "template", "variant_template")
+    readonly_fields = ("number", "sent_at", "recipients_count", "sent_count", "opened_count",
+                       "clicked_count", "bounced_count", "unsubscribed_count",
+                       "created_at", "updated_at")
+
+
+@admin.register(LandingPage)
+class LandingPageAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "campaign", "status", "submission_count", "routing_owner", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "name", "headline", "slug")
+    raw_id_fields = ("campaign",)
+    readonly_fields = ("number", "public_token", "submission_count", "created_at", "updated_at")
+
+
+@admin.register(FormSubmission)
+class FormSubmissionAdmin(admin.ModelAdmin):
+    list_display = ("name", "landing_page", "email", "status", "routed_to", "created_at", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("name", "email", "company")
+    raw_id_fields = ("landing_page", "converted_lead")
+    readonly_fields = ("ip_address", "created_at")
 
 
 @admin.register(Case)
