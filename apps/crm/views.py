@@ -1052,7 +1052,9 @@ def formsubmission_convert(request, pk):
 @login_required
 def case_list(request):
     return crud_list(
-        request, Case.objects.filter(tenant=request.tenant).select_related("account", "owner"),
+        request,
+        Case.objects.filter(tenant=request.tenant).select_related("account", "owner").defer(
+            "description", "satisfaction_comment"),  # large TextFields not shown on the list
         "crm/service/case/list.html",
         search_fields=["subject", "number"],
         filters=[("status", "status", False), ("priority", "priority", False), ("type", "type", False)],
@@ -1147,7 +1149,7 @@ def knowledgearticle_detail(request, pk):
     # Count a view via an atomic F() update (tenant-scoped); bypasses save() so it neither
     # touches updated_at nor re-numbers.
     KnowledgeArticle.objects.filter(pk=pk, tenant=request.tenant).update(views_count=F("views_count") + 1)
-    obj = get_object_or_404(KnowledgeArticle.objects.select_related("owner"),
+    obj = get_object_or_404(KnowledgeArticle.objects.select_related("owner", "kb_category"),
                             pk=pk, tenant=request.tenant)
     return render(request, "crm/service/knowledgearticle/detail.html", {"obj": obj})
 
@@ -1170,7 +1172,7 @@ def knowledgearticle_delete(request, pk):
 @login_required
 def slapolicy_list(request):
     return crud_list(
-        request, SlaPolicy.objects.filter(tenant=request.tenant),
+        request, SlaPolicy.objects.filter(tenant=request.tenant).defer("description"),
         "crm/service/slapolicy/list.html",
         search_fields=["number", "name"],
         filters=[("is_active", "is_active", False)],
@@ -1206,7 +1208,8 @@ def slapolicy_delete(request, pk):
 @login_required
 def kbcategory_list(request):
     return crud_list(
-        request, KbCategory.objects.filter(tenant=request.tenant).select_related("parent"),
+        request,
+        KbCategory.objects.filter(tenant=request.tenant).select_related("parent").defer("description", "slug"),
         "crm/service/kbcategory/list.html",
         search_fields=["number", "name"],
         filters=[("is_active", "is_active", False)],
@@ -1225,7 +1228,8 @@ def kbcategory_detail(request, pk):
     obj = get_object_or_404(KbCategory.objects.select_related("parent"), pk=pk, tenant=request.tenant)
     return render(request, "crm/service/kbcategory/detail.html", {
         "obj": obj,
-        "children": KbCategory.objects.filter(tenant=request.tenant, parent=obj),
+        "children": KbCategory.objects.filter(
+            tenant=request.tenant, parent=obj).only("pk", "number", "name", "order"),
         "articles": KnowledgeArticle.objects.filter(
             tenant=request.tenant, kb_category=obj).only("pk", "number", "title", "status")[:50],
     })
@@ -1315,7 +1319,8 @@ def case_public(request, token):
                 return redirect("crm:case_public", token=token)
     return render(request, "crm/service/case_public.html", {
         "case": case,
-        "comments": CaseComment.objects.filter(tenant=case.tenant, case=case, is_public=True),
+        "comments": CaseComment.objects.filter(
+            tenant=case.tenant, case=case, is_public=True).select_related("author"),
         "sat_form": sat_form, "comment_form": comment_form,
     })
 
@@ -1397,7 +1402,8 @@ def portal_case_detail(request, pk):
             return redirect("crm:portal_case_detail", pk=case.pk)
     return render(request, "crm/service/portal_case_detail.html", {
         "access": access, "case": case,
-        "comments": CaseComment.objects.filter(tenant=request.tenant, case=case, is_public=True),
+        "comments": CaseComment.objects.filter(
+            tenant=request.tenant, case=case, is_public=True).select_related("author"),
         "comment_form": comment_form,
     })
 
