@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Sales Forecast{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sales Forecast</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Forecast</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:salesquota_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Quotas</a>
+      <a href="{% url 'crm:opportunity_board' %}" class="btn btn-outline"><i data-lucide="kanban-square"></i> Pipeline Board</a>
+    </div>
+  </div>
+
+  {% if not request.tenant %}
+    <div class="card"><div class="card-body text-muted">
+      Sign in as a tenant admin (e.g. <strong>admin_acme / password</strong>) to see forecast data.
+    </div></div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ totals.pipeline|floatformat:0 }}</div><div class="stat-label">Open Pipeline</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="gauge"></i></div><div class="stat-value">{{ totals.weighted|floatformat:0 }}</div><div class="stat-label">Weighted Forecast</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="trophy"></i></div><div class="stat-value">{{ totals.won|floatformat:0 }}</div><div class="stat-label">Closed Won</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="target"></i></div><div class="stat-value">{{ totals.target|floatformat:0 }}</div><div class="stat-label">Total Quota</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Pipeline by forecast category</h3></div>
+    <div class="card-body"><canvas id="catChart" height="120"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Forecast categories</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th>Deals</th><th>Amount</th><th>Weighted</th></tr></thead>
+        <tbody>
+          {% for c in cats %}
+            <tr><td>{{ c.label }}</td><td>{{ c.count }}</td><td>{{ c.total }}</td><td>{{ c.weighted|floatformat:0 }}</td></tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="bar-chart-3"></i><p>No opportunities to forecast.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Quota attainment</h3><a href="{% url 'crm:salesquota_create' %}" class="btn btn-sm btn-outline">New quota</a></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Quota</th><th>Owner</th><th>Territory</th><th>Period</th><th>Target</th><th>Closed Won</th><th>Attainment</th></tr></thead>
+        <tbody>
+          {% for row in quotas %}
+            <tr>
+              <td><a href="{% url 'crm:salesquota_detail' row.q.pk %}" class="fw-600">{{ row.q.number }}</a></td>
+              <td>{% if row.q.owner %}{{ row.q.owner.get_full_name|default:row.q.owner.username }}{% else %}—{% endif %}</td>
+              <td>{% if row.q.territory %}{{ row.q.territory.name }}{% else %}—{% endif %}</td>
+              <td>{{ row.q.get_period_type_display }} {{ row.q.period_year }}</td>
+              <td>{{ row.q.target_amount }}</td>
+              <td>{{ row.attained }}</td>
+              <td style="min-width:140px;">
+                <div class="progress"><div class="progress-bar" style="width:{% if row.pct > 100 %}100{% else %}{{ row.pct }}{% endif %}%;"></div></div>
+                <span class="muted" style="font-size:.8rem; color:var(--text-muted);">{{ row.pct }}%</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="gauge"></i><p>No quotas set.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {{ chart_labels|json_script:"cat-labels" }}
+  {{ chart_data|json_script:"cat-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
+    var labels = J("cat-labels"), data = J("cat-data");
+    if (document.getElementById("catChart") && labels.length) {
+      new Chart(document.getElementById("catChart"), {
+        type: "bar",
+        data: { labels: labels, datasets: [{ label: "Amount", data: data, backgroundColor: "#2563eb", borderRadius: 6 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+  })();
+</script>
+{% endblock %}
