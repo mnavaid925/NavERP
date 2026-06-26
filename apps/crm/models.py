@@ -212,6 +212,7 @@ class CampaignMember(models.Model):
         indexes = [
             models.Index(fields=["tenant", "status"], name="crm_cmem_tnt_status_idx"),
             models.Index(fields=["tenant", "campaign"], name="crm_cmem_tnt_camp_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_cmem_tnt_created_idx"),
         ]
 
     @property
