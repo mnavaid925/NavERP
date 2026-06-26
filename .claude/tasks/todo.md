@@ -2768,6 +2768,38 @@ Actions column = view/edit/delete (CRUD rules), pagination with empty-state. Nev
 
 ---
 
-## 8. Review notes
+## 8. Review notes — CRM §1.2 Sales Force Automation (recreated in detail) ✅
 
-(filled in at the end)
+**Delivered (migrations 0008–0011):** enhanced `Opportunity` (forecast_category/competitor/loss_reason +
+system lost_at & stage_changed_at via from_db/save, territory) + 7 new entities — `Territory` (TER-, self-FK
+hierarchy), `Product` (PRD-, sales catalog, margin), `PriceBook` (PB-, ±% regional/tier), `OpportunitySplit`
+(revenue ≤100% + bounded percentage), `Quote` (QUO-, system status/totals, `recalc_totals`), `QuoteLine`
+(Decimal-safe line props), `SalesQuota` (QTA-, per-rep/territory period). Plus a **Kanban pipeline board**, a
+**quote builder** with printable output, and a **forecast dashboard** (weighted pipeline by category + quota
+attainment). `LIVE_LINKS["1.2"]` lights up all 3 NavERP bullets + 5 extras. 21 templates under
+`templates/crm/sales/`. `_seed_sfa` seeder (unconditional, Product-guarded). One file per commit to `main`.
+
+**Verification:** `manage.py check` clean; migrations apply; `seed_crm` idempotent (×2); `temp/smoke_sfa.py`
+all green; **980 CRM pytest tests pass** (235 new in `test_sfa.py` + 3 pre-existing Opportunity tests fixed for
+the now-required `forecast_category`).
+
+**Review agents (CLAUDE.md sequence), findings applied:**
+- **code-reviewer** — OpportunitySplit.clean tenant guard, Opportunity.save None sentinel, SalesQuota
+  unique_together + territory + SalesQuotaForm dup guard, territory-aware forecast attainment, quote-print
+  linebreaksbr. (False positive: `is_active` string filter — verified Django coerces it.)
+- **explorer** — confirmed full URL/context/field consistency; no code changes (backslash-path note was a false
+  positive — all paths use forward slashes).
+- **frontend-reviewer** — valid `kanban` icon, pipeline board theme vars (--page-bg/--radius) + `.btn-sm`,
+  forecast progress-bar pct clamp, dropped unused `{% load static %}`.
+- **performance-reviewer** — board 12→7 queries (one grouped aggregate), territory_detail children
+  select_related, defer(description) on 3 lists, OpportunitySplit.clean DB-side Sum, SalesQuota (tenant,territory)
+  index.
+- **qa-smoke-tester** — 74/74 checks pass, no changes.
+- **security-reviewer** (Medium) — bounded all percentage/discount/tax fields (no negative/over-100 that distort
+  totals); documented the deliberate `@login_required` (rep workflow) choice on quote send/accept + advance.
+- **test-writer** — 235 tests + surfaced a **real cross-DB bug**: `recalc_totals` used `F()/100` which
+  integer-divided on SQLite (dropped line discounts) → fixed to a portable Python sum over line properties.
+
+**Spine-gap note:** Product/PriceBook/Quote are CRM-owned (core.Item/PriceList/Currency/SalesOrder unbuilt);
+`currency_code` is a CharField; quote→sales-order sync deferred. Other deferrals: PriceBookEntry per-product
+pricing, real PDF/e-sign, CPQ rules/approval workflows, AI forecasting, commission payout, multi-currency FX.
