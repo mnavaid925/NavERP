@@ -2096,6 +2096,37 @@ in form `<input>`s.
 
 ---
 
-## Review notes
+## Review notes — CRM §1.3 Marketing Automation (recreated in detail) ✅
 
-(filled in at the end)
+**Delivered (migrations 0006 + 0007):** enhanced `Campaign` (objective/parent_campaign/utm_*) + 5 new entities —
+`CampaignMember` (target-list segmentation, per-recipient funnel status, `responded_at` stamping), `EmailTemplate`
+(`EMT-`), `EmailCampaign` (`BLAST-`, A/B variant + drip + open/click/bounce metrics & rates), `LandingPage`
+(`LP-`, 256-bit `public_token`, capture toggles, owner routing), `FormSubmission` (read-mostly web-to-lead). Full
+CRUD + custom actions (`campaignmember_add/_remove`, admin-gated `emailcampaign_send`, admin-gated
+`landingpage_publish`, `formsubmission_convert`) + **public** `landing_public(token)` (no login, published-only,
+CSRF, escaped body, PRG). `LIVE_LINKS["1.3"]` lights up all 3 NavERP bullets + 3 extras. 14 templates under
+`templates/crm/marketing/`. `_seed_marketing` seeder (unconditional, EmailTemplate-guarded). One file per commit
+to `main` (not pushed).
+
+**Verification:** `manage.py check` clean; migrations apply; `seed_crm` idempotent (×2); `temp/smoke_marketing.py`
+all green; **745 CRM pytest tests pass** (193 new in `test_marketing.py` + 3 pre-existing Campaign tests fixed for
+the now-required `objective` field).
+
+**Review agents (CLAUDE.md sequence), findings applied:**
+- **code-reviewer** — race-safe `emailcampaign_send` (conditional UPDATE), validate inline member email, PRG on the
+  public form, "View all members" link. (False positive: `is_active` string filter — verified Django coerces it.)
+- **explorer** — confirmed full URL/context/field consistency; no code changes.
+- **frontend-reviewer** — theme CSS vars on the public page (`--text-muted`/`--ok`), `<div>|linebreaksbr` for the
+  landing body (no nested `<p>`), removed a redundant inline style, documented the read-only column.
+- **performance-reviewer** — `.defer("body")`/`.defer("message")` on landing list/detail, `(tenant, created_at)`
+  index on CampaignMember (0007), `bulk_create` in the seeder.
+- **qa-smoke-tester** — 64/64 checks pass, no changes.
+- **security-reviewer** (3 Medium applied) — excluded `status` from EmailCampaignForm + LandingPageForm
+  (mass-assignment), gated `emailcampaign_send` + new `landingpage_publish` behind `@tenant_admin_required`,
+  256-bit token, audit-log the convert, WARNING comments (IP proxy caveat, public rate-limiting).
+- **test-writer** — 193 tests.
+
+**Note:** the final scope folded the research's separate DripStep/ABVariant tables into
+`EmailCampaign.send_type`/`variant_template`, and FormSubmission stores typed columns (not a `data` JSONField) —
+matching the approved 6-entity plan. Deferred: real ESP delivery, visual builder, CAPTCHA/rate-limit enforcement,
+multi-touch attribution (→ BI Module 10).
