@@ -2130,3 +2130,644 @@ the now-required `objective` field).
 `EmailCampaign.send_type`/`variant_template`, and FormSubmission stores typed columns (not a `data` JSONField) —
 matching the approved 6-entity plan. Deferred: real ESP delivery, visual builder, CAPTCHA/rate-limit enforcement,
 multi-touch attribution (→ BI Module 10).
+
+---
+# Module 1.2 — CRM Sales Force Automation (crm-sfa) — plan from research-crm-sfa.md  (2026-06-26)
+
+**Extending `apps/crm`** — NOT a new app. `apps.py`, `__init__.py`, `settings.py`, `config/urls.py` are already
+in place. The only new wire-up is rewriting `LIVE_LINKS["1.2"]` in `apps/core/navigation.py` + new URL patterns
+inside the existing `apps/crm/urls.py`. Migration base: **0007** (next migration will be **0008**).
+
+Sub-module template folder: `templates/crm/sales/` with one entity-folder per model (CLAUDE.md rule 2).
+Standalone pages: `templates/crm/sales/pipeline.html` (Kanban), `templates/crm/sales/forecast.html` (dashboard),
+`templates/crm/sales/quote/print.html` (print view — lives inside the quote entity folder as a secondary action).
+
+---
+
+## 0. Template folder structure
+
+- [ ] Create `templates/crm/sales/` sub-module root with the following entity folders:
+  - `sales/territory/{list,detail,form}.html`          — Territory CRUD
+  - `sales/product/{list,detail,form}.html`            — Product CRUD
+  - `sales/pricebook/{list,detail,form}.html`          — PriceBook CRUD
+  - `sales/opportunity/{list,detail,form}.html`        — Opportunity CRUD (replaces/extends existing
+    `templates/crm/` flat opportunity pages if any; existing views will be re-pointed)
+  - `sales/quote/{list,detail,form,print}.html`        — Quote CRUD + print action
+  - `sales/salesquota/{list,detail,form}.html`         — SalesQuota CRUD
+  - `sales/pipeline.html`                              — standalone Kanban board (sub-module root)
+  - `sales/forecast.html`                              — standalone forecast dashboard (sub-module root)
+  - NOTE: `OpportunitySplit` and `QuoteLine` are **inline only** — rendered inside their parent
+    detail pages. No standalone list/form templates.
+
+---
+
+## 1. Models (add to / enhance in `apps/crm/models.py`)
+
+### 1a. `Territory` [TER-] — `TenantNumbered`, `NUMBER_PREFIX = "TER"`
+
+Drivers: territory-assignment on opportunities (Salesforce, Zoho, Dynamics 365, SugarCRM); sub-territory
+hierarchy for forecast rollups (Salesforce, Zoho); territory quota in SalesQuota.
+
+- [ ] Add `Territory(TenantNumbered)` with `NUMBER_PREFIX = "TER"`:
+  - `number`       — `CharField(max_length=20, editable=False)` — inherited
+  - `name`         — `CharField(max_length=120)` — e.g. "North America – Enterprise"
+  - `region`       — `CharField(max_length=120, blank=True)` — geographic region label (Salesforce territory
+                      regions; Zoho territory hierarchy filter)
+  - `segment`      — `CharField(max_length=120, blank=True)` — market segment e.g. "Mid-Market"
+                      (Dynamics 365 sales territories by segment; Zoho territory-based forecasting)
+  - `parent`       — `ForeignKey("self", on_delete=SET_NULL, null=True, blank=True,
+                      related_name="child_territories")` — sub-territory parent for hierarchy
+                      rollups (Salesforce, Zoho, SugarCRM)
+  - `manager`      — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+                      related_name="managed_territories")` — territory manager / quota owner
+                      (Salesforce territory manager role; Zoho territory owner)
+  - `is_active`    — `BooleanField(default=True)`
+  - `description`  — `TextField(blank=True)`
+  - Meta indexes: `(tenant, is_active)` named `crm_ter_tnt_active_idx`; `(tenant, created_at)` named
+    `crm_ter_tnt_created_idx`; unique_together `(tenant, number)` (inherited from TenantNumbered)
+
+### 1b. `Product` [PRD-] — `TenantNumbered`, `NUMBER_PREFIX = "PRD"`
+
+Drivers: all 10 leaders have a product catalog; CRM-owned sales catalog distinct from `crm.ProductStock`
+(inventory-tracking); `product_type` drives quoting logic (Dynamics 365 product types, SugarCRM product
+catalog); `margin_pct` property for forecast-by-product-line reporting (Clari, Salesforce CPQ).
+
+- [ ] Add `Product(TenantNumbered)` with `NUMBER_PREFIX = "PRD"`:
+  - `number`        — `CharField(max_length=20, editable=False)` — inherited
+  - `name`          — `CharField(max_length=255)`
+  - `sku`           — `CharField(max_length=64, blank=True)` — stock-keeping unit
+                       (Dynamics 365, Salesforce, SugarCRM product SKU)
+  - `product_type`  — `CharField(max_length=20, choices=PRODUCT_TYPE_CHOICES, default="good")` —
+                       `good` / `service` / `subscription`
+                       (Dynamics 365 product types: product/service/bundle; SugarCRM types)
+  - `unit_price`    — `DecimalField(max_digits=12, decimal_places=2, default=0)` — default list price
+                       (Salesforce standard price; Dynamics 365 list price)
+  - `cost`          — `DecimalField(max_digits=12, decimal_places=2, default=0)` — internal cost for
+                       margin calc (SugarCRM, DealHub margin guardrails)
+  - `tax_pct`       — `DecimalField(max_digits=5, decimal_places=2, default=0)` — default tax rate
+                       applied when product is added to a QuoteLine (Zoho tax on product)
+  - `is_active`     — `BooleanField(default=True)`
+  - `description`   — `TextField(blank=True)`
+  - `PRODUCT_TYPE_CHOICES` module-level constant: `[("good","Good"),("service","Service"),
+    ("subscription","Subscription")]`
+  - `@property margin_pct` — `Decimal`-safe: `(unit_price - cost) / unit_price * 100` when
+    `unit_price > 0` else `Decimal(0)` (DealHub/PandaDoc margin display)
+  - Meta indexes: `(tenant, product_type)` named `crm_prd_tnt_type_idx`; `(tenant, is_active)` named
+    `crm_prd_tnt_active_idx`; unique_together `(tenant, number)`
+
+### 1c. `PriceBook` [PB-] — `TenantNumbered`, `NUMBER_PREFIX = "PB"`
+
+Drivers: regional/tier pricing (Salesforce Standard + Custom Price Books; Dynamics 365 PriceLevel;
+SugarCRM, Zoho, DealHub price books); `price_adjustment_pct` folds PriceBookEntry into the header
+(±% off product base — PriceBookEntry is a future enhancement); `is_default` for auto-selection
+(Salesforce default price book pattern).
+
+- [ ] Add `PriceBook(TenantNumbered)` with `NUMBER_PREFIX = "PB"`:
+  - `number`                — `CharField(max_length=20, editable=False)` — inherited
+  - `name`                  — `CharField(max_length=255)`
+  - `currency_code`         — `CharField(max_length=3, default="USD")` — ISO-4217 code; CharField
+                               because core Currency table is not yet built (Zoho, SugarCRM, Dynamics
+                               multi-currency quotes)
+  - `region`                — `CharField(max_length=120, blank=True)` — e.g. "APAC", "US West"
+                               (Salesforce territory→price-book; Dynamics 365 regional PriceLevel)
+  - `tier`                  — `CharField(max_length=80, blank=True)` — e.g. "Enterprise", "SMB"
+                               (DealHub tiered pricing; SugarCRM pricing tiers)
+  - `price_adjustment_pct`  — `DecimalField(max_digits=6, decimal_places=2, default=0)` — ±% off
+                               product `unit_price`; positive = markup, negative = discount
+                               (Salesforce custom price book % adjustment; Zoho pricebook discount)
+  - `is_default`            — `BooleanField(default=False)` — exactly one default per tenant
+                               (Salesforce Standard Price Book concept)
+  - `is_active`             — `BooleanField(default=True)`
+  - `description`           — `TextField(blank=True)`
+  - Meta indexes: `(tenant, is_active)` named `crm_pb_tnt_active_idx`; `(tenant, is_default)` named
+    `crm_pb_tnt_default_idx`; unique_together `(tenant, number)`
+
+### 1d. Enhance existing `Opportunity` (apps/crm/models.py line 453)
+
+Drivers: competitor capture (Salesforce, Dynamics 365, Zoho, SugarCRM deal detail fields); forecast
+category independent of stage (Salesforce Forecast Categories; Zoho 5-bucket forecasting; Clari);
+loss_reason on Closed Lost (Salesforce, Zoho, SugarCRM); `lost_at` system-stamp like `Case.resolved_at`;
+territory assignment for forecast rollups (Salesforce, Zoho); `stage_changed_at` for stalled-deal
+detection (Salesforce Pipeline Inspection, Clari).
+
+- [ ] ADD fields to `Opportunity` model (no new migration file yet — combined into 0008):
+  - `competitor`          — `CharField(max_length=100, blank=True)` — primary competing product/vendor
+  - `forecast_category`   — `CharField(max_length=20, choices=FORECAST_CATEGORY_CHOICES,
+                             default="pipeline")` — `omitted`/`pipeline`/`best_case`/`commit`/`closed`
+                             (Salesforce Forecast Categories; Zoho pipeline/best-case/committed/closed/
+                             omitted; HubSpot stage→category mapping; Clari Commit/Best Case/Pipeline)
+  - `loss_reason`         — `CharField(max_length=20, choices=LOSS_REASON_CHOICES, blank=True)` —
+                             `price`/`competition`/`timeline`/`no_decision`/`other`
+                             (Salesforce, Zoho loss reason on Closed Lost; SugarCRM loss reason field)
+  - `lost_at`             — `DateTimeField(null=True, blank=True)` — system-stamped in `save()` when
+                             `stage` transitions to `closed_lost`; cleared when stage changes away
+                             (mirrors `Case.resolved_at` pattern already in codebase)
+  - `territory`           — `ForeignKey("crm.Territory", on_delete=SET_NULL, null=True, blank=True,
+                             related_name="opportunities")` — territory for forecast rollup
+  - `stage_changed_at`    — `DateTimeField(null=True, blank=True)` — system-stamped in `save()` when
+                             `stage` changes; used for stage-age / stalled-deal detection
+  - `FORECAST_CATEGORY_CHOICES` module-level constant (add near `STAGE_CHOICES`)
+  - `LOSS_REASON_CHOICES` module-level constant
+  - Update `save()` to: (a) stamp `lost_at = timezone.now()` when `stage == "closed_lost"` and
+    `lost_at` is None; clear it when stage changes away from `closed_lost`; (b) stamp
+    `stage_changed_at` when `stage` differs from the DB value (`__class__.objects.filter(pk=self.pk)
+    .values_list("stage",flat=True).first()` before saving)
+  - Add Meta index `(tenant, forecast_category)` named `crm_opp_tnt_fcat_idx`
+
+### 1e. `OpportunitySplit` — plain tenant-scoped (no TenantNumbered)
+
+Drivers: Salesforce revenue + overlay splits (team selling, SE/SDR credit); HubSpot Sales Hub Enterprise
+deal credit splits; commission-credit distribution where revenue splits must total ≤ 100%.
+
+- [ ] Add `OpportunitySplit(models.Model)` (NOT TenantNumbered — no auto-number):
+  - `tenant`        — `ForeignKey("core.Tenant", on_delete=CASCADE, related_name="crm_opp_splits")`
+  - `opportunity`   — `ForeignKey("crm.Opportunity", on_delete=CASCADE, related_name="splits")`
+  - `user`          — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=CASCADE,
+                       related_name="crm_splits")`
+  - `split_type`    — `CharField(max_length=10, choices=[("revenue","Revenue"),("overlay","Overlay")])`
+                       (Salesforce revenue split = must total 100%; overlay = SE/channel credit, may
+                       exceed 100%; HubSpot deal-credit split types)
+  - `percentage`    — `DecimalField(max_digits=5, decimal_places=2)` — share 0.00–100.00
+  - `created_at`    — `DateTimeField(auto_now_add=True)`
+  - `updated_at`    — `DateTimeField(auto_now=True)`
+  - `clean()`: query sibling revenue splits, assert sum (excluding self) + self.percentage ≤ 100
+    for `split_type == "revenue"`; overlay has no cap
+  - Meta: ordering `["split_type", "-percentage"]`; no unique_together beyond natural FKs
+
+### 1f. `Quote` [QUO-] — `TenantNumbered`, `NUMBER_PREFIX = "QUO"`
+
+Drivers: formal quote document (all 10 leaders); quote lifecycle Draft→Sent→Accepted→Declined→Expired
+(Salesforce, Dynamics, SugarCRM 8-stage, Zoho, Freshsales); `price_book` auto-sets line `unit_price`
+(Salesforce Price Book on quote; Dynamics 365 PriceLevel); `recalc_totals()` mirrors existing
+`PurchaseOrder.recalc_total()`; system fields excluded from form (status, subtotal, tax_total, total,
+sent_at, accepted_at).
+
+- [ ] Add `Quote(TenantNumbered)` with `NUMBER_PREFIX = "QUO"`:
+  - `number`        — `CharField(max_length=20, editable=False)` — inherited
+  - `opportunity`   — `ForeignKey("crm.Opportunity", on_delete=SET_NULL, null=True, blank=True,
+                       related_name="quotes")` — linked deal
+  - `account`       — `ForeignKey("core.Party", on_delete=SET_NULL, null=True, blank=True,
+                       related_name="crm_quotes")` — billing party (denormalized for standalone quotes;
+                       Salesforce quote billing account; Dynamics 365 quote customer)
+  - `price_book`    — `ForeignKey("crm.PriceBook", on_delete=SET_NULL, null=True, blank=True,
+                       related_name="quotes")` — drives line unit_price adjustment
+  - `STATUS_CHOICES` — `[("draft","Draft"),("sent","Sent"),("accepted","Accepted"),
+                        ("declined","Declined"),("expired","Expired")]` module-level constant
+  - `status`        — `CharField(max_length=10, choices=STATUS_CHOICES, default="draft")` —
+                       SYSTEM field; excluded from form; set only by `quote_send`/`quote_accept`/
+                       `quote_decline` views
+  - `valid_until`   — `DateField(null=True, blank=True)` — quote expiry (Zoho, Freshsales, SugarCRM
+                       valid-through date)
+  - `currency_code` — `CharField(max_length=3, default="USD")` — ISO-4217; CharField because core
+                       Currency is not yet built (SugarCRM currency on quote; Dynamics 365 currency)
+  - `discount_pct`  — `DecimalField(max_digits=5, decimal_places=2, default=0)` — quote-level % off
+                       subtotal (SugarCRM Grand Total Discount %; DealHub quote discount)
+  - `subtotal`      — `DecimalField(max_digits=14, decimal_places=2, default=0)` — SYSTEM; set by
+                       `recalc_totals()`; excluded from form
+  - `tax_total`     — `DecimalField(max_digits=12, decimal_places=2, default=0)` — SYSTEM; set by
+                       `recalc_totals()`; excluded from form
+  - `total`         — `DecimalField(max_digits=14, decimal_places=2, default=0)` — SYSTEM; grand
+                       total; set by `recalc_totals()`; excluded from form
+  - `sent_at`       — `DateTimeField(null=True, blank=True)` — SYSTEM; stamped by `quote_send`
+  - `accepted_at`   — `DateTimeField(null=True, blank=True)` — SYSTEM; stamped by `quote_accept`
+  - `terms`         — `TextField(blank=True)` — payment/delivery terms; rendered escaped in template
+                       (never |safe — XSS guard)
+  - `owner`         — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+                       related_name="crm_quotes")`
+  - `recalc_totals()` method: aggregates `lines` DB-side via `Aggregate(Sum(...))`:
+    - line_sum = `lines.aggregate(s=Sum(line_total_expr))["s"] or 0`  (use DB expression)
+    - tax_sum  = `lines.aggregate(t=Sum(line_tax_expr))["t"] or 0`
+    - subtotal = line_sum
+    - tax_total = tax_sum
+    - total = subtotal * (1 - discount_pct/100) + tax_total
+    - saves with `update_fields=["subtotal","tax_total","total"]`
+  - Meta indexes: `(tenant, status)` named `crm_quo_tnt_status_idx`; `(tenant, created_at)` named
+    `crm_quo_tnt_created_idx`; unique_together `(tenant, number)`
+
+### 1g. `QuoteLine` — plain tenant-scoped (inline on quote detail)
+
+Drivers: line items on quotes (all 10 leaders); nullable `product` FK for write-in lines (Dynamics 365,
+SugarCRM, Salesforce); `order` for sort control; `unit_price` defaulting from `product.unit_price`
+adjusted by `quote.price_book.price_adjustment_pct` (Salesforce price book item; Dynamics 365
+PriceLevel); per-line discount + tax (SugarCRM %; DealHub per-line discount).
+
+- [ ] Add `QuoteLine(models.Model)` (NOT TenantNumbered — child of Quote):
+  - `tenant`        — `ForeignKey("core.Tenant", on_delete=CASCADE, related_name="crm_quote_lines")`
+  - `quote`         — `ForeignKey("crm.Quote", on_delete=CASCADE, related_name="lines")`
+  - `product`       — `ForeignKey("crm.Product", on_delete=SET_NULL, null=True, blank=True,
+                       related_name="quote_lines")` — nullable for write-in lines
+  - `description`   — `CharField(max_length=500, blank=True)` — snapshot or write-in label
+  - `quantity`      — `DecimalField(max_digits=10, decimal_places=2, default=1)`
+  - `unit_price`    — `DecimalField(max_digits=12, decimal_places=2, default=0)` — from product or
+                       overridden; if product FK set and quote has price_book, default =
+                       `product.unit_price * (1 + price_book.price_adjustment_pct / 100)`
+  - `discount_pct`  — `DecimalField(max_digits=5, decimal_places=2, default=0)` — per-line % discount
+  - `tax_pct`       — `DecimalField(max_digits=5, decimal_places=2, default=0)` — per-line tax %;
+                       defaults from `product.tax_pct` when product FK set
+  - `order`         — `PositiveSmallIntegerField(default=0)` — display sort order
+  - `@property line_subtotal` — `Decimal(quantity) * Decimal(unit_price) * (1 - discount_pct/100)`,
+                                 Decimal-safe, 2dp
+  - `@property line_tax`      — `line_subtotal * Decimal(tax_pct) / 100`, Decimal-safe
+  - `@property line_total`    — `line_subtotal + line_tax`, Decimal-safe
+  - `line_total` is NEVER stored; computed only — excluded from form
+  - Meta: ordering `["quote", "order", "id"]`
+
+### 1h. `SalesQuota` [QTA-] — `TenantNumbered`, `NUMBER_PREFIX = "QTA"`
+
+Drivers: per-rep + per-territory quota definitions (Salesforce, Zoho, Clari, SugarCRM, HubSpot Sales
+Hub Enterprise); `period_type` month/quarter/year (Zoho, Salesforce, Clari period buckets);
+`period_year` + `period_number` integer pair (simpler than a DateField — avoids quarter-start date
+ambiguity); unique_together prevents double-booking (Salesforce enforces one quota per rep/period).
+
+- [ ] Add `SalesQuota(TenantNumbered)` with `NUMBER_PREFIX = "QTA"`:
+  - `number`         — `CharField(max_length=20, editable=False)` — inherited
+  - `owner`          — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+                        related_name="crm_quotas")` — null = territory-only quota
+  - `territory`      — `ForeignKey("crm.Territory", on_delete=SET_NULL, null=True, blank=True,
+                        related_name="quotas")` — territory quota; both owner+territory can be set
+  - `PERIOD_TYPE_CHOICES` — `[("month","Month"),("quarter","Quarter"),("year","Year")]`
+  - `period_type`    — `CharField(max_length=8, choices=PERIOD_TYPE_CHOICES, default="quarter")`
+  - `period_year`    — `PositiveSmallIntegerField()` — e.g. 2026
+  - `period_number`  — `PositiveSmallIntegerField()` — month 1–12 or quarter 1–4 or 1 for year
+  - `target_amount`  — `DecimalField(max_digits=14, decimal_places=2, default=0)` — revenue quota
+  - Meta: unique_together `[("tenant","number"), ("tenant","owner","period_type","period_year",
+    "period_number")]` — prevents duplicate quota rows per rep/period; index `(tenant, period_year)`
+    named `crm_qta_tnt_year_idx`
+
+---
+
+## 2. Backend (`apps/crm/`)
+
+### 2a. `models.py`
+
+- [ ] Add module-level `PRODUCT_TYPE_CHOICES`, `FORECAST_CATEGORY_CHOICES`, `LOSS_REASON_CHOICES`,
+  `PERIOD_TYPE_CHOICES` constants near top of file (before or after `TenantNumbered`)
+- [ ] Implement `Territory(TenantNumbered)` with all fields, Meta indexes, `__str__`
+- [ ] Implement `Product(TenantNumbered)` with all fields, `margin_pct` property, Meta indexes, `__str__`
+- [ ] Implement `PriceBook(TenantNumbered)` with all fields, Meta indexes, `__str__`
+- [ ] Enhance `Opportunity` — add 6 fields + update `save()` to stamp `lost_at` and `stage_changed_at`
+  + add Meta index for `forecast_category`; keep all existing fields/props/Meta untouched
+- [ ] Implement `OpportunitySplit(models.Model)` with all fields, `clean()` revenue-sum guard, Meta
+- [ ] Implement `Quote(TenantNumbered)` with all fields + `recalc_totals()` method, Meta indexes, `__str__`
+- [ ] Implement `QuoteLine(models.Model)` with all fields + `line_subtotal`/`line_tax`/`line_total`
+  Decimal-safe properties, Meta ordering, `__str__`
+- [ ] Implement `SalesQuota(TenantNumbered)` with all fields, dual unique_together, Meta index, `__str__`
+
+### 2b. `forms.py`
+
+- [ ] `TerritoryForm(ModelForm)` — fields: `name`, `region`, `segment`, `parent`, `manager`,
+  `is_active`, `description`; exclude `tenant`, `number`; `parent` queryset scoped to
+  `Territory.objects.filter(tenant=request.tenant)` (pass via `__init__` kwarg)
+- [ ] `ProductForm(ModelForm)` — fields: `name`, `sku`, `product_type`, `unit_price`, `cost`,
+  `tax_pct`, `is_active`, `description`; exclude `tenant`, `number`
+- [ ] `PriceBookForm(ModelForm)` — fields: `name`, `currency_code`, `region`, `tier`,
+  `price_adjustment_pct`, `is_default`, `is_active`, `description`; exclude `tenant`, `number`
+- [ ] `OpportunityForm(ModelForm)` — EXTEND existing form to include new fields: `competitor`,
+  `forecast_category`, `loss_reason`, `territory`; exclude system fields `lost_at`,
+  `stage_changed_at`; `territory` queryset scoped to tenant
+- [ ] `OpportunitySplitForm(ModelForm)` — fields: `user`, `split_type`, `percentage`; exclude
+  `tenant`, `opportunity` (set in view); `user` queryset scoped to `request.tenant.users`
+- [ ] `QuoteForm(ModelForm)` — fields: `opportunity`, `account`, `price_book`, `valid_until`,
+  `currency_code`, `discount_pct`, `terms`, `owner`; **EXCLUDE** `status`, `subtotal`, `tax_total`,
+  `total`, `sent_at`, `accepted_at`, `number`, `tenant` (all system-managed); FK querysets
+  tenant-scoped in `__init__`
+- [ ] `QuoteLineForm(ModelForm)` — fields: `product`, `description`, `quantity`, `unit_price`,
+  `discount_pct`, `tax_pct`, `order`; **EXCLUDE** `tenant`, `quote`, computed line totals;
+  `product` queryset scoped to tenant active products
+- [ ] `SalesQuotaForm(ModelForm)` — fields: `owner`, `territory`, `period_type`, `period_year`,
+  `period_number`, `target_amount`; exclude `tenant`, `number`; FK querysets tenant-scoped
+
+### 2c. `views.py` — add to existing file
+
+All views: `@login_required`, `tenant=request.tenant` scoping, `get_object_or_404(..., tenant=request.tenant)` on
+every write, deletes POST-only, board + forecast aggregate DB-side.
+
+- [ ] `territory_list` — search (name/region/segment `Q`), filter `is_active` (`'active'/'inactive'`),
+  filter `parent` by pk; context: `territories`, `is_active_filter`, `status_choices=[("active","Active"),
+  ("inactive","Inactive")]`; pagination 20
+- [ ] `territory_create` — `TerritoryForm`; set `tenant` before save; redirect to `crm:territory_detail`
+- [ ] `territory_detail` — child territories listed inline; back to list, edit/delete sidebar actions
+- [ ] `territory_edit` — `TerritoryForm`; guard parent cannot be self or own descendant
+- [ ] `territory_delete` — POST-only; redirect `crm:territory_list`
+- [ ] `product_list` — search (name/sku Q), filter `product_type`, filter `is_active`; context:
+  `products`, `product_type_choices`, `status_choices`; pagination 25
+- [ ] `product_create` — `ProductForm`; set `tenant`; redirect `crm:product_detail`
+- [ ] `product_detail` — margin_pct displayed; back/edit/delete sidebar
+- [ ] `product_edit` — `ProductForm`
+- [ ] `product_delete` — POST-only; redirect `crm:product_list`
+- [ ] `pricebook_list` — search (name/region/tier Q), filter `is_active`, filter `is_default`;
+  context: `pricebooks`, `status_choices`; pagination 20
+- [ ] `pricebook_create` — `PriceBookForm`; set `tenant`; redirect `crm:pricebook_detail`
+- [ ] `pricebook_detail` — shows adjustment_pct, quotes using this book listed inline (count);
+  edit/delete sidebar
+- [ ] `pricebook_edit` — `PriceBookForm`
+- [ ] `pricebook_delete` — POST-only; redirect `crm:pricebook_list`
+- [ ] `opportunity_list` — KEEP existing view but ensure new filter params work: add `forecast_category`
+  filter (GET param `forecast_category`), `territory` filter (GET param `territory` pk); pass
+  `forecast_category_choices` and `territories` to context; pagination unchanged
+- [ ] `opportunity_create` / `opportunity_detail` / `opportunity_edit` / `opportunity_delete` — KEEP
+  existing views but update forms to include new fields; `opportunity_detail` renders `splits` inline
+  section with `OpportunitySplitForm`
+- [ ] `opportunity_board` — GET; aggregates existing `Opportunity` queryset grouped by `stage` for
+  Kanban columns; filters: `owner` (pk), `territory` (pk), `forecast_category`; context:
+  `board_columns` (list of `{stage, label, opportunities, total_amount}`); renders
+  `crm/sales/pipeline.html`
+- [ ] `opportunity_advance` — POST; `pk` + `stage` (next stage in STAGE_CHOICES); tenant-scoped;
+  updates `stage` and returns redirect to `crm:opportunity_detail` (or 302 to board)
+- [ ] `opportunitysplit_add` — POST on opportunity detail; `OpportunitySplitForm`; runs `full_clean()`
+  to invoke `clean()` revenue-sum guard; sets `tenant` + `opportunity`; redirect
+  `crm:opportunity_detail`
+- [ ] `opportunitysplit_remove` — POST; `pk` + implicit `opportunity_pk`; tenant-scoped on opportunity;
+  redirect `crm:opportunity_detail`
+- [ ] `quote_list` — search (number/account name Q), filter `status`, filter `opportunity` pk;
+  context: `quotes`, `status_choices`, `opportunities`; pagination 20
+- [ ] `quote_create` — `QuoteForm`; set `tenant`, `status="draft"`; call `recalc_totals()`; redirect
+  `crm:quote_detail`
+- [ ] `quote_detail` — renders `lines` inline with `QuoteLineForm` + add/remove actions; sidebar:
+  Edit (draft only), Send, Accept, Decline, Delete (draft only), Print link; totals displayed
+- [ ] `quote_edit` — `QuoteForm`; draft-only guard; after save call `recalc_totals()`
+- [ ] `quote_delete` — POST-only; draft-only guard; redirect `crm:quote_list`
+- [ ] `quoteline_add` — POST; `QuoteLineForm`; atomic with `recalc_totals()`; sets `tenant` + `quote`;
+  default `unit_price` computed from product + price_book adjustment if both set; redirect
+  `crm:quote_detail`
+- [ ] `quoteline_remove` — POST; tenant-scoped via quote FK; atomic with `recalc_totals()`; redirect
+  `crm:quote_detail`
+- [ ] `quote_send` — POST; draft→sent transition; stamp `sent_at = timezone.now()`; idempotent guard
+  (already sent → redirect with warning); redirect `crm:quote_detail`
+- [ ] `quote_accept` — POST; sent→accepted; stamp `accepted_at`; update linked
+  `opportunity.amount = quote.total` and advance stage toward "negotiation" if currently earlier;
+  idempotent guard; redirect `crm:quote_detail`
+- [ ] `quote_decline` — POST; sent→declined; idempotent guard; redirect `crm:quote_detail`
+- [ ] `quote_print` — `@login_required` (NOT public); GET; renders `crm/sales/quote/print.html`;
+  terms rendered with `|linebreaksbr` (never `|safe`)
+- [ ] `forecast_view` — GET; reads `period_year` + `period_type` from GET (defaults: current year +
+  "quarter"); aggregates `Opportunity` DB-side by `forecast_category`; joins `SalesQuota`; context:
+  `by_category` (dict), `quotas_qs`, `period_year`, `period_type`, `pipeline_coverage` (pipeline /
+  quota target or None), `closed_won_total`; renders `crm/sales/forecast.html`
+- [ ] `salesquota_list` — filter `period_type`, `period_year`, `owner`; context: `quotas`,
+  `period_type_choices`, `users`; pagination 20
+- [ ] `salesquota_create` — `SalesQuotaForm`; set `tenant`; redirect `crm:salesquota_detail`
+- [ ] `salesquota_detail` — shows target vs. closed-won actual for the period; edit/delete sidebar
+- [ ] `salesquota_edit` — `SalesQuotaForm`
+- [ ] `salesquota_delete` — POST-only; redirect `crm:salesquota_list`
+
+### 2d. `urls.py` — add to existing `app_name = "crm"` urlconf
+
+- [ ] Territory: `territory_list`, `territory_create`, `territory_detail/<int:pk>/`, `territory_edit/<int:pk>/`,
+  `territory_delete/<int:pk>/`
+- [ ] Product: `product_list`, `product_create`, `product_detail/<int:pk>/`, `product_edit/<int:pk>/`,
+  `product_delete/<int:pk>/`
+- [ ] PriceBook: `pricebook_list`, `pricebook_create`, `pricebook_detail/<int:pk>/`,
+  `pricebook_edit/<int:pk>/`, `pricebook_delete/<int:pk>/`
+- [ ] Opportunity extras: `opportunity_board` (GET), `opportunity_advance/<int:pk>/` (POST),
+  `opportunitysplit_add/<int:opportunity_pk>/` (POST),
+  `opportunitysplit_remove/<int:pk>/opportunity/<int:opportunity_pk>/` (POST)
+- [ ] Quote: `quote_list`, `quote_create`, `quote_detail/<int:pk>/`, `quote_edit/<int:pk>/`,
+  `quote_delete/<int:pk>/`, `quote_send/<int:pk>/`, `quote_accept/<int:pk>/`,
+  `quote_decline/<int:pk>/`, `quote_print/<int:pk>/`
+- [ ] QuoteLine: `quoteline_add/<int:quote_pk>/` (POST), `quoteline_remove/<int:pk>/quote/<int:quote_pk>/` (POST)
+- [ ] SalesQuota: `salesquota_list`, `salesquota_create`, `salesquota_detail/<int:pk>/`,
+  `salesquota_edit/<int:pk>/`, `salesquota_delete/<int:pk>/`
+- [ ] Forecast: `forecast/` → `forecast_view`, name `forecast`
+
+### 2e. `admin.py`
+
+- [ ] Register `Territory` with `list_display=(number, name, region, manager, parent, is_active)`,
+  `list_filter=(tenant, is_active)`, `search_fields=(name, region)`
+- [ ] Register `Product` with `list_display=(number, name, sku, product_type, unit_price, is_active)`,
+  `list_filter=(tenant, product_type, is_active)`, `search_fields=(name, sku)`
+- [ ] Register `PriceBook` with `list_display=(number, name, currency_code, is_default, is_active)`,
+  `list_filter=(tenant, is_default, is_active)`
+- [ ] Register `OpportunitySplit` with `list_display=(opportunity, user, split_type, percentage)`,
+  `list_filter=(tenant, split_type)`
+- [ ] Register `Quote` with `list_display=(number, account, status, total, valid_until, owner)`,
+  `list_filter=(tenant, status)`, `search_fields=(number,)`
+- [ ] Register `QuoteLine` with `list_display=(quote, product, description, quantity, unit_price)`,
+  `list_filter=(tenant,)`
+- [ ] Register `SalesQuota` with `list_display=(number, owner, territory, period_type, period_year,
+  period_number, target_amount)`, `list_filter=(tenant, period_type, period_year)`
+- [ ] Enhance `Opportunity` admin to show new fields `competitor`, `forecast_category`, `territory`
+
+### 2f. Migration
+
+- [ ] `python manage.py makemigrations crm` — produces `apps/crm/migrations/0008_*.py`; verify it
+  contains Territory, Product, PriceBook, OpportunitySplit, Quote, QuoteLine, SalesQuota models +
+  ALTER TABLE on `crm_opportunity` for 6 new fields; no data loss to existing Opportunity rows
+
+### 2g. Seeder (`apps/crm/management/commands/seed_crm.py`)
+
+- [ ] Add `_seed_sfa(tenant)` function (called unconditionally in `handle()` like `_seed_marketing`):
+  - Guard: `if Product.objects.filter(tenant=tenant).exists(): print("SFA already seeded."); return`
+  - Create 3 `Territory` rows (e.g. North America, EMEA, APAC) with TER- numbers; EMEA.parent = None,
+    APAC could be child of APAC-Pacific parent
+  - Create 4 `Product` rows: 1 good (Hardware Widget), 1 service (Implementation), 1 subscription
+    (SaaS Platform Annual), 1 service (Premium Support); each gets PRD- number via `save()`
+  - Create 2 `PriceBook` rows: "Standard" (`is_default=True`, `price_adjustment_pct=0`) +
+    "Enterprise" (`price_adjustment_pct=-10`); PB- numbers
+  - Reuse first `Opportunity` (`Opportunity.objects.filter(tenant=tenant).first()`) — if none exists,
+    create one minimal OPP- row — then attach 1 `Quote` (QUO-) with 2 `QuoteLine` rows; call
+    `quote.recalc_totals()` after lines are created
+  - Add 1 `OpportunitySplit` (revenue 60%) + 1 (overlay 100%) on that opportunity
+  - Create 2 `SalesQuota` rows (QTA-): one for `period_type=quarter, period_year=2026, period_number=2`
+    on a user; one for the North America Territory
+  - All rows use `get_or_create` / existence check to stay idempotent; print summary counts
+
+---
+
+## 3. Wire-up
+
+- [ ] `apps/core/navigation.py` — REWRITE `LIVE_LINKS["1.2"]` to replace the current 2-entry stub with
+  the 8-entry full map (3 NavERP.md bullets verbatim + 5 extras):
+  ```python
+  "1.2": {
+      # NavERP.md bullets (verbatim text)
+      "Opportunity Management (Deals)": "crm:opportunity_list",   # bullet
+      "Product Catalog (Quoting)":      "crm:product_list",       # bullet
+      "Forecasting":                    "crm:forecast",            # bullet
+      # Extra live links
+      "Pipeline Board":   "crm:opportunity_board",   # extra (Kanban)
+      "Quotes":           "crm:quote_list",           # extra
+      "Price Books":      "crm:pricebook_list",       # extra
+      "Sales Quotas":     "crm:salesquota_list",      # extra
+      "Territories":      "crm:territory_list",       # extra
+  },
+  ```
+  Note: existing `"crm:overview"` entry for Forecasting is replaced by `"crm:forecast"` (the new
+  dedicated forecast view).
+
+- [ ] `config/settings.py` — NO CHANGE (crm already in INSTALLED_APPS)
+- [ ] `config/urls.py` — NO CHANGE (crm already included at `crm/`)
+
+---
+
+## 4. Templates (`templates/crm/sales/`)
+
+All templates: `{% extends "base.html" %}`, Tailwind + HTMX patterns, filter-bar reflects `request.GET`,
+Actions column = view/edit/delete (CRUD rules), pagination with empty-state. Never `|safe` on user text.
+
+### Territory
+- [ ] `sales/territory/list.html` — table (number, name, region, segment, parent→link, manager, is_active);
+  filter bar: search `q`, `is_active` select; Actions column: view/edit/delete-POST+confirm+csrf;
+  "New Territory" button; empty-state; pagination
+- [ ] `sales/territory/detail.html` — all fields displayed; child territories inline list; sidebar:
+  Edit / Delete (POST+confirm) / Back to List
+- [ ] `sales/territory/form.html` — create + edit (pre-filled); `parent` select (excludes self on edit);
+  `manager` select; cancel → list
+
+### Product
+- [ ] `sales/product/list.html` — table (number, name, sku, product_type badge, unit_price, margin_pct%,
+  is_active badge); filter bar: search `q`, `product_type` select (pass `product_type_choices`),
+  `is_active` select; Actions; "New Product"; pagination
+- [ ] `sales/product/detail.html` — all fields; margin_pct computed; sidebar Edit/Delete/Back
+- [ ] `sales/product/form.html` — create + edit; product_type select; numeric fields; cancel → list
+
+### PriceBook
+- [ ] `sales/pricebook/list.html` — table (number, name, currency_code, region, tier, price_adjustment_pct,
+  is_default badge, is_active badge); filter bar: search `q`, `is_active` select; Actions; "New Price Book"
+- [ ] `sales/pricebook/detail.html` — all fields; count of quotes using this book; sidebar Edit/Delete/Back
+- [ ] `sales/pricebook/form.html` — create + edit; currency_code text input (with placeholder "USD");
+  numeric adjustment_pct; is_default checkbox; cancel → list
+
+### Opportunity (extend existing — MOVE to sales/ submodule folder)
+- [ ] `sales/opportunity/list.html` — extend existing list template under `sales/opportunity/`; add
+  `forecast_category` badge column, `territory` column; filter bar gains `forecast_category` select +
+  `territory` select (pass `forecast_category_choices`, `territories`); existing search/stage/owner
+  filters retained
+- [ ] `sales/opportunity/detail.html` — extend existing; add new field display block (competitor,
+  forecast_category, loss_reason, lost_at, territory, stage_changed_at); add **Splits inline section**:
+  table of splits (user, split_type, percentage, delete POST); `OpportunitySplitForm` to add new split;
+  "Advance Stage" button (POST `opportunity_advance`); keep existing fields above
+- [ ] `sales/opportunity/form.html` — extend existing form; add new fields in a "SFA Details" fieldset:
+  `competitor`, `forecast_category`, `loss_reason`, `territory`; `loss_reason` shown only when stage =
+  closed_lost (JS/HTMX show/hide); existing fields unchanged
+
+### Quote
+- [ ] `sales/quote/list.html` — table (number, account name, opportunity number→link, status badge,
+  total, valid_until, owner); filter bar: search `q`, `status` select (pass `status_choices`),
+  `opportunity` select (pass `opportunities`); Actions: view/edit(draft-only)/delete(draft-only)/print;
+  "New Quote"; pagination
+- [ ] `sales/quote/detail.html` — header section: all Quote fields; **Line Items section**: table of
+  QuoteLines (description, qty, unit_price, discount_pct%, tax_pct%, line_subtotal, line_tax,
+  line_total; Remove POST button per line); `QuoteLineForm` at bottom to add line (product select
+  auto-fills unit_price + tax_pct via JS/HTMX); totals footer (subtotal, tax, quote-discount, TOTAL);
+  **sidebar**: Edit (draft only), Send (draft only — POST `quote_send`), Accept (sent only — POST
+  `quote_accept`), Decline (sent only — POST `quote_decline`), Print (`quote_print` GET link),
+  Delete (draft only — POST+confirm), Back to List; sent_at / accepted_at displayed when set
+- [ ] `sales/quote/form.html` — create + edit; opportunity select; account select; price_book select;
+  currency_code text; discount_pct; valid_until date; terms textarea; owner select; cancel → list;
+  note: status/totals/timestamps NOT in form (excluded)
+- [ ] `sales/quote/print.html` — print-optimized; `@media print` CSS; company name/logo placeholder;
+  quote header (number, date, valid_until, client); line items table (description, qty, unit_price,
+  line_total); subtotal/tax/discount/TOTAL rows; `terms` rendered `|linebreaksbr` (never `|safe`);
+  no base navbar (standalone layout with minimal chrome); login-gated (no public access)
+
+### Pipeline Board (standalone)
+- [ ] `sales/pipeline.html` — Kanban columns from `board_columns` context; each column: stage label,
+  count + total amount; cards: deal name→detail link, account, amount, close_date, probability badge,
+  forecast_category badge; filter bar: `owner` select, `territory` select, `forecast_category` select;
+  "Advance" button on each card (POST `opportunity_advance` to next stage); responsive horizontal scroll
+
+### Forecast Dashboard (standalone)
+- [ ] `sales/forecast.html` — period selector (year + period_type GET form); KPI cards: Closed Won,
+  Weighted Pipeline, Best Case, Commit, Quota Target, Pipeline Coverage Ratio; table: forecast_category
+  rows (label, count, total_amount, weighted_amount); Quota vs. Actual per rep/territory table from
+  `quotas_qs`; all data from context (no inline JS fetches); aggregate DB-side
+
+### SalesQuota
+- [ ] `sales/salesquota/list.html` — table (number, owner, territory, period_type, period label,
+  target_amount); filter bar: `period_type` select, `period_year` text, `owner` select; Actions;
+  "New Quota"; pagination
+- [ ] `sales/salesquota/detail.html` — all fields; computed closed_won actual for the period; gap to
+  quota; sidebar Edit/Delete/Back
+- [ ] `sales/salesquota/form.html` — owner select, territory select, period_type select, period_year
+  number input, period_number number input, target_amount; cancel → list
+
+---
+
+## 5. Verify
+
+- [ ] `python manage.py makemigrations crm` — confirms only migration 0008 produced (no spurious
+  changes to prior models)
+- [ ] `python manage.py migrate` — applies 0008 cleanly; no errors
+- [ ] `python manage.py seed_crm` — first run: seeds SFA data + prints counts; no errors
+- [ ] `python manage.py seed_crm` again (×2 idempotency) — prints "SFA already seeded." for SFA
+  section; no duplicate rows created; no IntegrityError
+- [ ] `python manage.py check` — 0 issues
+- [ ] `temp/smoke_sfa.py` — sweep all `crm:*` SFA urls returning 200 or 302 (authenticated as
+  tenant admin):
+  - All list pages: territory_list, product_list, pricebook_list, opportunity_list, quote_list,
+    salesquota_list → 200
+  - opportunity_board → 200 (pipeline.html rendered)
+  - forecast → 200 (forecast.html rendered with period defaults)
+  - Territory/Product/PriceBook/Quote/SalesQuota create (GET) → 200
+  - Territory/Product/PriceBook/Quote/SalesQuota detail (seeded pk) → 200
+  - Territory/Product/PriceBook/Quote/SalesQuota edit (GET) → 200
+  - quote_print (seeded pk) → 200 (login-gated; no public access)
+  - quote_send (POST) → 302; second POST on same quote → 302 with warning (idempotent)
+  - quote_accept (POST after send) → 302; opportunity.amount updated to quote.total
+  - quote_decline on a sent quote → 302; status = declined
+  - QuoteLine add (POST) → 302; quote.subtotal / tax_total / total updated by recalc_totals()
+  - QuoteLine remove (POST) → 302; totals recalculated
+  - OpportunitySplit add revenue 60% + revenue 50% = 110% → 400/form error (sum > 100% rejected)
+  - opportunity_advance (POST) → 302; stage advances
+  - Cross-tenant IDOR: GET/POST on Territory/Product/PriceBook/Quote/SalesQuota/Opportunity pk
+    belonging to a different tenant → 404
+  - No `{#` or `{% comment` leaks in rendered HTML (search rendered output)
+  - Superuser (no tenant) hitting any list → 0 results (empty-state shown, not crash)
+
+---
+
+## 6. Close-out
+
+- [ ] **code-reviewer** agent — apply findings; commit
+- [ ] **explorer** agent — apply findings; commit
+- [ ] **frontend-reviewer** agent — apply findings; commit
+- [ ] **performance-reviewer** agent — apply findings; commit
+- [ ] **qa-smoke-tester** agent — apply findings; commit
+- [ ] **security-reviewer** agent — apply findings; commit
+- [ ] **test-writer** agent — write pytest suite for SFA; commit
+- [ ] Update `.claude/skills/crm/SKILL.md` — add 1.2 SFA section (Territory/Product/PriceBook/
+  Opportunity enhancements/OpportunitySplit/Quote/QuoteLine/SalesQuota models, new url names,
+  new templates under `sales/`, `_seed_sfa` seeder, LIVE_LINKS["1.2"] rewrite); commit
+- [ ] Update module README if one exists; commit
+
+---
+
+## 7. Later passes / deferred
+
+- **PriceBookEntry join table** — per-product price override per price book (unit_price + min_qty);
+  skipped this pass; `price_adjustment_pct` on PriceBook covers the common ±% case. Future enhancement.
+- **Multiple sales pipelines** — distinct pipeline definitions per product line / sales motion;
+  one default pipeline covers SMB. Deferred: new `Pipeline` + `PipelineStage` tables.
+- **Product bundling / kits** — self-FK on Product or separate bundle_line table; adds quoting
+  complexity. Deferred.
+- **Volume / tiered discount schedules** — `DiscountSchedule` + `DiscountTier` tables for quantity-
+  break pricing. Manual per-line discount covers initial need. Deferred.
+- **PDF library rendering** — WeasyPrint/wkhtmltopdf for true PDF; browser "Print to PDF" covers
+  the immediate requirement. Integration/later.
+- **E-signature delivery on quotes** — DocuSign/HelloSign integration; existing `ContractDocument`/
+  `SignerRecord` models the tracking, but delivery requires an e-sign provider. Integration/later.
+- **Quote → Sales Order sync** — push accepted quote into Module 8 `SalesOrder`; blocked until
+  Module 8 (Sales) is built.
+- **Quote → Invoice sync** — push accepted quote into Module 2 AR; blocked until Module 2 is built.
+- **AI predictive deal scoring** — win probability from activity signals (Salesforce Einstein, Clari,
+  Freshsales Freddy). Requires external ML inference. Integration/later.
+- **AI forecast accuracy / range** — HubSpot/Clari best/worst/likely AI forecast. Integration/later.
+- **Commission payout calculation** — dollar amounts from `OpportunitySplit` percentages; payroll
+  integration required. Deferred to Module 3 HRM/Payroll or dedicated commission module.
+- **OpportunityContact junction** — stakeholder roles (Decision Maker, Champion, Economic Buyer);
+  useful but not blocking core quoting. Follow-up sub-module pass.
+- **Real-time FX conversion** — multi-currency with live exchange rates; `currency_code` CharField
+  is sufficient now. Deferred to Module 2 Accounting.
+- **Inline pipeline editing (HTMX)** — edit amount/stage/close_date inline on board without full
+  reload; secondary pass after board is stable.
+- **Deal velocity / stage-age reporting** — average days per stage from `stage_changed_at` history;
+  secondary analytics pass.
+- **Approval workflow for over-discount quotes** — connect existing `WorkflowRule`/`ApprovalRequest`
+  to quotes exceeding discount threshold; no new model needed but wiring work. Secondary pass.
+
+---
+
+## 8. Review notes
+
+(filled in at the end)
