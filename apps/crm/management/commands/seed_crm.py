@@ -17,6 +17,7 @@ from apps.crm.models import (
     AccountProfile,
     ApprovalRequest,
     Campaign,
+    CampaignMember,
     Case,
     ContactProfile,
     ContractDocument,
@@ -24,9 +25,13 @@ from apps.crm.models import (
     CrmProject,
     CrmTask,
     DocTemplate,
+    EmailCampaign,
+    EmailTemplate,
     Expense,
+    FormSubmission,
     HealthScoreConfig,
     KnowledgeArticle,
+    LandingPage,
     Lead,
     OnboardingPlan,
     OnboardingStep,
@@ -93,6 +98,9 @@ class Command(BaseCommand):
                 self._seed_tenant(tenant)
             # 1.7–1.12 extension data — runs after base data exists; self-guards on Expense.
             self._seed_extension(tenant)
+            # 1.3 Marketing Automation — runs unconditionally; self-guards on EmailTemplate so
+            # existing seeded DBs gain the new marketing rows without a --flush.
+            self._seed_marketing(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -181,6 +189,83 @@ class Command(BaseCommand):
                 address_country="USA", source="event", owner=owner,
                 description="Primary point of contact.",
             )
+
+    def _seed_marketing(self, tenant):
+        """Idempotently seed 1.3 Marketing Automation demo data — campaign members, an email
+        template + sent blast (with metrics), a published landing page, and two form
+        submissions. Reuses the tenant's first Campaign + existing Party/Lead rows. Guard: skip
+        if an EmailTemplate already exists for the tenant (so it backfills without a --flush)."""
+        if EmailTemplate.objects.filter(tenant=tenant).exists():
+            return
+        campaign = Campaign.objects.filter(tenant=tenant).order_by("created_at").first()
+        if campaign is None:
+            return  # base seed didn't run (no tenant admin / parties) — nothing to attach to
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        org = Party.objects.filter(tenant=tenant, kind="organization").first()
+        person = Party.objects.filter(tenant=tenant, kind="person").first()
+        leads = list(Lead.objects.filter(tenant=tenant)[:2])
+
+        # Target-list members (varied funnel statuses).
+        members = [
+            CampaignMember(tenant=tenant, campaign=campaign, party=org,
+                           member_name=org.name if org else "Brightwave Media",
+                           member_email="info@brightwave.example", status="clicked"),
+            CampaignMember(tenant=tenant, campaign=campaign, party=person,
+                           member_name=person.name if person else "Jordan Lee",
+                           member_email="jordan@example.com", status="responded"),
+        ]
+        for i, lead in enumerate(leads):
+            members.append(CampaignMember(
+                tenant=tenant, campaign=campaign, lead=lead, member_name=lead.name,
+                member_email=lead.email, status="opened" if i == 0 else "sent"))
+        for m in members:
+            m.save()  # save() stamps responded_at for the responded/converted rows
+
+        template = EmailTemplate.objects.create(
+            tenant=tenant, name="Spring Launch Announcement", category="promotional",
+            subject="Introducing our Spring lineup, {{first_name}}",
+            preheader="A fresh set of features built for your team.",
+            body="<h1>Hello {{first_name}}</h1><p>We're excited to share what's new this season.</p>",
+            from_name="NavERP Marketing", from_email="marketing@naverp.example",
+            is_active=True, owner=owner,
+        )
+
+        member_count = CampaignMember.objects.filter(tenant=tenant, campaign=campaign).count()
+        EmailCampaign.objects.create(
+            tenant=tenant, name="Spring Launch — Blast A", campaign=campaign, template=template,
+            is_ab_test=False, send_type="one_time", status="sent",
+            sent_at=timezone.now() - datetime.timedelta(days=5),
+            recipients_count=member_count, sent_count=member_count,
+            opened_count=max(0, member_count - 1), clicked_count=max(0, member_count - 2),
+            bounced_count=0, unsubscribed_count=0, owner=owner,
+        )
+
+        page = LandingPage.objects.create(
+            tenant=tenant, name="Spring Launch — Free Trial", campaign=campaign,
+            slug="spring-free-trial", headline="Start your free 14-day trial",
+            subheadline="No credit card required.",
+            body="Join thousands of teams streamlining their operations with NavERP.",
+            capture_phone=True, capture_company=True, capture_message=False,
+            cta_label="Get started", status="published", routing_owner=owner,
+            lead_source="web", owner=owner,
+        )
+
+        FormSubmission.objects.create(
+            tenant=tenant, landing_page=page, name="Sasha Patel", email="sasha@acmestartup.example",
+            phone="+1 555 0150", company="Acme Startup", status="new", routed_to=owner,
+        )
+        converted = FormSubmission.objects.create(
+            tenant=tenant, landing_page=page, name="Toni Garcia", email="toni@brightlabs.example",
+            phone="+1 555 0151", company="Bright Labs", status="converted", routed_to=owner,
+        )
+        converted.converted_lead = Lead.objects.create(
+            tenant=tenant, name="Toni Garcia", company="Bright Labs", email="toni@brightlabs.example",
+            phone="+1 555 0151", source="web", status="new", owner=owner,
+            description="Captured via the Spring Launch landing page.",
+        )
+        converted.save(update_fields=["converted_lead"])
+        LandingPage.objects.filter(pk=page.pk).update(submission_count=2)
 
     def _seed_extension(self, tenant):
         """Idempotently seed the 1.7–1.12 demo data (expenses, projects/milestones/timesheets,
