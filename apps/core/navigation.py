@@ -87,9 +87,14 @@ LIVE_LINKS = {
         "Opportunity Management (Deals)": "crm:opportunity_list",  # bullet
         "Forecasting": "crm:overview",                  # bullet (weighted pipeline on the overview)
     },
-    # 1.3 Marketing Automation
+    # 1.3 Marketing Automation — all three bullets now live (recreated in detail).
     "1.3": {
-        "Campaign Management": "crm:campaign_list",      # bullet
+        "Campaign Management": "crm:campaign_list",          # bullet
+        "Campaign Members": "crm:campaignmember_list",       # extra (target-list segmentation)
+        "Email Marketing": "crm:emailcampaign_list",         # bullet
+        "Email Templates": "crm:emailtemplate_list",         # extra (HTML template builder)
+        "Landing Pages & Forms": "crm:landingpage_list",     # bullet
+        "Form Submissions": "crm:formsubmission_list",       # extra (web-to-lead captures)
     },
     # 1.4 Customer Service & Support (Help Desk)
     "1.4": {
