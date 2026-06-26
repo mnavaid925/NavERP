@@ -11,7 +11,7 @@ import secrets
 from decimal import Decimal
 
 from django.conf import settings
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
@@ -591,7 +591,8 @@ class Product(TenantNumbered):
     product_type = models.CharField(max_length=15, choices=TYPE_CHOICES, default="good")
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    tax_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    tax_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                  validators=[MinValueValidator(0), MaxValueValidator(100)])
     is_active = models.BooleanField(default=True)
     description = models.TextField(blank=True)
 
@@ -626,7 +627,8 @@ class PriceBook(TenantNumbered):
     currency_code = models.CharField(max_length=3, default="USD")
     region = models.CharField(max_length=120, blank=True)
     tier = models.CharField(max_length=120, blank=True)
-    price_adjustment_pct = models.DecimalField(max_digits=6, decimal_places=2, default=0)  # ± off base
+    price_adjustment_pct = models.DecimalField(  # ± off base; floor at -100% so it can't make a negative price
+        max_digits=6, decimal_places=2, default=0, validators=[MinValueValidator(-100)])
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     description = models.TextField(blank=True)
@@ -662,7 +664,11 @@ class OpportunitySplit(models.Model):
     opportunity = models.ForeignKey("Opportunity", on_delete=models.CASCADE, related_name="splits")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="crm_opportunity_splits")
     split_type = models.CharField(max_length=10, choices=SPLIT_TYPE_CHOICES, default="revenue")
-    percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # WARNING: a negative percentage would slip under the ≤100% sum guard and corrupt
+    # split_amount / forecast math — bound it to (0, 100].
+    percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        validators=[MinValueValidator(Decimal("0.01")), MaxValueValidator(100)])
     notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -680,6 +686,10 @@ class OpportunitySplit(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
+        # Defence in depth (the inline add calls clean() directly, not full_clean()): reject a
+        # non-positive percentage so it can't slip under the ≤100% aggregate guard below.
+        if self.percentage is not None and self.percentage <= 0:
+            raise ValidationError("Percentage must be greater than zero.")
         # Revenue splits divide the booking — they must not exceed 100% across the opportunity.
         # (Guard on tenant_id too so a clean() before the view sets tenant can't query tenant=None.)
         if self.split_type == "revenue" and self.opportunity_id and self.tenant_id:
@@ -721,7 +731,9 @@ class Quote(TenantNumbered):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
     valid_until = models.DateField(null=True, blank=True)
     currency_code = models.CharField(max_length=3, default="USD")
-    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # quote-level, on top of line discounts
+    discount_pct = models.DecimalField(  # quote-level, on top of line discounts
+        max_digits=5, decimal_places=2, default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)])
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)   # system (recalc_totals)
     tax_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)  # system
     total = models.DecimalField(max_digits=14, decimal_places=2, default=0)      # system
@@ -782,10 +794,13 @@ class QuoteLine(models.Model):
     quote = models.ForeignKey("Quote", on_delete=models.CASCADE, related_name="lines")
     product = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="quote_lines")
     description = models.CharField(max_length=255)
-    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1,
+                                   validators=[MinValueValidator(0)])
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    tax_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                       validators=[MinValueValidator(0), MaxValueValidator(100)])
+    tax_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                  validators=[MinValueValidator(0), MaxValueValidator(100)])
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
