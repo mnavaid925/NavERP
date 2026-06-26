@@ -12,15 +12,18 @@ from apps.core.models import Party
 
 from .models import (
     AccountProfile,
+    CalendarEvent,
     Campaign,
     CampaignMember,
     Case,
     CaseComment,
+    CommunicationLog,
     ContactProfile,
     CrmTask,
     CustomerPortalAccess,
     EmailCampaign,
     EmailTemplate,
+    EventAttendee,
     KbCategory,
     KnowledgeArticle,
     LandingPage,
@@ -274,8 +277,49 @@ class PublicCommentForm(forms.Form):
 class CrmTaskForm(TenantModelForm):
     class Meta:
         model = CrmTask
+        # recurrence_parent + completed_at are system-set (L20/L22) → excluded.
         fields = ["subject", "type", "priority", "status", "due_date", "owner", "party",
-                  "related_opportunity", "description"]
+                  "related_opportunity", "related_case", "description",
+                  "recurrence", "recurrence_interval", "recurrence_until"]
+
+
+# ===== 1.5 Activity & Communication Management (recreated) ====================
+class CalendarEventForm(TenantModelForm):
+    class Meta:
+        model = CalendarEvent
+        # public_token + number are system-set (L20/L22) → excluded.
+        fields = ["title", "event_type", "start", "end", "all_day", "location", "video_url",
+                  "status", "sync_source", "reminder_minutes", "owner", "party",
+                  "related_opportunity", "related_case", "description"]
+
+
+class EventAttendeeForm(TenantModelForm):
+    class Meta:
+        model = EventAttendee
+        # tenant + event are set by the view; responded_at is system-set on RSVP.
+        fields = ["party", "name", "email", "rsvp_status", "is_organizer"]
+
+
+class CommunicationLogForm(TenantModelForm):
+    class Meta:
+        model = CommunicationLog
+        # number is system-set; email_message_id is populated by the sync engine, not staff.
+        fields = ["channel", "direction", "subject", "body", "party", "owner",
+                  "related_opportunity", "related_case", "occurred_at", "duration_seconds",
+                  "outcome", "logged_via"]
+
+
+class PublicRsvpForm(forms.Form):
+    """Public meeting-invite RSVP (no tenant binding — written directly in the view). Choices
+    omit ``no_response`` (the default) since the form is an affirmative RSVP action."""
+
+    name = forms.CharField(max_length=255, widget=forms.TextInput(attrs={"class": "form-input"}))
+    email = forms.EmailField(widget=forms.EmailInput(attrs={"class": "form-input"}))
+    rsvp_status = forms.ChoiceField(
+        label="Your response",
+        choices=[("accepted", "Accept"), ("declined", "Decline"), ("tentative", "Maybe")],
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
 
 
 # Accounts & Contacts span two tables: the shared core.Party identity (name/tax_id) + the CRM
