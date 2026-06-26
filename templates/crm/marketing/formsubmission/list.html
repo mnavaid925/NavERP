@@ -47,6 +47,7 @@
               <td>{% if obj.landing_page %}<a href="{% url 'crm:landingpage_detail' obj.landing_page.pk %}">{{ obj.landing_page.name }}</a>{% else %}—{% endif %}</td>
               <td><span class="badge badge-{% if obj.status == 'converted' %}green{% elif obj.status == 'routed' %}info{% elif obj.status == 'spam' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.created_at|date:"M d, Y" }}</td>
+              {# FormSubmission is read-only (captured via the public form): no edit button — view, convert, or delete only. #}
               <td>
                 <div class="table-actions">
                   <a href="{% url 'crm:formsubmission_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
