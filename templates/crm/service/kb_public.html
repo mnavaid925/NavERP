@@ -1,0 +1,22 @@
+{% extends "base_auth.html" %}
+{% block title %}{{ article.title }}{% endblock %}
+{% block content %}
+  <h2>{{ article.title }}</h2>
+  {% if article.kb_category %}<p style="color:var(--text-muted);">{{ article.kb_category.name }}</p>{% endif %}
+
+  <div style="margin:1rem 0;">
+    {# Tenant-authored article body, rendered ESCAPED via linebreaksbr (never |safe). #}
+    {% if article.body %}{{ article.body|linebreaksbr }}{% else %}<p style="color:var(--text-muted);">No content.</p>{% endif %}
+  </div>
+
+  <hr style="margin:1.5rem 0; border:none; border-top:1px solid var(--border);">
+  <p style="color:var(--text-muted);">Was this article helpful?</p>
+  <form method="post" action="{% url 'crm:kb_helpful' article.public_token %}" style="display:inline;">
+    {% csrf_token %}
+    <button class="btn btn-outline" type="submit" name="vote" value="yes">👍 Yes ({{ article.helpful_count }})</button>
+  </form>
+  <form method="post" action="{% url 'crm:kb_helpful' article.public_token %}" style="display:inline;">
+    {% csrf_token %}
+    <button class="btn btn-outline" type="submit" name="vote" value="no">👎 No ({{ article.not_helpful_count }})</button>
+  </form>
+{% endblock %}
