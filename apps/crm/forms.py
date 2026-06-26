@@ -77,19 +77,24 @@ class EmailCampaignForm(TenantModelForm):
         model = EmailCampaign
         # WARNING: sent_at + every *_count metric are system-managed (set only by the
         # emailcampaign_send action / seeder). Excluded so a user can't fabricate engagement
-        # numbers or back-date a send via POST.
+        # numbers or back-date a send via POST. `status` is ALSO excluded: draft→sent happens
+        # only through the admin-gated emailcampaign_send action — accepting status from POST
+        # would let a member mark a blast "sent" (sent_at NULL, counts 0), corrupt metrics, and
+        # permanently lock out the send workflow.
         fields = ["name", "campaign", "template", "variant_template", "is_ab_test",
-                  "send_type", "status", "scheduled_at", "owner"]
+                  "send_type", "scheduled_at", "owner"]
 
 
 class LandingPageForm(TenantModelForm):
     class Meta:
         model = LandingPage
         # WARNING: public_token (unguessable URL key) + submission_count are system-managed —
-        # excluded so they can't be forged/reset via POST.
+        # excluded so they can't be forged/reset via POST. `status` is excluded too: making a
+        # page public (status=published) exposes a live web-to-lead URL, so that transition is
+        # gated to admins via the dedicated landingpage_publish action, not this content form.
         fields = ["name", "campaign", "slug", "headline", "subheadline", "body",
                   "capture_phone", "capture_company", "capture_message", "cta_label",
-                  "status", "routing_owner", "lead_source", "owner"]
+                  "routing_owner", "lead_source", "owner"]
         widgets = {"body": forms.Textarea(attrs={"rows": 8})}
 
 
