@@ -15,10 +15,13 @@ from .models import (
     Campaign,
     CampaignMember,
     Case,
+    CaseComment,
     ContactProfile,
     CrmTask,
+    CustomerPortalAccess,
     EmailCampaign,
     EmailTemplate,
+    KbCategory,
     KnowledgeArticle,
     LandingPage,
     Lead,
@@ -29,6 +32,7 @@ from .models import (
     Quote,
     QuoteLine,
     SalesQuota,
+    SlaPolicy,
     Territory,
 )
 
@@ -201,14 +205,70 @@ class PublicLeadForm(forms.Form):
 class CaseForm(TenantModelForm):
     class Meta:
         model = Case
+        # WARNING: first_response_due/first_responded_at/resolution_due/closed_at/public_token +
+        # satisfaction_* are system-managed (SLA save() / portal / public CSAT page). Excluded so a
+        # member can't forge SLA timers, back-date a close, or fake a satisfaction score via POST.
         fields = ["subject", "account", "contact", "type", "priority", "status", "origin",
-                  "owner", "due_at", "description"]
+                  "sla_policy", "owner", "due_at", "description"]
 
 
 class KnowledgeArticleForm(TenantModelForm):
     class Meta:
         model = KnowledgeArticle
-        fields = ["title", "category", "body", "visibility", "status", "owner"]
+        # helpful_count/not_helpful_count/public_token/views_count are system-managed — excluded.
+        fields = ["title", "kb_category", "category", "slug", "body", "visibility", "status", "owner"]
+
+
+# ===== 1.4 Customer Service & Support (recreated) ===========================
+class SlaPolicyForm(TenantModelForm):
+    class Meta:
+        model = SlaPolicy
+        fields = ["name", "description", "is_active", "is_default",
+                  "response_low", "response_medium", "response_high", "response_critical",
+                  "resolution_low", "resolution_medium", "resolution_high", "resolution_critical"]
+
+
+class KbCategoryForm(TenantModelForm):
+    class Meta:
+        model = KbCategory
+        fields = ["name", "description", "slug", "parent", "order", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A category can't be its own parent.
+        if self.instance and self.instance.pk:
+            self.fields["parent"].queryset = self.fields["parent"].queryset.exclude(pk=self.instance.pk)
+
+
+class CustomerPortalAccessForm(TenantModelForm):
+    class Meta:
+        model = CustomerPortalAccess
+        # accepted_at is system-set when the customer activates — excluded.
+        fields = ["customer_party", "portal_user", "can_submit_cases", "is_active"]
+
+
+class CaseCommentForm(TenantModelForm):
+    """Inline on the case detail page; tenant/case/author set in the view."""
+
+    class Meta:
+        model = CaseComment
+        fields = ["body", "is_public"]
+
+
+class PublicSatisfactionForm(forms.Form):
+    """CSAT on the public case-status page — a plain Form (no tenant binding)."""
+
+    rating = forms.ChoiceField(choices=[(i, str(i)) for i in range(1, 6)],
+                               widget=forms.Select(attrs={"class": "form-select"}))
+    comment = forms.CharField(max_length=2000, required=False,
+                              widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 3}))
+
+
+class PublicCommentForm(forms.Form):
+    """A public reply on the case-status page / portal — plain Form, length-capped."""
+
+    body = forms.CharField(max_length=4000,
+                           widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 3}))
 
 
 class CrmTaskForm(TenantModelForm):
