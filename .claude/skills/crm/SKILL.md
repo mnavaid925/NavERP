@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.12)
@@ -29,7 +29,7 @@ created_at)`; CrmTask uses `(tenant, due_date, created_at)`).
 |-------|--------|------------|------------|
 | `Lead` | `LEAD-` | name, company, title, email, phone, source, rating(hot/warm/cold), status(new/contacted/qualified/unqualified/converted/recycled), score(0–100), est_value, owner, description, converted_party | `owner`→`accounts.User`, `converted_party`→`core.Party` |
 | `Opportunity` | `OPP-` | name, stage(prospecting/qualification/proposal/negotiation/closed_won/closed_lost), amount, probability(0–100), close_date, next_step, description; props `weighted_amount`, `is_open`, `is_won`; `OPEN_STAGES` | `account`/`primary_contact`→`core.Party`, `owner`→User, `source_lead`→`crm.Lead`, `campaign`→`crm.Campaign` |
-| `Campaign` | `CAM-` | name, type, status(planned/active/paused/completed/cancelled), start/end_date, budget_planned/actual, expected/actual_revenue, target_size, description; prop `roi` | `owner`→User |
+| `Campaign` | `CAM-` | name, type, **objective**(awareness/lead_gen/nurture/conversion/event/retention), status(planned/active/paused/completed/cancelled), **parent_campaign**(self-FK), start/end_date, budget_planned/actual, expected/actual_revenue, target_size, **utm_source/medium/campaign**, description; prop `roi` | `owner`→User, `parent_campaign`→self (1.3 detail below) |
 | `Case` | `CASE-` | subject, type, priority(low/medium/high/critical), status(new/open/in_progress/waiting/resolved/closed), origin, description, due_at(SLA), resolved_at(system); props `is_open`/`is_overdue`; `OPEN_STATUSES`; `save()` stamps/clears `resolved_at` | `account`/`contact`→`core.Party`, `owner`→User |
 | `KnowledgeArticle` | `KB-` | title, category, body, visibility(internal/external), status(draft/published/archived), views_count(system) | `owner`→User |
 | `CrmTask` | `TASK-` | subject, type, priority(low/medium/high), status(open/in_progress/done/cancelled), due_date, description, completed_at(system); prop `is_overdue`; `OPEN_STATUSES`; `save()` stamps/clears `completed_at` | `owner`→User, `party`→`core.Party`, `related_opportunity`→`crm.Opportunity` |
@@ -94,7 +94,8 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
 
 **One folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page filename**
 (CLAUDE.md "Template Folder Structure"): `directory/` (entity folders `contact/ account/ lead/`), `sales/`
-(`opportunity/`), `marketing/` (`campaign/`), `service/` (`case/ knowledgearticle/`), `activities/` (`task/`),
+(`opportunity/`), `marketing/` (`campaign/ campaignmember/ emailtemplate/ emailcampaign/ landingpage/
+formsubmission/` + standalone public `landing_public.html` — see §1.3), `service/` (`case/ knowledgearticle/`), `activities/` (`task/`),
 `finance/` (`expense/`), `projects/` (`crmproject/ crmmilestone/ timesheet/`), `documents/` (`contractdocument/
 doctemplate/` + standalone `sign_document.html`), `workflow/` (`workflowrule/ approvalrequest/ workflowlog/`),
 `success/` (`onboardingplan/ healthscore/ survey/` + standalone `survey_respond.html`/`health_config`), `vendor/`
@@ -120,8 +121,9 @@ inventing duplicates. Per tenant: 2 campaigns, 3 leads, 4 opportunities (varied 
 closed_won), 3 cases, 2 KB articles, 3 tasks. `owner` = tenant admin. Also idempotently **backfills
 an `AccountProfile`/`ContactProfile`** onto the first org/person Party per tenant via
 `_backfill_profiles` (runs every time, independent of the lead-exists guard, so existing demo data
-gains firmographics/contact details without `--flush`). Prints the demo-login reminder and the
-`admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
+gains firmographics/contact details without `--flush`), and seeds **§1.3 marketing data** via
+`_seed_marketing` (also unconditional, self-guards on `EmailTemplate` — see the §1.3 section). Prints the
+demo-login reminder and the `admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
 
 ## Sidebar wiring (`apps/core/navigation.py` → `LIVE_LINKS`)
 
@@ -129,7 +131,10 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
 - `1.1`: Contacts → `crm:contact_list`; Accounts (Companies) → `crm:account_list`; Leads (Potential
   Customers) → `crm:lead_list`
 - `1.2`: Opportunity Management (Deals) → `crm:opportunity_list`; Forecasting → `crm:overview`
-- `1.3`: Campaign Management → `crm:campaign_list`
+- `1.3` (recreated in detail — all 3 bullets live): Campaign Management → `crm:campaign_list`; Campaign Members
+  → `crm:campaignmember_list`; Email Marketing → `crm:emailcampaign_list`; Email Templates →
+  `crm:emailtemplate_list`; Landing Pages & Forms → `crm:landingpage_list`; Form Submissions →
+  `crm:formsubmission_list` (see "§1.3 Marketing Automation" section)
 - `1.4`: Case / Ticket Management → `crm:case_list`; Solutions & Knowledge Base →
   `crm:knowledgearticle_list`
 - `1.5`: Task Management → `crm:task_list`
@@ -163,6 +168,57 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   maps to a `NavERP.md` bullet.
 - **Extend the seeder:** add rows inside `_seed_tenant`; keep the `Lead`-exists idempotency guard.
 - **Run the tests:** `venv\Scripts\python.exe -m pytest apps/crm -q` (SQLite via `config.settings_test`).
+
+---
+
+# §1.3 Marketing Automation (recreated in detail)
+
+The thin single-`Campaign` 1.3 was rebuilt to cover all three NavERP.md §1.3 bullets. Migrations `0006`
+(Campaign columns + 5 tables) and `0007` (CampaignMember `(tenant, created_at)` index). Models added to the
+same `apps/crm/models.py`:
+
+| Model | Prefix | Bullet | Key fields / behavior | Reuse |
+|-------|--------|--------|-----------------------|-------|
+| `Campaign` (enhanced) | `CAM-` | Campaign Management | + `objective`, `parent_campaign`(self-FK), `utm_source/medium/campaign`; member/response stats computed in `campaign_detail` via one `.aggregate(Count, Count filter=responded)` (not stored) | `parent_campaign`→self |
+| `CampaignMember` | — (plain, tenant-scoped) | target-list segmentation | `campaign`(CASCADE, `related_name="members"`), `party`→core.Party, `lead`→crm.Lead, member_name/email, status(targeted/sent/opened/clicked/responded/converted/bounced/unsubscribed), `responded_at`(system — `save()` stamps on responded/converted), notes; `RESPONDED_STATUSES` | `party`→Party, `lead`→Lead |
+| `EmailTemplate` | `EMT-` | Email Marketing | name, category, subject, preheader, `body`(HTML+merge vars, **deferred** on list, shown ESCAPED), from_name/email, is_active | `owner`→User |
+| `EmailCampaign` | `BLAST-` | Email Marketing (drip+A/B+tracking) | `campaign`(CASCADE, `related_name="email_campaigns"`), `template`+`variant_template`(A/B), is_ab_test, send_type(one_time/drip/ab_test), status(draft/scheduled/sending/sent/paused/cancelled), scheduled_at, **system**: sent_at + recipients/sent/opened/clicked/bounced/unsubscribed_count; props delivered_count/open_rate/click_rate/bounce_rate (Decimal-safe) | `template`→EmailTemplate |
+| `LandingPage` | `LP-` | Landing Pages & Forms | name, `campaign`(SET_NULL, `related_name="landing_pages"`), slug, **`public_token`**(auto `token_urlsafe(32)` in `save()`, unique, system), headline/subheadline/`body`, capture_phone/company/message, cta_label, status(draft/published/archived), `routing_owner`→User, lead_source(=`Lead.SOURCE_CHOICES`), `submission_count`(system, F()-bumped); prop is_published | `campaign`→Campaign |
+| `FormSubmission` | — (plain) | web-to-lead captures | `landing_page`(CASCADE, `related_name="submissions"`), name/email/phone/company/message, status(new/routed/converted/spam), routed_to→User, converted_lead→Lead, ip_address; **read-mostly** (list+detail+delete+convert, no create/edit form — mirrors WorkflowLog) | — |
+
+**Routes (`urls.py`):** standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for
+`campaignmember`/`emailtemplate`/`emailcampaign`/`landingpage`; `formsubmission_list/_detail/_delete/_convert`
+(read-mostly). Custom: `campaignmember_add`(inline on campaign)/`campaignmember_remove`; `emailcampaign_send`;
+`landingpage_publish`; `formsubmission_convert`; **public** `path("p/<str:token>/", landing_public)`.
+
+**Views & actions (`views.py`):** `campaign_detail` recreated — funnel `.aggregate` + members(≤50, "View all"
+>50)/email-campaigns/landing-pages/opportunities panels. Privileged actions are **`@tenant_admin_required`**:
+`emailcampaign_send` (snapshots recipients from members via a **race-safe conditional `.update()`** that claims
+the row; advances targeted→sent; system-sets metrics+sent_at) and `landingpage_publish` (draft↔published toggle —
+publishing exposes a public URL). `formsubmission_convert` (atomic) creates a routed `Lead` (idempotent).
+**Public `landing_public(token)`** — no login, only `status="published"` resolves (else 404), CSRF via template,
+body rendered ESCAPED (`|linebreaks`), input caps, Post/Redirect/Get (`?submitted=1`), `_client_ip` = REMOTE_ADDR
+only (XFF is spoofable; proxy caveat noted).
+
+**Forms (`forms.py`):** `CampaignForm` (+ objective/parent_campaign/utm_*, self-parent excluded) + per-model forms.
+**System-managed fields excluded from forms (mass-assignment guard):** `EmailCampaignForm` excludes `status` +
+all metric counters + `sent_at`; `LandingPageForm` excludes `status` + `public_token` + `submission_count`;
+`CampaignMemberForm` excludes `responded_at`. `PublicLeadForm` is a **plain `forms.Form`** (no tenant binding) with
+length caps for the public endpoint.
+
+**Templates (`templates/crm/marketing/`):** entity folders `campaign/ campaignmember/ emailtemplate/
+emailcampaign/ landingpage/ formsubmission/` (each `list/detail/form.html`; formsubmission has no `form.html`) +
+standalone public `landing_public.html` (extends `base_auth.html`). EmailTemplate body shown as escaped `<pre>`
+source; never `|safe` anywhere. Admin-only buttons (Send / Publish / Unpublish) wrapped in
+`{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+
+**Seeder:** `_seed_marketing(tenant)` runs unconditionally (like `_backfill_profiles`), self-guards on
+`EmailTemplate.objects.filter(tenant=...).exists()` so existing seeded DBs backfill 1.3 data **without `--flush`**.
+Reuses the tenant's first Campaign + existing Party/Lead rows; seeds members (`bulk_create`, pre-stamped
+responded_at), 1 template, 1 sent blast (with metrics), 1 published landing page, 2 submissions (one converted).
+
+**Tests:** `apps/crm/tests/test_marketing.py` (193 tests — invariants, form exclusions, CRUD, admin-gated
+send/publish, public endpoint, IDOR/FK-injection, N+1 budgets).
 
 ---
 
