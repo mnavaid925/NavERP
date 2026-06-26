@@ -3360,5 +3360,37 @@ All templates extend `base.html`. Public pages (`case_public.html`, `kb_public.h
 
 ---
 
-## 8. Review notes
-(filled in at the end)
+## 8. Review notes — CRM §1.4 Customer Service & Support (recreated in detail) ✅
+
+**Delivered (migration 0012):** new `SlaPolicy` (per-priority hour targets) + enhanced `Case` (SLA dues/breach
+props + CSAT + public_token, SLA-driven save) + `CaseComment` conversation thread + `KbCategory` + enhanced
+`KnowledgeArticle` (category FK + helpful votes + public_token) + `CustomerPortalAccess`. Plus a public
+case-status tracking page + public KB article page (+ helpful vote), and a **login-gated customer self-service
+portal** (own-cases-only list/detail/create). `LIVE_LINKS["1.4"]` lights up all 3 NavERP bullets + 3 extras. 20
+templates under `templates/crm/service/`. `_seed_service` seeder (unconditional, SlaPolicy-guarded). One file per
+commit to `main`.
+
+**Verification:** `manage.py check` clean; migration applies (public_token null=True+unique so existing rows stay
+distinct); `seed_crm` idempotent (×2); `temp/smoke_service.py` all green; **1178 CRM pytest tests pass** (198 new
+in `test_helpdesk.py` + a de-flaked SFA timestamp test).
+
+**Review agents (CLAUDE.md sequence), findings applied:**
+- **code-reviewer** — (Critical) reject portal access with customer_party=None (no Q(account=None) leak);
+  (Critical) atomic case_comment_add first-response claim (no TOCTOU); SLA two-guard due computation; CSAT
+  submitted-once; case_public select_related; portal reply success message.
+- **explorer** — confirmed full URL/context/field consistency; no code changes (public pages on base_auth match the
+  sign/survey/landing precedent).
+- **frontend-reviewer** — public case page: plain bordered divs (no card-in-auth-card); `<label for>` on the
+  comment/CSAT/reply forms; `--radius-sm` var.
+- **performance-reviewer** — Case.save skips the sla_policy lazy-load when dues are set; select_related(author) on
+  portal/public comments + select_related(kb_category) on KB detail; defer(description/…) on case/sla/kbcategory
+  lists; .only(...) on kbcategory children.
+- **qa-smoke-tester** — 62/62 checks pass, no changes.
+- **security-reviewer** (Medium×3) — atomic CSAT guard; `@tenant_admin_required` on SlaPolicy +
+  CustomerPortalAccess create/edit/delete (tenant-wide config / portal-login IAM); explicit portal-reply reject +
+  public-endpoint rate-limit WARNING comments.
+- **test-writer** — 198 tests; surfaced + I de-flaked the pre-existing `stage_changed_at` timestamp test.
+
+**Deferred (noted):** real email-to-ticket/telephony/omnichannel, AI answer-bot, macros/canned responses,
+round-robin assignment, business-hours SLA calendar, SLA-breach email escalation, CSAT email delivery, KB article
+versioning/multi-language, public-endpoint rate-limiting (WARNING-commented, needs django-ratelimit/WAF).
