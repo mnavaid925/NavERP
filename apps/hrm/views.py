@@ -2465,7 +2465,7 @@ def jobrequisition_detail(request, pk):
         "approval_form": RequisitionApprovalForm(tenant=request.tenant),
         "jd_templates": JobDescriptionTemplate.objects.filter(tenant=request.tenant, is_active=True)
         .order_by("name"),
-        "can_submit": obj.status == "draft",
+        "can_submit": obj.status in ("draft", "rejected"),
         "can_approve": obj.status == "pending_approval",
         "can_post": obj.status == "approved",
         "can_hold": obj.status in ("approved", "posted"),
@@ -2549,19 +2549,18 @@ def approval_delete(request, pk):
 @require_POST
 def jobrequisition_submit(request, pk):
     obj = get_object_or_404(JobRequisition, pk=pk, tenant=request.tenant)
-    if obj.status != "draft":
-        messages.error(request, "Only a draft requisition can be submitted.")
+    # A rejected requisition can be edited and re-submitted (mirrors the editable-when-rejected guard).
+    if obj.status not in ("draft", "rejected"):
+        messages.error(request, "Only a draft or rejected requisition can be submitted.")
         return redirect("hrm:jobrequisition_detail", pk=obj.pk)
     with transaction.atomic():
-        generate_approval_chain(obj)  # idempotent: keeps any manually-added steps
-        has_chain = obj.approvals.exists()
-        obj.status = "pending_approval" if has_chain else "approved"
+        # On re-submit of a rejected req, reset the prior chain so it re-approves from the top.
+        if obj.status == "rejected":
+            obj.approvals.update(status="pending", decided_at=None, decided_by=None, comments="")
+        generate_approval_chain(obj)  # idempotent: builds the default chain only when none exist
+        obj.status = "pending_approval"
         obj.submitted_at = timezone.now()
-        if obj.status == "approved":
-            obj.approved_at = timezone.now()
-            obj.save(update_fields=["status", "submitted_at", "approved_at", "updated_at"])
-        else:
-            obj.save(update_fields=["status", "submitted_at", "updated_at"])
+        obj.save(update_fields=["status", "submitted_at", "updated_at"])
         write_audit_log(request.user, obj, "update", {"action": "submit", "to": obj.status})
     messages.success(request, f"Requisition {obj.number} submitted for approval.")
     return redirect("hrm:jobrequisition_detail", pk=obj.pk)
@@ -2636,7 +2635,7 @@ def jobrequisition_return(request, pk):
             step.save(update_fields=["status", "decided_at", "decided_by", "comments", "updated_at"])
         # Reset the chain so a fresh submit re-approves from the top, and reopen the req for editing.
         obj.approvals.exclude(pk=step.pk if step else None).update(
-            status="pending", decided_at=None, decided_by=None)
+            status="pending", decided_at=None, decided_by=None, comments="")
         obj.status = "draft"
         obj.submitted_at = None
         obj.save(update_fields=["status", "submitted_at", "updated_at"])
