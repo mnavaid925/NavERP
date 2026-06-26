@@ -19,17 +19,20 @@ from apps.crm.models import (
     Campaign,
     CampaignMember,
     Case,
+    CaseComment,
     ContactProfile,
     ContractDocument,
     CrmMilestone,
     CrmProject,
     CrmTask,
+    CustomerPortalAccess,
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
     Expense,
     FormSubmission,
     HealthScoreConfig,
+    KbCategory,
     KnowledgeArticle,
     LandingPage,
     Lead,
@@ -47,6 +50,7 @@ from apps.crm.models import (
     QuoteLine,
     SalesQuota,
     SignerRecord,
+    SlaPolicy,
     Survey,
     Territory,
     Timesheet,
@@ -110,6 +114,8 @@ class Command(BaseCommand):
             self._seed_marketing(tenant)
             # 1.2 Sales Force Automation — runs unconditionally; self-guards on Product.
             self._seed_sfa(tenant)
+            # 1.4 Customer Service & Support — runs unconditionally; self-guards on SlaPolicy.
+            self._seed_service(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -342,6 +348,53 @@ class Command(BaseCommand):
                                   period_year=2026, period_number=2, target_amount=Decimal("150000"))
         SalesQuota.objects.create(tenant=tenant, owner=owner, territory=emea, period_type="quarter",
                                   period_year=2026, period_number=3, target_amount=Decimal("90000"))
+
+    def _seed_service(self, tenant):
+        """Idempotently seed 1.4 help-desk demo data — a default SLA policy, 2 KB categories, a
+        case conversation thread (internal + public) on the first case, category links + public
+        tokens on existing cases/articles, and a customer portal-access row. Guard: skip if an
+        SlaPolicy already exists for the tenant."""
+        if SlaPolicy.objects.filter(tenant=tenant).exists():
+            return
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        agent_name = (owner.get_full_name() or owner.username) if owner else "Support"
+
+        policy = SlaPolicy.objects.create(
+            tenant=tenant, name="Standard Support", description="Default first-response + resolution targets.",
+            is_active=True, is_default=True)
+        getting_started = KbCategory.objects.create(tenant=tenant, name="Getting Started", order=1)
+        KbCategory.objects.create(tenant=tenant, name="Troubleshooting", order=2)
+
+        # Attach the policy + a conversation thread to the first case (save() computes SLA dues + token).
+        case = Case.objects.filter(tenant=tenant).order_by("created_at").first()
+        if case is not None:
+            case.sla_policy = policy
+            case.save()
+            CaseComment.objects.create(
+                tenant=tenant, case=case, author=owner, author_name=agent_name,
+                body="Thanks for the report — we're looking into this now.", is_public=True)
+            CaseComment.objects.create(
+                tenant=tenant, case=case, author=owner, author_name=agent_name,
+                body="Internal: reproduced on staging, escalating to engineering.", is_public=False)
+            if case.first_responded_at is None:
+                case.first_responded_at = timezone.now()
+                case.save(update_fields=["first_responded_at", "updated_at"])
+
+        # Categorize existing articles (save() also backfills their public_token).
+        for art in KnowledgeArticle.objects.filter(tenant=tenant, kb_category__isnull=True):
+            art.kb_category = getting_started
+            art.save()
+
+        # Backfill a public status-tracking token on any remaining tokenless cases.
+        for c in Case.objects.filter(tenant=tenant, public_token__isnull=True):
+            c.public_token = secrets.token_urlsafe(32)
+            c.save(update_fields=["public_token"])
+
+        # Customer portal access (portal_user unassigned by default — assign a user to demo the login).
+        party = Party.objects.filter(tenant=tenant, kind="organization").first()
+        CustomerPortalAccess.objects.create(
+            tenant=tenant, customer_party=party, can_submit_cases=True, is_active=True)
 
     def _seed_extension(self, tenant):
         """Idempotently seed the 1.7–1.12 demo data (expenses, projects/milestones/timesheets,
