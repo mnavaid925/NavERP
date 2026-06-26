@@ -3834,4 +3834,34 @@ Add a `_seed_activities(tenant, users, parties, opportunities)` helper function 
 
 ## 13. Review notes
 
-(To be filled in after the review-agent sequence completes.)
+**Delivered (2026-06-27).** 4 models — `CrmTask` (enhanced: recurrence none/daily/weekly/monthly + interval +
+until + self-FK parent + spawn-next-on-complete, `related_case`), `CalendarEvent` [EVT] (+ public invite/RSVP
++ `.ics` export), `EventAttendee` (RSVP child), `CommunicationLog` [COM] (unified call/email log). Migrations
+`0013` + `0014`. `LIVE_LINKS["1.5"]` now wires all 3 NavERP.md bullets live. Seeder `_seed_activities`
+(idempotent). Verification: `manage.py check` clean, seed idempotent ×2, a `temp/` smoke script passes 21/21
+(routes 200/302, public invite/ICS, IDOR 404, recurrence spawn + no double-spawn, delete), `apps/crm` suite
+**1,315 pass** (1178 prior + 137 new in `apps/crm/tests/test_activities.py`).
+
+**Review-agent sequence (all 7 run, one at a time, fixes committed one file per commit):**
+- **code-reviewer** — wrapped `CrmTask.save()` parent-write + recurrence spawn in `transaction.atomic`; dropped
+  a redundant self-`exclude` in the idempotency guard; ICS line-folding per RFC 5545 §3.1; seeder voicemail
+  `duration_seconds=None` (not 0). Deferred (needs a new field+migration): monthly last-day drift → a
+  `recurrence_anchor_day` (see §12).
+- **explorer** — verified all `{% url %}`/context-var/filter/LIVE_LINKS wiring; **0 issues**.
+- **frontend-reviewer** — invite-link label `for`/`id` (a11y); explicit `note` channel + `cancelled` status
+  badge branches. Skipped (L28, faithful copies of app-wide patterns): `th-actions` (all 46 CRM `<th>` use
+  `table-actions`), and restyling `event_invite.html` beyond its `case_public.html` sibling.
+- **performance-reviewer** — `task_detail` `select_related(related_case, recurrence_parent)`; dropped unused
+  `owner`/`party` joins from the comm-log/calendar list querysets. Kept `body` in comm-log search (app-wide
+  TextField-search pattern — Expense/Timesheet/Survey/PO all do it, L28).
+- **qa-smoke-tester** — independent sweep, **36/36 pass**, 0 leaks, 0 fixes.
+- **security-reviewer** — public RSVP **first-response-wins** (no overwrite of a recorded answer via the shared
+  token); `CalendarEvent.public_token` `editable=False`; `_esc` strips bare CR. XSS/CSRF/IDOR/tenant-isolation
+  verified clean.
+- **test-writer** — 137 tests (`test_activities.py`).
+
+## 14. Deferred — add to §12
+- **`recurrence_anchor_day`** on `CrmTask` — current monthly recurrence advances from the (clamped) child due
+  date, so Jan 31 → Feb 28 → **Mar 28** (last-day drift). A stored anchor day (clamp from the original day each
+  month) fixes it. Test `TestCrmTaskMonthlyClamp::test_monthly_drift_on_subsequent_spawn` locks in current
+  behavior so the fix is a conscious change. Needs a field + migration.
