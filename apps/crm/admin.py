@@ -6,11 +6,13 @@ from .models import (
     Campaign,
     CampaignMember,
     Case,
+    CaseComment,
     ContactProfile,
     ContractDocument,
     CrmMilestone,
     CrmProject,
     CrmTask,
+    CustomerPortalAccess,
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
@@ -18,6 +20,7 @@ from .models import (
     FormSubmission,
     HealthScore,
     HealthScoreConfig,
+    KbCategory,
     KnowledgeArticle,
     LandingPage,
     Lead,
@@ -35,6 +38,7 @@ from .models import (
     QuoteLine,
     SalesQuota,
     SignerRecord,
+    SlaPolicy,
     Survey,
     Territory,
     Timesheet,
@@ -185,18 +189,60 @@ class FormSubmissionAdmin(admin.ModelAdmin):
 
 @admin.register(Case)
 class CaseAdmin(admin.ModelAdmin):
-    list_display = ("number", "subject", "account", "priority", "status", "owner", "tenant")
+    list_display = ("number", "subject", "account", "priority", "status", "sla_policy", "owner", "tenant")
     list_filter = ("status", "priority", "type", "tenant")
     search_fields = ("number", "subject")
-    readonly_fields = ("number", "resolved_at", "created_at", "updated_at")
+    raw_id_fields = ("sla_policy",)
+    readonly_fields = ("number", "resolved_at", "closed_at", "first_response_due", "first_responded_at",
+                       "resolution_due", "satisfaction_rating", "satisfaction_comment", "satisfaction_at",
+                       "public_token", "created_at", "updated_at")
 
 
 @admin.register(KnowledgeArticle)
 class KnowledgeArticleAdmin(admin.ModelAdmin):
-    list_display = ("number", "title", "category", "visibility", "status", "views_count", "tenant")
+    list_display = ("number", "title", "kb_category", "visibility", "status",
+                    "views_count", "helpful_count", "tenant")
     list_filter = ("status", "visibility", "tenant")
     search_fields = ("number", "title", "category")
-    readonly_fields = ("number", "views_count", "created_at", "updated_at")
+    raw_id_fields = ("kb_category",)
+    readonly_fields = ("number", "views_count", "helpful_count", "not_helpful_count",
+                       "public_token", "created_at", "updated_at")
+
+
+# ===== 1.4 Customer Service & Support (recreated) ===========================
+@admin.register(SlaPolicy)
+class SlaPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "is_default", "is_active", "tenant")
+    list_filter = ("is_active", "is_default", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(CaseComment)
+class CaseCommentAdmin(admin.ModelAdmin):
+    list_display = ("case", "author", "is_public", "created_at", "tenant")
+    list_filter = ("is_public", "tenant")
+    search_fields = ("body", "author_name")
+    raw_id_fields = ("case", "author")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(KbCategory)
+class KbCategoryAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "parent", "order", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "name")
+    raw_id_fields = ("parent",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(CustomerPortalAccess)
+class CustomerPortalAccessAdmin(admin.ModelAdmin):
+    list_display = ("number", "customer_party", "portal_user", "can_submit_cases", "is_active", "tenant")
+    list_filter = ("is_active", "can_submit_cases", "tenant")
+    search_fields = ("number", "customer_party__name", "portal_user__username")
+    raw_id_fields = ("customer_party", "portal_user")
+    readonly_fields = ("number", "accepted_at", "created_at", "updated_at")
 
 
 @admin.register(CrmTask)
