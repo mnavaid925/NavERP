@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Email Templates{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Email Templates</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Email Templates</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:emailtemplate_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Template</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, subject…">
+        </div>
+        <div class="form-group">
+          <select name="category" class="form-select">
+            <option value="">All categories</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select">
+            <option value="">Active &amp; inactive</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'crm:emailtemplate_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Category</th><th>Subject</th><th>Active</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'crm:emailtemplate_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.name }}</td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>{{ obj.subject|truncatechars:48 }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:emailtemplate_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'crm:emailtemplate_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'crm:emailtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="file-text"></i><h3>No email templates found</h3><p>Create a reusable HTML email template.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
