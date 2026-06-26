@@ -13,7 +13,9 @@ from .models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    JobDescriptionTemplate,
     JobGrade,
+    JobRequisition,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -24,6 +26,7 @@ from .models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    RequisitionApproval,
     SeparationCase,
     Shift,
     ShiftAssignment,
@@ -274,3 +277,43 @@ class FinalSettlementAdmin(admin.ModelAdmin):
     @admin.display(description="Net Payable")
     def net_payable_display(self, obj):
         return obj.net_payable
+
+
+# ----------------------------------------------------------------- 3.5 Job Requisition
+@admin.register(JobDescriptionTemplate)
+class JobDescriptionTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "designation", "employment_type", "is_active", "created_at", "tenant")
+    list_filter = ("is_active", "employment_type", "tenant")
+    search_fields = ("number", "name", "designation__name")
+    readonly_fields = ("number", "created_at", "updated_at")
+    raw_id_fields = ("designation",)
+
+
+class RequisitionApprovalInline(admin.TabularInline):
+    model = RequisitionApproval
+    extra = 0
+    readonly_fields = ("status", "decided_at", "decided_by", "created_at", "updated_at")
+    raw_id_fields = ("approver", "decided_by")
+
+
+@admin.register(JobRequisition)
+class JobRequisitionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "designation", "status", "priority", "hiring_manager",
+                    "headcount", "created_at", "tenant")
+    list_filter = ("status", "priority", "req_type", "employment_type", "tenant")
+    search_fields = ("number", "title", "location", "designation__name")
+    readonly_fields = ("number", "status", "submitted_at", "approved_at", "posted_at", "filled_at",
+                       "created_at", "updated_at")
+    raw_id_fields = ("designation", "job_grade", "template", "department", "cost_center",
+                     "hiring_manager", "recruiter")
+    inlines = [RequisitionApprovalInline]
+
+
+@admin.register(RequisitionApproval)
+class RequisitionApprovalAdmin(admin.ModelAdmin):
+    list_display = ("requisition", "step_order", "approver", "approver_role", "status",
+                    "decided_at", "decided_by", "tenant")
+    list_filter = ("status", "approver_role", "tenant")
+    search_fields = ("requisition__number", "approver__username")
+    readonly_fields = ("status", "decided_at", "decided_by", "created_at", "updated_at")
+    raw_id_fields = ("requisition", "approver", "decided_by")
