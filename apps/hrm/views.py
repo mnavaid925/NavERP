@@ -2347,8 +2347,7 @@ def jobdescriptiontemplate_list(request):
         "hrm/recruitment/jobdescriptiontemplate/list.html",
         search_fields=["number", "name", "jd_summary", "designation__name"],
         filters=[("is_active", "is_active", False), ("designation", "designation_id", True)],
-        extra_context={"employment_type_choices": EMPLOYMENT_TYPE_CHOICES,
-                       "designations": Designation.objects.filter(tenant=request.tenant, is_active=True)
+        extra_context={"designations": Designation.objects.filter(tenant=request.tenant, is_active=True)
                        .order_by("name")},
     )
 
