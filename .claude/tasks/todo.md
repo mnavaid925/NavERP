@@ -2803,3 +2803,562 @@ the now-required `forecast_category`).
 **Spine-gap note:** Product/PriceBook/Quote are CRM-owned (core.Item/PriceList/Currency/SalesOrder unbuilt);
 `currency_code` is a CharField; quote→sales-order sync deferred. Other deferrals: PriceBookEntry per-product
 pricing, real PDF/e-sign, CPQ rules/approval workflows, AI forecasting, commission payout, multi-currency FX.
+
+---
+
+# Module 1 CRM §1.4 — Customer Service & Support / Help Desk (crm) — plan from research-crm-helpdesk.md  (2026-06-26)
+
+**Extending `apps/crm`** — NOT a new app. Next migration is **0012**. The plan enhances two existing
+models (`Case` at line 865, `KnowledgeArticle` at line 936) and adds four new ones, all in
+`apps/crm/models.py`. Sub-module template folder: `templates/crm/service/`. Public + portal pages
+extend `base_auth.html` / `base.html` respectively (no login required for token pages; portal login-gated
+via `CustomerPortalAccess` check helper).
+
+---
+
+## 0. Template folder layout (decide before any code)
+
+All 1.4 entities live under `templates/crm/service/` (per CLAUDE.md two-level rule: sub-module=`service`,
+entity folder per model).
+
+- [ ] Confirm folder shape:
+  - `service/slapolicy/{list,detail,form}.html`            — SlaPolicy CRUD
+  - `service/case/{list,detail,form}.html`                 — Case CRUD (recreate existing flat templates)
+  - `service/kbcategory/{list,detail,form}.html`           — KbCategory CRUD
+  - `service/knowledgearticle/{list,detail,form}.html`     — KnowledgeArticle CRUD (recreate existing)
+  - `service/customerportalaccess/{list,detail,form}.html` — CustomerPortalAccess CRUD
+  - `service/case_public.html`                             — standalone public token page (no login)
+  - `service/kb_public.html`                               — standalone public KB article page (no login)
+  - `service/portal_case_list.html`                        — portal: customer's case list
+  - `service/portal_case_detail.html`                      — portal: customer's case detail (public comments only)
+  - `service/portal_case_form.html`                        — portal: submit new case
+  - NOTE: `CaseComment` rows render **inline on case detail** — no standalone list/form templates.
+
+---
+
+## 1. Models (all changes in `apps/crm/models.py`, migration 0012)
+
+### 1a. `SlaPolicy` [SLA-] — `TenantNumbered`, `NUMBER_PREFIX = "SLA"`
+
+Drivers: Freshdesk/Zendesk/HubSpot priority-tiered FRT + resolution targets in hours; one policy covers
+all four priorities in a single row (avoids multi-row fan-out, avoids unique_together on priority).
+
+- [ ] Add `SlaPolicy(TenantNumbered)` with `NUMBER_PREFIX = "SLA"`:
+  - `name`               — `CharField(max_length=255)` — e.g. "Standard", "VIP", "Urgent"
+  - `description`        — `TextField(blank=True)`
+  - `is_active`          — `BooleanField(default=True)`
+  - `is_default`         — `BooleanField(default=False)` — at most one default per tenant (enforced in save/admin)
+  - `response_low`       — `PositiveSmallIntegerField(default=48)` — first-response target in hours for Low priority
+  - `response_medium`    — `PositiveSmallIntegerField(default=24)` — first-response target in hours for Medium
+  - `response_high`      — `PositiveSmallIntegerField(default=8)`  — first-response target in hours for High
+  - `response_critical`  — `PositiveSmallIntegerField(default=1)`  — first-response target in hours for Critical
+  - `resolution_low`     — `PositiveSmallIntegerField(default=120)` — resolution target in hours for Low
+  - `resolution_medium`  — `PositiveSmallIntegerField(default=72)`  — resolution target in hours for Medium
+  - `resolution_high`    — `PositiveSmallIntegerField(default=24)`  — resolution target in hours for High
+  - `resolution_critical`— `PositiveSmallIntegerField(default=8)`   — resolution target in hours for Critical
+  - `Meta.indexes`: `(tenant, is_active)` named `crm_sla_tnt_active_idx`; `(tenant, is_default)` named
+    `crm_sla_tnt_default_idx`
+  - Method `targets_for(priority)` → `(response_hours, resolution_hours)` integer tuple; maps
+    `"low"/"medium"/"high"/"critical"` → the matching pair of fields; raises `ValueError` for unknown priority
+  - `__str__`: `f"{self.number} · {self.name}"`
+
+### 1b. Enhance `Case` (existing at `apps/crm/models.py:865`) — ADD fields only
+
+Drivers: Freshdesk/Zendesk dual SLA timers (FRT + resolution), CSAT on close, public token URL,
+first-response stamping, closed_at system stamp.
+
+- [ ] Add the following fields to `Case` (after existing `resolved_at`):
+  - `sla_policy`             — `ForeignKey("crm.SlaPolicy", on_delete=SET_NULL, null=True, blank=True,
+                               related_name="cases")` — policy applied at case creation
+  - `first_response_due`     — `DateTimeField(null=True, blank=True)` — system-computed; not on forms
+  - `first_responded_at`     — `DateTimeField(null=True, blank=True)` — system-stamped on first public
+                               agent reply via `case_comment_add`; not on forms
+  - `resolution_due`         — `DateTimeField(null=True, blank=True)` — system-computed; not on forms
+  - `closed_at`              — `DateTimeField(null=True, blank=True)` — system-stamped when status=closed;
+                               cleared if re-opened; not on forms
+  - `satisfaction_rating`    — `PositiveSmallIntegerField(null=True, blank=True)` — 1–5 CSAT score; set
+                               via public token page or portal; not on agent forms
+  - `satisfaction_comment`   — `TextField(blank=True)` — optional free-text CSAT feedback
+  - `satisfaction_at`        — `DateTimeField(null=True, blank=True)` — system-set on submission
+  - `public_token`           — `CharField(max_length=64, unique=True, blank=True)` — unguessable token;
+                               auto-generated in `save()` via `secrets.token_urlsafe(32)`
+- [ ] Extend `Case.save()`:
+  - Keep existing `resolved_at` logic
+  - Stamp `closed_at = timezone.now()` when `status == "closed"` and `closed_at is None`; clear
+    `closed_at` if status moves back to an open status (re-open scenario)
+  - When `sla_policy` is set and `first_response_due is None`, call
+    `sla_policy.targets_for(priority)` anchored at `(self.created_at or timezone.now())` to compute
+    `first_response_due = anchor + timedelta(hours=response_hours)` and
+    `resolution_due = anchor + timedelta(hours=resolution_hours)`
+  - Generate `public_token = secrets.token_urlsafe(32)` if `public_token` is blank
+- [ ] Add `Case` properties:
+  - `is_response_overdue` — `True` when `first_response_due` is set AND `first_responded_at is None`
+    AND `is_open` AND `first_response_due < timezone.now()`
+  - `is_resolution_overdue` — `True` when `resolution_due` is set AND `is_open` AND
+    `resolution_due < timezone.now()`
+  - Keep existing `is_open` and `is_overdue` unchanged
+- [ ] Add `Meta.indexes` entry: `(tenant, priority)` named `crm_case_tnt_priority_idx`
+
+### 1c. `CaseComment` (plain model — NOT TenantNumbered)
+
+Drivers: Universal across all 10 surveyed products — Zendesk yellow-bg internal notes, Freshdesk
+private/public toggle, Help Scout notes/replies, JSM internal/public comments.
+
+- [ ] Add `CaseComment(models.Model)` (no number prefix, no TenantNumbered):
+  - `tenant`       — `ForeignKey("core.Tenant", on_delete=CASCADE, related_name="crm_case_comments")`
+  - `case`         — `ForeignKey("crm.Case", on_delete=CASCADE, related_name="comments")`
+  - `author`       — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+                     related_name="crm_case_comments")` — snapshot of who posted; null for system
+  - `author_name`  — `CharField(max_length=255, blank=True)` — snapshot of author display name at post time
+  - `body`         — `TextField()` — comment content
+  - `is_public`    — `BooleanField(default=False)` — False = internal/agent-only note; True = customer-visible reply
+  - `created_at`   — `DateTimeField(auto_now_add=True)`
+  - `Meta.ordering = ["created_at"]` (chronological thread)
+  - `Meta.indexes`: `(tenant, case)` named `crm_ccomment_tnt_case_idx`
+  - `__str__`: `f"Comment on {self.case_id} by {self.author_name}"`
+
+### 1d. `KbCategory` [KBC-] — `TenantNumbered`, `NUMBER_PREFIX = "KBC"`
+
+Drivers: Zoho Desk (Category > Sections), JSM categories, Freshdesk (categories + folders), Zendesk
+(categories + sections) — 2-level hierarchy; replaces the flat `KnowledgeArticle.category CharField`.
+
+- [ ] Add `KbCategory(TenantNumbered)` with `NUMBER_PREFIX = "KBC"`:
+  - `name`         — `CharField(max_length=255)`
+  - `description`  — `TextField(blank=True)`
+  - `slug`         — `CharField(max_length=160, blank=True)` — URL-safe slug for portal browsing (blank ok)
+  - `parent`       — `ForeignKey("self", on_delete=SET_NULL, null=True, blank=True,
+                     related_name="child_categories")` — enables parent → child hierarchy (2 levels)
+  - `order`        — `PositiveSmallIntegerField(default=0)` — display ordering within parent
+  - `is_active`    — `BooleanField(default=True)`
+  - `Meta.ordering = ["order", "name"]`
+  - `Meta.indexes`: `(tenant, is_active)` named `crm_kbcat_tnt_active_idx`
+  - `__str__`: `f"{self.number} · {self.name}"`
+
+### 1e. Enhance `KnowledgeArticle` (existing at `apps/crm/models.py:936`) — ADD fields only
+
+Drivers: Zoho Desk (helpful/not-helpful votes), JSM (voted-as-helpful deflection metric), Zendesk article
+votes; `category FK KbCategory` replaces legacy `category CharField` without removing the old field yet
+(keep it as `category_legacy` or deprecate — migration copies string to KbCategory name if needed).
+
+- [ ] Add the following fields to `KnowledgeArticle`:
+  - `kb_category`        — `ForeignKey("crm.KbCategory", on_delete=SET_NULL, null=True, blank=True,
+                           related_name="articles")` — structured category replacing flat CharField
+  - `helpful_count`      — `PositiveIntegerField(default=0)` — F()-incremented; excluded from forms
+  - `not_helpful_count`  — `PositiveIntegerField(default=0)` — F()-incremented; excluded from forms
+  - `public_token`       — `CharField(max_length=64, unique=True, blank=True)` — auto-generated in
+                           `save()` for external-visibility articles; enables no-login public URL
+  - `slug`               — `CharField(max_length=200, blank=True)` — optional URL slug for portal
+- [ ] Extend `KnowledgeArticle.save()`:
+  - Generate `public_token = secrets.token_urlsafe(32)` if `public_token` is blank
+- [ ] Add `Meta.indexes` entry: `(tenant, kb_category)` named `crm_kb_tnt_cat_idx`
+- [ ] NOTE: keep legacy `category = CharField(max_length=120, blank=True)` in place (do NOT drop it in
+  migration 0012 — rename it to `category_legacy` or leave as-is; deferred cleanup)
+
+### 1f. `CustomerPortalAccess` [CSP-] — `TenantNumbered`, `NUMBER_PREFIX = "CSP"`
+
+Drivers: HubSpot (login-required customer portal), Freshdesk (customer accounts + ticket access),
+Zoho Desk (client portal), JSM (customer request portal) — mirrors existing `PartnerPortalAccess`
+pattern (§1.12) for customer-side helpdesk access.
+
+- [ ] Add `CustomerPortalAccess(TenantNumbered)` with `NUMBER_PREFIX = "CSP"`:
+  - `customer_party`  — `ForeignKey("core.Party", on_delete=SET_NULL, null=True, blank=True,
+                        related_name="crm_portal_accesses")` — the customer org/contact this grant covers
+  - `portal_user`     — `OneToOneField(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+                        related_name="crm_customer_portal_access")` — Django User login for the customer
+  - `can_submit_cases`— `BooleanField(default=True)` — allow/deny ticket submission from portal
+  - `accepted_at`     — `DateTimeField(null=True, blank=True)` — system-set on first portal login/activate
+  - `is_active`       — `BooleanField(default=True)`
+  - `Meta.indexes`: `(tenant, is_active)` named `crm_cpa_tnt_active_idx`; `(tenant, customer_party)`
+    named `crm_cpa_tnt_party_idx`
+  - `__str__`: `f"{self.number} · {self.customer_party}"`
+
+---
+
+## 2. Backend — `apps/crm/`
+
+### 2a. `models.py` (migration 0012)
+
+- [ ] Insert `SlaPolicy` class before `Case` class in `models.py`
+- [ ] Add all new fields to `Case` (§1b above); extend `save()`; add properties; add priority index
+- [ ] Add `CaseComment` class after `Case` in `models.py`
+- [ ] Add `KbCategory` class before `KnowledgeArticle` in `models.py`
+- [ ] Add all new fields to `KnowledgeArticle` (§1e above); extend `save()`; add kb_category index
+- [ ] Add `CustomerPortalAccess` class after `KnowledgeArticle` in `models.py`
+- [ ] Run `python manage.py makemigrations crm --name helpdesk` — produces `0012_helpdesk.py`
+
+### 2b. `forms.py`
+
+- [ ] `SlaPolicyForm(forms.ModelForm)` — fields: `name, description, is_active, is_default,
+  response_low, response_medium, response_high, response_critical,
+  resolution_low, resolution_medium, resolution_high, resolution_critical`; exclude `tenant`, `number`
+- [ ] Extend `CaseForm` — add `sla_policy` to included fields; exclude system fields:
+  `first_response_due, first_responded_at, resolution_due, closed_at, resolved_at,
+  public_token, satisfaction_rating, satisfaction_comment, satisfaction_at`
+- [ ] `KbCategoryForm(forms.ModelForm)` — fields: `name, description, slug, parent, order, is_active`;
+  exclude `tenant`, `number`; `parent` queryset filtered to tenant in `__init__` (no self-reference on
+  create: exclude self.instance.pk when editing)
+- [ ] Extend `KnowledgeArticleForm` — add `kb_category` to included fields; exclude system fields:
+  `helpful_count, not_helpful_count, public_token, views_count`; `kb_category` queryset filtered to
+  tenant in `__init__`
+- [ ] `CustomerPortalAccessForm(forms.ModelForm)` — fields: `customer_party, portal_user,
+  can_submit_cases, accepted_at, is_active`; exclude `tenant`, `number`; `customer_party` queryset
+  filtered to tenant in `__init__`
+- [ ] `CaseCommentForm(forms.ModelForm)` — fields: `body, is_public`; exclude `tenant, case, author,
+  author_name, created_at`; used inline on case detail (agent toggles is_public)
+- [ ] `PublicSatisfactionForm(forms.Form)` — fields: `rating (IntegerField, min=1 max=5)`,
+  `comment (CharField, max_length=2000, required=False)`; for public token CSAT submission
+- [ ] `PublicCommentForm(forms.Form)` — fields: `body (CharField, max_length=5000)`; for portal
+  customer reply (portal view forces `is_public=True` before saving as `CaseComment`)
+
+### 2c. `views.py` — all function-based, `@login_required` for agent/portal views
+
+#### SlaPolicy CRUD (agent, standard)
+- [ ] `slapolicy_list` — tenant-scoped qs; search by name (`q`); filter by `is_active`; pass
+  `status_choices=[("active","Active"),("inactive","Inactive")]`; paginate 20
+- [ ] `slapolicy_create` via `crud_create` helper — `SlaPolicyForm`; template
+  `crm/service/slapolicy/form.html`
+- [ ] `slapolicy_detail` — detail page showing all response/resolution targets; template
+  `crm/service/slapolicy/detail.html`
+- [ ] `slapolicy_edit` via `crud_edit` helper — pre-filled form; template
+  `crm/service/slapolicy/form.html`
+- [ ] `slapolicy_delete` — POST-only, tenant-scoped `get_object_or_404`, redirect to
+  `crm:slapolicy_list`
+
+#### Case CRUD (agent, recreated with SLA + comments)
+- [ ] `case_list` — tenant-scoped; search by `subject/number`; filter by `status, priority, origin,
+  sla_policy`; pass `status_choices, priority_choices, origin_choices, sla_policies`; annotate SLA
+  breach flags from properties; paginate 25
+- [ ] `case_create` via `crud_create` helper — `CaseForm`; template
+  `crm/service/case/form.html`
+- [ ] `case_detail` — tenant-scoped detail; load `case.comments.order_by("created_at")` (all for
+  agent); show SLA breach badges (`is_response_overdue`, `is_resolution_overdue`); inline
+  `CaseCommentForm`; show satisfaction rating if set; template `crm/service/case/detail.html`
+- [ ] `case_edit` via `crud_edit` helper — `CaseForm`; template `crm/service/case/form.html`
+- [ ] `case_delete` — POST-only, tenant-scoped, redirect to `crm:case_list`
+
+#### CaseComment custom action
+- [ ] `case_comment_add(request, pk)` — `@login_required`; POST-only; get_object_or_404 Case by
+  `pk + tenant`; validate `CaseCommentForm`; snapshot `author_name = request.user.get_full_name()
+  or request.user.username`; create `CaseComment(tenant, case, author, author_name, body,
+  is_public)`; if `is_public=True` AND `case.first_responded_at is None`, stamp
+  `case.first_responded_at = timezone.now()` and save Case; redirect to `crm:case_detail pk`
+  (driver: Freshdesk/Zendesk FRT stamping on first public agent reply)
+
+#### KbCategory CRUD (agent, standard)
+- [ ] `kbcategory_list` — tenant-scoped; search by name; filter by `is_active, parent`; pass
+  `status_choices, parent_categories` (root categories only); paginate 20
+- [ ] `kbcategory_create` via `crud_create` helper — `KbCategoryForm`; template
+  `crm/service/kbcategory/form.html`
+- [ ] `kbcategory_detail` — show parent, child_categories, linked articles count; template
+  `crm/service/kbcategory/detail.html`
+- [ ] `kbcategory_edit` via `crud_edit` helper; template `crm/service/kbcategory/form.html`
+- [ ] `kbcategory_delete` — POST-only, tenant-scoped, redirect to `crm:kbcategory_list`
+
+#### KnowledgeArticle CRUD (agent, recreated with kb_category + vote counts)
+- [ ] `knowledgearticle_list` — tenant-scoped; search by title; filter by `status, visibility,
+  kb_category`; pass `status_choices, visibility_choices, kb_categories`; paginate 20
+- [ ] `knowledgearticle_create` via `crud_create` helper — `KnowledgeArticleForm`; template
+  `crm/service/knowledgearticle/form.html`
+- [ ] `knowledgearticle_detail` — increment `views_count` via `F()` on GET; show `helpful_count /
+  not_helpful_count`; show public link if `public_token` set; template
+  `crm/service/knowledgearticle/detail.html`
+- [ ] `knowledgearticle_edit` via `crud_edit` helper; template
+  `crm/service/knowledgearticle/form.html`
+- [ ] `knowledgearticle_delete` — POST-only, tenant-scoped, redirect to
+  `crm:knowledgearticle_list`
+
+#### CustomerPortalAccess CRUD (agent, standard)
+- [ ] `customerportalaccess_list` — tenant-scoped; search by party name; filter by `is_active,
+  can_submit_cases`; pass `status_choices`; paginate 20
+- [ ] `customerportalaccess_create` via `crud_create` helper; template
+  `crm/service/customerportalaccess/form.html`
+- [ ] `customerportalaccess_detail`; template
+  `crm/service/customerportalaccess/detail.html`
+- [ ] `customerportalaccess_edit` via `crud_edit` helper; template
+  `crm/service/customerportalaccess/form.html`
+- [ ] `customerportalaccess_delete` — POST-only, tenant-scoped, redirect to
+  `crm:customerportalaccess_list`
+
+#### Public no-login views (no `@login_required`)
+- [ ] `case_public(request, token)` — GET: `get_object_or_404(Case, public_token=token)`; expose
+  only `subject, status, priority, created_at` and last `is_public=True` CaseComment; render
+  `crm/service/case_public.html`; POST (CSAT): validate `PublicSatisfactionForm`; if Case is
+  resolved/closed and `satisfaction_rating is None`, set `satisfaction_rating, satisfaction_comment,
+  satisfaction_at`; redirect back with success message; security: no tenant data exposed beyond the
+  token-scoped case, body/comment escaped (never `|safe`), CSRF required on POST
+- [ ] `kb_public(request, token)` — `get_object_or_404(KnowledgeArticle, public_token=token,
+  visibility="external", status="published")`; increment `views_count` via `F()`;
+  render `crm/service/kb_public.html`; draft/internal → 404 by queryset filter
+- [ ] `kb_helpful(request, token)` — POST-only; no login; `get_object_or_404(KnowledgeArticle,
+  public_token=token, status="published")`; read `vote` from POST (`helpful`/`not_helpful`);
+  `F()` increment `helpful_count` or `not_helpful_count`; redirect back to `kb_public` with
+  `?voted=1`; CSRF required
+
+#### Portal login-gated views (helper + 3 views)
+- [ ] `_customer_portal_access(request)` helper — returns `CustomerPortalAccess` for
+  `portal_user=request.user, tenant=request.tenant, is_active=True`; raises `Http404` if not found
+  (gates all portal views)
+- [ ] `portal_case_list(request)` — `@login_required`; call `_customer_portal_access`; filter
+  `Case.objects.filter(tenant=request.tenant, account=access.customer_party)`; filter by status
+  (GET param); show only public CaseComment count; render `crm/service/portal_case_list.html`
+- [ ] `portal_case_detail(request, pk)` — `@login_required`; call `_customer_portal_access`; get
+  Case by `pk + tenant + account=access.customer_party` (IDOR = 404); show only `is_public=True`
+  comments; `PublicCommentForm` for new reply; on POST: create `CaseComment(is_public=True,
+  author=request.user, author_name=...)`; if `case.status == "waiting"`, set `status = "open"` and
+  save; render `crm/service/portal_case_detail.html`
+- [ ] `portal_case_create(request)` — `@login_required`; call `_customer_portal_access`; check
+  `access.can_submit_cases`; on POST: validate form (subject/description/priority); force
+  `origin="portal"`, `account=access.customer_party`, `tenant=request.tenant`; create Case; redirect
+  to `portal_case_detail`; render `crm/service/portal_case_form.html`
+
+### 2d. `urls.py`
+
+- [ ] Add URL patterns (all under existing `app_name = "crm"`):
+  - `service/sla/` → `slapolicy_list` name=`slapolicy_list`
+  - `service/sla/new/` → `slapolicy_create` name=`slapolicy_create`
+  - `service/sla/<int:pk>/` → `slapolicy_detail` name=`slapolicy_detail`
+  - `service/sla/<int:pk>/edit/` → `slapolicy_edit` name=`slapolicy_edit`
+  - `service/sla/<int:pk>/delete/` → `slapolicy_delete` name=`slapolicy_delete`
+  - `service/cases/` → `case_list` name=`case_list` (replaces existing `cases/` if any)
+  - `service/cases/new/` → `case_create` name=`case_create`
+  - `service/cases/<int:pk>/` → `case_detail` name=`case_detail`
+  - `service/cases/<int:pk>/edit/` → `case_edit` name=`case_edit`
+  - `service/cases/<int:pk>/delete/` → `case_delete` name=`case_delete`
+  - `service/cases/<int:pk>/comment/` → `case_comment_add` name=`case_comment_add`
+  - `service/kb-categories/` → `kbcategory_list` name=`kbcategory_list`
+  - `service/kb-categories/new/` → `kbcategory_create` name=`kbcategory_create`
+  - `service/kb-categories/<int:pk>/` → `kbcategory_detail` name=`kbcategory_detail`
+  - `service/kb-categories/<int:pk>/edit/` → `kbcategory_edit` name=`kbcategory_edit`
+  - `service/kb-categories/<int:pk>/delete/` → `kbcategory_delete` name=`kbcategory_delete`
+  - `service/articles/` → `knowledgearticle_list` name=`knowledgearticle_list`
+  - `service/articles/new/` → `knowledgearticle_create` name=`knowledgearticle_create`
+  - `service/articles/<int:pk>/` → `knowledgearticle_detail` name=`knowledgearticle_detail`
+  - `service/articles/<int:pk>/edit/` → `knowledgearticle_edit` name=`knowledgearticle_edit`
+  - `service/articles/<int:pk>/delete/` → `knowledgearticle_delete` name=`knowledgearticle_delete`
+  - `service/portal-access/` → `customerportalaccess_list` name=`customerportalaccess_list`
+  - `service/portal-access/new/` → `customerportalaccess_create` name=`customerportalaccess_create`
+  - `service/portal-access/<int:pk>/` → `customerportalaccess_detail` name=`customerportalaccess_detail`
+  - `service/portal-access/<int:pk>/edit/` → `customerportalaccess_edit` name=`customerportalaccess_edit`
+  - `service/portal-access/<int:pk>/delete/` → `customerportalaccess_delete` name=`customerportalaccess_delete`
+  - `cases/track/<str:token>/` → `case_public` name=`case_public`
+  - `kb/public/<str:token>/` → `kb_public` name=`kb_public`
+  - `kb/public/<str:token>/vote/` → `kb_helpful` name=`kb_helpful`
+  - `portal/cases/` → `portal_case_list` name=`portal_case_list`
+  - `portal/cases/<int:pk>/` → `portal_case_detail` name=`portal_case_detail`
+  - `portal/cases/new/` → `portal_case_create` name=`portal_case_create`
+  - NOTE: check for and remove/replace any existing `cases/` and `articles/` patterns from the
+    original §1.4 stub to avoid URL name conflicts
+
+### 2e. `admin.py`
+
+- [ ] Register `SlaPolicy` with `list_display=[number, name, is_default, is_active]`
+- [ ] Register `CaseComment` with `list_display=[case, author_name, is_public, created_at]`,
+  `list_filter=[is_public, tenant]`, `raw_id_fields=[case, author]`
+- [ ] Register `KbCategory` with `list_display=[number, name, parent, order, is_active]`
+- [ ] Update existing `Case` admin — add `sla_policy, first_response_due, first_responded_at,
+  resolution_due, closed_at, satisfaction_rating, public_token` to `list_display` or `readonly_fields`
+- [ ] Update existing `KnowledgeArticle` admin — add `kb_category, helpful_count,
+  not_helpful_count, public_token` to `list_display` or `readonly_fields`
+- [ ] Register `CustomerPortalAccess` with `list_display=[number, customer_party, portal_user,
+  can_submit_cases, is_active]`
+
+### 2f. Migration
+
+- [ ] `python manage.py makemigrations crm --name helpdesk` → confirms 0012 is next
+- [ ] Verify migration covers: new SlaPolicy table, new CaseComment table, new KbCategory table,
+  new CustomerPortalAccess table, new fields on Case, new fields on KnowledgeArticle
+- [ ] `python manage.py migrate` — applies 0012 cleanly
+
+### 2g. Seeder — `_seed_service(tenant)` in `seed_crm` management command
+
+- [ ] Add `_seed_service(tenant)` function to `apps/crm/management/commands/seed_crm.py`:
+  - Guard: `if SlaPolicy.objects.filter(tenant=tenant).exists(): print("service data exists"); return`
+  - Create 2 SlaPolicy records: `"Standard SLA"` (response 48/24/8/1, resolution 120/72/24/8,
+    `is_default=True`) and `"VIP SLA"` (response 24/8/4/1, resolution 72/48/16/4)
+  - Create 2 KbCategory records: `"Getting Started"` (order=1) and `"Troubleshooting"` (order=2,
+    parent = Getting Started to demo hierarchy)
+  - Reuse the first existing Case from the tenant (created by `_seed_directory`); add 2 CaseComments
+    — one internal note (`is_public=False`), one public reply (`is_public=True`) — and update
+    `case.first_responded_at` on the first public comment
+  - Set `sla_policy` on that Case; compute `first_response_due` / `resolution_due` via `save()`
+  - Reuse the first existing KnowledgeArticle from the tenant (created by earlier stub); set
+    `kb_category` to "Getting Started"
+  - Create 1 KbCategory child: `"Account Setup"` (parent = Getting Started, order=1)
+  - NOTE: `CustomerPortalAccess` is intentionally skipped in seeder (requires a real portal_user User
+    account; document this in seeder comments)
+  - Print summary: counts of created objects; reminder: log in as tenant admin to see data
+- [ ] Call `_seed_service(tenant)` unconditionally from `handle()` (same pattern as `_seed_sfa`)
+
+---
+
+## 3. Wire-up
+
+- [ ] `apps/core/navigation.py` — rewrite `LIVE_LINKS["1.4"]` to:
+  ```python
+  "1.4": {
+      "Case / Ticket Management":        "crm:case_list",                 # bullet (verbatim)
+      "Solutions & Knowledge Base":      "crm:knowledgearticle_list",     # bullet (verbatim)
+      "Customer Self-Service Portal":    "crm:customerportalaccess_list", # bullet (verbatim)
+      "SLA Policies":                    "crm:slapolicy_list",            # extra
+      "KB Categories":                   "crm:kbcategory_list",           # extra
+      "Portal Access":                   "crm:customerportalaccess_list", # extra (duplicate ok — distinct label)
+  },
+  ```
+  NOTE: existing `"Case \ Ticket Management"` key uses a backslash — replace with the correct
+  forward-slash form `"Case / Ticket Management"` to match NavERP.md verbatim bullet text.
+- [ ] `config/settings.py` — `apps.crm` is already in `INSTALLED_APPS`; no change needed
+- [ ] `config/urls.py` — `crm/` include already in place; no change needed; confirm existing stub
+  case/article URL patterns are replaced by the new ones in §2d
+
+---
+
+## 4. Templates — `templates/crm/service/`
+
+All templates extend `base.html`. Public pages (`case_public.html`, `kb_public.html`) extend
+`base_auth.html` (unauthenticated shell). Portal pages (`portal_case_*.html`) extend `base.html`
+(user is logged in as portal_user).
+
+### SlaPolicy
+- [ ] `crm/service/slapolicy/list.html` — filter bar: search input + is_active dropdown; table cols:
+  Number, Name, Default badge, Response (Low/Med/High/Crit in hours), Resolution (Low/Med/High/Crit),
+  Active badge, Actions (view/edit/delete); empty state
+- [ ] `crm/service/slapolicy/detail.html` — full policy card with 4-column target matrix (priority ×
+  response/resolution); created_at; Actions sidebar (Edit / Delete / Back)
+- [ ] `crm/service/slapolicy/form.html` — form for name/description/is_active/is_default + 8 integer
+  fields in a 2-column grid (Response Targets / Resolution Targets); labels show "(hours)"
+
+### Case (recreate under service/)
+- [ ] `crm/service/case/list.html` — filter bar: search + status + priority + origin + sla_policy
+  dropdowns; table cols: Number, Subject, Account, Priority badge, Status badge, SLA (breach icon if
+  `is_resolution_overdue`), Owner, Created; Actions (view/edit/delete); pagination; empty state
+- [ ] `crm/service/case/detail.html` — full case info card; SLA panel (first_response_due +
+  first_responded_at with green/red indicator; resolution_due with green/orange/red badge);
+  satisfaction panel (show rating stars + comment if `satisfaction_rating` set); **comment thread
+  panel** (chronological; internal notes have yellow/grey background, public replies have white/blue;
+  agent sees all; inline `CaseCommentForm` at bottom with is_public toggle); Actions sidebar
+  (Edit / Delete / Back / Public Link copy button if `public_token`)
+- [ ] `crm/service/case/form.html` — `CaseForm`; include sla_policy dropdown; exclude all system fields;
+  note "SLA due dates are computed automatically"
+
+### KbCategory
+- [ ] `crm/service/kbcategory/list.html` — filter bar: search + is_active + parent dropdown; table
+  cols: Number, Name, Parent, Order, Article count, Active badge, Actions; empty state
+- [ ] `crm/service/kbcategory/detail.html` — category info + parent breadcrumb + child_categories
+  list + linked articles count; Actions sidebar
+- [ ] `crm/service/kbcategory/form.html` — fields: name, description, slug, parent (exclude self on
+  edit), order, is_active; help text "Leave slug blank to auto-generate"
+
+### KnowledgeArticle (recreate under service/)
+- [ ] `crm/service/knowledgearticle/list.html` — filter bar: search + status + visibility +
+  kb_category dropdowns; table cols: Number, Title, KB Category, Visibility badge, Status badge,
+  Views, Helpful (count), Actions; empty state
+- [ ] `crm/service/knowledgearticle/detail.html` — article body; KB Category breadcrumb;
+  helpful_count / not_helpful_count display; public link if `public_token` set; Actions sidebar
+  (Edit / Delete / Back / Public Link)
+- [ ] `crm/service/knowledgearticle/form.html` — `KnowledgeArticleForm`; kb_category dropdown;
+  exclude helpful counts, public_token, views_count; note "Public token generated automatically"
+
+### CustomerPortalAccess
+- [ ] `crm/service/customerportalaccess/list.html` — filter bar: search + is_active + can_submit
+  dropdowns; table cols: Number, Customer Party, Portal User, Can Submit, Active, Accepted At,
+  Actions; empty state
+- [ ] `crm/service/customerportalaccess/detail.html` — full grant info; portal_user display;
+  can_submit_cases badge; accepted_at; linked cases count for customer_party; Actions sidebar
+- [ ] `crm/service/customerportalaccess/form.html` — `CustomerPortalAccessForm`; customer_party +
+  portal_user + can_submit_cases + accepted_at + is_active
+
+### Standalone public pages
+- [ ] `crm/service/case_public.html` — extends `base_auth.html`; shows case subject, status badge,
+  priority badge, created_at, last public agent reply body; CSAT form if case resolved/closed and
+  `satisfaction_rating is None`; all user-generated text escaped (no `|safe`); max input lengths enforced
+- [ ] `crm/service/kb_public.html` — extends `base_auth.html`; shows article title, body (escaped),
+  KB Category if set; helpful/not-helpful vote form (POST to `kb_helpful`); shows voted state
+  (`?voted=1`); returns 404 for non-published or non-external articles
+
+### Portal pages
+- [ ] `crm/service/portal_case_list.html` — extends `base.html`; customer's own cases filtered by
+  their party; status filter dropdown; table: Subject, Priority, Status, Last Updated, Actions (view);
+  "Submit New Case" CTA if `access.can_submit_cases`; empty state
+- [ ] `crm/service/portal_case_detail.html` — extends `base.html`; case info (subject/status/priority);
+  only `is_public=True` comments shown (no internal notes); `PublicCommentForm` at bottom for reply;
+  CSAT form if resolved/closed and not yet rated; all content escaped
+- [ ] `crm/service/portal_case_form.html` — extends `base.html`; subject + description + priority
+  fields only; `origin` and `account` are forced server-side (not in form); submit button
+
+---
+
+## 5. Verify
+
+- [ ] `python manage.py makemigrations --check` — no unapplied model changes
+- [ ] `python manage.py migrate` — applies 0012 cleanly with no errors
+- [ ] `python manage.py seed_crm` ×2 — both runs succeed; second run prints "service data exists,
+  skipping" (idempotent guard); `manage.py check` clean after both runs
+- [ ] `python manage.py check` — no system check errors
+- [ ] `temp/smoke_helpdesk.py` sweep — verify:
+  - All `crm:slapolicy_*` URLs return 200 (list/create/detail/edit) or 302 (delete POST)
+  - All `crm:case_*` URLs return 200/302; `case_comment_add` POST-only returns 302
+  - All `crm:kbcategory_*` URLs return 200/302
+  - All `crm:knowledgearticle_*` URLs return 200/302
+  - All `crm:customerportalaccess_*` URLs return 200/302
+  - `case_public` GET with valid token → 200; with invalid token → 404
+  - `case_public` POST (CSAT) on resolved case → 302 + satisfaction_rating set
+  - `kb_public` with valid token + published + external → 200; draft → 404; internal → 404
+  - `kb_helpful` POST → 302 + helpful_count incremented (verify via DB query)
+  - `portal_case_list` with no CustomerPortalAccess → 404; with active access → 200
+  - `portal_case_create` POST with `can_submit_cases=False` → 404 or redirect
+  - `portal_case_detail` with case belonging to different party → 404 (IDOR check)
+  - Cross-tenant IDOR: Case.pk from tenant A accessed by tenant B session → 404
+  - No `{#` or `{% comment` template-comment leaks in rendered output
+  - Sidebar shows "Case / Ticket Management", "Solutions & Knowledge Base", "Customer Self-Service
+    Portal" as Live (green) links
+
+---
+
+## 6. Close-out
+
+- [ ] Run `code-reviewer` agent → apply findings → commit `apps/crm/` changes
+- [ ] Run `explorer` agent → apply findings → commit
+- [ ] Run `frontend-reviewer` agent → apply findings → commit templates
+- [ ] Run `performance-reviewer` agent → apply findings (check N+1 on comment thread, views_count F()
+  query, portal case list) → commit
+- [ ] Run `qa-smoke-tester` agent → apply findings → commit
+- [ ] Run `security-reviewer` agent → verify public endpoint token security, CSRF on all POSTs,
+  portal IDOR guards, no |safe on user content, input length caps → apply findings → commit
+- [ ] Run `test-writer` agent → add `tests/test_helpdesk.py` → commit
+- [ ] Update `.claude/skills/crm/SKILL.md` — add §1.4 models (SlaPolicy, CaseComment, KbCategory,
+  CustomerPortalAccess + Case/KnowledgeArticle enhancements), new URL names, new templates under
+  `service/`, `_seed_service` seeder, LIVE_LINKS["1.4"] rewrite → commit
+- [ ] Update module README if one exists → commit
+
+---
+
+## 7. Later passes / deferred
+
+- **Email-to-ticket ingestion (IMAP/SMTP)** — `Case.origin=email` choice already in place; live
+  mailbox polling via Celery beat + IMAP is an external integration; defer to integration pass
+- **Business hours / holiday calendar for SLA** — `SlaPolicy` ships with calendar-hours only;
+  `hours_mode` field + `BusinessHours`/`HolidaySchedule` table deferred to extension pass
+- **SLA escalation notifications** — breach properties (`is_response_overdue`, `is_resolution_overdue`)
+  ship now; email/in-app dispatch via existing `WorkflowRule` (1.10) wiring deferred to
+  notification/workflow pass
+- **CSAT survey email delivery** — CSAT fields + public token submission ship now; auto-send
+  post-close email requires SMTP notification integration; deferred to notification pass
+- **Merge duplicate cases** — self-FK `merged_into` on Case; deferred; low priority
+- **Macros / canned responses** — new `CannedResponse` table; wire into portal reply form; deferred
+- **Round-robin / skill-based auto-assignment** — assignment-engine table; deferred to workflow pass
+- **Article version history / rollback** — `KbArticleVersion` table; deferred
+- **Multi-language KB** — localization is a Module 0 cross-cutting concern; deferred
+- **Community forums** — separate sub-product; deferred
+- **Article-to-case keyword suggestion** — text-match service to surface KB on case creation; deferred
+  to search/AI pass
+- **AI answer-bot / ticket deflection** — requires LLM integration; deferred
+- **Omnichannel (social / SMS / WhatsApp / telephony)** — external channel integrations; deferred
+- **Live chat / chatbot on portal** — requires WebSocket; deferred
+- **`category_legacy` CharField cleanup** — the old `KnowledgeArticle.category CharField` field is
+  kept in migration 0012 for safety; drop it in a later migration once all data is migrated to
+  `kb_category` FK
+
+---
+
+## 8. Review notes
+(filled in at the end)
