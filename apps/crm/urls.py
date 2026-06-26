@@ -16,12 +16,60 @@ urlpatterns = [
     path("leads/<int:pk>/delete/", views.lead_delete, name="lead_delete"),
     path("leads/<int:pk>/convert/", views.lead_convert, name="lead_convert"),
 
-    # Opportunities (1.2)
+    # Opportunities (1.2 Opportunity Management)
     path("opportunities/", views.opportunity_list, name="opportunity_list"),
+    path("opportunities/board/", views.opportunity_board, name="opportunity_board"),  # Kanban
     path("opportunities/add/", views.opportunity_create, name="opportunity_create"),
     path("opportunities/<int:pk>/", views.opportunity_detail, name="opportunity_detail"),
     path("opportunities/<int:pk>/edit/", views.opportunity_edit, name="opportunity_edit"),
     path("opportunities/<int:pk>/delete/", views.opportunity_delete, name="opportunity_delete"),
+    path("opportunities/<int:pk>/advance/", views.opportunity_advance, name="opportunity_advance"),
+    path("opportunities/<int:pk>/add-split/", views.opportunitysplit_add, name="opportunitysplit_add"),
+    path("opportunity-splits/<int:split_pk>/remove/", views.opportunitysplit_remove, name="opportunitysplit_remove"),
+
+    # Territories (1.2 Forecasting)
+    path("territories/", views.territory_list, name="territory_list"),
+    path("territories/add/", views.territory_create, name="territory_create"),
+    path("territories/<int:pk>/", views.territory_detail, name="territory_detail"),
+    path("territories/<int:pk>/edit/", views.territory_edit, name="territory_edit"),
+    path("territories/<int:pk>/delete/", views.territory_delete, name="territory_delete"),
+
+    # Products — sales catalog (1.2 Quoting)
+    path("products/", views.product_list, name="product_list"),
+    path("products/add/", views.product_create, name="product_create"),
+    path("products/<int:pk>/", views.product_detail, name="product_detail"),
+    path("products/<int:pk>/edit/", views.product_edit, name="product_edit"),
+    path("products/<int:pk>/delete/", views.product_delete, name="product_delete"),
+
+    # Price books (1.2 Quoting)
+    path("price-books/", views.pricebook_list, name="pricebook_list"),
+    path("price-books/add/", views.pricebook_create, name="pricebook_create"),
+    path("price-books/<int:pk>/", views.pricebook_detail, name="pricebook_detail"),
+    path("price-books/<int:pk>/edit/", views.pricebook_edit, name="pricebook_edit"),
+    path("price-books/<int:pk>/delete/", views.pricebook_delete, name="pricebook_delete"),
+
+    # Quotes (1.2 Quoting)
+    path("quotes/", views.quote_list, name="quote_list"),
+    path("quotes/add/", views.quote_create, name="quote_create"),
+    path("quotes/<int:pk>/", views.quote_detail, name="quote_detail"),
+    path("quotes/<int:pk>/edit/", views.quote_edit, name="quote_edit"),
+    path("quotes/<int:pk>/delete/", views.quote_delete, name="quote_delete"),
+    path("quotes/<int:pk>/print/", views.quote_print, name="quote_print"),
+    path("quotes/<int:pk>/add-line/", views.quoteline_add, name="quoteline_add"),
+    path("quote-lines/<int:line_pk>/remove/", views.quoteline_remove, name="quoteline_remove"),
+    path("quotes/<int:pk>/send/", views.quote_send, name="quote_send"),
+    path("quotes/<int:pk>/accept/", views.quote_accept, name="quote_accept"),
+    path("quotes/<int:pk>/decline/", views.quote_decline, name="quote_decline"),
+
+    # Sales quotas (1.2 Forecasting)
+    path("sales-quotas/", views.salesquota_list, name="salesquota_list"),
+    path("sales-quotas/add/", views.salesquota_create, name="salesquota_create"),
+    path("sales-quotas/<int:pk>/", views.salesquota_detail, name="salesquota_detail"),
+    path("sales-quotas/<int:pk>/edit/", views.salesquota_edit, name="salesquota_edit"),
+    path("sales-quotas/<int:pk>/delete/", views.salesquota_delete, name="salesquota_delete"),
+
+    # Forecast dashboard (1.2 Forecasting)
+    path("forecast/", views.forecast, name="forecast"),
 
     # Campaigns (1.3 Campaign Management)
     path("campaigns/", views.campaign_list, name="campaign_list"),
