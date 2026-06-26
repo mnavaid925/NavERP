@@ -37,8 +37,8 @@
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
 
     <div class="form-group" style="margin-top:1rem;">
-      <label class="form-label">Public invite link</label>
-      <input type="text" class="form-input" readonly onclick="this.select()"
+      <label class="form-label" for="invite-link">Public invite link</label>
+      <input id="invite-link" type="text" class="form-input" readonly onclick="this.select()"
              value="{{ request.scheme }}://{{ request.get_host }}{% url 'crm:event_invite' obj.public_token %}">
       <div class="form-help">Share this link so invitees can RSVP without logging in.</div>
     </div>
