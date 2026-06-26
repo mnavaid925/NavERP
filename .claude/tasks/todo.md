@@ -3394,3 +3394,444 @@ in `test_helpdesk.py` + a de-flaked SFA timestamp test).
 **Deferred (noted):** real email-to-ticket/telephony/omnichannel, AI answer-bot, macros/canned responses,
 round-robin assignment, business-hours SLA calendar, SLA-breach email escalation, CSAT email delivery, KB article
 versioning/multi-language, public-endpoint rate-limiting (WARNING-commented, needs django-ratelimit/WAF).
+
+---
+# CRM Sub-module 1.5 — Activity & Communication Management (crm) — plan from research-crm-1.5.md  (2026-06-27)
+
+**Extending `apps/crm`** — NOT a new app. No `apps.py`/`settings.py`/`config/urls.py` churn.
+Scope: enhance `CrmTask` (3 new fields + spawn-next-on-complete logic) + add 3 new models
+(`CalendarEvent`, `EventAttendee`, `CommunicationLog`). One incremental migration (next after 0012).
+Extend `seed_crm`. Rewrite `LIVE_LINKS["1.5"]` from 1 bullet to 3. All templates under
+`templates/crm/activities/` (existing task templates stay, new entity folders added alongside).
+
+Authoritative scope from `bubbly-squishing-adleman.md` — do NOT expand beyond these 4 models this pass.
+
+---
+
+## 0. Template folder structure
+
+Sub-module folder is `templates/crm/activities/` (already exists for `task/`). Add new entity folders:
+
+- [ ] `templates/crm/activities/calendarevent/{list,detail,form}.html` — CalendarEvent CRUD
+- [ ] `templates/crm/activities/eventattendee/` — no standalone pages; attendees render inline on event detail
+- [ ] `templates/crm/activities/communicationlog/{list,detail,form}.html` — CommunicationLog CRUD
+- [ ] `templates/crm/activities/event_invite.html` — public RSVP page (standalone sub-module root, not an entity CRUD page; per CLAUDE.md rule 6)
+- [ ] NOTE: existing `templates/crm/activities/task/{list,detail,form}.html` gain new recurrence fields — no folder rename needed
+
+---
+
+## 1. Models (add to / enhance `apps/crm/models.py`)
+
+### 1a. `CrmTask` [ENHANCE — existing `TASK-` numbered model, line ~1144]
+
+Drivers: Salesforce recurring-task-on-complete, Zoho daily/weekly/monthly patterns, SuiteCRM series model.
+
+- [ ] Add 3 fields to `CrmTask` after the existing `completed_at` field:
+  - `recurrence` — `CharField(max_length=10, choices=[("none","None"),("daily","Daily"),("weekly","Weekly"),("monthly","Monthly")], default="none")` — recurrence frequency (Zoho/Salesforce daily/weekly/monthly)
+  - `recurrence_interval` — `PositiveSmallIntegerField(default=1)` — "every N days/weeks/months" (Zoho custom intervals); must be ≥ 1
+  - `recurrence_until` — `DateField(null=True, blank=True)` — optional end date for the series; no occurrences beyond this date (Zoho end-on-date)
+  - `recurrence_parent` — `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="recurrence_children")` — system-set; links a spawned occurrence to the origin task (Salesforce series model); never shown in forms
+- [ ] Update `CrmTask.save()` to add spawn-next-on-complete logic **after** the existing `completed_at` stamp block:
+  - Condition: `self.status == "done"` AND `self.recurrence != "none"` AND `self.due_date is not None` AND `self.pk is not None` (already saved, not a new object) AND the current object has just transitioned to done (guard: check that `completed_at` was None before, i.e. was not already done — use `_state.adding=False` + a pre-save old-status check via `type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()`)
+  - Guard against double-spawn: only spawn if `recurrence_parent_id is None` OR `self` is the series origin (avoids spawned children spawning further on re-save)
+  - Compute `next_due`: `due_date + timedelta(days=interval)` for daily, `due_date + timedelta(weeks=interval)` for weekly, `due_date + relativedelta(months=interval)` for monthly (use `dateutil.relativedelta` — already available in the Django environment)
+  - Skip spawn if `recurrence_until is not None` and `next_due > recurrence_until`
+  - Spawn: `CrmTask.objects.create(tenant=self.tenant, subject=self.subject, type=self.type, priority=self.priority, status="open", due_date=next_due, owner=self.owner, party=self.party, related_opportunity=self.related_opportunity, related_case=self.related_case, recurrence=self.recurrence, recurrence_interval=self.recurrence_interval, recurrence_until=self.recurrence_until, recurrence_parent=self.recurrence_parent or self)` — note: calls `TenantNumbered.save()` via `create()`, number is assigned there; no recursion risk because the spawned task starts `status="open"`
+  - IMPORTANT: the spawn must happen **after** `super().save()` returns (not before), to avoid a partially-saved parent
+  - Add `related_case` FK (see below) to the copy fields in the spawn
+- [ ] Add `related_case` FK to `CrmTask` (also needed for spawn copy above):
+  - `related_case` — `ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_tasks")` — task linkable to a support case (Salesforce/HubSpot pattern)
+- [ ] Update `CrmTask.Meta` indexes: the existing `crm_task_tenant_status_idx` and `crm_task_tnt_due_created_idx` are unchanged; no new index needed for recurrence (queried by parent_id only in spawn, small cardinality)
+- [ ] `CrmTask.__str__` unchanged
+- [ ] Reuses: existing spine (`core.Party`, `crm.Opportunity`); adds `crm.Case` FK + recurrence fields. No new table.
+
+### 1b. `CalendarEvent` [NEW — `TenantNumbered`, `NUMBER_PREFIX = "EVT"`]
+
+Drivers: Salesforce Event object, HubSpot Meetings, Zoho CRM Events, Pipedrive Activity (meeting type), Dynamics 365 Appointment + Calendly ICS/invite-link pattern.
+
+- [ ] Add `CalendarEvent(TenantNumbered)` after `CrmTask` in `models.py` with `NUMBER_PREFIX = "EVT"`:
+  - `number` — inherited from `TenantNumbered`; `unique_together(tenant, number)` in Meta
+  - `title` — `CharField(max_length=255)`
+  - `event_type` — `CharField(max_length=20, choices=[("meeting","Meeting"),("call","Call"),("demo","Demo"),("deadline","Deadline"),("reminder","Reminder"),("other","Other")], default="meeting")` — event categorization (research: Salesforce event types, Pipedrive activity types, HubSpot meeting types)
+  - `start` — `DateTimeField()` — event start; required
+  - `end` — `DateTimeField(null=True, blank=True)` — event end (null = open-ended / all-day-like)
+  - `all_day` — `BooleanField(default=False)` — when True, `start`/`end` are date-only semantics (HubSpot all-day meeting)
+  - `location` — `CharField(max_length=255, blank=True)` — physical location (Dynamics 365, HubSpot)
+  - `video_url` — `URLField(blank=True)` — Zoom/Teams/Meet link (HubSpot Meetings/Pipedrive Zoom/Calendly; store now, auto-generate later)
+  - `status` — `CharField(max_length=20, choices=[("scheduled","Scheduled"),("confirmed","Confirmed"),("cancelled","Cancelled"),("completed","Completed")], default="scheduled")` — lifecycle (HubSpot completion/cancellation, Dynamics 365 Completed/Cancelled)
+  - `sync_source` — `CharField(max_length=10, choices=[("manual","Manual"),("google","Google Calendar"),("outlook","Outlook"),("ical","iCal")], default="manual")` — provenance tag (Salesforce Einstein Activity Capture, Zoho/Pipedrive two-way sync; OAuth push is deferred)
+  - `reminder_minutes` — `PositiveSmallIntegerField(default=15, null=True, blank=True)` — lead-time reminder in minutes (Zoho/HubSpot/Salesforce; email send is integration/later)
+  - `owner` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_calendar_events")` — organizer/rep
+  - `party` — `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_calendar_events")` — primary contact/account (spine reuse)
+  - `related_opportunity` — `ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="calendar_events")` — linked deal
+  - `related_case` — `ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="calendar_events")` — linked support case
+  - `description` — `TextField(blank=True)`
+  - `public_token` — `CharField(max_length=64, unique=True, blank=True)` — unguessable bearer token for the public invite/RSVP/ICS link; mirrors `Case.public_token` / `LandingPage.public_token` pattern; auto-assigned in `save()` via `secrets.token_urlsafe(32)` when blank; **excluded from all forms** (L20/L22)
+  - `Meta.ordering = ["-start"]`
+  - `unique_together = ("tenant", "number")`
+  - DB indexes:
+    - `("tenant", "status")` — `crm_calevent_tenant_status_idx`
+    - `("tenant", "start")` — `crm_calevent_tenant_start_idx`
+  - Properties:
+    - `is_past` — `@property` returning `bool(self.start < timezone.now())` when start is set
+    - `duration_display` — `@property` returning `"HH:MM"` string when both `start` and `end` are set, else `""`; formula: `(end - start)` total seconds → `"%d:%02d" % divmod(total_seconds // 60, 60)` (hours:minutes)
+  - `save()`: assign `public_token` if blank (`self.public_token = secrets.token_urlsafe(32)`) before calling `super().save()` — same pattern as `Case.save()` and `LandingPage.save()`
+  - `__str__`: `f"{self.number} · {self.title}"`
+  - Reuses: `core.Party`, `crm.Opportunity`, `crm.Case`, `settings.AUTH_USER_MODEL`. Adds event lifecycle + ICS/invite token.
+
+### 1c. `EventAttendee` [NEW — plain model, child of `CalendarEvent`]
+
+Drivers: Dynamics 365 appointment attendee sync, Google Calendar accepted/declined/tentative/needsAction, Calendly invitee RSVP, iCalendar RFC-5545 PARTSTAT values.
+
+- [ ] Add `EventAttendee(models.Model)` immediately after `CalendarEvent` in `models.py` — NOT `TenantNumbered` (child rows, no auto-number needed; mirrors `CaseComment` pattern):
+  - `tenant` — `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)` — required for tenant-scoped queries; set in view/seeder to `event.tenant`
+  - `event` — `ForeignKey(CalendarEvent, on_delete=models.CASCADE, related_name="attendees")`
+  - `party` — `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="event_attendees")` — CRM contact/account (spine reuse); nullable so external guests (no Party record) can still be tracked
+  - `name` — `CharField(max_length=255)` — display-name snapshot; survives party deletion (Calendly invitee name)
+  - `email` — `EmailField(blank=True)` — used for ICS delivery and dedup; blank allowed for party-only attendees
+  - `rsvp_status` — `CharField(max_length=20, choices=[("no_response","No Response"),("accepted","Accepted"),("declined","Declined"),("tentative","Tentative")], default="no_response")` — iCalendar RFC-5545 PARTSTAT states (Google Calendar needsAction/accepted/declined/tentative, Dynamics 365, Calendly)
+  - `is_organizer` — `BooleanField(default=False)` — marks the meeting organizer among attendees; typically one per event
+  - `responded_at` — `DateTimeField(null=True, blank=True)` — system-set when `rsvp_status` changes from `no_response`; **excluded from all forms** (L20/L22)
+  - `created_at` — `DateTimeField(auto_now_add=True)`
+  - `Meta.ordering = ["-is_organizer", "name"]`
+  - `unique_together = ("event", "email")` — dedup: one row per (event, email); blank email is NOT unique-constrained (multiple party-only attendees without emails OK — Django unique_together with blank allows multiple blank rows)
+  - NO standalone list page or URL; managed inline on CalendarEvent detail only
+  - `__str__`: `f"{self.name} ({self.get_rsvp_status_display()})"`
+  - Reuses: `core.Party`, `crm.CalendarEvent`. Plain child model — no numbered prefix.
+
+### 1d. `CommunicationLog` [NEW — `TenantNumbered`, `NUMBER_PREFIX = "COM"`]
+
+Drivers: HubSpot unified activity timeline (call/email/SMS/note/meeting), Freshsales real-time feed, Salesloft multi-channel cadence, Outreach disposition logging, Pipedrive Smart BCC email dropbox.
+
+- [ ] Add `CommunicationLog(TenantNumbered)` after `EventAttendee` in `models.py` with `NUMBER_PREFIX = "COM"`:
+  - `number` — inherited from `TenantNumbered`; `unique_together(tenant, number)` in Meta
+  - `channel` — `CharField(max_length=10, choices=[("call","Call"),("email","Email"),("sms","SMS"),("note","Note"),("meeting","Meeting")], default="call")` — interaction channel (HubSpot unified timeline: calls/emails/meetings/notes/SMS)
+  - `direction` — `CharField(max_length=10, choices=[("inbound","Inbound"),("outbound","Outbound")], blank=True)` — who initiated (HubSpot inbound/outgoing, Salesloft direction property); blank for notes/meetings
+  - `subject` — `CharField(max_length=255, blank=True)` — email subject or call topic
+  - `body` — `TextField(blank=True)` — email body preview or note text; field name `body` (not `body_snippet`) per the approved plan
+  - `party` — `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")` — contact/account (spine reuse; HubSpot auto-associates to contact + company)
+  - `owner` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")` — rep who made/received the interaction
+  - `related_opportunity` — `ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")` — linked deal (HubSpot: 5 most recent open deals, Pipedrive Smart BCC auto-link)
+  - `related_case` — `ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")` — linked support case (Salesforce/HubSpot service call-back log)
+  - `occurred_at` — `DateTimeField(default=timezone.now)` — the actual interaction time (may differ from `created_at` for retrospective logging); the canonical sort key
+  - `duration_seconds` — `PositiveIntegerField(null=True, blank=True)` — call duration in seconds (HubSpot/Salesloft/Freshsales VoIP field; null for non-call channels)
+  - `outcome` — `CharField(max_length=20, choices=[("connected","Connected"),("voicemail","Voicemail"),("no_answer","No Answer"),("busy","Busy"),("wrong_number","Wrong Number")], blank=True)` — call-only disposition (Salesloft disposition, Outreach "No Answer" default, HubSpot customizable call outcome); blank for email/note/SMS/meeting
+  - `logged_via` — `CharField(max_length=20, choices=[("manual","Manual"),("bcc_dropbox","BCC Dropbox"),("voip","VoIP Auto-log"),("sync","Calendar Sync")], default="manual")` — provenance (Pipedrive Smart BCC, HubSpot BCC vs connected-inbox, Freshsales auto-log; full mail/VoIP engine is integration/later)
+  - `email_message_id` — `CharField(max_length=255, blank=True)` — email `Message-ID` header for dedup when same email arrives via BCC and sync; `db_index=True` (L11 guard: filter only when non-empty)
+  - `Meta.ordering = ["-occurred_at"]`
+  - `unique_together = ("tenant", "number")`
+  - DB indexes:
+    - `("tenant", "channel")` — `crm_commlog_tenant_channel_idx`
+    - `("tenant", "occurred_at")` — `crm_commlog_tenant_occurred_idx`
+  - Properties:
+    - `duration_display` — `@property` returning `"%d:%02d" % divmod(self.duration_seconds // 60, 60)` when `duration_seconds` is not None, else `""`; format is `"mm:ss"` for sub-hour calls (standard VoIP display)
+    - `is_call` — `@property` returning `self.channel == "call"`
+  - `save()`: no extra logic needed beyond `TenantNumbered.save()` number assignment
+  - `__str__`: `f"{self.number} · {self.get_channel_display()} ({self.occurred_at:%Y-%m-%d})"`
+  - Reuses: `core.Party`, `crm.Opportunity`, `crm.Case`, `settings.AUTH_USER_MODEL`. Adds unified comms log.
+
+---
+
+## 2. Forms (add to / update `apps/crm/forms.py`)
+
+Rule: exclude `tenant`, auto `number`, `public_token`, `completed_at`, `responded_at`, `recurrence_parent` — all system-set (L20/L22). Never expose `public_token` or `email_message_id` in editable forms.
+
+- [ ] Update import list in `forms.py` to add `CalendarEvent`, `EventAttendee`, `CommunicationLog`
+- [ ] Update `CrmTaskForm` — add `recurrence`, `recurrence_interval`, `recurrence_until`, `related_case` to `fields` list; keep `recurrence_parent` and `completed_at` **excluded** (system-set):
+  ```python
+  fields = ["subject", "type", "priority", "status", "due_date", "owner", "party",
+            "related_opportunity", "related_case", "description",
+            "recurrence", "recurrence_interval", "recurrence_until"]
+  ```
+- [ ] Add `CalendarEventForm(TenantModelForm)`:
+  - `fields = ["title", "event_type", "start", "end", "all_day", "location", "video_url", "status", "sync_source", "reminder_minutes", "owner", "party", "related_opportunity", "related_case", "description"]`
+  - `public_token` excluded (L20/L22 — system-set in `save()`)
+  - `number` excluded (inherited, system-set)
+- [ ] Add `EventAttendeeForm(TenantModelForm)`:
+  - `fields = ["party", "name", "email", "rsvp_status", "is_organizer"]`
+  - `responded_at` excluded (system-set when rsvp_status changes from no_response)
+  - `event` and `tenant` excluded (set by view)
+- [ ] Add `CommunicationLogForm(TenantModelForm)`:
+  - `fields = ["channel", "direction", "subject", "body", "party", "owner", "related_opportunity", "related_case", "occurred_at", "duration_seconds", "outcome", "logged_via"]`
+  - `email_message_id` excluded from staff form (populated by sync engine in later pass; staff enters manually only via future import)
+  - `number` excluded (system-set)
+- [ ] Add `PublicRsvpForm(forms.Form)` — plain Form (NOT TenantModelForm; no tenant binding needed, data written directly in view):
+  - `name = forms.CharField(max_length=255)`
+  - `email = forms.EmailField()`
+  - `rsvp_status = forms.ChoiceField(choices=[("accepted","Accept"),("declined","Decline"),("tentative","Maybe")])`
+  - NOTE: `rsvp_status` choices deliberately exclude `no_response` (the default); the form is an affirmative RSVP action
+
+---
+
+## 3. Views (add to `apps/crm/views.py`)
+
+All staff views: `@login_required`. Public views: no decorator, token bearer. Tenant-scoped: all `filter(tenant=request.tenant)` — no exceptions.
+
+### 3a. CalendarEvent CRUD (staff, `@login_required`)
+
+- [ ] `calendarevent_list` — `crud_list(request, CalendarEvent.objects.filter(tenant=request.tenant).select_related("owner","party"), "crm/activities/calendarevent/list.html", search_fields=["title","number"], filters=[("status","status",False),("event_type","event_type",False)], extra_context={"status_choices":CalendarEvent.STATUS_CHOICES,"type_choices":CalendarEvent.TYPE_CHOICES})` — (L7: pin all filter-dropdown choices)
+- [ ] `calendarevent_create` — `crud_create(request, form_class=CalendarEventForm, template="crm/activities/calendarevent/form.html", success_url="crm:calendarevent_list")`
+- [ ] `calendarevent_detail(request, pk)` — `get_object_or_404(CalendarEvent..., pk=pk, tenant=request.tenant)`; render with `attendees = event.attendees.select_related("party").all()` and `attendee_form = EventAttendeeForm(tenant=request.tenant)` in context (L7 — always pass the add-attendee form)
+- [ ] `calendarevent_edit(request, pk)` — `crud_edit(request, model=CalendarEvent, pk=pk, form_class=CalendarEventForm, template="crm/activities/calendarevent/form.html", success_url="crm:calendarevent_list")`
+- [ ] `calendarevent_delete(request, pk)` — `@require_POST`; `crud_delete(request, model=CalendarEvent, pk=pk, success_url="crm:calendarevent_list")`
+
+### 3b. EventAttendee inline actions (staff, `@login_required`)
+
+- [ ] `event_attendee_add(request, event_pk)` — `@login_required @require_POST`; get_or_404 `CalendarEvent(pk=event_pk, tenant=request.tenant)`, bind `EventAttendeeForm(request.POST, tenant=request.tenant)`, if valid: `obj = form.save(commit=False); obj.tenant = event.tenant; obj.event = event; obj.save()`; set `responded_at` if `rsvp_status != "no_response"` on save in view; `redirect("crm:calendarevent_detail", pk=event_pk)` — PRG
+- [ ] `event_attendee_delete(request, pk)` — `@login_required @require_POST`; `get_object_or_404(EventAttendee, pk=pk, tenant=request.tenant)`; `.delete()`; `redirect("crm:calendarevent_detail", pk=attendee.event_id)` — PRG
+- [ ] IMPORTANT: `event_attendee_add` must use `update_or_create(event=event, email=email, defaults={...})` when the form has a non-blank email (handles the public RSVP upsert case and avoids `unique_together(event,email)` IntegrityError on re-RSVP from staff side)
+
+### 3c. Public token views (no `@login_required`)
+
+- [ ] `event_invite(request, token)` — no `@login_required`; `get_object_or_404(CalendarEvent, public_token=token)`; render `PublicRsvpForm()` for GET; on POST bind `PublicRsvpForm(request.POST)`, if valid: `update_or_create(EventAttendee, event=event, email=cd["email"], defaults={"name":cd["name"],"rsvp_status":cd["rsvp_status"],"tenant":event.tenant,"responded_at":timezone.now()})` (upsert-by-email, no IntegrityError); `redirect("crm:event_invite", token=token)` with success message; context: `{"event": event, "attendees": event.attendees.all(), "form": rsvp_form}` — (L7: pin event + attendees + form). **`# WARNING: unauthenticated POST — add per-IP rate-limiting (django-ratelimit) or WAF throttle in production`**
+- [ ] `event_ics(request, token)` — no `@login_required`; `get_object_or_404(CalendarEvent, public_token=token)`; build a minimal iCalendar (RFC 5545) text/calendar response inline (no external ical library needed for a basic VCALENDAR with one VEVENT): `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//NavERP//EN\r\nBEGIN:VEVENT\r\nUID:{event.number}@naverp\r\nDTSTART:{start_ical}\r\nDTEND:{end_ical}\r\nSUMMARY:{event.title}\r\nLOCATION:{event.location}\r\nDESCRIPTION:{event.description}\r\nEND:VEVENT\r\nEND:VCALENDAR`; return `HttpResponse(ics_text, content_type="text/calendar; charset=utf-8")` with `Content-Disposition: attachment; filename="{event.number}.ics"`
+- [ ] L32 reminder: `event_invite` and `event_ics` are token-gated public pages — they must NOT appear in `LIVE_LINKS["1.5"]` and must NOT be sidebar targets
+
+### 3d. CommunicationLog CRUD (staff, `@login_required`)
+
+- [ ] `communicationlog_list` — `crud_list(request, CommunicationLog.objects.filter(tenant=request.tenant).select_related("party","owner"), "crm/activities/communicationlog/list.html", search_fields=["subject","number","body"], filters=[("channel","channel",False),("direction","direction",False),("logged_via","logged_via",False)], extra_context={"channel_choices":CommunicationLog.CHANNEL_CHOICES,"direction_choices":CommunicationLog.DIRECTION_CHOICES,"logged_via_choices":CommunicationLog.LOGGED_VIA_CHOICES})` — (L7: pin all 3 filter-dropdown choice lists; define as class-level constants in model)
+- [ ] `communicationlog_create` — `crud_create(request, form_class=CommunicationLogForm, template="crm/activities/communicationlog/form.html", success_url="crm:communicationlog_list")`
+- [ ] `communicationlog_detail(request, pk)` — `get_object_or_404(CommunicationLog.objects.select_related("party","owner","related_opportunity","related_case"), pk=pk, tenant=request.tenant)`; render `"crm/activities/communicationlog/detail.html"`
+- [ ] `communicationlog_edit(request, pk)` — `crud_edit(request, model=CommunicationLog, pk=pk, form_class=CommunicationLogForm, template="crm/activities/communicationlog/form.html", success_url="crm:communicationlog_list")`
+- [ ] `communicationlog_delete(request, pk)` — `@require_POST`; `crud_delete(request, model=CommunicationLog, pk=pk, success_url="crm:communicationlog_list")`
+
+### 3e. Task views — no new views needed
+- [ ] Confirm existing `task_list`/`task_create`/`task_detail`/`task_edit`/`task_delete` views still work after model field additions — the `crud_*` helpers are data-driven and the form field list controls what the user edits; verify `CrmTaskForm` new fields render correctly in `task_edit` smoke test
+
+---
+
+## 4. URLs (append to `apps/crm/urls.py`)
+
+- [ ] CalendarEvent CRUD routes (5):
+  ```python
+  path("calendar/", views.calendarevent_list, name="calendarevent_list"),
+  path("calendar/add/", views.calendarevent_create, name="calendarevent_create"),
+  path("calendar/<int:pk>/", views.calendarevent_detail, name="calendarevent_detail"),
+  path("calendar/<int:pk>/edit/", views.calendarevent_edit, name="calendarevent_edit"),
+  path("calendar/<int:pk>/delete/", views.calendarevent_delete, name="calendarevent_delete"),
+  ```
+- [ ] EventAttendee inline action routes (2):
+  ```python
+  path("calendar/<int:event_pk>/add-attendee/", views.event_attendee_add, name="event_attendee_add"),
+  path("calendar/attendees/<int:pk>/delete/", views.event_attendee_delete, name="event_attendee_delete"),
+  ```
+- [ ] Public token routes (2, outside any `@login_required` group — place at the very end of urlpatterns):
+  ```python
+  path("event-invite/<str:token>/", views.event_invite, name="event_invite"),
+  path("event-ics/<str:token>/", views.event_ics, name="event_ics"),
+  ```
+- [ ] CommunicationLog CRUD routes (5):
+  ```python
+  path("comms/", views.communicationlog_list, name="communicationlog_list"),
+  path("comms/add/", views.communicationlog_create, name="communicationlog_create"),
+  path("comms/<int:pk>/", views.communicationlog_detail, name="communicationlog_detail"),
+  path("comms/<int:pk>/edit/", views.communicationlog_edit, name="communicationlog_edit"),
+  path("comms/<int:pk>/delete/", views.communicationlog_delete, name="communicationlog_delete"),
+  ```
+- [ ] Verify `app_name = "crm"` is set (already is; no change)
+- [ ] Full URL name inventory for 1.5: `crm:calendarevent_list`, `crm:calendarevent_create`, `crm:calendarevent_detail`, `crm:calendarevent_edit`, `crm:calendarevent_delete`, `crm:event_attendee_add`, `crm:event_attendee_delete`, `crm:event_invite`, `crm:event_ics`, `crm:communicationlog_list`, `crm:communicationlog_create`, `crm:communicationlog_detail`, `crm:communicationlog_edit`, `crm:communicationlog_delete`
+
+---
+
+## 5. Admin (`apps/crm/admin.py`)
+
+- [ ] Register `CalendarEvent` with `list_display = ["number","title","event_type","status","start","owner"]` and `list_filter = ["status","event_type","sync_source"]`
+- [ ] Register `EventAttendee` with `list_display = ["name","email","event","rsvp_status","is_organizer"]` and `list_filter = ["rsvp_status"]`
+- [ ] Register `CommunicationLog` with `list_display = ["number","channel","direction","subject","party","occurred_at"]` and `list_filter = ["channel","direction","logged_via"]`
+- [ ] `CrmTask` admin already registered; no structural change needed — new fields auto-appear in the default admin form unless `fields` is pinned
+
+---
+
+## 6. Templates (`templates/crm/activities/`)
+
+Conventions from existing task templates: `{% extends "base.html" %}`, filter bar uses `request.GET.*` comparisons (string fields — no `|slugify`; L11/Filter-Implementation-Rules), Actions column has eye/pencil/bin buttons, pagination uses `page_obj.window`, empty-state has an "Add" CTA, badge CSS classes match existing `.badge-*` pattern.
+
+### 6a. CalendarEvent templates
+
+- [ ] `templates/crm/activities/calendarevent/list.html`:
+  - Filter bar: status dropdown (iterate `status_choices`, `{% if request.GET.status == value %}selected{% endif %}`), event_type dropdown (iterate `type_choices`), text search input bound to `?q=`
+  - Table columns: Number, Title, Event Type, Start, Status, Owner, Actions
+  - Actions column: eye (detail), pencil (edit), bin (delete POST + `onclick="return confirm(...)"`+ `{% csrf_token %}`)
+  - Badges: status values `scheduled/confirmed/cancelled/completed` — use `obj.get_status_display` with `{% else %}` fallback
+  - Pagination: `page_obj.window` + prev/next links (L9 guard: `page_obj.has_previous`/`has_next`)
+  - Empty state: "No events yet. Schedule your first meeting." with link to `crm:calendarevent_create`
+- [ ] `templates/crm/activities/calendarevent/form.html`:
+  - `is_edit` context var (L7) drives `<h1>` label ("Add Calendar Event" vs "Edit Calendar Event") and back-button URL
+  - Fields: title, event_type, start, end, all_day, location, video_url, status, sync_source, reminder_minutes, owner, party, related_opportunity, related_case, description
+  - `public_token` not rendered (system-set, L20/L22)
+  - For datetime fields: use `<input type="datetime-local">` with Django widget
+- [ ] `templates/crm/activities/calendarevent/detail.html`:
+  - Event info: title, type, status, start/end, `event.duration_display`, all_day, location, video_url, sync_source, reminder_minutes, owner, party, opportunity, case, description
+  - `event.is_past` drives a "Past Event" badge
+  - Invite link: `{% url "crm:event_invite" token=event.public_token %}` — show as a copyable input (not a sidebar link; L32)
+  - ICS download: `{% url "crm:event_ics" token=event.public_token %}` — "Add to Calendar" button
+  - Attendees section (inline list): iterate `attendees`, show name/email/rsvp_status badge; "Add Attendee" form (`attendee_form` from context — L7) as a collapsed/inline form posting to `crm:event_attendee_add`; each attendee row has a delete POST button
+  - Actions sidebar: Edit (→ `crm:calendarevent_edit`), Delete POST (→ `crm:calendarevent_delete`), Back to List
+
+### 6b. CommunicationLog templates
+
+- [ ] `templates/crm/activities/communicationlog/list.html`:
+  - Filter bar: channel dropdown (`channel_choices`), direction dropdown (`direction_choices`), logged_via dropdown (`logged_via_choices`), text search `?q=`
+  - Table columns: Number, Channel, Direction, Subject, Party, Owner, Occurred At, Duration, Actions
+  - Badges: channel values `call/email/sms/note/meeting`; direction values `inbound/outbound`
+  - Duration column: show `obj.duration_display` for calls, blank for others
+  - Actions: eye/pencil/bin
+  - Pagination + empty state
+- [ ] `templates/crm/activities/communicationlog/form.html`:
+  - Fields: channel, direction, subject, body, party, owner, related_opportunity, related_case, occurred_at, duration_seconds, outcome, logged_via
+  - `email_message_id` not in form (L20/L22 — sync-only; system-populated in later pass)
+  - Outcome and duration_seconds: note in help text "for calls only"
+  - `is_edit` label + back-button
+- [ ] `templates/crm/activities/communicationlog/detail.html`:
+  - All fields displayed; `obj.duration_display` for calls; `obj.is_call` drives "Call Details" section visibility
+  - Actions sidebar: Edit, Delete POST, Back to List
+
+### 6c. Public invite page
+
+- [ ] `templates/crm/activities/event_invite.html`:
+  - Standalone: extends `base_auth.html` (same as `crm/service/case_public.html` — public page, no sidebar) OR `base.html` minimal (check what `case_public.html` extends and mirror it exactly)
+  - Show event title, type, start/end, location, video_url, organizer name
+  - Show current attendee list with RSVP badges
+  - RSVP form: `PublicRsvpForm` fields (name, email, rsvp_status) with `{% csrf_token %}`, POST to same URL
+  - "Add to Calendar" ICS link: `{% url "crm:event_ics" token=event.public_token %}`
+  - Success message after RSVP (Django messages or inline flag in context)
+  - NOTE: this page is NOT a sidebar entry (L32); it is linked from the CalendarEvent detail page
+
+### 6d. CrmTask templates — update existing
+
+- [ ] `templates/crm/activities/task/form.html` — add `recurrence`, `recurrence_interval`, `recurrence_until` fields; group as "Recurrence" fieldset (show/hide when recurrence != "none"); `related_case` FK dropdown
+- [ ] `templates/crm/activities/task/list.html` — verify no changes needed to filter bar (status/priority/type already there); recurrence badge is optional in the list (only if space allows)
+- [ ] `templates/crm/activities/task/detail.html` — add recurrence display fields (`recurrence`, `recurrence_interval`, `recurrence_until`); if `recurrence_parent` set, show "This is a recurring occurrence of [parent number]" link; if `recurrence_children.count() > 0`, show "Spawned occurrences" mini-list
+
+---
+
+## 7. Migration
+
+- [ ] Run `python manage.py makemigrations crm` — should produce one migration (next after `0012_…`) adding:
+  - `CrmTask`: 4 new fields (`recurrence`, `recurrence_interval`, `recurrence_until`, `recurrence_parent`, `related_case`) — note `recurrence_parent` is a self-FK on `CrmTask`
+  - New table `crm_calendarevent` (CalendarEvent)
+  - New table `crm_eventattendee` (EventAttendee)
+  - New table `crm_communicationlog` (CommunicationLog)
+- [ ] Run `python manage.py migrate` — migration must apply cleanly with no data loss (existing `CrmTask` rows get `recurrence="none"`, `recurrence_interval=1`, null dates, null FKs — all safe defaults)
+- [ ] Verify `python manage.py check` reports no issues
+
+---
+
+## 8. Seed (`apps/crm/management/commands/seed_crm.py`)
+
+Add a `_seed_activities(tenant, users, parties, opportunities)` helper function in `seed_crm.py`, called from `handle()` after `_seed_service` — **idempotent** (skip block if any `CalendarEvent.objects.filter(tenant=tenant).exists()`; separate skip guard for `CommunicationLog`; the CrmTask recurrence update is guarded by checking for an existing recurring task).
+
+- [ ] Add idempotency guard: `if CalendarEvent.objects.filter(tenant=tenant).exists(): print("Activities already seeded."); return` at top of `_seed_activities`
+- [ ] Create 1 recurring CrmTask from existing seeded tasks data:
+  - Find any existing `CrmTask` for the tenant with `status="open"` (from prior seed); update it to set `recurrence="weekly", recurrence_interval=1, recurrence_until=(date.today() + timedelta(days=90))`
+  - OR create a new one: `CrmTask.objects.get_or_create(tenant=tenant, subject="Weekly Check-In Call", defaults={...recurrence fields...})`
+  - Do NOT call `.save()` on the task in a way that triggers spawn logic during seeding (set `status="open"` so the done→spawn path is not triggered)
+- [ ] Create 1 spawned occurrence manually (simulate the spawn for demo data):
+  - Use `CrmTask.objects.filter(tenant=tenant, subject="Weekly Check-In Call").first()` as parent
+  - Create child: `CrmTask.objects.get_or_create(tenant=tenant, subject="Weekly Check-In Call", due_date=<next_week>, defaults={"recurrence":"weekly","recurrence_interval":1,"recurrence_parent":parent_task,...})`
+- [ ] Create ~4 CalendarEvents with `get_or_create` keyed on `(tenant, title)` — check by number pattern is NOT needed here because CalendarEvent has no `unique_together(tenant, title)`, so use title as the uniqueness key for seeding:
+  ```
+  EVT-1: "Kickoff Meeting with Acme" — type=meeting, status=confirmed, start=now()+2days, owner=users[0], party=parties[0]
+  EVT-2: "Product Demo for GlobalEx" — type=demo, status=scheduled, start=now()+7days, owner=users[0], party=parties[1]
+  EVT-3: "Quarterly Business Review" — type=meeting, status=completed, start=now()-14days, owner=users[0]
+  EVT-4: "Follow-Up Call — Acme" — type=call, status=scheduled, start=now()+3days, owner=users[0], party=parties[0]
+  ```
+  IMPORTANT: use `get_or_create(tenant=tenant, title=<title>, defaults={...})` — do NOT use bare `.create()` (idempotency rule)
+- [ ] Create 2–3 EventAttendees per event using `update_or_create(event=evt, email=<email>, defaults={...})` (dedup on event+email per `unique_together`):
+  - Attendee 1 per event: `is_organizer=True, name=owner.get_full_name(), email=owner.email, rsvp_status="accepted"`
+  - Attendee 2 per event: `name=party.name, email="contact@example.com", rsvp_status="no_response"` (external guest)
+  - Attendee 3 on EVT-1 only: a second contact from parties[1], `rsvp_status="tentative"`
+- [ ] Create ~6 CommunicationLogs with `get_or_create` keyed on `(tenant, subject, occurred_at)` — use approximate timestamps to avoid collision:
+  ```
+  COM-1: channel=call, direction=outbound, subject="Cold Call — Acme Corp", outcome=connected, duration_seconds=243, party=parties[0], owner=users[0], occurred_at=now()-5days
+  COM-2: channel=call, direction=outbound, subject="Follow-Up Call — GlobalEx", outcome=voicemail, duration_seconds=0, party=parties[1], owner=users[0], occurred_at=now()-3days
+  COM-3: channel=email, direction=outbound, subject="Proposal Sent — Acme Corp", body="Please find attached...", party=parties[0], owner=users[0], logged_via=bcc_dropbox, occurred_at=now()-4days
+  COM-4: channel=email, direction=inbound, subject="Re: Proposal — Acme Corp", body="Thanks, looks good...", party=parties[0], owner=users[0], logged_via=bcc_dropbox, occurred_at=now()-3days
+  COM-5: channel=note, subject="Meeting Notes — Kickoff", body="Discussed Q3 roadmap...", party=parties[0], owner=users[0], occurred_at=now()-14days
+  COM-6: channel=sms, direction=outbound, subject="Reminder: Demo Tomorrow", party=parties[1], owner=users[0], occurred_at=now()-6days
+  ```
+- [ ] Print summary: `"Activities seeded: {len(events)} events, {len(logs)} comms logs"`
+
+---
+
+## 9. Wire-up
+
+- [ ] `apps/core/navigation.py` — rewrite `LIVE_LINKS["1.5"]` from the current 1-bullet mapping to 3-bullet mapping:
+  ```python
+  "1.5": {
+      "Task Management": "crm:task_list",                      # bullet — to-dos w/ due dates & priorities, automated recurring tasks
+      "Calendar Integration": "crm:calendarevent_list",        # bullet — meeting scheduling, invite links, two-way sync
+      "Email & Call Integration": "crm:communicationlog_list", # bullet — email sync via BCC dropbox, automatic call logging
+  },
+  ```
+  - Bullet labels must match **exact** NavERP.md `**Feature**` text (the parser matches on these)
+  - L32 reminder: `event_invite`/`event_ics` are public token-gated pages — they are NOT sidebar targets; staff links to them from the CalendarEvent detail page only
+- [ ] Verify no `config/settings.py` or `config/urls.py` changes needed (existing `apps.crm` + `crm/` include already wired)
+
+---
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations crm` — no drift, one migration file generated
+- [ ] `python manage.py migrate` — applies cleanly
+- [ ] `python manage.py seed_crm` — runs without error; prints activities seed summary
+- [ ] `python manage.py seed_crm` a **second time** — idempotent: prints "Activities already seeded." and exits without duplicate rows or IntegrityError
+- [ ] `python manage.py check` — zero issues
+- [ ] Smoke script `temp/smoke_activities.py` — write a throwaway script (`force_login(admin_acme)`):
+  - GET `crm:calendarevent_list` → 200, contains a seeded event title
+  - GET `crm:calendarevent_create` → 200, form renders
+  - GET `crm:calendarevent_detail` (sampled pk) → 200, attendees section present
+  - GET `crm:calendarevent_edit` (same pk) → 200, form pre-filled
+  - POST `crm:calendarevent_delete` (same pk) → 302
+  - GET `crm:communicationlog_list` → 200, contains a seeded COM number
+  - GET `crm:communicationlog_create` → 200
+  - GET `crm:communicationlog_detail` (sampled pk) → 200
+  - GET `crm:communicationlog_edit` (sampled pk) → 200
+  - GET `crm:event_invite` (a seeded event's public_token) → 200 (no login required)
+  - GET `crm:event_ics` (same token) → 200, content-type `text/calendar`
+  - No `{#` or `{% comment` leaks in any response body
+  - Cross-tenant IDOR: `admin_globex` GET `crm:calendarevent_detail` with Acme pk → 404
+  - Cross-tenant IDOR: `admin_globex` GET `crm:communicationlog_detail` with Acme pk → 404
+- [ ] Human sidebar pass (L30/L32):
+  - Log in as `admin_acme` (tenant admin, not the global `admin` superuser)
+  - Sidebar sub-module "1.5 Activity & Communication Management" shows 3 bullets, all Live (not "Soon")
+  - "Task Management" → `crm:task_list` → 200
+  - "Calendar Integration" → `crm:calendarevent_list` → 200
+  - "Email & Call Integration" → `crm:communicationlog_list` → 200
+  - None of the 3 bullets points at the public invite page (L32: sidebar bullets → staff-reachable pages only)
+- [ ] `pytest` — existing 1178 CRM tests pass; new tests from test-writer step will add to this count
+
+---
+
+## 11. Close-out
+
+- [ ] `code-reviewer` agent — apply findings, one file per commit
+- [ ] `explorer` agent — apply findings, one file per commit
+- [ ] `frontend-reviewer` agent — apply findings, one file per commit
+- [ ] `performance-reviewer` agent — apply findings (likely: `.select_related` on list querysets, `.defer("body"/"description")` on list pages, `(tenant, occurred_at)` index review); one file per commit
+- [ ] `qa-smoke-tester` agent — apply findings, one file per commit
+- [ ] `security-reviewer` agent — apply findings; expected areas: public RSVP POST (unauthenticated write — add `# WARNING` rate-limit note), `event_ics` response headers, `email_message_id` dedup guard; one file per commit
+- [ ] `test-writer` agent — apply output; expected: `tests/test_activities.py` covering CalendarEvent/EventAttendee/CommunicationLog CRUD + recurrence spawn logic + public token views; one file per commit
+- [ ] Update `.claude/skills/crm/SKILL.md` — add §1.5 models (CrmTask recurrence fields, CalendarEvent, EventAttendee, CommunicationLog), URL names, templates, seeder additions, LIVE_LINKS["1.5"] rewrite → commit
+
+---
+
+## 12. Later passes / deferred
+
+- **OAuth calendar push (Google/Outlook two-way sync)** — `CalendarEvent.sync_source` and `external_uid` (not in this pass — add `external_uid CharField` in a later migration) store provenance; actual event push/pull via Google Calendar API or MS Graph API is an external OAuth integration deferred to a later pass
+- **Live email send/receive engine (BCC dropbox)** — `logged_via=bcc_dropbox` and `email_message_id` fields are ready; the mail-receive webhook and SMTP handler are integration/later
+- **Email open/click tracking pixels** — `opened_at`/`clicked_at` fields from the research are not in this pass's scope; add in a later migration when the email send engine ships
+- **VoIP dialer integration (Twilio/Aircall)** — `duration_seconds`, `outcome`, `logged_via=voip` fields are modeled; real-time call webhook handler is deferred
+- **Call recording URL** — `recording_url URLField` from the research is deferred (add to CommunicationLog in a later migration with the VoIP integration)
+- **AI call transcription / sentiment** — `sentiment CharField` and `notes TextField` from the research are deferred to the VoIP/AI pass
+- **Round-robin meeting scheduling** — CalendarEvent.booking_token foundation exists (as `public_token`); availability-slot picking and round-robin distribution is a later feature
+- **Email sequence / cadence engine** — `CrmTask.recurrence` + `CommunicationLog` provide the data foundation; multi-step automated outreach sequences are a separate sub-module (1.10 already has WorkflowRule)
+- **Business-hours calendar for SLA / recurring task due calculation** — Zoho business-day adjustment on recurring tasks is deferred alongside the SLA policy business-hours calendar already deferred in 1.4
+- **Bulk recurring task creation across multiple records** — Zoho cross-record recurrence; single-record ships first in this pass
+- **SMS gateway send** — `channel=sms` is modeled for logging; the send gateway (Twilio SMS) is integration/later
+
+---
+
+## 13. Review notes
+
+(To be filled in after the review-agent sequence completes.)
