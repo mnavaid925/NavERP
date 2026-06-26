@@ -1211,13 +1211,16 @@ class CrmTask(TenantNumbered):
                 self.completed_at = timezone.now()
         else:
             self.completed_at = None
-        super().save(*args, **kwargs)
-        # Automated recurring tasks: on the first transition into "done", spawn the next open
-        # occurrence. The transition guard (prev != done) prevents double-spawn on re-save and
-        # stops the spawned open child from recursing.
-        if (self.status == "done" and prev_status != "done"
-                and self.recurrence != "none" and self.due_date):
-            self._spawn_next_occurrence()
+        # Atomic: the parent write + the spawned next occurrence commit or roll back together,
+        # so a failed spawn never leaves a completed task with a broken recurrence chain.
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            # Automated recurring tasks: on the first transition into "done", spawn the next open
+            # occurrence. The transition guard (prev != done) prevents double-spawn on re-save and
+            # stops the spawned open child from recursing.
+            if (self.status == "done" and prev_status != "done"
+                    and self.recurrence != "none" and self.due_date):
+                self._spawn_next_occurrence()
 
     def _next_due(self):
         """Next occurrence's due date, advancing by ``recurrence_interval`` units. Stdlib only —
@@ -1242,9 +1245,10 @@ class CrmTask(TenantNumbered):
         if self.recurrence_until and next_due > self.recurrence_until:
             return  # the series has ended
         origin = self.recurrence_parent or self
-        # Idempotent: never create a duplicate occurrence at the same next due date.
+        # Idempotent: never create a duplicate occurrence at the same next due date. (self can't
+        # match — its own due_date is the current value, not next_due — so no self-exclude needed.)
         if CrmTask.objects.filter(tenant=self.tenant, recurrence_parent=origin,
-                                  due_date=next_due).exclude(pk=self.pk).exists():
+                                  due_date=next_due).exists():
             return
         CrmTask.objects.create(
             tenant=self.tenant, subject=self.subject, type=self.type,
