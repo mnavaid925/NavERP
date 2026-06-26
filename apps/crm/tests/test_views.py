@@ -279,6 +279,7 @@ class TestCampaignCreateView:
         resp = client_a.post(reverse("crm:campaign_create"), {
             "name": "Summer Campaign",
             "type": "webinar",
+            "objective": "lead_gen",
             "status": "planned",
             "budget_planned": "500.00",
             "budget_actual": "0.00",
@@ -301,6 +302,7 @@ class TestCampaignEditView:
         resp = client_a.post(reverse("crm:campaign_edit", args=[campaign_a.pk]), {
             "name": "Updated Promo",
             "type": "social",
+            "objective": "lead_gen",
             "status": "active",
             "budget_planned": "3000.00",
             "budget_actual": "0.00",
