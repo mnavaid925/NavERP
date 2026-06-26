@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:landingpage_list' %}">Landing Pages</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'published' %}
+        <a href="{% url 'crm:landing_public' obj.public_token %}" target="_blank" rel="noopener" class="btn btn-outline"><i data-lucide="external-link"></i> View public page</a>
+      {% endif %}
+      <a href="{% url 'crm:landingpage_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:landingpage_delete' obj.pk %}" onsubmit="return confirm('Delete this landing page?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Campaign</dt><dd>{% if obj.campaign %}<a href="{% url 'crm:campaign_detail' obj.campaign.pk %}">{{ obj.campaign.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'published' %}green{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Headline</dt><dd>{{ obj.headline }}</dd></div>
+      <div class="detail-item"><dt>Subheadline</dt><dd>{{ obj.subheadline|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>CTA label</dt><dd>{{ obj.cta_label }}</dd></div>
+      <div class="detail-item"><dt>Capture fields</dt><dd>Name, Email{% if obj.capture_phone %}, Phone{% endif %}{% if obj.capture_company %}, Company{% endif %}{% if obj.capture_message %}, Message{% endif %}</dd></div>
+      <div class="detail-item"><dt>Lead source</dt><dd>{{ obj.get_lead_source_display }}</dd></div>
+      <div class="detail-item"><dt>Routing owner</dt><dd>{% if obj.routing_owner %}{{ obj.routing_owner.get_full_name|default:obj.routing_owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Submissions</dt><dd>{{ obj.submission_count }}</dd></div>
+      <div class="detail-item"><dt>Public URL</dt><dd>{% if obj.status == 'published' %}<a href="{% url 'crm:landing_public' obj.public_token %}" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'crm:landing_public' obj.public_token %}</a>{% else %}<span class="badge badge-muted">Publish to activate</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.body %}<p style="margin-top:1rem;">{{ obj.body|linebreaks }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Submissions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Status</th><th>Received</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in submissions %}
+            <tr>
+              <td><a href="{% url 'crm:formsubmission_detail' s.pk %}" class="fw-600">{{ s.name }}</a></td>
+              <td>{{ s.email|default:"—" }}</td>
+              <td>{{ s.company|default:"—" }}</td>
+              <td><span class="badge badge-{% if s.status == 'converted' %}green{% elif s.status == 'routed' %}info{% elif s.status == 'spam' %}red{% else %}muted{% endif %}">{{ s.get_status_display }}</span></td>
+              <td>{{ s.created_at|date:"M d, Y" }}</td>
+              <td><a href="{% url 'crm:formsubmission_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><p>No submissions yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'crm:landingpage_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
