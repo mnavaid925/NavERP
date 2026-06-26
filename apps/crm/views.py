@@ -35,7 +35,14 @@ from .forms import (
     LandingPageForm,
     LeadForm,
     OpportunityForm,
+    OpportunitySplitForm,
+    PriceBookForm,
+    ProductForm,
     PublicLeadForm,
+    QuoteForm,
+    QuoteLineForm,
+    SalesQuotaForm,
+    TerritoryForm,
 )
 from .models import (
     INDUSTRY_CHOICES,
@@ -52,6 +59,13 @@ from .models import (
     LandingPage,
     Lead,
     Opportunity,
+    OpportunitySplit,
+    PriceBook,
+    Product,
+    Quote,
+    QuoteLine,
+    SalesQuota,
+    Territory,
 )
 
 
@@ -133,16 +147,26 @@ def lead_convert(request, pk):
     return redirect("crm:opportunity_detail", pk=opp.pk)
 
 
-# ============================================================= Opportunities (1.2)
+# ============================================================================
+# ===== 1.2 Sales Force Automation (recreated) ===============================
+# Opportunity Management (+ Kanban board + commission splits), Product Catalog &
+# Quoting (products / price books / quote builder), and Forecasting (quotas + dashboard).
+# ============================================================================
+
+# ------------------------------------------------------------ Opportunities (1.2)
 @login_required
 def opportunity_list(request):
     return crud_list(
-        request, Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner"),
+        request,
+        Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner", "territory"),
         "crm/sales/opportunity/list.html",
         search_fields=["name", "number"],
-        filters=[("stage", "stage", False), ("account", "account_id", True)],
+        filters=[("stage", "stage", False), ("forecast_category", "forecast_category", False),
+                 ("account", "account_id", True), ("territory", "territory_id", True)],
         extra_context={"stage_choices": Opportunity.STAGE_CHOICES,
-                       "accounts": Party.objects.filter(tenant=request.tenant, kind="organization").order_by("name")},
+                       "forecast_choices": Opportunity.FORECAST_CATEGORY_CHOICES,
+                       "accounts": Party.objects.filter(tenant=request.tenant, kind="organization").order_by("name"),
+                       "territories": Territory.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
     )
 
 
@@ -155,10 +179,18 @@ def opportunity_create(request):
 @login_required
 def opportunity_detail(request, pk):
     obj = get_object_or_404(
-        Opportunity.objects.select_related("account", "primary_contact", "owner", "source_lead", "campaign"),
+        Opportunity.objects.select_related(
+            "account", "primary_contact", "owner", "source_lead", "campaign", "territory"),
         pk=pk, tenant=request.tenant)
+    splits = OpportunitySplit.objects.filter(
+        tenant=request.tenant, opportunity=obj).select_related("user")
+    rev_total = splits.filter(split_type="revenue").aggregate(t=Sum("percentage"))["t"] or 0
     return render(request, "crm/sales/opportunity/detail.html", {
         "obj": obj,
+        "splits": splits,
+        "revenue_split_total": rev_total,
+        "split_form": OpportunitySplitForm(tenant=request.tenant),
+        "quotes": Quote.objects.filter(tenant=request.tenant, opportunity=obj).select_related("account")[:20],
         "tasks": CrmTask.objects.filter(
             tenant=request.tenant, related_opportunity=obj).select_related("owner")[:20],
     })
@@ -174,6 +206,414 @@ def opportunity_edit(request, pk):
 @require_POST
 def opportunity_delete(request, pk):
     return crud_delete(request, model=Opportunity, pk=pk, success_url="crm:opportunity_list")
+
+
+@login_required
+def opportunity_board(request):
+    """Kanban pipeline board — opportunities grouped into a column per stage with per-stage
+    count + amount totals (aggregated DB-side; each column previews its top deals)."""
+    base = Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner")
+    columns = []
+    for value, label in Opportunity.STAGE_CHOICES:
+        col = base.filter(stage=value)
+        agg = col.aggregate(c=Count("id"), total=Sum("amount"))
+        columns.append({
+            "value": value, "label": label,
+            "count": agg["c"] or 0, "total": agg["total"] or 0,
+            "opps": list(col.order_by("-amount")[:50]),
+        })
+    return render(request, "crm/sales/pipeline.html", {"columns": columns})
+
+
+# Forward-only stage flow used by the board's quick-advance button.
+_OPP_FLOW = ["prospecting", "qualification", "proposal", "negotiation", "closed_won"]
+
+
+@login_required
+@require_POST
+def opportunity_advance(request, pk):
+    """Advance an opportunity one stage along the win path (board/detail quick action)."""
+    opp = get_object_or_404(Opportunity, pk=pk, tenant=request.tenant)
+    if opp.stage in _OPP_FLOW and opp.stage != "closed_won":
+        opp.stage = _OPP_FLOW[_OPP_FLOW.index(opp.stage) + 1]
+        if opp.stage == "closed_won":
+            opp.probability = 100
+            opp.forecast_category = "closed"
+        opp.save()  # save() stamps stage_changed_at
+        write_audit_log(request.user, opp, "update", {"action": "advance", "stage": opp.stage})
+        messages.success(request, f"Advanced to {opp.get_stage_display()}.")
+    else:
+        messages.info(request, "This opportunity can't be advanced further.")
+    # Fixed destinations only (no user-controlled redirect → no open-redirect).
+    if request.POST.get("next") == "board":
+        return redirect("crm:opportunity_board")
+    return redirect("crm:opportunity_detail", pk=opp.pk)
+
+
+@login_required
+@require_POST
+def opportunitysplit_add(request, pk):
+    opp = get_object_or_404(Opportunity, pk=pk, tenant=request.tenant)
+    form = OpportunitySplitForm(request.POST, tenant=request.tenant)
+    if not form.is_valid():
+        messages.error(request, "Could not add split — check the fields.")
+        return redirect("crm:opportunity_detail", pk=opp.pk)
+    split = form.save(commit=False)
+    split.tenant = request.tenant
+    split.opportunity = opp
+    try:
+        split.clean()  # enforces revenue splits ≤ 100% across the opportunity
+    except ValidationError as e:
+        messages.error(request, "; ".join(e.messages))
+        return redirect("crm:opportunity_detail", pk=opp.pk)
+    split.save()
+    messages.success(request, "Split added.")
+    return redirect("crm:opportunity_detail", pk=opp.pk)
+
+
+@login_required
+@require_POST
+def opportunitysplit_remove(request, split_pk):
+    split = get_object_or_404(OpportunitySplit, pk=split_pk, tenant=request.tenant)
+    opp_id = split.opportunity_id
+    split.delete()
+    messages.success(request, "Split removed.")
+    return redirect("crm:opportunity_detail", pk=opp_id)
+
+
+# ------------------------------------------------------------ Territories (1.2)
+@login_required
+def territory_list(request):
+    return crud_list(
+        request,
+        Territory.objects.filter(tenant=request.tenant).select_related("parent", "manager"),
+        "crm/sales/territory/list.html",
+        search_fields=["number", "name", "region", "segment"],
+        filters=[("is_active", "is_active", False)],
+        extra_context={},
+    )
+
+
+@login_required
+def territory_create(request):
+    return crud_create(request, form_class=TerritoryForm, template="crm/sales/territory/form.html",
+                       success_url="crm:territory_list")
+
+
+@login_required
+def territory_detail(request, pk):
+    obj = get_object_or_404(Territory.objects.select_related("parent", "manager"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/sales/territory/detail.html", {
+        "obj": obj,
+        "children": Territory.objects.filter(tenant=request.tenant, parent=obj),
+        "opportunities": Opportunity.objects.filter(
+            tenant=request.tenant, territory=obj).select_related("account")[:20],
+    })
+
+
+@login_required
+def territory_edit(request, pk):
+    return crud_edit(request, model=Territory, pk=pk, form_class=TerritoryForm,
+                     template="crm/sales/territory/form.html", success_url="crm:territory_list")
+
+
+@login_required
+@require_POST
+def territory_delete(request, pk):
+    return crud_delete(request, model=Territory, pk=pk, success_url="crm:territory_list")
+
+
+# ------------------------------------------------------------ Products (1.2 catalog)
+@login_required
+def product_list(request):
+    return crud_list(
+        request,
+        Product.objects.filter(tenant=request.tenant),
+        "crm/sales/product/list.html",
+        search_fields=["number", "name", "sku"],
+        filters=[("product_type", "product_type", False), ("is_active", "is_active", False)],
+        extra_context={"type_choices": Product.TYPE_CHOICES},
+    )
+
+
+@login_required
+def product_create(request):
+    return crud_create(request, form_class=ProductForm, template="crm/sales/product/form.html",
+                       success_url="crm:product_list")
+
+
+@login_required
+def product_detail(request, pk):
+    obj = get_object_or_404(Product, pk=pk, tenant=request.tenant)
+    return render(request, "crm/sales/product/detail.html", {"obj": obj})
+
+
+@login_required
+def product_edit(request, pk):
+    return crud_edit(request, model=Product, pk=pk, form_class=ProductForm,
+                     template="crm/sales/product/form.html", success_url="crm:product_list")
+
+
+@login_required
+@require_POST
+def product_delete(request, pk):
+    return crud_delete(request, model=Product, pk=pk, success_url="crm:product_list")
+
+
+# ------------------------------------------------------------ Price books (1.2)
+@login_required
+def pricebook_list(request):
+    return crud_list(
+        request,
+        PriceBook.objects.filter(tenant=request.tenant),
+        "crm/sales/pricebook/list.html",
+        search_fields=["number", "name", "region", "tier"],
+        filters=[("is_active", "is_active", False)],
+        extra_context={},
+    )
+
+
+@login_required
+def pricebook_create(request):
+    return crud_create(request, form_class=PriceBookForm, template="crm/sales/pricebook/form.html",
+                       success_url="crm:pricebook_list")
+
+
+@login_required
+def pricebook_detail(request, pk):
+    obj = get_object_or_404(PriceBook, pk=pk, tenant=request.tenant)
+    return render(request, "crm/sales/pricebook/detail.html", {"obj": obj})
+
+
+@login_required
+def pricebook_edit(request, pk):
+    return crud_edit(request, model=PriceBook, pk=pk, form_class=PriceBookForm,
+                     template="crm/sales/pricebook/form.html", success_url="crm:pricebook_list")
+
+
+@login_required
+@require_POST
+def pricebook_delete(request, pk):
+    return crud_delete(request, model=PriceBook, pk=pk, success_url="crm:pricebook_list")
+
+
+# ------------------------------------------------------------ Quotes (1.2 quoting)
+@login_required
+def quote_list(request):
+    return crud_list(
+        request,
+        Quote.objects.filter(tenant=request.tenant).select_related("account", "opportunity", "owner"),
+        "crm/sales/quote/list.html",
+        search_fields=["number", "name", "account__name"],
+        filters=[("status", "status", False), ("opportunity", "opportunity_id", True)],
+        extra_context={"status_choices": Quote.STATUS_CHOICES,
+                       "opportunities": Opportunity.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
+    )
+
+
+@login_required
+def quote_create(request):
+    return crud_create(request, form_class=QuoteForm, template="crm/sales/quote/form.html",
+                       success_url="crm:quote_list")
+
+
+@login_required
+def quote_detail(request, pk):
+    obj = get_object_or_404(
+        Quote.objects.select_related("account", "opportunity", "price_book", "owner"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/sales/quote/detail.html", {
+        "obj": obj,
+        "lines": obj.lines.select_related("product"),
+        "line_form": QuoteLineForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def quote_edit(request, pk):
+    return crud_edit(request, model=Quote, pk=pk, form_class=QuoteForm,
+                     template="crm/sales/quote/form.html", success_url="crm:quote_list")
+
+
+@login_required
+@require_POST
+def quote_delete(request, pk):
+    return crud_delete(request, model=Quote, pk=pk, success_url="crm:quote_list")
+
+
+@login_required
+def quote_print(request, pk):
+    """Print-styled quote (login-gated — quotes carry pricing, so no public token endpoint)."""
+    obj = get_object_or_404(
+        Quote.objects.select_related("account", "opportunity", "price_book", "owner"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/sales/quote/print.html", {
+        "obj": obj, "lines": obj.lines.select_related("product")})
+
+
+@login_required
+@require_POST
+def quoteline_add(request, pk):
+    quote = get_object_or_404(Quote.objects.select_related("price_book"), pk=pk, tenant=request.tenant)
+    if quote.status not in Quote.OPEN_STATUSES:
+        messages.info(request, "Only a draft or sent quote can be edited.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    form = QuoteLineForm(request.POST, tenant=request.tenant)
+    if not form.is_valid():
+        messages.error(request, "Could not add line — check the fields.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    line = form.save(commit=False)
+    line.tenant = request.tenant
+    line.quote = quote
+    # Default price/desc/tax from the product, adjusted by the quote's price book.
+    if line.product_id:
+        if not line.unit_price:
+            base = line.product.unit_price
+            line.unit_price = quote.price_book.adjusted_price(base) if quote.price_book else base
+        if not line.tax_pct:
+            line.tax_pct = line.product.tax_pct
+        if not line.description:
+            line.description = line.product.name
+    line.order = quote.lines.count()
+    with transaction.atomic():
+        line.save()
+        quote.recalc_totals()
+    messages.success(request, "Line added.")
+    return redirect("crm:quote_detail", pk=quote.pk)
+
+
+@login_required
+@require_POST
+def quoteline_remove(request, line_pk):
+    line = get_object_or_404(QuoteLine.objects.select_related("quote"), pk=line_pk, tenant=request.tenant)
+    quote = line.quote
+    with transaction.atomic():
+        line.delete()
+        quote.recalc_totals()
+    messages.success(request, "Line removed.")
+    return redirect("crm:quote_detail", pk=quote.pk)
+
+
+@login_required
+@require_POST
+def quote_send(request, pk):
+    quote = get_object_or_404(Quote, pk=pk, tenant=request.tenant)
+    if quote.status != "draft":
+        messages.info(request, "Only a draft quote can be sent.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    quote.status = "sent"
+    quote.sent_at = timezone.now()
+    quote.save(update_fields=["status", "sent_at", "updated_at"])
+    write_audit_log(request.user, quote, "update", {"action": "send"})
+    messages.success(request, f"{quote.number} marked as sent.")
+    return redirect("crm:quote_detail", pk=quote.pk)
+
+
+@login_required
+@require_POST
+def quote_accept(request, pk):
+    quote = get_object_or_404(Quote, pk=pk, tenant=request.tenant)
+    if quote.status != "sent":
+        messages.info(request, "Only a sent quote can be accepted.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    quote.status = "accepted"
+    quote.accepted_at = timezone.now()
+    quote.save(update_fields=["status", "accepted_at", "updated_at"])
+    write_audit_log(request.user, quote, "update", {"action": "accept"})
+    messages.success(request, f"{quote.number} accepted.")
+    return redirect("crm:quote_detail", pk=quote.pk)
+
+
+@login_required
+@require_POST
+def quote_decline(request, pk):
+    quote = get_object_or_404(Quote, pk=pk, tenant=request.tenant)
+    if quote.status != "sent":
+        messages.info(request, "Only a sent quote can be declined.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    quote.status = "declined"
+    quote.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, quote, "update", {"action": "decline"})
+    messages.success(request, f"{quote.number} declined.")
+    return redirect("crm:quote_detail", pk=quote.pk)
+
+
+# ------------------------------------------------------------ Sales quotas (1.2)
+@login_required
+def salesquota_list(request):
+    return crud_list(
+        request,
+        SalesQuota.objects.filter(tenant=request.tenant).select_related("owner", "territory"),
+        "crm/sales/salesquota/list.html",
+        search_fields=["number", "owner__username", "territory__name"],
+        filters=[("period_type", "period_type", False), ("territory", "territory_id", True)],
+        extra_context={"period_choices": SalesQuota.PERIOD_CHOICES,
+                       "territories": Territory.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
+    )
+
+
+@login_required
+def salesquota_create(request):
+    return crud_create(request, form_class=SalesQuotaForm, template="crm/sales/salesquota/form.html",
+                       success_url="crm:salesquota_list")
+
+
+@login_required
+def salesquota_detail(request, pk):
+    obj = get_object_or_404(SalesQuota.objects.select_related("owner", "territory"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/sales/salesquota/detail.html", {"obj": obj})
+
+
+@login_required
+def salesquota_edit(request, pk):
+    return crud_edit(request, model=SalesQuota, pk=pk, form_class=SalesQuotaForm,
+                     template="crm/sales/salesquota/form.html", success_url="crm:salesquota_list")
+
+
+@login_required
+@require_POST
+def salesquota_delete(request, pk):
+    return crud_delete(request, model=SalesQuota, pk=pk, success_url="crm:salesquota_list")
+
+
+# ------------------------------------------------------------ Forecast dashboard (1.2)
+@login_required
+def forecast(request):
+    """Weighted-pipeline-by-forecast-category + quota-attainment dashboard (DB-side aggregates)."""
+    tenant = request.tenant
+    cats, quotas = [], []
+    totals = {"pipeline": 0, "weighted": 0, "won": 0, "target": 0}
+    if tenant is not None:
+        opps = Opportunity.objects.filter(tenant=tenant)
+        cat_display = dict(Opportunity.FORECAST_CATEGORY_CHOICES)
+        for r in opps.values("forecast_category").annotate(
+                count=Count("id"), total=Sum("amount"),
+                weighted=Sum(F("amount") * F("probability"),
+                             output_field=DecimalField(max_digits=18, decimal_places=2))
+        ).order_by("forecast_category"):
+            cats.append({"label": cat_display.get(r["forecast_category"], r["forecast_category"]),
+                         "count": r["count"], "total": r["total"] or 0,
+                         "weighted": (r["weighted"] or 0) / 100})
+        open_agg = opps.filter(stage__in=Opportunity.OPEN_STAGES).aggregate(
+            pipeline=Sum("amount"),
+            weighted=Sum(F("amount") * F("probability"),
+                         output_field=DecimalField(max_digits=18, decimal_places=2)))
+        totals["pipeline"] = open_agg["pipeline"] or 0
+        totals["weighted"] = (open_agg["weighted"] or 0) / 100
+        totals["won"] = opps.filter(stage="closed_won").aggregate(t=Sum("amount"))["t"] or 0
+        # Quota attainment: closed-won booked per owner (single grouped query → dict).
+        won_by_owner = dict(opps.filter(stage="closed_won").values_list("owner").annotate(t=Sum("amount")))
+        for q in SalesQuota.objects.filter(tenant=tenant).select_related("owner", "territory"):
+            attained = won_by_owner.get(q.owner_id, 0) or 0
+            target = q.target_amount or 0
+            totals["target"] += target
+            quotas.append({"q": q, "attained": attained,
+                           "pct": round(float(attained) / float(target) * 100) if target else 0})
+    return render(request, "crm/sales/forecast.html", {
+        "cats": cats, "quotas": quotas, "totals": totals,
+        "chart_labels": [c["label"] for c in cats],
+        "chart_data": [float(c["total"]) for c in cats],
+    })
 
 
 # ============================================================================
