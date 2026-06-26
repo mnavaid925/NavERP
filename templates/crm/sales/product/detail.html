@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:product_list' %}">Products</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:product_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:product_delete' obj.pk %}" onsubmit="return confirm('Delete this product?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>SKU</dt><dd>{{ obj.sku|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_product_type_display }}</dd></div>
+      <div class="detail-item"><dt>Unit price</dt><dd>{{ obj.unit_price }}</dd></div>
+      <div class="detail-item"><dt>Cost</dt><dd>{{ obj.cost }}</dd></div>
+      <div class="detail-item"><dt>Margin</dt><dd>{% if obj.margin_pct is not None %}{{ obj.margin_pct|floatformat:1 }}%{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Tax %</dt><dd>{{ obj.tax_pct }}%</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'crm:product_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
