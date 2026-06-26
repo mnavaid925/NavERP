@@ -496,6 +496,10 @@ def quoteline_remove(request, line_pk):
     return redirect("crm:quote_detail", pk=quote.pk)
 
 
+# Quote send/accept/decline + opportunity_advance stay @login_required (NOT @tenant_admin_required):
+# pipeline progression is day-to-day rep work (cf. Salesforce/HubSpot deal ownership). The
+# tenant-admin gate in this codebase is reserved for financial posting / workspace config. All
+# transitions are audit-logged.
 @login_required
 @require_POST
 def quote_send(request, pk):
