@@ -14,7 +14,7 @@
 
   <div style="display:flex; gap:1rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
     {% for col in columns %}
-      <div style="flex:0 0 280px; background:var(--surface-2,#f3f4f6); border-radius:.6rem; padding:.75rem;">
+      <div style="flex:0 0 280px; background:var(--page-bg); border-radius:var(--radius); padding:.75rem;">
         <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:.5rem;">
           <strong>{{ col.label }}</strong>
           <span class="badge badge-muted">{{ col.count }}</span>
@@ -30,7 +30,7 @@
               <form method="post" action="{% url 'crm:opportunity_advance' opp.pk %}" style="margin-top:.4rem;">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="board">
-                <button class="btn btn-outline" type="submit" style="padding:.2rem .5rem; font-size:.78rem;"><i data-lucide="chevrons-right"></i> Advance</button>
+                <button class="btn btn-sm btn-outline" type="submit"><i data-lucide="chevrons-right"></i> Advance</button>
               </form>
             {% endif %}
           </div></div>
