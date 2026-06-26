@@ -25,7 +25,9 @@ from apps.hrm.models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    JobDescriptionTemplate,
     JobGrade,
+    JobRequisition,
     LeaveAllocation,
     LeaveRequest,
     LeaveType,
@@ -36,6 +38,7 @@ from apps.hrm.models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    RequisitionApproval,
     SeparationCase,
     Shift,
     ShiftAssignment,
@@ -143,6 +146,7 @@ class Command(BaseCommand):
             self._seed_onboarding(tenant, flush=options["flush"])
             self._seed_offboarding(tenant, flush=options["flush"])
             self._seed_employee_records(tenant, flush=options["flush"])
+            self._seed_job_requisition(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -632,3 +636,104 @@ class Command(BaseCommand):
                 days.append(cur)
             cur -= datetime.timedelta(days=1)
         return days
+
+    @transaction.atomic
+    def _seed_job_requisition(self, tenant, *, flush):
+        """Seed 3.5 Job Requisition demo data — 2 JD templates + 3 requisitions across the lifecycle
+        (one posted, one draft, one approved-with-chain). Reuses the already-seeded designations /
+        employees / department OrgUnit. Guarded independently (its own JobRequisition existence
+        check) so a tenant whose employees already exist still gets recruiting data."""
+        if flush:
+            RequisitionApproval.objects.filter(tenant=tenant).delete()
+            JobRequisition.objects.filter(tenant=tenant).delete()
+            JobDescriptionTemplate.objects.filter(tenant=tenant).delete()
+        if JobRequisition.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Job requisitions already exist for '{tenant.name}'. Use --flush to re-seed."))
+            return
+        designations = list(Designation.objects.filter(tenant=tenant).order_by("created_at"))
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant)
+                         .select_related("party").order_by("created_at"))
+        if not designations or not employees:
+            self.stdout.write(self.style.WARNING(
+                f"No designations/employees for '{tenant.name}' — skipping job requisitions."))
+            return
+        dept = OrgUnit.objects.filter(tenant=tenant, kind="department").first()
+        cost_center = OrgUnit.objects.filter(tenant=tenant, kind="cost_center").first()
+        today = timezone.localdate()
+
+        def desig(i):
+            return designations[i] if len(designations) > i else designations[0]
+
+        def emp(i):
+            return employees[i] if len(employees) > i else employees[0]
+
+        # --- 2 reusable JD templates (idempotent via tenant+name get_or_create) ---
+        tmpl1, _ = JobDescriptionTemplate.objects.get_or_create(
+            tenant=tenant, name="Software Engineer — Backend",
+            defaults={
+                "designation": desig(0), "employment_type": "full_time",
+                "jd_summary": "Build and maintain scalable backend services.",
+                "jd_responsibilities": "- Design REST APIs\n- Write unit tests\n- Review code",
+                "jd_requirements": "- 3+ years Python/Django\n- Strong SQL fundamentals",
+                "jd_nice_to_have": "- Experience with Docker / Kubernetes",
+            })
+        tmpl2, _ = JobDescriptionTemplate.objects.get_or_create(
+            tenant=tenant, name="Engineering Manager",
+            defaults={
+                "designation": desig(2), "employment_type": "full_time",
+                "jd_summary": "Lead a team of 5–8 engineers and own delivery.",
+                "jd_responsibilities": "- Define the roadmap\n- Run 1:1s\n- Hire and grow talent",
+                "jd_requirements": "- 5+ years engineering\n- 2+ years people management",
+                "jd_nice_to_have": "- MBA or advanced degree",
+            })
+
+        # --- 3 requisitions across the lifecycle (TenantNumbered → save(), never bulk_create) ---
+        req_specs = [
+            {"title": "Senior Python Developer", "designation": desig(1), "headcount": 2,
+             "req_type": "standard", "reason_for_hire": "new_headcount", "posting_type": "external",
+             "priority": "high", "salary_min": Decimal("90000"), "salary_max": Decimal("130000"),
+             "estimated_annual_cost": Decimal("150000"), "template": tmpl1,
+             "jd_summary": tmpl1.jd_summary, "jd_responsibilities": tmpl1.jd_responsibilities,
+             "jd_requirements": tmpl1.jd_requirements, "jd_nice_to_have": tmpl1.jd_nice_to_have,
+             "target_start_date": today + datetime.timedelta(days=45), "status": "posted",
+             "posted_at": timezone.now()},
+            {"title": "Junior Software Engineer", "designation": desig(0), "headcount": 1,
+             "req_type": "backfill", "reason_for_hire": "backfill", "posting_type": "both",
+             "priority": "medium", "salary_min": Decimal("60000"), "salary_max": Decimal("85000"),
+             "target_start_date": today + datetime.timedelta(days=60), "status": "draft"},
+            {"title": "Engineering Manager", "designation": desig(2), "headcount": 1,
+             "req_type": "standard", "reason_for_hire": "new_headcount", "posting_type": "external",
+             "priority": "urgent", "salary_min": Decimal("130000"), "salary_max": Decimal("180000"),
+             "estimated_annual_cost": Decimal("205000"), "template": tmpl2,
+             "jd_summary": tmpl2.jd_summary, "jd_responsibilities": tmpl2.jd_responsibilities,
+             "jd_requirements": tmpl2.jd_requirements, "jd_nice_to_have": tmpl2.jd_nice_to_have,
+             "target_start_date": today + datetime.timedelta(days=30), "status": "approved",
+             "approved_at": timezone.now()},
+        ]
+        reqs = []
+        for spec in req_specs:
+            jr = JobRequisition(
+                tenant=tenant, department=dept, cost_center=cost_center, location="Head Office",
+                employment_type="full_time", salary_currency="USD",
+                hiring_manager=emp(0), recruiter=emp(1), **spec)
+            jr.save()
+            reqs.append(jr)
+
+        # --- A fully-approved 2-step chain on the approved requisition (demonstrates the audit trail) ---
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        approved_req = reqs[2]
+        RequisitionApproval.objects.bulk_create([
+            RequisitionApproval(tenant=tenant, requisition=approved_req, step_order=1,
+                                approver=actor, approver_role="hr", status="approved",
+                                decided_by=actor, decided_at=timezone.now()),
+            RequisitionApproval(tenant=tenant, requisition=approved_req, step_order=2,
+                                approver=actor, approver_role="executive", status="approved",
+                                decided_by=actor, decided_at=timezone.now()),
+        ])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Job requisitions seeded for '{tenant.name}': "
+            f"{JobDescriptionTemplate.objects.filter(tenant=tenant).count()} templates, "
+            f"{JobRequisition.objects.filter(tenant=tenant).count()} requisitions, "
+            f"{RequisitionApproval.objects.filter(tenant=tenant).count()} approval step(s)."))
