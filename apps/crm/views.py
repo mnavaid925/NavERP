@@ -1613,6 +1613,14 @@ def event_ics(request, token):
         return (str(text or "").replace("\\", "\\\\").replace(";", "\\;")
                 .replace(",", "\\,").replace("\n", "\\n"))
 
+    def _fold(line):  # RFC 5545 §3.1: fold content lines >75 octets (continuation = leading space)
+        if len(line) <= 74:
+            return line
+        out = [line[:74]]
+        for i in range(74, len(line), 73):
+            out.append(line[i:i + 73])
+        return "\r\n ".join(out)
+
     end = event.end or event.start
     lines = [
         "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//NavERP//CRM 1.5//EN",
@@ -1627,7 +1635,8 @@ def event_ics(request, token):
         f"STATUS:{'CANCELLED' if event.status == 'cancelled' else 'CONFIRMED'}",
         "END:VEVENT", "END:VCALENDAR",
     ]
-    resp = HttpResponse("\r\n".join(lines) + "\r\n", content_type="text/calendar; charset=utf-8")
+    resp = HttpResponse("\r\n".join(_fold(ln) for ln in lines) + "\r\n",
+                        content_type="text/calendar; charset=utf-8")
     resp["Content-Disposition"] = f'attachment; filename="{event.number}.ics"'
     return resp
 
