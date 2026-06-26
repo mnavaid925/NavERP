@@ -2352,7 +2352,7 @@ def jobdescriptiontemplate_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # the shared JD template library is HR-config — admin-managed
 def jobdescriptiontemplate_create(request):
     return crud_create(request, form_class=JobDescriptionTemplateForm,
                        template="hrm/recruitment/jobdescriptiontemplate/form.html",
@@ -2369,7 +2369,7 @@ def jobdescriptiontemplate_detail(request, pk):
                   {"obj": obj, "linked_reqs": linked_reqs})
 
 
-@login_required
+@tenant_admin_required  # the shared JD template library is HR-config — admin-managed
 def jobdescriptiontemplate_edit(request, pk):
     return crud_edit(request, model=JobDescriptionTemplate, pk=pk,
                      form_class=JobDescriptionTemplateForm,
@@ -2377,7 +2377,7 @@ def jobdescriptiontemplate_edit(request, pk):
                      success_url="hrm:jobdescriptiontemplate_list")
 
 
-@login_required
+@tenant_admin_required  # the shared JD template library is HR-config — admin-managed
 @require_POST
 def jobdescriptiontemplate_delete(request, pk):
     obj = get_object_or_404(JobDescriptionTemplate, pk=pk, tenant=request.tenant)
@@ -2414,7 +2414,7 @@ def jobrequisition_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # a requisition authorizes headcount + budget — authoritative HR record
 def jobrequisition_create(request):
     # Custom create (not crud_create) so the "Save & Apply Template" button can copy the selected
     # template's JD body onto the new requisition in the same request.
@@ -2462,6 +2462,7 @@ def jobrequisition_detail(request, pk):
         "approval_progress": approval_progress,
         "current_step": current_step,
         "approval_form": RequisitionApprovalForm(tenant=request.tenant),
+        "is_hr_admin": _is_hr_admin(request.user),  # gates the admin-only action UI in the template
         "jd_templates": JobDescriptionTemplate.objects.filter(tenant=request.tenant, is_active=True)
         .only("id", "name").order_by("name"),  # dropdown uses pk+name only (skip the jd_* TEXT cols)
         "can_submit": obj.status in ("draft", "rejected"),
@@ -2474,7 +2475,7 @@ def jobrequisition_detail(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required  # a requisition authorizes headcount + budget — authoritative HR record
 def jobrequisition_edit(request, pk):
     obj = get_object_or_404(JobRequisition, pk=pk, tenant=request.tenant)
     # Only a draft or rejected req is editable — once it's in the approval flow its terms are locked.
@@ -2486,7 +2487,7 @@ def jobrequisition_edit(request, pk):
                      success_url="hrm:jobrequisition_list")
 
 
-@login_required
+@tenant_admin_required  # a requisition authorizes headcount + budget — authoritative HR record
 @require_POST
 def jobrequisition_delete(request, pk):
     obj = get_object_or_404(JobRequisition, pk=pk, tenant=request.tenant)
@@ -2731,7 +2732,7 @@ _JR_CLONE_PLAIN_FIELDS = ["title", "location", "headcount", "req_type", "employm
                           "jd_nice_to_have", "notes"]
 
 
-@login_required
+@tenant_admin_required  # cloning creates a new requisition — authoritative HR record
 @require_POST
 def jobrequisition_clone(request, pk):
     if request.tenant is None:
