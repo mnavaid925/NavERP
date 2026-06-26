@@ -17,6 +17,7 @@ from .models import (
     LeaveAllocation,
     LeaveRequest,
     OnboardingTask,
+    RequisitionApproval,
 )
 
 
@@ -134,3 +135,47 @@ def compute_leave_encashment(employee):
     amount = ((days * (basic_salary / Decimal("30"))).quantize(Decimal("0.01"))
               if basic_salary else ZERO)
     return days, amount
+
+
+# --------------------------------------------------------------------------- 3.5 Job Requisition
+
+# Default sequential approval chain raised for a requisition on submission when no steps were
+# added manually: (step_order, approver_role). Approver is left null (assigned later / overridden
+# by a tenant admin). Mirrors the ``generate_clearance_checklist`` idempotency contract.
+_DEFAULT_APPROVAL_CHAIN = [
+    (1, "hr"),
+    (2, "executive"),
+]
+
+
+def generate_approval_chain(requisition):
+    """Create the default sequential approval steps for a ``JobRequisition``. Idempotent — if the
+    requisition already has any approval rows, the existing chain is returned untouched (a tenant
+    may have added custom steps before submitting). Returns the full list of approval rows.
+
+    Shared by ``views.jobrequisition_submit`` and the seeder so both build the same chain.
+    """
+    existing = list(requisition.approvals.order_by("step_order"))
+    if existing:
+        return existing
+    to_create = [
+        RequisitionApproval(tenant=requisition.tenant, requisition=requisition,
+                            step_order=order, approver_role=role, status="pending")
+        for order, role in _DEFAULT_APPROVAL_CHAIN
+    ]
+    RequisitionApproval.objects.bulk_create(to_create)
+    return list(requisition.approvals.order_by("step_order"))
+
+
+def apply_template_to_requisition(requisition, template):
+    """Copy a ``JobDescriptionTemplate``'s JD body onto a requisition (copy-on-apply). Overwrites
+    the four ``jd_*`` fields and records which template was applied; deliberately does NOT touch
+    ``employment_type`` (the requisition owns its own value). Request-free so the seeder/tests can
+    call it. Persists with an explicit ``update_fields`` (keeps ``updated_at`` fresh)."""
+    requisition.jd_summary = template.jd_summary
+    requisition.jd_responsibilities = template.jd_responsibilities
+    requisition.jd_requirements = template.jd_requirements
+    requisition.jd_nice_to_have = template.jd_nice_to_have
+    requisition.template = template
+    requisition.save(update_fields=["jd_summary", "jd_responsibilities", "jd_requirements",
+                                    "jd_nice_to_have", "template", "updated_at"])
