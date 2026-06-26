@@ -401,9 +401,10 @@ class LandingPage(TenantNumbered):
         return self.status == "published"
 
     def save(self, *args, **kwargs):
-        # Unguessable public URL key — generated once, never user-editable.
+        # Unguessable public URL key — 256-bit, generated once, never user-editable
+        # (matches the project-wide token convention: SignerRecord/UserInvite use token_urlsafe(32)).
         if not self.public_token:
-            self.public_token = secrets.token_urlsafe(16)
+            self.public_token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
 
     def __str__(self):
