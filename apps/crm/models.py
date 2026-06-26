@@ -7,6 +7,7 @@ number (LEAD-/OPP-/CAM-/CASE-/KB-/TASK-) assigned in ``save()`` via the shared
 ``apps.core.utils.next_number`` helper, with the retry-on-collision pattern proven in
 ``tenants.SubscriptionInvoice``.
 """
+import calendar
 import secrets
 from datetime import timedelta
 from decimal import Decimal
@@ -1142,7 +1143,8 @@ class CustomerPortalAccess(TenantNumbered):
 
 
 class CrmTask(TenantNumbered):
-    """A to-do / call / follow-up (1.5). ``completed_at`` is system-set on done."""
+    """A to-do / call / follow-up (1.5). ``completed_at`` is system-set on done. Recurring tasks
+    spawn the next open occurrence when completed (see ``_spawn_next_occurrence``)."""
 
     NUMBER_PREFIX = "TASK"
 
@@ -1160,6 +1162,12 @@ class CrmTask(TenantNumbered):
         ("done", "Done"),
         ("cancelled", "Cancelled"),
     ]
+    RECURRENCE_CHOICES = [
+        ("none", "Does Not Repeat"),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+    ]
     OPEN_STATUSES = ["open", "in_progress"]
 
     subject = models.CharField(max_length=255)
@@ -1170,8 +1178,15 @@ class CrmTask(TenantNumbered):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_tasks")
     party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_tasks")
     related_opportunity = models.ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="tasks")
+    related_case = models.ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_tasks")
     description = models.TextField(blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)  # system-set
+    # ---- Automated recurring tasks (1.5) ----------------------------------------------------
+    recurrence = models.CharField(max_length=10, choices=RECURRENCE_CHOICES, default="none")
+    recurrence_interval = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])  # "every N"
+    recurrence_until = models.DateField(null=True, blank=True)  # optional series end date
+    # System-set: links a spawned occurrence back to the series origin (never on the form).
+    recurrence_parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="recurrence_children")
 
     class Meta:
         ordering = ["due_date", "-created_at"]
@@ -1187,6 +1202,9 @@ class CrmTask(TenantNumbered):
                     and self.due_date < timezone.localdate())
 
     def save(self, *args, **kwargs):
+        # Detect the open→done transition (drives recurrence spawn) before writing.
+        prev_status = (type(self).objects.filter(pk=self.pk)
+                       .values_list("status", flat=True).first()) if self.pk else None
         # System-set completed_at: stamp when first marked done, clear if re-opened.
         if self.status == "done":
             if self.completed_at is None:
@@ -1194,9 +1212,233 @@ class CrmTask(TenantNumbered):
         else:
             self.completed_at = None
         super().save(*args, **kwargs)
+        # Automated recurring tasks: on the first transition into "done", spawn the next open
+        # occurrence. The transition guard (prev != done) prevents double-spawn on re-save and
+        # stops the spawned open child from recursing.
+        if (self.status == "done" and prev_status != "done"
+                and self.recurrence != "none" and self.due_date):
+            self._spawn_next_occurrence()
+
+    def _next_due(self):
+        """Next occurrence's due date, advancing by ``recurrence_interval`` units. Stdlib only —
+        python-dateutil is not installed, so monthly is computed with ``calendar.monthrange``."""
+        n = self.recurrence_interval or 1
+        if self.recurrence == "daily":
+            return self.due_date + timedelta(days=n)
+        if self.recurrence == "weekly":
+            return self.due_date + timedelta(weeks=n)
+        if self.recurrence == "monthly":
+            idx = self.due_date.month - 1 + n
+            year = self.due_date.year + idx // 12
+            month = idx % 12 + 1
+            day = min(self.due_date.day, calendar.monthrange(year, month)[1])  # clamp to month end
+            return self.due_date.replace(year=year, month=month, day=day)
+        return None
+
+    def _spawn_next_occurrence(self):
+        next_due = self._next_due()
+        if next_due is None:
+            return
+        if self.recurrence_until and next_due > self.recurrence_until:
+            return  # the series has ended
+        origin = self.recurrence_parent or self
+        # Idempotent: never create a duplicate occurrence at the same next due date.
+        if CrmTask.objects.filter(tenant=self.tenant, recurrence_parent=origin,
+                                  due_date=next_due).exclude(pk=self.pk).exists():
+            return
+        CrmTask.objects.create(
+            tenant=self.tenant, subject=self.subject, type=self.type,
+            priority=self.priority, status="open", due_date=next_due,
+            owner=self.owner, party=self.party,
+            related_opportunity=self.related_opportunity, related_case=self.related_case,
+            recurrence=self.recurrence, recurrence_interval=self.recurrence_interval,
+            recurrence_until=self.recurrence_until, recurrence_parent=origin,
+        )
 
     def __str__(self):
         return f"{self.number} · {self.subject}"
+
+
+class CalendarEvent(TenantNumbered):
+    """A scheduled event / meeting (1.5 Calendar Integration). Carries a ``public_token`` for the
+    login-free invite/RSVP + ``.ics`` pages (mirrors ``Case.public_token``). External
+    Google/Outlook/iCal sync is represented by ``sync_source`` + the ICS export — OAuth push/pull
+    is deferred."""
+
+    NUMBER_PREFIX = "EVT"
+
+    TYPE_CHOICES = [
+        ("meeting", "Meeting"),
+        ("call", "Call"),
+        ("demo", "Demo"),
+        ("deadline", "Deadline"),
+        ("reminder", "Reminder"),
+        ("other", "Other"),
+    ]
+    STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("confirmed", "Confirmed"),
+        ("cancelled", "Cancelled"),
+        ("completed", "Completed"),
+    ]
+    SYNC_SOURCE_CHOICES = [
+        ("manual", "Manual"),
+        ("google", "Google Calendar"),
+        ("outlook", "Outlook"),
+        ("ical", "iCal"),
+    ]
+
+    title = models.CharField(max_length=255)
+    event_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="meeting")
+    start = models.DateTimeField()
+    end = models.DateTimeField(null=True, blank=True)
+    all_day = models.BooleanField(default=False)
+    location = models.CharField(max_length=255, blank=True)
+    video_url = models.URLField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="scheduled")
+    sync_source = models.CharField(max_length=10, choices=SYNC_SOURCE_CHOICES, default="manual")
+    reminder_minutes = models.PositiveSmallIntegerField(default=15, null=True, blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_calendar_events")
+    party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_calendar_events")
+    related_opportunity = models.ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="calendar_events")
+    related_case = models.ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="calendar_events")
+    description = models.TextField(blank=True)
+    # Unguessable bearer token for the public invite/RSVP/ICS endpoints (no login). System-set;
+    # excluded from every form (L20/L22) — mirrors Case.public_token / LandingPage.public_token.
+    public_token = models.CharField(max_length=64, unique=True, blank=True)
+
+    class Meta:
+        ordering = ["-start"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_calevent_tenant_status_idx"),
+            models.Index(fields=["tenant", "start"], name="crm_calevent_tenant_start_idx"),
+        ]
+
+    @property
+    def is_past(self):
+        return bool(self.start and self.start < timezone.now())
+
+    @property
+    def duration_display(self):
+        """``H:MM`` span when both ends are set, else ``""``."""
+        if self.start and self.end and self.end > self.start:
+            minutes = int((self.end - self.start).total_seconds() // 60)
+            return "%d:%02d" % divmod(minutes, 60)
+        return ""
+
+    def save(self, *args, **kwargs):
+        if not self.public_token:
+            self.public_token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.number} · {self.title}"
+
+
+class EventAttendee(models.Model):
+    """An invitee on a ``CalendarEvent`` (1.5). Plain child row (mirrors ``CaseComment``) — no
+    auto-number. ``responded_at`` is system-set when the RSVP leaves ``no_response``. ``email`` is
+    NULLed when blank so multiple party-only attendees don't collide on ``unique_together``."""
+
+    RSVP_CHOICES = [
+        ("no_response", "No Response"),
+        ("accepted", "Accepted"),
+        ("declined", "Declined"),
+        ("tentative", "Tentative"),
+    ]
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    event = models.ForeignKey("crm.CalendarEvent", on_delete=models.CASCADE, related_name="attendees")
+    party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="event_attendees")
+    name = models.CharField(max_length=255)
+    email = models.EmailField(null=True, blank=True)  # NULL (not "") when blank — see save()
+    rsvp_status = models.CharField(max_length=20, choices=RSVP_CHOICES, default="no_response")
+    is_organizer = models.BooleanField(default=False)
+    responded_at = models.DateTimeField(null=True, blank=True)  # system-set on RSVP
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-is_organizer", "name"]
+        # One row per (event, email); blank email stored as NULL so several party-only attendees
+        # (no email) are allowed — MySQL/MariaDB exempt NULLs from a UNIQUE index.
+        unique_together = ("event", "email")
+
+    def save(self, *args, **kwargs):
+        if not self.email:
+            self.email = None
+        if self.rsvp_status != "no_response" and self.responded_at is None:
+            self.responded_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_rsvp_status_display()})"
+
+
+class CommunicationLog(TenantNumbered):
+    """A logged interaction — call/email/sms/note/meeting (1.5 Email & Call Integration). The
+    unified activity-history record: call logging (duration/outcome) + email sync (BCC dropbox).
+    Live send/receive engines are deferred; ``logged_via`` records provenance."""
+
+    NUMBER_PREFIX = "COM"
+
+    CHANNEL_CHOICES = [
+        ("call", "Call"),
+        ("email", "Email"),
+        ("sms", "SMS"),
+        ("note", "Note"),
+        ("meeting", "Meeting"),
+    ]
+    DIRECTION_CHOICES = [("inbound", "Inbound"), ("outbound", "Outbound")]
+    OUTCOME_CHOICES = [
+        ("connected", "Connected"),
+        ("voicemail", "Voicemail"),
+        ("no_answer", "No Answer"),
+        ("busy", "Busy"),
+        ("wrong_number", "Wrong Number"),
+    ]
+    LOGGED_VIA_CHOICES = [
+        ("manual", "Manual"),
+        ("bcc_dropbox", "BCC Dropbox"),
+        ("voip", "VoIP Auto-log"),
+        ("sync", "Calendar Sync"),
+    ]
+
+    channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default="call")
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
+    body = models.TextField(blank=True)
+    party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")
+    related_opportunity = models.ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")
+    related_case = models.ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="communication_logs")
+    occurred_at = models.DateTimeField(default=timezone.now)  # the actual interaction time
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)  # calls only
+    outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES, blank=True)  # calls only
+    logged_via = models.CharField(max_length=20, choices=LOGGED_VIA_CHOICES, default="manual")
+    email_message_id = models.CharField(max_length=255, blank=True, db_index=True)  # dedup synced email
+
+    class Meta:
+        ordering = ["-occurred_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "channel"], name="crm_commlog_tnt_channel_idx"),
+            models.Index(fields=["tenant", "occurred_at"], name="crm_commlog_tnt_occurred_idx"),
+        ]
+
+    @property
+    def duration_display(self):
+        """``mm:ss`` for a call duration, else ``""``."""
+        if self.duration_seconds is not None:
+            return "%d:%02d" % divmod(self.duration_seconds, 60)
+        return ""
+
+    @property
+    def is_call(self):
+        return self.channel == "call"
+
+    def __str__(self):
+        return f"{self.number} · {self.get_channel_display()} ({self.occurred_at:%Y-%m-%d})"
 
 
 # ============================ Accounts & Contacts — CRM profile extensions (1.1) =============
