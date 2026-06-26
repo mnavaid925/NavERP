@@ -32,7 +32,10 @@ created_at)`; CrmTask uses `(tenant, due_date, created_at)`).
 | `Campaign` | `CAM-` | name, type, **objective**(awareness/lead_gen/nurture/conversion/event/retention), status(planned/active/paused/completed/cancelled), **parent_campaign**(self-FK), start/end_date, budget_planned/actual, expected/actual_revenue, target_size, **utm_source/medium/campaign**, description; prop `roi` | `owner`→User, `parent_campaign`→self (1.3 detail below) |
 | `Case` | `CASE-` | subject, type, priority(low/medium/high/critical), status(new/open/in_progress/waiting/resolved/closed), origin, description, due_at(manual), resolved_at(system), **sla_policy** + system **first_response_due/first_responded_at/resolution_due/closed_at** + **satisfaction_rating/comment/at** (CSAT) + **public_token**; props `is_open`/`is_overdue`/**is_response_overdue**/**is_resolution_overdue**; `save()` stamps resolved_at/closed_at + computes SLA dues + token (1.4 detail below) | `account`/`contact`→`core.Party`, `owner`→User, `sla_policy`→`crm.SlaPolicy` |
 | `KnowledgeArticle` | `KB-` | title, category(legacy free-text), **kb_category** FK, slug, body, visibility(internal/external), status(draft/published/archived), views_count(system), **helpful_count/not_helpful_count**(system), **public_token**; prop `is_public`(published+external); `save()` generates token | `owner`→User, `kb_category`→`crm.KbCategory` |
-| `CrmTask` | `TASK-` | subject, type, priority(low/medium/high), status(open/in_progress/done/cancelled), due_date, description, completed_at(system); prop `is_overdue`; `OPEN_STATUSES`; `save()` stamps/clears `completed_at` | `owner`→User, `party`→`core.Party`, `related_opportunity`→`crm.Opportunity` |
+| `CrmTask` | `TASK-` | subject, type(todo/call/email/meeting/follow_up), priority(low/medium/high), status(open/in_progress/done/cancelled), due_date, description, completed_at(system); **recurrence**(none/daily/weekly/monthly) + **recurrence_interval** + **recurrence_until** + **recurrence_parent**(self-FK, system); prop `is_overdue`; `save()` stamps/clears `completed_at` **and atomically spawns the next open occurrence on the open→done transition** (`_next_due`/`_spawn_next_occurrence`; monthly clamps month-end via stdlib `calendar`; idempotent) | `owner`→User, `party`→`core.Party`, `related_opportunity`→`crm.Opportunity`, **`related_case`→`crm.Case`** (1.5 detail below) |
+| `CalendarEvent` | `EVT-` | title, event_type(meeting/call/demo/deadline/reminder/other), start, end, all_day, location, video_url, status(scheduled/confirmed/cancelled/completed), sync_source(manual/google/outlook/ical), reminder_minutes, description, **public_token**(system, editable=False); props `is_past`/`duration_display`; `save()` generates token | `owner`→User, `party`→`core.Party`, `related_opportunity`→`crm.Opportunity`, `related_case`→`crm.Case` |
+| `EventAttendee` | — (plain child) | event(related_name `attendees`), party, name, email, rsvp_status(no_response/accepted/declined/tentative), is_organizer, responded_at(system); `save()` NULLs blank email + stamps `responded_at` on RSVP; `unique_together(event, email)` | `event`→`crm.CalendarEvent`, `party`→`core.Party` |
+| `CommunicationLog` | `COM-` | channel(call/email/sms/note/meeting), direction(inbound/outbound), subject, body, occurred_at, duration_seconds, outcome(connected/voicemail/no_answer/busy/wrong_number), logged_via(manual/bcc_dropbox/voip/sync), email_message_id(system); props `duration_display`(mm:ss)/`is_call` | `party`→`core.Party`, `owner`→User, `related_opportunity`→`crm.Opportunity`, `related_case`→`crm.Case` |
 
 **System-set fields kept out of forms:** `number`, `resolved_at`, `completed_at`, `views_count`,
 `converted_party`. **Decimal note:** `weighted_amount`/`roi` cast to `Decimal` so they're correct on
@@ -58,7 +61,9 @@ is a module-level constant in `models.py`. `website`/`linkedin` use `forms.URLFi
 
 - Per CRUD model — `<entity>_list`, `<entity>_create`, `<entity>_detail`, `<entity>_edit`,
   `<entity>_delete` (delete is POST-only) — for `lead`, `opportunity`, `campaign`, `case`,
-  `knowledgearticle`, `task`.
+  `knowledgearticle`, `task`, `calendarevent`, `communicationlog` (+ the 1.7–1.12 entities). 1.5 also adds
+  inline `event_attendee_add`/`_delete` (POST) and the public token routes `event_invite`/`event_ics` (no
+  login) — see §1.5.
 - Custom: `crm:overview` (module landing, `/crm/`), `crm:lead_convert` (POST). **Accounts & Contacts
   have full CRUD**, keyed by **Party pk**: `crm:account_list/_create/_detail/_edit/_delete` and
   `crm:contact_*` (delete is POST-only **and `@tenant_admin_required`** — see Views). "View in Core"
@@ -98,7 +103,8 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
 + `quote/print.html` — see §1.2), `marketing/` (`campaign/ campaignmember/ emailtemplate/ emailcampaign/ landingpage/
 formsubmission/` + standalone public `landing_public.html` — see §1.3), `service/` (`case/ knowledgearticle/
 slapolicy/ kbcategory/ customerportalaccess/` + standalone public `case_public.html`/`kb_public.html` + portal
-`portal_case_list/detail/form.html` — see §1.4), `activities/` (`task/`),
+`portal_case_list/detail/form.html` — see §1.4), `activities/` (`task/ calendarevent/ communicationlog/` +
+standalone public `event_invite.html` — see §1.5),
 `finance/` (`expense/`), `projects/` (`crmproject/ crmmilestone/ timesheet/`), `documents/` (`contractdocument/
 doctemplate/` + standalone `sign_document.html`), `workflow/` (`workflowrule/ approvalrequest/ workflowlog/`),
 `success/` (`onboardingplan/ healthscore/ survey/` + standalone `survey_respond.html`/`health_config`), `vendor/`
@@ -126,7 +132,8 @@ an `AccountProfile`/`ContactProfile`** onto the first org/person Party per tenan
 `_backfill_profiles` (runs every time, independent of the lead-exists guard, so existing demo data
 gains firmographics/contact details without `--flush`), seeds **§1.3 marketing data** via `_seed_marketing`
 (self-guards on `EmailTemplate`), **§1.2 SFA data** via `_seed_sfa` (self-guards on `Product`), and **§1.4
-help-desk data** via `_seed_service` (self-guards on `SlaPolicy` — see the §1.4 section). Prints the demo-login
+help-desk data** via `_seed_service` (self-guards on `SlaPolicy`), and **§1.5 activity data** via
+`_seed_activities` (self-guards on `CalendarEvent`). Prints the demo-login
 reminder and the `admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
 
 ## Sidebar wiring (`apps/core/navigation.py` → `LIVE_LINKS`)
@@ -148,7 +155,9 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   access-management page — the customer-facing `portal_case_list` is login-gated and would bounce staff to the
   dashboard, so it's the secondary "Customer Portal" extra link; mirrors the 1.12 Vendor/Partner Portal wiring)
   (see "§1.4 Customer Service & Support" section)
-- `1.5`: Task Management → `crm:task_list`
+- `1.5` (recreated in detail — all 3 bullets live): Task Management → `crm:task_list`; Calendar Integration →
+  `crm:calendarevent_list`; Email & Call Integration → `crm:communicationlog_list` (the public
+  `event_invite`/`event_ics` token pages are NOT sidebar targets — L32) (see "§1.5 Activity & Communication" section)
 - `1.6`: Dashboards → `crm:overview`; Standard Reports → `crm:overview`
 
 ## Conventions & gotchas
@@ -326,6 +335,37 @@ responded_at), 1 template, 1 sent blast (with metrics), 1 published landing page
 send/publish, public endpoint, IDOR/FK-injection, N+1 budgets).
 
 ---
+
+# §1.5 Activity & Communication Management (recreated in detail)
+
+The thin single-`CrmTask` 1.5 was rebuilt to cover all three NavERP.md §1.5 bullets. Migrations `0013`
+(CrmTask recurrence/related_case + the 3 new models) + `0014` (`public_token` editable=False). All templates
+under `templates/crm/activities/`.
+
+- **Task Management** (`CrmTask`, enhanced) — to-dos **+ automated recurring tasks**. On the **open→done
+  transition** `save()` (wrapped in `transaction.atomic`) spawns the next open occurrence via
+  `_spawn_next_occurrence()`: copies the task, advances `due_date` by `recurrence_interval`
+  (`_next_due`; monthly clamps to the month's last day with stdlib `calendar`, since `python-dateutil`
+  isn't installed), links it to the series origin (`recurrence_parent`), stops past `recurrence_until`, and
+  guards against a duplicate at the same next due date. `CrmTaskForm` makes `recurrence`/`recurrence_interval`
+  optional (`clean_*` coerce blank → none/1), so a simple to-do needs no recurrence choice. Routes `crm:task_*`.
+- **Calendar Integration** (`CalendarEvent` [EVT] + `EventAttendee`) — meeting scheduling, **invite links**,
+  Google/Outlook/iCal **sync** (modeled as `sync_source` provenance + a real ICS export — OAuth push is
+  deferred). Full CRUD `crm:calendarevent_*`; attendees managed **inline on the event detail**
+  (`crm:event_attendee_add`/`_delete`, POST; upsert by event+email). Two **public token** pages (no login,
+  `public_token` bearer, `# WARNING` rate-limit note): `crm:event_invite` (event details + public **RSVP**
+  upsert by email, **first-response-wins** so a shared-token visitor can't overwrite a recorded answer) and
+  `crm:event_ics` (RFC-5545 `text/calendar` download — UTC times, `;,\n` escaped, 75-octet line folding).
+- **Email & Call Integration** (`CommunicationLog` [COM]) — one unified activity-history record: call logging
+  (duration/outcome) **and** email sync via BCC dropbox (`logged_via` provenance; `email_message_id` dedup).
+  Full CRUD `crm:communicationlog_*`; filters channel/direction/logged_via. (Body-search is kept — matches the
+  app-wide TextField-search pattern, e.g. Expense/Timesheet/Survey/PO.)
+
+Seeder `_seed_activities` (self-guards on `CalendarEvent`): a weekly recurring task + a spawned occurrence,
+4 calendar events with 2–3 attendee RSVPs each, 6 communication logs (calls/emails/note/SMS). Tests:
+`apps/crm/tests/test_activities.py` (137). **Deferred** (see `todo.md`): OAuth calendar push, live BCC mail
+engine, VoIP/recording, email open/click tracking, per-invitee tokens, and a `recurrence_anchor_day` to fix
+monthly last-day drift on subsequent spawns.
 
 # Sub-modules 1.7–1.12 (extension — finance/delivery/docs/automation/success/vendor)
 
