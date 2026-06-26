@@ -68,7 +68,7 @@
       <tr class="grand"><td>Total ({{ obj.currency_code }})</td><td class="num">{{ obj.total }}</td></tr>
     </table>
 
-    {% if obj.terms %}<div class="terms"><strong>Terms &amp; conditions</strong><br>{{ obj.terms }}</div>{% endif %}
+    {% if obj.terms %}<div class="terms"><strong>Terms &amp; conditions</strong><br>{{ obj.terms|linebreaksbr }}</div>{% endif %}
   </div>
 </body>
 </html>
