@@ -617,7 +617,7 @@ def forecast(request):
             target = q.target_amount or 0
             totals["target"] += target
             quotas.append({"q": q, "attained": attained,
-                           "pct": round(float(attained) / float(target) * 100) if target else 0})
+                           "pct": max(0, round(float(attained) / float(target) * 100)) if target else 0})
     return render(request, "crm/sales/forecast.html", {
         "cats": cats, "quotas": quotas, "totals": totals,
         "chart_labels": [c["label"] for c in cats],
