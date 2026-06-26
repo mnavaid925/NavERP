@@ -959,10 +959,10 @@ class Case(TenantNumbered):
                 self.closed_at = timezone.now()
         else:
             self.closed_at = None
-        # Policy-driven SLA due timestamps — each computed once (independently, when still blank)
-        # from the policy. Independent guards so a 0-hour or partial target can't re-anchor the
-        # other due on every save.
-        if self.sla_policy_id:
+        # Policy-driven SLA due timestamps — each computed once (independently, when still blank).
+        # The outer guard also skips the sla_policy lazy-load entirely on a normal edit where both
+        # dues are already set (no extra SELECT per case-edit save).
+        if self.sla_policy_id and (self.first_response_due is None or self.resolution_due is None):
             anchor = self.created_at or timezone.now()
             resp_h, res_h = self.sla_policy.targets_for(self.priority)
             if resp_h and self.first_response_due is None:
