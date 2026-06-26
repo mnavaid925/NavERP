@@ -18,7 +18,7 @@
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
-      <div class="detail-item"><dt>Channel</dt><dd><span class="badge badge-{% if obj.channel == 'call' %}info{% elif obj.channel == 'email' %}green{% elif obj.channel == 'sms' %}amber{% elif obj.channel == 'meeting' %}slate{% else %}muted{% endif %}">{{ obj.get_channel_display }}</span></dd></div>
+      <div class="detail-item"><dt>Channel</dt><dd><span class="badge badge-{% if obj.channel == 'call' %}info{% elif obj.channel == 'email' %}green{% elif obj.channel == 'sms' %}amber{% elif obj.channel == 'note' %}muted{% elif obj.channel == 'meeting' %}slate{% else %}muted{% endif %}">{{ obj.get_channel_display }}</span></dd></div>
       <div class="detail-item"><dt>Direction</dt><dd>{% if obj.direction %}{{ obj.get_direction_display }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Occurred</dt><dd>{{ obj.occurred_at|date:"M d, Y H:i" }}</dd></div>
