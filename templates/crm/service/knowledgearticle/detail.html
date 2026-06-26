@@ -7,6 +7,7 @@
       <div class="breadcrumb"><a href="{% url 'crm:knowledgearticle_list' %}">Knowledge Base</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
+      {% if obj.is_public %}<a href="{% url 'crm:kb_public' obj.public_token %}" target="_blank" rel="noopener" class="btn btn-outline"><i data-lucide="external-link"></i> Public page</a>{% endif %}
       <a href="{% url 'crm:knowledgearticle_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'crm:knowledgearticle_delete' obj.pk %}" onsubmit="return confirm('Delete this article?');">
         {% csrf_token %}
@@ -18,10 +19,11 @@
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
-      <div class="detail-item"><dt>Category</dt><dd>{{ obj.category|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{% if obj.kb_category %}<a href="{% url 'crm:kbcategory_detail' obj.kb_category.pk %}">{{ obj.kb_category.name }}</a>{% else %}{{ obj.category|default:"—" }}{% endif %}</dd></div>
       <div class="detail-item"><dt>Visibility</dt><dd><span class="badge badge-{% if obj.visibility == 'external' %}info{% else %}slate{% endif %}">{{ obj.get_visibility_display }}</span></dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'published' %}green{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Views</dt><dd>{{ obj.views_count }}</dd></div>
+      <div class="detail-item"><dt>Helpful</dt><dd>{{ obj.helpful_count }} 👍 / {{ obj.not_helpful_count }} 👎</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
     </dl>
   </div></div>
