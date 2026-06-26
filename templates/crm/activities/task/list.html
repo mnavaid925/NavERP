@@ -53,7 +53,7 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'crm:task_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
-              <td>{{ obj.subject }}</td>
+              <td>{{ obj.subject }}{% if obj.recurrence != 'none' %} <i data-lucide="repeat" title="Recurring"></i>{% endif %}</td>
               <td>{{ obj.get_type_display }}</td>
               <td><span class="badge badge-{% if obj.priority == 'high' %}red{% elif obj.priority == 'medium' %}amber{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></td>
               <td><span class="badge badge-{% if obj.status == 'done' %}green{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'open' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
