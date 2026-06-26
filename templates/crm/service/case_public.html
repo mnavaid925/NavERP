@@ -13,10 +13,10 @@
 
   <h3 style="margin-top:1.5rem;">Conversation</h3>
   {% for c in comments %}
-    <div class="card" style="margin-bottom:.5rem;"><div class="card-body" style="padding:.6rem .8rem;">
+    <div style="margin-bottom:.5rem; padding:.6rem .8rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
       <div style="font-size:.8rem; color:var(--text-muted);">{{ c.author_name|default:"Support" }} · {{ c.created_at|date:"M d, Y H:i" }}</div>
       <div>{{ c.body|linebreaksbr }}</div>
-    </div></div>
+    </div>
   {% empty %}
     <p style="color:var(--text-muted);">No replies yet.</p>
   {% endfor %}
@@ -25,12 +25,15 @@
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="comment">
-    <div class="form-group">{{ comment_form.body }}{% for e in comment_form.body.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</div>
+    <div class="form-group">
+      <label class="form-label" for="{{ comment_form.body.id_for_label }}">Your reply</label>
+      {{ comment_form.body }}{% for e in comment_form.body.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
     <button class="btn btn-primary" type="submit">Send reply</button>
   </form>
 
   {% if case.satisfaction_rating %}
-    <div style="margin-top:1.5rem; padding:1rem; border-radius:.5rem; background:var(--ok-bg); color:var(--ok);">
+    <div style="margin-top:1.5rem; padding:1rem; border-radius:var(--radius-sm); background:var(--ok-bg); color:var(--ok);">
       <strong>Thanks for your feedback!</strong> You rated this {{ case.satisfaction_rating }}/5.
     </div>
   {% else %}
