@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:emailtemplate_list' %}">Email Templates</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:emailtemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:emailtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}</dd></div>
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject }}</dd></div>
+      <div class="detail-item"><dt>Preheader</dt><dd>{{ obj.preheader|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>From name</dt><dd>{{ obj.from_name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>From email</dt><dd>{{ obj.from_email|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">HTML body (source)</h2></div>
+    <div class="card-body">
+      {# Tenant-authored HTML is shown ESCAPED as source (never |safe) to avoid stored XSS. #}
+      <pre style="white-space:pre-wrap; word-break:break-word; font-family:monospace; font-size:.85rem; margin:0;">{{ obj.body|default:"(empty)" }}</pre>
+    </div>
+  </div>
+
+  <a href="{% url 'crm:emailtemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
