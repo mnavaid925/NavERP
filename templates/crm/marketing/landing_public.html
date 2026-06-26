@@ -2,12 +2,12 @@
 {% block title %}{{ page.headline }}{% endblock %}
 {% block content %}
   <h2>{{ page.headline }}</h2>
-  {% if page.subheadline %}<p style="color:var(--muted);">{{ page.subheadline }}</p>{% endif %}
+  {% if page.subheadline %}<p style="color:var(--text-muted);">{{ page.subheadline }}</p>{% endif %}
   {# Tenant-authored body is rendered ESCAPED via linebreaks (never |safe) — no stored XSS. #}
   {% if page.body %}<div style="margin:1rem 0;">{{ page.body|linebreaks }}</div>{% endif %}
 
   {% if submitted %}
-    <div class="form-success" style="padding:1rem; border-radius:.5rem; background:var(--success-bg,#e7f6ec); color:var(--success,#1a7f37);">
+    <div style="padding:1rem; border-radius:.5rem; background:var(--ok-bg); color:var(--ok);">
       <strong>Thank you!</strong> We’ve received your details and a representative will be in touch.
     </div>
   {% else %}
