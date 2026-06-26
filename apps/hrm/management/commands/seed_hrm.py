@@ -697,6 +697,7 @@ class Command(BaseCommand):
              "jd_summary": tmpl1.jd_summary, "jd_responsibilities": tmpl1.jd_responsibilities,
              "jd_requirements": tmpl1.jd_requirements, "jd_nice_to_have": tmpl1.jd_nice_to_have,
              "target_start_date": today + datetime.timedelta(days=45), "status": "posted",
+             "submitted_at": timezone.now(), "approved_at": timezone.now(),
              "posted_at": timezone.now()},
             {"title": "Junior Software Engineer", "designation": desig(0), "headcount": 1,
              "req_type": "backfill", "reason_for_hire": "backfill", "posting_type": "both",
@@ -709,7 +710,7 @@ class Command(BaseCommand):
              "jd_summary": tmpl2.jd_summary, "jd_responsibilities": tmpl2.jd_responsibilities,
              "jd_requirements": tmpl2.jd_requirements, "jd_nice_to_have": tmpl2.jd_nice_to_have,
              "target_start_date": today + datetime.timedelta(days=30), "status": "approved",
-             "approved_at": timezone.now()},
+             "submitted_at": timezone.now(), "approved_at": timezone.now()},
         ]
         reqs = []
         for spec in req_specs:
