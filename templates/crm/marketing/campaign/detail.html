@@ -46,7 +46,10 @@
   </div></div>
 
   <div class="card">
-    <div class="card-header"><h2 class="card-title">Target list — members ({{ member_total }})</h2></div>
+    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 class="card-title">Target list — members ({{ member_total }})</h2>
+      {% if member_total > 50 %}<a href="{% url 'crm:campaignmember_list' %}?campaign={{ obj.pk }}" class="btn btn-outline">View all {{ member_total }}</a>{% endif %}
+    </div>
     <div class="card-body">
       <form method="post" action="{% url 'crm:campaignmember_add' obj.pk %}" class="filter-bar">
         {% csrf_token %}
