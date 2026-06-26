@@ -1,0 +1,41 @@
+{% extends "base_auth.html" %}
+{% block title %}Invite · {{ event.title }}{% endblock %}
+{% block content %}
+  <h2>{{ event.title }}</h2>
+  <p style="color:var(--text-muted);">You're invited — please let us know if you can make it.</p>
+
+  <dl class="detail-grid" style="margin:1rem 0;">
+    <div class="detail-item"><dt>When</dt><dd>{{ event.start|date:"l, M d, Y H:i" }}{% if event.end %} – {{ event.end|date:"H:i" }}{% endif %}</dd></div>
+    <div class="detail-item"><dt>Type</dt><dd>{{ event.get_event_type_display }}</dd></div>
+    {% if event.location %}<div class="detail-item"><dt>Location</dt><dd>{{ event.location }}</dd></div>{% endif %}
+    {% if event.video_url %}<div class="detail-item"><dt>Video link</dt><dd><a href="{{ event.video_url }}" target="_blank" rel="noopener">Join online</a></dd></div>{% endif %}
+    {% if event.owner %}<div class="detail-item"><dt>Organizer</dt><dd>{{ event.owner.get_full_name|default:event.owner.username }}</dd></div>{% endif %}
+  </dl>
+
+  {% if event.description %}<p>{{ event.description|linebreaksbr }}</p>{% endif %}
+
+  <p><a href="{% url 'crm:event_ics' event.public_token %}" class="btn btn-outline">Add to Calendar (.ics)</a></p>
+
+  <h3 style="margin-top:1.5rem;">Who's coming</h3>
+  {% for a in attendees %}
+    <div style="display:flex; justify-content:space-between; padding:.4rem .2rem; border-bottom:1px solid var(--border);">
+      <span>{{ a.name }}</span>
+      <span class="badge badge-{% if a.rsvp_status == 'accepted' %}green{% elif a.rsvp_status == 'declined' %}red{% elif a.rsvp_status == 'tentative' %}amber{% else %}muted{% endif %}">{{ a.get_rsvp_status_display }}</span>
+    </div>
+  {% empty %}
+    <p style="color:var(--text-muted);">Be the first to respond.</p>
+  {% endfor %}
+
+  <h3 style="margin-top:1.5rem;">Your response</h3>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="form-group">
+        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Send RSVP</button>
+  </form>
+{% endblock %}
