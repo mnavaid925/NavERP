@@ -509,9 +509,10 @@ class Opportunity(TenantNumbered):
         return inst
 
     def save(self, *args, **kwargs):
-        # System-stamp stage_changed_at on any stage transition (incl. first create);
+        # System-stamp stage_changed_at on any stage transition (incl. first create — a fresh
+        # instance has no _loaded_stage, so the None sentinel never equals a real stage);
         # stamp lost_at when entering closed_lost, clear it if re-opened (mirrors Case.resolved_at).
-        if self.stage != getattr(self, "_loaded_stage", "\x00new"):
+        if self.stage != getattr(self, "_loaded_stage", None):
             self.stage_changed_at = timezone.now()
         if self.stage == "closed_lost":
             if self.lost_at is None:
@@ -680,7 +681,8 @@ class OpportunitySplit(models.Model):
     def clean(self):
         from django.core.exceptions import ValidationError
         # Revenue splits divide the booking — they must not exceed 100% across the opportunity.
-        if self.split_type == "revenue" and self.opportunity_id:
+        # (Guard on tenant_id too so a clean() before the view sets tenant can't query tenant=None.)
+        if self.split_type == "revenue" and self.opportunity_id and self.tenant_id:
             others = OpportunitySplit.objects.filter(
                 tenant=self.tenant, opportunity=self.opportunity, split_type="revenue")
             if self.pk:
@@ -749,6 +751,8 @@ class Quote(TenantNumbered):
         line_sub = Decimal(agg["sub"] or 0)
         line_tax = Decimal(agg["tax"] or 0)
         disc = (Decimal(100) - Decimal(self.discount_pct or 0)) / 100  # quote-level discount factor
+        # The discount factor is applied to BOTH subtotal and tax, so tax is effectively computed
+        # on the discounted base (tax_total = line_sub*tax_pct*disc = discounted_subtotal*tax_pct).
         self.subtotal = (line_sub * disc).quantize(Decimal("0.01"))
         self.tax_total = (line_tax * disc).quantize(Decimal("0.01"))
         self.total = (self.subtotal + self.tax_total).quantize(Decimal("0.01"))
@@ -830,7 +834,9 @@ class SalesQuota(TenantNumbered):
         ordering = ["-period_year", "period_number"]
         unique_together = [
             ("tenant", "number"),
-            ("tenant", "owner", "period_type", "period_year", "period_number"),
+            # Territory is part of the key so a rep can hold one quota per territory per period
+            # (a null-territory "overall" quota is also enforced friendly-side in the form).
+            ("tenant", "owner", "territory", "period_type", "period_year", "period_number"),
         ]
         indexes = [
             models.Index(fields=["tenant", "period_year"], name="crm_qta_tnt_year_idx"),
