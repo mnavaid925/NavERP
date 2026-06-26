@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.12)
@@ -30,8 +30,8 @@ created_at)`; CrmTask uses `(tenant, due_date, created_at)`).
 | `Lead` | `LEAD-` | name, company, title, email, phone, source, rating(hot/warm/cold), status(new/contacted/qualified/unqualified/converted/recycled), score(0–100), est_value, owner, description, converted_party | `owner`→`accounts.User`, `converted_party`→`core.Party` |
 | `Opportunity` | `OPP-` | name, stage(prospecting/qualification/proposal/negotiation/closed_won/closed_lost), **forecast_category**(omitted/pipeline/best_case/commit/closed), amount, probability(0–100), close_date, **competitor**, **loss_reason**, **lost_at**(system), **stage_changed_at**(system via from_db/save), next_step, description; props `weighted_amount`, `is_open`, `is_won`; `OPEN_STAGES` | `account`/`primary_contact`→`core.Party`, `owner`→User, `source_lead`→`crm.Lead`, `campaign`→`crm.Campaign`, **territory**→`crm.Territory` (1.2 detail below) |
 | `Campaign` | `CAM-` | name, type, **objective**(awareness/lead_gen/nurture/conversion/event/retention), status(planned/active/paused/completed/cancelled), **parent_campaign**(self-FK), start/end_date, budget_planned/actual, expected/actual_revenue, target_size, **utm_source/medium/campaign**, description; prop `roi` | `owner`→User, `parent_campaign`→self (1.3 detail below) |
-| `Case` | `CASE-` | subject, type, priority(low/medium/high/critical), status(new/open/in_progress/waiting/resolved/closed), origin, description, due_at(SLA), resolved_at(system); props `is_open`/`is_overdue`; `OPEN_STATUSES`; `save()` stamps/clears `resolved_at` | `account`/`contact`→`core.Party`, `owner`→User |
-| `KnowledgeArticle` | `KB-` | title, category, body, visibility(internal/external), status(draft/published/archived), views_count(system) | `owner`→User |
+| `Case` | `CASE-` | subject, type, priority(low/medium/high/critical), status(new/open/in_progress/waiting/resolved/closed), origin, description, due_at(manual), resolved_at(system), **sla_policy** + system **first_response_due/first_responded_at/resolution_due/closed_at** + **satisfaction_rating/comment/at** (CSAT) + **public_token**; props `is_open`/`is_overdue`/**is_response_overdue**/**is_resolution_overdue**; `save()` stamps resolved_at/closed_at + computes SLA dues + token (1.4 detail below) | `account`/`contact`→`core.Party`, `owner`→User, `sla_policy`→`crm.SlaPolicy` |
+| `KnowledgeArticle` | `KB-` | title, category(legacy free-text), **kb_category** FK, slug, body, visibility(internal/external), status(draft/published/archived), views_count(system), **helpful_count/not_helpful_count**(system), **public_token**; prop `is_public`(published+external); `save()` generates token | `owner`→User, `kb_category`→`crm.KbCategory` |
 | `CrmTask` | `TASK-` | subject, type, priority(low/medium/high), status(open/in_progress/done/cancelled), due_date, description, completed_at(system); prop `is_overdue`; `OPEN_STATUSES`; `save()` stamps/clears `completed_at` | `owner`→User, `party`→`core.Party`, `related_opportunity`→`crm.Opportunity` |
 
 **System-set fields kept out of forms:** `number`, `resolved_at`, `completed_at`, `views_count`,
@@ -96,7 +96,9 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
 (CLAUDE.md "Template Folder Structure"): `directory/` (entity folders `contact/ account/ lead/`), `sales/`
 (`opportunity/ territory/ product/ pricebook/ quote/ salesquota/` + standalone `pipeline.html`/`forecast.html`
 + `quote/print.html` — see §1.2), `marketing/` (`campaign/ campaignmember/ emailtemplate/ emailcampaign/ landingpage/
-formsubmission/` + standalone public `landing_public.html` — see §1.3), `service/` (`case/ knowledgearticle/`), `activities/` (`task/`),
+formsubmission/` + standalone public `landing_public.html` — see §1.3), `service/` (`case/ knowledgearticle/
+slapolicy/ kbcategory/ customerportalaccess/` + standalone public `case_public.html`/`kb_public.html` + portal
+`portal_case_list/detail/form.html` — see §1.4), `activities/` (`task/`),
 `finance/` (`expense/`), `projects/` (`crmproject/ crmmilestone/ timesheet/`), `documents/` (`contractdocument/
 doctemplate/` + standalone `sign_document.html`), `workflow/` (`workflowrule/ approvalrequest/ workflowlog/`),
 `success/` (`onboardingplan/ healthscore/ survey/` + standalone `survey_respond.html`/`health_config`), `vendor/`
@@ -123,9 +125,9 @@ closed_won), 3 cases, 2 KB articles, 3 tasks. `owner` = tenant admin. Also idemp
 an `AccountProfile`/`ContactProfile`** onto the first org/person Party per tenant via
 `_backfill_profiles` (runs every time, independent of the lead-exists guard, so existing demo data
 gains firmographics/contact details without `--flush`), seeds **§1.3 marketing data** via `_seed_marketing`
-(self-guards on `EmailTemplate`), and **§1.2 SFA data** via `_seed_sfa` (self-guards on `Product` — see the §1.2
-section). Prints the demo-login reminder and the `admin`-has-no-tenant warning. Run after
-`seed_core`/`seed_accounts`/`seed_tenants`.
+(self-guards on `EmailTemplate`), **§1.2 SFA data** via `_seed_sfa` (self-guards on `Product`), and **§1.4
+help-desk data** via `_seed_service` (self-guards on `SlaPolicy` — see the §1.4 section). Prints the demo-login
+reminder and the `admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
 
 ## Sidebar wiring (`apps/core/navigation.py` → `LIVE_LINKS`)
 
@@ -140,8 +142,10 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   → `crm:campaignmember_list`; Email Marketing → `crm:emailcampaign_list`; Email Templates →
   `crm:emailtemplate_list`; Landing Pages & Forms → `crm:landingpage_list`; Form Submissions →
   `crm:formsubmission_list` (see "§1.3 Marketing Automation" section)
-- `1.4`: Case / Ticket Management → `crm:case_list`; Solutions & Knowledge Base →
-  `crm:knowledgearticle_list`
+- `1.4` (recreated in detail — all 3 bullets live): Case / Ticket Management → `crm:case_list`; SLA Policies →
+  `crm:slapolicy_list`; Solutions & Knowledge Base → `crm:knowledgearticle_list`; KB Categories →
+  `crm:kbcategory_list`; Customer Self-Service Portal → `crm:portal_case_list`; Portal Access →
+  `crm:customerportalaccess_list` (see "§1.4 Customer Service & Support" section)
 - `1.5`: Task Management → `crm:task_list`
 - `1.6`: Dashboards → `crm:overview`; Standard Reports → `crm:overview`
 
@@ -221,6 +225,52 @@ products, 2 price books, opportunity splits, a recalculated quote with lines, 2 
 opp with territory/competitor/forecast. Backfills without `--flush`.
 
 **Tests:** `apps/crm/tests/test_sfa.py` (235 tests).
+
+---
+
+# §1.4 Customer Service & Support / Help Desk (recreated in detail)
+
+The basic `Case` + `KnowledgeArticle` were rebuilt to cover all three NavERP.md §1.4 bullets. Migration `0012`
+(Case + KnowledgeArticle columns + 4 tables). Models in the same `apps/crm/models.py`:
+
+| Model | Prefix | Bullet | Key fields / behavior | Reuse |
+|-------|--------|--------|-----------------------|-------|
+| `SlaPolicy` | `SLA-` | SLA deadline warnings | name, is_active, is_default; per-priority **hour** targets `response_{low,medium,high,critical}` + `resolution_{...}`; `targets_for(priority)`→(resp_h, res_h). **CRUD `@tenant_admin_required`** (tenant-wide config). | — |
+| `Case` (enhanced) | `CASE-` | Case / Ticket Management | + `sla_policy`, system `first_response_due`/`first_responded_at`/`resolution_due`/`closed_at` + CSAT `satisfaction_rating`/`_comment`/`_at` + `public_token`; `save()` computes dues (once, when blank — skips the lazy-load when both set) + stamps closed_at + token; props `is_response_overdue`/`is_resolution_overdue`. | `sla_policy`→SlaPolicy |
+| `CaseComment` | — (plain) | conversation thread | `case`(CASCADE, `related_name="comments"`), `author`, `author_name`, `body`, `is_public` (customer reply vs internal note). Portal/public adds force `is_public=True`; first **public** reply stamps `Case.first_responded_at` (atomic). | `author`→User |
+| `KbCategory` | `KBC-` | Solutions & KB | name, slug, `parent`(self-FK), order, is_active. | `parent`→self |
+| `KnowledgeArticle` (enhanced) | `KB-` | Solutions & KB | + `kb_category`, `helpful_count`/`not_helpful_count` (system), `public_token`, slug; prop `is_public`(published+external). | `kb_category`→KbCategory |
+| `CustomerPortalAccess` | `CSP-` | Self-Service Portal | `customer_party`→Party, `portal_user` OneToOne→User, `can_submit_cases`, accepted_at, is_active. Mirrors PartnerPortalAccess. **CRUD `@tenant_admin_required`** (granting a portal login = IAM). | `customer_party`→Party |
+
+**Routes (`urls.py`):** standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for
+`slapolicy`/`kbcategory`/`customerportalaccess`. Custom: `case_comment_add`. **Public** (no login):
+`cases/track/<token>/` (case_public), `kb/<token>/` (kb_public) + `kb/<token>/helpful/` (kb_helpful).
+**Portal** (login): `portal/cases/` (list), `portal/cases/new/` (create), `portal/cases/<pk>/` (detail).
+
+**Views & actions (`views.py`):** all `@login_required`, tenant-scoped, `crud_*` helpers. `case_detail` recreated
+(SLA breach banners + comments thread + inline internal/public add). `case_comment_add` stamps first_responded_at
+via an atomic `filter().update()`. **Public** `case_public(token)` — status + public-only comments + reply + CSAT
+(submitted-once via atomic update); `kb_public(token)` — only published+external resolves (else 404), F() view
+count; `kb_helpful(token)` — POST-only F() vote. **Portal** — `_customer_portal_access` gate (mirrors
+`_portal_access`); `portal_case_list/detail` strictly scope to the user's own `customer_party` (null-party
+rejected — no `Q(account=None)` leak); `portal_case_create` forces account=customer_party + origin=portal +
+default SLA. **SlaPolicy + CustomerPortalAccess create/edit/delete are `@tenant_admin_required`.**
+
+**Forms (`forms.py`):** `CaseForm` (+ sla_policy; SLA timers/closed_at/CSAT/public_token excluded),
+`KnowledgeArticleForm` (+ kb_category; helpful counts/public_token excluded), `SlaPolicyForm`, `KbCategoryForm`
+(self-parent exclusion), `CustomerPortalAccessForm`, inline `CaseCommentForm`, plain `PublicSatisfactionForm`/
+`PublicCommentForm` for the public page.
+
+**Templates (`templates/crm/service/`):** recreated `case/` + `knowledgearticle/`; entity folders `slapolicy/
+kbcategory/ customerportalaccess/` (list/detail/form); standalone **public** `case_public.html`/`kb_public.html`
+(extend `base_auth.html`, escaped via `linebreaksbr`, never `|safe`); standalone **portal** `portal_case_list/
+detail/form.html` (extend `base.html`). Internal notes (`is_public=False`) never render on the public/portal pages.
+
+**Seeder:** `_seed_service(tenant)` runs unconditionally (self-guards on `SlaPolicy`): a default SlaPolicy, 2 KB
+categories, internal+public comments on the first case, article category links, public-token backfill on existing
+cases/articles, and a CustomerPortalAccess (portal_user unassigned by default — assign a user to demo the login).
+
+**Tests:** `apps/crm/tests/test_helpdesk.py` (198 tests).
 
 ---
 
