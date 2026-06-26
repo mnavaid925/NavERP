@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.12)
@@ -28,7 +28,7 @@ created_at)`; CrmTask uses `(tenant, due_date, created_at)`).
 | Model | Prefix | Key fields | Core reuse |
 |-------|--------|------------|------------|
 | `Lead` | `LEAD-` | name, company, title, email, phone, source, rating(hot/warm/cold), status(new/contacted/qualified/unqualified/converted/recycled), score(0–100), est_value, owner, description, converted_party | `owner`→`accounts.User`, `converted_party`→`core.Party` |
-| `Opportunity` | `OPP-` | name, stage(prospecting/qualification/proposal/negotiation/closed_won/closed_lost), amount, probability(0–100), close_date, next_step, description; props `weighted_amount`, `is_open`, `is_won`; `OPEN_STAGES` | `account`/`primary_contact`→`core.Party`, `owner`→User, `source_lead`→`crm.Lead`, `campaign`→`crm.Campaign` |
+| `Opportunity` | `OPP-` | name, stage(prospecting/qualification/proposal/negotiation/closed_won/closed_lost), **forecast_category**(omitted/pipeline/best_case/commit/closed), amount, probability(0–100), close_date, **competitor**, **loss_reason**, **lost_at**(system), **stage_changed_at**(system via from_db/save), next_step, description; props `weighted_amount`, `is_open`, `is_won`; `OPEN_STAGES` | `account`/`primary_contact`→`core.Party`, `owner`→User, `source_lead`→`crm.Lead`, `campaign`→`crm.Campaign`, **territory**→`crm.Territory` (1.2 detail below) |
 | `Campaign` | `CAM-` | name, type, **objective**(awareness/lead_gen/nurture/conversion/event/retention), status(planned/active/paused/completed/cancelled), **parent_campaign**(self-FK), start/end_date, budget_planned/actual, expected/actual_revenue, target_size, **utm_source/medium/campaign**, description; prop `roi` | `owner`→User, `parent_campaign`→self (1.3 detail below) |
 | `Case` | `CASE-` | subject, type, priority(low/medium/high/critical), status(new/open/in_progress/waiting/resolved/closed), origin, description, due_at(SLA), resolved_at(system); props `is_open`/`is_overdue`; `OPEN_STATUSES`; `save()` stamps/clears `resolved_at` | `account`/`contact`→`core.Party`, `owner`→User |
 | `KnowledgeArticle` | `KB-` | title, category, body, visibility(internal/external), status(draft/published/archived), views_count(system) | `owner`→User |
@@ -94,7 +94,8 @@ scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_deta
 
 **One folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page filename**
 (CLAUDE.md "Template Folder Structure"): `directory/` (entity folders `contact/ account/ lead/`), `sales/`
-(`opportunity/`), `marketing/` (`campaign/ campaignmember/ emailtemplate/ emailcampaign/ landingpage/
+(`opportunity/ territory/ product/ pricebook/ quote/ salesquota/` + standalone `pipeline.html`/`forecast.html`
++ `quote/print.html` — see §1.2), `marketing/` (`campaign/ campaignmember/ emailtemplate/ emailcampaign/ landingpage/
 formsubmission/` + standalone public `landing_public.html` — see §1.3), `service/` (`case/ knowledgearticle/`), `activities/` (`task/`),
 `finance/` (`expense/`), `projects/` (`crmproject/ crmmilestone/ timesheet/`), `documents/` (`contractdocument/
 doctemplate/` + standalone `sign_document.html`), `workflow/` (`workflowrule/ approvalrequest/ workflowlog/`),
@@ -121,16 +122,20 @@ inventing duplicates. Per tenant: 2 campaigns, 3 leads, 4 opportunities (varied 
 closed_won), 3 cases, 2 KB articles, 3 tasks. `owner` = tenant admin. Also idempotently **backfills
 an `AccountProfile`/`ContactProfile`** onto the first org/person Party per tenant via
 `_backfill_profiles` (runs every time, independent of the lead-exists guard, so existing demo data
-gains firmographics/contact details without `--flush`), and seeds **§1.3 marketing data** via
-`_seed_marketing` (also unconditional, self-guards on `EmailTemplate` — see the §1.3 section). Prints the
-demo-login reminder and the `admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
+gains firmographics/contact details without `--flush`), seeds **§1.3 marketing data** via `_seed_marketing`
+(self-guards on `EmailTemplate`), and **§1.2 SFA data** via `_seed_sfa` (self-guards on `Product` — see the §1.2
+section). Prints the demo-login reminder and the `admin`-has-no-tenant warning. Run after
+`seed_core`/`seed_accounts`/`seed_tenants`.
 
 ## Sidebar wiring (`apps/core/navigation.py` → `LIVE_LINKS`)
 
 Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
 - `1.1`: Contacts → `crm:contact_list`; Accounts (Companies) → `crm:account_list`; Leads (Potential
   Customers) → `crm:lead_list`
-- `1.2`: Opportunity Management (Deals) → `crm:opportunity_list`; Forecasting → `crm:overview`
+- `1.2` (recreated in detail — all 3 bullets live): Opportunity Management (Deals) → `crm:opportunity_list`;
+  Pipeline Board → `crm:opportunity_board`; Product Catalog (Quoting) → `crm:product_list`; Quotes →
+  `crm:quote_list`; Price Books → `crm:pricebook_list`; Forecasting → `crm:forecast`; Sales Quotas →
+  `crm:salesquota_list`; Territories → `crm:territory_list` (see "§1.2 Sales Force Automation" section)
 - `1.3` (recreated in detail — all 3 bullets live): Campaign Management → `crm:campaign_list`; Campaign Members
   → `crm:campaignmember_list`; Email Marketing → `crm:emailcampaign_list`; Email Templates →
   `crm:emailtemplate_list`; Landing Pages & Forms → `crm:landingpage_list`; Form Submissions →
@@ -168,6 +173,54 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   maps to a `NavERP.md` bullet.
 - **Extend the seeder:** add rows inside `_seed_tenant`; keep the `Lead`-exists idempotency guard.
 - **Run the tests:** `venv\Scripts\python.exe -m pytest apps/crm -q` (SQLite via `config.settings_test`).
+
+---
+
+# §1.2 Sales Force Automation (recreated in detail)
+
+The thin single-`Opportunity` 1.2 was rebuilt to cover all three NavERP.md §1.2 bullets. Migrations `0008`
+(Opportunity columns + 7 tables), `0009`/`0010`/`0011` (SalesQuota territory unique + index, percentage
+validators). Models in the same `apps/crm/models.py`:
+
+| Model | Prefix | Bullet | Key fields / behavior | Reuse |
+|-------|--------|--------|-----------------------|-------|
+| `Opportunity` (enhanced) | `OPP-` | Opportunity Management | + `forecast_category`, `competitor`, `loss_reason`, `lost_at` + `stage_changed_at` (system, via `from_db`/`save()` — stamps on stage change / closed_lost), `territory`. Board + advance action. | `territory`→Territory |
+| `OpportunitySplit` | — (plain) | commission/credit splits | `opportunity`(CASCADE, `related_name="splits"`), `user`, `split_type`(revenue/overlay), `percentage`(0–100); `clean()` rejects ≤0 and revenue sum >100%; prop `split_amount`. Inline on opp detail. | `user`→User |
+| `Territory` | `TER-` | Forecasting (by territory) | name, region, segment, `parent`(self-FK hierarchy), `manager`, is_active | `parent`→self, `manager`→User |
+| `Product` | `PRD-` | Product Catalog | name, sku, product_type(good/service/subscription), unit_price, cost, tax_pct, is_active; prop `margin_pct`. CRM-owned (→ core.Item later), distinct from 1.12 ProductStock. | — |
+| `PriceBook` | `PB-` | price books for regions/tiers | name, currency_code, region, tier, `price_adjustment_pct`(±%; floored at −100), is_default; `adjusted_price(base)`. (PriceBookEntry per-product override = future.) | — |
+| `Quote` | `QUO-` | Quoting | `opportunity`(SET_NULL, `related_name="quotes"`), `account`→Party, `price_book`, **system**: status(draft/sent/accepted/declined/expired) + subtotal/tax_total/total + sent_at/accepted_at (all excluded from form), discount_pct, valid_until, currency_code, terms; `recalc_totals()` sums lines **in Python** (Decimal-safe — NOT `F()/100`, which integer-divides on SQLite); props `is_open`/`is_expired`. | `price_book`→PriceBook |
+| `QuoteLine` | — (plain) | line items/discounts/tax | `quote`(CASCADE, `related_name="lines"`), `product`(SET_NULL), description, quantity, unit_price, discount_pct, tax_pct, order; props `line_subtotal`/`line_tax`/`line_total`. Inline on quote detail; defaults unit_price from product × price-book adjustment. | `product`→Product |
+| `SalesQuota` | `QTA-` | quota vs. actual | `owner`, `territory`, period_type(month/quarter/year), period_year, period_number, target_amount; `unique_together(tenant,owner,territory,period_type,period_year,period_number)` + form dup guard. | `owner`→User, `territory`→Territory |
+
+**Routes (`urls.py`):** standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for
+`territory`/`product`/`pricebook`/`quote`/`salesquota`. Custom: `opportunity_board` (Kanban GET),
+`opportunity_advance`, `opportunitysplit_add`/`_remove`; `quoteline_add`/`_remove` (atomic + `recalc_totals`),
+`quote_send`/`_accept`/`_decline`, `quote_print` (login-gated); `forecast` (dashboard).
+
+**Views & actions (`views.py`):** all `@login_required`, tenant-scoped, `crud_*` helpers. `opportunity_detail`
+recreated (splits panel w/ inline add + revenue total, quotes panel, tasks). `opportunity_board` — one grouped
+aggregate for per-stage count/total + a slice per column. `opportunity_advance` — forward stage flow; closed_won
+sets probability 100 + forecast_category closed; fixed-allowlist redirect (no open redirect). Quote actions are
+system-managed state transitions (status/totals/timestamps never from the form). `forecast` aggregates DB-side
+(weighted pipeline by forecast_category + quota attainment matched per (owner,territory)). **Quote send/accept/
+decline + opportunity_advance stay `@login_required`** (rep-owned pipeline; audit-logged) — not admin-gated.
+
+**Forms (`forms.py`):** `OpportunityForm` (+ forecast_category/competitor/loss_reason/territory; lost_at/
+stage_changed_at excluded). `QuoteForm` excludes status + subtotal/tax_total/total + sent_at/accepted_at.
+`SalesQuotaForm.clean()` blocks duplicate (owner+territory+period). Inline `QuoteLineForm`/`OpportunitySplitForm`.
+Percentage/discount/tax fields carry Min/Max validators (no negative/over-100 values).
+
+**Templates (`templates/crm/sales/`):** entity folders `opportunity/ territory/ product/ pricebook/ quote/
+salesquota/` (each list/detail/form; quote also `print.html`) + standalone `pipeline.html` (Kanban board) and
+`forecast.html` (dashboard, Chart.js via overview's json_script pattern). Quote detail = the quote builder
+(inline lines, recalculated totals, send/accept/decline). Never `|safe`; quote terms via `linebreaksbr`.
+
+**Seeder:** `_seed_sfa(tenant)` runs unconditionally (self-guards on `Product`): 2 territories, 3 catalog
+products, 2 price books, opportunity splits, a recalculated quote with lines, 2 sales quotas; enriches the first
+opp with territory/competitor/forecast. Backfills without `--flush`.
+
+**Tests:** `apps/crm/tests/test_sfa.py` (235 tests).
 
 ---
 
