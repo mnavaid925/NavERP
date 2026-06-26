@@ -282,6 +282,19 @@ class CrmTaskForm(TenantModelForm):
                   "related_opportunity", "related_case", "description",
                   "recurrence", "recurrence_interval", "recurrence_until"]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Both have model defaults (a simple to-do needs no recurrence choice) — optional on the
+        # form; clean_* below coerces a blank submission back to the model default.
+        self.fields["recurrence"].required = False
+        self.fields["recurrence_interval"].required = False
+
+    def clean_recurrence(self):
+        return self.cleaned_data.get("recurrence") or "none"
+
+    def clean_recurrence_interval(self):
+        return self.cleaned_data.get("recurrence_interval") or 1
+
 
 # ===== 1.5 Activity & Communication Management (recreated) ====================
 class CalendarEventForm(TenantModelForm):
