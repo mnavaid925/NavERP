@@ -7,6 +7,7 @@
       <div class="breadcrumb"><a href="{% url 'crm:case_list' %}">Cases</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
+      {% if obj.public_token %}<a href="{% url 'crm:case_public' obj.public_token %}" target="_blank" rel="noopener" class="btn btn-outline"><i data-lucide="external-link"></i> Public link</a>{% endif %}
       <a href="{% url 'crm:case_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'crm:case_delete' obj.pk %}" onsubmit="return confirm('Delete this case?');">
         {% csrf_token %}
@@ -15,8 +16,11 @@
     </div>
   </div>
 
-  {% if obj.is_overdue %}
-    <div class="card" style="border-inline-start:3px solid var(--bad);"><div class="card-body text-danger"><i data-lucide="alert-triangle"></i> This case is past its SLA deadline.</div></div>
+  {% if obj.is_response_overdue %}
+    <div class="card" style="border-inline-start:3px solid var(--bad);"><div class="card-body text-danger"><i data-lucide="alert-triangle"></i> First-response SLA breached.</div></div>
+  {% endif %}
+  {% if obj.is_resolution_overdue %}
+    <div class="card" style="border-inline-start:3px solid var(--bad);"><div class="card-body text-danger"><i data-lucide="alert-triangle"></i> Resolution SLA breached.</div></div>
   {% endif %}
 
   <div class="card"><div class="card-body">
@@ -29,13 +33,50 @@
       <div class="detail-item"><dt>Priority</dt><dd><span class="badge badge-{% if obj.priority == 'critical' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'resolved' %}green{% elif obj.status == 'closed' %}slate{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'new' or obj.status == 'open' or obj.status == 'waiting' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Origin</dt><dd>{{ obj.get_origin_display }}</dd></div>
-      <div class="detail-item"><dt>Due (SLA)</dt><dd>{% if obj.due_at %}{{ obj.due_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>SLA policy</dt><dd>{% if obj.sla_policy %}<a href="{% url 'crm:slapolicy_detail' obj.sla_policy.pk %}">{{ obj.sla_policy.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>First-response due</dt><dd>{% if obj.first_response_due %}{{ obj.first_response_due|date:"M d, Y H:i" }}{% if obj.is_response_overdue %} <span class="badge badge-red">Breached</span>{% elif obj.first_responded_at %} <span class="badge badge-green">Met</span>{% endif %}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Resolution due</dt><dd>{% if obj.resolution_due %}{{ obj.resolution_due|date:"M d, Y H:i" }}{% if obj.is_resolution_overdue %} <span class="badge badge-red">Breached</span>{% endif %}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Manual due</dt><dd>{% if obj.due_at %}{{ obj.due_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Resolved at</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Closed at</dt><dd>{% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Satisfaction</dt><dd>{% if obj.satisfaction_rating %}{{ obj.satisfaction_rating }}/5{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+    {% if obj.satisfaction_comment %}<p style="margin-top:1rem;"><strong>CSAT comment:</strong> {{ obj.satisfaction_comment|linebreaksbr }}</p>{% endif %}
   </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Conversation</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'crm:case_comment_add' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-group">{{ comment_form.body }}</div>
+        <div class="form-group" style="display:flex; align-items:center; gap:.5rem;">
+          <label class="form-label" style="margin:0;">{{ comment_form.is_public }} Customer-visible reply (otherwise an internal note)</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="message-square"></i> Add comment</button>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Author</th><th>Visibility</th><th>Comment</th></tr></thead>
+        <tbody>
+          {% for c in comments %}
+            <tr{% if not c.is_public %} style="background:var(--warn-bg);"{% endif %}>
+              <td>{{ c.created_at|date:"M d, Y H:i" }}</td>
+              <td>{% if c.author %}{{ c.author.get_full_name|default:c.author.username }}{% else %}{{ c.author_name|default:"Customer" }}{% endif %}</td>
+              <td>{% if c.is_public %}<span class="badge badge-green">Public</span>{% else %}<span class="badge badge-amber">Internal</span>{% endif %}</td>
+              <td>{{ c.body|linebreaksbr }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="message-square"></i><p>No comments yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <a href="{% url 'crm:case_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
