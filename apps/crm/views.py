@@ -1180,7 +1180,7 @@ def slapolicy_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # SLA policy is tenant-wide config (is_default drives every case's SLA)
 def slapolicy_create(request):
     return crud_create(request, form_class=SlaPolicyForm, template="crm/service/slapolicy/form.html",
                        success_url="crm:slapolicy_list")
@@ -1192,13 +1192,13 @@ def slapolicy_detail(request, pk):
     return render(request, "crm/service/slapolicy/detail.html", {"obj": obj})
 
 
-@login_required
+@tenant_admin_required
 def slapolicy_edit(request, pk):
     return crud_edit(request, model=SlaPolicy, pk=pk, form_class=SlaPolicyForm,
                      template="crm/service/slapolicy/form.html", success_url="crm:slapolicy_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def slapolicy_delete(request, pk):
     return crud_delete(request, model=SlaPolicy, pk=pk, success_url="crm:slapolicy_list")
@@ -1260,7 +1260,7 @@ def customerportalaccess_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # granting a customer a portal login that reads their cases is an IAM action
 def customerportalaccess_create(request):
     return crud_create(request, form_class=CustomerPortalAccessForm,
                        template="crm/service/customerportalaccess/form.html",
@@ -1275,14 +1275,14 @@ def customerportalaccess_detail(request, pk):
     return render(request, "crm/service/customerportalaccess/detail.html", {"obj": obj})
 
 
-@login_required
+@tenant_admin_required
 def customerportalaccess_edit(request, pk):
     return crud_edit(request, model=CustomerPortalAccess, pk=pk, form_class=CustomerPortalAccessForm,
                      template="crm/service/customerportalaccess/form.html",
                      success_url="crm:customerportalaccess_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def customerportalaccess_delete(request, pk):
     return crud_delete(request, model=CustomerPortalAccess, pk=pk,
@@ -1293,7 +1293,9 @@ def customerportalaccess_delete(request, pk):
 def case_public(request, token):
     """Public case-status tracking page — no login; the unguessable token is the bearer credential.
     Shows status/SLA + PUBLIC comments only (internal notes never leak) and lets the customer post a
-    reply or a CSAT rating. CSRF-protected via the template tag; tenant taken from the case itself."""
+    reply or a CSAT rating. CSRF-protected via the template tag; tenant taken from the case itself.
+    # WARNING: unauthenticated POST — add per-IP rate-limiting (django-ratelimit) or a WAF throttle
+    # in production to stop public comment floods."""
     case = get_object_or_404(
         Case.objects.select_related("sla_policy", "owner", "contact"), public_token=token)
     sat_form = PublicSatisfactionForm()
@@ -1311,11 +1313,12 @@ def case_public(request, token):
         elif action == "satisfaction" and case.satisfaction_rating is None:  # CSAT submitted once
             sat_form = PublicSatisfactionForm(request.POST)
             if sat_form.is_valid():
-                case.satisfaction_rating = int(sat_form.cleaned_data["rating"])
-                case.satisfaction_comment = sat_form.cleaned_data["comment"]
-                case.satisfaction_at = timezone.now()
-                case.save(update_fields=["satisfaction_rating", "satisfaction_comment",
-                                         "satisfaction_at", "updated_at"])
+                # Atomic guard — a concurrent second submit updates 0 rows (can't overwrite the
+                # rating); mirrors the first_responded_at claim, no TOCTOU race.
+                Case.objects.filter(pk=case.pk, satisfaction_rating__isnull=True).update(
+                    satisfaction_rating=int(sat_form.cleaned_data["rating"]),
+                    satisfaction_comment=sat_form.cleaned_data["comment"],
+                    satisfaction_at=timezone.now(), updated_at=timezone.now())
                 return redirect("crm:case_public", token=token)
     return render(request, "crm/service/case_public.html", {
         "case": case,
@@ -1337,7 +1340,8 @@ def kb_public(request, token):
 
 @require_POST
 def kb_helpful(request, token):
-    """Public helpful/not-helpful vote on a KB article (CSRF-protected, F() increment)."""
+    """Public helpful/not-helpful vote on a KB article (CSRF-protected, F() increment).
+    # WARNING: unauthenticated — add per-IP rate-limiting in production to prevent vote stuffing."""
     article = get_object_or_404(
         KnowledgeArticle, public_token=token, status="published", visibility="external")
     vote = request.POST.get("vote")
@@ -1391,7 +1395,10 @@ def portal_case_detail(request, pk):
     case = get_object_or_404(
         Case.objects.filter(tenant=request.tenant).filter(Q(account=party) | Q(contact=party)), pk=pk)
     comment_form = PublicCommentForm()
-    if request.method == "POST" and access.can_submit_cases:
+    if request.method == "POST":
+        if not access.can_submit_cases:  # explicit reject (don't silently no-op a crafted POST)
+            messages.error(request, "You don't have permission to reply.")
+            return redirect("crm:portal_case_detail", pk=case.pk)
         comment_form = PublicCommentForm(request.POST)
         if comment_form.is_valid():
             CaseComment.objects.create(
