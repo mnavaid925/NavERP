@@ -1590,11 +1590,17 @@ def event_invite(request, token):
         form = PublicRsvpForm(request.POST)
         if form.is_valid():
             cd = form.cleaned_data
-            EventAttendee.objects.update_or_create(
-                event=event, email=cd["email"],
-                defaults={"tenant": event.tenant, "name": cd["name"],
-                          "rsvp_status": cd["rsvp_status"], "responded_at": timezone.now()})
-            messages.success(request, "Thanks — your response has been recorded.")
+            # First response wins: the invite token is shared with every invitee, so an anonymous
+            # visitor who knows another invitee's email must not overwrite a response already on file.
+            existing = EventAttendee.objects.filter(event=event, email=cd["email"]).first()
+            if existing and existing.rsvp_status != "no_response":
+                messages.info(request, "A response for that email is already recorded.")
+            else:
+                EventAttendee.objects.update_or_create(
+                    event=event, email=cd["email"],
+                    defaults={"tenant": event.tenant, "name": cd["name"],
+                              "rsvp_status": cd["rsvp_status"], "responded_at": timezone.now()})
+                messages.success(request, "Thanks — your response has been recorded.")
             return redirect("crm:event_invite", token=token)
     return render(request, "crm/activities/event_invite.html", {
         "event": event, "attendees": event.attendees.all(), "form": form,
@@ -1610,8 +1616,8 @@ def event_ics(request, token):
     def _ics_dt(dt):
         return dt.astimezone(dt_timezone.utc).strftime("%Y%m%dT%H%M%SZ") if dt else ""
 
-    def _esc(text):  # RFC 5545 TEXT escaping
-        return (str(text or "").replace("\\", "\\\\").replace(";", "\\;")
+    def _esc(text):  # RFC 5545 TEXT escaping (strip bare CR first — no meaning in a TEXT value)
+        return (str(text or "").replace("\r", "").replace("\\", "\\\\").replace(";", "\\;")
                 .replace(",", "\\,").replace("\n", "\\n"))
 
     def _fold(line):  # RFC 5545 §3.1: fold content lines >75 octets (continuation = leading space)
