@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Form Submissions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Form Submissions</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Form Submissions</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, email, company…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="landing_page" class="form-select">
+            <option value="">All landing pages</option>
+            {% for lp in landing_pages %}
+              <option value="{{ lp.pk }}" {% if request.GET.landing_page == lp.pk|stringformat:"d" %}selected{% endif %}>{{ lp.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'crm:formsubmission_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Landing page</th><th>Status</th><th>Received</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'crm:formsubmission_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>{{ obj.email|default:"—" }}</td>
+              <td>{{ obj.company|default:"—" }}</td>
+              <td>{% if obj.landing_page %}<a href="{% url 'crm:landingpage_detail' obj.landing_page.pk %}">{{ obj.landing_page.name }}</a>{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if obj.status == 'converted' %}green{% elif obj.status == 'routed' %}info{% elif obj.status == 'spam' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.created_at|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:formsubmission_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.converted_lead_id %}
+                    <form method="post" action="{% url 'crm:formsubmission_convert' obj.pk %}" onsubmit="return confirm('Convert this submission to a lead?');">
+                      {% csrf_token %}
+                      <button class="btn-icon" type="submit" title="Convert to lead"><i data-lucide="user-plus"></i></button>
+                    </form>
+                  {% endif %}
+                  <form method="post" action="{% url 'crm:formsubmission_delete' obj.pk %}" onsubmit="return confirm('Delete this submission?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>No form submissions found</h3><p>Captures from public landing-page forms appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
