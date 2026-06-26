@@ -81,7 +81,7 @@
               <td>{{ obj.title }}<br><span class="text-muted">{{ obj.designation.name|default:"" }}</span></td>
               <td>{{ obj.department.name|default:"—" }}</td>
               <td><span class="badge badge-{% if obj.priority == 'urgent' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></td>
-              <td><span class="badge badge-{% if obj.status == 'draft' %}muted{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'posted' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'filled' %}green{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'draft' %}muted{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'posted' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'filled' %}green{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td class="text-right">{{ obj.headcount }}</td>
               <td>{{ obj.hiring_manager.party.name|default:"—" }}</td>
               <td>{% if obj.target_start_date %}{{ obj.target_start_date }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
