@@ -132,6 +132,7 @@ class TestCampaignFormValid:
         form = CampaignForm({
             "name": "Test Campaign",
             "type": "email",
+            "objective": "lead_gen",
             "status": "planned",
             "budget_planned": "0.00",
             "budget_actual": "0.00",
