@@ -114,9 +114,11 @@ LIVE_LINKS = {
         "Customer Self-Service Portal": "crm:customerportalaccess_list",  # bullet (portal access mgmt)
         "Customer Portal": "crm:portal_case_list",                # extra (customer-facing entry, gated)
     },
-    # 1.5 Activity & Communication Management
+    # 1.5 Activity & Communication Management — all three bullets now live (recreated in detail).
     "1.5": {
-        "Task Management": "crm:task_list",              # bullet
+        "Task Management": "crm:task_list",                       # bullet (to-dos + recurring tasks)
+        "Calendar Integration": "crm:calendarevent_list",        # bullet (meetings + invite link + ICS)
+        "Email & Call Integration": "crm:communicationlog_list", # bullet (call logging + email/BCC sync)
     },
     # 1.6 Analytics & Reporting
     "1.6": {
