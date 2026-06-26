@@ -184,7 +184,9 @@ def opportunity_delete(request, pk):
 
 def _client_ip(request):
     """Best-effort client IP for a public submission. Uses REMOTE_ADDR only —
-    X-Forwarded-For is client-spoofable, so we never trust it for storage."""
+    X-Forwarded-For is client-spoofable, so we never trust it for storage.
+    # WARNING: behind a reverse proxy REMOTE_ADDR is the proxy IP. For accurate visitor IPs in
+    # production, resolve via django-ipware with a configured trusted-proxy count."""
     return request.META.get("REMOTE_ADDR") or None
 
 
@@ -408,7 +410,7 @@ def emailcampaign_delete(request, pk):
     return crud_delete(request, model=EmailCampaign, pk=pk, success_url="crm:emailcampaign_list")
 
 
-@login_required
+@tenant_admin_required  # firing a blast is privileged + irreversible — mirrors expense_approve/crm_po_receive
 @require_POST
 def emailcampaign_send(request, pk):
     """Simulate a send: snapshot recipient count from the campaign's members, stamp the
@@ -481,10 +483,26 @@ def landingpage_delete(request, pk):
     return crud_delete(request, model=LandingPage, pk=pk, success_url="crm:landingpage_list")
 
 
+@tenant_admin_required  # publishing exposes a live public web-to-lead URL — admin-gated
+@require_POST
+def landingpage_publish(request, pk):
+    """Toggle a landing page between draft and published. Publishing makes it live on a public
+    URL accepting leads, so this transition is admin-only (the content form excludes `status`)."""
+    page = get_object_or_404(LandingPage, pk=pk, tenant=request.tenant)
+    new_status = "draft" if page.status == "published" else "published"
+    LandingPage.objects.filter(pk=page.pk, tenant=request.tenant).update(status=new_status)
+    write_audit_log(request.user, page, "update",
+                    {"action": "publish" if new_status == "published" else "unpublish"})
+    messages.success(request, f"{page.number} is now {new_status}.")
+    return redirect("crm:landingpage_detail", pk=page.pk)
+
+
 def landing_public(request, token):
     """Public landing page + web-to-lead form (1.3). No login; the unguessable public_token is
     the bearer credential and only a *published* page resolves (draft/archived → 404). CSRF is
-    enforced by the template's {% csrf_token %}; the tenant-authored body is rendered ESCAPED."""
+    enforced by the template's {% csrf_token %}; the tenant-authored body is rendered ESCAPED.
+    # WARNING: unauthenticated endpoint — add per-IP rate-limiting (django-ratelimit) or a WAF
+    # throttle in production to stop scripted FormSubmission floods."""
     page = get_object_or_404(
         LandingPage.objects.select_related("campaign"), public_token=token, status="published")
     form = PublicLeadForm()
@@ -560,6 +578,7 @@ def formsubmission_convert(request, pk):
         sub.routed_to = owner
         sub.save(update_fields=["converted_lead", "status", "routed_to"])
     write_audit_log(request.user, lead, "create", {"from": "form_submission", "submission": sub.pk})
+    write_audit_log(request.user, sub, "update", {"action": "convert", "lead": lead.pk})
     messages.success(request, f"Converted to lead {lead.number}.")
     return redirect("crm:lead_detail", pk=lead.pk)
 
