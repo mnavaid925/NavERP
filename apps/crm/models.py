@@ -751,19 +751,17 @@ class Quote(TenantNumbered):
         ]
 
     def recalc_totals(self, save=True):
-        """Recompute subtotal/tax/total from the lines DB-side, then apply the quote-level
-        discount. Lines store unit_price/discount/tax; totals are derived, never user-entered."""
-        from django.db.models import DecimalField as DF
-        from django.db.models import ExpressionWrapper, F, Sum
-        net = ExpressionWrapper(
-            F("quantity") * F("unit_price") * (Decimal(1) - F("discount_pct") / 100),
-            output_field=DF(max_digits=18, decimal_places=4))
-        agg = self.lines.aggregate(
-            sub=Sum(net),
-            tax=Sum(net * F("tax_pct") / 100, output_field=DF(max_digits=18, decimal_places=4)),
-        )
-        line_sub = Decimal(agg["sub"] or 0)
-        line_tax = Decimal(agg["tax"] or 0)
+        """Recompute subtotal/tax/total from the lines, then apply the quote-level discount.
+        Lines store unit_price/discount/tax; totals are derived, never user-entered.
+
+        Summed in Python over the (few, bounded) lines using the Decimal-safe line properties —
+        NOT a DB-side ``F()/100`` expression, which integer-divides on SQLite and silently drops
+        per-line discounts/tax. One query (``self.lines.all()``); quotes have a handful of lines."""
+        line_sub = Decimal(0)
+        line_tax = Decimal(0)
+        for ln in self.lines.all():
+            line_sub += ln.line_subtotal
+            line_tax += ln.line_tax
         disc = (Decimal(100) - Decimal(self.discount_pct or 0)) / 100  # quote-level discount factor
         # The discount factor is applied to BOTH subtotal and tax, so tax is effectively computed
         # on the discounted base (tax_total = line_sub*tax_pct*disc = discounted_subtotal*tax_pct).
