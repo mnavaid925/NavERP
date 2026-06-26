@@ -1108,10 +1108,13 @@ def case_comment_add(request, pk):
     comment.case = case
     comment.author = request.user
     comment.author_name = request.user.get_full_name() or request.user.username
-    comment.save()
-    if comment.is_public and case.first_responded_at is None:
-        case.first_responded_at = timezone.now()
-        case.save(update_fields=["first_responded_at", "updated_at"])
+    with transaction.atomic():
+        comment.save()
+        if comment.is_public:
+            # Atomic claim — only the first public reply stamps the SLA first-response clock
+            # (no read-check-write race between two agents replying concurrently).
+            Case.objects.filter(pk=case.pk, first_responded_at__isnull=True).update(
+                first_responded_at=timezone.now(), updated_at=timezone.now())
     messages.success(request, "Comment added.")
     return redirect("crm:case_detail", pk=case.pk)
 
@@ -1287,7 +1290,8 @@ def case_public(request, token):
     """Public case-status tracking page — no login; the unguessable token is the bearer credential.
     Shows status/SLA + PUBLIC comments only (internal notes never leak) and lets the customer post a
     reply or a CSAT rating. CSRF-protected via the template tag; tenant taken from the case itself."""
-    case = get_object_or_404(Case.objects.select_related("sla_policy", "owner"), public_token=token)
+    case = get_object_or_404(
+        Case.objects.select_related("sla_policy", "owner", "contact"), public_token=token)
     sat_form = PublicSatisfactionForm()
     comment_form = PublicCommentForm()
     if request.method == "POST":
@@ -1300,7 +1304,7 @@ def case_public(request, token):
                     author_name=(case.contact.name if case.contact else "Customer"),
                     body=comment_form.cleaned_data["body"], is_public=True)
                 return redirect("crm:case_public", token=token)
-        elif action == "satisfaction":
+        elif action == "satisfaction" and case.satisfaction_rating is None:  # CSAT submitted once
             sat_form = PublicSatisfactionForm(request.POST)
             if sat_form.is_valid():
                 case.satisfaction_rating = int(sat_form.cleaned_data["rating"])
@@ -1356,6 +1360,10 @@ def portal_case_list(request):
         messages.error(request, "You don't have customer portal access.")
         return redirect("dashboard:home")
     party = access.customer_party
+    if party is None:  # WARNING: without this, Q(account=None)|Q(contact=None) would match
+        # every unlinked case in the tenant — leaking cases to a misconfigured portal account.
+        messages.error(request, "Your portal account has no linked customer — contact support.")
+        return redirect("dashboard:home")
     cases = (Case.objects.filter(tenant=request.tenant)
              .filter(Q(account=party) | Q(contact=party))
              .select_related("owner").order_by("-created_at"))
@@ -1371,6 +1379,9 @@ def portal_case_detail(request, pk):
         messages.error(request, "You don't have customer portal access.")
         return redirect("dashboard:home")
     party = access.customer_party
+    if party is None:  # no linked customer → no scope; refuse rather than match null-party cases
+        messages.error(request, "Your portal account has no linked customer — contact support.")
+        return redirect("dashboard:home")
     # Scoped to the portal user's own party — they can never open another customer's case.
     case = get_object_or_404(
         Case.objects.filter(tenant=request.tenant).filter(Q(account=party) | Q(contact=party)), pk=pk)
@@ -1382,6 +1393,7 @@ def portal_case_detail(request, pk):
                 tenant=request.tenant, case=case, author=request.user,
                 author_name=request.user.get_full_name() or request.user.username,
                 body=comment_form.cleaned_data["body"], is_public=True)
+            messages.success(request, "Your reply was sent.")
             return redirect("crm:portal_case_detail", pk=case.pk)
     return render(request, "crm/service/portal_case_detail.html", {
         "access": access, "case": case,
