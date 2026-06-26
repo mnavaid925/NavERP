@@ -22,21 +22,31 @@ from apps.core.utils import write_audit_log
 from .forms import (
     AccountForm,
     CampaignForm,
+    CampaignMemberForm,
     CaseForm,
     ContactForm,
     CrmTaskForm,
+    EmailCampaignForm,
+    EmailTemplateForm,
     KnowledgeArticleForm,
+    LandingPageForm,
     LeadForm,
     OpportunityForm,
+    PublicLeadForm,
 )
 from .models import (
     INDUSTRY_CHOICES,
     AccountProfile,
     Campaign,
+    CampaignMember,
     Case,
     ContactProfile,
     CrmTask,
+    EmailCampaign,
+    EmailTemplate,
+    FormSubmission,
     KnowledgeArticle,
+    LandingPage,
     Lead,
     Opportunity,
 )
@@ -163,16 +173,30 @@ def opportunity_delete(request, pk):
     return crud_delete(request, model=Opportunity, pk=pk, success_url="crm:opportunity_list")
 
 
-# ================================================================ Campaigns (1.3)
+# ============================================================================
+# ===== 1.3 Marketing Automation (recreated) =================================
+# Campaign Management (+ target-list segmentation), Email Marketing (templates +
+# blasts/drip/A-B + tracking), and Landing Pages & Forms (public web-to-lead).
+# ============================================================================
+
+def _client_ip(request):
+    """Best-effort client IP for a public submission. Uses REMOTE_ADDR only —
+    X-Forwarded-For is client-spoofable, so we never trust it for storage."""
+    return request.META.get("REMOTE_ADDR") or None
+
+
+# ------------------------------------------------------------ Campaigns (1.3)
 @login_required
 def campaign_list(request):
     return crud_list(
         request, Campaign.objects.filter(tenant=request.tenant).select_related("owner"),
         "crm/marketing/campaign/list.html",
         search_fields=["name", "number"],
-        filters=[("status", "status", False), ("type", "type", False)],
+        filters=[("status", "status", False), ("type", "type", False),
+                 ("objective", "objective", False)],
         extra_context={"status_choices": Campaign.STATUS_CHOICES,
-                       "type_choices": Campaign.TYPE_CHOICES},
+                       "type_choices": Campaign.TYPE_CHOICES,
+                       "objective_choices": Campaign.OBJECTIVE_CHOICES},
     )
 
 
@@ -184,11 +208,28 @@ def campaign_create(request):
 
 @login_required
 def campaign_detail(request, pk):
-    obj = get_object_or_404(Campaign.objects.select_related("owner"), pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        Campaign.objects.select_related("owner", "parent_campaign"), pk=pk, tenant=request.tenant)
+    members_qs = CampaignMember.objects.filter(tenant=request.tenant, campaign=obj)
+    # Single aggregate for the funnel stats — no per-row loop, no N+1.
+    agg = members_qs.aggregate(
+        total=Count("id"),
+        responded=Count("id", filter=Q(status__in=CampaignMember.RESPONDED_STATUSES)),
+    )
+    total, responded = agg["total"] or 0, agg["responded"] or 0
     return render(request, "crm/marketing/campaign/detail.html", {
         "obj": obj,
+        "members": members_qs.select_related("party", "lead")[:50],
+        "member_total": total,
+        "responded_count": responded,
+        "response_rate": (responded / total * 100) if total else None,
+        "email_campaigns": EmailCampaign.objects.filter(
+            tenant=request.tenant, campaign=obj).select_related("template")[:20],
+        "landing_pages": LandingPage.objects.filter(
+            tenant=request.tenant, campaign=obj)[:20],
         "opportunities": Opportunity.objects.filter(
             tenant=request.tenant, campaign=obj).select_related("account")[:20],
+        "member_status_choices": CampaignMember.STATUS_CHOICES,
     })
 
 
@@ -202,6 +243,313 @@ def campaign_edit(request, pk):
 @require_POST
 def campaign_delete(request, pk):
     return crud_delete(request, model=Campaign, pk=pk, success_url="crm:campaign_list")
+
+
+# ------------------------------------------------------------ Campaign members (1.3)
+@login_required
+def campaignmember_list(request):
+    return crud_list(
+        request,
+        CampaignMember.objects.filter(tenant=request.tenant).select_related("campaign", "party", "lead"),
+        "crm/marketing/campaignmember/list.html",
+        search_fields=["member_name", "member_email", "campaign__name"],
+        filters=[("status", "status", False), ("campaign", "campaign_id", True)],
+        extra_context={"status_choices": CampaignMember.STATUS_CHOICES,
+                       "campaigns": Campaign.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
+    )
+
+
+@login_required
+def campaignmember_create(request):
+    return crud_create(request, form_class=CampaignMemberForm,
+                       template="crm/marketing/campaignmember/form.html",
+                       success_url="crm:campaignmember_list")
+
+
+@login_required
+def campaignmember_detail(request, pk):
+    obj = get_object_or_404(
+        CampaignMember.objects.select_related("campaign", "party", "lead"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/marketing/campaignmember/detail.html", {"obj": obj})
+
+
+@login_required
+def campaignmember_edit(request, pk):
+    return crud_edit(request, model=CampaignMember, pk=pk, form_class=CampaignMemberForm,
+                     template="crm/marketing/campaignmember/form.html",
+                     success_url="crm:campaignmember_list")
+
+
+@login_required
+@require_POST
+def campaignmember_delete(request, pk):
+    return crud_delete(request, model=CampaignMember, pk=pk, success_url="crm:campaignmember_list")
+
+
+@login_required
+@require_POST
+def campaignmember_add(request, pk):
+    """Inline add on the campaign detail page — quick manual list entry."""
+    campaign = get_object_or_404(Campaign, pk=pk, tenant=request.tenant)
+    name = request.POST.get("member_name", "").strip()[:255]
+    if not name:
+        messages.error(request, "A member name is required.")
+        return redirect("crm:campaign_detail", pk=campaign.pk)
+    status = request.POST.get("status", "targeted")
+    if status not in dict(CampaignMember.STATUS_CHOICES):
+        status = "targeted"
+    CampaignMember.objects.create(
+        tenant=request.tenant, campaign=campaign, member_name=name,
+        member_email=request.POST.get("member_email", "").strip()[:254], status=status)
+    messages.success(request, "Member added to the campaign.")
+    return redirect("crm:campaign_detail", pk=campaign.pk)
+
+
+@login_required
+@require_POST
+def campaignmember_remove(request, member_pk):
+    member = get_object_or_404(CampaignMember, pk=member_pk, tenant=request.tenant)
+    campaign_id = member.campaign_id
+    member.delete()
+    messages.success(request, "Member removed.")
+    return redirect("crm:campaign_detail", pk=campaign_id)
+
+
+# ------------------------------------------------------------ Email templates (1.3)
+@login_required
+def emailtemplate_list(request):
+    return crud_list(
+        request,
+        # defer the large HTML body — it's never shown on the list.
+        EmailTemplate.objects.filter(tenant=request.tenant).select_related("owner").defer("body"),
+        "crm/marketing/emailtemplate/list.html",
+        search_fields=["number", "name", "subject"],
+        filters=[("category", "category", False), ("is_active", "is_active", False)],
+        extra_context={"category_choices": EmailTemplate.CATEGORY_CHOICES},
+    )
+
+
+@login_required
+def emailtemplate_create(request):
+    return crud_create(request, form_class=EmailTemplateForm,
+                       template="crm/marketing/emailtemplate/form.html",
+                       success_url="crm:emailtemplate_list")
+
+
+@login_required
+def emailtemplate_detail(request, pk):
+    obj = get_object_or_404(EmailTemplate.objects.select_related("owner"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/marketing/emailtemplate/detail.html", {"obj": obj})
+
+
+@login_required
+def emailtemplate_edit(request, pk):
+    return crud_edit(request, model=EmailTemplate, pk=pk, form_class=EmailTemplateForm,
+                     template="crm/marketing/emailtemplate/form.html",
+                     success_url="crm:emailtemplate_list")
+
+
+@login_required
+@require_POST
+def emailtemplate_delete(request, pk):
+    return crud_delete(request, model=EmailTemplate, pk=pk, success_url="crm:emailtemplate_list")
+
+
+# ------------------------------------------------------------ Email campaigns / blasts (1.3)
+@login_required
+def emailcampaign_list(request):
+    return crud_list(
+        request,
+        EmailCampaign.objects.filter(tenant=request.tenant).select_related("campaign", "template", "owner"),
+        "crm/marketing/emailcampaign/list.html",
+        search_fields=["number", "name", "campaign__name"],
+        filters=[("status", "status", False), ("send_type", "send_type", False),
+                 ("campaign", "campaign_id", True)],
+        extra_context={"status_choices": EmailCampaign.STATUS_CHOICES,
+                       "send_type_choices": EmailCampaign.SEND_TYPE_CHOICES,
+                       "campaigns": Campaign.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
+    )
+
+
+@login_required
+def emailcampaign_create(request):
+    return crud_create(request, form_class=EmailCampaignForm,
+                       template="crm/marketing/emailcampaign/form.html",
+                       success_url="crm:emailcampaign_list")
+
+
+@login_required
+def emailcampaign_detail(request, pk):
+    obj = get_object_or_404(
+        EmailCampaign.objects.select_related("campaign", "template", "variant_template", "owner"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/marketing/emailcampaign/detail.html", {"obj": obj})
+
+
+@login_required
+def emailcampaign_edit(request, pk):
+    return crud_edit(request, model=EmailCampaign, pk=pk, form_class=EmailCampaignForm,
+                     template="crm/marketing/emailcampaign/form.html",
+                     success_url="crm:emailcampaign_list")
+
+
+@login_required
+@require_POST
+def emailcampaign_delete(request, pk):
+    return crud_delete(request, model=EmailCampaign, pk=pk, success_url="crm:emailcampaign_list")
+
+
+@login_required
+@require_POST
+def emailcampaign_send(request, pk):
+    """Simulate a send: snapshot recipient count from the campaign's members, stamp the
+    send, and advance any 'targeted' members to 'sent'. (No real ESP — metrics are modelled,
+    not delivered.) recipients_count/sent_count/sent_at are system-set here, never via the form."""
+    blast = get_object_or_404(EmailCampaign.objects.select_related("campaign"), pk=pk, tenant=request.tenant)
+    if blast.status in ("sending", "sent", "cancelled"):
+        messages.info(request, "This email campaign has already been sent or cancelled.")
+        return redirect("crm:emailcampaign_detail", pk=blast.pk)
+    recipients = CampaignMember.objects.filter(tenant=request.tenant, campaign=blast.campaign).count()
+    with transaction.atomic():
+        blast.recipients_count = recipients
+        blast.sent_count = recipients
+        blast.status = "sent"
+        blast.sent_at = timezone.now()
+        blast.save(update_fields=["recipients_count", "sent_count", "status", "sent_at", "updated_at"])
+        CampaignMember.objects.filter(
+            tenant=request.tenant, campaign=blast.campaign, status="targeted").update(status="sent")
+    write_audit_log(request.user, blast, "update", {"action": "send", "recipients": recipients})
+    messages.success(request, f"{blast.number} sent to {recipients} recipient(s).")
+    return redirect("crm:emailcampaign_detail", pk=blast.pk)
+
+
+# ------------------------------------------------------------ Landing pages (1.3)
+@login_required
+def landingpage_list(request):
+    return crud_list(
+        request,
+        LandingPage.objects.filter(tenant=request.tenant).select_related("campaign", "routing_owner"),
+        "crm/marketing/landingpage/list.html",
+        search_fields=["number", "name", "headline", "slug"],
+        filters=[("status", "status", False), ("campaign", "campaign_id", True)],
+        extra_context={"status_choices": LandingPage.STATUS_CHOICES,
+                       "campaigns": Campaign.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
+    )
+
+
+@login_required
+def landingpage_create(request):
+    return crud_create(request, form_class=LandingPageForm,
+                       template="crm/marketing/landingpage/form.html",
+                       success_url="crm:landingpage_list")
+
+
+@login_required
+def landingpage_detail(request, pk):
+    obj = get_object_or_404(
+        LandingPage.objects.select_related("campaign", "routing_owner", "owner"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/marketing/landingpage/detail.html", {
+        "obj": obj,
+        "submissions": FormSubmission.objects.filter(
+            tenant=request.tenant, landing_page=obj).select_related("converted_lead")[:20],
+    })
+
+
+@login_required
+def landingpage_edit(request, pk):
+    return crud_edit(request, model=LandingPage, pk=pk, form_class=LandingPageForm,
+                     template="crm/marketing/landingpage/form.html",
+                     success_url="crm:landingpage_list")
+
+
+@login_required
+@require_POST
+def landingpage_delete(request, pk):
+    return crud_delete(request, model=LandingPage, pk=pk, success_url="crm:landingpage_list")
+
+
+def landing_public(request, token):
+    """Public landing page + web-to-lead form (1.3). No login; the unguessable public_token is
+    the bearer credential and only a *published* page resolves (draft/archived → 404). CSRF is
+    enforced by the template's {% csrf_token %}; the tenant-authored body is rendered ESCAPED."""
+    page = get_object_or_404(
+        LandingPage.objects.select_related("campaign"), public_token=token, status="published")
+    submitted = False
+    form = PublicLeadForm()
+    if request.method == "POST":
+        form = PublicLeadForm(request.POST)
+        if form.is_valid():
+            cd = form.cleaned_data
+            with transaction.atomic():
+                FormSubmission.objects.create(
+                    tenant=page.tenant, landing_page=page,
+                    name=cd["name"], email=cd["email"],
+                    phone=cd["phone"] if page.capture_phone else "",
+                    company=cd["company"] if page.capture_company else "",
+                    message=cd["message"] if page.capture_message else "",
+                    status="new", routed_to=page.routing_owner, ip_address=_client_ip(request),
+                )
+                LandingPage.objects.filter(pk=page.pk).update(submission_count=F("submission_count") + 1)
+            submitted = True
+            form = PublicLeadForm()  # reset for a fresh blank form
+    return render(request, "crm/marketing/landing_public.html", {
+        "page": page, "form": form, "submitted": submitted})
+
+
+# ------------------------------------------------------------ Form submissions (1.3, read-mostly)
+@login_required
+def formsubmission_list(request):
+    return crud_list(
+        request,
+        FormSubmission.objects.filter(tenant=request.tenant).select_related(
+            "landing_page", "routed_to", "converted_lead"),
+        "crm/marketing/formsubmission/list.html",
+        search_fields=["name", "email", "company", "landing_page__name"],
+        filters=[("status", "status", False), ("landing_page", "landing_page_id", True)],
+        extra_context={"status_choices": FormSubmission.STATUS_CHOICES,
+                       "landing_pages": LandingPage.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
+    )
+
+
+@login_required
+def formsubmission_detail(request, pk):
+    obj = get_object_or_404(
+        FormSubmission.objects.select_related("landing_page", "routed_to", "converted_lead"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/marketing/formsubmission/detail.html", {"obj": obj})
+
+
+@login_required
+@require_POST
+def formsubmission_delete(request, pk):
+    return crud_delete(request, model=FormSubmission, pk=pk, success_url="crm:formsubmission_list")
+
+
+@login_required
+@require_POST
+def formsubmission_convert(request, pk):
+    """Turn a captured submission into a CRM Lead, routed to the landing page's owner.
+    Idempotent — a submission already linked to a lead is left untouched."""
+    sub = get_object_or_404(
+        FormSubmission.objects.select_related("landing_page", "routed_to"), pk=pk, tenant=request.tenant)
+    if sub.converted_lead_id:
+        messages.info(request, "This submission was already converted to a lead.")
+        return redirect("crm:formsubmission_detail", pk=sub.pk)
+    lp = sub.landing_page
+    owner = sub.routed_to or (lp.routing_owner if lp else None)
+    with transaction.atomic():
+        lead = Lead.objects.create(
+            tenant=request.tenant, name=sub.name, company=sub.company, email=sub.email,
+            phone=sub.phone, source=(lp.lead_source if lp else "web"), status="new",
+            owner=owner, description=sub.message,
+        )
+        sub.converted_lead = lead
+        sub.status = "converted"
+        sub.routed_to = owner
+        sub.save(update_fields=["converted_lead", "status", "routed_to"])
+    write_audit_log(request.user, lead, "create", {"from": "form_submission", "submission": sub.pk})
+    messages.success(request, f"Converted to lead {lead.number}.")
+    return redirect("crm:lead_detail", pk=lead.pk)
 
 
 # ============================================================ Cases / Tickets (1.4)
