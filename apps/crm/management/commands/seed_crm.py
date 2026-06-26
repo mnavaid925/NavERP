@@ -16,10 +16,12 @@ from apps.core.models import Party, Tenant
 from apps.crm.models import (
     AccountProfile,
     ApprovalRequest,
+    CalendarEvent,
     Campaign,
     CampaignMember,
     Case,
     CaseComment,
+    CommunicationLog,
     ContactProfile,
     ContractDocument,
     CrmMilestone,
@@ -29,6 +31,7 @@ from apps.crm.models import (
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
+    EventAttendee,
     Expense,
     FormSubmission,
     HealthScoreConfig,
@@ -116,6 +119,8 @@ class Command(BaseCommand):
             self._seed_sfa(tenant)
             # 1.4 Customer Service & Support — runs unconditionally; self-guards on SlaPolicy.
             self._seed_service(tenant)
+            # 1.5 Activity & Communication Management — runs unconditionally; self-guards on CalendarEvent.
+            self._seed_activities(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -553,3 +558,90 @@ class Command(BaseCommand):
             can_register_leads=False, is_active=True)
 
         self.stdout.write(self.style.SUCCESS(f"{tenant.name}: seeded CRM 1.7–1.12 extension data"))
+
+    def _seed_activities(self, tenant):
+        """Idempotently seed 1.5 Activity & Communication data — a recurring task + its next
+        spawned occurrence, calendar events with attendees (incl. RSVPs), and a unified
+        call/email/note/SMS communication history. Reuses the tenant's owner / Party /
+        Opportunity. Guard: skip if a CalendarEvent already exists for the tenant."""
+        if CalendarEvent.objects.filter(tenant=tenant).exists():
+            return
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        if owner is None:
+            return
+        org = Party.objects.filter(tenant=tenant, kind="organization").first()
+        person = Party.objects.filter(tenant=tenant, kind="person").first()
+        opp = Opportunity.objects.filter(tenant=tenant).order_by("created_at").first()
+        now = timezone.now()
+        today = timezone.localdate()
+        td = datetime.timedelta
+        org_name = org.name if org else "Acme Corp"
+
+        # --- Recurring task (weekly) + a manually-created "next occurrence" (demo of the series).
+        # Both start status="open", so CrmTask.save() does NOT trigger the spawn-on-done path.
+        parent_task = CrmTask.objects.create(
+            tenant=tenant, subject="Weekly check-in call", type="call", priority="medium",
+            status="open", due_date=today + td(days=7), owner=owner, party=person,
+            related_opportunity=opp, recurrence="weekly", recurrence_interval=1,
+            recurrence_until=today + td(days=90),
+            description="Recurring weekly touch-base with the account.")
+        CrmTask.objects.create(
+            tenant=tenant, subject="Weekly check-in call", type="call", priority="medium",
+            status="open", due_date=today + td(days=14), owner=owner, party=person,
+            related_opportunity=opp, recurrence="weekly", recurrence_interval=1,
+            recurrence_until=today + td(days=90), recurrence_parent=parent_task,
+            description="Recurring weekly touch-base with the account.")
+
+        # --- Calendar events (varied types/statuses) + attendees with RSVPs.
+        events_spec = [
+            ("Kickoff Meeting", "meeting", "confirmed", now + td(days=2), 60, org),
+            ("Product Demo", "demo", "scheduled", now + td(days=7), 45, org),
+            ("Quarterly Business Review", "meeting", "completed", now - td(days=14), 90, org),
+            ("Follow-up Call", "call", "scheduled", now + td(days=3), 30, person),
+        ]
+        first_event = None
+        for title, etype, status, start, dur, evt_party in events_spec:
+            ev = CalendarEvent.objects.create(
+                tenant=tenant, title=f"{title} — {org_name}", event_type=etype, status=status,
+                start=start, end=start + td(minutes=dur), location="Online",
+                video_url="https://meet.example.com/naverp-demo", sync_source="manual",
+                reminder_minutes=15, owner=owner, party=evt_party, related_opportunity=opp,
+                description=f"{title} with {org_name}.")
+            first_event = first_event or ev
+            EventAttendee.objects.create(
+                tenant=tenant, event=ev, party=None,
+                name=(owner.get_full_name() or owner.username),
+                email=(owner.email or "rep@naverp.example"),
+                rsvp_status="accepted", is_organizer=True)
+            EventAttendee.objects.create(
+                tenant=tenant, event=ev, party=org, name=org_name,
+                email="contact@example.com",
+                rsvp_status="tentative" if status == "scheduled" else "accepted")
+        # A third (no-response) attendee on the first event.
+        if first_event is not None and person is not None:
+            EventAttendee.objects.create(
+                tenant=tenant, event=first_event, party=person, name=person.name,
+                email="contact2@example.com", rsvp_status="no_response")
+
+        # --- Communication history (calls w/ duration+outcome, BCC-synced emails, a note, an SMS).
+        comms = [
+            ("call", "outbound", "Cold call — intro", "", 243, "connected", "voip", now - td(days=5)),
+            ("call", "outbound", "Follow-up call", "", 0, "voicemail", "voip", now - td(days=3)),
+            ("email", "outbound", "Proposal sent", "Please find the proposal attached.",
+             None, "", "bcc_dropbox", now - td(days=4)),
+            ("email", "inbound", "Re: Proposal", "Thanks — this looks good, reviewing internally.",
+             None, "", "bcc_dropbox", now - td(days=3)),
+            ("note", "", "Meeting notes — kickoff", "Discussed Q3 roadmap and success criteria.",
+             None, "", "manual", now - td(days=14)),
+            ("sms", "outbound", "Reminder: demo tomorrow", "See you at 2pm!",
+             None, "", "manual", now - td(days=6)),
+        ]
+        for channel, direction, subject, body, dur, outcome, via, occurred in comms:
+            CommunicationLog.objects.create(
+                tenant=tenant, channel=channel, direction=direction, subject=subject, body=body,
+                party=org, owner=owner, related_opportunity=opp, occurred_at=occurred,
+                duration_seconds=dur, outcome=outcome, logged_via=via)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"{tenant.name}: seeded CRM 1.5 activity & communication data"))
