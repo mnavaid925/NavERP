@@ -82,10 +82,16 @@ LIVE_LINKS = {
         "Accounts (Companies)": "crm:account_list",     # bullet (organization Party lens)
         "Leads (Potential Customers)": "crm:lead_list", # bullet
     },
-    # 1.2 Sales Force Automation (SFA)
+    # 1.2 Sales Force Automation (SFA) — all three bullets now live (recreated in detail).
     "1.2": {
         "Opportunity Management (Deals)": "crm:opportunity_list",  # bullet
-        "Forecasting": "crm:overview",                  # bullet (weighted pipeline on the overview)
+        "Pipeline Board": "crm:opportunity_board",                 # extra (Kanban)
+        "Product Catalog (Quoting)": "crm:product_list",           # bullet
+        "Quotes": "crm:quote_list",                                # extra (quote builder)
+        "Price Books": "crm:pricebook_list",                       # extra
+        "Forecasting": "crm:forecast",                             # bullet (real forecast dashboard)
+        "Sales Quotas": "crm:salesquota_list",                     # extra
+        "Territories": "crm:territory_list",                       # extra
     },
     # 1.3 Marketing Automation — all three bullets now live (recreated in detail).
     "1.3": {
