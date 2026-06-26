@@ -7,6 +7,7 @@
       <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Opportunities</span></div>
     </div>
     <div class="page-actions">
+      <a href="{% url 'crm:opportunity_board' %}" class="btn btn-outline"><i data-lucide="kanban-square"></i> Pipeline Board</a>
       <a href="{% url 'crm:opportunity_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Opportunity</a>
     </div>
   </div>
@@ -26,10 +27,26 @@
           </select>
         </div>
         <div class="form-group">
+          <select name="forecast_category" class="form-select">
+            <option value="">All forecast</option>
+            {% for val, label in forecast_choices %}
+              <option value="{{ val }}" {% if request.GET.forecast_category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="account" class="form-select">
             <option value="">All accounts</option>
             {% for acc in accounts %}
               <option value="{{ acc.pk }}" {% if request.GET.account == acc.pk|stringformat:"d" %}selected{% endif %}>{{ acc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="territory" class="form-select">
+            <option value="">All territories</option>
+            {% for t in territories %}
+              <option value="{{ t.pk }}" {% if request.GET.territory == t.pk|stringformat:"d" %}selected{% endif %}>{{ t.name }}</option>
             {% endfor %}
           </select>
         </div>
@@ -40,7 +57,7 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Amount</th><th>Prob.</th><th>Close Date</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Forecast</th><th>Amount</th><th>Weighted</th><th>Close</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -48,8 +65,9 @@
               <td>{{ obj.name }}</td>
               <td>{% if obj.account %}{{ obj.account.name }}{% else %}—{% endif %}</td>
               <td><span class="badge badge-{% if obj.stage == 'closed_won' %}green{% elif obj.stage == 'closed_lost' %}red{% elif obj.stage == 'negotiation' %}amber{% elif obj.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ obj.get_stage_display }}</span></td>
+              <td>{{ obj.get_forecast_category_display }}</td>
               <td>{{ obj.amount }}</td>
-              <td>{{ obj.probability }}%</td>
+              <td>{{ obj.weighted_amount|floatformat:0 }}</td>
               <td>{% if obj.close_date %}{{ obj.close_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
               <td>
@@ -64,7 +82,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="9"><div class="empty-state"><i data-lucide="target"></i><h3>No opportunities found</h3><p>Create your first deal to build your pipeline.</p></div></td></tr>
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="target"></i><h3>No opportunities found</h3><p>Create your first deal to build your pipeline.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
