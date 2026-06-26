@@ -34,7 +34,7 @@
       <div class="detail-item"><dt>Public URL</dt><dd>{% if obj.status == 'published' %}<a href="{% url 'crm:landing_public' obj.public_token %}" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'crm:landing_public' obj.public_token %}</a>{% else %}<span class="badge badge-muted">Publish to activate</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
     </dl>
-    {% if obj.body %}<p style="margin-top:1rem;">{{ obj.body|linebreaks }}</p>{% endif %}
+    {% if obj.body %}<div style="margin-top:1rem;">{{ obj.body|linebreaksbr }}</div>{% endif %}
   </div></div>
 
   <div class="card">
