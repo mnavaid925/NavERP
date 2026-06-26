@@ -192,7 +192,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.9/3.10/3.12
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.9/3.10/3.12
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -229,6 +229,15 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `FinalSettlement` (`FNF-`) with earnings/deductions and a **derived** `net_payable`, `Compute` auto-fills leave
   encashment + gratuity, then HR→Finance approve→paid; and auto-generated relieving/experience letters
   (print views). GL posting deferred (`gl_posted` stub → `accounting.PayrollRun`).
+- **3.5 Job Requisition** — the "authorization to hire". A `JobRequisition` (`JR-`) hub carries the opening's
+  title/designation/grade, department + cost-center (`core.OrgUnit`), headcount, req-type, budget (salary range +
+  estimated annual cost + hiring-cost budget) and a job-description body, with hiring_manager/recruiter as
+  `EmployeeProfile`s. It runs a sequential **approval chain** of `RequisitionApproval` steps (the immutable audit
+  trail) through a `draft→pending_approval→approved→posted→on_hold→filled` lifecycle (+ rejected/cancelled, all
+  status fields workflow-owned, never on the form); on submit a `generate_approval_chain` service auto-builds the
+  default HR→Executive chain. A reusable `JobDescriptionTemplate` (`JDTMPL-`) library pre-fills the JD via a
+  copy-on-apply `apply_template_to_requisition` service; plus per-step approve/reject/return, clone, and an
+  overdue indicator. Candidate/interview/offer linkage deferred to 3.6–3.8.
 - **3.9 Attendance Management** — `AttendanceRecord` (`ATT-`, auto `hours_worked` incl. overnight, late-arrival
   badge, source/status), `Shift` (grace window) + `ShiftAssignment`.
 - **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
@@ -644,7 +653,7 @@ Before deploying:
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, opportunities, campaigns, cases, KB, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard + cash-forecast; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, recurring invoicing, payments + cash application, aging, payment schedule; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
-| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.9/3.10/3.12 built — 7 of 41 sub-modules (**employee management** — full personnel-file profiles on `core.Party`/`core.Employment` with a document vault [verify/reject + expiry + confidential] and a dated lifecycle/job-history timeline; **organizational structure** — job grades + designations (salary bands/JD), department & cost-center companion profiles (head/owner/budget) on `core.OrgUnit`, a derived org chart + company-setup view; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.5 Job Requisition |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.5/3.9/3.10/3.12 built — 8 of 41 sub-modules (**employee management** — full personnel-file profiles on `core.Party`/`core.Employment` with a document vault [verify/reject + expiry + confidential] and a dated lifecycle/job-history timeline; **organizational structure** — job grades + designations (salary bands/JD), department & cost-center companion profiles (head/owner/budget) on `core.OrgUnit`, a derived org chart + company-setup view; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; **job requisition** — a `JobRequisition` authorization-to-hire hub with budget/headcount/JD, a sequential `RequisitionApproval` chain (draft→pending→approved→posted→filled), reusable `JobDescriptionTemplate` copy-on-apply, and clone; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.6 Candidate Management |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
 | 6 | Procurement Management System | `procurement` | Roadmap |
