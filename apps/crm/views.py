@@ -213,14 +213,15 @@ def opportunity_board(request):
     """Kanban pipeline board — opportunities grouped into a column per stage with per-stage
     count + amount totals (aggregated DB-side; each column previews its top deals)."""
     base = Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner", "territory")
+    # One grouped query for all per-stage count + amount totals (instead of 6 aggregate round-trips).
+    stage_agg = {r["stage"]: r for r in base.values("stage").annotate(c=Count("id"), total=Sum("amount"))}
     columns = []
     for value, label in Opportunity.STAGE_CHOICES:
-        col = base.filter(stage=value)
-        agg = col.aggregate(c=Count("id"), total=Sum("amount"))
+        row = stage_agg.get(value, {})
         columns.append({
             "value": value, "label": label,
-            "count": agg["c"] or 0, "total": agg["total"] or 0,
-            "opps": list(col.order_by("-amount")[:50]),
+            "count": row.get("c") or 0, "total": row.get("total") or 0,
+            "opps": list(base.filter(stage=value).order_by("-amount")[:50]),
         })
     return render(request, "crm/sales/pipeline.html", {"columns": columns})
 
@@ -286,7 +287,8 @@ def opportunitysplit_remove(request, split_pk):
 def territory_list(request):
     return crud_list(
         request,
-        Territory.objects.filter(tenant=request.tenant).select_related("parent", "manager"),
+        # defer the large description TextField — not rendered on the list.
+        Territory.objects.filter(tenant=request.tenant).select_related("parent", "manager").defer("description"),
         "crm/sales/territory/list.html",
         search_fields=["number", "name", "region", "segment"],
         filters=[("is_active", "is_active", False)],
@@ -305,7 +307,7 @@ def territory_detail(request, pk):
     obj = get_object_or_404(Territory.objects.select_related("parent", "manager"), pk=pk, tenant=request.tenant)
     return render(request, "crm/sales/territory/detail.html", {
         "obj": obj,
-        "children": Territory.objects.filter(tenant=request.tenant, parent=obj),
+        "children": Territory.objects.filter(tenant=request.tenant, parent=obj).select_related("manager"),
         "opportunities": Opportunity.objects.filter(
             tenant=request.tenant, territory=obj).select_related("account")[:20],
     })
@@ -328,7 +330,7 @@ def territory_delete(request, pk):
 def product_list(request):
     return crud_list(
         request,
-        Product.objects.filter(tenant=request.tenant),
+        Product.objects.filter(tenant=request.tenant).defer("description"),  # description not on the list
         "crm/sales/product/list.html",
         search_fields=["number", "name", "sku"],
         filters=[("product_type", "product_type", False), ("is_active", "is_active", False)],
@@ -365,7 +367,7 @@ def product_delete(request, pk):
 def pricebook_list(request):
     return crud_list(
         request,
-        PriceBook.objects.filter(tenant=request.tenant),
+        PriceBook.objects.filter(tenant=request.tenant).defer("description"),  # description not on the list
         "crm/sales/pricebook/list.html",
         search_fields=["number", "name", "region", "tier"],
         filters=[("is_active", "is_active", False)],
