@@ -121,10 +121,21 @@ class Campaign(TenantNumbered):
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
     ]
+    OBJECTIVE_CHOICES = [
+        ("awareness", "Brand Awareness"),
+        ("lead_gen", "Lead Generation"),
+        ("nurture", "Nurture / Engagement"),
+        ("conversion", "Conversion / Sales"),
+        ("event", "Event Promotion"),
+        ("retention", "Retention / Loyalty"),
+    ]
 
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="email")
+    objective = models.CharField(max_length=20, choices=OBJECTIVE_CHOICES, default="lead_gen")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="planned")
+    # Self-FK lets campaigns roll up under a parent program (e.g. "Q3 Demand Gen").
+    parent_campaign = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="child_campaigns")
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     budget_planned = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -132,6 +143,10 @@ class Campaign(TenantNumbered):
     expected_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     actual_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     target_size = models.PositiveIntegerField(default=0)
+    # UTM tagging so downstream web/landing traffic can be attributed to the campaign.
+    utm_source = models.CharField(max_length=120, blank=True)
+    utm_medium = models.CharField(max_length=120, blank=True)
+    utm_campaign = models.CharField(max_length=120, blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_campaigns")
     description = models.TextField(blank=True)
 
@@ -157,6 +172,280 @@ class Campaign(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.name}"
+
+
+class CampaignMember(models.Model):
+    """A target-list member of a Campaign (1.3) with per-recipient response tracking.
+
+    Not ``TenantNumbered`` — it's a membership row (target-list segmentation), so it
+    carries its own tenant FK + timestamps and no human-readable number. Targets either a
+    reused ``core.Party`` (account/contact) or a ``crm.Lead``; ``member_name``/``member_email``
+    keep a display snapshot so imported list rows survive a null/changed source record.
+    """
+
+    STATUS_CHOICES = [
+        ("targeted", "Targeted"),
+        ("sent", "Sent"),
+        ("opened", "Opened"),
+        ("clicked", "Clicked"),
+        ("responded", "Responded"),
+        ("converted", "Converted"),
+        ("bounced", "Bounced"),
+        ("unsubscribed", "Unsubscribed"),
+    ]
+    RESPONDED_STATUSES = ("responded", "converted")
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    campaign = models.ForeignKey("Campaign", on_delete=models.CASCADE, related_name="members")
+    party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_campaign_members")
+    lead = models.ForeignKey("Lead", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_campaign_members")
+    member_name = models.CharField(max_length=255)
+    member_email = models.EmailField(blank=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="targeted")
+    responded_at = models.DateTimeField(null=True, blank=True)  # system-set, out of forms
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_cmem_tnt_status_idx"),
+            models.Index(fields=["tenant", "campaign"], name="crm_cmem_tnt_camp_idx"),
+        ]
+
+    @property
+    def has_responded(self):
+        return self.status in self.RESPONDED_STATUSES
+
+    def save(self, *args, **kwargs):
+        # System-set responded_at: stamp the first time the member responds/converts.
+        if self.status in self.RESPONDED_STATUSES and self.responded_at is None:
+            self.responded_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.member_name} · {self.get_status_display()}"
+
+
+class EmailTemplate(TenantNumbered):
+    """A reusable marketing-email template (1.3 Email Marketing) with merge variables.
+
+    ``body`` is raw HTML with merge tokens (e.g. ``{{first_name}}``); it is shown ESCAPED
+    as a source preview on the detail page (never ``|safe``) and deferred on the list QS.
+    """
+
+    NUMBER_PREFIX = "EMT"
+
+    CATEGORY_CHOICES = [
+        ("newsletter", "Newsletter"),
+        ("promotional", "Promotional"),
+        ("transactional", "Transactional"),
+        ("drip", "Drip / Nurture"),
+        ("announcement", "Announcement"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default="promotional")
+    subject = models.CharField(max_length=255)
+    preheader = models.CharField(max_length=255, blank=True)
+    body = models.TextField(blank=True)
+    from_name = models.CharField(max_length=120, blank=True)
+    from_email = models.EmailField(blank=True)
+    is_active = models.BooleanField(default=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_email_templates")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "category"], name="crm_etpl_tnt_cat_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_etpl_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class EmailCampaign(TenantNumbered):
+    """An email send/blast (1.3 Email Marketing) tied to a Campaign + EmailTemplate.
+
+    A/B testing folds into ``variant_template`` (+ ``is_ab_test``); drip folds into
+    ``send_type='drip'`` + ``scheduled_at`` — no separate DripStep/ABVariant tables. All the
+    engagement counters are SYSTEM-managed (set by ``emailcampaign_send`` / the seeder) and
+    excluded from the form so a user can't fabricate metrics.
+    """
+
+    NUMBER_PREFIX = "BLAST"
+
+    SEND_TYPE_CHOICES = [
+        ("one_time", "One-time Blast"),
+        ("drip", "Drip / Automated"),
+        ("ab_test", "A/B Test"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("scheduled", "Scheduled"),
+        ("sending", "Sending"),
+        ("sent", "Sent"),
+        ("paused", "Paused"),
+        ("cancelled", "Cancelled"),
+    ]
+    SENT_STATUSES = ("sending", "sent")
+
+    name = models.CharField(max_length=255)
+    campaign = models.ForeignKey("Campaign", on_delete=models.CASCADE, related_name="email_campaigns")
+    template = models.ForeignKey("EmailTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="email_campaigns")
+    variant_template = models.ForeignKey("EmailTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")  # A/B variant B
+    is_ab_test = models.BooleanField(default=False)
+    send_type = models.CharField(max_length=10, choices=SEND_TYPE_CHOICES, default="one_time")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)  # system-set on send
+    # Engagement counters — system-managed (excluded from the form).
+    recipients_count = models.PositiveIntegerField(default=0)
+    sent_count = models.PositiveIntegerField(default=0)
+    opened_count = models.PositiveIntegerField(default=0)
+    clicked_count = models.PositiveIntegerField(default=0)
+    bounced_count = models.PositiveIntegerField(default=0)
+    unsubscribed_count = models.PositiveIntegerField(default=0)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_email_campaigns")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_blast_tnt_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_blast_tnt_created_idx"),
+        ]
+
+    @property
+    def delivered_count(self):
+        return max(0, (self.sent_count or 0) - (self.bounced_count or 0))
+
+    @property
+    def open_rate(self):
+        """Unique opens ÷ delivered, as a %. None when nothing was delivered.
+
+        Casts to Decimal so the property is correct on a freshly-created (un-round-tripped)
+        instance, mirroring ``Campaign.roi``."""
+        delivered = self.delivered_count
+        if not delivered:
+            return None
+        return Decimal(self.opened_count or 0) / Decimal(delivered) * 100
+
+    @property
+    def click_rate(self):
+        delivered = self.delivered_count
+        if not delivered:
+            return None
+        return Decimal(self.clicked_count or 0) / Decimal(delivered) * 100
+
+    @property
+    def bounce_rate(self):
+        sent = self.sent_count or 0
+        if not sent:
+            return None
+        return Decimal(self.bounced_count or 0) / Decimal(sent) * 100
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class LandingPage(TenantNumbered):
+    """A public landing page + web-to-lead form (1.3 Landing Pages & Forms).
+
+    Served at an unguessable ``public_token`` URL; only ``status='published'`` pages resolve
+    publicly. ``body`` is tenant-authored and rendered to the public ESCAPED (via the
+    ``linebreaks`` filter, never ``|safe``) to avoid stored XSS against visitors. Captured
+    leads route to ``routing_owner``.
+    """
+
+    NUMBER_PREFIX = "LP"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("published", "Published"),
+        ("archived", "Archived"),
+    ]
+
+    name = models.CharField(max_length=255)
+    campaign = models.ForeignKey("Campaign", on_delete=models.SET_NULL, null=True, blank=True, related_name="landing_pages")
+    slug = models.SlugField(max_length=160, blank=True)
+    public_token = models.CharField(max_length=64, unique=True, editable=False, blank=True)
+    headline = models.CharField(max_length=255)
+    subheadline = models.CharField(max_length=255, blank=True)
+    body = models.TextField(blank=True)
+    capture_phone = models.BooleanField(default=True)
+    capture_company = models.BooleanField(default=True)
+    capture_message = models.BooleanField(default=False)
+    cta_label = models.CharField(max_length=60, default="Submit")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    routing_owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_routed_landing_pages")
+    lead_source = models.CharField(max_length=20, choices=Lead.SOURCE_CHOICES, default="web")
+    submission_count = models.PositiveIntegerField(default=0)  # system-set (F()-bumped on submit)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_landing_pages")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_lp_tnt_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_lp_tnt_created_idx"),
+        ]
+
+    @property
+    def is_published(self):
+        return self.status == "published"
+
+    def save(self, *args, **kwargs):
+        # Unguessable public URL key — generated once, never user-editable.
+        if not self.public_token:
+            self.public_token = secrets.token_urlsafe(16)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class FormSubmission(models.Model):
+    """A web-to-lead capture from a public LandingPage (1.3 Landing Pages & Forms).
+
+    Read-mostly: rows are created only by the public ``landing_public`` endpoint, so there is
+    no internal create/edit form (mirrors the ``WorkflowLog`` read-only precedent). They can be
+    converted into a ``crm.Lead`` (routed to the rep) or deleted as spam.
+    """
+
+    STATUS_CHOICES = [
+        ("new", "New"),
+        ("routed", "Routed"),
+        ("converted", "Converted"),
+        ("spam", "Spam"),
+    ]
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    landing_page = models.ForeignKey("LandingPage", on_delete=models.CASCADE, related_name="submissions")
+    name = models.CharField(max_length=255)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    company = models.CharField(max_length=255, blank=True)
+    message = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="new")
+    routed_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_routed_submissions")
+    converted_lead = models.ForeignKey("Lead", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_form_submissions")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_fsub_tnt_status_idx"),
+            models.Index(fields=["tenant", "landing_page"], name="crm_fsub_tnt_lp_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} · {self.get_status_display()}"
 
 
 class Opportunity(TenantNumbered):
