@@ -21,7 +21,7 @@
       <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject }}</dd></div>
       <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_type_display }}</dd></div>
       <div class="detail-item"><dt>Priority</dt><dd><span class="badge badge-{% if obj.priority == 'high' %}red{% elif obj.priority == 'medium' %}amber{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></dd></div>
-      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'done' %}green{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'open' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'done' %}green{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'open' %}info{% elif obj.status == 'cancelled' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Due date</dt><dd>{% if obj.due_date %}<span class="{% if obj.is_overdue %}text-danger{% endif %}">{{ obj.due_date|date:"M d, Y" }}</span>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Completed at</dt><dd>{% if obj.completed_at %}{{ obj.completed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
