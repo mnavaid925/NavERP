@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:customerportalaccess_list' %}">Portal Access</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:customerportalaccess_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:customerportalaccess_delete' obj.pk %}" onsubmit="return confirm('Delete this access?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Customer</dt><dd>{% if obj.customer_party %}<a href="{% url 'core:party_detail' obj.customer_party.pk %}">{{ obj.customer_party.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Portal user</dt><dd>{% if obj.portal_user %}{{ obj.portal_user.get_full_name|default:obj.portal_user.username }}{% else %}<span class="badge badge-muted">Unassigned</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Can submit cases</dt><dd>{% if obj.can_submit_cases %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Accepted at</dt><dd>{% if obj.accepted_at %}{{ obj.accepted_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'crm:customerportalaccess_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
