@@ -27,6 +27,9 @@
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Related party</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.related_opportunity %}<a href="{% url 'crm:opportunity_detail' obj.related_opportunity.pk %}">{{ obj.related_opportunity.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Case</dt><dd>{% if obj.related_case %}<a href="{% url 'crm:case_detail' obj.related_case.pk %}">{{ obj.related_case.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Recurrence</dt><dd>{% if obj.recurrence == 'none' %}Does not repeat{% else %}{{ obj.get_recurrence_display }}{% if obj.recurrence_interval > 1 %} (every {{ obj.recurrence_interval }}){% endif %}{% if obj.recurrence_until %}, until {{ obj.recurrence_until|date:"M d, Y" }}{% endif %}{% endif %}</dd></div>
+      {% if obj.recurrence_parent %}<div class="detail-item"><dt>Recurring series</dt><dd>Occurrence of <a href="{% url 'crm:task_detail' obj.recurrence_parent.pk %}">{{ obj.recurrence_parent.number }}</a></dd></div>{% endif %}
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div></div>
