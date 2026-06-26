@@ -161,14 +161,21 @@ class TestOpportunitySave:
         assert opp.stage_changed_at is not None
 
     def test_stage_changed_at_stamped_on_stage_change(self, opportunity_a):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
         from apps.crm.models import Opportunity
-        # Reload from DB so from_db() sets _loaded_stage
+        # Force a known-old stamp in the DB (bypassing save), then reload so from_db() sets
+        # _loaded_stage. Using a day-old anchor makes the "moved forward" assertion deterministic
+        # (two consecutive timezone.now() calls can collide to the same microsecond on fast CPUs).
+        old = timezone.now() - timedelta(days=1)
+        Opportunity.objects.filter(pk=opportunity_a.pk).update(stage_changed_at=old)
         opp = Opportunity.objects.get(pk=opportunity_a.pk)
-        first_stamp = opp.stage_changed_at
         opp.stage = "qualification"
         opp.save()
         opp.refresh_from_db()
-        assert opp.stage_changed_at > first_stamp
+        assert opp.stage_changed_at > old
 
     def test_stage_changed_at_not_updated_on_non_stage_edit(self, opportunity_a):
         from apps.crm.models import Opportunity
