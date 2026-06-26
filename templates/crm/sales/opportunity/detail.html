@@ -7,6 +7,12 @@
       <div class="breadcrumb"><a href="{% url 'crm:opportunity_list' %}">Opportunities</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
+      {% if obj.is_open %}
+        <form method="post" action="{% url 'crm:opportunity_advance' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="chevrons-right"></i> Advance stage</button>
+        </form>
+      {% endif %}
       {% if obj.stage == 'closed_won' %}
         <form method="post" action="{% url 'crm:opportunity_to_project' obj.pk %}" onsubmit="return confirm('Create a delivery project from this won opportunity?');">
           {% csrf_token %}
@@ -28,10 +34,14 @@
       <div class="detail-item"><dt>Account</dt><dd>{% if obj.account %}<a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Primary contact</dt><dd>{% if obj.primary_contact %}<a href="{% url 'crm:contact_detail' obj.primary_contact.pk %}">{{ obj.primary_contact.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Stage</dt><dd><span class="badge badge-{% if obj.stage == 'closed_won' %}green{% elif obj.stage == 'closed_lost' %}red{% elif obj.stage == 'negotiation' %}amber{% elif obj.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ obj.get_stage_display }}</span></dd></div>
+      <div class="detail-item"><dt>Forecast category</dt><dd>{{ obj.get_forecast_category_display }}</dd></div>
       <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }}</dd></div>
       <div class="detail-item"><dt>Probability</dt><dd>{{ obj.probability }}%</dd></div>
       <div class="detail-item"><dt>Weighted</dt><dd>{{ obj.weighted_amount|floatformat:2 }}</dd></div>
       <div class="detail-item"><dt>Close date</dt><dd>{% if obj.close_date %}{{ obj.close_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Competitor</dt><dd>{{ obj.competitor|default:"—" }}</dd></div>
+      {% if obj.stage == 'closed_lost' %}<div class="detail-item"><dt>Loss reason</dt><dd>{{ obj.loss_reason|default:"—" }}</dd></div>{% endif %}
+      <div class="detail-item"><dt>Territory</dt><dd>{% if obj.territory %}<a href="{% url 'crm:territory_detail' obj.territory.pk %}">{{ obj.territory.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Campaign</dt><dd>{% if obj.campaign %}<a href="{% url 'crm:campaign_detail' obj.campaign.pk %}">{{ obj.campaign.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Source lead</dt><dd>{% if obj.source_lead %}<a href="{% url 'crm:lead_detail' obj.source_lead.pk %}">{{ obj.source_lead.number }}</a>{% else %}—{% endif %}</dd></div>
@@ -39,6 +49,66 @@
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Team splits — revenue total {{ revenue_split_total|floatformat:0 }}%</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'crm:opportunitysplit_add' obj.pk %}" class="filter-bar">
+        {% csrf_token %}
+        <div class="form-group">{{ split_form.user }}</div>
+        <div class="form-group">{{ split_form.split_type }}</div>
+        <div class="form-group" style="max-width:120px;">{{ split_form.percentage }}</div>
+        <div class="form-group" style="flex:1; min-width:140px;">{{ split_form.notes }}</div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Add split</button>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>User</th><th>Type</th><th>Percentage</th><th>Amount</th><th>Notes</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in splits %}
+            <tr>
+              <td>{{ s.user.get_full_name|default:s.user.username }}</td>
+              <td><span class="badge badge-{% if s.split_type == 'revenue' %}info{% else %}muted{% endif %}">{{ s.get_split_type_display }}</span></td>
+              <td>{{ s.percentage }}%</td>
+              <td>{{ s.split_amount|floatformat:2 }}</td>
+              <td>{{ s.notes|default:"—" }}</td>
+              <td>
+                <form method="post" action="{% url 'crm:opportunitysplit_remove' s.pk %}" onsubmit="return confirm('Remove this split?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="users"></i><p>No team splits yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Quotes</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Status</th><th>Total</th><th>Valid until</th></tr></thead>
+        <tbody>
+          {% for q in quotes %}
+            <tr>
+              <td><a href="{% url 'crm:quote_detail' q.pk %}" class="fw-600">{{ q.number }}</a></td>
+              <td>{{ q.name }}</td>
+              <td><span class="badge badge-{% if q.status == 'accepted' %}green{% elif q.status == 'sent' %}info{% elif q.status == 'declined' or q.status == 'expired' %}red{% else %}muted{% endif %}">{{ q.get_status_display }}</span></td>
+              <td>{{ q.total }}</td>
+              <td>{% if q.valid_until %}{{ q.valid_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="file-text"></i><p>No quotes linked to this opportunity.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Tasks</h2></div>
