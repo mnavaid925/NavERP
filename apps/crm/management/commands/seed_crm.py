@@ -219,8 +219,12 @@ class Command(BaseCommand):
             members.append(CampaignMember(
                 tenant=tenant, campaign=campaign, lead=lead, member_name=lead.name,
                 member_email=lead.email, status="opened" if i == 0 else "sent"))
+        # Pre-stamp responded_at (save() would, but bulk_create skips save()), then one INSERT.
+        now = timezone.now()
         for m in members:
-            m.save()  # save() stamps responded_at for the responded/converted rows
+            if m.status in CampaignMember.RESPONDED_STATUSES:
+                m.responded_at = now
+        CampaignMember.objects.bulk_create(members)
 
         template = EmailTemplate.objects.create(
             tenant=tenant, name="Spring Launch Announcement", category="promotional",
