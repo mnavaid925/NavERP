@@ -53,7 +53,7 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'crm:communicationlog_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
-              <td><span class="badge badge-{% if obj.channel == 'call' %}info{% elif obj.channel == 'email' %}green{% elif obj.channel == 'sms' %}amber{% elif obj.channel == 'meeting' %}slate{% else %}muted{% endif %}">{{ obj.get_channel_display }}</span></td>
+              <td><span class="badge badge-{% if obj.channel == 'call' %}info{% elif obj.channel == 'email' %}green{% elif obj.channel == 'sms' %}amber{% elif obj.channel == 'note' %}muted{% elif obj.channel == 'meeting' %}slate{% else %}muted{% endif %}">{{ obj.get_channel_display }}</span></td>
               <td>{% if obj.direction %}{{ obj.get_direction_display }}{% else %}—{% endif %}</td>
               <td>{{ obj.subject|default:"—" }}</td>
               <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
