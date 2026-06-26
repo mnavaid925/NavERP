@@ -1469,3 +1469,268 @@ class EmployeeLifecycleEvent(TenantNumbered):
     def __str__(self):
         name = self.employee.name if self.employee_id else "—"
         return f"{self.number} · {name} — {self.get_event_type_display()} ({self.effective_date})"
+
+
+# ---------------------------------------------------------------------------
+# 3.5 Job Requisition — the "authorization to hire" record + its reusable JD
+# template library + the sequential approval chain. A requisition reuses the
+# spine: the role/salary-band come from ``hrm.Designation`` (+ ``JobGrade``),
+# hiring_manager/recruiter are ``hrm.EmployeeProfile`` rows, and department /
+# cost_center are ``core.OrgUnit`` nodes. The future Candidate (3.6) / Interview
+# (3.7) / Offer (3.8) sub-modules will FK *into* ``JobRequisition`` — it does NOT
+# reference them (they don't exist yet), so 3.5 is fully self-contained.
+# ---------------------------------------------------------------------------
+
+# Shared choice constants (module-level — reused by JobDescriptionTemplate, JobRequisition,
+# RequisitionApproval, the forms' filter dropdowns, and the seeder).
+EMPLOYMENT_TYPE_CHOICES = [
+    ("full_time", "Full-Time"),
+    ("part_time", "Part-Time"),
+    ("contract", "Contract"),
+    ("intern", "Intern"),
+    ("consultant", "Consultant"),
+]
+
+REQ_TYPE_CHOICES = [
+    ("standard", "Standard"),
+    ("backfill", "Backfill"),
+    ("replacement", "Replacement"),
+    ("evergreen", "Evergreen / Pipeline"),
+]
+
+REASON_FOR_HIRE_CHOICES = [
+    ("new_headcount", "New Headcount"),
+    ("backfill", "Backfill Vacancy"),
+    ("replacement", "Replacement"),
+    ("project", "Project / Fixed Term"),
+    ("contractor_to_perm", "Contractor to Permanent"),
+]
+
+POSTING_TYPE_CHOICES = [
+    ("internal", "Internal Only"),
+    ("external", "External Only"),
+    ("both", "Internal & External"),
+]
+
+PRIORITY_CHOICES = [
+    ("low", "Low"),
+    ("medium", "Medium"),
+    ("high", "High"),
+    ("urgent", "Urgent"),
+]
+
+JR_STATUS_CHOICES = [
+    ("draft", "Draft"),
+    ("pending_approval", "Pending Approval"),
+    ("approved", "Approved"),
+    ("posted", "Posted"),
+    ("on_hold", "On Hold"),
+    ("filled", "Filled"),
+    ("cancelled", "Cancelled"),
+    ("rejected", "Rejected"),
+]
+
+APPROVAL_STEP_STATUS_CHOICES = [
+    ("pending", "Pending"),
+    ("approved", "Approved"),
+    ("rejected", "Rejected"),
+    ("returned", "Returned for Revision"),
+    ("skipped", "Skipped"),
+]
+
+APPROVER_ROLE_CHOICES = [
+    ("hiring_manager", "Hiring Manager"),
+    ("hr", "HR"),
+    ("finance", "Finance"),
+    ("executive", "Executive"),
+    ("custom", "Custom"),
+]
+
+
+class JobDescriptionTemplate(TenantNumbered):
+    """Reusable job-description library (3.5). Optionally tied to a ``Designation`` so a
+    requisition raised for that role can auto-suggest the template (mirrors
+    ``OnboardingTemplate.designation``). Applying a template copies its ``jd_*`` text onto the
+    requisition (copy-on-apply, not a live link), so editing the template never silently mutates
+    open requisitions."""
+
+    NUMBER_PREFIX = "JDTMPL"
+
+    name = models.CharField(max_length=255)
+    designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name="jd_templates")
+    employment_type = models.CharField(max_length=20, blank=True, choices=EMPLOYMENT_TYPE_CHOICES)
+    jd_summary = models.TextField(blank=True)
+    jd_responsibilities = models.TextField(blank=True)
+    jd_requirements = models.TextField(blank=True)
+    jd_nice_to_have = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "designation"], name="hrm_jdtmpl_tenant_desig_idx"),
+            models.Index(fields=["tenant", "is_active"], name="hrm_jdtmpl_tenant_active_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class JobRequisition(TenantNumbered):
+    """The hub "authorization to hire" record (3.5). One per opening event; drives the
+    draft → pending_approval → approved → posted → filled lifecycle (+ on_hold / rejected /
+    cancelled). The JD body fields are an opening-specific *copy* (distinct from the evergreen
+    ``Designation.description``). Workflow-owned fields (status + the ``*_at`` stamps) are
+    ``editable=False`` and set only by the audited POST actions — never on the form."""
+
+    NUMBER_PREFIX = "JR"
+
+    # Identity
+    title = models.CharField(max_length=255)
+    designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name="requisitions")
+    job_grade = models.ForeignKey("hrm.JobGrade", on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="requisitions")
+    template = models.ForeignKey("hrm.JobDescriptionTemplate", on_delete=models.SET_NULL, null=True,
+                                 blank=True, related_name="requisitions")
+
+    # Organization
+    department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_requisitions",
+                                   limit_choices_to={"kind": "department"})
+    cost_center = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="hrm_requisitions_cc",
+                                    limit_choices_to={"kind": "cost_center"})
+    location = models.CharField(max_length=255, blank=True)
+
+    # Headcount & type
+    headcount = models.PositiveSmallIntegerField(default=1)
+    req_type = models.CharField(max_length=20, choices=REQ_TYPE_CHOICES, default="standard")
+    employment_type = models.CharField(max_length=20, choices=EMPLOYMENT_TYPE_CHOICES,
+                                       default="full_time")
+    reason_for_hire = models.CharField(max_length=30, choices=REASON_FOR_HIRE_CHOICES,
+                                       default="new_headcount")
+    is_replacement_for = models.CharField(max_length=255, blank=True,
+                                          help_text="Name of the departing employee (free text; "
+                                                    "FK upgrade deferred to 3.6).")
+    posting_type = models.CharField(max_length=10, choices=POSTING_TYPE_CHOICES, default="external")
+
+    # Hiring team — per HRM convention, FK to EmployeeProfile (never core.Party directly).
+    hiring_manager = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True,
+                                       blank=True, related_name="managed_requisitions")
+    recruiter = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True,
+                                  blank=True, related_name="assigned_requisitions")
+
+    # Timeline
+    target_start_date = models.DateField(null=True, blank=True)
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
+
+    # Budget
+    salary_min = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    salary_max = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    salary_currency = models.CharField(max_length=3, default="USD")
+    estimated_annual_cost = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                                help_text="Loaded annual cost (salary + benefits).")
+    hiring_cost_budget = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                             help_text="One-time recruitment spend (agency/job-board).")
+
+    # Job description (opening-specific copy)
+    jd_summary = models.TextField(blank=True)
+    jd_responsibilities = models.TextField(blank=True)
+    jd_requirements = models.TextField(blank=True)
+    jd_nice_to_have = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+
+    # Workflow-owned — set only by the POST actions, never the form.
+    status = models.CharField(max_length=20, choices=JR_STATUS_CHOICES, default="draft",
+                              editable=False)
+    submitted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    posted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    filled_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_jr_tenant_status_idx"),
+            models.Index(fields=["tenant", "designation"], name="hrm_jr_tenant_desig_idx"),
+            models.Index(fields=["tenant", "department"], name="hrm_jr_tenant_dept_idx"),
+            models.Index(fields=["tenant", "hiring_manager"], name="hrm_jr_tenant_hm_idx"),
+            models.Index(fields=["tenant", "priority", "status"], name="hrm_jr_tenant_prio_stat_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (self.salary_min is not None and self.salary_max is not None
+                and self.salary_min > self.salary_max):
+            raise ValidationError({"salary_max": "Salary minimum cannot exceed maximum."})
+        if self.headcount is not None and self.headcount < 1:
+            raise ValidationError({"headcount": "Headcount must be at least 1."})
+
+    @property
+    def is_overdue(self):
+        """True when the target start date has passed and the req isn't yet filled/closed —
+        drives the red 'Overdue' indicator."""
+        return (self.target_start_date is not None
+                and self.target_start_date < date.today()
+                and self.status not in ("filled", "cancelled", "rejected"))
+
+    @property
+    def approval_progress(self):
+        """``(approved_count, total_count)`` over the approval chain — feeds the detail-hub
+        progress text. Computed from the prefetched ``approvals`` when available."""
+        steps = self.approvals.all()
+        total = len(steps)
+        approved = sum(1 for s in steps if s.status == "approved")
+        return approved, total
+
+    @property
+    def current_approval_step(self):
+        """The lowest-ordered still-pending approval step (the one awaiting a decision), or
+        ``None`` when the chain is fully decided."""
+        return (self.approvals.filter(status="pending").order_by("step_order").first())
+
+    def __str__(self):
+        return f"{self.number} · {self.title}"
+
+
+class RequisitionApproval(TenantOwned):
+    """One sequential approval step on a ``JobRequisition`` (3.5). The collection is both the
+    approval chain (the current step = the lowest ``step_order`` still ``pending``) and the
+    immutable audit trail — rows are never edited via a form: the approve/reject/return POST
+    actions stamp ``status``/``decided_at``/``decided_by``. Mirrors the ``ClearanceItem`` child
+    pattern from 3.4 Offboarding."""
+
+    requisition = models.ForeignKey("hrm.JobRequisition", on_delete=models.CASCADE,
+                                    related_name="approvals")
+    step_order = models.PositiveSmallIntegerField(default=1)
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                 blank=True, related_name="hrm_requisition_approvals")
+    approver_role = models.CharField(max_length=20, choices=APPROVER_ROLE_CHOICES, default="hr")
+    # Workflow-owned — set only by the approve/reject/return actions.
+    status = models.CharField(max_length=20, choices=APPROVAL_STEP_STATUS_CHOICES,
+                              default="pending", editable=False)
+    decided_at = models.DateTimeField(null=True, blank=True, editable=False)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name="hrm_approval_decisions", editable=False)
+    comments = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["step_order"]
+        unique_together = ("requisition", "step_order")
+        indexes = [
+            models.Index(fields=["requisition", "status"], name="hrm_ra_req_status_idx"),
+            models.Index(fields=["approver", "status"], name="hrm_ra_approver_status_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.step_order is not None and self.step_order < 1:
+            raise ValidationError({"step_order": "Step order must be at least 1."})
+
+    def __str__(self):
+        return (f"Step {self.step_order} — {self.get_approver_role_display()} "
+                f"— {self.get_status_display()}")
