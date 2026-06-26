@@ -6,12 +6,15 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * one-click Lead conversion (creates Party + roles + an Opportunity),
   * a CRM analytics overview (1.6) using the dashboard's json_script + Chart.js pattern.
 """
+from datetime import timezone as dt_timezone
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, Q, Sum
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -24,6 +27,10 @@ from apps.core.utils import write_audit_log
 
 from .forms import (
     AccountForm,
+    CalendarEventForm,
+    CommunicationLogForm,
+    EventAttendeeForm,
+    PublicRsvpForm,
     CampaignForm,
     CampaignMemberForm,
     CaseForm,
@@ -53,6 +60,9 @@ from .forms import (
 from .models import (
     INDUSTRY_CHOICES,
     AccountProfile,
+    CalendarEvent,
+    CommunicationLog,
+    EventAttendee,
     Campaign,
     CampaignMember,
     Case,
@@ -1481,6 +1491,189 @@ def task_edit(request, pk):
 @require_POST
 def task_delete(request, pk):
     return crud_delete(request, model=CrmTask, pk=pk, success_url="crm:task_list")
+
+
+# ===================== Calendar Events (1.5 Calendar Integration) ===========================
+@login_required
+def calendarevent_list(request):
+    return crud_list(
+        request,
+        CalendarEvent.objects.filter(tenant=request.tenant).select_related("owner", "party"),
+        "crm/activities/calendarevent/list.html",
+        search_fields=["title", "number", "location"],
+        filters=[("status", "status", False), ("event_type", "event_type", False)],
+        extra_context={"status_choices": CalendarEvent.STATUS_CHOICES,
+                       "type_choices": CalendarEvent.TYPE_CHOICES},
+    )
+
+
+@login_required
+def calendarevent_create(request):
+    return crud_create(request, form_class=CalendarEventForm,
+                       template="crm/activities/calendarevent/form.html",
+                       success_url="crm:calendarevent_list")
+
+
+@login_required
+def calendarevent_detail(request, pk):
+    event = get_object_or_404(
+        CalendarEvent.objects.select_related("owner", "party", "related_opportunity", "related_case"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/activities/calendarevent/detail.html", {
+        "obj": event,
+        "attendees": event.attendees.select_related("party").all(),
+        "attendee_form": EventAttendeeForm(tenant=request.tenant),  # L7: always pass the add form
+    })
+
+
+@login_required
+def calendarevent_edit(request, pk):
+    return crud_edit(request, model=CalendarEvent, pk=pk, form_class=CalendarEventForm,
+                     template="crm/activities/calendarevent/form.html",
+                     success_url="crm:calendarevent_list")
+
+
+@login_required
+@require_POST
+def calendarevent_delete(request, pk):
+    return crud_delete(request, model=CalendarEvent, pk=pk, success_url="crm:calendarevent_list")
+
+
+# ----- EventAttendee inline actions (managed on the event detail page) ----------------------
+@login_required
+@require_POST
+def event_attendee_add(request, event_pk):
+    event = get_object_or_404(CalendarEvent, pk=event_pk, tenant=request.tenant)
+    form = EventAttendeeForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        cd = form.cleaned_data
+        email = cd.get("email") or None
+        if email:
+            # Upsert by (event, email) — avoids the unique_together IntegrityError on re-add.
+            EventAttendee.objects.update_or_create(
+                event=event, email=email,
+                defaults={"tenant": event.tenant, "party": cd.get("party"), "name": cd["name"],
+                          "rsvp_status": cd["rsvp_status"], "is_organizer": cd["is_organizer"]})
+        else:
+            attendee = form.save(commit=False)
+            attendee.tenant = event.tenant
+            attendee.event = event
+            attendee.save()
+        messages.success(request, "Attendee added.")
+    else:
+        messages.error(request, "Could not add attendee — check the name/email and try again.")
+    return redirect("crm:calendarevent_detail", pk=event_pk)
+
+
+@login_required
+@require_POST
+def event_attendee_delete(request, pk):
+    attendee = get_object_or_404(EventAttendee, pk=pk, tenant=request.tenant)
+    event_pk = attendee.event_id
+    attendee.delete()
+    messages.success(request, "Attendee removed.")
+    return redirect("crm:calendarevent_detail", pk=event_pk)
+
+
+# ----- Public meeting-invite pages (no login — the token is the bearer credential) ----------
+def event_invite(request, token):
+    """Public meeting invite + RSVP (1.5). No login; the unguessable ``public_token`` gates one
+    event. The RSVP upserts an ``EventAttendee`` by email. CSRF enforced by the template tag;
+    tenant taken from the event itself.
+    # WARNING: unauthenticated POST — add per-IP rate-limiting (django-ratelimit) or a WAF throttle
+    # in production to stop public RSVP floods."""
+    event = get_object_or_404(
+        CalendarEvent.objects.select_related("owner", "party"), public_token=token)
+    form = PublicRsvpForm()
+    if request.method == "POST":
+        form = PublicRsvpForm(request.POST)
+        if form.is_valid():
+            cd = form.cleaned_data
+            EventAttendee.objects.update_or_create(
+                event=event, email=cd["email"],
+                defaults={"tenant": event.tenant, "name": cd["name"],
+                          "rsvp_status": cd["rsvp_status"], "responded_at": timezone.now()})
+            messages.success(request, "Thanks — your response has been recorded.")
+            return redirect("crm:event_invite", token=token)
+    return render(request, "crm/activities/event_invite.html", {
+        "event": event, "attendees": event.attendees.all(), "form": form,
+    })
+
+
+def event_ics(request, token):
+    """Public iCalendar (.ics) export for one event (1.5) — the realistic, offline-true version of
+    "add to Google/Outlook/iCal". No login; the ``public_token`` is the bearer credential. Times
+    are emitted in UTC (``...Z``) so any calendar app imports them unambiguously."""
+    event = get_object_or_404(CalendarEvent, public_token=token)
+
+    def _ics_dt(dt):
+        return dt.astimezone(dt_timezone.utc).strftime("%Y%m%dT%H%M%SZ") if dt else ""
+
+    def _esc(text):  # RFC 5545 TEXT escaping
+        return (str(text or "").replace("\\", "\\\\").replace(";", "\\;")
+                .replace(",", "\\,").replace("\n", "\\n"))
+
+    end = event.end or event.start
+    lines = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//NavERP//CRM 1.5//EN",
+        "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
+        f"UID:{event.number}-{event.public_token}@naverp",
+        f"DTSTAMP:{_ics_dt(timezone.now())}",
+        f"DTSTART:{_ics_dt(event.start)}",
+        f"DTEND:{_ics_dt(end)}",
+        f"SUMMARY:{_esc(event.title)}",
+        f"LOCATION:{_esc(event.location)}",
+        f"DESCRIPTION:{_esc(event.description)}",
+        f"STATUS:{'CANCELLED' if event.status == 'cancelled' else 'CONFIRMED'}",
+        "END:VEVENT", "END:VCALENDAR",
+    ]
+    resp = HttpResponse("\r\n".join(lines) + "\r\n", content_type="text/calendar; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{event.number}.ics"'
+    return resp
+
+
+# ===================== Communication Logs (1.5 Email & Call Integration) =====================
+@login_required
+def communicationlog_list(request):
+    return crud_list(
+        request,
+        CommunicationLog.objects.filter(tenant=request.tenant).select_related("party", "owner"),
+        "crm/activities/communicationlog/list.html",
+        search_fields=["subject", "number", "body"],
+        filters=[("channel", "channel", False), ("direction", "direction", False),
+                 ("logged_via", "logged_via", False)],
+        extra_context={"channel_choices": CommunicationLog.CHANNEL_CHOICES,
+                       "direction_choices": CommunicationLog.DIRECTION_CHOICES,
+                       "logged_via_choices": CommunicationLog.LOGGED_VIA_CHOICES},
+    )
+
+
+@login_required
+def communicationlog_create(request):
+    return crud_create(request, form_class=CommunicationLogForm,
+                       template="crm/activities/communicationlog/form.html",
+                       success_url="crm:communicationlog_list")
+
+
+@login_required
+def communicationlog_detail(request, pk):
+    obj = get_object_or_404(
+        CommunicationLog.objects.select_related("party", "owner", "related_opportunity", "related_case"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/activities/communicationlog/detail.html", {"obj": obj})
+
+
+@login_required
+def communicationlog_edit(request, pk):
+    return crud_edit(request, model=CommunicationLog, pk=pk, form_class=CommunicationLogForm,
+                     template="crm/activities/communicationlog/form.html",
+                     success_url="crm:communicationlog_list")
+
+
+@login_required
+@require_POST
+def communicationlog_delete(request, pk):
+    return crud_delete(request, model=CommunicationLog, pk=pk, success_url="crm:communicationlog_list")
 
 
 # ===================== Accounts & Contacts — core.Party + CRM profile (1.1) =================
