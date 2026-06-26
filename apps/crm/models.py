@@ -683,12 +683,14 @@ class OpportunitySplit(models.Model):
         # Revenue splits divide the booking — they must not exceed 100% across the opportunity.
         # (Guard on tenant_id too so a clean() before the view sets tenant can't query tenant=None.)
         if self.split_type == "revenue" and self.opportunity_id and self.tenant_id:
+            from django.db.models import Sum
             others = OpportunitySplit.objects.filter(
                 tenant=self.tenant, opportunity=self.opportunity, split_type="revenue")
             if self.pk:
                 others = others.exclude(pk=self.pk)
-            total = sum((Decimal(s.percentage or 0) for s in others), Decimal(0)) + Decimal(self.percentage or 0)
-            if total > 100:
+            # DB-side SUM instead of fetching every split row to add in Python.
+            existing = others.aggregate(t=Sum("percentage"))["t"] or Decimal(0)
+            if existing + Decimal(self.percentage or 0) > 100:
                 raise ValidationError("Revenue splits for an opportunity cannot exceed 100%.")
 
     def __str__(self):
@@ -840,6 +842,7 @@ class SalesQuota(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "period_year"], name="crm_qta_tnt_year_idx"),
+            models.Index(fields=["tenant", "territory"], name="crm_qta_tnt_terr_idx"),
         ]
 
     def __str__(self):
