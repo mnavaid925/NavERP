@@ -35,7 +35,7 @@
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
-      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'draft' %}muted{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'posted' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'filled' %}green{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'draft' %}muted{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'posted' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'filled' %}green{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Priority</dt><dd><span class="badge badge-{% if obj.priority == 'urgent' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></dd></div>
       <div class="detail-item"><dt>Requisition Type</dt><dd>{{ obj.get_req_type_display }}</dd></div>
       <div class="detail-item"><dt>Employment Type</dt><dd>{{ obj.get_employment_type_display }}</dd></div>
@@ -134,7 +134,7 @@
               <tr>
                 <td>{{ a.step_order }}</td>
                 <td><span class="badge badge-muted">{{ a.get_approver_role_display }}</span></td>
-                <td>{{ a.approver.get_full_name|default:a.approver.username|default:"—" }}</td>
+                <td>{% if a.approver %}{{ a.approver.get_full_name|default:a.approver.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
                 <td><span class="badge badge-{% if a.status == 'pending' %}amber{% elif a.status == 'approved' %}green{% elif a.status == 'rejected' %}red{% elif a.status == 'returned' %}info{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
                 <td>{{ a.decided_by.username|default:"—" }}</td>
                 <td>{{ a.decided_at|date:"Y-m-d H:i"|default:"—" }}</td>
@@ -143,8 +143,7 @@
                   <div class="table-actions">
                     {% if obj.status == 'draft' %}
                       <form method="post" action="{% url 'hrm:approval_delete' a.pk %}" onsubmit="return confirm('Remove this approval step?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove step"><i data-lucide="trash-2"></i></button></form>
-                    {% endif %}
-                    {% if can_approve and current_step and a.pk == current_step.pk %}
+                    {% elif can_approve and current_step and a.pk == current_step.pk %}
                       <form method="post" action="{% url 'hrm:jobrequisition_approve_step' obj.pk %}" onsubmit="return confirm('Approve this step?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Approve step"><i data-lucide="check"></i></button></form>
                     {% endif %}
                   </div>
@@ -171,22 +170,32 @@
         </form>
       {% endif %}
 
-      {% if can_approve and current_step %}
-        <div style="margin-top:1.25rem; border-top:1px solid var(--border); padding-top:1rem;">
-          <h3 class="card-title" style="margin-bottom:.5rem;">Decision on step #{{ current_step.step_order }} ({{ current_step.get_approver_role_display }})</h3>
-          <form method="post" action="{% url 'hrm:jobrequisition_reject' obj.pk %}">
-            {% csrf_token %}
-            <div class="form-group">
-              <label class="form-label" for="id_decision_comments">Comments (for reject / return)</label>
-              <textarea id="id_decision_comments" name="comments" class="form-textarea" placeholder="Reason for rejection or revision…"></textarea>
-            </div>
-            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject Requisition</button>
-            <button class="btn btn-outline" type="submit" formaction="{% url 'hrm:jobrequisition_return' obj.pk %}"><i data-lucide="undo-2"></i> Return for Revision</button>
-          </form>
-        </div>
-      {% endif %}
     </div>
   </div>
+
+  {% if can_approve and current_step %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Decision on step #{{ current_step.step_order }} ({{ current_step.get_approver_role_display }})</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'hrm:jobrequisition_reject' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_reject_comments">Comments (for reject)</label>
+            <textarea id="id_reject_comments" name="comments" class="form-textarea" placeholder="Reason for rejection…"></textarea>
+          </div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject Requisition</button>
+        </form>
+        <form method="post" action="{% url 'hrm:jobrequisition_return' obj.pk %}" style="margin-top:1rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_return_comments">Comments (for return)</label>
+            <textarea id="id_return_comments" name="comments" class="form-textarea" placeholder="What needs revising before re-submission…"></textarea>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="undo-2"></i> Return for Revision</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
 
   {% if obj.notes %}
     <div class="card">
