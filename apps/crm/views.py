@@ -8,9 +8,12 @@ int-FK-guarded filters + windowed pagination + audit), plus:
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -298,9 +301,15 @@ def campaignmember_add(request, pk):
     status = request.POST.get("status", "targeted")
     if status not in dict(CampaignMember.STATUS_CHOICES):
         status = "targeted"
+    email = request.POST.get("member_email", "").strip()[:254]
+    if email:
+        try:  # the inline shortcut bypasses the EmailField form — validate here too.
+            validate_email(email)
+        except ValidationError:
+            email = ""
     CampaignMember.objects.create(
         tenant=request.tenant, campaign=campaign, member_name=name,
-        member_email=request.POST.get("member_email", "").strip()[:254], status=status)
+        member_email=email, status=status)
     messages.success(request, "Member added to the campaign.")
     return redirect("crm:campaign_detail", pk=campaign.pk)
 
@@ -406,16 +415,17 @@ def emailcampaign_send(request, pk):
     send, and advance any 'targeted' members to 'sent'. (No real ESP — metrics are modelled,
     not delivered.) recipients_count/sent_count/sent_at are system-set here, never via the form."""
     blast = get_object_or_404(EmailCampaign.objects.select_related("campaign"), pk=pk, tenant=request.tenant)
-    if blast.status in ("sending", "sent", "cancelled"):
-        messages.info(request, "This email campaign has already been sent or cancelled.")
-        return redirect("crm:emailcampaign_detail", pk=blast.pk)
     recipients = CampaignMember.objects.filter(tenant=request.tenant, campaign=blast.campaign).count()
     with transaction.atomic():
-        blast.recipients_count = recipients
-        blast.sent_count = recipients
-        blast.status = "sent"
-        blast.sent_at = timezone.now()
-        blast.save(update_fields=["recipients_count", "sent_count", "status", "sent_at", "updated_at"])
+        # Conditional UPDATE claims the row atomically: a second concurrent POST sees the status
+        # already advanced and updates 0 rows, so the metrics can never be double-counted.
+        claimed = EmailCampaign.objects.filter(pk=blast.pk, tenant=request.tenant).exclude(
+            status__in=("sending", "sent", "cancelled")).update(
+            recipients_count=recipients, sent_count=recipients, status="sent",
+            sent_at=timezone.now())
+        if not claimed:
+            messages.info(request, "This email campaign has already been sent or cancelled.")
+            return redirect("crm:emailcampaign_detail", pk=blast.pk)
         CampaignMember.objects.filter(
             tenant=request.tenant, campaign=blast.campaign, status="targeted").update(status="sent")
     write_audit_log(request.user, blast, "update", {"action": "send", "recipients": recipients})
@@ -474,7 +484,6 @@ def landing_public(request, token):
     enforced by the template's {% csrf_token %}; the tenant-authored body is rendered ESCAPED."""
     page = get_object_or_404(
         LandingPage.objects.select_related("campaign"), public_token=token, status="published")
-    submitted = False
     form = PublicLeadForm()
     if request.method == "POST":
         form = PublicLeadForm(request.POST)
@@ -490,10 +499,10 @@ def landing_public(request, token):
                     status="new", routed_to=page.routing_owner, ip_address=_client_ip(request),
                 )
                 LandingPage.objects.filter(pk=page.pk).update(submission_count=F("submission_count") + 1)
-            submitted = True
-            form = PublicLeadForm()  # reset for a fresh blank form
+            # Post/Redirect/Get — a browser refresh after submit won't re-post the form.
+            return redirect(f"{reverse('crm:landing_public', args=[token])}?submitted=1")
     return render(request, "crm/marketing/landing_public.html", {
-        "page": page, "form": form, "submitted": submitted})
+        "page": page, "form": form, "submitted": request.GET.get("submitted") == "1"})
 
 
 # ------------------------------------------------------------ Form submissions (1.3, read-mostly)
