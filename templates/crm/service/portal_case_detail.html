@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ case.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ case.subject }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:portal_case_list' %}">My Tickets</a><span class="sep">›</span><span>{{ case.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Ticket</dt><dd>{{ case.number }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if case.status == 'resolved' %}green{% elif case.status == 'closed' %}slate{% elif case.status == 'in_progress' %}amber{% else %}info{% endif %}">{{ case.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Priority</dt><dd>{{ case.get_priority_display }}</dd></div>
+      <div class="detail-item"><dt>Opened</dt><dd>{{ case.created_at|date:"M d, Y" }}</dd></div>
+    </dl>
+    {% if case.description %}<p style="margin-top:1rem;">{{ case.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Conversation</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>From</th><th>Message</th></tr></thead>
+        <tbody>
+          {% for c in comments %}
+            <tr>
+              <td>{{ c.created_at|date:"M d, Y H:i" }}</td>
+              <td>{% if c.author %}{{ c.author.get_full_name|default:c.author.username }}{% else %}{{ c.author_name|default:"You" }}{% endif %}</td>
+              <td>{{ c.body|linebreaksbr }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="message-square"></i><p>No replies yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if access.can_submit_cases %}
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-group">{{ comment_form.body }}{% for e in comment_form.body.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="message-square"></i> Send reply</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <a href="{% url 'crm:portal_case_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to my tickets</a>
+{% endblock %}
