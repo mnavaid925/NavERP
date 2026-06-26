@@ -10,6 +10,16 @@
       {% if obj.status == 'published' %}
         <a href="{% url 'crm:landing_public' obj.public_token %}" target="_blank" rel="noopener" class="btn btn-outline"><i data-lucide="external-link"></i> View public page</a>
       {% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'crm:landingpage_publish' obj.pk %}">
+          {% csrf_token %}
+          {% if obj.status == 'published' %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="eye-off"></i> Unpublish</button>
+          {% else %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="globe"></i> Publish</button>
+          {% endif %}
+        </form>
+      {% endif %}
       <a href="{% url 'crm:landingpage_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'crm:landingpage_delete' obj.pk %}" onsubmit="return confirm('Delete this landing page?');">
         {% csrf_token %}
