@@ -1476,7 +1476,8 @@ def task_create(request):
 @login_required
 def task_detail(request, pk):
     obj = get_object_or_404(
-        CrmTask.objects.select_related("owner", "party", "related_opportunity"),
+        CrmTask.objects.select_related(
+            "owner", "party", "related_opportunity", "related_case", "recurrence_parent"),
         pk=pk, tenant=request.tenant)
     return render(request, "crm/activities/task/detail.html", {"obj": obj})
 
@@ -1498,7 +1499,7 @@ def task_delete(request, pk):
 def calendarevent_list(request):
     return crud_list(
         request,
-        CalendarEvent.objects.filter(tenant=request.tenant).select_related("owner", "party"),
+        CalendarEvent.objects.filter(tenant=request.tenant).select_related("owner"),
         "crm/activities/calendarevent/list.html",
         search_fields=["title", "number", "location"],
         filters=[("status", "status", False), ("event_type", "event_type", False)],
@@ -1646,7 +1647,7 @@ def event_ics(request, token):
 def communicationlog_list(request):
     return crud_list(
         request,
-        CommunicationLog.objects.filter(tenant=request.tenant).select_related("party", "owner"),
+        CommunicationLog.objects.filter(tenant=request.tenant).select_related("party"),
         "crm/activities/communicationlog/list.html",
         search_fields=["subject", "number", "body"],
         filters=[("channel", "channel", False), ("direction", "direction", False),
