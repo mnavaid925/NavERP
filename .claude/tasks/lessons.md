@@ -328,3 +328,22 @@ than authoring a new one. Explicit args still win: `N.M` (e.g. `3.4`) → that e
 (`payroll`/`offboarding`) → its `N.M`; a bare module number/name → that module's *next unbuilt* sub-module. **Rule:**
 the unit of "next" is the sub-module; CLAUDE.md's Module Creation Sequence (research→todo→code→reviews→skill) runs
 per sub-module, scoped to that one `N.M`.
+
+## L32 — A staff sidebar bullet must point to a STAFF-reachable page, never a login-gated customer/partner portal page
+User clicked the CRM 1.4 sidebar bullet "Customer Self-Service Portal" and got bounced to the dashboard. **Root
+cause:** `LIVE_LINKS["1.4"]["Customer Self-Service Portal"]` pointed at `crm:portal_case_list`, the *customer-facing*
+portal view, which is gated by `_customer_portal_access(request)` (a `CustomerPortalAccess` row with
+`portal_user=request.user`). Internal staff (tenant admins/agents) are NOT portal customers, so `access is None` →
+`redirect("dashboard:home")` with a "You don't have customer portal access" message. The sidebar is the *staff*
+navigation, so every staff click on that bullet redirects. The review/test agents didn't catch it (per L30): the
+route reverses + the gated redirect returns 302 (a valid "200/302" status), and the IDOR/portal tests assert exactly
+that a non-portal user is bounced — the redirect is correct *behavior*, just wrong as a *sidebar destination*. **Fix
+(`apps/core/navigation.py`):** point the NavERP *bullet* at the **staff-facing access-management** page
+(`crm:customerportalaccess_list`) and demote the gated customer page to a secondary "Customer Portal" extra. This
+mirrors the **already-correct 1.12 wiring**: the "Vendor/Partner Portal" bullet → `crm:partnerportalaccess_list`
+(staff mgmt), with "Partner Portal" → `crm:portal_dashboard` (gated) as the extra. **Rule:** any portal/self-service
+sub-module exposes TWO surfaces — a staff-facing management list (cases/access mgmt) and a login-gated
+customer/partner entry. The sidebar bullet (and any staff-prominent link) MUST target the staff-facing one; the
+gated portal entry, if linked at all, is a clearly-labelled secondary link that staff are expected to be redirected
+from. Add this to the L30 human sidebar pass: for each portal-style bullet, click it as a *plain tenant admin* and
+confirm it lands on a 200 staff page, not a redirect.
