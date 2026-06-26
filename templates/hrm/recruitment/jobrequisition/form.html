@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Requisition{% else %}New Requisition{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Job Requisition{% else %}New Job Requisition{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:jobrequisition_list' %}">Requisitions</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group"{% if field.name == "jd_summary" or field.name == "jd_responsibilities" or field.name == "jd_requirements" or field.name == "jd_nice_to_have" or field.name == "notes" %} style="grid-column:1/-1;"{% endif %}>
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="form-help">Selecting a template and choosing “Save &amp; Apply Template” copies the template's job-description text onto this requisition.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        {% if not is_edit %}<button class="btn btn-outline" type="submit" name="apply_template" value="1"><i data-lucide="clipboard-paste"></i> Save &amp; Apply Template</button>{% endif %}
+        <a href="{% url 'hrm:jobrequisition_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
