@@ -108,8 +108,11 @@ LIVE_LINKS = {
         "SLA Policies": "crm:slapolicy_list",                     # extra (SLA targets/breach)
         "Solutions & Knowledge Base": "crm:knowledgearticle_list",  # bullet
         "KB Categories": "crm:kbcategory_list",                   # extra (KB hierarchy)
-        "Customer Self-Service Portal": "crm:portal_case_list",   # bullet (login portal)
-        "Portal Access": "crm:customerportalaccess_list",         # extra (admin mapping)
+        # Bullet → the STAFF-facing access-management page (any staff user can open it). The
+        # customer-facing portal_case_list is login-gated to portal users and would bounce staff
+        # to the dashboard, so it's the secondary link — mirrors the 1.12 Vendor/Partner Portal wiring.
+        "Customer Self-Service Portal": "crm:customerportalaccess_list",  # bullet (portal access mgmt)
+        "Customer Portal": "crm:portal_case_list",                # extra (customer-facing entry, gated)
     },
     # 1.5 Activity & Communication Management
     "1.5": {
