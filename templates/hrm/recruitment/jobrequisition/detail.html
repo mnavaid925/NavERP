@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:jobrequisition_list' %}">Requisitions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if can_submit %}
+        <form method="post" action="{% url 'hrm:jobrequisition_submit' obj.pk %}" onsubmit="return confirm('Submit this requisition for approval?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button></form>
+      {% endif %}
+      {% if can_post %}
+        <form method="post" action="{% url 'hrm:jobrequisition_post' obj.pk %}" onsubmit="return confirm('Post this requisition?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="megaphone"></i> Post</button></form>
+      {% endif %}
+      {% if can_hold %}
+        <form method="post" action="{% url 'hrm:jobrequisition_hold' obj.pk %}" onsubmit="return confirm('Place this requisition on hold?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="pause"></i> On Hold</button></form>
+      {% endif %}
+      {% if can_fill %}
+        <form method="post" action="{% url 'hrm:jobrequisition_mark_filled' obj.pk %}" onsubmit="return confirm('Mark this requisition as filled?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="user-check"></i> Mark Filled</button></form>
+      {% endif %}
+      <form method="post" action="{% url 'hrm:jobrequisition_clone' obj.pk %}" onsubmit="return confirm('Clone this requisition as a new draft?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="copy"></i> Clone</button></form>
+      {% if can_edit %}
+        <a href="{% url 'hrm:jobrequisition_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if can_cancel %}
+        <form method="post" action="{% url 'hrm:jobrequisition_cancel' obj.pk %}" onsubmit="return confirm('Cancel this requisition?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button></form>
+      {% endif %}
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:jobrequisition_delete' obj.pk %}" onsubmit="return confirm('Delete this requisition?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'draft' %}muted{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'posted' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'filled' %}green{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Priority</dt><dd><span class="badge badge-{% if obj.priority == 'urgent' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></dd></div>
+      <div class="detail-item"><dt>Requisition Type</dt><dd>{{ obj.get_req_type_display }}</dd></div>
+      <div class="detail-item"><dt>Employment Type</dt><dd>{{ obj.get_employment_type_display }}</dd></div>
+      <div class="detail-item"><dt>Reason for Hire</dt><dd>{{ obj.get_reason_for_hire_display }}</dd></div>
+      <div class="detail-item"><dt>Openings</dt><dd>{{ obj.headcount }}</dd></div>
+      <div class="detail-item"><dt>Posting</dt><dd>{{ obj.get_posting_type_display }}</dd></div>
+      <div class="detail-item"><dt>Location</dt><dd>{{ obj.location|default:"—" }}</dd></div>
+      {% if obj.is_replacement_for %}<div class="detail-item"><dt>Replacement For</dt><dd>{{ obj.is_replacement_for }}</dd></div>{% endif %}
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Hiring Team</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Hiring Manager</dt><dd>{% if obj.hiring_manager %}<a href="{% url 'hrm:employee_detail' obj.hiring_manager.pk %}">{{ obj.hiring_manager.party.name }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Recruiter</dt><dd>{% if obj.recruiter %}<a href="{% url 'hrm:employee_detail' obj.recruiter.pk %}">{{ obj.recruiter.party.name }}</a>{% else %}—{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Organization</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Designation</dt><dd>{% if obj.designation %}<a href="{% url 'hrm:designation_detail' obj.designation.pk %}">{{ obj.designation.name }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Job Grade</dt><dd>{{ obj.job_grade.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Department</dt><dd>{{ obj.department.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Cost Center</dt><dd>{{ obj.cost_center.name|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Timeline &amp; Budget</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Target Start Date</dt><dd>{% if obj.target_start_date %}{{ obj.target_start_date }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Salary Range</dt><dd>{% if obj.salary_min or obj.salary_max %}{{ obj.salary_currency }} {{ obj.salary_min|default:"—" }} – {{ obj.salary_max|default:"—" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Estimated Annual Cost</dt><dd>{% if obj.estimated_annual_cost %}{{ obj.salary_currency }} {{ obj.estimated_annual_cost }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Hiring Cost Budget</dt><dd>{% if obj.hiring_cost_budget %}{{ obj.salary_currency }} {{ obj.hiring_cost_budget }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Submitted</dt><dd>{{ obj.submitted_at|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Approved</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Posted</dt><dd>{{ obj.posted_at|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Filled</dt><dd>{{ obj.filled_at|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Job Description</h2>
+      {% if obj.template %}<span class="badge badge-info">Template: {{ obj.template.name }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        {% if obj.jd_summary %}<div class="detail-item" style="grid-column:1/-1;"><dt>Summary</dt><dd>{{ obj.jd_summary|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.jd_responsibilities %}<div class="detail-item" style="grid-column:1/-1;"><dt>Responsibilities</dt><dd>{{ obj.jd_responsibilities|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.jd_requirements %}<div class="detail-item" style="grid-column:1/-1;"><dt>Requirements</dt><dd>{{ obj.jd_requirements|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.jd_nice_to_have %}<div class="detail-item" style="grid-column:1/-1;"><dt>Nice to Have</dt><dd>{{ obj.jd_nice_to_have|linebreaksbr }}</dd></div>{% endif %}
+      </dl>
+      {% if not obj.jd_summary and not obj.jd_responsibilities and not obj.jd_requirements and not obj.jd_nice_to_have %}
+        <div class="empty-state"><i data-lucide="file-text"></i><h3>No job description yet</h3><p>Apply a template below or edit the requisition to add the JD.</p></div>
+      {% endif %}
+      {% if can_edit and jd_templates %}
+        <form method="post" action="{% url 'hrm:jobrequisition_apply_template' obj.pk %}" class="filter-bar" style="margin-top:1rem;">
+          {% csrf_token %}
+          <div class="form-group" style="min-width:240px;">
+            <label class="form-label" for="apply_template_id">Apply a JD template</label>
+            <select name="template_id" id="apply_template_id" class="form-select">
+              <option value="">Select a template…</option>
+              {% for t in jd_templates %}<option value="{{ t.pk }}">{{ t.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="clipboard-paste"></i> Apply Template</button>
+        </form>
+        <p class="form-help">Applying a template overwrites the four job-description fields with the template's text.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Approval Chain</h2></div>
+    <div class="card-body">
+      {% if total_count %}
+        <div style="margin-bottom:1rem;">
+          <div class="progress"><div class="progress-bar" style="width: {{ approval_progress }}%"></div></div>
+          {{ approval_progress }}% — {{ approved_count }} of {{ total_count }} step{{ total_count|pluralize }} approved
+        </div>
+      {% endif %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Step</th><th>Role</th><th>Approver</th><th>Status</th><th>Decided By</th><th>Decided At</th><th>Comments</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for a in approvals %}
+              <tr>
+                <td>{{ a.step_order }}</td>
+                <td><span class="badge badge-muted">{{ a.get_approver_role_display }}</span></td>
+                <td>{{ a.approver.get_full_name|default:a.approver.username|default:"—" }}</td>
+                <td><span class="badge badge-{% if a.status == 'pending' %}amber{% elif a.status == 'approved' %}green{% elif a.status == 'rejected' %}red{% elif a.status == 'returned' %}info{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
+                <td>{{ a.decided_by.username|default:"—" }}</td>
+                <td>{{ a.decided_at|date:"Y-m-d H:i"|default:"—" }}</td>
+                <td>{{ a.comments|default:"—" }}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if obj.status == 'draft' %}
+                      <form method="post" action="{% url 'hrm:approval_delete' a.pk %}" onsubmit="return confirm('Remove this approval step?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove step"><i data-lucide="trash-2"></i></button></form>
+                    {% endif %}
+                    {% if can_approve and current_step and a.pk == current_step.pk %}
+                      <form method="post" action="{% url 'hrm:jobrequisition_approve_step' obj.pk %}" onsubmit="return confirm('Approve this step?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Approve step"><i data-lucide="check"></i></button></form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8"><div class="empty-state"><i data-lucide="git-pull-request"></i><h3>No approval steps</h3><p>Add steps below, or submit the requisition to auto-generate a default HR → Executive chain.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:approval_add' obj.pk %}" class="filter-bar" style="margin-top:1rem; align-items:flex-end;">
+          {% csrf_token %}
+          {% for field in approval_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="plus"></i> Add Step</button>
+        </form>
+      {% endif %}
+
+      {% if can_approve and current_step %}
+        <div style="margin-top:1.25rem; border-top:1px solid var(--border); padding-top:1rem;">
+          <h3 class="card-title" style="margin-bottom:.5rem;">Decision on step #{{ current_step.step_order }} ({{ current_step.get_approver_role_display }})</h3>
+          <form method="post" action="{% url 'hrm:jobrequisition_reject' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_comments">Comments (for reject / return)</label>
+              <textarea id="id_decision_comments" name="comments" class="form-textarea" placeholder="Reason for rejection or revision…"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject Requisition</button>
+            <button class="btn btn-outline" type="submit" formaction="{% url 'hrm:jobrequisition_return' obj.pk %}"><i data-lucide="undo-2"></i> Return for Revision</button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.notes %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body">{{ obj.notes|linebreaksbr }}</div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:jobrequisition_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
