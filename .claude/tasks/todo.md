@@ -1059,4 +1059,29 @@ every list: View (eye), Edit (pencil), Delete (trash — POST form + `onclick="r
 
 ## Review notes
 
-(filled in at the end)
+**Delivered (2026-06-26).** HRM 3.5 Job Requisition built end-to-end, extending `apps/hrm`:
+- **Models (migration `0010`):** `JobDescriptionTemplate` (`JDTMPL-`), `JobRequisition` (`JR-`) hub with the
+  9-state lifecycle + `clean()` (salary_min≤max, headcount≥1) + 3 derived props (`is_overdue`,
+  `approval_progress`, `current_approval_step`), and `RequisitionApproval` child (immutable audit trail,
+  `unique_together(requisition, step_order)`). All workflow fields `editable=False`.
+- **Services:** `generate_approval_chain` (idempotent default HR→Executive chain) + `apply_template_to_requisition`
+  (copy-on-apply JD, leaves `employment_type`).
+- **Forms:** workflow fields excluded (mirrors `SeparationCaseForm`); FK querysets tenant-scoped; `approver`
+  scoped to tenant users.
+- **Views/URLs:** full CRUD for both entities + 8 workflow POSTs (submit/approve-step/reject/return/post/hold/
+  fill/cancel) + apply-template + clone + inline approval add/delete. All writes `@tenant_admin_required`+`@require_POST`,
+  audited. 17 new url names.
+- **Templates:** `templates/hrm/recruitment/{jobrequisition,jobdescriptiontemplate}/{list,detail,form}.html` —
+  approval chain renders inline on the requisition hub.
+- **Wire-up:** `LIVE_LINKS["3.5"]` (all 5 NavERP bullets live; Approval Workflow deep-links `?status=pending_approval`).
+- **Seeder:** `_seed_job_requisition` (2 templates + 3 reqs across the lifecycle + a 2-step approved chain),
+  idempotent + `--flush`.
+- **Verify:** `makemigrations`/`migrate`/`check` clean; seed idempotent; smoke sweep — every page 200, full
+  state-machine POSTs 302, cross-tenant IDOR → 404, non-admin write → 403, no template-comment leaks. **ALL PASS.**
+
+**Deferred:** Candidate/Interview/Offer linkage (3.6–3.8), condition-based approval routing, delegation,
+re-approval on salary change, external job-board posting, AI JD generation, internal career portal,
+`is_replacement_for` FK upgrade, evergreen auto-reopen. (See "Later passes / deferred" above.)
+
+**Pending close-out:** review-agent sequence (code-reviewer → explorer → frontend-reviewer → performance-reviewer →
+qa-smoke-tester → security-reviewer → test-writer) + HRM skill update.
