@@ -114,6 +114,7 @@ class TestOpportunityFormValid:
         form = OpportunityForm({
             "name": "Test Opp",
             "stage": "prospecting",
+            "forecast_category": "pipeline",
             "amount": "0.00",
             "probability": 10,
         }, tenant=tenant_a)
