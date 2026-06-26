@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Submission · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:formsubmission_list' %}">Form Submissions</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if not obj.converted_lead_id %}
+        <form method="post" action="{% url 'crm:formsubmission_convert' obj.pk %}" onsubmit="return confirm('Convert this submission to a lead?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Convert to lead</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{% url 'crm:formsubmission_delete' obj.pk %}" onsubmit="return confirm('Delete this submission?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Email</dt><dd>{{ obj.email|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Phone</dt><dd>{{ obj.phone|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Company</dt><dd>{{ obj.company|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Landing page</dt><dd>{% if obj.landing_page %}<a href="{% url 'crm:landingpage_detail' obj.landing_page.pk %}">{{ obj.landing_page.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'converted' %}green{% elif obj.status == 'routed' %}info{% elif obj.status == 'spam' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Routed to</dt><dd>{% if obj.routed_to %}{{ obj.routed_to.get_full_name|default:obj.routed_to.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Converted lead</dt><dd>{% if obj.converted_lead %}<a href="{% url 'crm:lead_detail' obj.converted_lead.pk %}">{{ obj.converted_lead.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>IP address</dt><dd>{{ obj.ip_address|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Received</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    {% if obj.message %}<p style="margin-top:1rem;">{{ obj.message|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'crm:formsubmission_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
