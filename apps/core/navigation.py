@@ -17,6 +17,7 @@ flagged, parent module/sub-module marked open). Exposed to every template via
 import os
 import re
 from functools import lru_cache
+from urllib.parse import parse_qsl
 
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
@@ -323,15 +324,17 @@ LIVE_LINKS = {
     "3.12": {
         "Holiday Calendar": "hrm:publicholiday_list",    # bullet
     },
-    # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates.
-    # Job Posting / Budget / Requisition Tracking are all facets of the requisition record, so they
-    # deep-link to the requisition list; Approval Workflow filters it to the pending-approval queue.
+    # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
+    # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
+    # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
+    # Workflow → the pending-approval queue. Budget Management + Requisition Tracking are both the
+    # full unfiltered list (budget columns / all-status tracking) so they co-highlight only there.
     "3.5": {
-        "Job Posting": "hrm:jobrequisition_list",                                  # bullet (post an opening)
+        "Job Posting": "hrm:jobrequisition_list?status=posted",                    # bullet (published openings)
         "Approval Workflow": "hrm:jobrequisition_list?status=pending_approval",    # bullet (pending queue)
-        "Budget Management": "hrm:jobrequisition_list",                            # bullet (salary/cost on the req)
+        "Budget Management": "hrm:jobrequisition_list",                            # bullet (salary/cost columns)
         "Job Templates": "hrm:jobdescriptiontemplate_list",                        # bullet (reusable JD library)
-        "Requisition Tracking": "hrm:jobrequisition_list",                         # bullet (status lifecycle)
+        "Requisition Tracking": "hrm:jobrequisition_list",                         # bullet (all-status tracking)
     },
 }
 
@@ -377,6 +380,7 @@ def resolve_nav(request):
     """Build the render-ready sidebar tree (Dashboard + Module → Sub-module → Feature)."""
     match = getattr(request, "resolver_match", None)
     current = getattr(match, "view_name", None) if match is not None else None
+    current_get = getattr(request, "GET", None)
 
     sections = [{
         "kind": "link",
@@ -399,13 +403,20 @@ def resolve_nav(request):
             features, used = [], set()
             for name in sub["features"]:
                 url = live_map.get(name)
-                features.append(_feature_node(name, url, current))
+                features.append(_feature_node(name, url))
                 if url:
                     used.add(name)
             # Extra built pages not present as NavERP.md bullets.
             for name, url in live_map.items():
                 if name not in used:
-                    features.append(_feature_node(name, url, current))
+                    features.append(_feature_node(name, url))
+
+            # "Most-specific match wins" within the sub-module: the bullet whose ?query best matches
+            # the current request is highlighted (only it), so sibling bullets sharing one route but
+            # differing by ?query no longer all light up together (e.g. 3.5's status filters, 2.15's
+            # ?category= integrations). Ties on the same score (identical hrefs, or #fragment-only
+            # differences the server can't see) still co-highlight — that's unavoidable, not a bug.
+            _mark_active(features, current, current_get)
 
             sub_open = any(f["is_active"] for f in features)
             mod_node["submodules"].append({
@@ -419,10 +430,23 @@ def resolve_nav(request):
     return sections
 
 
-def _feature_node(name, url, current):
+def _feature_node(name, url):
     href = _safe_reverse(url) if url else None
-    return {"label": name, "href": href, "live": href is not None,
-            "is_active": _is_active(url, current)}
+    # ``url`` (with its ?query/#fragment suffix) is kept for the active-scoring pass; ``is_active``
+    # is filled in by ``_mark_active`` once all the sub-module's features are known.
+    return {"label": name, "url": url, "href": href, "live": href is not None, "is_active": False}
+
+
+def _mark_active(features, current, current_get):
+    """Flag the active feature(s) in one sub-module by "most-specific match wins": score each
+    feature against the current route + query string, then mark the highest scorers active. A
+    route-only (or #fragment) bullet scores 0; a ``?query`` bullet whose params all match the
+    request scores by the number of params (so it beats the bare route on its filtered page) and a
+    bullet whose query conflicts with the request is disqualified."""
+    scores = [_match_score(f["url"], current, current_get) for f in features]
+    best = max((s for s in scores if s >= 0), default=-1)
+    for feat, score in zip(features, scores):
+        feat["is_active"] = best >= 0 and score == best
 
 
 def _route_name(url_name):
@@ -435,21 +459,70 @@ def _route_name(url_name):
     return url_name[:cut], url_name[cut:]
 
 
-def _is_active(url_name, current):
-    """True if `current` is this route or one of its CRUD sub-routes (detail/edit/...).
+# A route-match strength larger than any namespaced base-name length, so an EXACT route match always
+# outscores a sub-route (prefix) match — and so a longer (more specific) entity prefix outscores a
+# shorter one without an action allowlist to maintain.
+_EXACT_ROUTE = 1_000_000
 
-    A ``name?query`` / ``name#fragment`` value matches on the route name alone. Note: bullets that
-    share one route but differ only by ``?query``/``#fragment`` (the 2.1 dashboard widgets, the 2.15
-    integration categories) therefore ALL highlight together on that page — the resolver match
-    carries no query string, and URL fragments are never sent to the server, so a single-bullet
-    highlight isn't derivable here (review F4, accepted limitation)."""
+
+def _route_score(url_name, current):
+    """Route-match strength of a feature's route against the current view, ignoring ``?query``/
+    ``#fragment``:
+
+      * ``-1``            — no match.
+      * ``len(base)``     — ``current`` is a CRUD/secondary sub-route of this list (e.g. ``..._detail``,
+                            ``..._edit``, ``..._import``). Scored by base length so the **longest**
+                            (most specific) prefix wins: on ``payment_term_detail`` the
+                            ``payment_term_list`` bullet (longer base) beats the ``payment_list`` one.
+      * ``_EXACT_ROUTE``  — an exact route match, which always beats any sub-route. So a page that has
+                            its own bullet (``payment_schedule``, ``budget_variance``,
+                            ``employee_document_list``) is never co-highlighted by a sibling list whose
+                            name it merely shares a prefix with.
+    """
     if not url_name or not current:
-        return False
+        return -1
     name, _ = _route_name(url_name)
     if current == name:
-        return True
+        return _EXACT_ROUTE
     base = name[:-5] if name.endswith("_list") else name
-    return current.startswith(base + "_")
+    if current.startswith(base + "_"):
+        return len(base)
+    return -1
+
+
+def _is_active(url_name, current):
+    """True if `current` is this route or a sub-route of it (ignoring any ``?query``/``#fragment``).
+    Coarse route-gate used directly for the single Dashboard top-link; sub-module bullets get the
+    finer ``_match_score`` / ``_mark_active`` precision (exact beats a prefix, longest prefix wins,
+    and ``?query`` siblings are disambiguated against the request's query string)."""
+    return _route_score(url_name, current) >= 0
+
+
+def _match_score(url_name, current, current_get):
+    """Score a feature's ``url`` against the current request for the "most-specific match wins" pass.
+
+    ``-1`` when the route doesn't match OR a ``?query`` param the bullet pins conflicts with / is
+    absent from ``request.GET`` (disqualified). Otherwise the route-match strength from
+    ``_route_score`` (exact ≫ longest sub-route prefix) plus the number of ``?query`` params the
+    bullet pins that the request satisfies — so a filter bullet beats the bare route on its own
+    filtered page, an exact route beats a sub-route, and a longer entity prefix beats a shorter one.
+    Route-only and ``#fragment`` bullets carry no query, so siblings differing only by fragment (the
+    2.1 dashboard widgets) or by an identical href tie and co-highlight — unavoidable, not a bug."""
+    base_score = _route_score(url_name, current)
+    if base_score < 0:
+        return -1
+    _, suffix = _route_name(url_name)
+    if not suffix.startswith("?"):
+        return base_score  # route-only or #fragment — the baseline match
+    params = parse_qsl(suffix[1:])
+    if not params:
+        return base_score
+    if current_get is None:
+        return -1  # the bullet pins a filter but we can't see the request's query → not the active one
+    for key, value in params:
+        if current_get.get(key) != value:
+            return -1  # this filtered bullet doesn't describe the current page
+    return base_score + len(params)
 
 
 def _safe_reverse(url_name):
