@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}My Support Tickets{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Support Tickets</h1>
+      <div class="breadcrumb"><span>{{ access.customer_party.name|default:"Customer Portal" }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if access.can_submit_cases %}<a href="{% url 'crm:portal_case_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Ticket</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Subject</th><th>Priority</th><th>Status</th><th>Opened</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'crm:portal_case_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.subject }}</td>
+              <td>{{ obj.get_priority_display }}</td>
+              <td><span class="badge badge-{% if obj.status == 'resolved' %}green{% elif obj.status == 'closed' %}slate{% elif obj.status == 'in_progress' %}amber{% else %}info{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.created_at|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="life-buoy"></i><h3>No tickets yet</h3><p>You haven't opened any support tickets.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
