@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:emailcampaign_list' %}">Email Campaigns</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status != 'sent' and obj.status != 'sending' and obj.status != 'cancelled' %}
+        <form method="post" action="{% url 'crm:emailcampaign_send' obj.pk %}" onsubmit="return confirm('Send this email campaign to all campaign members?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'crm:emailcampaign_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:emailcampaign_delete' obj.pk %}" onsubmit="return confirm('Delete this email campaign?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid" style="margin-bottom:1rem;">
+    <div class="stat-card"><div class="stat-label">Recipients</div><div class="stat-value">{{ obj.recipients_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">{{ obj.delivered_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Open rate</div><div class="stat-value">{% if obj.open_rate is not None %}{{ obj.open_rate|floatformat:1 }}%{% else %}—{% endif %}</div></div>
+    <div class="stat-card"><div class="stat-label">Click rate</div><div class="stat-value">{% if obj.click_rate is not None %}{{ obj.click_rate|floatformat:1 }}%{% else %}—{% endif %}</div></div>
+    <div class="stat-card"><div class="stat-label">Bounce rate</div><div class="stat-value">{% if obj.bounce_rate is not None %}{{ obj.bounce_rate|floatformat:1 }}%{% else %}—{% endif %}</div></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Campaign</dt><dd>{% if obj.campaign %}<a href="{% url 'crm:campaign_detail' obj.campaign.pk %}">{{ obj.campaign.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Send type</dt><dd>{{ obj.get_send_type_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'sent' %}green{% elif obj.status == 'scheduled' or obj.status == 'sending' %}info{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'paused' %}amber{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>A/B test</dt><dd>{% if obj.is_ab_test %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Template (A)</dt><dd>{% if obj.template %}<a href="{% url 'crm:emailtemplate_detail' obj.template.pk %}">{{ obj.template.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Variant (B)</dt><dd>{% if obj.variant_template %}<a href="{% url 'crm:emailtemplate_detail' obj.variant_template.pk %}">{{ obj.variant_template.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Scheduled at</dt><dd>{% if obj.scheduled_at %}{{ obj.scheduled_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Sent at</dt><dd>{% if obj.sent_at %}{{ obj.sent_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Sent</dt><dd>{{ obj.sent_count }}</dd></div>
+      <div class="detail-item"><dt>Opened</dt><dd>{{ obj.opened_count }}</dd></div>
+      <div class="detail-item"><dt>Clicked</dt><dd>{{ obj.clicked_count }}</dd></div>
+      <div class="detail-item"><dt>Bounced</dt><dd>{{ obj.bounced_count }}</dd></div>
+      <div class="detail-item"><dt>Unsubscribed</dt><dd>{{ obj.unsubscribed_count }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'crm:emailcampaign_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
