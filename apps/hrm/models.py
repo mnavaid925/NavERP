@@ -1681,7 +1681,10 @@ class JobRequisition(TenantNumbered):
     @property
     def approval_progress(self):
         """``(approved_count, total_count)`` over the approval chain — feeds the detail-hub
-        progress text. Computed from the prefetched ``approvals`` when available."""
+        progress text. Computed from the prefetched ``approvals`` when available.
+
+        PERF: fires a SELECT unless ``approvals`` is prefetched. Over a *collection* of
+        requisitions, compute from an already-fetched list instead (see ``jobrequisition_detail``)."""
         steps = self.approvals.all()
         total = len(steps)
         approved = sum(1 for s in steps if s.status == "approved")
@@ -1690,7 +1693,10 @@ class JobRequisition(TenantNumbered):
     @property
     def current_approval_step(self):
         """The lowest-ordered still-pending approval step (the one awaiting a decision), or
-        ``None`` when the chain is fully decided."""
+        ``None`` when the chain is fully decided.
+
+        PERF: fires a SELECT per call. Don't call in a list loop — the detail view derives the
+        current step from its already-fetched ``approvals`` list instead."""
         return (self.approvals.filter(status="pending").order_by("step_order").first())
 
     def __str__(self):
