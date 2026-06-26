@@ -15,24 +15,127 @@
     </div>
   </div>
 
+  <div class="stat-grid" style="margin-bottom:1rem;">
+    <div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">{{ member_total }}</div></div>
+    <div class="stat-card"><div class="stat-label">Responded</div><div class="stat-value">{{ responded_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Response rate</div><div class="stat-value">{% if response_rate is not None %}{{ response_rate|floatformat:1 }}%{% else %}—{% endif %}</div></div>
+    <div class="stat-card"><div class="stat-label">ROI</div><div class="stat-value">{% if obj.roi is not None %}{{ obj.roi|floatformat:1 }}%{% else %}—{% endif %}</div></div>
+  </div>
+
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
       <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
       <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_type_display }}</dd></div>
+      <div class="detail-item"><dt>Objective</dt><dd>{{ obj.get_objective_display }}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'planned' %}info{% elif obj.status == 'paused' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'completed' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Parent program</dt><dd>{% if obj.parent_campaign %}<a href="{% url 'crm:campaign_detail' obj.parent_campaign.pk %}">{{ obj.parent_campaign.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Start date</dt><dd>{% if obj.start_date %}{{ obj.start_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>End date</dt><dd>{% if obj.end_date %}{{ obj.end_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Budget (planned)</dt><dd>{{ obj.budget_planned }}</dd></div>
       <div class="detail-item"><dt>Budget (actual)</dt><dd>{{ obj.budget_actual }}</dd></div>
       <div class="detail-item"><dt>Expected revenue</dt><dd>{{ obj.expected_revenue }}</dd></div>
       <div class="detail-item"><dt>Actual revenue</dt><dd>{{ obj.actual_revenue }}</dd></div>
-      <div class="detail-item"><dt>ROI</dt><dd>{% if obj.roi is not None %}{{ obj.roi|floatformat:1 }}%{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Target size</dt><dd>{{ obj.target_size }}</dd></div>
+      <div class="detail-item"><dt>UTM source</dt><dd>{{ obj.utm_source|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>UTM medium</dt><dd>{{ obj.utm_medium|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>UTM campaign</dt><dd>{{ obj.utm_campaign|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Target list — members ({{ member_total }})</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'crm:campaignmember_add' obj.pk %}" class="filter-bar">
+        {% csrf_token %}
+        <div class="form-group" style="flex:1; min-width:160px;">
+          <input type="text" name="member_name" class="form-input" placeholder="Member name" required>
+        </div>
+        <div class="form-group" style="flex:1; min-width:160px;">
+          <input type="email" name="member_email" class="form-input" placeholder="Email (optional)">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            {% for val, label in member_status_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Add member</button>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Email</th><th>Linked to</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for m in members %}
+            <tr>
+              <td><a href="{% url 'crm:campaignmember_detail' m.pk %}" class="fw-600">{{ m.member_name }}</a></td>
+              <td>{{ m.member_email|default:"—" }}</td>
+              <td>{% if m.party %}{{ m.party.name }}{% elif m.lead %}{{ m.lead.name }}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if m.status == 'converted' %}green{% elif m.status == 'responded' %}green{% elif m.status == 'clicked' or m.status == 'opened' %}info{% elif m.status == 'sent' %}slate{% elif m.status == 'bounced' or m.status == 'unsubscribed' %}red{% else %}muted{% endif %}">{{ m.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:campaignmember_edit' m.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'crm:campaignmember_remove' m.pk %}" onsubmit="return confirm('Remove this member?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="users"></i><p>No members yet — add targets above.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Email campaigns</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Type</th><th>Status</th><th>Sent</th><th>Opens</th><th>Clicks</th></tr></thead>
+        <tbody>
+          {% for ec in email_campaigns %}
+            <tr>
+              <td><a href="{% url 'crm:emailcampaign_detail' ec.pk %}" class="fw-600">{{ ec.number }}</a></td>
+              <td>{{ ec.name }}</td>
+              <td>{{ ec.get_send_type_display }}</td>
+              <td><span class="badge badge-{% if ec.status == 'sent' %}green{% elif ec.status == 'scheduled' %}info{% elif ec.status == 'sending' %}info{% elif ec.status == 'cancelled' %}red{% elif ec.status == 'paused' %}amber{% else %}muted{% endif %}">{{ ec.get_status_display }}</span></td>
+              <td>{{ ec.sent_count }}</td>
+              <td>{{ ec.opened_count }}</td>
+              <td>{{ ec.clicked_count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="mail"></i><p>No email campaigns linked.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Landing pages</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Status</th><th>Submissions</th></tr></thead>
+        <tbody>
+          {% for lp in landing_pages %}
+            <tr>
+              <td><a href="{% url 'crm:landingpage_detail' lp.pk %}" class="fw-600">{{ lp.number }}</a></td>
+              <td>{{ lp.name }}</td>
+              <td><span class="badge badge-{% if lp.status == 'published' %}green{% elif lp.status == 'archived' %}slate{% else %}muted{% endif %}">{{ lp.get_status_display }}</span></td>
+              <td>{{ lp.submission_count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="layout-template"></i><p>No landing pages linked.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Influenced opportunities</h2></div>
