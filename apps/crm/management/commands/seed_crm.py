@@ -36,12 +36,19 @@ from apps.crm.models import (
     OnboardingPlan,
     OnboardingStep,
     Opportunity,
+    OpportunitySplit,
     PartnerPortalAccess,
+    PriceBook,
+    Product,
     ProductStock,
     PurchaseOrder,
     PurchaseOrderLine,
+    Quote,
+    QuoteLine,
+    SalesQuota,
     SignerRecord,
     Survey,
+    Territory,
     Timesheet,
     WorkflowLog,
     WorkflowRule,
@@ -101,6 +108,8 @@ class Command(BaseCommand):
             # 1.3 Marketing Automation — runs unconditionally; self-guards on EmailTemplate so
             # existing seeded DBs gain the new marketing rows without a --flush.
             self._seed_marketing(tenant)
+            # 1.2 Sales Force Automation — runs unconditionally; self-guards on Product.
+            self._seed_sfa(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -270,6 +279,69 @@ class Command(BaseCommand):
         )
         converted.save(update_fields=["converted_lead"])
         LandingPage.objects.filter(pk=page.pk).update(submission_count=2)
+
+    def _seed_sfa(self, tenant):
+        """Idempotently seed 1.2 SFA demo data — territories, a sales-product catalog + price
+        books, opportunity splits, a quote (+ lines, recalculated), and sales quotas. Reuses the
+        tenant's first Opportunity/Party. Guard: skip if a Product already exists for the tenant."""
+        if Product.objects.filter(tenant=tenant).exists():
+            return
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        if owner is None:
+            return
+        org = Party.objects.filter(tenant=tenant, kind="organization").first()
+        opp = Opportunity.objects.filter(tenant=tenant).order_by("created_at").first()
+
+        emea = Territory.objects.create(tenant=tenant, name="EMEA", region="Europe",
+                                        segment="Enterprise", manager=owner)
+        amer = Territory.objects.create(tenant=tenant, name="Americas", region="North America",
+                                        segment="Mid-Market", manager=owner)
+
+        products = [
+            Product(tenant=tenant, name="Pro Plan License", sku="LIC-PRO", product_type="subscription",
+                    unit_price=Decimal("1200"), cost=Decimal("300"), tax_pct=Decimal("10")),
+            Product(tenant=tenant, name="Onboarding Service", sku="SVC-ONB", product_type="service",
+                    unit_price=Decimal("2500"), cost=Decimal("900"), tax_pct=Decimal("0")),
+            Product(tenant=tenant, name="Hardware Kit", sku="HW-KIT", product_type="good",
+                    unit_price=Decimal("800"), cost=Decimal("500"), tax_pct=Decimal("10")),
+        ]
+        for p in products:
+            p.save()  # TenantNumbered.save assigns the PRD- number
+
+        book = PriceBook.objects.create(
+            tenant=tenant, name="Standard (USD)", currency_code="USD", region="Global",
+            tier="Standard", price_adjustment_pct=Decimal("0"), is_default=True)
+        PriceBook.objects.create(
+            tenant=tenant, name="EMEA Enterprise", currency_code="EUR", region="Europe",
+            tier="Enterprise", price_adjustment_pct=Decimal("-10"))
+
+        if opp is not None:
+            opp.territory = amer
+            opp.competitor = "Acme Rival Inc."
+            opp.forecast_category = "best_case"
+            opp.save()
+            OpportunitySplit.objects.create(tenant=tenant, opportunity=opp, user=owner,
+                                            split_type="revenue", percentage=Decimal("70"))
+            OpportunitySplit.objects.create(tenant=tenant, opportunity=opp, user=owner,
+                                            split_type="overlay", percentage=Decimal("25"), notes="SE credit")
+            quote = Quote.objects.create(
+                tenant=tenant, name="Initial Proposal", opportunity=opp, account=org, price_book=book,
+                currency_code="USD", discount_pct=Decimal("5"),
+                valid_until=timezone.localdate() + datetime.timedelta(days=30), owner=owner,
+                terms="Net 30. Prices valid for 30 days.")
+            for i, p in enumerate(products[:2]):
+                QuoteLine.objects.create(
+                    tenant=tenant, quote=quote, product=p, description=p.name,
+                    quantity=Decimal("2") if i == 0 else Decimal("1"),
+                    unit_price=p.unit_price, tax_pct=p.tax_pct, order=i)
+            quote.recalc_totals()
+
+        # Distinct periods — the unique key is (tenant, owner, period_type, year, number).
+        SalesQuota.objects.create(tenant=tenant, owner=owner, territory=amer, period_type="quarter",
+                                  period_year=2026, period_number=2, target_amount=Decimal("150000"))
+        SalesQuota.objects.create(tenant=tenant, owner=owner, territory=emea, period_type="quarter",
+                                  period_year=2026, period_number=3, target_amount=Decimal("90000"))
 
     def _seed_extension(self, tenant):
         """Idempotently seed the 1.7–1.12 demo data (expenses, projects/milestones/timesheets,
