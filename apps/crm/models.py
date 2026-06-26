@@ -464,14 +464,28 @@ class Opportunity(TenantNumbered):
         ("closed_lost", "Closed Lost"),
     ]
     OPEN_STAGES = ["prospecting", "qualification", "proposal", "negotiation"]
+    # Forecast rollup buckets (Salesforce/Zoho/Clari) — drive the 1.2 forecast dashboard.
+    FORECAST_CATEGORY_CHOICES = [
+        ("omitted", "Omitted"),
+        ("pipeline", "Pipeline"),
+        ("best_case", "Best Case"),
+        ("commit", "Commit"),
+        ("closed", "Closed"),
+    ]
 
     name = models.CharField(max_length=255)
     account = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_opportunities")
     primary_contact = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_contact_opportunities")
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default="prospecting")
+    forecast_category = models.CharField(max_length=12, choices=FORECAST_CATEGORY_CHOICES, default="pipeline")
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     probability = models.PositiveSmallIntegerField(default=10, validators=[MaxValueValidator(100)])
     close_date = models.DateField(null=True, blank=True)
+    competitor = models.CharField(max_length=255, blank=True)
+    loss_reason = models.CharField(max_length=255, blank=True)  # filled when closed_lost
+    lost_at = models.DateTimeField(null=True, blank=True)  # system-set when stage→closed_lost
+    stage_changed_at = models.DateTimeField(null=True, blank=True)  # system-set on stage change (days-in-stage)
+    territory = models.ForeignKey("crm.Territory", on_delete=models.SET_NULL, null=True, blank=True, related_name="opportunities")
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_opportunities")
     source_lead = models.ForeignKey("crm.Lead", on_delete=models.SET_NULL, null=True, blank=True, related_name="opportunities")
     campaign = models.ForeignKey("crm.Campaign", on_delete=models.SET_NULL, null=True, blank=True, related_name="opportunities")
@@ -484,7 +498,28 @@ class Opportunity(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "stage"], name="crm_opp_tenant_stage_idx"),
             models.Index(fields=["tenant", "created_at"], name="crm_opp_tenant_created_idx"),
+            models.Index(fields=["tenant", "forecast_category"], name="crm_opp_tnt_fcast_idx"),
         ]
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        # Remember the persisted stage so save() can detect a transition without a re-query.
+        inst = super().from_db(db, field_names, values)
+        inst._loaded_stage = inst.stage
+        return inst
+
+    def save(self, *args, **kwargs):
+        # System-stamp stage_changed_at on any stage transition (incl. first create);
+        # stamp lost_at when entering closed_lost, clear it if re-opened (mirrors Case.resolved_at).
+        if self.stage != getattr(self, "_loaded_stage", "\x00new"):
+            self.stage_changed_at = timezone.now()
+        if self.stage == "closed_lost":
+            if self.lost_at is None:
+                self.lost_at = timezone.now()
+        else:
+            self.lost_at = None
+        super().save(*args, **kwargs)
+        self._loaded_stage = self.stage
 
     @property
     def weighted_amount(self):
@@ -504,6 +539,305 @@ class Opportunity(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.name}"
+
+
+# ============================================================================
+# ===== 1.2 Sales Force Automation (recreated) ===============================
+# Opportunity splits, the sales Product catalog + price books, the Quote builder,
+# territories, and sales quotas (the forecast/Kanban are views, not tables).
+# ============================================================================
+class Territory(TenantNumbered):
+    """A sales territory (1.2 Forecasting) — region/segment with an optional parent for
+    roll-up hierarchies; opportunities + quotas hang off it for forecast-by-territory."""
+
+    NUMBER_PREFIX = "TER"
+
+    name = models.CharField(max_length=255)
+    region = models.CharField(max_length=120, blank=True)
+    segment = models.CharField(max_length=120, blank=True)
+    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="child_territories")
+    manager = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_territories")
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="crm_ter_tnt_active_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_ter_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class Product(TenantNumbered):
+    """A sales-catalog product/service (1.2 Quoting). CRM-owned for now — migrate to the
+    shared ``core.Item`` master once Inventory (Module 5) ships. Distinct from the 1.12
+    ``ProductStock`` (which tracks on-hand inventory, not a sellable catalog + list price)."""
+
+    NUMBER_PREFIX = "PRD"
+
+    TYPE_CHOICES = [
+        ("good", "Good"),
+        ("service", "Service"),
+        ("subscription", "Subscription"),
+    ]
+
+    name = models.CharField(max_length=255)
+    sku = models.CharField(max_length=64, blank=True)
+    product_type = models.CharField(max_length=15, choices=TYPE_CHOICES, default="good")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "product_type"], name="crm_prd_tnt_type_idx"),
+            models.Index(fields=["tenant", "is_active"], name="crm_prd_tnt_active_idx"),
+        ]
+
+    @property
+    def margin_pct(self):
+        """Gross margin %, or None when no price is set. Decimal-safe on a fresh instance."""
+        price = Decimal(self.unit_price or 0)
+        if not price:
+            return None
+        return (price - Decimal(self.cost or 0)) / price * 100
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class PriceBook(TenantNumbered):
+    """A regional/tier price list (1.2 Quoting). ``price_adjustment_pct`` shifts a product's
+    base price by ±% for this book (e.g. EU Tier-2 = -10%) — a per-product override table
+    (PriceBookEntry) is a documented future enhancement, not built here."""
+
+    NUMBER_PREFIX = "PB"
+
+    name = models.CharField(max_length=255)
+    currency_code = models.CharField(max_length=3, default="USD")
+    region = models.CharField(max_length=120, blank=True)
+    tier = models.CharField(max_length=120, blank=True)
+    price_adjustment_pct = models.DecimalField(max_digits=6, decimal_places=2, default=0)  # ± off base
+    is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-is_default", "name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="crm_pb_tnt_active_idx"),
+            models.Index(fields=["tenant", "is_default"], name="crm_pb_tnt_default_idx"),
+        ]
+
+    def adjusted_price(self, base):
+        """Apply this book's ± adjustment to a product base price (Decimal-safe)."""
+        base = Decimal(base or 0)
+        return base * (Decimal(100) + Decimal(self.price_adjustment_pct or 0)) / 100
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class OpportunitySplit(models.Model):
+    """A sales-team credit/commission split on an Opportunity (1.2). Plain tenant-scoped row
+    (no auto-number). Revenue-type splits across an opportunity must total ≤ 100% (validated in
+    ``clean()`` + the add view); overlay credit is uncapped (it doesn't divide the booking)."""
+
+    SPLIT_TYPE_CHOICES = [
+        ("revenue", "Revenue"),
+        ("overlay", "Overlay / Credit"),
+    ]
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    opportunity = models.ForeignKey("Opportunity", on_delete=models.CASCADE, related_name="splits")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="crm_opportunity_splits")
+    split_type = models.CharField(max_length=10, choices=SPLIT_TYPE_CHOICES, default="revenue")
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["split_type", "-percentage"]
+        indexes = [
+            models.Index(fields=["tenant", "opportunity"], name="crm_osplit_tnt_opp_idx"),
+        ]
+
+    @property
+    def split_amount(self):
+        """This split's share of the opportunity amount (Decimal-safe)."""
+        return Decimal(self.opportunity.amount or 0) * Decimal(self.percentage or 0) / 100
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        # Revenue splits divide the booking — they must not exceed 100% across the opportunity.
+        if self.split_type == "revenue" and self.opportunity_id:
+            others = OpportunitySplit.objects.filter(
+                tenant=self.tenant, opportunity=self.opportunity, split_type="revenue")
+            if self.pk:
+                others = others.exclude(pk=self.pk)
+            total = sum((Decimal(s.percentage or 0) for s in others), Decimal(0)) + Decimal(self.percentage or 0)
+            if total > 100:
+                raise ValidationError("Revenue splits for an opportunity cannot exceed 100%.")
+
+    def __str__(self):
+        return f"{self.user} · {self.percentage}% ({self.get_split_type_display()})"
+
+
+class Quote(TenantNumbered):
+    """A sales quote (1.2 Quoting) with line items, per-line + quote-level discount and tax.
+    ``status`` and the ``subtotal``/``tax_total``/``total`` + ``sent_at``/``accepted_at`` are
+    SYSTEM-managed (set by the send/accept/decline actions + ``recalc_totals()``) and excluded
+    from the form, so a user can't forge a total or self-accept a quote via POST."""
+
+    NUMBER_PREFIX = "QUO"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("sent", "Sent"),
+        ("accepted", "Accepted"),
+        ("declined", "Declined"),
+        ("expired", "Expired"),
+    ]
+    OPEN_STATUSES = ("draft", "sent")
+
+    name = models.CharField(max_length=255)
+    opportunity = models.ForeignKey("Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")
+    account = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_quotes")
+    price_book = models.ForeignKey("PriceBook", on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    valid_until = models.DateField(null=True, blank=True)
+    currency_code = models.CharField(max_length=3, default="USD")
+    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # quote-level, on top of line discounts
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)   # system (recalc_totals)
+    tax_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)  # system
+    total = models.DecimalField(max_digits=14, decimal_places=2, default=0)      # system
+    sent_at = models.DateTimeField(null=True, blank=True)      # system (quote_send)
+    accepted_at = models.DateTimeField(null=True, blank=True)  # system (quote_accept)
+    terms = models.TextField(blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_quotes")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="crm_quo_tnt_status_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_quo_tnt_created_idx"),
+        ]
+
+    def recalc_totals(self, save=True):
+        """Recompute subtotal/tax/total from the lines DB-side, then apply the quote-level
+        discount. Lines store unit_price/discount/tax; totals are derived, never user-entered."""
+        from django.db.models import DecimalField as DF
+        from django.db.models import ExpressionWrapper, F, Sum
+        net = ExpressionWrapper(
+            F("quantity") * F("unit_price") * (Decimal(1) - F("discount_pct") / 100),
+            output_field=DF(max_digits=18, decimal_places=4))
+        agg = self.lines.aggregate(
+            sub=Sum(net),
+            tax=Sum(net * F("tax_pct") / 100, output_field=DF(max_digits=18, decimal_places=4)),
+        )
+        line_sub = Decimal(agg["sub"] or 0)
+        line_tax = Decimal(agg["tax"] or 0)
+        disc = (Decimal(100) - Decimal(self.discount_pct or 0)) / 100  # quote-level discount factor
+        self.subtotal = (line_sub * disc).quantize(Decimal("0.01"))
+        self.tax_total = (line_tax * disc).quantize(Decimal("0.01"))
+        self.total = (self.subtotal + self.tax_total).quantize(Decimal("0.01"))
+        if save:
+            super().save(update_fields=["subtotal", "tax_total", "total", "updated_at"])
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+    @property
+    def is_expired(self):
+        return bool(self.valid_until and self.status in self.OPEN_STATUSES
+                    and self.valid_until < timezone.localdate())
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class QuoteLine(models.Model):
+    """A line item on a Quote (1.2). Plain tenant-scoped child; ``line_total`` is a derived
+    property (never stored/forged). ``product`` is nullable for free-text write-in lines."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    quote = models.ForeignKey("Quote", on_delete=models.CASCADE, related_name="lines")
+    product = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="quote_lines")
+    description = models.CharField(max_length=255)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    tax_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "quote"], name="crm_qline_tnt_quote_idx"),
+        ]
+
+    @property
+    def line_subtotal(self):
+        return (Decimal(self.quantity or 0) * Decimal(self.unit_price or 0)
+                * (Decimal(1) - Decimal(self.discount_pct or 0) / 100))
+
+    @property
+    def line_tax(self):
+        return self.line_subtotal * Decimal(self.tax_pct or 0) / 100
+
+    @property
+    def line_total(self):
+        return self.line_subtotal + self.line_tax
+
+    def __str__(self):
+        return f"{self.description} × {self.quantity}"
+
+
+class SalesQuota(TenantNumbered):
+    """A per-rep (and optional per-territory) sales target for a period (1.2 Forecasting).
+    The forecast dashboard rolls weighted pipeline + closed-won against this target."""
+
+    NUMBER_PREFIX = "QTA"
+
+    PERIOD_CHOICES = [
+        ("month", "Monthly"),
+        ("quarter", "Quarterly"),
+        ("year", "Annual"),
+    ]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_sales_quotas")
+    territory = models.ForeignKey("Territory", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_quotas")
+    period_type = models.CharField(max_length=10, choices=PERIOD_CHOICES, default="quarter")
+    period_year = models.PositiveSmallIntegerField(default=2026)
+    period_number = models.PositiveSmallIntegerField(default=1)  # month 1-12 / quarter 1-4 / year=0
+    target_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-period_year", "period_number"]
+        unique_together = [
+            ("tenant", "number"),
+            ("tenant", "owner", "period_type", "period_year", "period_number"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "period_year"], name="crm_qta_tnt_year_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.get_period_type_display()} {self.period_year}"
 
 
 class Case(TenantNumbered):
