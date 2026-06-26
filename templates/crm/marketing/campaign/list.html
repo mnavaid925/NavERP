@@ -33,6 +33,14 @@
             {% endfor %}
           </select>
         </div>
+        <div class="form-group">
+          <select name="objective" class="form-select">
+            <option value="">All objectives</option>
+            {% for val, label in objective_choices %}
+              <option value="{{ val }}" {% if request.GET.objective == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
         <a href="{% url 'crm:campaign_list' %}" class="btn btn-outline">Reset</a>
       </form>
@@ -40,16 +48,18 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Name</th><th>Type</th><th>Status</th><th>Budget (actual)</th><th>Revenue</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Number</th><th>Name</th><th>Type</th><th>Objective</th><th>Status</th><th>Budget (actual)</th><th>Revenue</th><th>ROI</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'crm:campaign_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.name }}</td>
               <td>{{ obj.get_type_display }}</td>
+              <td>{{ obj.get_objective_display }}</td>
               <td><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'planned' %}info{% elif obj.status == 'paused' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'completed' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.budget_actual }}</td>
               <td>{{ obj.actual_revenue }}</td>
+              <td>{% if obj.roi is not None %}{{ obj.roi|floatformat:1 }}%{% else %}—{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
               <td>
                 <div class="table-actions">
@@ -63,7 +73,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="8"><div class="empty-state"><i data-lucide="megaphone"></i><h3>No campaigns found</h3><p>Launch your first marketing campaign.</p></div></td></tr>
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="megaphone"></i><h3>No campaigns found</h3><p>Launch your first marketing campaign.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
