@@ -323,6 +323,16 @@ LIVE_LINKS = {
     "3.12": {
         "Holiday Calendar": "hrm:publicholiday_list",    # bullet
     },
+    # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates.
+    # Job Posting / Budget / Requisition Tracking are all facets of the requisition record, so they
+    # deep-link to the requisition list; Approval Workflow filters it to the pending-approval queue.
+    "3.5": {
+        "Job Posting": "hrm:jobrequisition_list",                                  # bullet (post an opening)
+        "Approval Workflow": "hrm:jobrequisition_list?status=pending_approval",    # bullet (pending queue)
+        "Budget Management": "hrm:jobrequisition_list",                            # bullet (salary/cost on the req)
+        "Job Templates": "hrm:jobdescriptiontemplate_list",                        # bullet (reusable JD library)
+        "Requisition Tracking": "hrm:jobrequisition_list",                         # bullet (status lifecycle)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
