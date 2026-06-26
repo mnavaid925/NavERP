@@ -7,6 +7,7 @@
       <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:jobrequisition_list' %}">Requisitions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
+      {% if is_hr_admin %}
       {% if can_submit %}
         <form method="post" action="{% url 'hrm:jobrequisition_submit' obj.pk %}" onsubmit="return confirm('Submit this requisition for approval?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button></form>
       {% endif %}
@@ -29,6 +30,7 @@
       {% if obj.status == 'draft' %}
         <form method="post" action="{% url 'hrm:jobrequisition_delete' obj.pk %}" onsubmit="return confirm('Delete this requisition?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
       {% endif %}
+      {% endif %}{# admin-only action header #}
     </div>
   </div>
 
@@ -100,7 +102,7 @@
       {% if not obj.jd_summary and not obj.jd_responsibilities and not obj.jd_requirements and not obj.jd_nice_to_have %}
         <div class="empty-state"><i data-lucide="file-text"></i><h3>No job description yet</h3><p>Apply a template below or edit the requisition to add the JD.</p></div>
       {% endif %}
-      {% if can_edit and jd_templates %}
+      {% if is_hr_admin and can_edit and jd_templates %}
         <form method="post" action="{% url 'hrm:jobrequisition_apply_template' obj.pk %}" class="filter-bar" style="margin-top:1rem;">
           {% csrf_token %}
           <div class="form-group" style="min-width:240px;">
@@ -141,9 +143,9 @@
                 <td>{{ a.comments|default:"—" }}</td>
                 <td>
                   <div class="table-actions">
-                    {% if obj.status == 'draft' %}
+                    {% if is_hr_admin and obj.status == 'draft' %}
                       <form method="post" action="{% url 'hrm:approval_delete' a.pk %}" onsubmit="return confirm('Remove this approval step?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove step"><i data-lucide="trash-2"></i></button></form>
-                    {% elif can_approve and current_step and a.pk == current_step.pk %}
+                    {% elif is_hr_admin and can_approve and current_step and a.pk == current_step.pk %}
                       <form method="post" action="{% url 'hrm:jobrequisition_approve_step' obj.pk %}" onsubmit="return confirm('Approve this step?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Approve step"><i data-lucide="check"></i></button></form>
                     {% endif %}
                   </div>
@@ -156,7 +158,7 @@
         </table>
       </div>
 
-      {% if obj.status == 'draft' %}
+      {% if is_hr_admin and obj.status == 'draft' %}
         <form method="post" action="{% url 'hrm:approval_add' obj.pk %}" class="filter-bar" style="margin-top:1rem; align-items:flex-end;">
           {% csrf_token %}
           {% for field in approval_form %}
@@ -173,7 +175,7 @@
     </div>
   </div>
 
-  {% if can_approve and current_step %}
+  {% if is_hr_admin and can_approve and current_step %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Decision on step #{{ current_step.step_order }} ({{ current_step.get_approver_role_display }})</h2></div>
       <div class="card-body">
