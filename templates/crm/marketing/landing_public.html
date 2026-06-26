@@ -1,0 +1,51 @@
+{% extends "base_auth.html" %}
+{% block title %}{{ page.headline }}{% endblock %}
+{% block content %}
+  <h2>{{ page.headline }}</h2>
+  {% if page.subheadline %}<p style="color:var(--muted);">{{ page.subheadline }}</p>{% endif %}
+  {# Tenant-authored body is rendered ESCAPED via linebreaks (never |safe) — no stored XSS. #}
+  {% if page.body %}<div style="margin:1rem 0;">{{ page.body|linebreaks }}</div>{% endif %}
+
+  {% if submitted %}
+    <div class="form-success" style="padding:1rem; border-radius:.5rem; background:var(--success-bg,#e7f6ec); color:var(--success,#1a7f37);">
+      <strong>Thank you!</strong> We’ve received your details and a representative will be in touch.
+    </div>
+  {% else %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-group">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Name <span class="req">*</span></label>
+        {{ form.name }}
+        {% for e in form.name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.email.id_for_label }}">Email <span class="req">*</span></label>
+        {{ form.email }}
+        {% for e in form.email.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      {% if page.capture_phone %}
+        <div class="form-group">
+          <label class="form-label" for="{{ form.phone.id_for_label }}">Phone</label>
+          {{ form.phone }}
+          {% for e in form.phone.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      {% endif %}
+      {% if page.capture_company %}
+        <div class="form-group">
+          <label class="form-label" for="{{ form.company.id_for_label }}">Company</label>
+          {{ form.company }}
+          {% for e in form.company.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      {% endif %}
+      {% if page.capture_message %}
+        <div class="form-group">
+          <label class="form-label" for="{{ form.message.id_for_label }}">Message</label>
+          {{ form.message }}
+          {% for e in form.message.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      {% endif %}
+      <button class="btn btn-primary" type="submit">{{ page.cta_label|default:"Submit" }}</button>
+    </form>
+  {% endif %}
+{% endblock %}
