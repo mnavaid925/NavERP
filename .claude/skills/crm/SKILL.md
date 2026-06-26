@@ -144,8 +144,10 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
   `crm:formsubmission_list` (see "§1.3 Marketing Automation" section)
 - `1.4` (recreated in detail — all 3 bullets live): Case / Ticket Management → `crm:case_list`; SLA Policies →
   `crm:slapolicy_list`; Solutions & Knowledge Base → `crm:knowledgearticle_list`; KB Categories →
-  `crm:kbcategory_list`; Customer Self-Service Portal → `crm:portal_case_list`; Portal Access →
-  `crm:customerportalaccess_list` (see "§1.4 Customer Service & Support" section)
+  `crm:kbcategory_list`; **Customer Self-Service Portal → `crm:customerportalaccess_list`** (the staff-facing
+  access-management page — the customer-facing `portal_case_list` is login-gated and would bounce staff to the
+  dashboard, so it's the secondary "Customer Portal" extra link; mirrors the 1.12 Vendor/Partner Portal wiring)
+  (see "§1.4 Customer Service & Support" section)
 - `1.5`: Task Management → `crm:task_list`
 - `1.6`: Dashboards → `crm:overview`; Standard Reports → `crm:overview`
 
