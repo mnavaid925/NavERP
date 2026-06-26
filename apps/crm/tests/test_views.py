@@ -197,6 +197,7 @@ class TestOpportunityCreateView:
         resp = client_a.post(reverse("crm:opportunity_create"), {
             "name": "New Opp",
             "stage": "prospecting",
+            "forecast_category": "pipeline",
             "amount": "0.00",
             "probability": 10,
         })
@@ -223,6 +224,7 @@ class TestOpportunityEditView:
         resp = client_a.post(reverse("crm:opportunity_edit", args=[opportunity_a.pk]), {
             "name": "Updated Opp",
             "stage": "qualification",
+            "forecast_category": "pipeline",
             "amount": "9000.00",
             "probability": 30,
         })
