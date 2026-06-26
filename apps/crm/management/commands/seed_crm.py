@@ -627,7 +627,7 @@ class Command(BaseCommand):
         # --- Communication history (calls w/ duration+outcome, BCC-synced emails, a note, an SMS).
         comms = [
             ("call", "outbound", "Cold call — intro", "", 243, "connected", "voip", now - td(days=5)),
-            ("call", "outbound", "Follow-up call", "", 0, "voicemail", "voip", now - td(days=3)),
+            ("call", "outbound", "Follow-up call", "", None, "voicemail", "voip", now - td(days=3)),
             ("email", "outbound", "Proposal sent", "Please find the proposal attached.",
              None, "", "bcc_dropbox", now - td(days=4)),
             ("email", "inbound", "Re: Proposal", "Thanks — this looks good, reviewing internally.",
