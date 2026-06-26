@@ -1,14 +1,14 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition/recruiting, 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
 
 NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix `/hrm/`
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
-3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.9 Attendance Management, 3.10 Leave Management,
-3.12 Holiday Management.** Reuses the
+3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.9 Attendance Management,
+3.10 Leave Management, 3.12 Holiday Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -17,7 +17,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 25 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records)
+## Models (`apps/hrm/models.py`) — 28 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -79,6 +79,18 @@ properties.
 
 **Employee-records views (`apps/hrm/views.py`, the `3.1 … (completion)` section):** full CRUD for both via `crud_*`; `_employee_child_create` (the `?employee=<pk>` pre-fill helper, validates the pk → `cancel_employee`); `employee_document_mark_verified`/`_reject` (`@tenant_admin_required`); `_is_hr_admin(user)` helper (superuser or `is_tenant_admin`) gates confidential docs. `employee_detail` is the hub — adds **Documents** + **Employment Lifecycle** section cards (confidential docs filtered for non-admins). The employee form renders the new personnel-file fields via its generic `{% for field in form %}` loop (no template edit needed). Seeded by `_seed_employee_records` (see Seeder).
 
+### 3.5 Job Requisition (3 tables) — authorization-to-hire hub + JD template library + approval chain
+
+| Model | Number | Key fields | Reuses core / notes |
+|-------|--------|-----------|---------------------|
+| `JobDescriptionTemplate` (3.5) | `JDTMPL-` | name, designation→`Designation`(SET_NULL), employment_type, jd_summary/responsibilities/requirements/nice_to_have, is_active | Reusable JD library; `unique_together=(tenant,name)`. **Copy-on-apply** — `apply_template_to_requisition` copies the 4 `jd_*` onto a requisition (NOT a live link), so editing a template never mutates open reqs. Mirrors `OnboardingTemplate.designation`. |
+| `JobRequisition` (3.5) | `JR-` | title, designation→`Designation`, job_grade→`JobGrade`, template→`JobDescriptionTemplate`, department/cost_center→`core.OrgUnit`(limit_choices_to kind), location, headcount, req_type, employment_type, reason_for_hire, is_replacement_for(free-text stub), posting_type, **hiring_manager/recruiter→`EmployeeProfile`** (never `core.Party`), target_start_date, priority, salary_min/max/currency, estimated_annual_cost, hiring_cost_budget, jd_*(opening-specific copy), notes, **+ workflow-owned (editable=False): status / submitted_at / approved_at / posted_at / filled_at** | The hub — 3.6/3.7/3.8 will FK *in*; it FKs only what exists today. `JR_STATUS_CHOICES`: draft→pending_approval→approved→posted→on_hold→filled (+cancelled/rejected). `clean()`: salary_min≤max, headcount≥1. **Derived props** `is_overdue` / `approval_progress` (approved,total) / `current_approval_step` (lowest pending) — the last two fire a SELECT, so the detail view computes them from an already-fetched list. Indexes (tenant,status)/(tenant,designation)/(tenant,department)/(tenant,hiring_manager)/(tenant,priority,status). |
+| `RequisitionApproval` (3.5) | — | requisition→`JobRequisition`(CASCADE), step_order, approver→`User`(SET_NULL, nullable), approver_role, **status**(pending/approved/rejected/returned/skipped, editable=False), decided_at/decided_by(editable=False), comments | Child of the requisition — both the sequential approval chain (current step = lowest `step_order` still `pending`) and the immutable audit trail (rows are UPDATEd by the actions, never form-edited). `unique_together=(requisition,step_order)`; `clean()` step_order≥1. Mirrors `ClearanceItem`. |
+
+**Requisition flow:** create a `JobRequisition` (draft) → optionally add `RequisitionApproval` steps (admin) or let **Submit** auto-build the default HR→Executive chain (`generate_approval_chain`) → **Submit** (draft/rejected→pending_approval) → **Approve Step** each pending step in order (last one flips the req to `approved`) / **Reject** (→rejected, re-submittable) / **Return** (→draft, resets the chain) → **Post** (approved→posted) → **Hold** (→on_hold) → **Mark Filled** (posted/on_hold→filled) / **Cancel**. **Apply Template** (draft/rejected) copies a JD template's body; **Clone** duplicates a req as a fresh draft (no workflow stamps). **All writes are `@tenant_admin_required`** (authoritative HR records carrying salary/headcount — same precedent as `EmployeeLifecycleEvent`); list/detail reads are `@login_required`. Workflow-owned fields are excluded from every form.
+
+**Requisition services (`apps/hrm/services.py`):** `generate_approval_chain(requisition)` — idempotent (returns existing rows if any) default 2-step (HR, Executive) `bulk_create`. `apply_template_to_requisition(requisition, template)` — copies the 4 `jd_*` fields + sets `template`, deliberately leaves `employment_type`; request-free.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -113,6 +125,13 @@ properties.
   `offboarding_letters` view) — a standalone list of cases in `LETTER_READY_STATUSES` (cleared/settled/completed)
   with per-row relieving/experience letter buttons + a "generated on" indicator. This is what the **"Experience
   Letter" sidebar bullet** points at (the letters themselves are per-case print views, not records).
+- **Job Requisition (3.5):** `jobrequisition_list/_create/_detail/_edit/_delete` (`/hrm/requisitions/`) and
+  `jobdescriptiontemplate_list/_create/_detail/_edit/_delete` (`/hrm/job-templates/`). **Workflow extras (all
+  POST-only, `@tenant_admin_required`):** `jobrequisition_submit/_approve_step/_reject/_return/_post/_hold/
+  _mark_filled/_cancel`, `jobrequisition_apply_template`, `jobrequisition_clone`, and the inline approval-step
+  actions `approval_add` (`/requisitions/<jr_pk>/approval/add/`) / `approval_delete`
+  (`/requisition-approvals/<pk>/delete/`). **All JobRequisition + JobDescriptionTemplate writes (CRUD + workflow)
+  are `@tenant_admin_required`** — list/detail reads are `@login_required`.
 
 ## Views (`apps/hrm/views.py`)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
@@ -142,9 +161,20 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   print template with `Content-Disposition: inline`. Delete/edit guards: only a `draft` case is deletable
   (else withdraw), only `draft`/`pending_approval` editable; clearance line editable/deletable only while
   `pending`/`in_progress`; settlement editable in `draft`/`computed`, deletable only in `draft`.
+- **Job Requisition (3.5):** `jobrequisition_detail` is the hub — info/team/org/timeline+budget/JD cards + the
+  inline **approval chain** (progress bar, per-row approve/remove, add-step form, a separate reject/return decision
+  card), with conditional workflow buttons by status (`can_submit/_approve/_post/_hold/_fill/_cancel/_edit` context
+  flags) and an `is_hr_admin` flag that gates **all** action UI (non-admins get a read-only hub). `approved_count`/
+  `total_count`/`approval_progress`/`current_step` are computed from the already-fetched `approvals` list (the
+  model's `approval_progress`/`current_approval_step` props would each re-query). `jobrequisition_create` is a
+  custom view (not `crud_create`) so the "Save & Apply Template" button can copy the JD in one request. Edit guard:
+  only `draft`/`rejected` editable; delete guard: only `draft`. `jobrequisition_submit` accepts `draft` **or**
+  `rejected` (resets the prior chain on re-submit). `jobrequisition_approve_step` advances the lowest pending step
+  and flips the req to `approved` when the last clears. `jobrequisition_clone` copies non-workflow fields via
+  `_JR_CLONE_FK_FIELDS`/`_JR_CLONE_PLAIN_FIELDS` (status→draft, all `*_at` null).
 
 ## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
-82 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+88 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
 filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — the main employee is single-entity so
 `employee/list.html` etc.; its child entities get their own folders `employee/document/{list,detail,form}.html` and
 `employee/lifecycle/{list,detail,form}.html` — the `budget/line/` child-entity precedent),
@@ -157,6 +187,8 @@ orientationsession/`), **`offboarding/` (3.4 — entity folders `separationcase/
 clearanceitem/ finalsettlement/`, plus the standalone pages `offboarding/letters.html` [the letters landing list]
 and the two print pages `offboarding/relieving_letter.html` / `offboarding/experience_letter.html` [which stay at
 the sub-module level and do NOT extend base.html])**,
+**`recruitment/` (3.5 — entity folders `jobrequisition/` [the hub] and `jobdescriptiontemplate/`, each with
+`list/detail/form.html`; `RequisitionApproval` rows render inline on the requisition hub, no own templates)**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
@@ -189,6 +221,11 @@ spouse_name/current+permanent_address/emergency_contact_2_*) + `confirmed_on`. `
 `verification_status`/`verified_by`/`verified_at` (workflow-owned) and `clean_file` allowlists pdf/doc/docx/jpg/png
 + 10 MB. `EmployeeLifecycleEventForm` excludes `initiated_by` and scopes all FK querysets (employee/managers/
 designations/departments) to the tenant.
+**Job-requisition form security (3.5):** `JobRequisitionForm` excludes `status`/`submitted_at`/`approved_at`/
+`posted_at`/`filled_at` (workflow-owned) + scopes designation/job_grade/template/department/cost_center/
+hiring_manager/recruiter querysets to the tenant; `clean()` validates salary_min≤max and headcount≥1.
+`RequisitionApprovalForm` excludes `status`/`decided_at`/`decided_by` and scopes `approver` to **tenant users**
+(`get_user_model().filter(tenant=…)`). `JobDescriptionTemplateForm` scopes `designation` to active tenant rows.
 
 ## Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
@@ -208,7 +245,11 @@ HR line cleared), 12 clearance items, 1 exit interview, 1 settlement. **Employee
 `_seed_employee_records(tenant)` (guarded by its own `EmployeeDocument.exists()` check; both models in the `--flush`
 list): for the first 3 employees — 3 `EmployeeDocument`s each (national_id [verified], passport [pending, expires in
 ~180 days = expiring-soon], appointment_letter [verified]) + a `hire` (and `confirmation` if confirmed)
-`EmployeeLifecycleEvent`. Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
+`EmployeeLifecycleEvent`. **Job requisitions (3.5)** are seeded by `_seed_job_requisition(tenant)` (guarded by its
+own `JobRequisition.exists()` check; the 3 models self-flush): 2 `JobDescriptionTemplate`s + 3 `JobRequisition`s
+across the lifecycle (1 posted, 1 draft, 1 approved with a fully-approved 2-step `RequisitionApproval` chain),
+reusing the seeded designations/employees/department + cost-center OrgUnits.
+Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
 ## Sidebar wiring (`apps/core/navigation.py` `LIVE_LINKS`)
@@ -225,6 +266,9 @@ tenant and sees nothing.
 - 3.4: Resignation Management → `hrm:separationcase_list`; Exit Interview → `hrm:exitinterview_list`; Clearance
   Process → `hrm:clearanceitem_list`; F&F Settlement → `hrm:finalsettlement_list`; Experience Letter →
   `hrm:offboarding_letters` (the letters landing page).
+- 3.5 (all 5 bullets live): Job Posting / Budget Management / Requisition Tracking → `hrm:jobrequisition_list`;
+  Approval Workflow → `hrm:jobrequisition_list?status=pending_approval` (filtered to the pending queue, suffix
+  handled by `_safe_reverse`); Job Templates → `hrm:jobdescriptiontemplate_list`.
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
   + Shift Assignments → `hrm:shiftassignment_list`.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
@@ -277,13 +321,16 @@ splitting a sensitive-fields sub-form behind `@tenant_admin_required` is a Modul
 `EmployeeDocument` files are served via the dev `/media/` helper with no auth gate (same as onboarding docs/photos/
 resignation letters — keep `MEDIA_ROOT` outside the web root in production, or add a protected `X-Accel-Redirect`
 serve view project-wide).
-Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), recruiting/ATS
-(3.5–3.8), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
+Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), the rest of recruiting/
+ATS — **3.6 Candidate / 3.7 Interview / 3.8 Offer (these FK into the built 3.5 `JobRequisition`)** — plus
+`JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
+external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
+upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), attendance regularization & geofencing, optional-holiday selection, leave
 carry-forward/encashment batch, employee self-service portal, and a per-employee↔user link for ownership-scoped
 leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
 **3.3 onboarding deferrals:** live e-sign API (DocuSign/HelloSign — `external_ref` is the stub), preboarding
-before an `EmployeeProfile` exists (needs ATS 3.5–3.8), automated task reminders / calendar invites, IT
+before an `EmployeeProfile` exists (needs ATS 3.6–3.8), automated task reminders / calendar invites, IT
 provisioning automation, AI 30-60-90-day plan generation, a new-hire self-service portal, and a real FK to the
 Module 11 `assets.Asset` register (reserved on `AssetAllocation`). Onboarding session reschedule/cancel actions
 aren't built — `OrientationSession.attendance_status` reschedule/cancel are reachable only via Django admin.
