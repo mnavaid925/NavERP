@@ -212,7 +212,7 @@ def opportunity_delete(request, pk):
 def opportunity_board(request):
     """Kanban pipeline board — opportunities grouped into a column per stage with per-stage
     count + amount totals (aggregated DB-side; each column previews its top deals)."""
-    base = Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner")
+    base = Opportunity.objects.filter(tenant=request.tenant).select_related("account", "owner", "territory")
     columns = []
     for value, label in Opportunity.STAGE_CHOICES:
         col = base.filter(stage=value)
@@ -601,10 +601,19 @@ def forecast(request):
         totals["pipeline"] = open_agg["pipeline"] or 0
         totals["weighted"] = (open_agg["weighted"] or 0) / 100
         totals["won"] = opps.filter(stage="closed_won").aggregate(t=Sum("amount"))["t"] or 0
-        # Quota attainment: closed-won booked per owner (single grouped query → dict).
-        won_by_owner = dict(opps.filter(stage="closed_won").values_list("owner").annotate(t=Sum("amount")))
+        # Quota attainment: closed-won booked per (owner, territory) in one grouped query. A
+        # territory-scoped quota matches its (owner, territory) bucket; a null-territory quota
+        # matches the owner's total across all territories.
+        won = opps.filter(stage="closed_won").values_list("owner", "territory").annotate(t=Sum("amount"))
+        won_by_owner_terr = {(o, terr): (t or 0) for o, terr, t in won}
+        won_by_owner = {}
+        for (o, terr), t in won_by_owner_terr.items():
+            won_by_owner[o] = won_by_owner.get(o, 0) + t
         for q in SalesQuota.objects.filter(tenant=tenant).select_related("owner", "territory"):
-            attained = won_by_owner.get(q.owner_id, 0) or 0
+            if q.territory_id:
+                attained = won_by_owner_terr.get((q.owner_id, q.territory_id), 0)
+            else:
+                attained = won_by_owner.get(q.owner_id, 0)
             target = q.target_amount or 0
             totals["target"] += target
             quotas.append({"q": q, "attained": attained,
