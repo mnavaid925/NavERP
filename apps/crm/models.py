@@ -1308,8 +1308,8 @@ class CalendarEvent(TenantNumbered):
     related_case = models.ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="calendar_events")
     description = models.TextField(blank=True)
     # Unguessable bearer token for the public invite/RSVP/ICS endpoints (no login). System-set;
-    # excluded from every form (L20/L22) — mirrors Case.public_token / LandingPage.public_token.
-    public_token = models.CharField(max_length=64, unique=True, blank=True)
+    # editable=False keeps it off every form/admin (mirrors Case/LandingPage/KnowledgeArticle tokens).
+    public_token = models.CharField(max_length=64, unique=True, editable=False, blank=True)
 
     class Meta:
         ordering = ["-start"]
