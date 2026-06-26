@@ -24,12 +24,19 @@ from .models import (
     OnboardingPlan,
     OnboardingStep,
     Opportunity,
+    OpportunitySplit,
     PartnerPortalAccess,
+    PriceBook,
+    Product,
     ProductStock,
     PurchaseOrder,
     PurchaseOrderLine,
+    Quote,
+    QuoteLine,
+    SalesQuota,
     SignerRecord,
     Survey,
+    Territory,
     Timesheet,
     WorkflowLog,
     WorkflowRule,
@@ -46,9 +53,76 @@ class LeadAdmin(admin.ModelAdmin):
 
 @admin.register(Opportunity)
 class OpportunityAdmin(admin.ModelAdmin):
-    list_display = ("number", "name", "account", "stage", "amount", "probability", "owner", "tenant")
-    list_filter = ("stage", "tenant")
-    search_fields = ("number", "name")
+    list_display = ("number", "name", "account", "stage", "forecast_category", "amount",
+                    "probability", "territory", "owner", "tenant")
+    list_filter = ("stage", "forecast_category", "tenant")
+    search_fields = ("number", "name", "competitor")
+    raw_id_fields = ("territory",)
+    readonly_fields = ("number", "lost_at", "stage_changed_at", "created_at", "updated_at")
+
+
+# ===== 1.2 Sales Force Automation (recreated) ===============================
+@admin.register(Territory)
+class TerritoryAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "region", "segment", "parent", "manager", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "name", "region", "segment")
+    raw_id_fields = ("parent",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "sku", "product_type", "unit_price", "cost", "is_active", "tenant")
+    list_filter = ("product_type", "is_active", "tenant")
+    search_fields = ("number", "name", "sku")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(PriceBook)
+class PriceBookAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "currency_code", "region", "tier", "price_adjustment_pct",
+                    "is_default", "is_active", "tenant")
+    list_filter = ("is_default", "is_active", "tenant")
+    search_fields = ("number", "name", "region", "tier")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(OpportunitySplit)
+class OpportunitySplitAdmin(admin.ModelAdmin):
+    list_display = ("opportunity", "user", "split_type", "percentage", "tenant")
+    list_filter = ("split_type", "tenant")
+    search_fields = ("opportunity__name", "user__username")
+    raw_id_fields = ("opportunity", "user")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(Quote)
+class QuoteAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "account", "opportunity", "status", "total", "owner", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "name", "account__name")
+    raw_id_fields = ("opportunity", "account", "price_book")
+    readonly_fields = ("number", "subtotal", "tax_total", "total", "sent_at", "accepted_at",
+                       "created_at", "updated_at")
+
+
+@admin.register(QuoteLine)
+class QuoteLineAdmin(admin.ModelAdmin):
+    list_display = ("quote", "description", "quantity", "unit_price", "discount_pct", "order", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("description",)
+    raw_id_fields = ("quote", "product")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(SalesQuota)
+class SalesQuotaAdmin(admin.ModelAdmin):
+    list_display = ("number", "owner", "territory", "period_type", "period_year",
+                    "period_number", "target_amount", "tenant")
+    list_filter = ("period_type", "period_year", "tenant")
+    search_fields = ("number", "owner__username")
+    raw_id_fields = ("territory",)
     readonly_fields = ("number", "created_at", "updated_at")
 
 
