@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Portal Access{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Customer Portal Access</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><span>Portal Access</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:customerportalaccess_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Access</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search customer, user…">
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select">
+            <option value="">Active &amp; inactive</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'crm:customerportalaccess_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Customer</th><th>Portal user</th><th>Can submit</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'crm:customerportalaccess_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{% if obj.customer_party %}{{ obj.customer_party.name }}{% else %}—{% endif %}</td>
+              <td>{% if obj.portal_user %}{{ obj.portal_user.get_full_name|default:obj.portal_user.username }}{% else %}<span class="badge badge-muted">Unassigned</span>{% endif %}</td>
+              <td>{% if obj.can_submit_cases %}Yes{% else %}No{% endif %}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:customerportalaccess_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'crm:customerportalaccess_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'crm:customerportalaccess_delete' obj.pk %}" onsubmit="return confirm('Delete this access?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="user-cog"></i><h3>No portal access yet</h3><p>Grant a customer login to the self-service portal.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
