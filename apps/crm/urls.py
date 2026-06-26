@@ -161,12 +161,30 @@ urlpatterns = [
     path("portal/cases/new/", views.portal_case_create, name="portal_case_create"),
     path("portal/cases/<int:pk>/", views.portal_case_detail, name="portal_case_detail"),
 
-    # Tasks (1.5)
+    # Tasks (1.5 Task Management — to-dos + recurring tasks)
     path("tasks/", views.task_list, name="task_list"),
     path("tasks/add/", views.task_create, name="task_create"),
     path("tasks/<int:pk>/", views.task_detail, name="task_detail"),
     path("tasks/<int:pk>/edit/", views.task_edit, name="task_edit"),
     path("tasks/<int:pk>/delete/", views.task_delete, name="task_delete"),
+
+    # Calendar events (1.5 Calendar Integration — meetings, invite links, ICS)
+    path("calendar/", views.calendarevent_list, name="calendarevent_list"),
+    path("calendar/add/", views.calendarevent_create, name="calendarevent_create"),
+    path("calendar/<int:pk>/", views.calendarevent_detail, name="calendarevent_detail"),
+    path("calendar/<int:pk>/edit/", views.calendarevent_edit, name="calendarevent_edit"),
+    path("calendar/<int:pk>/delete/", views.calendarevent_delete, name="calendarevent_delete"),
+    path("calendar/<int:event_pk>/add-attendee/", views.event_attendee_add, name="event_attendee_add"),
+    path("calendar/attendees/<int:pk>/delete/", views.event_attendee_delete, name="event_attendee_delete"),
+    path("invite/<str:token>/", views.event_invite, name="event_invite"),     # public RSVP page
+    path("invite/<str:token>/ics/", views.event_ics, name="event_ics"),       # public .ics download
+
+    # Communication logs (1.5 Email & Call Integration — calls + email/BCC sync)
+    path("comms/", views.communicationlog_list, name="communicationlog_list"),
+    path("comms/add/", views.communicationlog_create, name="communicationlog_create"),
+    path("comms/<int:pk>/", views.communicationlog_detail, name="communicationlog_detail"),
+    path("comms/<int:pk>/edit/", views.communicationlog_edit, name="communicationlog_edit"),
+    path("comms/<int:pk>/delete/", views.communicationlog_delete, name="communicationlog_delete"),
 
     # Accounts — core.Party (organization) + AccountProfile (1.1)
     path("accounts/", views.account_list, name="account_list"),
