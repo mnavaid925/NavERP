@@ -1,0 +1,52 @@
+{% extends "base_auth.html" %}
+{% block title %}Case {{ case.number }}{% endblock %}
+{% block content %}
+  <h2>Ticket {{ case.number }}</h2>
+  <p style="color:var(--text-muted);">{{ case.subject }}</p>
+
+  <dl class="detail-grid" style="margin:1rem 0;">
+    <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if case.status == 'resolved' %}green{% elif case.status == 'closed' %}slate{% elif case.status == 'in_progress' %}amber{% else %}info{% endif %}">{{ case.get_status_display }}</span></dd></div>
+    <div class="detail-item"><dt>Priority</dt><dd>{{ case.get_priority_display }}</dd></div>
+    <div class="detail-item"><dt>Opened</dt><dd>{{ case.created_at|date:"M d, Y" }}</dd></div>
+    {% if case.resolution_due %}<div class="detail-item"><dt>Target resolution</dt><dd>{{ case.resolution_due|date:"M d, Y" }}</dd></div>{% endif %}
+  </dl>
+
+  <h3 style="margin-top:1.5rem;">Conversation</h3>
+  {% for c in comments %}
+    <div class="card" style="margin-bottom:.5rem;"><div class="card-body" style="padding:.6rem .8rem;">
+      <div style="font-size:.8rem; color:var(--text-muted);">{{ c.author_name|default:"Support" }} · {{ c.created_at|date:"M d, Y H:i" }}</div>
+      <div>{{ c.body|linebreaksbr }}</div>
+    </div></div>
+  {% empty %}
+    <p style="color:var(--text-muted);">No replies yet.</p>
+  {% endfor %}
+
+  <h3 style="margin-top:1.5rem;">Add a reply</h3>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="comment">
+    <div class="form-group">{{ comment_form.body }}{% for e in comment_form.body.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</div>
+    <button class="btn btn-primary" type="submit">Send reply</button>
+  </form>
+
+  {% if case.satisfaction_rating %}
+    <div style="margin-top:1.5rem; padding:1rem; border-radius:.5rem; background:var(--ok-bg); color:var(--ok);">
+      <strong>Thanks for your feedback!</strong> You rated this {{ case.satisfaction_rating }}/5.
+    </div>
+  {% else %}
+    <h3 style="margin-top:1.5rem;">Rate your support</h3>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="satisfaction">
+      <div class="form-group">
+        <label class="form-label" for="{{ sat_form.rating.id_for_label }}">Rating (1–5)</label>
+        {{ sat_form.rating }}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ sat_form.comment.id_for_label }}">Comment</label>
+        {{ sat_form.comment }}
+      </div>
+      <button class="btn btn-primary" type="submit">Submit rating</button>
+    </form>
+  {% endif %}
+{% endblock %}
