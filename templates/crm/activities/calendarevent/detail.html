@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}{% if obj.is_past %} <span class="badge badge-muted">Past</span>{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:calendarevent_list' %}">Calendar</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:event_ics' obj.public_token %}" class="btn btn-outline"><i data-lucide="calendar-plus"></i> Add to Calendar</a>
+      <a href="{% url 'crm:calendarevent_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:calendarevent_delete' obj.pk %}" onsubmit="return confirm('Delete this event?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_event_type_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'confirmed' %}green{% elif obj.status == 'completed' %}slate{% elif obj.status == 'cancelled' %}red{% else %}info{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Starts</dt><dd>{{ obj.start|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Ends</dt><dd>{% if obj.end %}{{ obj.end|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Duration</dt><dd>{{ obj.duration_display|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>All day</dt><dd>{% if obj.all_day %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Location</dt><dd>{{ obj.location|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Video link</dt><dd>{% if obj.video_url %}<a href="{{ obj.video_url }}" target="_blank" rel="noopener">Join</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Calendar source</dt><dd>{{ obj.get_sync_source_display }}</dd></div>
+      <div class="detail-item"><dt>Reminder</dt><dd>{% if obj.reminder_minutes %}{{ obj.reminder_minutes }} min before{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Related party</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.related_opportunity %}<a href="{% url 'crm:opportunity_detail' obj.related_opportunity.pk %}">{{ obj.related_opportunity.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Case</dt><dd>{% if obj.related_case %}<a href="{% url 'crm:case_detail' obj.related_case.pk %}">{{ obj.related_case.number }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+
+    <div class="form-group" style="margin-top:1rem;">
+      <label class="form-label">Public invite link</label>
+      <input type="text" class="form-input" readonly onclick="this.select()"
+             value="{{ request.scheme }}://{{ request.get_host }}{% url 'crm:event_invite' obj.public_token %}">
+      <div class="form-help">Share this link so invitees can RSVP without logging in.</div>
+    </div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h3>Attendees ({{ attendees|length }})</h3></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Name</th><th>Email</th><th>RSVP</th><th>Organizer</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for a in attendees %}
+              <tr>
+                <td>{{ a.name }}</td>
+                <td>{% if a.email %}{{ a.email }}{% else %}—{% endif %}</td>
+                <td><span class="badge badge-{% if a.rsvp_status == 'accepted' %}green{% elif a.rsvp_status == 'declined' %}red{% elif a.rsvp_status == 'tentative' %}amber{% else %}muted{% endif %}">{{ a.get_rsvp_status_display }}</span></td>
+                <td>{% if a.is_organizer %}<i data-lucide="crown" title="Organizer"></i>{% else %}—{% endif %}</td>
+                <td>
+                  <form method="post" action="{% url 'crm:event_attendee_delete' a.pk %}" onsubmit="return confirm('Remove this attendee?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="users"></i><p>No attendees yet.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <form method="post" action="{% url 'crm:event_attendee_add' obj.pk %}" class="filter-bar" style="margin-top:1rem; align-items:flex-end;">
+        {% csrf_token %}
+        {% for field in attendee_form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Add</button>
+      </form>
+    </div>
+  </div>
+
+  <a href="{% url 'crm:calendarevent_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
