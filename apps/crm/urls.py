@@ -23,12 +23,50 @@ urlpatterns = [
     path("opportunities/<int:pk>/edit/", views.opportunity_edit, name="opportunity_edit"),
     path("opportunities/<int:pk>/delete/", views.opportunity_delete, name="opportunity_delete"),
 
-    # Campaigns (1.3)
+    # Campaigns (1.3 Campaign Management)
     path("campaigns/", views.campaign_list, name="campaign_list"),
     path("campaigns/add/", views.campaign_create, name="campaign_create"),
     path("campaigns/<int:pk>/", views.campaign_detail, name="campaign_detail"),
     path("campaigns/<int:pk>/edit/", views.campaign_edit, name="campaign_edit"),
     path("campaigns/<int:pk>/delete/", views.campaign_delete, name="campaign_delete"),
+    path("campaigns/<int:pk>/add-member/", views.campaignmember_add, name="campaignmember_add"),
+
+    # Campaign members — target-list segmentation (1.3)
+    path("campaign-members/", views.campaignmember_list, name="campaignmember_list"),
+    path("campaign-members/add/", views.campaignmember_create, name="campaignmember_create"),
+    path("campaign-members/<int:pk>/", views.campaignmember_detail, name="campaignmember_detail"),
+    path("campaign-members/<int:pk>/edit/", views.campaignmember_edit, name="campaignmember_edit"),
+    path("campaign-members/<int:pk>/delete/", views.campaignmember_delete, name="campaignmember_delete"),
+    path("campaign-members/<int:member_pk>/remove/", views.campaignmember_remove, name="campaignmember_remove"),
+
+    # Email templates (1.3 Email Marketing)
+    path("email-templates/", views.emailtemplate_list, name="emailtemplate_list"),
+    path("email-templates/add/", views.emailtemplate_create, name="emailtemplate_create"),
+    path("email-templates/<int:pk>/", views.emailtemplate_detail, name="emailtemplate_detail"),
+    path("email-templates/<int:pk>/edit/", views.emailtemplate_edit, name="emailtemplate_edit"),
+    path("email-templates/<int:pk>/delete/", views.emailtemplate_delete, name="emailtemplate_delete"),
+
+    # Email campaigns / blasts (1.3 Email Marketing — drip + A/B + tracking)
+    path("email-campaigns/", views.emailcampaign_list, name="emailcampaign_list"),
+    path("email-campaigns/add/", views.emailcampaign_create, name="emailcampaign_create"),
+    path("email-campaigns/<int:pk>/", views.emailcampaign_detail, name="emailcampaign_detail"),
+    path("email-campaigns/<int:pk>/edit/", views.emailcampaign_edit, name="emailcampaign_edit"),
+    path("email-campaigns/<int:pk>/delete/", views.emailcampaign_delete, name="emailcampaign_delete"),
+    path("email-campaigns/<int:pk>/send/", views.emailcampaign_send, name="emailcampaign_send"),
+
+    # Landing pages (1.3 Landing Pages & Forms)
+    path("landing-pages/", views.landingpage_list, name="landingpage_list"),
+    path("landing-pages/add/", views.landingpage_create, name="landingpage_create"),
+    path("landing-pages/<int:pk>/", views.landingpage_detail, name="landingpage_detail"),
+    path("landing-pages/<int:pk>/edit/", views.landingpage_edit, name="landingpage_edit"),
+    path("landing-pages/<int:pk>/delete/", views.landingpage_delete, name="landingpage_delete"),
+    path("p/<str:token>/", views.landing_public, name="landing_public"),  # public web-to-lead
+
+    # Form submissions (1.3 — web-to-lead captures, read-mostly)
+    path("form-submissions/", views.formsubmission_list, name="formsubmission_list"),
+    path("form-submissions/<int:pk>/", views.formsubmission_detail, name="formsubmission_detail"),
+    path("form-submissions/<int:pk>/delete/", views.formsubmission_delete, name="formsubmission_delete"),
+    path("form-submissions/<int:pk>/convert/", views.formsubmission_convert, name="formsubmission_convert"),
 
     # Cases / Tickets (1.4)
     path("cases/", views.case_list, name="case_list"),
