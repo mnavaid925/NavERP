@@ -29,8 +29,11 @@ from .forms import (
     CaseForm,
     ContactForm,
     CrmTaskForm,
+    CaseCommentForm,
+    CustomerPortalAccessForm,
     EmailCampaignForm,
     EmailTemplateForm,
+    KbCategoryForm,
     KnowledgeArticleForm,
     LandingPageForm,
     LeadForm,
@@ -38,10 +41,13 @@ from .forms import (
     OpportunitySplitForm,
     PriceBookForm,
     ProductForm,
+    PublicCommentForm,
     PublicLeadForm,
+    PublicSatisfactionForm,
     QuoteForm,
     QuoteLineForm,
     SalesQuotaForm,
+    SlaPolicyForm,
     TerritoryForm,
 )
 from .models import (
@@ -50,11 +56,14 @@ from .models import (
     Campaign,
     CampaignMember,
     Case,
+    CaseComment,
     ContactProfile,
     CrmTask,
+    CustomerPortalAccess,
     EmailCampaign,
     EmailTemplate,
     FormSubmission,
+    KbCategory,
     KnowledgeArticle,
     LandingPage,
     Lead,
@@ -65,6 +74,7 @@ from .models import (
     Quote,
     QuoteLine,
     SalesQuota,
+    SlaPolicy,
     Territory,
 )
 
@@ -1060,9 +1070,15 @@ def case_create(request):
 
 @login_required
 def case_detail(request, pk):
-    obj = get_object_or_404(Case.objects.select_related("account", "contact", "owner"),
-                            pk=pk, tenant=request.tenant)
-    return render(request, "crm/service/case/detail.html", {"obj": obj})
+    obj = get_object_or_404(
+        Case.objects.select_related("account", "contact", "owner", "sla_policy"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/service/case/detail.html", {
+        "obj": obj,
+        "comments": CaseComment.objects.filter(
+            tenant=request.tenant, case=obj).select_related("author"),
+        "comment_form": CaseCommentForm(tenant=request.tenant),
+    })
 
 
 @login_required
@@ -1077,16 +1093,42 @@ def case_delete(request, pk):
     return crud_delete(request, model=Case, pk=pk, success_url="crm:case_list")
 
 
+@login_required
+@require_POST
+def case_comment_add(request, pk):
+    """Add a reply/note to a case's conversation thread. The first PUBLIC agent reply stamps
+    the SLA first-response clock (``first_responded_at``)."""
+    case = get_object_or_404(Case, pk=pk, tenant=request.tenant)
+    form = CaseCommentForm(request.POST, tenant=request.tenant)
+    if not form.is_valid():
+        messages.error(request, "A comment body is required.")
+        return redirect("crm:case_detail", pk=case.pk)
+    comment = form.save(commit=False)
+    comment.tenant = request.tenant
+    comment.case = case
+    comment.author = request.user
+    comment.author_name = request.user.get_full_name() or request.user.username
+    comment.save()
+    if comment.is_public and case.first_responded_at is None:
+        case.first_responded_at = timezone.now()
+        case.save(update_fields=["first_responded_at", "updated_at"])
+    messages.success(request, "Comment added.")
+    return redirect("crm:case_detail", pk=case.pk)
+
+
 # ====================================================== Knowledge Base / Solutions (1.4)
 @login_required
 def knowledgearticle_list(request):
     return crud_list(
-        request, KnowledgeArticle.objects.filter(tenant=request.tenant).defer("body"),
+        request,
+        KnowledgeArticle.objects.filter(tenant=request.tenant).select_related("kb_category").defer("body"),
         "crm/service/knowledgearticle/list.html",
         search_fields=["title", "category", "number"],
-        filters=[("status", "status", False), ("visibility", "visibility", False)],
+        filters=[("status", "status", False), ("visibility", "visibility", False),
+                 ("kb_category", "kb_category_id", True)],
         extra_context={"status_choices": KnowledgeArticle.STATUS_CHOICES,
-                       "visibility_choices": KnowledgeArticle.VISIBILITY_CHOICES},
+                       "visibility_choices": KnowledgeArticle.VISIBILITY_CHOICES,
+                       "categories": KbCategory.objects.filter(tenant=request.tenant).only("pk", "name", "number")},
     )
 
 
@@ -1119,6 +1161,261 @@ def knowledgearticle_edit(request, pk):
 def knowledgearticle_delete(request, pk):
     return crud_delete(request, model=KnowledgeArticle, pk=pk,
                        success_url="crm:knowledgearticle_list")
+
+
+# ------------------------------------------------------------ SLA policies (1.4)
+@login_required
+def slapolicy_list(request):
+    return crud_list(
+        request, SlaPolicy.objects.filter(tenant=request.tenant),
+        "crm/service/slapolicy/list.html",
+        search_fields=["number", "name"],
+        filters=[("is_active", "is_active", False)],
+        extra_context={},
+    )
+
+
+@login_required
+def slapolicy_create(request):
+    return crud_create(request, form_class=SlaPolicyForm, template="crm/service/slapolicy/form.html",
+                       success_url="crm:slapolicy_list")
+
+
+@login_required
+def slapolicy_detail(request, pk):
+    obj = get_object_or_404(SlaPolicy, pk=pk, tenant=request.tenant)
+    return render(request, "crm/service/slapolicy/detail.html", {"obj": obj})
+
+
+@login_required
+def slapolicy_edit(request, pk):
+    return crud_edit(request, model=SlaPolicy, pk=pk, form_class=SlaPolicyForm,
+                     template="crm/service/slapolicy/form.html", success_url="crm:slapolicy_list")
+
+
+@login_required
+@require_POST
+def slapolicy_delete(request, pk):
+    return crud_delete(request, model=SlaPolicy, pk=pk, success_url="crm:slapolicy_list")
+
+
+# ------------------------------------------------------------ KB categories (1.4)
+@login_required
+def kbcategory_list(request):
+    return crud_list(
+        request, KbCategory.objects.filter(tenant=request.tenant).select_related("parent"),
+        "crm/service/kbcategory/list.html",
+        search_fields=["number", "name"],
+        filters=[("is_active", "is_active", False)],
+        extra_context={},
+    )
+
+
+@login_required
+def kbcategory_create(request):
+    return crud_create(request, form_class=KbCategoryForm, template="crm/service/kbcategory/form.html",
+                       success_url="crm:kbcategory_list")
+
+
+@login_required
+def kbcategory_detail(request, pk):
+    obj = get_object_or_404(KbCategory.objects.select_related("parent"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/service/kbcategory/detail.html", {
+        "obj": obj,
+        "children": KbCategory.objects.filter(tenant=request.tenant, parent=obj),
+        "articles": KnowledgeArticle.objects.filter(
+            tenant=request.tenant, kb_category=obj).only("pk", "number", "title", "status")[:50],
+    })
+
+
+@login_required
+def kbcategory_edit(request, pk):
+    return crud_edit(request, model=KbCategory, pk=pk, form_class=KbCategoryForm,
+                     template="crm/service/kbcategory/form.html", success_url="crm:kbcategory_list")
+
+
+@login_required
+@require_POST
+def kbcategory_delete(request, pk):
+    return crud_delete(request, model=KbCategory, pk=pk, success_url="crm:kbcategory_list")
+
+
+# ------------------------------------------------------------ Customer portal access (1.4, admin)
+@login_required
+def customerportalaccess_list(request):
+    return crud_list(
+        request,
+        CustomerPortalAccess.objects.filter(tenant=request.tenant).select_related("customer_party", "portal_user"),
+        "crm/service/customerportalaccess/list.html",
+        search_fields=["number", "customer_party__name", "portal_user__username"],
+        filters=[("is_active", "is_active", False)],
+        extra_context={},
+    )
+
+
+@login_required
+def customerportalaccess_create(request):
+    return crud_create(request, form_class=CustomerPortalAccessForm,
+                       template="crm/service/customerportalaccess/form.html",
+                       success_url="crm:customerportalaccess_list")
+
+
+@login_required
+def customerportalaccess_detail(request, pk):
+    obj = get_object_or_404(
+        CustomerPortalAccess.objects.select_related("customer_party", "portal_user"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/service/customerportalaccess/detail.html", {"obj": obj})
+
+
+@login_required
+def customerportalaccess_edit(request, pk):
+    return crud_edit(request, model=CustomerPortalAccess, pk=pk, form_class=CustomerPortalAccessForm,
+                     template="crm/service/customerportalaccess/form.html",
+                     success_url="crm:customerportalaccess_list")
+
+
+@login_required
+@require_POST
+def customerportalaccess_delete(request, pk):
+    return crud_delete(request, model=CustomerPortalAccess, pk=pk,
+                       success_url="crm:customerportalaccess_list")
+
+
+# ------------------------------------------------------------ Public help-desk pages (1.4, no login)
+def case_public(request, token):
+    """Public case-status tracking page — no login; the unguessable token is the bearer credential.
+    Shows status/SLA + PUBLIC comments only (internal notes never leak) and lets the customer post a
+    reply or a CSAT rating. CSRF-protected via the template tag; tenant taken from the case itself."""
+    case = get_object_or_404(Case.objects.select_related("sla_policy", "owner"), public_token=token)
+    sat_form = PublicSatisfactionForm()
+    comment_form = PublicCommentForm()
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "comment":
+            comment_form = PublicCommentForm(request.POST)
+            if comment_form.is_valid():
+                CaseComment.objects.create(
+                    tenant=case.tenant, case=case, author=None,
+                    author_name=(case.contact.name if case.contact else "Customer"),
+                    body=comment_form.cleaned_data["body"], is_public=True)
+                return redirect("crm:case_public", token=token)
+        elif action == "satisfaction":
+            sat_form = PublicSatisfactionForm(request.POST)
+            if sat_form.is_valid():
+                case.satisfaction_rating = int(sat_form.cleaned_data["rating"])
+                case.satisfaction_comment = sat_form.cleaned_data["comment"]
+                case.satisfaction_at = timezone.now()
+                case.save(update_fields=["satisfaction_rating", "satisfaction_comment",
+                                         "satisfaction_at", "updated_at"])
+                return redirect("crm:case_public", token=token)
+    return render(request, "crm/service/case_public.html", {
+        "case": case,
+        "comments": CaseComment.objects.filter(tenant=case.tenant, case=case, is_public=True),
+        "sat_form": sat_form, "comment_form": comment_form,
+    })
+
+
+def kb_public(request, token):
+    """Public KB article page — no login; only a published + external article resolves (drafts and
+    internal articles → 404). Counts a view via an atomic F() bump."""
+    article = get_object_or_404(
+        KnowledgeArticle.objects.select_related("kb_category"),
+        public_token=token, status="published", visibility="external")
+    KnowledgeArticle.objects.filter(pk=article.pk).update(views_count=F("views_count") + 1)
+    return render(request, "crm/service/kb_public.html", {"article": article})
+
+
+@require_POST
+def kb_helpful(request, token):
+    """Public helpful/not-helpful vote on a KB article (CSRF-protected, F() increment)."""
+    article = get_object_or_404(
+        KnowledgeArticle, public_token=token, status="published", visibility="external")
+    vote = request.POST.get("vote")
+    if vote == "yes":
+        KnowledgeArticle.objects.filter(pk=article.pk).update(helpful_count=F("helpful_count") + 1)
+    elif vote == "no":
+        KnowledgeArticle.objects.filter(pk=article.pk).update(not_helpful_count=F("not_helpful_count") + 1)
+    return redirect("crm:kb_public", token=token)
+
+
+# ------------------------------------------------------------ Customer self-service portal (1.4, login)
+def _customer_portal_access(request):
+    """Return the active CustomerPortalAccess for the logged-in portal user, or None."""
+    if not request.user.is_authenticated:
+        return None
+    return (CustomerPortalAccess.objects
+            .filter(portal_user=request.user, tenant=request.tenant, is_active=True)
+            .select_related("customer_party").first())
+
+
+@login_required
+def portal_case_list(request):
+    access = _customer_portal_access(request)
+    if access is None:
+        messages.error(request, "You don't have customer portal access.")
+        return redirect("dashboard:home")
+    party = access.customer_party
+    cases = (Case.objects.filter(tenant=request.tenant)
+             .filter(Q(account=party) | Q(contact=party))
+             .select_related("owner").order_by("-created_at"))
+    page_obj = paginate(request, cases)
+    return render(request, "crm/service/portal_case_list.html", {
+        "access": access, "object_list": page_obj.object_list, "page_obj": page_obj})
+
+
+@login_required
+def portal_case_detail(request, pk):
+    access = _customer_portal_access(request)
+    if access is None:
+        messages.error(request, "You don't have customer portal access.")
+        return redirect("dashboard:home")
+    party = access.customer_party
+    # Scoped to the portal user's own party — they can never open another customer's case.
+    case = get_object_or_404(
+        Case.objects.filter(tenant=request.tenant).filter(Q(account=party) | Q(contact=party)), pk=pk)
+    comment_form = PublicCommentForm()
+    if request.method == "POST" and access.can_submit_cases:
+        comment_form = PublicCommentForm(request.POST)
+        if comment_form.is_valid():
+            CaseComment.objects.create(
+                tenant=request.tenant, case=case, author=request.user,
+                author_name=request.user.get_full_name() or request.user.username,
+                body=comment_form.cleaned_data["body"], is_public=True)
+            return redirect("crm:portal_case_detail", pk=case.pk)
+    return render(request, "crm/service/portal_case_detail.html", {
+        "access": access, "case": case,
+        "comments": CaseComment.objects.filter(tenant=request.tenant, case=case, is_public=True),
+        "comment_form": comment_form,
+    })
+
+
+@login_required
+def portal_case_create(request):
+    access = _customer_portal_access(request)
+    if access is None or not access.can_submit_cases:
+        messages.error(request, "You can't submit support tickets.")
+        return redirect("crm:portal_case_list" if access else "dashboard:home")
+    if request.method == "POST":
+        subject = request.POST.get("subject", "").strip()[:255]
+        if not subject:
+            messages.error(request, "A subject is required.")
+        else:
+            priority = request.POST.get("priority", "medium")
+            if priority not in dict(Case.PRIORITY_CHOICES):
+                priority = "medium"
+            # Force the party + origin server-side — a portal user can't file for another customer.
+            default_sla = SlaPolicy.objects.filter(
+                tenant=request.tenant, is_default=True, is_active=True).first()
+            case = Case.objects.create(
+                tenant=request.tenant, subject=subject,
+                description=request.POST.get("description", "").strip()[:5000],
+                priority=priority, status="new", origin="portal",
+                account=access.customer_party, sla_policy=default_sla)
+            messages.success(request, f"Ticket {case.number} submitted.")
+            return redirect("crm:portal_case_detail", pk=case.pk)
+    return render(request, "crm/service/portal_case_form.html", {
+        "access": access, "priority_choices": Case.PRIORITY_CHOICES})
 
 
 # =============================================================== Tasks (1.5)
