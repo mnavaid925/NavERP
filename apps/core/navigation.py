@@ -102,10 +102,14 @@ LIVE_LINKS = {
         "Landing Pages & Forms": "crm:landingpage_list",     # bullet
         "Form Submissions": "crm:formsubmission_list",       # extra (web-to-lead captures)
     },
-    # 1.4 Customer Service & Support (Help Desk)
+    # 1.4 Customer Service & Support (Help Desk) — all three bullets now live (recreated in detail).
     "1.4": {
-        "Case / Ticket Management": "crm:case_list",         # bullet
+        "Case / Ticket Management": "crm:case_list",              # bullet
+        "SLA Policies": "crm:slapolicy_list",                     # extra (SLA targets/breach)
         "Solutions & Knowledge Base": "crm:knowledgearticle_list",  # bullet
+        "KB Categories": "crm:kbcategory_list",                   # extra (KB hierarchy)
+        "Customer Self-Service Portal": "crm:portal_case_list",   # bullet (login portal)
+        "Portal Access": "crm:customerportalaccess_list",         # extra (admin mapping)
     },
     # 1.5 Activity & Communication Management
     "1.5": {
