@@ -7,11 +7,13 @@
       <div class="breadcrumb"><a href="{% url 'crm:emailcampaign_list' %}">Email Campaigns</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
-      {% if obj.status != 'sent' and obj.status != 'sending' and obj.status != 'cancelled' %}
-        <form method="post" action="{% url 'crm:emailcampaign_send' obj.pk %}" onsubmit="return confirm('Send this email campaign to all campaign members?');">
-          {% csrf_token %}
-          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send</button>
-        </form>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status != 'sent' and obj.status != 'sending' and obj.status != 'cancelled' %}
+          <form method="post" action="{% url 'crm:emailcampaign_send' obj.pk %}" onsubmit="return confirm('Send this email campaign to all campaign members?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send</button>
+          </form>
+        {% endif %}
       {% endif %}
       <a href="{% url 'crm:emailcampaign_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'crm:emailcampaign_delete' obj.pk %}" onsubmit="return confirm('Delete this email campaign?');">
