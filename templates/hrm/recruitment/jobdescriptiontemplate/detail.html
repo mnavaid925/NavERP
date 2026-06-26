@@ -51,7 +51,7 @@
               <tr>
                 <td><a href="{% url 'hrm:jobrequisition_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
                 <td>{{ r.title }}</td>
-                <td><span class="badge badge-muted">{{ r.get_status_display }}</span></td>
+                <td><span class="badge badge-{% if r.status == 'draft' %}muted{% elif r.status == 'pending_approval' %}amber{% elif r.status == 'approved' %}green{% elif r.status == 'posted' %}info{% elif r.status == 'on_hold' %}amber{% elif r.status == 'filled' %}green{% elif r.status == 'cancelled' %}muted{% elif r.status == 'rejected' %}red{% else %}muted{% endif %}">{{ r.get_status_display }}</span></td>
                 <td>{{ r.created_at|date:"Y-m-d" }}</td>
               </tr>
             {% empty %}
