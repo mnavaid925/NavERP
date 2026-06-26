@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:kbcategory_list' %}">KB Categories</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:kbcategory_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:kbcategory_delete' obj.pk %}" onsubmit="return confirm('Delete this category?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Parent</dt><dd>{% if obj.parent %}<a href="{% url 'crm:kbcategory_detail' obj.parent.pk %}">{{ obj.parent.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Order</dt><dd>{{ obj.order }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Sub-categories</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Order</th></tr></thead>
+        <tbody>
+          {% for c in children %}
+            <tr><td><a href="{% url 'crm:kbcategory_detail' c.pk %}" class="fw-600">{{ c.number }}</a></td><td>{{ c.name }}</td><td>{{ c.order }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="folder-tree"></i><p>No sub-categories.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Articles in this category</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in articles %}
+            <tr>
+              <td><a href="{% url 'crm:knowledgearticle_detail' a.pk %}" class="fw-600">{{ a.number }}</a></td>
+              <td>{{ a.title }}</td>
+              <td><span class="badge badge-{% if a.status == 'published' %}green{% elif a.status == 'archived' %}slate{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="book-open"></i><p>No articles in this category.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'crm:kbcategory_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
