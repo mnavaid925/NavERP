@@ -225,4 +225,32 @@ urlpatterns = [
     path("settlements/<int:pk>/hr-approve/", views.finalsettlement_hr_approve, name="finalsettlement_hr_approve"),
     path("settlements/<int:pk>/finance-approve/", views.finalsettlement_finance_approve, name="finalsettlement_finance_approve"),
     path("settlements/<int:pk>/mark-paid/", views.finalsettlement_mark_paid, name="finalsettlement_mark_paid"),
+
+    # Job Description Templates (3.5) — CRUD
+    path("job-templates/", views.jobdescriptiontemplate_list, name="jobdescriptiontemplate_list"),
+    path("job-templates/add/", views.jobdescriptiontemplate_create, name="jobdescriptiontemplate_create"),
+    path("job-templates/<int:pk>/", views.jobdescriptiontemplate_detail, name="jobdescriptiontemplate_detail"),
+    path("job-templates/<int:pk>/edit/", views.jobdescriptiontemplate_edit, name="jobdescriptiontemplate_edit"),
+    path("job-templates/<int:pk>/delete/", views.jobdescriptiontemplate_delete, name="jobdescriptiontemplate_delete"),
+
+    # Job Requisitions (3.5) — CRUD + approval state machine + utilities
+    path("requisitions/", views.jobrequisition_list, name="jobrequisition_list"),
+    path("requisitions/add/", views.jobrequisition_create, name="jobrequisition_create"),
+    path("requisitions/<int:pk>/", views.jobrequisition_detail, name="jobrequisition_detail"),
+    path("requisitions/<int:pk>/edit/", views.jobrequisition_edit, name="jobrequisition_edit"),
+    path("requisitions/<int:pk>/delete/", views.jobrequisition_delete, name="jobrequisition_delete"),
+    path("requisitions/<int:pk>/submit/", views.jobrequisition_submit, name="jobrequisition_submit"),
+    path("requisitions/<int:pk>/approve-step/", views.jobrequisition_approve_step, name="jobrequisition_approve_step"),
+    path("requisitions/<int:pk>/reject/", views.jobrequisition_reject, name="jobrequisition_reject"),
+    path("requisitions/<int:pk>/return/", views.jobrequisition_return, name="jobrequisition_return"),
+    path("requisitions/<int:pk>/post/", views.jobrequisition_post, name="jobrequisition_post"),
+    path("requisitions/<int:pk>/hold/", views.jobrequisition_hold, name="jobrequisition_hold"),
+    path("requisitions/<int:pk>/fill/", views.jobrequisition_mark_filled, name="jobrequisition_mark_filled"),
+    path("requisitions/<int:pk>/cancel/", views.jobrequisition_cancel, name="jobrequisition_cancel"),
+    path("requisitions/<int:pk>/apply-template/", views.jobrequisition_apply_template, name="jobrequisition_apply_template"),
+    path("requisitions/<int:pk>/clone/", views.jobrequisition_clone, name="jobrequisition_clone"),
+
+    # Requisition approval steps (3.5) — inline add/remove from the requisition hub
+    path("requisitions/<int:jr_pk>/approval/add/", views.approval_add, name="approval_add"),
+    path("requisition-approvals/<int:pk>/delete/", views.approval_delete, name="approval_delete"),
 ]
