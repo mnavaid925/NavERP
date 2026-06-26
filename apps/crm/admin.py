@@ -3,10 +3,12 @@ from django.contrib import admin
 from .models import (
     AccountProfile,
     ApprovalRequest,
+    CalendarEvent,
     Campaign,
     CampaignMember,
     Case,
     CaseComment,
+    CommunicationLog,
     ContactProfile,
     ContractDocument,
     CrmMilestone,
@@ -16,6 +18,7 @@ from .models import (
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
+    EventAttendee,
     Expense,
     FormSubmission,
     HealthScore,
@@ -247,10 +250,40 @@ class CustomerPortalAccessAdmin(admin.ModelAdmin):
 
 @admin.register(CrmTask)
 class CrmTaskAdmin(admin.ModelAdmin):
-    list_display = ("number", "subject", "type", "priority", "status", "due_date", "owner", "tenant")
-    list_filter = ("status", "priority", "type", "tenant")
+    list_display = ("number", "subject", "type", "priority", "status", "due_date",
+                    "recurrence", "owner", "tenant")
+    list_filter = ("status", "priority", "type", "recurrence", "tenant")
     search_fields = ("number", "subject")
+    raw_id_fields = ("recurrence_parent", "related_case", "related_opportunity")
     readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+# ===== 1.5 Activity & Communication Management (recreated) ===================
+@admin.register(CalendarEvent)
+class CalendarEventAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "event_type", "status", "start", "owner", "tenant")
+    list_filter = ("status", "event_type", "sync_source", "tenant")
+    search_fields = ("number", "title", "location")
+    raw_id_fields = ("party", "related_opportunity", "related_case")
+    readonly_fields = ("number", "public_token", "created_at", "updated_at")
+
+
+@admin.register(EventAttendee)
+class EventAttendeeAdmin(admin.ModelAdmin):
+    list_display = ("name", "email", "event", "rsvp_status", "is_organizer", "tenant")
+    list_filter = ("rsvp_status", "is_organizer", "tenant")
+    search_fields = ("name", "email", "event__title")
+    raw_id_fields = ("event", "party")
+    readonly_fields = ("responded_at", "created_at")
+
+
+@admin.register(CommunicationLog)
+class CommunicationLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "channel", "direction", "subject", "party", "occurred_at", "owner", "tenant")
+    list_filter = ("channel", "direction", "logged_via", "tenant")
+    search_fields = ("number", "subject", "body")
+    raw_id_fields = ("party", "related_opportunity", "related_case")
+    readonly_fields = ("number", "created_at", "updated_at")
 
 
 @admin.register(AccountProfile)
