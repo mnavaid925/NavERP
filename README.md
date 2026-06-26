@@ -146,7 +146,11 @@ Three design ideas hold the whole platform together:
     view counter, **helpful/not-helpful** voting, and a public article page (`/crm/kb/<token>/`).
   - **Customer Self-Service Portal** — **CustomerPortalAccess** (`CSP-#####`) grants a customer a login to view
     only their own cases, submit tickets, and reply (`/crm/portal/cases/`); admin-gated access grants.
-- **Tasks** (`TASK-#####`) — to-dos/calls/follow-ups with priority, due date, and system-set `completed_at`.
+- **1.5 Activity & Communication** (recreated in detail) — **Tasks** (`TASK-#####`, to-dos/calls/follow-ups with
+  priority, due date, and **automated recurring tasks** that spawn the next occurrence on completion); **Calendar
+  Events** (`EVT-#####`) with attendee **RSVPs**, a public **meeting-invite/RSVP link** + an **`.ics` calendar
+  export** (`/crm/invite/<token>/`); and a unified **Communication Log** (`COM-#####`) for call logging
+  (duration/outcome) and email/BCC sync across call/email/SMS/note/meeting channels.
 - **Accounts & Contacts** are the shared **`core.Party`** identity (one record, many roles) enriched with CRM-owned
   one-to-one **`AccountProfile`** (industry, website, revenue, employees, parent company, address) and
   **`ContactProfile`** (job title, department, phone/mobile, employer account, address) extensions — **full CRUD**
@@ -174,7 +178,7 @@ Three design ideas hold the whole platform together:
   > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
   > the spine when those modules land.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **552-test** suite.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **1,315-test** suite.
 
 ### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.15
 
