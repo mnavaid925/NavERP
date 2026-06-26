@@ -117,12 +117,21 @@ urlpatterns = [
     path("form-submissions/<int:pk>/delete/", views.formsubmission_delete, name="formsubmission_delete"),
     path("form-submissions/<int:pk>/convert/", views.formsubmission_convert, name="formsubmission_convert"),
 
-    # Cases / Tickets (1.4)
+    # Cases / Tickets (1.4 Case / Ticket Management)
     path("cases/", views.case_list, name="case_list"),
     path("cases/add/", views.case_create, name="case_create"),
+    path("cases/track/<str:token>/", views.case_public, name="case_public"),  # public status page
     path("cases/<int:pk>/", views.case_detail, name="case_detail"),
     path("cases/<int:pk>/edit/", views.case_edit, name="case_edit"),
     path("cases/<int:pk>/delete/", views.case_delete, name="case_delete"),
+    path("cases/<int:pk>/add-comment/", views.case_comment_add, name="case_comment_add"),
+
+    # SLA policies (1.4)
+    path("sla-policies/", views.slapolicy_list, name="slapolicy_list"),
+    path("sla-policies/add/", views.slapolicy_create, name="slapolicy_create"),
+    path("sla-policies/<int:pk>/", views.slapolicy_detail, name="slapolicy_detail"),
+    path("sla-policies/<int:pk>/edit/", views.slapolicy_edit, name="slapolicy_edit"),
+    path("sla-policies/<int:pk>/delete/", views.slapolicy_delete, name="slapolicy_delete"),
 
     # Knowledge base / Solutions (1.4)
     path("knowledge/", views.knowledgearticle_list, name="knowledgearticle_list"),
@@ -130,6 +139,27 @@ urlpatterns = [
     path("knowledge/<int:pk>/", views.knowledgearticle_detail, name="knowledgearticle_detail"),
     path("knowledge/<int:pk>/edit/", views.knowledgearticle_edit, name="knowledgearticle_edit"),
     path("knowledge/<int:pk>/delete/", views.knowledgearticle_delete, name="knowledgearticle_delete"),
+    path("kb/<str:token>/", views.kb_public, name="kb_public"),                # public article page
+    path("kb/<str:token>/helpful/", views.kb_helpful, name="kb_helpful"),      # public vote
+
+    # KB categories (1.4)
+    path("kb-categories/", views.kbcategory_list, name="kbcategory_list"),
+    path("kb-categories/add/", views.kbcategory_create, name="kbcategory_create"),
+    path("kb-categories/<int:pk>/", views.kbcategory_detail, name="kbcategory_detail"),
+    path("kb-categories/<int:pk>/edit/", views.kbcategory_edit, name="kbcategory_edit"),
+    path("kb-categories/<int:pk>/delete/", views.kbcategory_delete, name="kbcategory_delete"),
+
+    # Customer portal access — admin mapping (1.4)
+    path("portal-access/", views.customerportalaccess_list, name="customerportalaccess_list"),
+    path("portal-access/add/", views.customerportalaccess_create, name="customerportalaccess_create"),
+    path("portal-access/<int:pk>/", views.customerportalaccess_detail, name="customerportalaccess_detail"),
+    path("portal-access/<int:pk>/edit/", views.customerportalaccess_edit, name="customerportalaccess_edit"),
+    path("portal-access/<int:pk>/delete/", views.customerportalaccess_delete, name="customerportalaccess_delete"),
+
+    # Customer self-service portal — customer-facing (1.4)
+    path("portal/cases/", views.portal_case_list, name="portal_case_list"),
+    path("portal/cases/new/", views.portal_case_create, name="portal_case_create"),
+    path("portal/cases/<int:pk>/", views.portal_case_detail, name="portal_case_detail"),
 
     # Tasks (1.5)
     path("tasks/", views.task_list, name="task_list"),
