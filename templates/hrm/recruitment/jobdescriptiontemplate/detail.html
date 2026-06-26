@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:jobdescriptiontemplate_list' %}">Job Templates</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:jobdescriptiontemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:jobdescriptiontemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Designation</dt><dd>{% if obj.designation %}<a href="{% url 'hrm:designation_detail' obj.designation.pk %}">{{ obj.designation.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Employment Type</dt><dd>{% if obj.employment_type %}{{ obj.get_employment_type_display }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Job Description</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        {% if obj.jd_summary %}<div class="detail-item" style="grid-column:1/-1;"><dt>Summary</dt><dd>{{ obj.jd_summary|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.jd_responsibilities %}<div class="detail-item" style="grid-column:1/-1;"><dt>Responsibilities</dt><dd>{{ obj.jd_responsibilities|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.jd_requirements %}<div class="detail-item" style="grid-column:1/-1;"><dt>Requirements</dt><dd>{{ obj.jd_requirements|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.jd_nice_to_have %}<div class="detail-item" style="grid-column:1/-1;"><dt>Nice to Have</dt><dd>{{ obj.jd_nice_to_have|linebreaksbr }}</dd></div>{% endif %}
+      </dl>
+      {% if not obj.jd_summary and not obj.jd_responsibilities and not obj.jd_requirements and not obj.jd_nice_to_have %}
+        <div class="empty-state"><i data-lucide="file-text"></i><h3>No job description text</h3><p>Edit the template to add a summary, responsibilities, and requirements.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Linked Requisitions</h2>
+      <a href="{% url 'hrm:jobrequisition_list' %}" class="btn btn-outline"><i data-lucide="briefcase"></i> All Requisitions</a>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Title</th><th>Status</th><th>Created</th></tr></thead>
+          <tbody>
+            {% for r in linked_reqs %}
+              <tr>
+                <td><a href="{% url 'hrm:jobrequisition_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+                <td>{{ r.title }}</td>
+                <td><span class="badge badge-muted">{{ r.get_status_display }}</span></td>
+                <td>{{ r.created_at|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="link"></i><h3>No requisitions use this template yet</h3><p>Apply this template when raising a requisition to pre-fill its job description.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:jobdescriptiontemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
