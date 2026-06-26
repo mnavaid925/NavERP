@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:quote_list' %}">Quotes</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:quote_print' obj.pk %}" target="_blank" rel="noopener" class="btn btn-outline"><i data-lucide="printer"></i> Print</a>
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'crm:quote_send' obj.pk %}" onsubmit="return confirm('Mark this quote as sent?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send</button>
+        </form>
+      {% elif obj.status == 'sent' %}
+        <form method="post" action="{% url 'crm:quote_accept' obj.pk %}" onsubmit="return confirm('Mark this quote as accepted?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Accept</button>
+        </form>
+        <form method="post" action="{% url 'crm:quote_decline' obj.pk %}" onsubmit="return confirm('Mark this quote as declined?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="x-circle"></i> Decline</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'crm:quote_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:quote_delete' obj.pk %}" onsubmit="return confirm('Delete this quote?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid" style="margin-bottom:1rem;">
+    <div class="stat-card"><div class="stat-label">Subtotal</div><div class="stat-value">{{ obj.subtotal }}</div></div>
+    <div class="stat-card"><div class="stat-label">Tax</div><div class="stat-value">{{ obj.tax_total }}</div></div>
+    <div class="stat-card"><div class="stat-label">Total ({{ obj.currency_code }})</div><div class="stat-value">{{ obj.total }}</div></div>
+    <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value"><span class="badge badge-{% if obj.status == 'accepted' %}green{% elif obj.status == 'sent' %}info{% elif obj.status == 'declined' or obj.status == 'expired' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></div></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Account</dt><dd>{% if obj.account %}<a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.opportunity %}<a href="{% url 'crm:opportunity_detail' obj.opportunity.pk %}">{{ obj.opportunity.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Price book</dt><dd>{% if obj.price_book %}<a href="{% url 'crm:pricebook_detail' obj.price_book.pk %}">{{ obj.price_book.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Quote discount</dt><dd>{{ obj.discount_pct }}%</dd></div>
+      <div class="detail-item"><dt>Valid until</dt><dd>{% if obj.valid_until %}{{ obj.valid_until|date:"M d, Y" }}{% if obj.is_expired %} <span class="badge badge-red">Expired</span>{% endif %}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Sent</dt><dd>{% if obj.sent_at %}{{ obj.sent_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Accepted</dt><dd>{% if obj.accepted_at %}{{ obj.accepted_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.terms %}<p style="margin-top:1rem;"><strong>Terms:</strong><br>{{ obj.terms|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Line items</h2></div>
+    {% if obj.is_open %}
+    <div class="card-body">
+      <form method="post" action="{% url 'crm:quoteline_add' obj.pk %}" class="filter-bar">
+        {% csrf_token %}
+        <div class="form-group" style="min-width:160px;">{{ line_form.product }}</div>
+        <div class="form-group" style="flex:1; min-width:140px;">{{ line_form.description }}</div>
+        <div class="form-group" style="max-width:90px;">{{ line_form.quantity }}</div>
+        <div class="form-group" style="max-width:110px;">{{ line_form.unit_price }}</div>
+        <div class="form-group" style="max-width:90px;">{{ line_form.discount_pct }}</div>
+        <div class="form-group" style="max-width:90px;">{{ line_form.tax_pct }}</div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add line</button>
+      </form>
+      <p class="form-help">Leave price/tax blank to default from the product (adjusted by the price book).</p>
+    </div>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Disc %</th><th>Tax %</th><th>Line total</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for l in lines %}
+            <tr>
+              <td>{{ l.description }}{% if l.product %} <span class="badge badge-muted">{{ l.product.sku|default:l.product.number }}</span>{% endif %}</td>
+              <td>{{ l.quantity }}</td>
+              <td>{{ l.unit_price }}</td>
+              <td>{{ l.discount_pct }}%</td>
+              <td>{{ l.tax_pct }}%</td>
+              <td>{{ l.line_total|floatformat:2 }}</td>
+              <td>
+                {% if obj.is_open %}
+                  <form method="post" action="{% url 'crm:quoteline_remove' l.pk %}" onsubmit="return confirm('Remove this line?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list"></i><p>No line items yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'crm:quote_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
