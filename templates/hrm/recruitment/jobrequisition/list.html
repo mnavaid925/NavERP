@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Job Requisitions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Job Requisitions</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Requisitions</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:jobdescriptiontemplate_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Templates</a>
+      <a href="{% url 'hrm:jobrequisition_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Requisition</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, title, or location…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" class="form-select" aria-label="Priority">
+            <option value="">All priorities</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="department" class="form-select" aria-label="Department">
+            <option value="">All departments</option>
+            {% for d in departments %}
+              <option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="hiring_manager" class="form-select" aria-label="Hiring Manager">
+            <option value="">All hiring managers</option>
+            {% for e in hiring_managers %}
+              <option value="{{ e.pk }}" {% if request.GET.hiring_manager == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="req_type" class="form-select" aria-label="Requisition Type">
+            <option value="">All types</option>
+            {% for val, label in req_type_choices %}
+              <option value="{{ val }}" {% if request.GET.req_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:jobrequisition_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Department</th><th>Priority</th><th>Status</th><th class="text-right">Openings</th><th>Hiring Manager</th><th>Target Start</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:jobrequisition_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}<br><span class="text-muted">{{ obj.designation.name|default:"" }}</span></td>
+              <td>{{ obj.department.name|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.priority == 'urgent' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_priority_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'draft' %}muted{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'posted' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'filled' %}green{% elif obj.status == 'rejected' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td class="text-right">{{ obj.headcount }}</td>
+              <td>{{ obj.hiring_manager.party.name|default:"—" }}</td>
+              <td>{% if obj.target_start_date %}{{ obj.target_start_date }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:jobrequisition_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'rejected' %}
+                    <a href="{% url 'hrm:jobrequisition_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'hrm:jobrequisition_delete' obj.pk %}" onsubmit="return confirm('Delete this requisition?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="briefcase"></i><h3>No requisitions found</h3><p>Raise a job requisition to authorize a new hire.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
