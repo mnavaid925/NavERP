@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Pipeline Board</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a><span class="sep">›</span><a href="{% url 'crm:opportunity_list' %}">Opportunities</a><span class="sep">›</span><span>Board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:opportunity_list' %}" class="btn btn-outline"><i data-lucide="list"></i> List view</a>
+      <a href="{% url 'crm:opportunity_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Opportunity</a>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:1rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
+    {% for col in columns %}
+      <div style="flex:0 0 280px; background:var(--surface-2,#f3f4f6); border-radius:.6rem; padding:.75rem;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:.5rem;">
+          <strong>{{ col.label }}</strong>
+          <span class="badge badge-muted">{{ col.count }}</span>
+        </div>
+        <div class="muted" style="font-size:.8rem; color:var(--text-muted); margin-bottom:.6rem;">{{ col.total }} total</div>
+        {% for opp in col.opps %}
+          <div class="card" style="margin-bottom:.5rem;"><div class="card-body" style="padding:.6rem .7rem;">
+            <a href="{% url 'crm:opportunity_detail' opp.pk %}" class="fw-600">{{ opp.name }}</a>
+            <div class="muted" style="font-size:.8rem; color:var(--text-muted);">
+              {% if opp.account %}{{ opp.account.name }} · {% endif %}{{ opp.amount }}
+            </div>
+            {% if opp.is_open %}
+              <form method="post" action="{% url 'crm:opportunity_advance' opp.pk %}" style="margin-top:.4rem;">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="board">
+                <button class="btn btn-outline" type="submit" style="padding:.2rem .5rem; font-size:.78rem;"><i data-lucide="chevrons-right"></i> Advance</button>
+              </form>
+            {% endif %}
+          </div></div>
+        {% empty %}
+          <div class="muted" style="font-size:.82rem; color:var(--text-muted); padding:.5rem 0;">No deals.</div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}
