@@ -13,6 +13,12 @@
     </nav>
   </div>
   <div class="page-actions">
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}{% if not obj.sent_at %}
+    <form method="post" action="{% url 'crm:survey_send' obj.pk %}" onsubmit="return confirm('Mark this survey as sent? (email delivery is deferred)');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-primary"><i data-lucide="send"></i> Send</button>
+    </form>
+    {% endif %}{% endif %}
     <a href="{% url 'crm:survey_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     <form method="post" action="{% url 'crm:survey_delete' obj.pk %}" onsubmit="return confirm('Delete this survey?');" style="display:inline;">
       {% csrf_token %}
@@ -55,9 +61,9 @@
       <div class="detail-item">
         <dt>Classification</dt>
         <dd>
-          {% if obj.classification == 'promoter' %}<span class="badge badge-green">{{ obj.get_classification_display }}</span>
-          {% elif obj.classification == 'passive' %}<span class="badge badge-amber">{{ obj.get_classification_display }}</span>
-          {% elif obj.classification == 'detractor' %}<span class="badge badge-red">{{ obj.get_classification_display }}</span>
+          {% if obj.classification == 'promoter' or obj.classification == 'satisfied' or obj.classification == 'easy' %}<span class="badge badge-green">{{ obj.get_classification_display }}</span>
+          {% elif obj.classification == 'passive' or obj.classification == 'neutral' %}<span class="badge badge-amber">{{ obj.get_classification_display }}</span>
+          {% elif obj.classification == 'detractor' or obj.classification == 'dissatisfied' or obj.classification == 'hard' %}<span class="badge badge-red">{{ obj.get_classification_display }}</span>
           {% elif obj.classification %}<span class="badge badge-muted">{{ obj.get_classification_display }}</span>
           {% else %}—{% endif %}
         </dd>
