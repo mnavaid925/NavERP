@@ -2817,12 +2817,16 @@ def _safe_doc_context(contract):
     }
 
 
-# Isolated engine for rendering user-authored DocTemplate bodies: NO loader_tags
-# ({% include %}/{% extends %}) and NO project ``{% load %}`` libraries — so a template body can only
-# use {{ vars }}, filters and {% if %}/{% for %}, never pull in internal templates or tag libs
-# (security-review). Combined with the string-only ``_safe_doc_context`` (no model instances).
-_DOC_ENGINE = Engine(dirs=[], app_dirs=False, libraries={},
-                     builtins=["django.template.defaulttags", "django.template.defaultfilters"])
+# Isolated engine for rendering user-authored DocTemplate bodies. ``default_builtins`` is overridden
+# to DROP ``loader_tags`` — so ``{% include %}`` / ``{% extends %}`` are invalid tags (TemplateSyntaxError
+# at parse), not merely defanged by empty loaders. With ``libraries={}`` a ``{% load %}`` also fails.
+# A body can therefore only use ``{{ vars }}``, filters and ``{% if %}/{% for %}`` — it can never pull
+# in internal templates or tag libs (security). Combined with the string-only ``_safe_doc_context``.
+class _IsolatedDocEngine(Engine):
+    default_builtins = ["django.template.defaulttags", "django.template.defaultfilters"]
+
+
+_DOC_ENGINE = _IsolatedDocEngine(dirs=[], app_dirs=False, libraries={})
 
 
 def _render_doc_body(contract):
