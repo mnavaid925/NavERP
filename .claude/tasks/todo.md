@@ -4733,3 +4733,48 @@ and a per-request shared-base-queryset cache for many-widget dashboards — left
 `models.py`, which carried concurrent uncommitted 1.7 work during the build (avoided bundling); pick up as a
 standalone migration. `_compute_service` averages durations in Python on purpose (cross-DB `Avg(DurationField)`
 returns µs-float on SQLite vs timedelta on MariaDB).
+
+---
+
+## CRM 1.7 — Finance & Billing (recreated in detail) — Review
+
+**Delivered scope (all three NavERP.md bullets now live, reusing the Accounting ledger — L29; draft hand-off):**
+- **Invoicing** — `DealInvoice` (`DINV-`) wraps an `accounting.Invoice`. One-click **quote→invoice conversion**
+  (`dealinvoice_from_quote`, accepted quotes only, atomic, idempotent) folds per-line + quote-level discount + tax
+  so `invoice.total == quote.total`; the invoice is created **draft** and issued/posted in Accounting
+  (`accounting:invoice_post`, admin-gated). Detail shows linked-invoice status/paid/balance, ledger allocations
+  (partial/milestone payments), receipts, and a **deal-margin card** (revenue − non-billable expenses). Manual
+  "link existing invoice" create + edit (the `editable=False` `invoice` link can't be re-pointed on edit).
+- **Payment Tracking** — `PaymentReceipt` (`RCPT-`) over `accounting.Payment` with gateway metadata
+  (Stripe/PayPal/Razorpay + `gateway_txn_id`) and a **printable receipt** (`receipt.html`, `window.print()`).
+- **Expense Tracking** — existing `Expense` + new **`is_billable`** flag (billable = re-billed → excluded from
+  true margin).
+- Migration `0016`; `LIVE_LINKS["1.7"]` = Invoicing/Payment Tracking/Expense Tracking + Recurring Invoices extra;
+  `seed_crm._seed_finance17` (idempotent, runs after `_seed_sfa`).
+
+**Architecture decision (user-approved):** "CRM wrappers, draft hand-off" — CRM creates/links real ledger
+documents but never posts to the GL or builds a second ledger (L28→L29). **No changes to `apps/accounting`.**
+
+**Verification:** all new pages 200/302; conversion math exact (297.00 / 7077.50, diff 0.00); idempotency guard;
+cross-tenant IDOR → 404; no template-comment leaks. `apps/crm/tests/test_finance_17.py` = **103 tests, green**.
+
+**Review agents (all 7, in order; findings applied + committed between):**
+- **code-reviewer** — `_seed_finance17` wrapped in `transaction.atomic`; `Currency.get_or_create` moved inside
+  the conversion's atomic block + currency-symbol lookup; recurring-schedule link → `recurringinvoice_detail`.
+- **explorer** — wiring fully consistent; gated the deal-invoice "Issue invoice" button to tenant admins (it
+  targets the `@tenant_admin_required` `accounting:invoice_post`).
+- **frontend-reviewer** — nested admin/draft guards for clarity; `<h3>` on inline empty-states. (`table-actions`
+  on `<th>` kept = app-wide convention across ~52 lists; pagination partial already preserves `q`/`status`.)
+- **performance-reviewer** — `dealinvoice_list` annotates `amt_paid`/`bal_due` via `Subquery` (killed per-row
+  N+1 → constant query count); `dealinvoice_detail` precomputes paid/balance once (no double aggregate).
+- **qa-smoke-tester** — PASS, no fixes.
+- **security-reviewer** — defense-in-depth: `DealInvoiceForm.invoice` + `PaymentReceiptForm.payment` use safe
+  empty querysets + explicit tenant scoping; `currency_code` clamped to 3 chars. No exploitable issue; the
+  `editable=False` link, tenant isolation, CSRF, XSS, open-redirect, mass-assignment all sound.
+- **test-writer** — 103 tests (numbering, read-through props, conversion math/idempotency/guards, tenant-scoped
+  form querysets, CRUD, cross-tenant IDOR, CSRF, list N+1 guard). All green.
+
+**Deferred (documented, not built):** real payment-gateway webhooks (Stripe/PayPal/Razorpay charge confirmation
+→ auto-mark paid) — gateway fields capture the reference only; server-side PDF (weasyprint) — the receipt is
+browser-print today; in-CRM GL posting — issuing stays in Accounting (draft hand-off); `gateway_txn_id`
+uniqueness — deferred with webhooks. `Expense.currency_code` stays a CharField (Expense doesn't touch the ledger).
