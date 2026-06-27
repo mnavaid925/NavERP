@@ -169,7 +169,7 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   performance/top-performers, funnel drop-off, service resolution-time + CSAT) computed live with a chart +
   table + KPI summary, plus point-in-time **`ReportSnapshot`** runs frozen as JSON for period-over-period trends.
 
-**Sub-modules 1.7–1.12** (extension pass, 24 CRM-owned tables, migrations `0005` + `0016`–`0022` for the 1.7/1.8/1.9/1.10 recreations):
+**Sub-modules 1.7–1.12** (extension pass, 27 CRM-owned tables, migrations `0005` + `0016`–`0024` for the 1.7/1.8/1.9/1.10/1.11 recreations):
 - **1.7 Finance & Billing** *(recreated in detail — all three NavERP.md bullets now live, reusing the
   **Accounting ledger** per L29; draft hand-off)* — **Deal Invoices** (`DINV-#####`): one-click
   **quote→invoice conversion** that generates a draft `accounting.Invoice` (line items, per-line + quote-level
@@ -204,9 +204,15 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   (HMAC-SHA256-signed JSON payloads; admin **Test**). Outbound HTTP is **recorded-and-signed only** (the real POST
   is deferred behind a documented SSRF guard — https-only, pin-resolved-IP, port 443, no redirects). Webhook config
   + rule authoring/run are tenant-admin-gated.
-- **1.11 Customer Success** — **Onboarding Plans** (`CS-#####`, step checklists + progress), **Health Scores**
-  (`HS-#####`, 0–100 derived from tickets/NPS/tasks/engagement with configurable weights), **Surveys**
-  (`NPS-#####`, NPS/CSAT/CES with auto-classification + a public respond page).
+- **1.11 Customer Success** *(recreated in detail — all three NavERP.md bullets deepened)* — **Onboarding
+  Pipelines**: **Onboarding Plans** (`CS-#####`, step checklists + progress + step edit) **plus reusable Onboarding
+  Templates** (`OTPL-#####`, ordered steps with day-offsets, **applied in one click** to clone a fresh plan for a
+  client; admin-authored); **Health Scoring**: **Health Scores** (`HS-#####`, 0–100 from tickets/NPS/tasks/engagement
+  with configurable, validated weights) now keep an append-only **Health Score History** trend and **auto-raise a
+  guarded churn-risk task** when an account turns Red, with an admin **Recompute all**; **Surveys & Feedback**:
+  **Surveys** (`NPS-#####`, NPS/CSAT/CES) with **type-aware** classification + a type-aware public respond page
+  (NPS 0–10 / CSAT 1–5 / CES 1–7), an admin **Send** action, and an **NPS analytics** page (NPS = %promoters −
+  %detractors, promoter/passive/detractor split, CSAT/CES averages).
 - **1.12 Inventory & Vendor** — CRM-owned **Product Stock** (`STK-#####`, low-stock alerts), **Purchase Orders**
   (`PO-#####`) with line items + receive-to-stock, and **Partner Portal Access** (`PRT-#####`) with a
   partner-facing read-only portal (orders + stock).
@@ -214,7 +220,7 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
   > the spine when those modules land.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **1,956-test** suite.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **2,114-test** suite.
 
 ### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.15
 
@@ -502,7 +508,7 @@ backend) — copy the link from there.
 | Users & RBAC | `/` | `/users/`, `/roles/`, `/invites/`, `/invite/<token>/`, `/profile/` |
 | Core spine | `/core/` | `/core/parties/`, `/core/org-units/`, `/core/party-roles/`, `/core/addresses/`, `/core/contact-methods/`, `/core/relationships/`, `/core/employments/`, `/core/activities/`, `/core/documents/`, `/core/audit-logs/` |
 | Module 0.1 | `/tenants/` | `/tenants/subscriptions/`, `/tenants/subscription-invoices/`, `/tenants/branding/`, `/tenants/encryption-keys/`, `/tenants/health/`, `/tenants/onboarding/`, `/tenants/stripe/webhook/` |
-| Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/opportunities/board/`, `/crm/territories/`, `/crm/products/`, `/crm/price-books/`, `/crm/quotes/`, `/crm/sales-quotas/`, `/crm/forecast/`, `/crm/campaigns/`, `/crm/campaign-members/`, `/crm/email-templates/`, `/crm/email-campaigns/`, `/crm/landing-pages/`, `/crm/form-submissions/`, `/crm/cases/`, `/crm/sla-policies/`, `/crm/knowledge/`, `/crm/kb-categories/`, `/crm/portal-access/`, `/crm/portal/cases/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/`, `/crm/expenses/`, `/crm/projects/`, `/crm/milestones/`, `/crm/timesheets/`, `/crm/doc-templates/`, `/crm/contracts/`, `/crm/workflows/`, `/crm/workflow-logs/`, `/crm/approvals/`, `/crm/webhooks/`, `/crm/webhook-deliveries/`, `/crm/onboarding/`, `/crm/health-scores/`, `/crm/surveys/`, `/crm/stock/`, `/crm/purchase-orders/`, `/crm/partner-portal/`, `/crm/portal/` (partner-facing); public `/crm/p/<token>/` (web-to-lead), `/crm/cases/track/<token>/` (case status), `/crm/kb/<token>/` (KB article), `/crm/sign/<token>/`, `/crm/surveys/<token>/respond/` |
+| Module 1 (CRM) | `/crm/` | `/crm/` (overview), `/crm/leads/`, `/crm/opportunities/`, `/crm/opportunities/board/`, `/crm/territories/`, `/crm/products/`, `/crm/price-books/`, `/crm/quotes/`, `/crm/sales-quotas/`, `/crm/forecast/`, `/crm/campaigns/`, `/crm/campaign-members/`, `/crm/email-templates/`, `/crm/email-campaigns/`, `/crm/landing-pages/`, `/crm/form-submissions/`, `/crm/cases/`, `/crm/sla-policies/`, `/crm/knowledge/`, `/crm/kb-categories/`, `/crm/portal-access/`, `/crm/portal/cases/`, `/crm/tasks/`, `/crm/accounts/`, `/crm/contacts/`, `/crm/expenses/`, `/crm/projects/`, `/crm/milestones/`, `/crm/timesheets/`, `/crm/doc-templates/`, `/crm/contracts/`, `/crm/workflows/`, `/crm/workflow-logs/`, `/crm/approvals/`, `/crm/webhooks/`, `/crm/webhook-deliveries/`, `/crm/onboarding/`, `/crm/onboarding-templates/`, `/crm/health-scores/`, `/crm/surveys/`, `/crm/surveys/results/`, `/crm/stock/`, `/crm/purchase-orders/`, `/crm/partner-portal/`, `/crm/portal/` (partner-facing); public `/crm/p/<token>/` (web-to-lead), `/crm/cases/track/<token>/` (case status), `/crm/kb/<token>/` (KB article), `/crm/sign/<token>/`, `/crm/surveys/<token>/respond/` |
 | Module 2 (Accounting) | `/accounting/` | `/accounting/` (dashboard), `/accounting/glaccounts/`, `/accounting/journal-entries/`, `/accounting/fiscal-periods/`, `/accounting/currencies/`, `/accounting/exchange-rates/`, `/accounting/vendor-profiles/`, `/accounting/bills/`, `/accounting/customer-profiles/`, `/accounting/invoices/`, `/accounting/recurring-invoices/`, `/accounting/payments/`, `/accounting/allocations/`, `/accounting/bank-accounts/`, `/accounting/bank-transactions/`, `/accounting/reconciliation/`, `/accounting/fixed-assets/`, `/accounting/asset-disposals/`, `/accounting/cost-allocations/`, `/accounting/payroll-runs/`, `/accounting/projects/`, `/accounting/intercompany/`, `/accounting/tax-codes/`, `/accounting/tax-returns/`, `/accounting/budgets/`, `/accounting/controls/`, `/accounting/integrations/`; reports `/accounting/reports/{trial-balance,cash-forecast,payment-schedule,ar-aging,ap-aging,balance-sheet,profit-and-loss,budget-variance}/` |
 | Module 3 (HRM) | `/hrm/` | `/hrm/` (overview), `/hrm/employees/`, `/hrm/employee-documents/`, `/hrm/lifecycle-events/`, `/hrm/designations/`; **onboarding** `/hrm/onboarding-templates/`, `/hrm/onboarding-template-tasks/`, `/hrm/onboarding/`, `/hrm/onboarding-tasks/`, `/hrm/onboarding-documents/`, `/hrm/assets/`, `/hrm/orientation/`; **offboarding** `/hrm/separations/`, `/hrm/exit-interviews/`, `/hrm/clearance/`, `/hrm/settlements/`, `/hrm/letters/` (letters landing; + POST `…/separations/<pk>/{relieving,experience}-letter/`); **time** `/hrm/leave-types/`, `/hrm/leave-allocations/`, `/hrm/leave-requests/`, `/hrm/holidays/`, `/hrm/shifts/`, `/hrm/shift-assignments/`, `/hrm/attendance/` |
 | Django admin | `/admin/` | `/admin/` |
@@ -543,8 +549,8 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **3,537 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
-  the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 1,956**,
+- **3,695 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+  the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
   **Accounting 212**, **HRM 1,048**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
