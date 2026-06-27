@@ -70,6 +70,7 @@
                   {% csrf_token %}
                   <button class="btn-icon" title="{% if s.completed_at %}Reopen{% else %}Complete{% endif %}"><i data-lucide="check-circle"></i></button>
                 </form>
+                <a href="{% url 'crm:onboardingstep_edit' s.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                 <form method="post" action="{% url 'crm:onboardingstep_delete' s.pk %}" onsubmit="return confirm('Delete this step?');" style="display:inline;">
                   {% csrf_token %}
                   <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
