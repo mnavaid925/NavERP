@@ -7,6 +7,7 @@
 {% else %}
 <form method="post">
   {% csrf_token %}
+  {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
   <div class="form-group">
     <label class="form-label" for="id_score">
       {% if survey.survey_type == 'nps' %}How likely are you to recommend us? (0 = not at all, 10 = extremely)
