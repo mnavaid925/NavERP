@@ -52,7 +52,7 @@
           <td class="fw-600">{% if row.user %}{{ row.user.get_full_name|default:row.user.username }}{% else %}—{% endif %}</td>
           <td>
             <div class="progress" title="{{ row.util_pct }}% of capacity">
-              <div class="progress-bar" style="width: {% if row.util_pct > 100 %}100{% else %}{{ row.util_pct }}{% endif %}%;{% if row.overbooked %} background:#dc2626;{% endif %}"></div>
+              <div class="progress-bar" style="width: {% if row.util_pct > 100 %}100{% else %}{{ row.util_pct }}{% endif %}%;{% if row.overbooked %} background:var(--bad);{% endif %}"></div>
             </div>
             <span class="text-muted">{{ row.util_pct }}%</span>
           </td>
