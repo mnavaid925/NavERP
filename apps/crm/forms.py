@@ -417,6 +417,7 @@ from .models import (  # noqa: E402  (after the base forms above)
     SignerRecord,
     Survey,
     Timesheet,
+    Webhook,
     WorkflowRule,
 )
 
@@ -597,6 +598,24 @@ class WorkflowRuleForm(TenantModelForm):
                   "trigger_value", "conditions", "actions", "delay_value", "delay_unit", "owner"]
         widgets = {"conditions": forms.Textarea(attrs={"rows": 4}),
                    "actions": forms.Textarea(attrs={"rows": 4})}
+
+
+class WebhookForm(TenantModelForm):
+    """1.10 Webhook endpoint. ``secret`` is WRITE-ONLY — rendered via PasswordInput(render_value=False)
+    so the stored value is never shipped to the browser; blank on edit keeps the existing secret."""
+
+    class Meta:
+        model = Webhook
+        fields = ["name", "target_url", "trigger_entity", "trigger_event", "secret",
+                  "is_active", "headers", "description"]
+        widgets = {"secret": forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+                   "headers": forms.Textarea(attrs={"rows": 3})}
+
+    def clean_secret(self):
+        secret = self.cleaned_data.get("secret", "")
+        if not secret and self.instance and self.instance.pk:
+            return self.instance.secret  # blank on edit → keep the stored secret (never round-tripped)
+        return secret
 
 
 class ApprovalRequestForm(TenantModelForm):
