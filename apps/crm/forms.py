@@ -402,6 +402,7 @@ from .models import (  # noqa: E402  (after the base forms above)
     CrmProject,
     DealInvoice,
     DocTemplate,
+    DocumentVersion,
     Expense,
     HealthScore,
     HealthScoreConfig,
@@ -547,11 +548,31 @@ class DocTemplateForm(TenantModelForm):
 class ContractDocumentForm(TenantModelForm):
     class Meta:
         model = ContractDocument
-        # WARNING: status/current_version are system-managed (the public signing flow + system
-        # transitions own them). Excluded so a member can't forge a "signed" contract via POST.
-        fields = ["name", "template", "opportunity", "account",
-                  "body_snapshot", "expires_at", "owner"]
-        widgets = {"body_snapshot": forms.Textarea(attrs={"rows": 12})}
+        # WARNING: status/current_version/body_snapshot are system-managed. body_snapshot is now
+        # GENERATED from the linked template (contractdocument_generate) or captured as a
+        # DocumentVersion — never hand-typed; status/current_version are owned by the signing flow +
+        # version actions. Excluded so a member can't forge a "signed" contract or inject HTML via POST.
+        fields = ["name", "template", "opportunity", "account", "expires_at", "owner"]
+
+
+class DocumentVersionForm(TenantModelForm):
+    """Upload a contract revision (1.9 File Repository). version_no / contract / body_snapshot /
+    created_by are set in the view; this form only takes the uploaded file + a change note."""
+
+    class Meta:
+        model = DocumentVersion
+        fields = ["file", "change_note"]
+
+    def clean_file(self):
+        # Mirror ExpenseForm.clean_receipt — extension allowlist + size cap (blocks .html/.svg XSS).
+        f = self.cleaned_data.get("file")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_DOC_EXTENSIONS:
+                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+            if getattr(f, "size", 0) and f.size > MAX_UPLOAD_BYTES:
+                raise forms.ValidationError("File exceeds the 20 MB limit.")
+        return f
 
 
 class SignerRecordForm(TenantModelForm):
