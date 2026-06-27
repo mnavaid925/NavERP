@@ -29,7 +29,7 @@
         <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search accounts…">
       </div>
       <div class="form-group">
-        <select name="tier" class="form-select">
+        <select name="tier" class="form-select" aria-label="Filter by tier">
           <option value="">All tiers</option>
           {% for val, label in tier_choices %}
           <option value="{{ val }}" {% if request.GET.tier == val %}selected{% endif %}>{{ label }}</option>
