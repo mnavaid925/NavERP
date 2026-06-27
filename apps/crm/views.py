@@ -2994,7 +2994,7 @@ def workflowrule_detail(request, pk):
     obj = get_object_or_404(WorkflowRule.objects.select_related("owner"), pk=pk, tenant=request.tenant)
     return render(request, "crm/workflow/workflowrule/detail.html", {
         "obj": obj,
-        "logs": WorkflowLog.objects.filter(tenant=request.tenant, rule=obj)[:10],
+        "logs": WorkflowLog.objects.filter(tenant=request.tenant, rule=obj).order_by("-fired_at")[:10],
     })
 
 
@@ -3185,7 +3185,14 @@ def _run_rule(rule, user):
     active_webhooks = list(Webhook.objects.filter(
         tenant=rule.tenant, is_active=True,
         trigger_entity=rule.trigger_entity, trigger_event=rule.trigger_event))
-    records = Model.objects.filter(tenant=rule.tenant).order_by("-id")[:_RULE_RUN_LIMIT]
+    # Join only the FK fields the conditions actually read — zero cost for scalar conditions, and no
+    # per-record FK lazy-load (N+1) when a condition targets a relation field (perf-review).
+    cond_fields = {c.get("field") for c in (rule.conditions or []) if isinstance(c, dict)}
+    fk_names = [f.name for f in Model._meta.concrete_fields if f.is_relation and f.name in cond_fields]
+    records = Model.objects.filter(tenant=rule.tenant)
+    if fk_names:
+        records = records.select_related(*fk_names)
+    records = records.order_by("-id")[:_RULE_RUN_LIMIT]
     for rec in records:
         summary["evaluated"] += 1
         if not _eval_conditions(rec, rule.conditions):
