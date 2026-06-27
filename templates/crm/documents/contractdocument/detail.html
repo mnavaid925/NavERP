@@ -159,6 +159,7 @@
         </tbody>
       </table>
     </div>
+    {% if obj.status != 'signed' and obj.status != 'declined' %}
     <form method="post" action="{% url 'crm:contractdocument_version_add' obj.pk %}" enctype="multipart/form-data" style="margin-top:1rem;">
       {% csrf_token %}
       <div class="form-grid">
@@ -175,6 +176,7 @@
         <button type="submit" class="btn btn-outline"><i data-lucide="upload"></i> Add revision</button>
       </div>
     </form>
+    {% endif %}
   </div>
 </div>
 
