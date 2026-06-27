@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.6 analytics & reporting = saved per-user dashboards + live-computed widgets (KPI/gauge/bar/line/pie/table) + standard reports (sales activity/performance/funnel/service) + report snapshots; 1.7 finance & billing = deal invoices (one-click quote→invoice conversion that drafts an accounting.Invoice — draft hand-off, L29) + payment receipts (printable + Stripe/PayPal/Razorpay gateway metadata) + expenses (billable flag / true-margin); 1.8–1.12 projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.6 analytics & reporting = saved per-user dashboards + live-computed widgets (KPI/gauge/bar/line/pie/table) + standard reports (sales activity/performance/funnel/service) + report snapshots; 1.7 finance & billing = deal invoices (one-click quote→invoice conversion that drafts an accounting.Invoice — draft hand-off, L29) + payment receipts (printable + Stripe/PayPal/Razorpay gateway metadata) + expenses (billable flag / true-margin); 1.8 project & delivery = projects (deal→project convert + derived progress%/overdue + Kanban board with status-move) + milestones (sub-tasks) + timesheets (billable + owner-submit/admin-approve, status OFF the form) + resource allocation (capacity bookings + a workload board flagging overbooked vs free capacity); 1.9–1.12 doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.12)
@@ -438,9 +438,10 @@ scoring derives from CRM signals. See `.claude/tasks/todo.md`.
 | `DealInvoice` | `DINV-` | 1.7 | **CRM wrapper over the accounting ledger** — links a deal (opportunity/quote/account) to the `accounting.Invoice` it generated. `invoice` FK is **editable=False** (set by the conversion action / manual create view, never a normal form field). Read-through props `invoice_number/invoice_status/invoice_total/amount_paid/balance_due` **guard a None invoice**. List annotates `amt_paid`/`bal_due` via a `Subquery` (no per-row N+1). | `opportunity`/`quote`→crm, `account`→Party, `invoice`→**accounting.Invoice**, `recurring_invoice`→**accounting.RecurringInvoice** |
 | `PaymentReceipt` | `RCPT-` | 1.7 | customer receipt for a (partial/milestone) payment on a deal invoice; **printable** (`receipt.html`, `window.print()`); `METHOD` + `GATEWAY`(manual/stripe/paypal/razorpay) + `gateway_txn_id` metadata; optional `payment` link **scoped to the tenant's inbound payments** | `deal_invoice`→DealInvoice(CASCADE), `payment`→**accounting.Payment**(SET_NULL) |
 | `Expense` | `EXP-` | 1.7 | category, amount, **currency_code**(char), expense_date, **`is_billable`** (true=re-billed to client → excluded from true margin), **receipt** FileField (allowlist+20MB via `clean_receipt`), status(draft/submitted/approved/rejected), **submitted_by/approved_by/status are system-set — NOT in the form** | `opportunity`/`project`→crm, submitted_by/approved_by→User |
-| `CrmProject` | `PRJ-` | 1.8 | name, status(planning/active/on_hold/completed/cancelled), start/end_date, budget, owner, description | `account`→Party, `source_opportunity`→Opportunity |
-| `CrmMilestone` | `MS-` | 1.8 | title, kind(milestone/task), status(not_started/in_progress/completed/blocked), order, `parent`(self-FK subtasks), `completed_at`(system via `save()`) | `project`→CrmProject(CASCADE), assignee→User |
-| `Timesheet` | `TS-` | 1.8 | date, hours, is_billable, status; (approved_by is NOT in the form) | `project`(CASCADE)/`milestone`→crm, employee→User, client→Party |
+| `CrmProject` | `PRJ-` | 1.8 | name, status(planning/active/on_hold/completed/cancelled), start/end_date, budget, owner, description; **derived props** `progress_pct` (completed÷total milestones — list view annotates `ms_total`/`ms_done` to avoid N+1) + `is_overdue` | `account`→Party, `source_opportunity`→Opportunity |
+| `CrmMilestone` | `MS-` | 1.8 | title, kind(milestone/task), status(not_started/in_progress/completed/blocked), order, `parent`(self-FK subtasks), `completed_at`(system via `save()`); shown on the **Kanban board** + moved via `crmmilestone_move` | `project`→CrmProject(CASCADE), assignee→User |
+| `Timesheet` | `TS-` | 1.8 | date, hours, is_billable; **status + approved_by are system-managed — NOT in the form** (advanced only by submit/approve/reject; closes a self-approve gap). edit/delete restricted to draft/rejected; submit gated to owner/admin | `project`(CASCADE)/`milestone`→crm, employee→User, client→Party |
+| `ResourceAllocation` | `RA-` | 1.8 | **capacity booking** — assignee, role, `hours_per_week`, start/end_date(null=ongoing), status(planned/active/completed/cancelled); `overlap_hours(win_start,win_end)` prorates planned hours; feeds the **workload board** (planned vs logged vs 40h/wk capacity → overbooked/free). Form `clean`: end≥start | `project`→CrmProject(CASCADE), assignee→User |
 | `DocTemplate` | `TPL-` | 1.9 | name, template_type(nda/proposal/contract/quote/receipt), `body`(merge-var HTML, deferred on list) , is_active | owner→User |
 | `ContractDocument` | `CTR-` | 1.9 | name, status(draft/sent/viewed/signed/declined/expired/archived), current_version, body_snapshot(deferred on list), signed_at/expires_at; **status/current_version are system-managed — NOT in the form** | `template`→DocTemplate, opportunity→crm, account→Party |
 | `SignerRecord` | — (plain) | 1.9 | per-signer: signer_name/email, `token`(secrets.token_urlsafe(32)), order(auto in view), viewed_at/signed_at/declined_at/ip_address | `contract`→ContractDocument(CASCADE) |
@@ -466,14 +467,15 @@ not built.)
 ## URLs / views (1.7–1.12)
 
 Standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for: `dealinvoice`,
-`paymentreceipt`, `expense`, `crmproject`, `crmmilestone`, `timesheet`, `doctemplate`, `contractdocument`,
+`paymentreceipt`, `expense`, `crmproject`, `crmmilestone`, `timesheet`, `resourceallocation`, `doctemplate`, `contractdocument`,
 `workflowrule`, `approvalrequest`, `onboardingplan`, `healthscore`, `survey`, `productstock`, `crm_po`
 (PurchaseOrder), `partnerportalaccess`. `workflowlog` is **list+detail only** (read-only). Custom actions
 (all `@require_POST` unless noted):
 - **1.7 Invoicing:** `dealinvoice_from_quote(quote_pk)` (accepted-quote → draft `accounting.Invoice` + InvoiceLines + DealInvoice, `transaction.atomic`, **idempotent** guard, folds per-line + quote-level discount + tax so `invoice.total == quote.total`). `dealinvoice_create`/`_edit` are **custom** (not `crud_*`) so the `editable=False` `invoice` link is set on create and popped on edit. The deal-invoice detail's "Issue invoice" button POSTs to `accounting:invoice_post` (**admin-gated in the template**; GL posting stays in Accounting).
 - **1.7 Payments:** `paymentreceipt_print` (GET — standalone printable `receipt.html`, `window.print()`).
 - **Expense:** `expense_submit` (owner, draft→submitted), `expense_approve`/`expense_reject` (**`@tenant_admin_required`**).
-- **1.8:** `opportunity_to_project` (won opp → CrmProject, **idempotent** guard on `source_opportunity`).
+- **1.8 Projects/Resource:** `opportunity_to_project` (won opp → CrmProject, **idempotent** guard on `source_opportunity`). `crmproject_board` (Kanban — milestones bucketed by status) + `crmmilestone_move` (status-move, value **whitelisted** against STATUS_CHOICES, tenant-scoped). `resource_workload` (capacity board — planned allocations [prorated via `overlap_hours`] vs logged timesheets [excl. rejected] vs 40 h/wk capacity, overbooked flag; 2–3 aggregate queries, no per-person N+1). `resourceallocation_*` CRUD.
+- **1.8 Timesheet workflow:** `timesheet_submit` (**owner or admin only**, draft→submitted), `timesheet_approve`/`timesheet_reject` (**`@tenant_admin_required`**); `timesheet_edit`/`timesheet_delete` restricted to **draft/rejected** (no post-approval mutation/erase). `status`/`approved_by` are OFF `TimesheetForm` — closes the self-approve gap.
 - **1.9:** `contractdocument_add_signer`/`_remove_signer`; **public** `sign_document(token)` (no login; `select_for_update` against double-sign; refuses expired; sets `viewed_at`/`signed_at`/`declined_at`, flips contract→signed when all signed).
 - **1.10:** `approvalrequest_approve`/`_reject` (**`@tenant_admin_required`**).
 - **1.11:** `onboardingstep_add`/`_complete`(toggle)/`_delete`; `recompute_health_score`; `health_config_edit` (**`@tenant_admin_required`**); **public** `survey_respond(token)` (no login; clamps score 0–10, caps feedback 4000, no re-submit).
@@ -481,8 +483,8 @@ Standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for: `
 
 ## Security conventions (1.7–1.12) — important
 
-- **System-managed fields are excluded from their ModelForm** (prevents mass-assignment self-approval/forgery): `Expense.status/submitted_by/approved_by`, `Timesheet.approved_by`, `ContractDocument.status/current_version`, `ProductStock.on_hand_qty`. Set them only in the dedicated action views.
-- **Privileged actions are `@tenant_admin_required`:** expense approve/reject, approval approve/reject, `crm_po_receive` (inventory mutation), `health_config_edit` (tenant-wide config). Day-to-day CRUD stays `@login_required`.
+- **System-managed fields are excluded from their ModelForm** (prevents mass-assignment self-approval/forgery): `Expense.status/submitted_by/approved_by`, **`Timesheet.status/approved_by`** (1.8 — status moved off the form), `ContractDocument.status/current_version`, `ProductStock.on_hand_qty`. Set them only in the dedicated action views.
+- **Privileged actions are `@tenant_admin_required`:** expense approve/reject, **timesheet approve/reject**, approval approve/reject, `crm_po_receive` (inventory mutation), `health_config_edit` (tenant-wide config). Day-to-day CRUD stays `@login_required`; **timesheet submit is owner-or-admin**, and timesheet edit/delete are blocked once approved.
 - **File upload** (`Expense.receipt`): `ExpenseForm.clean_receipt` mirrors `core.DocumentForm` (extension allowlist + 20 MB cap) — blocks `.html`/`.svg` same-origin XSS.
 - **Public endpoints** (`sign_document`, `survey_respond`): unguessable `secrets.token_urlsafe` tokens, `get_object_or_404(token=…)`, CSRF-protected (`{% csrf_token %}`, not exempt), extend `base_auth.html`. `body_snapshot` rendered **escaped** (no `|safe`).
 - **No `|safe`/`eval`/raw SQL** anywhere in the new code; WorkflowRule conditions/actions are stored JSON, never executed.
@@ -496,10 +498,12 @@ lines, and a PartnerPortalAccess (note: `portal_user=None` by default — assign
 `seed_crm` also gained **`_seed_finance17(tenant)`** (runs **after** `_seed_sfa` since it needs a quote;
 guarded by `DealInvoice.exists()`): marks a seeded quote accepted, converts it to a draft
 `accounting.Invoice` + `DealInvoice`, and records a partial Stripe `PaymentReceipt`; fresh seeds also flag
-one expense `is_billable`.
+one expense `is_billable`. **`_seed_resource18(tenant)`** (after `_seed_extension`; guarded by
+`ResourceAllocation.exists()`) books seeded users onto the project incl. one **overbooked** person so the
+workload board has data.
 `LIVE_LINKS` (`apps/core/navigation.py`) wires 1.7 (**Invoicing**→`dealinvoice_list`, **Payment
 Tracking**→`paymentreceipt_list`, **Expense Tracking**→`expense_list`, + **Recurring Invoices**→
-`accounting:recurringinvoice_list` extra), 1.8 (Projects/Time Tracking/Resource Allocation + Milestones extra), 1.9 (E-Signatures/Document
+`accounting:recurringinvoice_list` extra), 1.8 (**Resource Allocation**→`resource_workload` (the real workload board, was a stub) + **Project Board**(Kanban)/Milestones/Allocations extras), 1.9 (E-Signatures/Document
 Generation/File Repository), 1.10 (Trigger-Based Actions/Approval Processes/Webhooks + Workflow Logs extra),
 1.11 (Onboarding Pipelines/Health Scoring/Surveys & Feedback (NPS)), 1.12 (Purchase Orders/Stock Tracking/
 Vendor-Partner Portal + Partner Portal extra).
@@ -514,3 +518,9 @@ list views are paginated. `PurchaseOrder.recalc_total()` / `compute_health_score
 the per-row `balance_due` property) so the list is a **constant** query count regardless of rows;
 `dealinvoice_detail` precomputes paid/balance once (no double aggregate). Both deal-invoice/receipt lists
 `select_related` the FKs their rows render.
+**1.8:** `resource_workload` is 2–3 aggregate queries (allocations + grouped timesheet hours + a name lookup
+for timesheet-only users) — proration is in Python (date-overlap math), no per-person N+1; `crmproject_board`
+evaluates the milestone qs once and buckets by status in Python (no per-column re-query) and scans the
+projects list in Python for `selected_project`; `crmproject_list` annotates `ms_total`/`ms_done` (so
+`progress_pct` doesn't query per row) with an explicit `order_by`; `ResourceAllocation` has
+`(tenant,status)`/`(tenant,start_date)`/`(tenant,end_date)` indexes for the workload window filter.
