@@ -2440,6 +2440,12 @@ def timesheet_detail(request, pk):
 
 @login_required
 def timesheet_edit(request, pk):
+    # Lock down post-approval edits: once submitted/approved, the hours an approval was granted for
+    # must not be silently mutated (code-review). Re-open by rejecting first.
+    obj = get_object_or_404(Timesheet, pk=pk, tenant=request.tenant)
+    if obj.status not in ("draft", "rejected"):
+        messages.error(request, "Only a draft or rejected timesheet can be edited.")
+        return redirect("crm:timesheet_detail", pk=obj.pk)
     return crud_edit(request, model=Timesheet, pk=pk, form_class=TimesheetForm,
                      template="crm/projects/timesheet/form.html", success_url="crm:timesheet_list")
 
@@ -2561,6 +2567,7 @@ def resource_workload(request):
     # Logged: timesheet hours grouped by employee in the window (one query).
     logged_by_user = {r["employee"]: (r["h"] or Decimal("0")) for r in
                       Timesheet.objects.filter(tenant=request.tenant, date__gte=start, date__lte=end)
+                      .exclude(status="rejected")  # rejected hours aren't real logged work (code-review)
                       .values("employee").annotate(h=Sum("hours"))}
 
     user_ids = {uid for uid in (set(planned_by_user) | set(logged_by_user)) if uid is not None}
