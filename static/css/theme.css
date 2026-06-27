@@ -108,6 +108,16 @@ html[data-collapsed="true"] .nav-section-title { display: none; }
 html[data-collapsed="true"] .nav-group.open > .nav-sub,
 html[data-sidebar="small-icon"] .nav-group.open > .nav-sub,
 html[data-sidebar="icon-hovered"] .sidebar:not(:hover) .nav-group.open > .nav-sub { display: none; }
+/* Icon rail: center the lone icon (its label is hidden) and enlarge it a touch so it reads clearly
+   in the 72px rail instead of looking small + left-shifted. */
+html[data-collapsed="true"] .nav-link, html[data-collapsed="true"] .brand,
+html[data-sidebar="small-icon"] .nav-link, html[data-sidebar="small-icon"] .brand,
+html[data-sidebar="icon-hovered"] .sidebar:not(:hover) .nav-link,
+html[data-sidebar="icon-hovered"] .sidebar:not(:hover) .brand { justify-content: center; }
+html[data-collapsed="true"] .nav-link > i, html[data-collapsed="true"] .nav-link > svg,
+html[data-sidebar="small-icon"] .nav-link > i, html[data-sidebar="small-icon"] .nav-link > svg,
+html[data-sidebar="icon-hovered"] .sidebar:not(:hover) .nav-link > i,
+html[data-sidebar="icon-hovered"] .sidebar:not(:hover) .nav-link > svg { width: 22px; height: 22px; }
 
 /* Colored sidebar */
 html[data-sidebar-color="colored"] {
@@ -163,7 +173,8 @@ html[dir="rtl"] .main { margin-left: 0; margin-right: var(--sidebar-w); }
 .nav-link:hover { background: var(--brand-50); color: var(--brand-700); }
 .nav-link.active { background: var(--brand-100); color: var(--brand-700); font-weight: 600; }
 html.dark .nav-link:hover, html.dark .nav-link.active { background: rgba(59,130,246,.15); color: #bfdbfe; }
-.nav-link i { width: 18px; height: 18px; flex: 0 0 auto; }
+/* size the rendered icon — lucide swaps the <i> for an <svg>, so target both (else it squishes to 18×24) */
+.nav-link > i, .nav-link > svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .nav-caret { transition: transform .15s ease; flex: 0 0 auto; }
 .nav-link .nav-caret { margin-left: auto; width: 16px; height: 16px; }
 .nav-group.open > .nav-link .nav-caret { transform: rotate(90deg); }
@@ -172,7 +183,7 @@ html.dark .nav-link:hover, html.dark .nav-link.active { background: rgba(59,130,
 
 /* Level 2 — sub-modules */
 .nav-sublink { display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .4rem .55rem; margin-top: 1px; border-radius: var(--radius-sm); color: var(--sidebar-text); font-size: .83rem; font-weight: 500; cursor: pointer; }
-.nav-sublink i { width: 14px; height: 14px; }
+.nav-sublink > i, .nav-sublink > svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .nav-sublink:hover { color: var(--brand-700); background: var(--brand-50); }
 .nav-subgroup.open > .nav-sublink { color: var(--brand-700); }
 .nav-subgroup.open > .nav-sublink .nav-caret { transform: rotate(90deg); }
