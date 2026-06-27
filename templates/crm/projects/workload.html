@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Resource Workload{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Resource Workload</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Resource Allocation
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:resourceallocation_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Allocations</a>
+    <a href="{% url 'crm:resourceallocation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Allocation</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group">
+        <label class="form-label" for="wl-start">From</label>
+        <input type="date" id="wl-start" name="start" value="{{ start|date:'Y-m-d' }}" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="wl-end">To</label>
+        <input type="date" id="wl-end" name="end" value="{{ end|date:'Y-m-d' }}" class="form-input">
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+      <a href="{% url 'crm:resource_workload' %}" class="btn btn-outline">Reset</a>
+    </form>
+    <p class="form-help">Planned hours (from allocations) vs. capacity ({{ capacity }} h over this window) per person. Overbooked = planned exceeds capacity.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Person</th>
+          <th style="min-width:220px;">Utilization</th>
+          <th>Planned</th>
+          <th>Logged</th>
+          <th>Capacity</th>
+          <th>Available</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="fw-600">{% if row.user %}{{ row.user.get_full_name|default:row.user.username }}{% else %}—{% endif %}</td>
+          <td>
+            <div class="progress" title="{{ row.util_pct }}% of capacity">
+              <div class="progress-bar" style="width: {% if row.util_pct > 100 %}100{% else %}{{ row.util_pct }}{% endif %}%;{% if row.overbooked %} background:#dc2626;{% endif %}"></div>
+            </div>
+            <span class="text-muted">{{ row.util_pct }}%</span>
+          </td>
+          <td>{{ row.planned }}</td>
+          <td>{{ row.logged }}</td>
+          <td>{{ row.capacity }}</td>
+          <td>{{ row.available }}</td>
+          <td>
+            {% if row.overbooked %}<span class="badge badge-red">Overbooked</span>
+            {% elif row.available > 0 %}<span class="badge badge-green">Available</span>
+            {% else %}<span class="badge badge-muted">Full</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <i data-lucide="gauge"></i>
+              <h3>No activity in this window</h3>
+              <p>Add resource allocations or log timesheets within the selected dates.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
