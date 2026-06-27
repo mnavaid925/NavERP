@@ -4778,3 +4778,50 @@ cross-tenant IDOR → 404; no template-comment leaks. `apps/crm/tests/test_finan
 → auto-mark paid) — gateway fields capture the reference only; server-side PDF (weasyprint) — the receipt is
 browser-print today; in-CRM GL posting — issuing stays in Accounting (draft hand-off); `gateway_txn_id`
 uniqueness — deferred with webhooks. `Expense.currency_code` stays a CharField (Expense doesn't touch the ledger).
+
+---
+
+## CRM 1.8 — Project & Delivery Management (recreated in detail) — Review
+
+**Delivered scope (all three NavERP.md bullets now genuinely live; CRM-owned, no new spine coupling):**
+- **Resource Allocation** (was a STUB → `timesheet_list`) — new `ResourceAllocation` (`RA-`) capacity bookings
+  (assignee/role/`hours_per_week`/period/status) + a real **workload board** (`resource_workload`): per person,
+  planned (allocations prorated via `overlap_hours`) vs logged (timesheets, **excl. rejected**) vs capacity
+  (40 h/wk × weeks), flagging **overbooked** / available. Full CRUD.
+- **Projects "Gantt/Kanban views"** — new **Kanban board** (`crmproject_board`) bucketing milestones into 4 status
+  columns + `crmmilestone_move` (whitelisted status-move); `CrmProject.progress_pct` (annotated, no N+1) +
+  `is_overdue` shown on the list/detail.
+- **Time Tracking** — `Timesheet` gained the owner-**submit** / admin-**approve/reject** workflow; **`status` moved
+  OFF `TimesheetForm`** (closed a self-approve gap — a member could previously set their own timesheet to
+  approved); edit/delete restricted to draft/rejected.
+- Migrations `0017` (ResourceAllocation) + `0018` (workload indexes); `LIVE_LINKS["1.8"]` = Projects/Time
+  Tracking/Resource Allocation→workload + Project Board/Milestones/Allocations extras; `seed_crm._seed_resource18`.
+
+**People keyed on `User`** (matching `Timesheet.employee`/`CrmMilestone.assignee`) so the workload join shares one
+key; HRM `EmployeeProfile` exists but mixing keys would fragment it — noted as a future migration.
+
+**Verification:** all new pages 200/302; workload overbooked flag correct; Kanban move works; self-approve closed
+(status stays draft on a forged edit); cross-tenant IDOR → 404; no comment leaks. `apps/crm/tests/
+test_projects_18.py` = **123 tests, green**; full CRM suite green (no regression).
+
+**Review agents (all 7, in order; findings applied + committed between):**
+- **code-reviewer** — workload excludes rejected timesheets from logged; `timesheet_edit` guarded to
+  draft/rejected (no post-approval mutation); `ResourceAllocationForm.clean` end≥start; board URL reordered.
+- **explorer** — wiring fully consistent (all url names resolve, context-vars match, LIVE_LINKS valid). No changes.
+- **frontend-reviewer** — overbooked bar uses `var(--bad)` (dark-mode safe); dropped undefined `.kanban` class;
+  board move-form inline flex + select `aria-label`s; `type=submit` on delete buttons; employee-filter full name.
+- **performance-reviewer** — `crmproject_board` evaluates projects once (drops the `selected_project` query);
+  added `(tenant,status)/(tenant,start_date)/(tenant,end_date)` indexes (migration 0018). Workload/list confirmed
+  optimal (2–3 queries, no N+1).
+- **qa-smoke-tester** — 18/18 PASS, no fixes.
+- **security-reviewer** — self-approve fix confirmed sound; `timesheet_submit` gated to owner/admin;
+  `timesheet_delete` blocked on approved (+ button hidden); isolation/CSRF/XSS/mass-assignment clean.
+- **test-writer** — 123 tests (overlap_hours proration, progress/overdue, workload incl. rejected-excluded +
+  overbooked, self-approve closed + owner/admin submit + admin approve + edit/delete guards, Kanban move,
+  tenant-scoped forms, IDOR, query-count). All green.
+
+**Deferred (documented, not built):** drag-and-drop Kanban (status-move is button/select, no JS DnD); a real Gantt
+chart (progress % + Kanban cover the "Gantt/Kanban" bullet); per-person capacity overrides (workload uses a flat
+40 h/wk default — a future `EmployeeProfile.weekly_capacity`); billable-timesheet → invoice bridge (could feed 1.7
+`DealInvoice` lines later); migrating people from `User` to HRM `EmployeeProfile`. App-wide follow-up (not forked
+here per L28): `expense_submit` has the same no-ownership-check pattern `timesheet_submit` just fixed.
