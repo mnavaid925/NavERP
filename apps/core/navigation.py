@@ -156,11 +156,14 @@ LIVE_LINKS = {
         "File Repository": "crm:document_repository",     # bullet (versioned contract repo by account)
     },
     # 1.10 Automation & Workflow Engine
+    # 1.10 recreated in detail — Webhooks now a REAL endpoint registry + signed delivery log (was a
+    # stub → workflowrule_list); rules now actually execute via a manual Run engine.
     "1.10": {
-        "Trigger-Based Actions (If This, Then That)": "crm:workflowrule_list",  # bullet
+        "Trigger-Based Actions (If This, Then That)": "crm:workflowrule_list",  # bullet (now with a Run engine)
         "Approval Processes": "crm:approvalrequest_list",  # bullet
-        "Webhooks": "crm:workflowrule_list",             # bullet (webhook is a rule action type)
+        "Webhooks": "crm:webhook_list",                  # bullet (endpoint registry + signed deliveries)
         "Workflow Logs": "crm:workflowlog_list",         # extra (rule-execution audit)
+        "Webhook Deliveries": "crm:webhookdelivery_list",  # extra (delivery audit)
     },
     # 1.11 Customer Success & Retention
     "1.11": {
