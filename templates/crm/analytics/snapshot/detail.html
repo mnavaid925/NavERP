@@ -22,7 +22,7 @@
       <div class="detail-item"><dt>Captured</dt><dd>{{ obj.generated_at|date:"M d, Y H:i" }}</dd></div>
       <div class="detail-item"><dt>By</dt><dd>{% if obj.generated_by %}{{ obj.generated_by.get_full_name|default:obj.generated_by.username }}{% else %}—{% endif %}</dd></div>
     </dl>
-    <p class="form-help" style="margin-top:1rem;">This is a frozen point-in-time copy — the figures below are stored as captured and are not recomputed.</p>
+    <p class="text-muted" style="margin-top:1rem;">This is a frozen point-in-time copy — the figures below are stored as captured and are not recomputed.</p>
   </div></div>
 
   {% if obj.summary %}
