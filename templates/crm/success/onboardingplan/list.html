@@ -19,13 +19,13 @@
         <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search plans…">
       </div>
       <div class="form-group">
-        <select name="status" class="form-select">
+        <select name="status" class="form-select" aria-label="Filter by status">
           <option value="">All statuses</option>
           {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <select name="account" class="form-select">
+        <select name="account" class="form-select" aria-label="Filter by account">
           <option value="">All accounts</option>
           {% for o in accounts %}<option value="{{ o.pk }}" {% if request.GET.account == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
         </select>
