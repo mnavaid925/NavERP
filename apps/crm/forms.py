@@ -713,6 +713,18 @@ class SurveyForm(TenantModelForm):
         fields = ["account", "contact", "survey_type", "trigger", "related_case",
                   "score", "feedback_text"]
 
+    def clean(self):
+        # The model field caps at 10 (the NPS ceiling); enforce each type's real range here so a
+        # CSAT can't be saved as 8 and then mis-classified as "satisfied".
+        cleaned = super().clean()
+        score, stype = cleaned.get("score"), cleaned.get("survey_type")
+        limits = {"nps": (0, 10), "csat": (1, 5), "ces": (1, 7)}
+        if score is not None and stype in limits:
+            lo, hi = limits[stype]
+            if not (lo <= score <= hi):
+                self.add_error("score", f"Score must be {lo}–{hi} for {stype.upper()}.")
+        return cleaned
+
 
 class ProductStockForm(TenantModelForm):
     class Meta:
