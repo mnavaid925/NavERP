@@ -10,6 +10,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.template import Context, Template
 from django.utils import timezone
 
 from apps.accounting.models import Currency, Invoice, InvoiceLine  # 1.7 reuses the ledger (L29)
@@ -28,6 +29,7 @@ from apps.crm.models import (
     CommunicationLog,
     ContactProfile,
     ContractDocument,
+    DocumentVersion,
     CrmMilestone,
     CrmProject,
     CrmTask,
@@ -136,6 +138,8 @@ class Command(BaseCommand):
             self._seed_finance17(tenant)
             # 1.8 Resource Allocation (recreated) — capacity bookings for the workload board; guards on ResourceAllocation.
             self._seed_resource18(tenant)
+            # 1.9 File Repository (recreated) — render a contract + capture versions; guards on DocumentVersion.
+            self._seed_documents19(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -435,6 +439,43 @@ class Command(BaseCommand):
                 tenant=tenant, project=project, assignee=users[i % len(users)], role=role,
                 hours_per_week=hpw, start_date=start, end_date=end, status="active",
                 notes=f"{role} booked on {project.name}.")
+
+    def _seed_documents19(self, tenant):
+        """Idempotently seed 1.9 File Repository data — render a draft contract from its template and
+        capture two versions so the repository + version history show data. Guard: skip if any
+        DocumentVersion exists. Runs after _seed_extension (needs a contract with a linked template)."""
+        if DocumentVersion.objects.filter(tenant=tenant).exists():
+            return
+        tpl = (DocTemplate.objects.filter(tenant=tenant, template_type="contract").first()
+               or DocTemplate.objects.filter(tenant=tenant).first())
+        account = Party.objects.filter(tenant=tenant, kind="organization").first()
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        if tpl is None or account is None:
+            return
+        # A dedicated draft contract so the repository + generation demo always have a draft to act on.
+        contract = ContractDocument.objects.create(
+            tenant=tenant, name="Service Agreement (Repository Demo)", template=tpl,
+            account=account, status="draft", owner=owner)
+        acc, opp = contract.account, contract.opportunity
+        ctx = {
+            "today": timezone.localdate().isoformat(),
+            "contract": {"name": contract.name, "number": contract.number},
+            "account": {"name": acc.name if acc else ""},
+            "opportunity": {"name": opp.name if opp else "", "number": opp.number if opp else "",
+                            "amount": str(opp.amount) if opp else ""},
+            "owner": (owner.get_full_name() or owner.username) if owner else "",
+        }
+        rendered = Template(contract.template.body or "").render(Context(ctx))
+        contract.body_snapshot = rendered
+        contract.current_version = 2
+        contract.save(update_fields=["body_snapshot", "current_version", "updated_at"])
+        DocumentVersion.objects.create(
+            tenant=tenant, contract=contract, version_no=1, body_snapshot=rendered,
+            change_note=f"Generated from {contract.template.number}", created_by=owner)
+        DocumentVersion.objects.create(
+            tenant=tenant, contract=contract, version_no=2, body_snapshot=rendered,
+            change_note="Revised pricing terms.", created_by=owner)
 
     def _seed_service(self, tenant):
         """Idempotently seed 1.4 help-desk demo data — a default SLA policy, 2 KB categories, a
