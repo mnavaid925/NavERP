@@ -2592,13 +2592,14 @@ def resource_workload(request):
 @login_required
 def crmproject_board(request):
     """1.8 Projects — Kanban board: milestones grouped into status columns (optional ?project=)."""
-    projects = CrmProject.objects.filter(tenant=request.tenant).order_by("name")
+    projects = list(CrmProject.objects.filter(tenant=request.tenant).order_by("name"))
     qs = CrmMilestone.objects.filter(tenant=request.tenant).select_related("project", "assignee")
     project_id = request.GET.get("project", "").strip()
     selected_project = None
     if project_id.isdigit():
-        qs = qs.filter(project_id=int(project_id))
-        selected_project = projects.filter(pk=int(project_id)).first()
+        pid = int(project_id)
+        qs = qs.filter(project_id=pid)
+        selected_project = next((p for p in projects if p.pk == pid), None)  # scan the list — no 2nd query
     ms_list = list(qs)  # evaluate once; bucket per column in Python (no re-query)
     columns = [{"value": v, "label": label, "cards": [m for m in ms_list if m.status == v]}
                for v, label in CrmMilestone.STATUS_CHOICES]
