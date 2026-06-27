@@ -98,10 +98,12 @@
                   </form>
                   {% endif %}
                 {% endif %}
+                {% if obj.status == 'draft' or obj.status == 'rejected' %}
                 <form method="post" action="{% url 'crm:timesheet_delete' obj.pk %}" onsubmit="return confirm('Delete this timesheet?');" style="display:inline;">
                   {% csrf_token %}
                   <button type="submit" class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
                 </form>
+                {% endif %}
               </div>
             </td>
           </tr>
