@@ -4694,6 +4694,42 @@ Sub-module folder: `templates/crm/analytics/`. Per CLAUDE.md template rules:
 
 ---
 
-## 13. Review notes
+## 13. Review notes — CRM 1.6 Analytics & Reporting (delivered)
 
-(To be filled in after the build and review-agent sequence completes.)
+**Delivered scope (4 models, extend `apps/crm`):** `AnalyticsDashboard` (DASH-), `DashboardWidget`,
+`AnalyticsReport` (RPT-), `ReportSnapshot` + the `apps/crm/analytics.py` compute layer (20 widget metric
+resolvers + 4 standard-report computers). Migration `0015`. All read-only aggregations over existing CRM
+data; only `ReportSnapshot` stores derived figures (frozen JSON). Sidebar `LIVE_LINKS["1.6"]` now Live
+(Dashboards → `dashboard_list`, Standard Reports → `report_list`, + Analytics Overview extra). 8 templates
+under `templates/crm/analytics/`. Seeder `_seed_analytics` (2 dashboards w/ 11 widgets, 4 reports, 1 snapshot).
+
+**Verification:** `manage.py check` clean; `makemigrations`/`migrate` clean; `seed_crm` idempotent (2× run);
+throwaway smoke (`temp/smoke_16.py`) green — every 1.6 page 200/302, all 4 report types compute, filters work,
+no template-comment leaks, cross-tenant IDOR → 404, snapshot POST creates a row. Full CRM suite **1,488 passed**
+(173 new in `apps/crm/tests/test_analytics.py`).
+
+**Review agents (all 7, in order; findings applied + committed between):**
+- **code-reviewer** — added per-report-type `group_by` validation in `AnalyticsReportForm.clean()` (no silent
+  ignore); `report_snapshot` + `widget_move` writes wrapped in `transaction.atomic`; audit-log widget moves;
+  dropped redundant `get_user_model` re-import; explicit None handling for avg CSAT; funnel first-row drop-off
+  shows "—"; documented win-rate cohort semantics.
+- **explorer** — wiring fully consistent; fixed one cosmetic gap (report detail `last_run_at` em-dash guard).
+- **frontend-reviewer** — responsive widget grid (`minmax(200px,1fr)`), `.mb-0`/`.flex` utilities, favorite-star
+  `role=img`/`aria-label` a11y, `.text-muted` for snapshot prose. No comment leaks, charts via `json_script`.
+- **performance-reviewer** — `_compute_funnel` now 1 grouped query (was 5); `widget_move` `bulk_update`;
+  `report_detail` snapshots capped 50 + `.only()` JSON-defer; `_r_campaign_roi` `.values()`. (See deferred indexes.)
+- **qa-smoke-tester** — 51/51 pass, no fixes.
+- **security-reviewer** — gated `is_shared`/`is_default` behind `can_share` (tenant-admin only) on the dashboard
+  form + hand-written create/edit views; all other checks (tenant isolation, IDOR, CSRF, XSS via `json_script`,
+  ORM injection, mass assignment, JSON snapshot content) passed.
+- **test-writer** — 173 tests in `apps/crm/tests/test_analytics.py` (models, compute edge cases + JSON round-trip,
+  form validation, CRUD/integration, IDOR, permission gating, query-count guardrails). All green.
+
+**Deferred (documented, not built):** drag-and-drop JS layout builder; scheduled email delivery / nightly
+auto-snapshot command; PDF/CSV export; cross-object custom report builder; AI NL report builder; external BI
+embeds; real-time WebSocket push. Performance follow-ups for large-scale data: composite indexes
+(`Opportunity(tenant,owner)`, `Campaign(tenant,actual_revenue)`, `ReportSnapshot(tenant,report,generated_at)`)
+and a per-request shared-base-queryset cache for many-widget dashboards — left out this pass because they touch
+`models.py`, which carried concurrent uncommitted 1.7 work during the build (avoided bundling); pick up as a
+standalone migration. `_compute_service` averages durations in Python on purpose (cross-DB `Avg(DurationField)`
+returns µs-float on SQLite vs timedelta on MariaDB).
