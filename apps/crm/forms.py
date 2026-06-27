@@ -529,6 +529,13 @@ class ResourceAllocationForm(TenantModelForm):
         fields = ["project", "assignee", "role", "hours_per_week", "start_date",
                   "end_date", "status", "notes"]
 
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_date"), cleaned.get("end_date")
+        if start and end and end < start:
+            raise forms.ValidationError("End date must be on or after the start date.")
+        return cleaned
+
 
 class DocTemplateForm(TenantModelForm):
     class Meta:
