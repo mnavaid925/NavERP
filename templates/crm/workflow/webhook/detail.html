@@ -18,12 +18,12 @@
       {% csrf_token %}
       <button type="submit" class="btn btn-primary"><i data-lucide="send"></i> Test</button>
     </form>
-    {% endif %}
     <a href="{% url 'crm:webhook_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     <form method="post" action="{% url 'crm:webhook_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this webhook?');">
       {% csrf_token %}
       <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
     </form>
+    {% endif %}
   </div>
 </div>
 
