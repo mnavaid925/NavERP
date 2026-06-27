@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.6 analytics & reporting = saved per-user dashboards + live-computed widgets (KPI/gauge/bar/line/pie/table) + standard reports (sales activity/performance/funnel/service) + report snapshots; 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.6 analytics & reporting = saved per-user dashboards + live-computed widgets (KPI/gauge/bar/line/pie/table) + standard reports (sales activity/performance/funnel/service) + report snapshots; 1.7 finance & billing = deal invoices (one-click quote→invoice conversion that drafts an accounting.Invoice — draft hand-off, L29) + payment receipts (printable + Stripe/PayPal/Razorpay gateway metadata) + expenses (billable flag / true-margin); 1.8–1.12 projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.12)
@@ -420,18 +420,24 @@ larger-scale indexes (`Opportunity(tenant,owner)`, `Campaign(tenant,actual_reven
 # Sub-modules 1.7–1.12 (extension — finance/delivery/docs/automation/success/vendor)
 
 Added as an extension pass on the **same `apps/crm` app** (one big `models.py`, `forms.py`, `views.py`,
-`urls.py`, `admin.py`, `seed_crm.py`). Migration `0005` created the 18 tables. **Spine-gap note:** the
-unified-core masters (`core.Item/Currency/Invoice/Payment/PurchaseOrder/StockMove`) are **not built
-yet** (Accounting/Inventory/Procurement = future modules 2/5/6), so 1.12 ships **CRM-owned**
-`PurchaseOrder`/`PurchaseOrderLine`/`ProductStock`, `Expense.currency_code` is a CharField, and health
-scoring derives from existing CRM signals. See `.claude/tasks/todo.md` "Spine-gap adaptation". When those
-modules land, migrate these onto the spine.
+`urls.py`, `admin.py`, `seed_crm.py`). Migration `0005` created the original 18 tables; migration `0016`
+added the **1.7 recreation** (`DealInvoice`, `PaymentReceipt`, `Expense.is_billable`). **Spine status:**
+**Accounting (Module 2) is now built and owns the financial ledger** (`accounting.Invoice/InvoiceLine/
+Payment/PaymentAllocation/RecurringInvoice/Currency`), so **1.7 was recreated to REUSE it** — the CRM layer
+adds the deal-facing wrappers (`DealInvoice`/`PaymentReceipt`) and the quote→invoice conversion creates a
+**draft** `accounting.Invoice`; issuing/GL-posting + confirmed cash-application stay in Accounting (**draft
+hand-off**, lesson L29 — never a second ledger). **Still future:** `Item/StockMove` (Inventory 5),
+`PurchaseOrder/GoodsReceipt` (Procurement 6) — so **1.12** still ships **CRM-owned**
+`PurchaseOrder`/`PurchaseOrderLine`/`ProductStock`. `Expense.currency_code` stays a CharField; health
+scoring derives from CRM signals. See `.claude/tasks/todo.md`.
 
 ## Models (1.7–1.12) — all `TenantNumbered` unless noted
 
 | Model | Prefix | Sub-mod | Key fields / behavior | Reuse |
 |-------|--------|---------|-----------------------|-------|
-| `Expense` | `EXP-` | 1.7 | category, amount, **currency_code**(char), expense_date, **receipt** FileField (allowlist+20MB via `clean_receipt`), status(draft/submitted/approved/rejected), **submitted_by/approved_by/status are system-set — NOT in the form** | `opportunity`/`project`→crm, submitted_by/approved_by→User |
+| `DealInvoice` | `DINV-` | 1.7 | **CRM wrapper over the accounting ledger** — links a deal (opportunity/quote/account) to the `accounting.Invoice` it generated. `invoice` FK is **editable=False** (set by the conversion action / manual create view, never a normal form field). Read-through props `invoice_number/invoice_status/invoice_total/amount_paid/balance_due` **guard a None invoice**. List annotates `amt_paid`/`bal_due` via a `Subquery` (no per-row N+1). | `opportunity`/`quote`→crm, `account`→Party, `invoice`→**accounting.Invoice**, `recurring_invoice`→**accounting.RecurringInvoice** |
+| `PaymentReceipt` | `RCPT-` | 1.7 | customer receipt for a (partial/milestone) payment on a deal invoice; **printable** (`receipt.html`, `window.print()`); `METHOD` + `GATEWAY`(manual/stripe/paypal/razorpay) + `gateway_txn_id` metadata; optional `payment` link **scoped to the tenant's inbound payments** | `deal_invoice`→DealInvoice(CASCADE), `payment`→**accounting.Payment**(SET_NULL) |
+| `Expense` | `EXP-` | 1.7 | category, amount, **currency_code**(char), expense_date, **`is_billable`** (true=re-billed to client → excluded from true margin), **receipt** FileField (allowlist+20MB via `clean_receipt`), status(draft/submitted/approved/rejected), **submitted_by/approved_by/status are system-set — NOT in the form** | `opportunity`/`project`→crm, submitted_by/approved_by→User |
 | `CrmProject` | `PRJ-` | 1.8 | name, status(planning/active/on_hold/completed/cancelled), start/end_date, budget, owner, description | `account`→Party, `source_opportunity`→Opportunity |
 | `CrmMilestone` | `MS-` | 1.8 | title, kind(milestone/task), status(not_started/in_progress/completed/blocked), order, `parent`(self-FK subtasks), `completed_at`(system via `save()`) | `project`→CrmProject(CASCADE), assignee→User |
 | `Timesheet` | `TS-` | 1.8 | date, hours, is_billable, status; (approved_by is NOT in the form) | `project`(CASCADE)/`milestone`→crm, employee→User, client→Party |
@@ -459,10 +465,13 @@ not built.)
 
 ## URLs / views (1.7–1.12)
 
-Standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for: `expense`, `crmproject`,
-`crmmilestone`, `timesheet`, `doctemplate`, `contractdocument`, `workflowrule`, `approvalrequest`,
-`onboardingplan`, `healthscore`, `survey`, `productstock`, `crm_po` (PurchaseOrder), `partnerportalaccess`.
-`workflowlog` is **list+detail only** (read-only). Custom actions (all `@require_POST`):
+Standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for: `dealinvoice`,
+`paymentreceipt`, `expense`, `crmproject`, `crmmilestone`, `timesheet`, `doctemplate`, `contractdocument`,
+`workflowrule`, `approvalrequest`, `onboardingplan`, `healthscore`, `survey`, `productstock`, `crm_po`
+(PurchaseOrder), `partnerportalaccess`. `workflowlog` is **list+detail only** (read-only). Custom actions
+(all `@require_POST` unless noted):
+- **1.7 Invoicing:** `dealinvoice_from_quote(quote_pk)` (accepted-quote → draft `accounting.Invoice` + InvoiceLines + DealInvoice, `transaction.atomic`, **idempotent** guard, folds per-line + quote-level discount + tax so `invoice.total == quote.total`). `dealinvoice_create`/`_edit` are **custom** (not `crud_*`) so the `editable=False` `invoice` link is set on create and popped on edit. The deal-invoice detail's "Issue invoice" button POSTs to `accounting:invoice_post` (**admin-gated in the template**; GL posting stays in Accounting).
+- **1.7 Payments:** `paymentreceipt_print` (GET — standalone printable `receipt.html`, `window.print()`).
 - **Expense:** `expense_submit` (owner, draft→submitted), `expense_approve`/`expense_reject` (**`@tenant_admin_required`**).
 - **1.8:** `opportunity_to_project` (won opp → CrmProject, **idempotent** guard on `source_opportunity`).
 - **1.9:** `contractdocument_add_signer`/`_remove_signer`; **public** `sign_document(token)` (no login; `select_for_update` against double-sign; refuses expired; sets `viewed_at`/`signed_at`/`declined_at`, flips contract→signed when all signed).
@@ -484,8 +493,13 @@ Standard `<entity>_list/_create/_detail/_edit/_delete` (delete POST-only) for: `
 projects+milestones+timesheets, expenses, doc templates+contracts+signers, workflow rules+log+approvals,
 onboarding plan+steps, surveys + `compute_health_score` per org party, product stock + a purchase order +
 lines, and a PartnerPortalAccess (note: `portal_user=None` by default — assign a user to demo the portal).
-`LIVE_LINKS` (`apps/core/navigation.py`) wires 1.7 (Expense Tracking only — Invoicing/Payment need
-Accounting), 1.8 (Projects/Time Tracking/Resource Allocation + Milestones extra), 1.9 (E-Signatures/Document
+`seed_crm` also gained **`_seed_finance17(tenant)`** (runs **after** `_seed_sfa` since it needs a quote;
+guarded by `DealInvoice.exists()`): marks a seeded quote accepted, converts it to a draft
+`accounting.Invoice` + `DealInvoice`, and records a partial Stripe `PaymentReceipt`; fresh seeds also flag
+one expense `is_billable`.
+`LIVE_LINKS` (`apps/core/navigation.py`) wires 1.7 (**Invoicing**→`dealinvoice_list`, **Payment
+Tracking**→`paymentreceipt_list`, **Expense Tracking**→`expense_list`, + **Recurring Invoices**→
+`accounting:recurringinvoice_list` extra), 1.8 (Projects/Time Tracking/Resource Allocation + Milestones extra), 1.9 (E-Signatures/Document
 Generation/File Repository), 1.10 (Trigger-Based Actions/Approval Processes/Webhooks + Workflow Logs extra),
 1.11 (Onboarding Pipelines/Health Scoring/Surveys & Feedback (NPS)), 1.12 (Purchase Orders/Stock Tracking/
 Vendor-Partner Portal + Partner Portal extra).
@@ -496,3 +510,7 @@ List views `select_related` the FKs their templates render and **defer large Tex
 (`DocTemplate.body`, `ContractDocument.body_snapshot`, `WorkflowLog.error_msg`); `onboardingplan_list`
 `prefetch_related("steps")` so `progress_pct` doesn't N+1; filter dropdowns use `.only(...)`; portal
 list views are paginated. `PurchaseOrder.recalc_total()` / `compute_health_score` aggregate DB-side.
+**1.7:** `dealinvoice_list` annotates confirmed `amt_paid`/`bal_due` via a correlated `Subquery` (instead of
+the per-row `balance_due` property) so the list is a **constant** query count regardless of rows;
+`dealinvoice_detail` precomputes paid/balance once (no double aggregate). Both deal-invoice/receipt lists
+`select_related` the FKs their rows render.
