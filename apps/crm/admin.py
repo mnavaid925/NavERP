@@ -28,12 +28,15 @@ from .models import (
     FormSubmission,
     HealthScore,
     HealthScoreConfig,
+    HealthScoreHistory,
     KbCategory,
     KnowledgeArticle,
     LandingPage,
     Lead,
     OnboardingPlan,
     OnboardingStep,
+    OnboardingTemplate,
+    OnboardingTemplateStep,
     Opportunity,
     OpportunitySplit,
     PartnerPortalAccess,
@@ -480,6 +483,23 @@ class OnboardingStepAdmin(admin.ModelAdmin):
     readonly_fields = ("completed_at", "created_at")
 
 
+@admin.register(OnboardingTemplate)
+class OnboardingTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(OnboardingTemplateStep)
+class OnboardingTemplateStepAdmin(admin.ModelAdmin):
+    list_display = ("template", "order", "title", "offset_days", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("title",)
+    raw_id_fields = ("template",)
+    readonly_fields = ("created_at",)
+
+
 @admin.register(HealthScore)
 class HealthScoreAdmin(admin.ModelAdmin):
     list_display = ("number", "account", "score", "tier", "computed_at", "tenant")
@@ -494,6 +514,18 @@ class HealthScoreConfigAdmin(admin.ModelAdmin):
     list_display = ("tenant", "weight_tickets", "weight_nps", "weight_tasks",
                     "weight_engagement", "red_threshold", "yellow_threshold")
     readonly_fields = ("updated_at",)
+
+
+@admin.register(HealthScoreHistory)
+class HealthScoreHistoryAdmin(admin.ModelAdmin):
+    list_display = ("account", "score", "tier", "computed_at", "tenant")
+    list_filter = ("tier", "tenant")
+    search_fields = ("account__name",)
+    raw_id_fields = ("account",)
+    readonly_fields = ("account", "score", "tier", "breakdown", "computed_at", "tenant")
+
+    def has_add_permission(self, request):
+        return False  # append-only — written by compute_health_score, never by hand
 
 
 @admin.register(Survey)
