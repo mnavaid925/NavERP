@@ -278,6 +278,11 @@ urlpatterns = [
     path("contracts/<int:pk>/delete/", views.contractdocument_delete, name="contractdocument_delete"),
     path("contracts/<int:pk>/add-signer/", views.contractdocument_add_signer, name="contractdocument_add_signer"),
     path("contracts/<int:pk>/remove-signer/<int:signer_pk>/", views.contractdocument_remove_signer, name="contractdocument_remove_signer"),
+    path("contracts/<int:pk>/generate/", views.contractdocument_generate, name="contractdocument_generate"),
+    path("contracts/<int:pk>/send/", views.contractdocument_send, name="contractdocument_send"),
+    path("contracts/<int:pk>/versions/add/", views.contractdocument_version_add, name="contractdocument_version_add"),
+    path("document-versions/<int:pk>/", views.documentversion_detail, name="documentversion_detail"),
+    path("document-repository/", views.document_repository, name="document_repository"),
     path("sign/<str:token>/", views.sign_document, name="sign_document"),  # public
 
     # Workflow rules (1.10)
