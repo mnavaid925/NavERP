@@ -44,6 +44,7 @@ from .models import (
     PurchaseOrderLine,
     Quote,
     QuoteLine,
+    ResourceAllocation,
     SalesQuota,
     SignerRecord,
     SlaPolicy,
@@ -365,6 +366,15 @@ class TimesheetAdmin(admin.ModelAdmin):
     list_filter = ("status", "is_billable", "tenant")
     search_fields = ("number", "description")
     raw_id_fields = ("project", "milestone", "client")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ResourceAllocation)
+class ResourceAllocationAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "assignee", "role", "hours_per_week", "start_date", "end_date", "status", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "role")
+    raw_id_fields = ("project", "assignee")
     readonly_fields = ("number", "created_at", "updated_at")
 
 
