@@ -3865,3 +3865,835 @@ until + self-FK parent + spawn-next-on-complete, `related_case`), `CalendarEvent
   date, so Jan 31 → Feb 28 → **Mar 28** (last-day drift). A stored anchor day (clamp from the original day each
   month) fixes it. Test `TestCrmTaskMonthlyClamp::test_monthly_drift_on_subsequent_spawn` locks in current
   behavior so the fix is a conscious change. Needs a field + migration.
+
+---
+# CRM Sub-module 1.6 — Analytics & Reporting (crm) — plan from research-crm-analytics-reporting.md  (2026-06-27)
+
+**Extending `apps/crm`** — NOT a new app. `apps.py`, `__init__.py`, `settings.py`, `config/urls.py` are already
+in place. Four new models are appended to `apps/crm/models.py`; a new pure-Python helper `apps/crm/analytics.py`
+provides all aggregation logic (no new DB tables beyond the 4 models). The next migration is `0015_analytics`.
+Template sub-module folder: `templates/crm/analytics/`.
+
+**Existing CRM models that supply raw data (do NOT re-model — only query in analytics.py):**
+`Lead` (status/source/rating/score), `Opportunity` (stage/amount/probability/forecast_category/close_date/
+weighted_amount/stage_changed_at/lost_at/loss_reason/competitor), `SalesQuota` (target_amount/owner/territory),
+`Case` (status/priority/type/origin/resolved_at/first_responded_at/closed_at/satisfaction_rating),
+`CrmTask` (status/task_type/owner/completed_at), `Campaign` (budget/actual_cost/expected_revenue),
+`CommunicationLog` (direction/channel/duration_seconds/owner), `CalendarEvent` (owner/start_at).
+
+---
+
+## 0. Context — what is being built
+
+Sub-module 1.6 currently has `LIVE_LINKS["1.6"]` pointing both "Dashboards" and "Standard Reports" at
+`crm:overview` (a stub). This pass delivers:
+- Saved per-user/shared **dashboards** with individually configurable **widgets** that compute live
+- Saved **standard reports** (4 types) with **point-in-time snapshots** for trending
+- `apps/crm/analytics.py` — the single compute engine (17 metric resolvers + 4 report computers)
+- Full CRUD on all 4 models; 1.6 sidebar bullets light up as Live
+
+---
+
+## 1. Models (append to `apps/crm/models.py`)
+
+### 1a. `AnalyticsDashboard` [DASH-] — `TenantNumbered`, `NUMBER_PREFIX = "DASH"`
+
+Drivers: Per-User Dashboard Container (Salesforce/HubSpot/Pipedrive/monday — table-stakes); Dashboard Sharing
+(HubSpot/Insightly/Copper — common); Date Range / Period Filter on Dashboard (all leaders — table-stakes);
+Role-Based / Audience Dashboards (Dynamics 365/Freshsales personas — common).
+
+- [ ] Add module-level choice constants BEFORE `AnalyticsDashboard`:
+
+  ```python
+  DASHBOARD_LAYOUT_CHOICES = [
+      ("one_col",   "Single Column"),
+      ("two_col",   "Two Columns"),
+      ("three_col", "Three Columns"),
+  ]
+
+  PERIOD_CHOICES = [
+      ("last_7",   "Last 7 Days"),
+      ("last_30",  "Last 30 Days"),
+      ("last_90",  "Last 90 Days"),
+      ("quarter",  "This Quarter"),
+      ("year",     "This Year"),
+      ("all",      "All Time"),
+  ]
+  ```
+
+- [ ] Add `AnalyticsDashboard(TenantNumbered)` with `NUMBER_PREFIX = "DASH"`:
+  - `name` — `CharField(max_length=120)` — human name, e.g. "Sales Command Center"
+  - `description` — `TextField(blank=True)`
+  - `owner` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+    related_name="crm_dashboards")` — null = system/shared dashboard (driver: personal vs. team dashboards)
+  - `is_shared` — `BooleanField(default=False)` — visible to all tenant users when True
+    (driver: Dashboard Sharing — HubSpot/Insightly/Copper)
+  - `is_default` — `BooleanField(default=False)` — one default per owner; loaded on first visit
+    (driver: Per-User Dashboard Container — Salesforce/Pipedrive set-as-default)
+  - `layout` — `CharField(max_length=12, choices=DASHBOARD_LAYOUT_CHOICES, default="two_col")`
+    (driver: Drag-and-Drop Layout Builder — store grid column count; JS builder deferred)
+  - `default_period` — `CharField(max_length=12, choices=PERIOD_CHOICES, default="last_30")`
+    (driver: Date Range / Period Filter on Dashboard — all leaders)
+  - `Meta.ordering = ["-is_default", "name"]`
+  - `unique_together = ("tenant", "owner", "name")`
+  - DB indexes: `("tenant", "owner", "is_default")` → `crm_adash_tenant_owner_default_idx`
+  - `__str__`: `f"{self.number} · {self.name}"`
+  - **Reuses**: `core.Tenant` (via TenantNumbered), `accounts.User`. Adds dashboard-domain fields only.
+
+### 1b. `DashboardWidget` — tenant-scoped child (no number prefix)
+
+Drivers: KPI Summary Card (table-stakes, all leaders); Bar/Column Chart (table-stakes, all 10); Line/Area Chart
+(table-stakes, 6 leaders); Funnel Chart (table-stakes, Dynamics 365 ships it on every dashboard); Gauge (common,
+Salesforce/Zoho/Insightly); Leaderboard/Table (common, Zoho/Dynamics/Freshsales); Pie/Donut (common,
+Zoho/Pipedrive/monday); Widget Configuration metric+dimension+filter (table-stakes, Pipedrive/HubSpot/Zoho).
+
+- [ ] Add widget metric choices constant:
+
+  ```python
+  WIDGET_METRIC_CHOICES = [
+      # Scalar KPI metrics (kind=scalar)
+      ("kpi_open_pipeline",      "Open Pipeline Value"),
+      ("kpi_weighted_forecast",  "Weighted Forecast"),
+      ("kpi_win_rate",           "Win Rate (%)"),
+      ("kpi_open_cases",         "Open Cases"),
+      ("kpi_avg_csat",           "Average CSAT"),
+      ("kpi_open_tasks",         "Open Tasks"),
+      # Series / categorical metrics (kind=series)
+      ("pipeline_by_stage",      "Pipeline by Stage (Count)"),
+      ("pipeline_value_by_stage","Pipeline by Stage (Value)"),
+      ("leads_by_rating",        "Leads by Rating"),
+      ("leads_by_status",        "Leads by Status"),
+      ("win_loss",               "Win / Loss Comparison"),
+      ("cases_by_status",        "Cases by Status"),
+      ("cases_by_priority",      "Cases by Priority"),
+      ("revenue_won_by_month",   "Revenue Won by Month"),
+      ("top_performers",         "Top Performers (Revenue Won)"),
+      ("tasks_by_type",          "Tasks by Type"),
+      ("campaign_roi",           "Campaign ROI"),
+  ]
+
+  CHART_TYPE_CHOICES = [
+      ("kpi",       "KPI Card"),
+      ("bar",       "Bar Chart"),
+      ("line",      "Line Chart"),
+      ("pie",       "Pie Chart"),
+      ("doughnut",  "Doughnut Chart"),
+      ("gauge",     "Gauge"),
+      ("table",     "Data Table"),
+  ]
+
+  WIDGET_SIZE_CHOICES = [
+      ("small",  "Small (1 col)"),
+      ("medium", "Medium (2 col)"),
+      ("large",  "Large (3 col)"),
+      ("full",   "Full Width"),
+  ]
+  ```
+
+- [ ] Add `DashboardWidget(models.Model)`:
+  - `tenant` — `ForeignKey("core.Tenant", on_delete=CASCADE, related_name="crm_widgets", db_index=True)`
+  - `dashboard` — `ForeignKey(AnalyticsDashboard, on_delete=CASCADE, related_name="widgets")`
+    (driver: each widget belongs to one dashboard; CASCADE removes widget when dashboard deleted)
+  - `title` — `CharField(max_length=120)` — display label on the tile
+  - `metric` — `CharField(max_length=40, choices=WIDGET_METRIC_CHOICES)`
+    (driver: Widget Configuration — fixed catalog of metric_key choices, Pipedrive/HubSpot/Zoho)
+  - `chart_type` — `CharField(max_length=12, choices=CHART_TYPE_CHOICES, default="bar")`
+    (driver: Bar/Line/Pie/Doughnut/KPI/Gauge/Table — all leaders)
+  - `date_range` — `CharField(max_length=12, choices=PERIOD_CHOICES, blank=True)`
+    — blank = inherit `dashboard.default_period` (driver: per-widget date override)
+  - `size` — `CharField(max_length=8, choices=WIDGET_SIZE_CHOICES, default="medium")`
+    (driver: Drag-and-drop layout — store column span; live resize deferred)
+  - `position` — `PositiveSmallIntegerField(default=0)`
+    (driver: manual ordering; drag-and-drop reorder deferred to JS polish sprint)
+  - `target_value` — `DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)`
+    (driver: Gauge dial target / KPI goal threshold — Salesforce/Zoho/Insightly)
+  - `created_at` / `updated_at` — `DateTimeField(auto_now_add/auto_now)`
+  - `Meta.ordering = ["position", "id"]`
+  - DB indexes: `("tenant", "dashboard")` → `crm_widget_tenant_dash_idx`
+  - `__str__`: `f"{self.title} ({self.get_chart_type_display()})"`
+  - **Reuses**: `core.Tenant`. No spine duplication. Aggregates existing CRM models via `analytics.py`.
+
+### 1c. `AnalyticsReport` [RPT-] — `TenantNumbered`, `NUMBER_PREFIX = "RPT"`
+
+Drivers: Sales Activity Report (table-stakes, Salesforce/HubSpot/Pipedrive/Dynamics 365); Sales Performance /
+Top Performers (table-stakes, all 10 leaders); Pipeline / Funnel Analysis (table-stakes, all 10 — core CRM report);
+Service Resolution Time (table-stakes, Zendesk/Salesforce Service Cloud); CSAT/Satisfaction (table-stakes,
+Zendesk/Salesforce Service/HubSpot); Report Saved Filters/Parameters (table-stakes, Salesforce/HubSpot);
+Scheduling fields stored now, wired to task queue in a later sprint.
+
+- [ ] Add report type and group-by choices constants:
+
+  ```python
+  REPORT_TYPE_CHOICES = [
+      ("sales_activity",    "Sales Activity"),
+      ("sales_performance", "Sales Performance"),
+      ("funnel",            "Pipeline / Funnel"),
+      ("service",           "Service (Resolution & CSAT)"),
+  ]
+
+  GROUP_BY_CHOICES = [
+      ("month",    "By Month"),
+      ("week",     "By Week"),
+      ("owner",    "By Owner"),
+      ("priority", "By Priority"),
+      ("stage",    "By Stage"),
+  ]
+
+  SCHEDULE_FREQ_CHOICES = [
+      ("none",    "None"),
+      ("daily",   "Daily"),
+      ("weekly",  "Weekly"),
+      ("monthly", "Monthly"),
+  ]
+  ```
+
+- [ ] Add `AnalyticsReport(TenantNumbered)` with `NUMBER_PREFIX = "RPT"`:
+  - `name` — `CharField(max_length=200)`
+  - `description` — `TextField(blank=True)`
+  - `report_type` — `CharField(max_length=24, choices=REPORT_TYPE_CHOICES)`
+    (driver: the 4 table-stakes report types per approved build scope — approved plan §scope)
+  - `date_range` — `CharField(max_length=12, choices=PERIOD_CHOICES, default="last_30")`
+    (driver: Report Saved Filters/Parameters — Salesforce/HubSpot/Pipedrive/Zoho)
+  - `group_by` — `CharField(max_length=12, choices=GROUP_BY_CHOICES, default="month")`
+    (driver: dimension breakdowns — Pipedrive measure-by / HubSpot segment-by)
+  - `is_favorite` — `BooleanField(default=False)` — pinned to report library header
+    (driver: Insightly shared folders / Copper pre-built one-click templates)
+  - `owner` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+    related_name="crm_reports")` — null = system/shared report
+  - `last_run_at` — `DateTimeField(null=True, blank=True, editable=False)` — system-set on snapshot
+    creation; never exposed in form (driver: Copper/Insightly report freshness indicator)
+  - `schedule_frequency` — `CharField(max_length=8, choices=SCHEDULE_FREQ_CHOICES, default="none")`
+    (driver: Scheduled Report Email Delivery — store now; task-queue wiring deferred)
+  - `schedule_recipients` — `JSONField(default=list, blank=True)` — list of email addresses
+  - `next_run_at` — `DateTimeField(null=True, blank=True)` — task queue sets this; null when none
+  - `Meta.ordering = ["-is_favorite", "name"]`
+  - `unique_together = ("tenant", "name")`
+  - DB indexes: `("tenant", "report_type")` → `crm_rpt_tenant_type_idx`;
+    `("tenant", "is_favorite")` → `crm_rpt_tenant_fav_idx`
+  - `__str__`: `f"{self.number} · {self.name}"`
+  - **Reuses**: `core.Tenant` (via TenantNumbered), `accounts.User`. All compute logic in `analytics.py`
+    — this model stores saved parameters only, no aggregated data.
+
+### 1d. `ReportSnapshot` — tenant-scoped child (no number prefix)
+
+Drivers: Historical Snapshot / Trend Data (common, Salesforce Reporting Snapshots/Zoho historical trend/
+HubSpot deal change history); Period-over-Period Comparison (common, Salesforce/HubSpot/Zoho/Pipedrive).
+
+- [ ] Add `ReportSnapshot(models.Model)`:
+  - `tenant` — `ForeignKey("core.Tenant", on_delete=CASCADE, related_name="crm_snapshots", db_index=True)`
+  - `report` — `ForeignKey(AnalyticsReport, on_delete=CASCADE, related_name="snapshots")`
+  - `title` — `CharField(max_length=200)` — e.g. "Sales Activity · Last 30 Days · 2026-06-27"
+    (auto-set by `report_snapshot` view action; editable if user wants to rename)
+  - `generated_by` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True,
+    related_name="crm_snapshots_generated")`
+  - `generated_at` — `DateTimeField(auto_now_add=True)`
+  - `summary` — `JSONField(default=list)` — list of KPI dicts, e.g.
+    `[{"label": "Tasks Completed", "value": 143}, {"label": "Calls Logged", "value": 89}]`
+  - `data` — `JSONField(default=dict)` — full result: `{"columns": [...], "rows": [...],
+    "chart_type": "bar", "chart_labels": [...], "chart_data": [...], "totals": {...}}`
+  - `Meta.ordering = ["-generated_at"]`
+  - DB indexes: `("tenant", "report")` → `crm_snap_tenant_report_idx`;
+    `("tenant", "generated_at")` → `crm_snap_tenant_gen_idx`
+  - `__str__`: `f"{self.title} @ {self.generated_at:%Y-%m-%d %H:%M}"`
+  - No create form — made exclusively via the `report_snapshot` POST action.
+  - **Reuses**: `core.Tenant`, `accounts.User`. Pure analytics artifact; no spine FK.
+
+---
+
+## 2. `apps/crm/analytics.py` — compute helper (no new DB tables)
+
+All functions are tenant-scoped, read-only against existing CRM models, and return plain Python dicts.
+
+- [ ] Create `apps/crm/analytics.py` with the following structure:
+
+  **Date range utilities:**
+  - [ ] `RANGE_CHOICES` — mirrors `PERIOD_CHOICES` (same keys: `last_7`, `last_30`, `last_90`,
+    `quarter`, `year`, `all`)
+  - [ ] `range_bounds(key)` → `(start_date, end_date)` using `timezone.now()` — handles `quarter`
+    (first day of current quarter), `year` (Jan 1), `all` (returns `None, None`). Used by every
+    compute function to turn a period key into `created_at__gte` / `created_at__lt` filter kwargs.
+
+  **Widget metrics registry:**
+  - [ ] `WIDGET_METRICS` dict — `metric_key → {"label": str, "kind": "scalar"|"series"|"table",
+    "compatible_charts": [...]}`. Maps the 17 `WIDGET_METRIC_CHOICES` keys. Used by
+    `DashboardWidgetForm.clean()` to validate chart_type vs metric kind.
+
+  **Widget compute function:**
+  - [ ] `compute_widget(widget)` → `dict` with keys `kind`, `value`, `labels`, `data`, `columns`,
+    `rows`, `max`, `target`. Branches on `widget.metric`:
+    - `kpi_open_pipeline` — `Opportunity.objects.filter(tenant, stage__in=OPEN_STAGES).aggregate(Sum("amount"))`
+    - `kpi_weighted_forecast` — `Sum(amount * probability / 100)` via `ExpressionWrapper`
+    - `kpi_win_rate` — closed-won count / total closed count × 100
+    - `kpi_open_cases` — `Case.objects.filter(tenant, status__in=["open","in_progress"]).count()`
+    - `kpi_avg_csat` — `Case.objects.filter(tenant, satisfaction_rating__isnull=False).aggregate(Avg("satisfaction_rating"))`
+    - `kpi_open_tasks` — `CrmTask.objects.filter(tenant, status__in=["todo","in_progress"]).count()`
+    - `pipeline_by_stage` — `Opportunity.objects.filter(tenant).values("stage").annotate(Count("id"))`
+    - `pipeline_value_by_stage` — same with `Sum("amount")`
+    - `leads_by_rating` — `Lead.objects.filter(tenant).values("rating").annotate(Count("id"))`
+    - `leads_by_status` — `Lead.objects.filter(tenant).values("status").annotate(Count("id"))`
+    - `win_loss` — `{"Won": closed_won_count, "Lost": closed_lost_count}`
+    - `cases_by_status` — `Case.objects.filter(tenant).values("status").annotate(Count("id"))`
+    - `cases_by_priority` — same with `priority`
+    - `revenue_won_by_month` — `Opportunity.objects.filter(tenant, stage="closed_won").annotate(
+      month=TruncMonth("close_date")).values("month").annotate(revenue=Sum("amount")).order_by("month")`
+    - `top_performers` — `Opportunity.objects.filter(tenant, stage="closed_won")
+      .values("owner__username").annotate(revenue=Sum("amount"), deals=Count("id")).order_by("-revenue")[:10]`
+    - `tasks_by_type` — `CrmTask.objects.filter(tenant).values("task_type").annotate(Count("id"))`
+    - `campaign_roi` — `Campaign.objects.filter(tenant).values("name","budget","actual_cost","expected_revenue")`
+    - All filtered by `range_bounds(widget.date_range or widget.dashboard.default_period)` on the
+      appropriate date field (`created_at` / `close_date` / `start_date`).
+
+  **Report compute functions:**
+  - [ ] `compute_report(report)` → `dict` — dispatcher that calls one of the 4 below:
+
+  - [ ] `_compute_sales_activity(tenant, start, end, group_by)`:
+    - Aggregates `CrmTask` (completed, by type), `CommunicationLog` (by channel), `CalendarEvent`
+      (by owner) over the period. Groups by `month`/`week`/`owner` per `group_by`.
+    - Returns `{"summary": [{label, value},...], "columns": [...], "rows": [...],
+      "chart_type": "line", "chart_labels": [...], "chart_data": [...]}`
+    - Fields used: `CrmTask.completed_at`, `CrmTask.task_type`, `CrmTask.owner`;
+      `CommunicationLog.occurred_at`, `CommunicationLog.channel`;
+      `CalendarEvent.start_at`, `CalendarEvent.owner`
+
+  - [ ] `_compute_sales_performance(tenant, start, end, group_by)`:
+    - Per-owner: deals won, revenue won (`Sum("amount")` where `stage="closed_won"`), win rate
+      (won / total closed), quota attainment (won / `SalesQuota.target_amount` × 100).
+    - Groups by `owner`. Returns ranked rows + bar chart data.
+    - Fields used: `Opportunity.stage`, `Opportunity.amount`, `Opportunity.owner`,
+      `Opportunity.close_date`; `SalesQuota.target_amount`, `SalesQuota.owner`
+
+  - [ ] `_compute_funnel(tenant, start, end, group_by)`:
+    - Stage-by-stage count and value from `Opportunity.stage` + lead-to-opp conversion from
+      `Lead.status`. Calculates drop-off % between consecutive stages.
+    - Returns funnel rows ordered by stage progression. Chart type "bar" (horizontal).
+    - Fields used: `Opportunity.stage`, `Opportunity.amount`, `Opportunity.created_at`;
+      `Lead.status`, `Lead.created_at`
+
+  - [ ] `_compute_service(tenant, start, end, group_by)`:
+    - Resolved count, avg resolution hrs (`Avg(resolved_at - created_at)`),
+      avg first-response hrs (`Avg(first_responded_at - created_at)`),
+      SLA breach rate (`% where resolved_at > resolution_due`), avg CSAT, rated case count.
+    - Groups by `month`/`week`/`owner`/`priority` per `group_by`.
+    - Returns summary KPIs + detail rows + bar chart.
+    - Fields used: `Case.created_at`, `Case.resolved_at`, `Case.first_responded_at`,
+      `Case.resolution_due`, `Case.satisfaction_rating`, `Case.owner`, `Case.priority`
+
+  **Note:** `OPEN_STAGES` constant (used by `kpi_open_pipeline`) — import from `crm.models` or
+  define locally in `analytics.py` as the set of stages that are neither closed_won nor closed_lost.
+
+---
+
+## 3. Backend — `apps/crm/forms.py`
+
+- [ ] Add `AnalyticsDashboardForm(TenantModelForm)`:
+  - `model = AnalyticsDashboard`
+  - `exclude = ("tenant", "number", "created_at", "updated_at")`
+  - No special `clean()` needed; `owner` dropdown scoped to `tenant` users in `__init__`
+
+- [ ] Add `DashboardWidgetForm(TenantModelForm)`:
+  - `model = DashboardWidget`
+  - `exclude = ("tenant", "dashboard", "created_at", "updated_at")`
+  - `__init__`: no extra FK scoping (metric/chart_type are choice fields, not FKs)
+  - `clean()`: validate `chart_type` is compatible with `metric` kind using `WIDGET_METRICS` registry:
+    - scalar metrics (`kpi_*`) must use `chart_type in ("kpi", "gauge")` — raise
+      `ValidationError("This metric is a single value — use KPI Card or Gauge chart type.")`
+    - series/table metrics must NOT use `chart_type="kpi"` — raise
+      `ValidationError("KPI Card only works with scalar (single-value) metrics.")`
+
+- [ ] Add `AnalyticsReportForm(TenantModelForm)`:
+  - `model = AnalyticsReport`
+  - `exclude = ("tenant", "number", "last_run_at", "created_at", "updated_at")`
+  - `owner` dropdown scoped to `tenant` users in `__init__`
+  - NOTE: `schedule_recipients` is a `JSONField` — render as `Textarea` with a help_text
+    "Comma-separated email addresses (stored as JSON list). Leave blank if no schedule."
+  - `clean_schedule_recipients()`: if non-blank, parse comma-separated emails into a Python list;
+    store as `["a@b.com", "c@d.com"]`
+
+- [ ] (No `ReportSnapshotForm` — snapshots are created by a view action, never a user form.)
+
+---
+
+## 4. Backend — `apps/crm/views.py`
+
+Add a clearly-delimited `# ── 1.6 Analytics & Reporting ──` section at the end of `views.py`.
+
+### 4a. `AnalyticsDashboard` CRUD
+
+- [ ] **`dashboard_list(request)`** — `@login_required`:
+  - QS: `AnalyticsDashboard.objects.filter(tenant=request.tenant).filter(
+    Q(owner=request.user) | Q(is_shared=True)).select_related("owner").order_by("-is_default","name")`
+  - Search: `q` on `name`, `description`
+  - Filters: `?shared=1` → `is_shared=True`; `?period=<key>` → `default_period=<key>`
+  - Context: `{"dashboards": page, "period_choices": PERIOD_CHOICES, "q": q, "shared": shared}`
+  - Template: `"crm/analytics/dashboard/list.html"`
+
+- [ ] **`dashboard_create(request)`** — `@login_required`, GET+POST:
+  - On POST save: set `obj.tenant = request.tenant`; if `obj.is_default`, clear other
+    `is_default=True` dashboards for this owner before saving
+  - `write_audit_log(request.user, obj, "create")`
+  - Redirect to `crm:dashboard_detail pk=obj.pk`
+  - Template: `"crm/analytics/dashboard/form.html"`
+
+- [ ] **`dashboard_detail(request, pk)`** — `@login_required`:
+  - Fetch: `get_object_or_404(AnalyticsDashboard, pk=pk, tenant=request.tenant)` — also allow if
+    `obj.is_shared` (but still enforce `obj.tenant == request.tenant` for IDOR safety)
+  - Widgets: `widgets = obj.widgets.order_by("position", "id")`
+  - Compute each widget: `computed = [compute_widget(w) for w in widgets]`
+  - Context: `{"dashboard": obj, "widgets": widgets, "computed": computed,
+    "widget_zip": zip(widgets, computed), "layout_cols": {"one_col":1,"two_col":2,"three_col":3}[obj.layout]}`
+  - Template: `"crm/analytics/dashboard/detail.html"` — renders Chart.js via `json_script`
+
+- [ ] **`dashboard_edit(request, pk)`** — `@login_required`, GET+POST:
+  - Fetch with `tenant=request.tenant`; if `obj.is_default` toggled on, clear other defaults for owner
+  - `write_audit_log(request.user, obj, "update")`
+  - Template: `"crm/analytics/dashboard/form.html"`
+
+- [ ] **`dashboard_delete(request, pk)`** — `@login_required`, POST-only:
+  - `get_object_or_404(AnalyticsDashboard, pk=pk, tenant=request.tenant)`
+  - Delete cascades to widgets (Django CASCADE)
+  - `write_audit_log`; `messages.success`; redirect to `crm:dashboard_list`
+
+### 4b. `DashboardWidget` CRUD
+
+- [ ] **`widget_create(request, dashboard_pk)`** — `@login_required`, GET+POST:
+  - Fetch dashboard: `get_object_or_404(AnalyticsDashboard, pk=dashboard_pk, tenant=request.tenant)`
+  - On POST save: `obj.tenant = request.tenant; obj.dashboard = dashboard`
+  - Set `obj.position = dashboard.widgets.count()` (append to end)
+  - `write_audit_log`; redirect to `crm:dashboard_detail pk=dashboard.pk`
+  - Template: `"crm/analytics/widget/form.html"` with context `{"dashboard": dashboard}`
+
+- [ ] **`widget_edit(request, pk)`** — `@login_required`, GET+POST:
+  - Fetch: `get_object_or_404(DashboardWidget, pk=pk, tenant=request.tenant)`
+  - On save: `write_audit_log`; redirect to `crm:dashboard_detail pk=obj.dashboard.pk`
+  - Template: `"crm/analytics/widget/form.html"`
+
+- [ ] **`widget_delete(request, pk)`** — `@login_required`, POST-only:
+  - Fetch; store `dashboard_pk = obj.dashboard.pk`; `write_audit_log`; `obj.delete()`
+  - Redirect to `crm:dashboard_detail pk=dashboard_pk`
+
+- [ ] **`widget_move(request, pk)`** — `@login_required`, POST-only:
+  - Accepts `direction` POST param (`"up"` or `"down"`)
+  - Swaps `position` with the adjacent widget in the same dashboard
+  - Redirect to `crm:dashboard_detail pk=obj.dashboard.pk`
+
+### 4c. `AnalyticsReport` CRUD + actions
+
+- [ ] **`report_list(request)`** — `@login_required`:
+  - QS: `AnalyticsReport.objects.filter(tenant=request.tenant).select_related("owner")
+    .order_by("-is_favorite","name")`
+  - Search: `q` on `name`, `description`
+  - Filters: `?report_type=<key>`, `?is_favorite=1`
+  - Context: `{"reports": page, "report_type_choices": REPORT_TYPE_CHOICES,
+    "q": q, "report_type": rt, "is_favorite": fav}`
+  - Template: `"crm/analytics/report/list.html"`
+
+- [ ] **`report_create(request)`** — `@login_required`, GET+POST:
+  - On POST save: `obj.tenant = request.tenant`; `write_audit_log`
+  - Redirect to `crm:report_detail pk=obj.pk`
+  - Template: `"crm/analytics/report/form.html"`
+
+- [ ] **`report_detail(request, pk)`** — `@login_required`:
+  - Fetch: `get_object_or_404(AnalyticsReport, pk=pk, tenant=request.tenant)`
+  - Compute live: `result = compute_report(report)` — catches any exception, renders error message
+    gracefully
+  - Snapshots: `snapshots = report.snapshots.order_by("-generated_at")[:10]`
+  - Context: `{"report": report, "result": result, "snapshots": snapshots}`
+  - Template: `"crm/analytics/report/detail.html"`
+
+- [ ] **`report_edit(request, pk)`** — `@login_required`, GET+POST:
+  - `write_audit_log`; redirect to `crm:report_detail pk=obj.pk`
+  - Template: `"crm/analytics/report/form.html"`
+
+- [ ] **`report_delete(request, pk)`** — `@login_required`, POST-only:
+  - Cascades to snapshots; `write_audit_log`; redirect to `crm:report_list`
+
+- [ ] **`report_favorite(request, pk)`** — `@login_required`, POST-only:
+  - Toggle `is_favorite`; `obj.save(update_fields=["is_favorite", "updated_at"])`; redirect to
+    `crm:report_list`
+
+- [ ] **`report_snapshot(request, pk)`** — `@login_required`, POST-only:
+  - Fetch report; call `compute_report(report)`
+  - Create `ReportSnapshot(tenant=request.tenant, report=report, generated_by=request.user,
+    title=f"{report.name} · {report.get_date_range_display()} · {today}", summary=result["summary"],
+    data=result)`
+  - Stamp `report.last_run_at = timezone.now(); report.save(update_fields=["last_run_at","updated_at"])`
+  - `write_audit_log`; `messages.success`; redirect to `crm:report_detail pk=pk`
+
+### 4d. `ReportSnapshot` views
+
+- [ ] **`snapshot_detail(request, pk)`** — `@login_required`:
+  - Fetch: `get_object_or_404(ReportSnapshot, pk=pk, tenant=request.tenant)` with
+    `select_related("report", "generated_by")`
+  - Context: `{"snap": snap, "summary": snap.summary, "data": snap.data}`
+  - Template: `"crm/analytics/snapshot/detail.html"`
+
+- [ ] **`snapshot_delete(request, pk)`** — `@login_required`, POST-only:
+  - Fetch; store `report_pk = snap.report_id`; `write_audit_log`; `snap.delete()`
+  - Redirect to `crm:report_detail pk=report_pk`
+
+---
+
+## 5. Backend — `apps/crm/urls.py`
+
+Append a `# ── 1.6 Analytics & Reporting ──` comment block with:
+
+- [ ] Dashboard URLs:
+  - `path("analytics/dashboards/", views.dashboard_list, name="dashboard_list")`
+  - `path("analytics/dashboards/add/", views.dashboard_create, name="dashboard_create")`
+  - `path("analytics/dashboards/<int:pk>/", views.dashboard_detail, name="dashboard_detail")`
+  - `path("analytics/dashboards/<int:pk>/edit/", views.dashboard_edit, name="dashboard_edit")`
+  - `path("analytics/dashboards/<int:pk>/delete/", views.dashboard_delete, name="dashboard_delete")`
+
+- [ ] Widget URLs:
+  - `path("analytics/dashboards/<int:dashboard_pk>/widgets/add/", views.widget_create, name="widget_create")`
+  - `path("analytics/widgets/<int:pk>/edit/", views.widget_edit, name="widget_edit")`
+  - `path("analytics/widgets/<int:pk>/delete/", views.widget_delete, name="widget_delete")`
+  - `path("analytics/widgets/<int:pk>/move/", views.widget_move, name="widget_move")`
+
+- [ ] Report URLs:
+  - `path("analytics/reports/", views.report_list, name="report_list")`
+  - `path("analytics/reports/add/", views.report_create, name="report_create")`
+  - `path("analytics/reports/<int:pk>/", views.report_detail, name="report_detail")`
+  - `path("analytics/reports/<int:pk>/edit/", views.report_edit, name="report_edit")`
+  - `path("analytics/reports/<int:pk>/delete/", views.report_delete, name="report_delete")`
+  - `path("analytics/reports/<int:pk>/favorite/", views.report_favorite, name="report_favorite")`
+  - `path("analytics/reports/<int:pk>/snapshot/", views.report_snapshot, name="report_snapshot")`
+
+- [ ] Snapshot URLs:
+  - `path("analytics/snapshots/<int:pk>/", views.snapshot_detail, name="snapshot_detail")`
+  - `path("analytics/snapshots/<int:pk>/delete/", views.snapshot_delete, name="snapshot_delete")`
+
+---
+
+## 6. Backend — `apps/crm/admin.py`
+
+- [ ] Register `AnalyticsDashboard` — `list_display = ("number","name","owner","is_shared","is_default","layout","default_period")`;
+  `list_filter = ("is_shared","is_default","layout","default_period")`;
+  `search_fields = ("number","name")`; `raw_id_fields = ("owner",)`
+- [ ] Register `DashboardWidget` — `list_display = ("title","metric","chart_type","size","position","dashboard")`;
+  `list_filter = ("metric","chart_type","size")`;
+  `raw_id_fields = ("dashboard",)` (inline on `AnalyticsDashboard` is optional nice-to-have)
+- [ ] Register `AnalyticsReport` — `list_display = ("number","name","report_type","date_range","group_by","is_favorite","last_run_at","owner")`;
+  `list_filter = ("report_type","date_range","group_by","is_favorite")`;
+  `search_fields = ("number","name")`;
+  `readonly_fields = ("last_run_at",)`
+- [ ] Register `ReportSnapshot` — `list_display = ("title","report","generated_by","generated_at")`;
+  `list_filter = ("report__report_type",)`;
+  `readonly_fields = ("generated_at","summary","data")`
+
+---
+
+## 7. Seeder — `apps/crm/management/commands/seed_crm.py`
+
+Add `_seed_analytics(tenant)` called from the existing `handle()`. No new management files needed
+(the `management/` and `management/commands/` `__init__.py` files already exist).
+
+- [ ] Add `_seed_analytics(tenant)` function:
+
+  **Idempotency guard:**
+  ```python
+  if AnalyticsDashboard.objects.filter(tenant=tenant).exists():
+      self.stdout.write("  [skip] Analytics data already seeded.")
+      return
+  ```
+
+  **Seed data:**
+  - [ ] Resolve `owner` = first tenant admin user (`User.objects.filter(tenantmembership__tenant=tenant, tenantmembership__role="admin").first()`)
+  - [ ] Create **Dashboard 1**: `name="Sales Command Center"`, `layout="two_col"`, `is_default=True`,
+    `is_shared=True`, `default_period="last_30"` — use `AnalyticsDashboard(tenant=tenant, owner=owner, ...)` + `.save()` (TenantNumbered)
+  - [ ] Add 5 widgets to Dashboard 1 (one per metric kind):
+    1. `title="Open Pipeline"`, `metric="kpi_open_pipeline"`, `chart_type="kpi"`, `size="small"`, `position=0`
+    2. `title="Pipeline by Stage"`, `metric="pipeline_by_stage"`, `chart_type="bar"`, `size="medium"`, `position=1`
+    3. `title="Revenue Won by Month"`, `metric="revenue_won_by_month"`, `chart_type="line"`, `size="large"`, `position=2`
+    4. `title="Win / Loss"`, `metric="win_loss"`, `chart_type="doughnut"`, `size="small"`, `position=3`
+    5. `title="Top Performers"`, `metric="top_performers"`, `chart_type="table"`, `size="medium"`, `position=4`
+    — Use `DashboardWidget.objects.bulk_create([...])`
+  - [ ] Create **Dashboard 2**: `name="Service Desk"`, `layout="two_col"`, `is_default=False`,
+    `is_shared=True`, `default_period="last_30"`
+  - [ ] Add 3 widgets to Dashboard 2:
+    1. `title="Open Cases"`, `metric="kpi_open_cases"`, `chart_type="kpi"`, `size="small"`, `position=0`
+    2. `title="Cases by Priority"`, `metric="cases_by_priority"`, `chart_type="bar"`, `size="medium"`, `position=1`
+    3. `title="Average CSAT"`, `metric="kpi_avg_csat"`, `chart_type="gauge"`, `size="small"`, `position=2`, `target_value=Decimal("4.0")`
+  - [ ] Create **4 Reports** (one per `report_type`), using `AnalyticsReport(tenant=tenant, ...).save()`:
+    1. `name="Monthly Sales Activity"`, `report_type="sales_activity"`, `date_range="last_30"`, `group_by="month"`, `is_favorite=True`, `owner=owner`
+    2. `name="Sales Performance — Top Reps"`, `report_type="sales_performance"`, `date_range="quarter"`, `group_by="owner"`, `is_favorite=True`, `owner=owner`
+    3. `name="Pipeline Funnel Overview"`, `report_type="funnel"`, `date_range="last_90"`, `group_by="stage"`, `is_favorite=False`, `owner=owner`
+    4. `name="Service Resolution & CSAT"`, `report_type="service"`, `date_range="last_30"`, `group_by="month"`, `is_favorite=False`, `owner=owner`
+  - [ ] Create **2 Snapshots** for the first report (demonstrate trending):
+    - Snapshot 1: `title="Monthly Sales Activity · Snapshot 1"`, compute `_compute_sales_activity(tenant, ...)`
+      for `last_30`; store result in `summary`/`data`; `generated_by=owner`
+    - Snapshot 2: same report, `title="Monthly Sales Activity · Snapshot 2"` (re-run to show the
+      snapshots list on report_detail)
+    - Use `ReportSnapshot.objects.create(...)` (not `TenantNumbered` — no `save()` override needed)
+  - [ ] Print on success:
+    ```
+    self.stdout.write("  [analytics] 2 dashboards (8 widgets) + 4 reports + 2 snapshots seeded.")
+    self.stdout.write("  Login as admin_acme / password123 to see analytics data.")
+    ```
+
+---
+
+## 8. Wire-up — `apps/core/navigation.py`
+
+- [ ] Update `LIVE_LINKS["1.6"]` — replace the two stub entries with real routes + add overview:
+
+  ```python
+  # 1.6 Analytics & Reporting — dashboards (per-user widgets), standard reports (4 types), snapshots
+  "1.6": {
+      "Dashboards":       "crm:dashboard_list",   # bullet (per-user/shared dashboard containers)
+      "Standard Reports": "crm:report_list",       # bullet (sales activity / performance / funnel / service)
+      "Analytics Overview": "crm:overview",        # extra (module landing)
+  },
+  ```
+
+  NOTE: "Analytics Overview" does not match a NavERP.md bullet — it will be appended as an extra
+  live leaf (navigation.py handles non-matching labels as extras, same as "Subscription Invoices" in 0.1).
+
+---
+
+## 9. Templates — `templates/crm/analytics/<entity>/<page>.html`
+
+Sub-module folder: `templates/crm/analytics/`. Per CLAUDE.md template rules:
+- sub-module = `analytics`, each entity gets its own subfolder
+- Pages are bare filenames: `list.html`, `detail.html`, `form.html`
+
+### 9a. `templates/crm/analytics/dashboard/list.html`
+
+- [ ] Extend `base.html`. Page header: "Dashboards" + "New Dashboard" button → `crm:dashboard_create`.
+- [ ] Filter bar:
+  - Search input `name="q"` (persists `{{ q }}`)
+  - "Shared Only" checkbox or toggle → `?shared=1` (compare `{% if request.GET.shared == "1" %}checked{% endif %}`)
+  - Period select `name="period"` — iterate `period_choices`; compare `{% if request.GET.period == value %}selected{% endif %}`
+  - "Reset" link → `crm:dashboard_list`
+- [ ] Dashboard cards grid (not a table — dashboards are card-view entities):
+  - Card per dashboard: name (link to `crm:dashboard_detail`), number badge, description,
+    default badge (green "Default" if `is_default`), shared badge (blue "Shared" if `is_shared`),
+    layout chip, period chip, owner name, widget count (`dashboard.widgets.count`),
+    Edit / Delete actions (POST delete with `onclick="return confirm(...)"` + `{% csrf_token %}`)
+- [ ] Empty state + pagination.
+
+### 9b. `templates/crm/analytics/dashboard/form.html`
+
+- [ ] Extend `base.html`. Breadcrumb: CRM › Dashboards › Add / Edit.
+- [ ] Fields: `name`, `description` (textarea), `owner`, `is_shared`, `is_default`, `layout`, `default_period`.
+- [ ] Help text below `is_default`: "Only one dashboard per user can be the default. Enabling this will
+  unset other defaults for the same owner."
+- [ ] Submit + Cancel (→ `crm:dashboard_list`).
+
+### 9c. `templates/crm/analytics/dashboard/detail.html`
+
+- [ ] Extend `base.html`. Breadcrumb: CRM › Dashboards › `{{ dashboard.number }}`.
+- [ ] Page header: dashboard name + description + chips (layout, period, Shared badge, Default badge).
+- [ ] Sidebar actions:
+  - "Edit Dashboard" → `crm:dashboard_edit`
+  - "Add Widget" → `crm:widget_create dashboard_pk=dashboard.pk`
+  - Delete (POST to `crm:dashboard_delete` + confirm)
+  - Back to Dashboards
+- [ ] Widget grid — render `{% for widget, computed in widget_zip %}` in a CSS grid with
+  `layout_cols` columns:
+  - Each tile: title, metric label, size badge.
+  - KPI tile (`chart_type=="kpi"`): large centered value `{{ computed.value }}` with optional
+    target comparison (% of target if `widget.target_value`).
+  - Bar/Line/Pie/Doughnut tile: `<canvas id="chart-{{ widget.pk }}">` — emit one
+    `{% json_script computed.chart_data widget.pk|stringformat:"s" %}` block; JS loop in
+    `{% block extra_js %}` iterates `document.querySelectorAll("canvas[id^='chart-']")` and builds
+    Chart.js instances with `labels` and `data` from the JSON script tags.
+  - Gauge tile: HTML progress bar from 0 to `computed.max` (or `widget.target_value`) showing
+    `computed.value` — no Chart.js for gauge (pure CSS).
+  - Table tile: `<table>` of `computed.columns` / `computed.rows`.
+  - Per-tile actions: Edit (→ `crm:widget_edit`), Move Up / Move Down (POST → `crm:widget_move`
+    with `direction=up/down`), Delete (POST → `crm:widget_delete` + confirm).
+- [ ] Empty state when no widgets: "No widgets yet. Add your first widget."
+- [ ] `{% block extra_js %}` — Chart.js CDN `<script>` + initialization loop.
+
+### 9d. `templates/crm/analytics/widget/form.html`
+
+- [ ] Extend `base.html`. Breadcrumb: CRM › Dashboards › `{{ dashboard.number }}` › Add Widget / Edit Widget.
+- [ ] Fields: `title`, `metric` (select from `WIDGET_METRIC_CHOICES`), `chart_type`, `date_range`
+  (blank = inherit dashboard default), `size`, `position`, `target_value`.
+- [ ] Help text below `chart_type`: "KPI Card and Gauge only work with scalar metrics (kpi_* prefix).
+  Bar, Line, Pie, Doughnut, and Table work with category/series metrics."
+- [ ] Submit + Cancel (→ `crm:dashboard_detail pk=dashboard.pk`).
+
+### 9e. `templates/crm/analytics/report/list.html`
+
+- [ ] Extend `base.html`. Page header: "Standard Reports" + "New Report" button → `crm:report_create`.
+- [ ] Filter bar:
+  - Search `name="q"` (persists `{{ q }}`)
+  - Report type select `name="report_type"` — iterate `report_type_choices`;
+    compare `{% if request.GET.report_type == value %}selected{% endif %}`
+  - "Favorites only" checkbox → `?is_favorite=1`
+  - "Reset" link → `crm:report_list`
+- [ ] Table columns: Number (link to `crm:report_detail`), Name, Type (badge: sales_activity=blue /
+  sales_performance=green / funnel=purple / service=amber), Date Range, Group By, Owner, Last Run
+  (`last_run_at|timesince` or "Never"), Favorite (star icon — POST to `crm:report_favorite`),
+  Actions (view/edit/delete).
+- [ ] Favorite star: filled gold if `is_favorite`, hollow otherwise. POST form with `{% csrf_token %}`.
+- [ ] Empty state + pagination.
+
+### 9f. `templates/crm/analytics/report/form.html`
+
+- [ ] Extend `base.html`. Breadcrumb: CRM › Standard Reports › Add / Edit.
+- [ ] Fields: `name`, `description`, `report_type`, `date_range`, `group_by`, `is_favorite`, `owner`,
+  `schedule_frequency`, `schedule_recipients` (textarea with help text), `next_run_at`.
+- [ ] Section divider between main fields and scheduling fields with note: "Scheduling fields are stored
+  now; email delivery requires the task-queue integration (future sprint)."
+- [ ] Submit + Cancel (→ `crm:report_list`).
+
+### 9g. `templates/crm/analytics/report/detail.html`
+
+- [ ] Extend `base.html`. Breadcrumb: CRM › Standard Reports › `{{ report.number }}`.
+- [ ] Sidebar actions:
+  - "Run Snapshot" → POST to `crm:report_snapshot pk=report.pk` + `{% csrf_token %}`
+  - Favorite toggle → POST to `crm:report_favorite` (star icon)
+  - "Edit Report" → `crm:report_edit`
+  - Delete (POST + confirm)
+  - Back to Reports
+- [ ] Report header card: name, type badge, date range, group by, owner, last run timestamp.
+- [ ] **Summary KPIs row**: `{% for kpi in result.summary %}` — render each as a small KPI card
+  (`label` + `value`).
+- [ ] **Chart area**: `<canvas id="report-chart">` — emit `{% json_script result.chart_labels "rpt-labels" %}`
+  and `{% json_script result.chart_data "rpt-data" %}`; JS renders a Chart.js chart of type
+  `{{ result.chart_type }}` with those labels/data in `{% block extra_js %}`.
+- [ ] **Detail table**: `<table>` of `result.columns` headers + `result.rows` rows (generic — works for
+  all 4 report types since they all return the same dict shape).
+- [ ] **Snapshots list**: `{% for snap in snapshots %}` — card per snapshot: title, generated_by,
+  generated_at (relative), link to `crm:snapshot_detail`, Delete POST → `crm:snapshot_delete`.
+  Empty state: "No snapshots yet. Click 'Run Snapshot' to save the current results."
+- [ ] `{% block extra_js %}` — Chart.js + initialization.
+
+### 9h. `templates/crm/analytics/snapshot/detail.html`
+
+- [ ] Extend `base.html`. Breadcrumb: CRM › Standard Reports › `{{ snap.report.name }}` › Snapshot.
+- [ ] Sidebar: "Back to Report" → `crm:report_detail pk=snap.report.pk`; Delete snapshot (POST + confirm).
+- [ ] Header card: title, report link, generated by, generated at.
+- [ ] **Summary KPIs row**: `{% for kpi in summary %}` — same pattern as report_detail.
+- [ ] **Chart + Table**: from `data` JSON (stored result) — same rendering as report_detail but reading
+  from the snapshot's stored data instead of recomputing.
+- [ ] NOTE: This page shows a frozen historical result; add a note "Snapshot captured on `{{ snap.generated_at|date }}`."
+
+---
+
+## 10. Verify
+
+- [ ] `venv\Scripts\python.exe manage.py makemigrations crm` — confirm a single new migration file
+  `0015_analyticsdashboard_dashboardwidget_analyticsreport_reportsnapshot.py` (or similar name);
+  no unapplied changes after `--check`.
+- [ ] `venv\Scripts\python.exe manage.py migrate` — applies cleanly to `nav_erp` MariaDB.
+- [ ] `venv\Scripts\python.exe manage.py seed_crm` — first run: prints "2 dashboards (8 widgets) + 4
+  reports + 2 snapshots seeded" + login instructions.
+- [ ] `venv\Scripts\python.exe manage.py seed_crm` (second run) — `[skip] Analytics data already seeded.`
+  message fires; no new rows, no `IntegrityError` (idempotency verified).
+- [ ] `venv\Scripts\python.exe manage.py check` — 0 issues.
+- [ ] **Smoke sweep** (throwaway `temp/test_analytics_smoke.py`) — `force_login(admin_acme)`, assert:
+  - [ ] `crm:dashboard_list` → 200 (seeded dashboards visible)
+  - [ ] `crm:dashboard_create` → 200 (form renders)
+  - [ ] `crm:dashboard_detail pk=<sales_command_center>` → 200 (widget grid rendered; no unrendered
+    `{#`/`{% comment` tags)
+  - [ ] `crm:dashboard_edit pk=<dash>` → 200
+  - [ ] `crm:dashboard_delete pk=<dash>` → POST → 302
+  - [ ] `crm:widget_create dashboard_pk=<dash>` → 200
+  - [ ] `crm:widget_edit pk=<widget>` → 200
+  - [ ] `crm:widget_move pk=<widget>` POST `direction=down` → 302
+  - [ ] `crm:widget_delete pk=<widget>` POST → 302
+  - [ ] `crm:report_list` → 200 (seeded reports visible)
+  - [ ] `crm:report_create` → 200
+  - [ ] `crm:report_detail pk=<sales_activity_report>` → 200 (KPI cards + chart + table rendered)
+  - [ ] `crm:report_edit pk=<report>` → 200
+  - [ ] `crm:report_favorite pk=<report>` POST → 302 (favorite toggled)
+  - [ ] `crm:report_snapshot pk=<report>` POST → 302 (new snapshot created; `last_run_at` stamped)
+  - [ ] `crm:report_delete pk=<report>` POST → 302
+  - [ ] `crm:snapshot_detail pk=<snap>` → 200 (stored data rendered without recompute)
+  - [ ] `crm:snapshot_delete pk=<snap>` POST → 302
+  - [ ] **Cross-tenant IDOR → 404**: `admin_acme` GET `crm:dashboard_detail pk=<globex_dashboard>` → 404
+  - [ ] **Cross-tenant IDOR → 404**: `admin_acme` GET `crm:report_detail pk=<globex_report>` → 404
+  - [ ] **No template comment leaks**: grep all new `.html` files for `{#` or `{% comment` — 0 matches
+- [ ] **Sidebar Live**: log in as `admin_acme`; CRM → sub-module 1.6 → "Dashboards" and
+  "Standard Reports" both show as **Live** (not "On the roadmap"). "Analytics Overview" also Live.
+- [ ] **Filter verify**: `crm:report_list?report_type=funnel` → only funnel reports; `?is_favorite=1` →
+  only favorited reports. `crm:dashboard_list?shared=1` → only shared dashboards.
+- [ ] **Widget form validation**: POST `crm:widget_create` with `metric=kpi_open_pipeline` and
+  `chart_type=bar` → form re-renders with `DashboardWidgetForm.clean()` error message.
+- [ ] **Snapshot freshness**: after `report_snapshot` POST, `crm:report_detail` shows `last_run_at` as
+  non-null and the new snapshot card appears in the snapshots list.
+
+---
+
+## 11. Close-out
+
+- [ ] Run **code-reviewer** agent — focus: `compute_widget` branching completeness, `range_bounds`
+  edge cases (empty DB), `DashboardWidgetForm.clean()` chart/metric compatibility, `dashboard_detail`
+  context size (large computed list), atomic `is_default` toggle. Apply findings, one file per commit.
+- [ ] Run **explorer** agent — verify all `{% url %}` names match `urls.py`, context-var names match
+  templates, `WIDGET_METRIC_CHOICES` keys match `analytics.py` branch names, `LIVE_LINKS["1.6"]`
+  resolves cleanly. Apply findings, one file per commit.
+- [ ] Run **frontend-reviewer** agent — focus: Chart.js `json_script` pattern correctness, gauge
+  CSS-only implementation, widget grid CSS classes match `layout_cols`, filter bar `|stringformat:"d"`
+  for FK selects (none here — all choice fields), empty-state rendering. Apply findings, one file per commit.
+- [ ] Run **performance-reviewer** agent — focus: `dashboard_detail` calling `compute_widget` N times
+  in a loop (consider annotating or caching), `report_list` `select_related("owner")`, snapshot list
+  `[:10]` slice, `DashboardWidget.objects.count()` per card on dashboard_list (use `Prefetch`).
+  Apply findings, one file per commit.
+- [ ] Run **qa-smoke-tester** agent — apply findings, one file per commit.
+- [ ] Run **security-reviewer** agent — focus: `report_snapshot` POST stamps `last_run_at` server-side
+  (not from user input); snapshot `data` JSON stored verbatim (no XSS risk since rendered via template
+  tags); `compute_report` exception handling doesn't leak stack traces to the template;
+  cross-tenant `is_shared` dashboards still enforce `tenant=request.tenant` IDOR guard.
+  Apply findings, one file per commit.
+- [ ] Run **test-writer** agent — apply output, one file per commit. Expected: `tests/test_analytics.py`
+  covering:
+  - `AnalyticsDashboard` model: `DASH-` prefix, `__str__`, `unique_together`, `is_default` toggle.
+  - `DashboardWidget` model: ordering by position, `__str__`.
+  - `AnalyticsReport` model: `RPT-` prefix, `__str__`, `unique_together`.
+  - `ReportSnapshot` model: `__str__`, ordering.
+  - `DashboardWidgetForm.clean()`: kpi_* metric + bar chart_type → ValidationError; kpi_* + kpi chart_type → valid.
+  - `AnalyticsReportForm.clean_schedule_recipients()`: comma-separated → list; blank → empty list.
+  - `analytics.range_bounds()`: `last_7`, `last_30`, `quarter`, `year`, `all` return correct tuple types.
+  - `compute_widget()`: each of the 17 metric keys returns a dict with the expected keys.
+  - `compute_report()`: each of the 4 report types returns a dict with `summary`, `columns`, `rows`,
+    `chart_type`, `chart_labels`, `chart_data`.
+  - CRUD views: dashboard list/create/detail/edit/delete → 200/302; all tenant-scoped.
+  - Widget views: create under dashboard, edit, delete, move (position swap).
+  - Report views: list/create/detail/edit/delete, favorite toggle, snapshot POST stamps `last_run_at`.
+  - Snapshot views: detail renders stored data, delete redirects to report.
+  - Cross-tenant IDOR → 404 for all 4 models.
+  - Seeder idempotency.
+- [ ] Update **`.claude/skills/crm/SKILL.md`** — add §1.6 to the Models section (4 new models);
+  add 19 new url names to the URLs section; add `analytics/<entity>/` template paths;
+  add `analytics.py` compute helpers; update `LIVE_LINKS["1.6"]`; add `_seed_analytics` to Seeder section.
+- [ ] Mark 1.6 as delivered in **`README.md`** roadmap.
+
+---
+
+## 12. Later passes / deferred
+
+- **Drag-and-drop JS layout builder** — `DashboardWidget.position` + `size` fields are stored now;
+  interactive live rearrangement (Sortable.js / GridStack.js / HTMX drag) deferred to a UI-polish sprint.
+  The `widget_move` (up/down) action ships now as the minimum usable ordering UX.
+- **Scheduled email delivery** — `AnalyticsReport.schedule_frequency` / `schedule_recipients` /
+  `next_run_at` fields are in the model and form now; actual task execution (Celery Beat / Django Q) is
+  deferred; no migration change needed when it ships.
+- **PDF export** — CSV download (simple `HttpResponse` streaming of report rows) is buildable without
+  a library; PDF layout (WeasyPrint / reportlab) deferred.
+- **Additional report types** — Win/Loss Analysis, Revenue Forecast, Lead Source / Campaign Attribution,
+  Case Volume / Agent Performance, Deal Velocity, NPS/Survey Analytics — all have researched fields
+  in the existing models; they can be added by extending `REPORT_TYPE_CHOICES` + adding compute branches
+  in `analytics.py` (no migration needed for new report types).
+- **AI natural-language report builder** — requires LLM API (OpenAI / Anthropic) integration; deferred.
+- **Cross-object custom report builder** — Salesforce-style drag-fields-from-any-object canvas;
+  deferred to Module 10 BI.
+- **External BI embed** (Power BI / Tableau / Looker iframes) — integration/later.
+- **Automatic nightly snapshot command** — `snapshot_crm_reports` management command (calls
+  `compute_report` for all `schedule_frequency != "none"` reports) is deferred; the model fields
+  are ready.
+- **Real-time push (WebSockets / SSE)** — widgets compute on page load (HTMX GET); true push without
+  page reload deferred.
+- **Mobile-responsive widget grid** — CSS responsive breakpoints for the dashboard grid are best-effort
+  this pass; full mobile-optimized widget resizing deferred.
+- **`recurrence_anchor_day` on CrmTask** — deferred from 1.5 (see §14 of 1.5 notes above).
+
+---
+
+## 13. Review notes
+
+(To be filled in after the build and review-agent sequence completes.)
