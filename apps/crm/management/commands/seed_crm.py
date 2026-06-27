@@ -13,8 +13,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import Party, Tenant
+from apps.crm.analytics import compute_report
 from apps.crm.models import (
     AccountProfile,
+    AnalyticsDashboard,
+    AnalyticsReport,
     ApprovalRequest,
     CalendarEvent,
     Campaign,
@@ -28,6 +31,7 @@ from apps.crm.models import (
     CrmProject,
     CrmTask,
     CustomerPortalAccess,
+    DashboardWidget,
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
@@ -51,6 +55,7 @@ from apps.crm.models import (
     PurchaseOrderLine,
     Quote,
     QuoteLine,
+    ReportSnapshot,
     SalesQuota,
     SignerRecord,
     SlaPolicy,
@@ -121,6 +126,8 @@ class Command(BaseCommand):
             self._seed_service(tenant)
             # 1.5 Activity & Communication Management — runs unconditionally; self-guards on CalendarEvent.
             self._seed_activities(tenant)
+            # 1.6 Analytics & Reporting — runs unconditionally; self-guards on AnalyticsDashboard.
+            self._seed_analytics(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -645,3 +652,80 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"{tenant.name}: seeded CRM 1.5 activity & communication data"))
+
+    def _seed_analytics(self, tenant):
+        """Idempotently seed 1.6 Analytics & Reporting — two saved dashboards (a sales command
+        centre + a service desk) with live-computed widgets, the four standard reports, and a
+        baseline snapshot of the top-performers report. Reuses the tenant admin as owner.
+        Guard: skip if an AnalyticsDashboard already exists for the tenant."""
+        if AnalyticsDashboard.objects.filter(tenant=tenant).exists():
+            return
+        owner = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or User.objects.filter(tenant=tenant).first())
+        if owner is None:
+            return
+        dec = Decimal
+
+        # --- Dashboard 1: Sales Command Center (3-column) -----------------------------------
+        sales = AnalyticsDashboard.objects.create(
+            tenant=tenant, name="Sales Command Center", owner=owner, is_shared=True,
+            is_default=True, layout="three",
+            description="Live pipeline, forecast and win-rate at a glance.")
+        sales_widgets = [
+            ("Open Pipeline", "kpi_open_pipeline", "kpi", "last_90", "small", None),
+            ("Weighted Forecast", "kpi_weighted_forecast", "kpi", "last_90", "small", None),
+            ("Win Rate", "kpi_win_rate", "gauge", "last_90", "small", dec("50")),
+            ("Pipeline by Stage", "pipeline_by_stage", "bar", "all", "large", None),
+            ("Won vs Lost", "win_loss", "doughnut", "year", "medium", None),
+            ("Revenue Won by Month", "revenue_won_by_month", "line", "year", "medium", None),
+            ("Top Performers", "top_performers", "table", "year", "large", None),
+        ]
+        for i, (title, metric, chart, rng, size, target) in enumerate(sales_widgets):
+            DashboardWidget.objects.create(
+                tenant=tenant, dashboard=sales, title=title, metric=metric, chart_type=chart,
+                date_range=rng, size=size, target_value=target, position=i)
+
+        # --- Dashboard 2: Service Desk (2-column) -------------------------------------------
+        service = AnalyticsDashboard.objects.create(
+            tenant=tenant, name="Service Desk", owner=owner, is_shared=True, is_default=False,
+            layout="two", description="Case load, resolution and customer satisfaction.")
+        service_widgets = [
+            ("Open Cases", "kpi_open_cases", "kpi", "last_30", "small", None),
+            ("Average CSAT", "kpi_avg_csat", "gauge", "last_90", "small", None),
+            ("Cases by Status", "cases_by_status", "bar", "last_90", "medium", None),
+            ("Cases by Priority", "cases_by_priority", "doughnut", "last_90", "medium", None),
+        ]
+        for i, (title, metric, chart, rng, size, target) in enumerate(service_widgets):
+            DashboardWidget.objects.create(
+                tenant=tenant, dashboard=service, title=title, metric=metric, chart_type=chart,
+                date_range=rng, size=size, target_value=target, position=i)
+
+        # --- The four standard reports ------------------------------------------------------
+        reports = [
+            ("Sales Activity (Monthly)", "sales_activity", "last_90", "month", True,
+             "Opportunities created, tasks completed and communications logged per month."),
+            ("Top Performers (YTD)", "sales_performance", "year", "owner", True,
+             "Closed-won deals and revenue by sales rep."),
+            ("Pipeline Funnel", "funnel", "all", "stage", False,
+             "Stage-by-stage conversion and drop-off across the open pipeline."),
+            ("Service Resolution & CSAT", "service", "last_90", "priority", False,
+             "Resolution time, first-response time and CSAT by priority."),
+        ]
+        made = {}
+        for name, rtype, rng, grp, fav, desc in reports:
+            made[rtype] = AnalyticsReport.objects.create(
+                tenant=tenant, name=name, report_type=rtype, date_range=rng, group_by=grp,
+                is_favorite=fav, owner=owner, description=desc)
+
+        # --- A baseline snapshot of the top-performers report -------------------------------
+        perf = made.get("sales_performance")
+        if perf is not None:
+            result = compute_report(perf)
+            ReportSnapshot.objects.create(
+                tenant=tenant, report=perf, title=f"{perf.name} — baseline",
+                generated_by=owner, summary=result.get("summary", []),
+                data={k: result.get(k) for k in
+                      ("columns", "rows", "chart_type", "chart_label", "chart_labels", "chart_data")})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"{tenant.name}: seeded CRM 1.6 analytics dashboards, reports & a snapshot"))
