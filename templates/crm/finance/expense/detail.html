@@ -43,6 +43,7 @@
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
       <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}</dd></div>
       <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }} {{ obj.currency_code }}</dd></div>
+      <div class="detail-item"><dt>Billable</dt><dd>{% if obj.is_billable %}<span class="badge badge-info">Billable — re-billed to client</span>{% else %}<span class="text-muted">No — counts toward true margin</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.opportunity %}<a href="{% url 'crm:opportunity_detail' obj.opportunity.pk %}">{{ obj.opportunity.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Project</dt><dd>{% if obj.project %}<a href="{% url 'crm:crmproject_detail' obj.project.pk %}">{{ obj.project.name }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Date</dt><dd>{{ obj.expense_date|date:"M d, Y" }}</dd></div>
