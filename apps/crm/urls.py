@@ -324,12 +324,25 @@ urlpatterns = [
     path("onboarding/<int:pk>/delete/", views.onboardingplan_delete, name="onboardingplan_delete"),
     path("onboarding/<int:pk>/add-step/", views.onboardingstep_add, name="onboardingstep_add"),
     path("onboarding/steps/<int:step_pk>/complete/", views.onboardingstep_complete, name="onboardingstep_complete"),
+    path("onboarding/steps/<int:step_pk>/edit/", views.onboardingstep_edit, name="onboardingstep_edit"),
     path("onboarding/steps/<int:step_pk>/delete/", views.onboardingstep_delete, name="onboardingstep_delete"),
+
+    # Onboarding templates (1.11 — reusable blueprints)
+    path("onboarding-templates/", views.onboardingtemplate_list, name="onboardingtemplate_list"),
+    path("onboarding-templates/add/", views.onboardingtemplate_create, name="onboardingtemplate_create"),
+    path("onboarding-templates/<int:pk>/", views.onboardingtemplate_detail, name="onboardingtemplate_detail"),
+    path("onboarding-templates/<int:pk>/edit/", views.onboardingtemplate_edit, name="onboardingtemplate_edit"),
+    path("onboarding-templates/<int:pk>/delete/", views.onboardingtemplate_delete, name="onboardingtemplate_delete"),
+    path("onboarding-templates/<int:pk>/apply/", views.onboardingtemplate_apply, name="onboardingtemplate_apply"),
+    path("onboarding-templates/<int:pk>/add-step/", views.onboardingtemplatestep_add, name="onboardingtemplatestep_add"),
+    path("onboarding-templates/steps/<int:step_pk>/edit/", views.onboardingtemplatestep_edit, name="onboardingtemplatestep_edit"),
+    path("onboarding-templates/steps/<int:step_pk>/delete/", views.onboardingtemplatestep_delete, name="onboardingtemplatestep_delete"),
 
     # Health scores (1.11)
     path("health-scores/", views.healthscore_list, name="healthscore_list"),
     path("health-scores/add/", views.healthscore_create, name="healthscore_create"),
     path("health-scores/config/", views.health_config_edit, name="health_config_edit"),
+    path("health-scores/recompute-all/", views.recompute_all_health_scores, name="recompute_all_health_scores"),
     path("health-scores/<int:pk>/", views.healthscore_detail, name="healthscore_detail"),
     path("health-scores/<int:pk>/edit/", views.healthscore_edit, name="healthscore_edit"),
     path("health-scores/<int:pk>/delete/", views.healthscore_delete, name="healthscore_delete"),
@@ -338,7 +351,9 @@ urlpatterns = [
     # Surveys (1.11)
     path("surveys/", views.survey_list, name="survey_list"),
     path("surveys/add/", views.survey_create, name="survey_create"),
+    path("surveys/results/", views.survey_results, name="survey_results"),
     path("surveys/<int:pk>/", views.survey_detail, name="survey_detail"),
+    path("surveys/<int:pk>/send/", views.survey_send, name="survey_send"),
     path("surveys/<int:pk>/edit/", views.survey_edit, name="survey_edit"),
     path("surveys/<int:pk>/delete/", views.survey_delete, name="survey_delete"),
     path("surveys/<str:token>/respond/", views.survey_respond, name="survey_respond"),  # public
