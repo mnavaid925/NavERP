@@ -14,11 +14,12 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, DecimalField, F, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.template import Context, Template
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
@@ -1933,6 +1934,7 @@ from .forms import (  # noqa: E402
     CrmProjectForm,
     DealInvoiceForm,
     DocTemplateForm,
+    DocumentVersionForm,
     ExpenseForm,
     HealthScoreConfigForm,
     HealthScoreForm,
@@ -1956,6 +1958,7 @@ from .models import (  # noqa: E402
     CrmProject,
     DealInvoice,
     DocTemplate,
+    DocumentVersion,
     Expense,
     HealthScore,
     HealthScoreConfig,
@@ -2707,6 +2710,8 @@ def contractdocument_detail(request, pk):
         "obj": obj,
         "signers": obj.signers.select_related("signer_party").all(),
         "signer_form": SignerRecordForm(tenant=request.tenant),
+        "versions": obj.versions.select_related("created_by").all(),
+        "version_form": DocumentVersionForm(tenant=request.tenant),
     })
 
 
@@ -2795,6 +2800,127 @@ def sign_document(request, token):
         signer.save(update_fields=["viewed_at"])
     return render(request, "crm/documents/sign_document.html",
                   {"signer": signer, "contract": contract, "already": already})
+
+
+# ---- 1.9 Document Generation + File Repository (version control) -------------------------
+def _safe_doc_context(contract):
+    """A string-only render context for DocTemplate bodies — NO model instances, so a user-authored
+    template body can't traverse attributes or call methods (template-injection safe). Autoescape on."""
+    acc, opp = contract.account, contract.opportunity
+    return {
+        "today": timezone.localdate().isoformat(),
+        "contract": {"name": contract.name, "number": contract.number},
+        "account": {"name": acc.name if acc else ""},
+        "opportunity": {"name": opp.name if opp else "", "number": opp.number if opp else "",
+                        "amount": str(opp.amount) if opp else ""},
+        "owner": (contract.owner.get_full_name() or contract.owner.username) if contract.owner_id else "",
+    }
+
+
+@login_required
+@require_POST
+def contractdocument_generate(request, pk):
+    """1.9 Document Generation — render the linked template's merge variables into the contract body
+    and capture it as a new immutable DocumentVersion. Rendered with a restricted string-only context
+    (``_safe_doc_context``) so a template body can't reach model attributes/methods."""
+    contract = get_object_or_404(ContractDocument, pk=pk, tenant=request.tenant)
+    if contract.status in ("signed", "declined"):
+        messages.error(request, "A signed or declined contract can't be regenerated.")
+        return redirect("crm:contractdocument_detail", pk=pk)
+    if contract.template_id is None:
+        messages.error(request, "Link a document template first, then generate.")
+        return redirect("crm:contractdocument_detail", pk=pk)
+    try:
+        rendered = Template(contract.template.body or "").render(Context(_safe_doc_context(contract)))
+    except Exception as e:  # a malformed template must not 500 the page  # noqa: BLE001
+        messages.error(request, f"Template error: {e}")
+        return redirect("crm:contractdocument_detail", pk=pk)
+    with transaction.atomic():
+        next_no = (contract.versions.aggregate(m=Max("version_no"))["m"] or 0) + 1
+        contract.body_snapshot = rendered
+        contract.current_version = next_no
+        contract.save(update_fields=["body_snapshot", "current_version", "updated_at"])
+        DocumentVersion.objects.create(
+            tenant=request.tenant, contract=contract, version_no=next_no, body_snapshot=rendered,
+            change_note=f"Generated from {contract.template.number}", created_by=request.user)
+    write_audit_log(request.user, contract, "update", {"action": "generate", "version": next_no})
+    messages.success(request, f"Generated v{next_no} from {contract.template.number}.")
+    return redirect("crm:contractdocument_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def contractdocument_version_add(request, pk):
+    """1.9 File Repository — capture a new revision: an uploaded file + the current body snapshot."""
+    contract = get_object_or_404(ContractDocument, pk=pk, tenant=request.tenant)
+    form = DocumentVersionForm(request.POST, request.FILES, tenant=request.tenant)
+    if form.is_valid():
+        with transaction.atomic():
+            next_no = (contract.versions.aggregate(m=Max("version_no"))["m"] or 0) + 1
+            ver = form.save(commit=False)
+            ver.tenant = request.tenant
+            ver.contract = contract
+            ver.version_no = next_no
+            ver.body_snapshot = contract.body_snapshot
+            ver.created_by = request.user
+            ver.save()
+            contract.current_version = next_no
+            contract.save(update_fields=["current_version", "updated_at"])
+        write_audit_log(request.user, contract, "update", {"action": "version_add", "version": next_no})
+        messages.success(request, f"Revision v{next_no} added.")
+    else:
+        messages.error(request, "Could not add the revision — check the file type/size.")
+    return redirect("crm:contractdocument_detail", pk=contract.pk)
+
+
+@login_required
+@require_POST
+def contractdocument_send(request, pk):
+    """1.9 — move a draft contract → sent (needs a generated body + at least one signer)."""
+    contract = get_object_or_404(ContractDocument, pk=pk, tenant=request.tenant)
+    if contract.status != "draft":
+        messages.info(request, "Only a draft contract can be sent.")
+        return redirect("crm:contractdocument_detail", pk=pk)
+    if not contract.body_snapshot:
+        messages.error(request, "Generate the document body before sending.")
+        return redirect("crm:contractdocument_detail", pk=pk)
+    if not contract.signers.exists():
+        messages.error(request, "Add at least one signer before sending.")
+        return redirect("crm:contractdocument_detail", pk=pk)
+    contract.status = "sent"
+    contract.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, contract, "update", {"action": "send"})
+    messages.success(request, f"Contract {contract.number} marked as sent — share each signer's link.")
+    return redirect("crm:contractdocument_detail", pk=pk)
+
+
+@login_required
+def documentversion_detail(request, pk):
+    """Read-only view of one immutable contract revision (snapshot + file download)."""
+    obj = get_object_or_404(
+        DocumentVersion.objects.select_related("contract", "created_by"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/documents/documentversion/detail.html", {"obj": obj})
+
+
+@login_required
+def document_repository(request):
+    """1.9 File Repository — contracts organized by account/deal, with version counts."""
+    qs = (ContractDocument.objects.filter(tenant=request.tenant)
+          .select_related("account", "opportunity", "owner")
+          .annotate(version_count=Count("versions"))
+          .defer("body_snapshot")
+          .order_by("-created_at"))  # annotate()+GROUP BY drops the Meta default ordering
+    return crud_list(
+        request, qs, "crm/documents/repository.html",
+        search_fields=["number", "name", "account__name", "opportunity__name"],
+        filters=[("status", "status", False), ("account", "account_id", True),
+                 ("opportunity", "opportunity_id", True)],
+        extra_context={
+            "status_choices": ContractDocument.STATUS_CHOICES,
+            "accounts": Party.objects.filter(tenant=request.tenant, kind="organization").only("id", "name").order_by("name"),
+            "opportunities": Opportunity.objects.filter(tenant=request.tenant).only("id", "number", "name").order_by("-created_at")[:200],
+        },
+    )
 
 
 # ------------------------------------------------------------ 1.10 Workflow rules
