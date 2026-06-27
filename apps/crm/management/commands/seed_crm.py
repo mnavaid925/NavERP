@@ -384,7 +384,7 @@ class Command(BaseCommand):
             quote.accepted_at = timezone.now()
             quote.save(update_fields=["status", "accepted_at", "updated_at"])
 
-        code = (quote.currency_code or "USD").upper()
+        code = (quote.currency_code or "USD").upper()[:3]  # clamp to the Currency.code max_length
         quote_disc = (Decimal(100) - Decimal(quote.discount_pct or 0)) / Decimal(100)
         # Self-contained atomic block (mirrors the dealinvoice_from_quote view) so a partial
         # failure can't leave an orphaned ledger invoice — handle() is also @transaction.atomic.
