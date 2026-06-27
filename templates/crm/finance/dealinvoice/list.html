@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Deal Invoices{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Deal Invoices</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Invoicing
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:dealinvoice_create' %}" class="btn btn-primary"><i data-lucide="link"></i> Link Invoice</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, account, deal, invoice…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Invoice Statuses</option>
+          {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:dealinvoice_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Account</th>
+          <th>Deal</th>
+          <th>Invoice</th>
+          <th>Status</th>
+          <th>Total</th>
+          <th>Balance</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td><a href="{% url 'crm:dealinvoice_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+          <td>{{ obj.account.name|default:"—" }}</td>
+          <td>{{ obj.opportunity.name|default:"—" }}</td>
+          <td>
+            {% if obj.invoice %}<a href="{% url 'accounting:invoice_detail' obj.invoice.pk %}">{{ obj.invoice.number }}</a>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if obj.invoice_status == 'paid' %}<span class="badge badge-green">{{ obj.invoice_status_display }}</span>
+            {% elif obj.invoice_status == 'partial' %}<span class="badge badge-amber">{{ obj.invoice_status_display }}</span>
+            {% elif obj.invoice_status == 'sent' %}<span class="badge badge-info">{{ obj.invoice_status_display }}</span>
+            {% elif obj.invoice_status == 'void' %}<span class="badge badge-red">{{ obj.invoice_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.invoice_status_display }}</span>{% endif %}
+          </td>
+          <td>{{ obj.invoice_total }}</td>
+          <td>{{ obj.balance_due }}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'crm:dealinvoice_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'crm:dealinvoice_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'crm:dealinvoice_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this deal-invoice link? The ledger invoice in Accounting is NOT deleted.');">
+                {% csrf_token %}
+                <button type="submit" class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">
+            <div class="empty-state">
+              <i data-lucide="file-text"></i>
+              <h3>No deal invoices yet</h3>
+              <p>Convert an accepted quote to an invoice, or link an existing one.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
