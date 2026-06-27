@@ -169,9 +169,15 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   performance/top-performers, funnel drop-off, service resolution-time + CSAT) computed live with a chart +
   table + KPI summary, plus point-in-time **`ReportSnapshot`** runs frozen as JSON for period-over-period trends.
 
-**Sub-modules 1.7–1.12** (extension pass, 18 CRM-owned tables, migration `0005`):
-- **1.7 Finance & Billing** — **Expenses** (`EXP-#####`): deal/project cost logging with receipt upload
-  (extension-allowlisted), an owner **submit** + tenant-admin **approve/reject** workflow.
+**Sub-modules 1.7–1.12** (extension pass, 20 CRM-owned tables, migrations `0005` + `0016` for the 1.7 recreation):
+- **1.7 Finance & Billing** *(recreated in detail — all three NavERP.md bullets now live, reusing the
+  **Accounting ledger** per L29; draft hand-off)* — **Deal Invoices** (`DINV-#####`): one-click
+  **quote→invoice conversion** that generates a draft `accounting.Invoice` (line items, per-line + quote-level
+  discount, and tax carried so `invoice.total == quote.total`) and links it to the deal, with a deal-margin
+  card; **Payment Receipts** (`RCPT-#####`): printable receipts over `accounting.Payment` allocations with
+  payment-gateway metadata (Stripe/PayPal/Razorpay); **Expenses** (`EXP-#####`, + **`is_billable`** for true
+  margin): deal/project cost logging with allowlisted receipt upload + owner **submit** / tenant-admin
+  **approve/reject**.
 - **1.8 Project & Delivery** — **Projects** (`PRJ-#####`, one-click **convert** from a won opportunity),
   **Milestones** (`MS-#####`, Gantt/Kanban, sub-tasks), **Timesheets** (`TS-#####`, billable/non-billable).
 - **1.9 Document & Contract** — **Doc Templates** (`TPL-#####`, merge-variable HTML) and **Contracts**
