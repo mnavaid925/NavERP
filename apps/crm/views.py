@@ -3281,12 +3281,14 @@ def widget_move(request, pk, direction):
         swap = idx - 1 if direction == "up" else idx + 1
         if 0 <= swap < len(order):
             order[idx], order[swap] = order[swap], order[idx]
-            with transaction.atomic():
-                for i, w in enumerate(order):
-                    if w.position != i:
-                        w.position = i
-                        w.save(update_fields=["position"])
-            write_audit_log(request.user, widget, "update", {"action": "move", "direction": direction})
+            to_update = []
+            for i, w in enumerate(order):
+                if w.position != i:
+                    w.position = i
+                    to_update.append(w)
+            if to_update:
+                DashboardWidget.objects.bulk_update(to_update, ["position"])  # one statement, not N
+                write_audit_log(request.user, widget, "update", {"action": "move", "direction": direction})
     return redirect("crm:dashboard_detail", pk=widget.dashboard_id)
 
 
@@ -3318,7 +3320,11 @@ def report_detail(request, pk):
     now = timezone.now()
     AnalyticsReport.objects.filter(pk=report.pk).update(last_run_at=now)
     report.last_run_at = now
-    snapshots = report.snapshots.filter(tenant=request.tenant).select_related("generated_by")
+    # Cap + defer the heavy summary/data JSON columns — the list panel only needs the header fields.
+    snapshots = (report.snapshots.filter(tenant=request.tenant)
+                 .select_related("generated_by")
+                 .only("pk", "title", "generated_at", "generated_by__username",
+                       "generated_by__first_name", "generated_by__last_name")[:50])
     return render(request, "crm/analytics/report/detail.html",
                   {"obj": report, "result": result, "snapshots": snapshots})
 
