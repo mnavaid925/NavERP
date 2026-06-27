@@ -2708,7 +2708,7 @@ def contractdocument_detail(request, pk):
         pk=pk, tenant=request.tenant)
     return render(request, "crm/documents/contractdocument/detail.html", {
         "obj": obj,
-        "signers": obj.signers.select_related("signer_party").all(),
+        "signers": obj.signers.all(),  # signer_party isn't rendered — no JOIN needed (perf-review)
         "signer_form": SignerRecordForm(tenant=request.tenant),
         "versions": obj.versions.select_related("created_by").all(),
         "version_form": DocumentVersionForm(tenant=request.tenant),
@@ -2836,7 +2836,9 @@ def contractdocument_generate(request, pk):
     """1.9 Document Generation — render the linked template's merge variables into the contract body
     and capture it as a new immutable DocumentVersion. Rendered with a restricted string-only context
     + isolated engine so a template body can't reach model attributes/methods or include other files."""
-    contract = get_object_or_404(ContractDocument, pk=pk, tenant=request.tenant)
+    contract = get_object_or_404(
+        ContractDocument.objects.select_related("template", "account", "opportunity", "owner"),
+        pk=pk, tenant=request.tenant)  # the render reads all four FKs — avoid lazy per-FK queries
     if contract.status != "draft":
         messages.error(request, "Only a draft contract can be generated — its body is locked once sent.")
         return redirect("crm:contractdocument_detail", pk=pk)
