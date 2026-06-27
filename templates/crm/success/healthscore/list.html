@@ -11,6 +11,12 @@
     </nav>
   </div>
   <div class="page-actions">
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    <form method="post" action="{% url 'crm:recompute_all_health_scores' %}" onsubmit="return confirm('Recompute every health score now?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline"><i data-lucide="refresh-cw"></i> Recompute all</button>
+    </form>
+    {% endif %}
     <a href="{% url 'crm:health_config_edit' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Configure Weights</a>
     <a href="{% url 'crm:healthscore_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Score</a>
   </div>
