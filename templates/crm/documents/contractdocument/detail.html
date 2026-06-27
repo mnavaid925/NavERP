@@ -13,7 +13,7 @@
     </nav>
   </div>
   <div class="page-actions">
-    {% if obj.template and obj.status != 'signed' and obj.status != 'declined' %}
+    {% if obj.template and obj.status == 'draft' %}
     <form method="post" action="{% url 'crm:contractdocument_generate' obj.pk %}" style="display:inline;" onsubmit="return confirm('Generate the document body from the template? This captures a new version.');">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary"><i data-lucide="file-text"></i> Generate from template</button>
