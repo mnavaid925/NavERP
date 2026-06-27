@@ -4,10 +4,12 @@ by ``request.tenant`` so cross-tenant ids 404.
 """
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
 from .crud import crud_create, crud_delete, crud_detail, crud_edit, crud_list
+from .search import run_search
 from .decorators import tenant_admin_required
 from .models import (
     Activity,
@@ -395,3 +397,21 @@ def auditlog_list(request):
 def auditlog_detail(request, pk):
     obj = get_object_or_404(AuditLog.objects.select_related("user"), pk=pk, tenant=request.tenant)
     return render(request, "core/auditlog/detail.html", {"obj": obj})
+
+
+# ------------------------------------------------------------ Global search
+@login_required
+def global_search_suggest(request):
+    """Live suggestions for the header search dropdown (JSON), tenant-scoped."""
+    q = request.GET.get("q", "").strip()[:80]
+    groups = run_search(request.tenant, q, per_target=5, total_cap=8)
+    return JsonResponse({"q": q, "groups": groups})
+
+
+@login_required
+def global_search(request):
+    """Full search results page (Enter / 'see all'), tenant-scoped."""
+    q = request.GET.get("q", "").strip()[:80]
+    groups = run_search(request.tenant, q, per_target=20, total_cap=99)  # all groups on the results page
+    count = sum(len(g["items"]) for g in groups)
+    return render(request, "core/search.html", {"q": q, "groups": groups, "count": count})
