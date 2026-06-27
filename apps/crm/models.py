@@ -1964,6 +1964,8 @@ class ContractDocument(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="crm_ctr_tnt_status_idx"),
             models.Index(fields=["tenant", "opportunity"], name="crm_ctr_tnt_opp_idx"),
             models.Index(fields=["tenant", "created_at"], name="crm_ctr_tnt_created_idx"),
+            # The File Repository filters contracts by account (performance-review).
+            models.Index(fields=["tenant", "account"], name="crm_ctr_tnt_account_idx"),
         ]
 
     def __str__(self):
