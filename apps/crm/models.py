@@ -2368,7 +2368,7 @@ class Survey(TenantNumbered):
     def save(self, *args, **kwargs):
         # Public respond-link token (random, URL-safe) generated once.
         if not self.token:
-            self.token = secrets.token_urlsafe(24)
+            self.token = secrets.token_urlsafe(32)  # 256-bit — match the project public-token standard
         # Auto-classify by type against each type's own scale (1.11 recreate):
         #   NPS 0–10:  9–10 promoter / 7–8 passive / ≤6 detractor
         #   CSAT 1–5:  ≥4 satisfied / 3 neutral / ≤2 dissatisfied
