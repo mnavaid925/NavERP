@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Search</h1>
+    <nav class="breadcrumb"><a href="{% url 'dashboard:home' %}">Home</a> <span class="sep">›</span> Search</nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" action="{% url 'core:search' %}" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:240px;">
+        <input type="text" name="q" value="{{ q }}" class="form-input" placeholder="Search everything…" aria-label="Search" autofocus>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Search</button>
+    </form>
+    {% if q %}<p class="form-help" style="margin-top:.5rem;">{{ count }} result{{ count|pluralize }} for “{{ q }}”.</p>{% endif %}
+  </div>
+</div>
+
+{% for g in groups %}
+<div class="card">
+  <div class="card-header"><h2 class="card-title"><i data-lucide="{{ g.icon }}"></i> {{ g.group }}</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <tbody>
+        {% for it in g.items %}
+        <tr>
+          <td><a href="{{ it.url }}" class="fw-600">{{ it.title }}</a></td>
+          <td class="text-muted">{{ it.subtitle }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% empty %}
+<div class="card"><div class="card-body">
+  <div class="empty-state">
+    <i data-lucide="search-x"></i>
+    <h3>{% if q %}No matches for “{{ q }}”{% else %}Search NavERP{% endif %}</h3>
+    <p>{% if q %}Try a different name, number, or keyword.{% else %}Type at least 2 characters to search accounts, contacts, leads, deals, invoices, employees and more.{% endif %}</p>
+  </div>
+</div></div>
+{% endfor %}
+{% endblock %}
