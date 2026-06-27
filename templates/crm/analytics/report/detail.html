@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if obj.is_favorite %}<i data-lucide="star"></i> {% endif %}{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:report_list' %}">Reports</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'crm:report_favorite' obj.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="star"></i> {% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}</button>
+      </form>
+      <form method="post" action="{% url 'crm:report_snapshot' obj.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="camera"></i> Run Snapshot</button>
+      </form>
+      <a href="{% url 'crm:report_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'crm:report_delete' obj.pk %}" onsubmit="return confirm('Delete this report and its snapshots?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-info">{{ obj.get_report_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Date range</dt><dd>{{ obj.get_date_range_display }}</dd></div>
+      <div class="detail-item"><dt>Grouped by</dt><dd>{{ obj.get_group_by_display }}</dd></div>
+      <div class="detail-item"><dt>Last run</dt><dd>{{ obj.last_run_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  {% if result.summary %}
+    <div class="stat-grid">
+      {% for s in result.summary %}
+        <div class="stat-card"><div class="stat-value">{{ s.value }}</div><div class="stat-label">{{ s.label }}</div></div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h3>{{ obj.get_report_type_display }}</h3><span class="badge badge-muted">{{ obj.get_date_range_display }}</span></div>
+    <div class="card-body">
+      {% if result.chart_labels %}<canvas id="reportChart" height="110"></canvas>{% else %}<p class="text-muted">No data in this range.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>{% for c in result.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in result.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% empty %}<tr><td colspan="{{ result.columns|length }}"><div class="empty-state"><i data-lucide="table"></i><p>No rows for this range.</p></div></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Snapshots</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Title</th><th>Generated</th><th>By</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in snapshots %}
+            <tr>
+              <td><a href="{% url 'crm:snapshot_detail' s.pk %}" class="fw-600">{{ s.title }}</a></td>
+              <td>{{ s.generated_at|date:"M d, Y H:i" }}</td>
+              <td>{% if s.generated_by %}{{ s.generated_by.get_full_name|default:s.generated_by.username }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:snapshot_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <form method="post" action="{% url 'crm:snapshot_delete' s.pk %}" onsubmit="return confirm('Delete this snapshot?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="camera"></i><p>No snapshots yet — run one to freeze this report for trend history.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {{ result|json_script:"report-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return null; } }
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"];
+    var d = J("report-data");
+    var el = document.getElementById("reportChart");
+    if (!d || !el || !(d.chart_labels || []).length) return;
+    var type = d.chart_type || "bar";
+    var pie = (type === "pie" || type === "doughnut");
+    var ds = pie
+      ? [{ data: d.chart_data, backgroundColor: palette }]
+      : [{ label: d.chart_label || "", data: d.chart_data, backgroundColor: type === "line" ? "rgba(37,99,235,.15)" : blue,
+           borderColor: blue, borderRadius: 6, fill: type === "line", tension: 0.3 }];
+    new Chart(el, {
+      type: type,
+      data: { labels: d.chart_labels, datasets: ds },
+      options: { plugins: { legend: { display: pie, position: "bottom" } }, scales: pie ? {} : { y: { beginAtZero: true } } }
+    });
+  })();
+</script>
+{% endblock %}
