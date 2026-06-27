@@ -617,6 +617,19 @@ class WebhookForm(TenantModelForm):
             return self.instance.secret  # blank on edit → keep the stored secret (never round-tripped)
         return secret
 
+    def clean_headers(self):
+        # Validate the custom-headers JSON now so the (deferred) HTTP sender can't be fed a non-dict,
+        # non-string, or CRLF-injected header value (header injection / serialization crash) — security-review.
+        headers = self.cleaned_data.get("headers") or {}
+        if not isinstance(headers, dict):
+            raise forms.ValidationError("Headers must be a JSON object (key/value pairs).")
+        for k, v in headers.items():
+            if not isinstance(k, str) or not isinstance(v, str):
+                raise forms.ValidationError("All header keys and values must be strings.")
+            if any(ch in k or ch in v for ch in ("\r", "\n")):
+                raise forms.ValidationError("Header keys/values must not contain newlines (CRLF).")
+        return headers
+
 
 class ApprovalRequestForm(TenantModelForm):
     class Meta:
