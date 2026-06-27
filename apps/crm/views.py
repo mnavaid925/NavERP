@@ -2073,6 +2073,15 @@ def expense_reject(request, pk):
 # ------------------------------------------------------------ 1.7 Invoicing (DealInvoice)
 # CRM-owned wrapper over the accounting ledger (L29): the conversion creates a DRAFT
 # accounting.Invoice; issuing/GL-posting + cash application stay in Accounting (draft hand-off).
+_CCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "INR": "₹",
+                "AUD": "$", "CAD": "$", "CHF": "CHF", "CNY": "¥"}
+
+
+def _ccy_symbol(code):
+    """A display symbol for a currency code so an auto-created Currency isn't symbol-less."""
+    return _CCY_SYMBOLS.get(code, "")
+
+
 @login_required
 def dealinvoice_list(request):
     return crud_list(
@@ -2110,9 +2119,10 @@ def dealinvoice_from_quote(request, quote_pk):
         return redirect("crm:quote_detail", pk=quote.pk)
 
     code = (quote.currency_code or "USD").upper()
-    currency, _ = Currency.objects.get_or_create(code=code, defaults={"name": code, "symbol": ""})
     quote_disc = (Decimal(100) - Decimal(quote.discount_pct or 0)) / Decimal(100)
     with transaction.atomic():
+        currency, _ = Currency.objects.get_or_create(
+            code=code, defaults={"name": code, "symbol": _ccy_symbol(code)})
         inv = Invoice.objects.create(
             tenant=request.tenant, party=quote.account, issue_date=timezone.localdate(),
             status="draft", currency=currency,
@@ -3181,11 +3191,30 @@ def dashboard_list(request):
     )
 
 
+def _can_share_dashboards(user):
+    # Publishing (is_shared) / defaulting (is_default) a dashboard is a tenant-wide setting,
+    # so it is restricted to tenant admins (or superuser) — security-review finding.
+    return bool(user.is_superuser or getattr(user, "is_tenant_admin", False))
+
+
 @login_required
 def dashboard_create(request):
-    return crud_create(
-        request, form_class=AnalyticsDashboardForm,
-        template="crm/analytics/dashboard/form.html", success_url="crm:dashboard_list")
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    can_share = _can_share_dashboards(request.user)
+    if request.method == "POST":
+        form = AnalyticsDashboardForm(request.POST, tenant=request.tenant, can_share=can_share)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Created successfully.")
+            return redirect("crm:dashboard_detail", pk=obj.pk)
+    else:
+        form = AnalyticsDashboardForm(tenant=request.tenant, can_share=can_share)
+    return render(request, "crm/analytics/dashboard/form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -3208,10 +3237,19 @@ def dashboard_detail(request, pk):
 
 @login_required
 def dashboard_edit(request, pk):
-    return crud_edit(
-        request, model=AnalyticsDashboard, pk=pk, form_class=AnalyticsDashboardForm,
-        template="crm/analytics/dashboard/form.html",
-        success_url=reverse("crm:dashboard_detail", args=[pk]))
+    obj = get_object_or_404(AnalyticsDashboard, pk=pk, tenant=request.tenant)
+    can_share = _can_share_dashboards(request.user)
+    if request.method == "POST":
+        form = AnalyticsDashboardForm(request.POST, instance=obj, tenant=request.tenant, can_share=can_share)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Updated successfully.")
+            return redirect("crm:dashboard_detail", pk=obj.pk)
+    else:
+        form = AnalyticsDashboardForm(instance=obj, tenant=request.tenant, can_share=can_share)
+    return render(request, "crm/analytics/dashboard/form.html",
+                  {"form": form, "obj": obj, "is_edit": True})
 
 
 @login_required
