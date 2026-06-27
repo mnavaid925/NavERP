@@ -2952,3 +2952,239 @@ def portal_stock(request):
     page_obj = paginate(request, products)
     return render(request, "crm/vendor/portal_stock.html",
                   {"access": access, "object_list": page_obj.object_list, "page_obj": page_obj})
+
+
+# ============================================================================
+# ===== Module 1.6 — Analytics & Reporting ===================================
+# Saved per-user dashboards (widgets computed LIVE on render) + saved standard
+# reports (4 canned types) with point-in-time snapshots. All compute lives in
+# apps/crm/analytics.py; views stay thin and tenant-scope every queryset.
+# ============================================================================
+from django.contrib.auth import get_user_model as _get_user_model  # noqa: E402
+
+from .analytics import compute_report, compute_widget  # noqa: E402
+from .forms import (  # noqa: E402
+    AnalyticsDashboardForm,
+    AnalyticsReportForm,
+    DashboardWidgetForm,
+)
+from .models import (  # noqa: E402
+    AnalyticsDashboard,
+    AnalyticsReport,
+    DashboardWidget,
+    ReportSnapshot,
+)
+
+
+# ----- Dashboards -----------------------------------------------------------
+@login_required
+def dashboard_list(request):
+    User = _get_user_model()
+    qs = AnalyticsDashboard.objects.filter(tenant=request.tenant).select_related("owner")
+    return crud_list(
+        request, qs, "crm/analytics/dashboard/list.html",
+        search_fields=["name", "number", "description"],
+        filters=[("owner", "owner_id", True)],
+        extra_context={"owners": User.objects.filter(tenant=request.tenant).order_by("username")},
+    )
+
+
+@login_required
+def dashboard_create(request):
+    return crud_create(
+        request, form_class=AnalyticsDashboardForm,
+        template="crm/analytics/dashboard/form.html", success_url="crm:dashboard_list")
+
+
+@login_required
+def dashboard_detail(request, pk):
+    dashboard = get_object_or_404(
+        AnalyticsDashboard.objects.select_related("owner"), pk=pk, tenant=request.tenant)
+    rendered, chart_configs = [], []
+    for w in dashboard.widgets.filter(tenant=request.tenant):
+        result = compute_widget(w)
+        rendered.append({"widget": w, "result": result})
+        # Only true Chart.js charts go to JS; KPI/gauge/table render as HTML.
+        if result.get("kind") == "series" and w.chart_type in ("bar", "line", "pie", "doughnut"):
+            chart_configs.append({"id": w.pk, "type": w.chart_type,
+                                  "labels": result.get("labels", []), "data": result.get("data", [])})
+    return render(request, "crm/analytics/dashboard/detail.html",
+                  {"obj": dashboard, "rendered_widgets": rendered, "chart_configs": chart_configs})
+
+
+@login_required
+def dashboard_edit(request, pk):
+    return crud_edit(
+        request, model=AnalyticsDashboard, pk=pk, form_class=AnalyticsDashboardForm,
+        template="crm/analytics/dashboard/form.html",
+        success_url=reverse("crm:dashboard_detail", args=[pk]))
+
+
+@login_required
+@require_POST
+def dashboard_delete(request, pk):
+    return crud_delete(request, model=AnalyticsDashboard, pk=pk, success_url="crm:dashboard_list")
+
+
+# ----- Dashboard widgets (children of a dashboard) --------------------------
+@login_required
+def widget_create(request, dash_pk):
+    dashboard = get_object_or_404(AnalyticsDashboard, pk=dash_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = DashboardWidgetForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            widget = form.save(commit=False)
+            widget.tenant = request.tenant
+            widget.dashboard = dashboard
+            last = dashboard.widgets.order_by("-position").first()
+            widget.position = (last.position + 1) if last else 0
+            widget.save()
+            write_audit_log(request.user, widget, "create")
+            messages.success(request, "Widget added.")
+            return redirect("crm:dashboard_detail", pk=dashboard.pk)
+    else:
+        form = DashboardWidgetForm(tenant=request.tenant)
+    return render(request, "crm/analytics/widget/form.html",
+                  {"form": form, "is_edit": False, "dashboard": dashboard})
+
+
+@login_required
+def widget_edit(request, pk):
+    widget = get_object_or_404(DashboardWidget, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = DashboardWidgetForm(request.POST, instance=widget, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Widget updated.")
+            return redirect("crm:dashboard_detail", pk=widget.dashboard_id)
+    else:
+        form = DashboardWidgetForm(instance=widget, tenant=request.tenant)
+    return render(request, "crm/analytics/widget/form.html",
+                  {"form": form, "is_edit": True, "obj": widget, "dashboard": widget.dashboard})
+
+
+@login_required
+@require_POST
+def widget_delete(request, pk):
+    widget = get_object_or_404(DashboardWidget, pk=pk, tenant=request.tenant)
+    dash_pk = widget.dashboard_id
+    write_audit_log(request.user, widget, "delete")
+    widget.delete()
+    messages.success(request, "Widget removed.")
+    return redirect("crm:dashboard_detail", pk=dash_pk)
+
+
+@login_required
+@require_POST
+def widget_move(request, pk, direction):
+    """Reorder a widget one slot up/down. Normalizes positions to 0..n-1 so it is robust even
+    when several widgets share the default position 0."""
+    widget = get_object_or_404(DashboardWidget, pk=pk, tenant=request.tenant)
+    order = list(widget.dashboard.widgets.filter(tenant=request.tenant).order_by("position", "id"))
+    idx = next((i for i, w in enumerate(order) if w.pk == widget.pk), None)
+    if idx is not None and direction in ("up", "down"):
+        swap = idx - 1 if direction == "up" else idx + 1
+        if 0 <= swap < len(order):
+            order[idx], order[swap] = order[swap], order[idx]
+            for i, w in enumerate(order):
+                if w.position != i:
+                    w.position = i
+                    w.save(update_fields=["position"])
+    return redirect("crm:dashboard_detail", pk=widget.dashboard_id)
+
+
+# ----- Standard reports -----------------------------------------------------
+@login_required
+def report_list(request):
+    qs = AnalyticsReport.objects.filter(tenant=request.tenant).select_related("owner")
+    return crud_list(
+        request, qs, "crm/analytics/report/list.html",
+        search_fields=["name", "number", "description"],
+        filters=[("report_type", "report_type", False)],
+        extra_context={"report_type_choices": AnalyticsReport._meta.get_field("report_type").choices},
+    )
+
+
+@login_required
+def report_create(request):
+    return crud_create(
+        request, form_class=AnalyticsReportForm,
+        template="crm/analytics/report/form.html", success_url="crm:report_list")
+
+
+@login_required
+def report_detail(request, pk):
+    report = get_object_or_404(
+        AnalyticsReport.objects.select_related("owner"), pk=pk, tenant=request.tenant)
+    result = compute_report(report)
+    # Stamp last_run_at without bumping updated_at (system field; .update() bypasses auto_now).
+    now = timezone.now()
+    AnalyticsReport.objects.filter(pk=report.pk).update(last_run_at=now)
+    report.last_run_at = now
+    snapshots = report.snapshots.filter(tenant=request.tenant).select_related("generated_by")
+    return render(request, "crm/analytics/report/detail.html",
+                  {"obj": report, "result": result, "snapshots": snapshots})
+
+
+@login_required
+def report_edit(request, pk):
+    return crud_edit(
+        request, model=AnalyticsReport, pk=pk, form_class=AnalyticsReportForm,
+        template="crm/analytics/report/form.html",
+        success_url=reverse("crm:report_detail", args=[pk]))
+
+
+@login_required
+@require_POST
+def report_delete(request, pk):
+    return crud_delete(request, model=AnalyticsReport, pk=pk, success_url="crm:report_list")
+
+
+@login_required
+@require_POST
+def report_favorite(request, pk):
+    report = get_object_or_404(AnalyticsReport, pk=pk, tenant=request.tenant)
+    report.is_favorite = not report.is_favorite
+    report.save(update_fields=["is_favorite", "updated_at"])
+    write_audit_log(request.user, report, "update", {"is_favorite": report.is_favorite})
+    messages.success(request, "Pinned to top." if report.is_favorite else "Unpinned.")
+    return redirect("crm:report_detail", pk=report.pk)
+
+
+@login_required
+@require_POST
+def report_snapshot(request, pk):
+    report = get_object_or_404(AnalyticsReport, pk=pk, tenant=request.tenant)
+    result = compute_report(report)
+    snap = ReportSnapshot.objects.create(
+        tenant=request.tenant, report=report,
+        title="{} — {:%Y-%m-%d %H:%M}".format(report.name, timezone.now()),
+        generated_by=request.user if request.user.is_authenticated else None,
+        summary=result.get("summary", []),
+        data={k: result.get(k) for k in
+              ("columns", "rows", "chart_type", "chart_label", "chart_labels", "chart_data")},
+    )
+    AnalyticsReport.objects.filter(pk=report.pk).update(last_run_at=timezone.now())
+    write_audit_log(request.user, snap, "create")
+    messages.success(request, "Snapshot saved.")
+    return redirect("crm:snapshot_detail", pk=snap.pk)
+
+
+# ----- Report snapshots -----------------------------------------------------
+@login_required
+def snapshot_detail(request, pk):
+    snap = get_object_or_404(
+        ReportSnapshot.objects.select_related("report", "generated_by"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/analytics/snapshot/detail.html", {"obj": snap})
+
+
+@login_required
+@require_POST
+def snapshot_delete(request, pk):
+    snap = get_object_or_404(ReportSnapshot, pk=pk, tenant=request.tenant)
+    report_pk = snap.report_id
+    write_audit_log(request.user, snap, "delete")
+    snap.delete()
+    messages.success(request, "Snapshot deleted.")
+    return redirect("crm:report_detail", pk=report_pk)
