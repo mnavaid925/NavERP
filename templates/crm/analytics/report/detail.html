@@ -28,7 +28,7 @@
       <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-info">{{ obj.get_report_type_display }}</span></dd></div>
       <div class="detail-item"><dt>Date range</dt><dd>{{ obj.get_date_range_display }}</dd></div>
       <div class="detail-item"><dt>Grouped by</dt><dd>{{ obj.get_group_by_display }}</dd></div>
-      <div class="detail-item"><dt>Last run</dt><dd>{{ obj.last_run_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Last run</dt><dd>{% if obj.last_run_at %}{{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
