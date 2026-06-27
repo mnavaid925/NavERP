@@ -44,7 +44,7 @@
     <div class="progress" style="margin:.25rem 0 1rem;"><div class="progress-bar" style="width:{{ passive_pct }}%"></div></div>
     <p><span class="badge badge-red">Detractors</span> {{ detractors }} ({{ detractor_pct }}%)</p>
     <div class="progress" style="margin:.25rem 0 0;"><div class="progress-bar" style="width:{{ detractor_pct }}%"></div></div>
-    <p class="form-help" style="margin-top:1rem;">NPS = % promoters − % detractors = <strong>{{ nps_score }}</strong>.</p>
+    <p class="form-help" style="margin-top:1rem;">NPS = % promoters − % detractors = <strong>{{ nps_score|default:"—" }}</strong>.</p>
     {% else %}
     <div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No NPS responses yet</h3><p>Send NPS surveys and collect responses to see the score.</p></div>
     {% endif %}
