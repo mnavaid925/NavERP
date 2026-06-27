@@ -1194,6 +1194,8 @@ class CrmTask(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="crm_task_tenant_status_idx"),
             models.Index(fields=["tenant", "due_date", "created_at"], name="crm_task_tnt_due_created_idx"),
+            # health scoring counts a party's tasks (tenant, party) on every recompute (perf-review).
+            models.Index(fields=["tenant", "party"], name="crm_task_tnt_party_idx"),
         ]
 
     @property
@@ -2455,15 +2457,17 @@ class HealthScoreHistory(models.Model):
         return f"{self.account_id} · {self.score} ({self.tier})"
 
 
-def compute_health_score(party, tenant):
+def compute_health_score(party, tenant, config=None):
     """Derive + persist a 0–100 health score for ``party`` from existing CRM signals.
 
     Reuses the per-tenant ``HealthScoreConfig`` weights (tickets/nps/tasks/engagement).
+    Pass ``config`` to reuse one fetched config across a bulk recompute loop (avoids N refetches).
     The Accounting ledger (invoice/payment punctuality) is not built yet, so payments is
     intentionally absent — wire it in when Module 2 lands.
     """
     with transaction.atomic():
-        config, _ = HealthScoreConfig.objects.get_or_create(tenant=tenant)
+        if config is None:
+            config, _ = HealthScoreConfig.objects.get_or_create(tenant=tenant)
 
         open_cases = Case.objects.filter(tenant=tenant, account=party, status__in=Case.OPEN_STATUSES).count()
         tickets_score = max(0, 100 - open_cases * 20)
