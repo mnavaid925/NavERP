@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'crm:report_list' %}">Reports</a><span class="sep">›</span><a href="{% url 'crm:report_detail' obj.report.pk %}">{{ obj.report.number }}</a><span class="sep">›</span><span>Snapshot</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:report_detail' obj.report.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to report</a>
+      <form method="post" action="{% url 'crm:snapshot_delete' obj.pk %}" onsubmit="return confirm('Delete this snapshot?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Report</dt><dd><a href="{% url 'crm:report_detail' obj.report.pk %}">{{ obj.report.name }}</a></dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-info">{{ obj.report.get_report_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Captured</dt><dd>{{ obj.generated_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>By</dt><dd>{% if obj.generated_by %}{{ obj.generated_by.get_full_name|default:obj.generated_by.username }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    <p class="form-help" style="margin-top:1rem;">This is a frozen point-in-time copy — the figures below are stored as captured and are not recomputed.</p>
+  </div></div>
+
+  {% if obj.summary %}
+    <div class="stat-grid">
+      {% for s in obj.summary %}
+        <div class="stat-card"><div class="stat-value">{{ s.value }}</div><div class="stat-label">{{ s.label }}</div></div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if obj.data.chart_labels %}
+    <div class="card">
+      <div class="card-header"><h3>{{ obj.report.get_report_type_display }}</h3></div>
+      <div class="card-body"><canvas id="snapChart" height="110"></canvas></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>{% for c in obj.data.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in obj.data.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% empty %}<tr><td colspan="{{ obj.data.columns|length }}"><div class="empty-state"><p>No rows captured.</p></div></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {{ obj.data|json_script:"snap-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return null; } }
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"];
+    var d = J("snap-data");
+    var el = document.getElementById("snapChart");
+    if (!d || !el || !(d.chart_labels || []).length) return;
+    var type = d.chart_type || "bar";
+    var pie = (type === "pie" || type === "doughnut");
+    var ds = pie
+      ? [{ data: d.chart_data, backgroundColor: palette }]
+      : [{ label: d.chart_label || "", data: d.chart_data, backgroundColor: type === "line" ? "rgba(37,99,235,.15)" : blue,
+           borderColor: blue, borderRadius: 6, fill: type === "line", tension: 0.3 }];
+    new Chart(el, {
+      type: type,
+      data: { labels: d.chart_labels, datasets: ds },
+      options: { plugins: { legend: { display: pie, position: "bottom" } }, scales: pie ? {} : { y: { beginAtZero: true } } }
+    });
+  })();
+</script>
+{% endblock %}
