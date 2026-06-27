@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from .models import (
     AccountProfile,
+    AnalyticsDashboard,
+    AnalyticsReport,
     ApprovalRequest,
     CalendarEvent,
     Campaign,
@@ -15,6 +17,7 @@ from .models import (
     CrmProject,
     CrmTask,
     CustomerPortalAccess,
+    DashboardWidget,
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
@@ -42,6 +45,7 @@ from .models import (
     SalesQuota,
     SignerRecord,
     SlaPolicy,
+    ReportSnapshot,
     Survey,
     Territory,
     Timesheet,
@@ -472,3 +476,48 @@ class PartnerPortalAccessAdmin(admin.ModelAdmin):
     search_fields = ("number", "partner_party__name", "portal_user__username")
     raw_id_fields = ("partner_party", "portal_user")
     readonly_fields = ("number", "accepted_at", "created_at", "updated_at")
+
+
+# ===== 1.6 Analytics & Reporting ===========================================
+
+class DashboardWidgetInline(admin.TabularInline):
+    model = DashboardWidget
+    extra = 0
+    fields = ("title", "metric", "chart_type", "date_range", "size", "position")
+
+
+@admin.register(AnalyticsDashboard)
+class AnalyticsDashboardAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "owner", "is_shared", "is_default", "layout", "tenant")
+    list_filter = ("is_shared", "is_default", "layout", "tenant")
+    search_fields = ("number", "name", "description")
+    raw_id_fields = ("owner",)
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [DashboardWidgetInline]
+
+
+@admin.register(DashboardWidget)
+class DashboardWidgetAdmin(admin.ModelAdmin):
+    list_display = ("title", "dashboard", "metric", "chart_type", "date_range", "size", "position", "tenant")
+    list_filter = ("chart_type", "date_range", "tenant")
+    search_fields = ("title",)
+    raw_id_fields = ("dashboard",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AnalyticsReport)
+class AnalyticsReportAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "report_type", "date_range", "group_by", "is_favorite", "owner", "tenant")
+    list_filter = ("report_type", "is_favorite", "tenant")
+    search_fields = ("number", "name", "description")
+    raw_id_fields = ("owner",)
+    readonly_fields = ("number", "last_run_at", "created_at", "updated_at")
+
+
+@admin.register(ReportSnapshot)
+class ReportSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("title", "report", "generated_by", "generated_at", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("title", "report__name")
+    raw_id_fields = ("report", "generated_by")
+    readonly_fields = ("generated_at",)
