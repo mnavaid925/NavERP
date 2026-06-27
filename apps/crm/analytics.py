@@ -240,12 +240,15 @@ def _r_top_performers(tenant, start, end):
 
 
 def _r_campaign_roi(tenant, start, end):
-    qs = _in_range(Campaign.objects.filter(tenant=tenant), start, end).order_by("-actual_revenue")[:10]
+    # .values() avoids instantiating Campaign objects just to read three columns.
+    qs = (_in_range(Campaign.objects.filter(tenant=tenant), start, end)
+          .values("name", "budget_actual", "actual_revenue").order_by("-actual_revenue")[:10])
     out = []
     for c in qs:
-        roi = c.roi
-        out.append([c.name, _money(c.budget_actual), _money(c.actual_revenue),
-                    (_pct(roi) if roi is not None else "—")])
+        budget = float(c["budget_actual"] or 0)
+        rev = float(c["actual_revenue"] or 0)
+        roi = ((rev - budget) / budget * 100) if budget else None
+        out.append([c["name"], _money(budget), _money(rev), (_pct(roi) if roi is not None else "—")])
     return {"columns": ["Campaign", "Spend", "Revenue", "ROI %"], "rows": out}
 
 
@@ -360,13 +363,15 @@ def _compute_funnel(report, tenant, start, end):
     order = [("prospecting", "Prospecting"), ("qualification", "Qualification"),
              ("proposal", "Proposal"), ("negotiation", "Negotiation"), ("closed_won", "Closed Won")]
     keys = [k for k, _ in order]
+    # One grouped query for count+value per current stage, then roll forward: a deal in a
+    # later stage has, by definition, already passed through every earlier stage.
+    per_stage = {row["stage"]: (row["c"], float(row["s"] or 0))
+                 for row in opps.values("stage").annotate(c=Count("id"), s=Sum("amount"))}
     rows, labels, counts = [], [], []
     prev = None
     for i, (val, label) in enumerate(order):
-        reached = opps.filter(stage__in=keys[i:])  # currently at-or-past this stage
-        agg = reached.aggregate(c=Count("id"), s=Sum("amount"))
-        c = agg["c"] or 0
-        s = float(agg["s"] or 0)
+        c = sum(per_stage.get(k, (0, 0))[0] for k in keys[i:])  # currently at-or-past this stage
+        s = sum(per_stage.get(k, (0, 0))[1] for k in keys[i:])
         drop = "—" if prev is None else (_pct((prev - c) / prev * 100) if prev else "0%")
         rows.append([label, c, _money(s), drop])
         labels.append(label)
@@ -386,6 +391,10 @@ def _compute_funnel(report, tenant, start, end):
 
 
 def _compute_service(report, tenant, start, end):
+    # Durations are averaged in Python on purpose: Avg(ExpressionWrapper(... DurationField))
+    # returns a float of microseconds on SQLite but a timedelta on MariaDB, so a single
+    # cross-DB expression can't call .total_seconds() safely. The set is bounded by the
+    # tenant's cases inside the date window; only the six needed columns are fetched.
     cases = list(_in_range(Case.objects.filter(tenant=tenant), start, end).values(
         "priority", "status", "created_at", "resolved_at", "first_responded_at", "satisfaction_rating"))
     by_period = report.group_by in ("month", "week")
