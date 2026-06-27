@@ -385,29 +385,32 @@ class Command(BaseCommand):
             quote.save(update_fields=["status", "accepted_at", "updated_at"])
 
         code = (quote.currency_code or "USD").upper()
-        currency, _ = Currency.objects.get_or_create(
-            code=code, defaults={"name": code, "symbol": "$" if code == "USD" else ""})
         quote_disc = (Decimal(100) - Decimal(quote.discount_pct or 0)) / Decimal(100)
-        inv = Invoice.objects.create(
-            tenant=tenant, party=quote.account, issue_date=timezone.localdate(),
-            status="draft", currency=currency, notes=f"Generated from quote {quote.number}")
-        for ln in quote.lines.all():
-            line_disc = (Decimal(100) - Decimal(ln.discount_pct or 0)) / Decimal(100)
-            net_unit = (Decimal(ln.unit_price or 0) * line_disc * quote_disc).quantize(Decimal("0.01"))
-            InvoiceLine.objects.create(
-                invoice=inv, description=(ln.description or "Item")[:255],
-                quantity=(ln.quantity or Decimal(1)), unit_price=net_unit,
-                tax_rate_pct=(ln.tax_pct or Decimal(0)))
-        inv.recalc_totals()
-        deal = DealInvoice.objects.create(
-            tenant=tenant, opportunity=quote.opportunity, quote=quote, account=quote.account,
-            invoice=inv, notes="Converted from the accepted quote (demo).")
-        # A partial (milestone) receipt via a payment gateway, against the deal invoice.
-        PaymentReceipt.objects.create(
-            tenant=tenant, deal_invoice=deal,
-            amount=((inv.total or Decimal("0")) / 2).quantize(Decimal("0.01")),
-            received_date=timezone.localdate(), method="card", gateway="stripe",
-            gateway_txn_id="ch_demo_0001", notes="Partial (50%) milestone payment via Stripe.")
+        # Self-contained atomic block (mirrors the dealinvoice_from_quote view) so a partial
+        # failure can't leave an orphaned ledger invoice — handle() is also @transaction.atomic.
+        with transaction.atomic():
+            currency, _ = Currency.objects.get_or_create(
+                code=code, defaults={"name": code, "symbol": "$" if code == "USD" else ""})
+            inv = Invoice.objects.create(
+                tenant=tenant, party=quote.account, issue_date=timezone.localdate(),
+                status="draft", currency=currency, notes=f"Generated from quote {quote.number}")
+            for ln in quote.lines.all():
+                line_disc = (Decimal(100) - Decimal(ln.discount_pct or 0)) / Decimal(100)
+                net_unit = (Decimal(ln.unit_price or 0) * line_disc * quote_disc).quantize(Decimal("0.01"))
+                InvoiceLine.objects.create(
+                    invoice=inv, description=(ln.description or "Item")[:255],
+                    quantity=(ln.quantity or Decimal(1)), unit_price=net_unit,
+                    tax_rate_pct=(ln.tax_pct or Decimal(0)))
+            inv.recalc_totals()
+            deal = DealInvoice.objects.create(
+                tenant=tenant, opportunity=quote.opportunity, quote=quote, account=quote.account,
+                invoice=inv, notes="Converted from the accepted quote (demo).")
+            # A partial (milestone) receipt via a payment gateway, against the deal invoice.
+            PaymentReceipt.objects.create(
+                tenant=tenant, deal_invoice=deal,
+                amount=((inv.total or Decimal("0")) / 2).quantize(Decimal("0.01")),
+                received_date=timezone.localdate(), method="card", gateway="stripe",
+                gateway_txn_id="ch_demo_0001", notes="Partial (50%) milestone payment via Stripe.")
 
     def _seed_service(self, tenant):
         """Idempotently seed 1.4 help-desk demo data — a default SLA policy, 2 KB categories, a
