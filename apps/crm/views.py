@@ -2983,7 +2983,7 @@ def workflowrule_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # rule authoring = executable automation config; match the run gate (security-review)
 def workflowrule_create(request):
     return crud_create(request, form_class=WorkflowRuleForm, template="crm/workflow/workflowrule/form.html",
                        success_url="crm:workflowrule_list")
@@ -2998,13 +2998,13 @@ def workflowrule_detail(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required  # automation config (security-review)
 def workflowrule_edit(request, pk):
     return crud_edit(request, model=WorkflowRule, pk=pk, form_class=WorkflowRuleForm,
                      template="crm/workflow/workflowrule/form.html", success_url="crm:workflowrule_list")
 
 
-@login_required
+@tenant_admin_required  # automation config (security-review)
 @require_POST
 def workflowrule_delete(request, pk):
     return crud_delete(request, model=WorkflowRule, pk=pk, success_url="crm:workflowrule_list")
@@ -3109,15 +3109,17 @@ _RULE_RUN_LIMIT = 50  # cap records evaluated per manual run (bounded engine)
 
 
 def _safe_record_field(record, name):
-    """Read a scalar attribute off a record for condition evaluation. SAFE: rejects private/dunder
-    names, callables (no method calls), and related managers (no relation traversal) — only a plain
-    stored value."""
-    if not name or name.startswith("_"):
+    """Read a stored column value off a record for condition evaluation. SAFE: allowlist — only the
+    model's concrete, NON-relation DB columns are readable (by attname). This rejects dunder/private
+    names, methods, @property getters, FK objects/managers, and any security-bearing token field that
+    isn't a plain column; it also means iterating records can't trigger a per-record FK lazy-load
+    (security-review)."""
+    if not name:
         return None
-    value = getattr(record, name, None)
-    if callable(value) or (hasattr(value, "all") and hasattr(value, "filter")):
-        return None  # reject methods + RelatedManagers (code-review)
-    return value
+    allowed = {f.attname for f in record._meta.concrete_fields if not f.is_relation}
+    if name not in allowed:
+        return None
+    return getattr(record, name, None)
 
 
 def _eval_conditions(record, conditions):
@@ -3159,9 +3161,11 @@ def _webhook_payload(event, record):
 
 def _deliver_webhook(webhook, event, payload):
     """Record a (signed) delivery for a webhook. The real outbound HTTP POST is **deferred**."""
-    # WARNING (SSRF): when implementing the real POST, require https, resolve the host and REJECT
-    # private/loopback/link-local/169.254.169.254 (cloud-metadata) ranges, disable redirects, set a
-    # short timeout, and cap the response size. Never POST to a raw user-supplied URL without that.
+    # WARNING (SSRF): when implementing the real POST: (1) https-only scheme; (2) resolve the host
+    # ONCE, reject private/loopback/link-local/169.254.169.254 (cloud-metadata) ranges, then connect
+    # to the PINNED resolved IP — do NOT re-resolve at connect time (prevents DNS rebinding); (3) allow
+    # port 443 only (block internal port scans); (4) disable redirects; (5) short connect+read timeout;
+    # (6) cap the response read + never log/store the body. Never POST to a raw user-supplied URL without that.
     sig = ""
     if webhook.secret:
         sig = hmac.new(webhook.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
@@ -3185,14 +3189,9 @@ def _run_rule(rule, user):
     active_webhooks = list(Webhook.objects.filter(
         tenant=rule.tenant, is_active=True,
         trigger_entity=rule.trigger_entity, trigger_event=rule.trigger_event))
-    # Join only the FK fields the conditions actually read — zero cost for scalar conditions, and no
-    # per-record FK lazy-load (N+1) when a condition targets a relation field (perf-review).
-    cond_fields = {c.get("field") for c in (rule.conditions or []) if isinstance(c, dict)}
-    fk_names = [f.name for f in Model._meta.concrete_fields if f.is_relation and f.name in cond_fields]
-    records = Model.objects.filter(tenant=rule.tenant)
-    if fk_names:
-        records = records.select_related(*fk_names)
-    records = records.order_by("-id")[:_RULE_RUN_LIMIT]
+    # _safe_record_field reads only concrete non-relation columns (already loaded with the row), so
+    # iterating records never triggers a per-record FK lazy-load — no select_related needed (perf+security-review).
+    records = Model.objects.filter(tenant=rule.tenant).order_by("-id")[:_RULE_RUN_LIMIT]
     for rec in records:
         summary["evaluated"] += 1
         if not _eval_conditions(rec, rule.conditions):
