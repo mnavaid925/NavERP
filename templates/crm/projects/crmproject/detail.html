@@ -37,7 +37,7 @@
         {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
       </dd></div>
       <div class="detail-item"><dt>Start date</dt><dd>{{ obj.start_date|date:"M d, Y"|default:"—" }}</dd></div>
-      <div class="detail-item"><dt>End date</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>End date</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Budget</dt><dd>{{ obj.budget }}</dd></div>
       <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
@@ -52,6 +52,10 @@
   </div>
   <div class="card-body">
     <dl class="detail-grid">
+      <div class="detail-item"><dt>Progress</dt><dd>
+        <div class="progress" style="max-width:180px;"><div class="progress-bar" style="width: {{ obj.progress_pct }}%;"></div></div>
+        <span class="text-muted">{{ obj.progress_pct }}% of milestones complete</span>
+      </dd></div>
       <div class="detail-item"><dt>Total hours</dt><dd>{{ total_hours }}</dd></div>
       <div class="detail-item"><dt>Billable hours</dt><dd>{{ billable_hours }}</dd></div>
       <div class="detail-item"><dt>Approved expenses</dt><dd>{{ expense_total }}</dd></div>
