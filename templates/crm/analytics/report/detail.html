@@ -3,7 +3,7 @@
 {% block content %}
   <div class="page-header">
     <div>
-      <h1 class="page-title">{% if obj.is_favorite %}<i data-lucide="star"></i> {% endif %}{{ obj.name }}</h1>
+      <h1 class="page-title">{% if obj.is_favorite %}<span role="img" aria-label="Favorite"><i data-lucide="star"></i></span> {% endif %}{{ obj.name }}</h1>
       <div class="breadcrumb"><a href="{% url 'crm:report_list' %}">Reports</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
