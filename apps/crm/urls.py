@@ -249,6 +249,19 @@ urlpatterns = [
     path("timesheets/<int:pk>/", views.timesheet_detail, name="timesheet_detail"),
     path("timesheets/<int:pk>/edit/", views.timesheet_edit, name="timesheet_edit"),
     path("timesheets/<int:pk>/delete/", views.timesheet_delete, name="timesheet_delete"),
+    path("timesheets/<int:pk>/submit/", views.timesheet_submit, name="timesheet_submit"),
+    path("timesheets/<int:pk>/approve/", views.timesheet_approve, name="timesheet_approve"),
+    path("timesheets/<int:pk>/reject/", views.timesheet_reject, name="timesheet_reject"),
+
+    # Resource Allocation (1.8) — capacity bookings + workload board + Kanban
+    path("resource-allocations/", views.resourceallocation_list, name="resourceallocation_list"),
+    path("resource-allocations/add/", views.resourceallocation_create, name="resourceallocation_create"),
+    path("resource-allocations/<int:pk>/", views.resourceallocation_detail, name="resourceallocation_detail"),
+    path("resource-allocations/<int:pk>/edit/", views.resourceallocation_edit, name="resourceallocation_edit"),
+    path("resource-allocations/<int:pk>/delete/", views.resourceallocation_delete, name="resourceallocation_delete"),
+    path("workload/", views.resource_workload, name="resource_workload"),
+    path("projects/board/", views.crmproject_board, name="crmproject_board"),
+    path("milestones/<int:pk>/move/", views.crmmilestone_move, name="crmmilestone_move"),
 
     # Document templates (1.9)
     path("doc-templates/", views.doctemplate_list, name="doctemplate_list"),
