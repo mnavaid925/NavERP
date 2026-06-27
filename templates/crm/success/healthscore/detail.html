@@ -87,5 +87,33 @@
   </div>
 </div>
 
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Score history</h2></div>
+  <div class="card-body">
+    {% if obj.tier == 'red' %}<p class="text-danger" style="margin-bottom:1rem;"><i data-lucide="alert-triangle"></i> Red tier — a churn-risk follow-up task is raised automatically (once) when this account is recomputed.</p>{% endif %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Score</th><th>Tier</th></tr></thead>
+        <tbody>
+          {% for h in history %}
+          <tr>
+            <td>{{ h.computed_at|date:"M d, Y H:i" }}</td>
+            <td>{{ h.score }}/100</td>
+            <td>
+              {% if h.tier == 'green' %}<span class="badge badge-green">{{ h.get_tier_display }}</span>
+              {% elif h.tier == 'yellow' %}<span class="badge badge-amber">{{ h.get_tier_display }}</span>
+              {% elif h.tier == 'red' %}<span class="badge badge-red">{{ h.get_tier_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ h.get_tier_display }}</span>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3"><div class="empty-state"><i data-lucide="trending-up"></i><h3>No history yet</h3><p>Recompute to record the first trend point.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <a href="{% url 'crm:healthscore_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
