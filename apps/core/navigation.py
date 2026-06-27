@@ -148,10 +148,13 @@ LIVE_LINKS = {
         "Allocations": "crm:resourceallocation_list",       # extra (capacity bookings)
     },
     # 1.9 Document & Contract Management
+    # 1.9 recreated in detail — File Repository now points at a REAL versioned repository organized by
+    # account/deal (was a stub → contractdocument_list); Document Generation renders template merge-vars.
     "1.9": {
-        "E-Signatures": "crm:contractdocument_list",     # bullet (contract + signer tracking)
-        "Document Generation": "crm:doctemplate_list",   # bullet (merge-variable templates)
-        "File Repository": "crm:contractdocument_list",  # bullet (versioned contract documents)
+        "E-Signatures": "crm:contractdocument_list",     # bullet (contract + signer tracking + sign flow)
+        "Document Generation": "crm:doctemplate_list",   # bullet (merge-var templates → generate on the contract)
+        "File Repository": "crm:document_repository",     # bullet (versioned contract repo by account)
+        "Contracts": "crm:contractdocument_list",         # extra
     },
     # 1.10 Automation & Workflow Engine
     "1.10": {
