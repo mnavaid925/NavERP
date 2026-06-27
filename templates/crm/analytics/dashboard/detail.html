@@ -23,13 +23,13 @@
   {% if obj.description %}<div class="card"><div class="card-body text-muted">{{ obj.description|linebreaksbr }}</div></div>{% endif %}
 
   {% if rendered_widgets %}
-    <div style="display:grid; grid-template-columns: repeat({{ cols }}, minmax(0,1fr)); gap:1rem; align-items:start;">
+    <div style="display:grid; grid-template-columns: repeat({{ cols }}, minmax(200px,1fr)); gap:1rem; align-items:start;">
       {% for item in rendered_widgets %}
         {% with w=item.widget r=item.result %}
-        <div class="card" style="grid-column: span {{ item.span }}; margin-bottom:0;">
+        <div class="card mb-0" style="grid-column: span {{ item.span }};">
           <div class="card-header">
             <h3>{{ w.title }}</h3>
-            <div class="table-actions">
+            <div class="flex items-center gap-2">
               <span class="badge badge-muted">{{ w.get_date_range_display }}</span>
               <form method="post" action="{% url 'crm:widget_move' w.pk 'up' %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Move up"><i data-lucide="arrow-up"></i></button></form>
               <form method="post" action="{% url 'crm:widget_move' w.pk 'down' %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Move down"><i data-lucide="arrow-down"></i></button></form>
