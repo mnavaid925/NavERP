@@ -127,10 +127,14 @@ LIVE_LINKS = {
         "Standard Reports": "crm:report_list",           # bullet (4 canned reports + snapshots)
         "Analytics Overview": "crm:overview",            # extra (module KPI landing page)
     },
-    # 1.7 Finance & Billing Management — only Expense Tracking is built; Invoicing &
-    # Payment Tracking need the Accounting ledger (Module 2, not built) → stay roadmap.
+    # 1.7 Finance & Billing Management — recreated in detail; all three bullets now live. The
+    # real Invoice/Payment/RecurringInvoice ledger is OWNED by Accounting (Module 2, L29) — CRM
+    # adds the deal-facing wrappers (DealInvoice/PaymentReceipt) over it (draft hand-off).
     "1.7": {
-        "Expense Tracking": "crm:expense_list",          # bullet
+        "Invoicing": "crm:dealinvoice_list",                       # bullet (quote→invoice conversion)
+        "Payment Tracking": "crm:paymentreceipt_list",            # bullet (receipts + ledger allocations)
+        "Expense Tracking": "crm:expense_list",                   # bullet (deal cost → true margin)
+        "Recurring Invoices": "accounting:recurringinvoice_list", # extra — subscription schedules live in the ledger
     },
     # 1.8 Project & Delivery Management (Post-Sale)
     "1.8": {
