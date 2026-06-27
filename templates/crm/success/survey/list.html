@@ -11,6 +11,7 @@
     </nav>
   </div>
   <div class="page-actions">
+    <a href="{% url 'crm:survey_results' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Analytics</a>
     <a href="{% url 'crm:survey_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Survey</a>
   </div>
 </div>
@@ -66,9 +67,9 @@
             <td><span class="badge badge-info">{{ obj.get_survey_type_display }}</span></td>
             <td>{{ obj.score|default:"—" }}</td>
             <td>
-              {% if obj.classification == 'promoter' %}<span class="badge badge-green">{{ obj.get_classification_display }}</span>
-              {% elif obj.classification == 'passive' %}<span class="badge badge-amber">{{ obj.get_classification_display }}</span>
-              {% elif obj.classification == 'detractor' %}<span class="badge badge-red">{{ obj.get_classification_display }}</span>
+              {% if obj.classification == 'promoter' or obj.classification == 'satisfied' or obj.classification == 'easy' %}<span class="badge badge-green">{{ obj.get_classification_display }}</span>
+              {% elif obj.classification == 'passive' or obj.classification == 'neutral' %}<span class="badge badge-amber">{{ obj.get_classification_display }}</span>
+              {% elif obj.classification == 'detractor' or obj.classification == 'dissatisfied' or obj.classification == 'hard' %}<span class="badge badge-red">{{ obj.get_classification_display }}</span>
               {% elif obj.classification %}<span class="badge badge-muted">{{ obj.get_classification_display }}</span>
               {% else %}—{% endif %}
             </td>
