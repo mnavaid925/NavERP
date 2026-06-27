@@ -36,7 +36,7 @@
       <div class="form-group">
         <select name="employee" class="form-select">
           <option value="">All employees</option>
-          {% for o in employees %}<option value="{{ o.pk }}" {% if request.GET.employee == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.username }}</option>{% endfor %}
+          {% for o in employees %}<option value="{{ o.pk }}" {% if request.GET.employee == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.get_full_name|default:o.username }}</option>{% endfor %}
         </select>
       </div>
       <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
