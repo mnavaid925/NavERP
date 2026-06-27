@@ -20,16 +20,20 @@
     </form>
     {% endif %}
     {% if obj.status == 'submitted' %}
-    <form method="post" action="{% url 'crm:timesheet_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve this timesheet?');">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Approve</button>
-    </form>
-    <form method="post" action="{% url 'crm:timesheet_reject' obj.pk %}" style="display:inline;" onsubmit="return confirm('Reject this timesheet?');">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-outline"><i data-lucide="x"></i> Reject</button>
-    </form>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'crm:timesheet_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve this timesheet?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Approve</button>
+      </form>
+      <form method="post" action="{% url 'crm:timesheet_reject' obj.pk %}" style="display:inline;" onsubmit="return confirm('Reject this timesheet?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline"><i data-lucide="x"></i> Reject</button>
+      </form>
+      {% endif %}
     {% endif %}
+    {% if obj.status == 'draft' or obj.status == 'rejected' %}
     <a href="{% url 'crm:timesheet_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    {% endif %}
     <form method="post" action="{% url 'crm:timesheet_delete' obj.pk %}" onsubmit="return confirm('Delete this timesheet?');" style="display:inline;">
       {% csrf_token %}
       <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
