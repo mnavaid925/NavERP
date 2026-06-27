@@ -57,6 +57,7 @@ from apps.crm.models import (
     PurchaseOrder,
     PurchaseOrderLine,
     Quote,
+    ResourceAllocation,
     QuoteLine,
     ReportSnapshot,
     SalesQuota,
@@ -133,6 +134,8 @@ class Command(BaseCommand):
             self._seed_analytics(tenant)
             # 1.7 Finance & Billing (recreated) — runs after SFA (needs a quote); self-guards on DealInvoice.
             self._seed_finance17(tenant)
+            # 1.8 Resource Allocation (recreated) — capacity bookings for the workload board; guards on ResourceAllocation.
+            self._seed_resource18(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -411,6 +414,27 @@ class Command(BaseCommand):
                 amount=((inv.total or Decimal("0")) / 2).quantize(Decimal("0.01")),
                 received_date=timezone.localdate(), method="card", gateway="stripe",
                 gateway_txn_id="ch_demo_0001", notes="Partial (50%) milestone payment via Stripe.")
+
+    def _seed_resource18(self, tenant):
+        """Idempotently seed 1.8 Resource Allocations (capacity bookings) so the workload board has
+        planned load — the first person is intentionally overbooked (50 h/wk > 40 capacity). Guard:
+        skip if allocations already exist. Reuses the seeded project + tenant users."""
+        if ResourceAllocation.objects.filter(tenant=tenant).exists():
+            return
+        project = CrmProject.objects.filter(tenant=tenant).order_by("created_at").first()
+        users = list(User.objects.filter(tenant=tenant).order_by("pk")[:3])
+        if project is None or not users:
+            return
+        today = timezone.localdate()
+        start = today - datetime.timedelta(days=today.weekday())  # this week's Monday
+        end = start + datetime.timedelta(days=55)                 # ~8 weeks
+        for i, (role, hpw) in enumerate([("Project Manager", Decimal("50")),   # overbooked
+                                         ("Developer", Decimal("25")),
+                                         ("QA Engineer", Decimal("15"))]):
+            ResourceAllocation.objects.create(
+                tenant=tenant, project=project, assignee=users[i % len(users)], role=role,
+                hours_per_week=hpw, start_date=start, end_date=end, status="active",
+                notes=f"{role} booked on {project.name}.")
 
     def _seed_service(self, tenant):
         """Idempotently seed 1.4 help-desk demo data — a default SLA policy, 2 KB categories, a
