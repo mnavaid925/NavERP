@@ -3431,7 +3431,7 @@ def onboardingtemplate_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # template authoring = the shared org blueprint library (security-review)
 def onboardingtemplate_create(request):
     return crud_create(request, form_class=OnboardingTemplateForm,
                        template="crm/success/onboardingtemplate/form.html", success_url="crm:onboardingtemplate_list")
@@ -3448,19 +3448,19 @@ def onboardingtemplate_detail(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required  # shared blueprint library (security-review)
 def onboardingtemplate_edit(request, pk):
     return crud_edit(request, model=OnboardingTemplate, pk=pk, form_class=OnboardingTemplateForm,
                      template="crm/success/onboardingtemplate/form.html", success_url="crm:onboardingtemplate_list")
 
 
-@login_required
+@tenant_admin_required  # shared blueprint library (security-review)
 @require_POST
 def onboardingtemplate_delete(request, pk):
     return crud_delete(request, model=OnboardingTemplate, pk=pk, success_url="crm:onboardingtemplate_list")
 
 
-@login_required
+@tenant_admin_required  # shared blueprint library (security-review)
 @require_POST
 def onboardingtemplatestep_add(request, pk):
     template = get_object_or_404(OnboardingTemplate, pk=pk, tenant=request.tenant)
@@ -3477,7 +3477,7 @@ def onboardingtemplatestep_add(request, pk):
     return redirect("crm:onboardingtemplate_detail", pk=template.pk)
 
 
-@login_required
+@tenant_admin_required  # shared blueprint library (security-review)
 def onboardingtemplatestep_edit(request, step_pk):
     step = get_object_or_404(OnboardingTemplateStep.objects.select_related("template"),
                              pk=step_pk, tenant=request.tenant)
@@ -3492,7 +3492,7 @@ def onboardingtemplatestep_edit(request, step_pk):
     return render(request, "crm/success/onboardingtemplatestep/form.html", {"form": form, "step": step})
 
 
-@login_required
+@tenant_admin_required  # shared blueprint library (security-review)
 @require_POST
 def onboardingtemplatestep_delete(request, step_pk):
     step = get_object_or_404(OnboardingTemplateStep, pk=step_pk, tenant=request.tenant)
@@ -3714,16 +3714,23 @@ def survey_send(request, pk):
 
 
 def survey_respond(request, token):
-    """Public survey-response page (1.11) — token-scoped, no login. Scale + clamp are type-aware."""
+    """Public survey-response page (1.11) — token-scoped, no login. Scale + clamp are type-aware.
+    WARNING: unauthenticated endpoint — add per-IP rate-limiting (django-ratelimit) or a WAF throttle
+    in production. A single token is single-use (responded_at guard), but a bulk campaign issues one
+    token per contact, so scripted submission across many tokens is unthrottled at the app layer.
+    """
     survey = get_object_or_404(Survey, token=token)
     scale_max = _SURVEY_SCALE_MAX.get(survey.survey_type, 10)
     scale_min = 0 if survey.survey_type == "nps" else 1  # NPS is 0–10; CSAT/CES start at 1
     error = ""
     if request.method == "POST" and survey.responded_at is None:
-        raw = request.POST.get("score", "")
-        if raw.isdigit():
+        try:
+            parsed = int(request.POST.get("score", ""))  # int() not isdigit() — isdigit() accepts unicode (²) that int() rejects
+        except (TypeError, ValueError):
+            parsed = None
+        if parsed is not None:
             # Clamp to the type's scale — this is a public endpoint, never trust the POST.
-            survey.score = max(scale_min, min(scale_max, int(raw)))
+            survey.score = max(scale_min, min(scale_max, parsed))
             # Public endpoint — cap feedback length to prevent unbounded-storage abuse.
             survey.feedback_text = request.POST.get("feedback_text", "").strip()[:4000]
             survey.responded_at = timezone.now()
