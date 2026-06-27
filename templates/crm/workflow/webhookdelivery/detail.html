@@ -28,14 +28,16 @@
       {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
     </dd></div>
     <div class="detail-item"><dt>Response code</dt><dd>{{ obj.response_code|default:"—" }}</dd></div>
-    <div class="detail-item"><dt>Signature (HMAC-SHA256)</dt><dd style="word-break:break-all; font-family:monospace; font-size:.8rem;">{{ obj.signature|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Signature (HMAC-SHA256)</dt><dd class="mono" style="word-break:break-all; font-size:.8rem;">{{ obj.signature|default:"—" }}</dd></div>
     <div class="detail-item"><dt>When</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
   </dl>
-  {% if obj.error_msg %}<p class="form-error" style="margin-top:1rem;">{{ obj.error_msg }}</p>{% endif %}
+  {% if obj.error_msg %}<p class="text-danger" style="margin-top:1rem;">{{ obj.error_msg }}</p>{% endif %}
 </div></div>
 
 <div class="card">
   <div class="card-header"><h2 class="card-title">Payload</h2></div>
   <div class="card-body"><pre style="white-space:pre-wrap; word-break:break-all;">{{ obj.payload|default:"(empty)" }}</pre></div>
 </div>
+
+<a href="{% url 'crm:webhookdelivery_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
