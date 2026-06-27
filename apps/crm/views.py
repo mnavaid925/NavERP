@@ -19,7 +19,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.template import Context, Engine
+from django.template import Context, Engine, Library
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
@@ -2673,7 +2673,7 @@ def doctemplate_edit(request, pk):
                      template="crm/documents/doctemplate/form.html", success_url="crm:doctemplate_list")
 
 
-@login_required
+@tenant_admin_required  # symmetric with create/edit — template authoring is admin-only (security-review)
 @require_POST
 def doctemplate_delete(request, pk):
     return crud_delete(request, model=DocTemplate, pk=pk, success_url="crm:doctemplate_list")
@@ -2817,16 +2817,34 @@ def _safe_doc_context(contract):
     }
 
 
-# Isolated engine for rendering user-authored DocTemplate bodies. ``default_builtins`` is overridden
-# to DROP ``loader_tags`` — so ``{% include %}`` / ``{% extends %}`` are invalid tags (TemplateSyntaxError
-# at parse), not merely defanged by empty loaders. With ``libraries={}`` a ``{% load %}`` also fails.
-# A body can therefore only use ``{{ vars }}``, filters and ``{% if %}/{% for %}`` — it can never pull
-# in internal templates or tag libs (security). Combined with the string-only ``_safe_doc_context``.
+# Isolated engine for rendering user-authored DocTemplate bodies. Its only builtins are RESTRICTED
+# libraries carrying every Django default tag/filter EXCEPT the escape-bypass members (the
+# ``safe``/``safeseq``/``json_script`` filters + the ``autoescape`` tag) and EXCEPT ``loader_tags``
+# (so ``{% include %}``/``{% extends %}``/``{% load %}`` are invalid tags). A body can therefore only
+# use ``{{ vars }}``, normal filters and ``{% if %}/{% for %}`` with auto-escaping ALWAYS on — it can
+# never disable escaping, store raw markup, pull in internal templates, or load tag libs
+# (security-review). Combined with the string-only ``_safe_doc_context`` (no model instances).
+import django.template.defaultfilters as _doc_default_filters  # noqa: E402
+import django.template.defaulttags as _doc_default_tags  # noqa: E402
+
+_DOC_FILTER_LIB = Library()
+for _fname, _ffn in _doc_default_filters.register.filters.items():
+    if _fname not in {"safe", "safeseq", "json_script"}:
+        _DOC_FILTER_LIB.filter(_fname, _ffn)
+_DOC_TAG_LIB = Library()
+for _tname, _tfn in _doc_default_tags.register.tags.items():
+    if _tname != "autoescape":
+        _DOC_TAG_LIB.tag(_tname, _tfn)
+
+
 class _IsolatedDocEngine(Engine):
-    default_builtins = ["django.template.defaulttags", "django.template.defaultfilters"]
+    default_builtins = []  # no auto builtins — restricted Library instances are injected directly below
 
 
 _DOC_ENGINE = _IsolatedDocEngine(dirs=[], app_dirs=False, libraries={})
+# Engine's ``builtins=`` / ``libraries=`` kwargs expect dotted import PATHS, not Library objects, so set
+# the parsed builtins directly to our restricted libraries (no loader_tags / safe / safeseq / autoescape).
+_DOC_ENGINE.template_builtins = [_DOC_TAG_LIB, _DOC_FILTER_LIB]
 
 
 def _render_doc_body(contract):
