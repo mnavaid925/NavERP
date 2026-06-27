@@ -4958,3 +4958,56 @@ of the three NavERP.md bullets up to depth. CRM-owned, reuse the spine. Migratio
 - [ ] makemigrations/migrate/seed×2/check; throwaway temp verify (pages, apply, recompute-all, churn-task once, weights validation, type-aware respond, IDOR/admin gates).
 - [ ] review agents in order (code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer); commit between.
 - [ ] README 1.11 + skills/crm/SKILL.md 1.11 + this todo review section.
+
+---
+
+# CRM Sub-module 1.11 — Customer Success & Retention — REVIEW (recreated in detail, 2026-06-27)
+
+**Delivered scope (deepened all three NavERP.md bullets; CRM-owned, reused the spine):**
+- **Onboarding Pipelines** — added reusable **`OnboardingTemplate`** (`OTPL-#####`) + `OnboardingTemplateStep`
+  (ordered, `offset_days`); **`onboardingtemplate_apply`** clones an active template's steps into a fresh
+  `OnboardingPlan` for a tenant-scoped account (due = today + offset), atomic + audit; added the missing
+  `onboardingstep_edit`. Template authoring is **`@tenant_admin_required`** (the shared blueprint library).
+- **Health Scoring** — `compute_health_score` now appends an append-only **`HealthScoreHistory`** trend point and
+  **auto-raises one guarded churn-risk `CrmTask`** on Red tier (skips if an open "Churn risk:" follow-up exists);
+  added admin **`recompute_all_health_scores`** (per-account error-isolated) + audit on single recompute;
+  `HealthScoreConfigForm` validates weights sum to 100 + red<yellow.
+- **Surveys & Feedback** — `Survey.save()` classifies **per type** (NPS/CSAT/CES on their own scales); the public
+  `survey_respond` is **type-aware** (NPS 0–10 / CSAT 1–5 / CES 1–7), added admin **`survey_send`** + an
+  **`survey_results`** NPS-analytics page; `SurveyForm` validates the per-type score range.
+- Migrations `0023` (3 models + Survey.classification) + `0024` (CrmTask `(tenant,party)` index). LIVE_LINKS["1.11"]
+  + Onboarding Templates / Survey Analytics extras.
+
+**Verification:** `check` clean; `seed_crm` idempotent (template + 3 steps + an at-risk account that computes Red);
+`temp/verify_crm_111.py` all-pass (pages, apply clone w/ offset due dates, at-risk→red→one churn task + history,
+recompute dedup, weights validation, type-aware CSAT/CES respond clamp+classify, member-403, IDOR-404). **Full
+project suite green (3,695 tests; CRM 2,114; exit 0).**
+
+**Review agents (all 7, in order; findings applied + committed between):**
+- **code-reviewer** — `SurveyForm.clean` per-type score range (a CSAT couldn't be saved out-of-scale); churn guard
+  also matches `type=follow_up`; `recompute_all` per-account error isolation; `survey_results` NPS uses `round` not
+  floor-div; `survey_respond` no longer locks the survey on an empty score; immutable history admin (change/delete
+  blocked). (Skipped: seeder extraction — already idempotent under `_seed_extension`; step-order race — benign via
+  the `["order","id"]` tiebreaker.)
+- **explorer** — added a forward Templates link from the plan list. (Two flags were false positives — verified: the
+  `/respond/` suffix means a digit token still routes to `survey_respond`; `progress_pct` over a prefetched plan
+  list issues 0 queries.)
+- **frontend-reviewer** — `health_config` form renders clean error lines (not an ErrorList `<ul>`) so the new
+  weights/threshold errors show; aria-labels on filter selects; score uses `fw-600` (`.stat-value` only styles
+  inside `.stat-card`); results cards value-before-label.
+- **performance-reviewer** — bulk recompute fetches `HealthScoreConfig` once (`compute_health_score(config=…)`);
+  `CrmTask (tenant,party)` index (migration 0024); `survey_results` collapsed 11 count/avg queries into one
+  conditional aggregate (verified 1 query).
+- **qa-smoke-tester** — 64/64 PASS, no fixes.
+- **security-reviewer** — public `survey_respond` parses score via `int()` not `isdigit()` (a unicode digit `²` was
+  500-ing the endpoint) + rate-limit WARNING; **admin-gated the 6 onboarding-template authoring views** (members
+  could destroy the shared library) + gated the buttons; `Survey.token` → `token_urlsafe(32)` (project standard).
+- **test-writer** — 158 tests (models, compute engine + churn/history/config, forms, apply clone, public respond
+  incl. unicode, survey_results, admin-gating, cross-tenant IDOR, CSRF, read-only history); updated 2 stale
+  `test_ext_models` tests that asserted the old CSAT/CES "blank classification" behavior. All green.
+
+**Deferred (documented, not built):** real outbound survey email (the send action records sent_at only — wire a
+vetted transactional-email service + the documented rate-limit/SSRF-free delivery); `HealthScoreHistory` retention
+(append-only, admin-delete-blocked — add a periodic purge/keep-latest-N before production); login-frequency +
+invoice-payment-punctuality health signals (need a session/activity log + the Accounting ledger — Module 2);
+auto-on-event survey triggers (post_close/post_ticket/scheduled are metadata — a WorkflowRule/cron would fire them).
