@@ -169,7 +169,7 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   performance/top-performers, funnel drop-off, service resolution-time + CSAT) computed live with a chart +
   table + KPI summary, plus point-in-time **`ReportSnapshot`** runs frozen as JSON for period-over-period trends.
 
-**Sub-modules 1.7–1.12** (extension pass, 21 CRM-owned tables, migrations `0005` + `0016`–`0018` for the 1.7/1.8 recreations):
+**Sub-modules 1.7–1.12** (extension pass, 22 CRM-owned tables, migrations `0005` + `0016`–`0020` for the 1.7/1.8/1.9 recreations):
 - **1.7 Finance & Billing** *(recreated in detail — all three NavERP.md bullets now live, reusing the
   **Accounting ledger** per L29; draft hand-off)* — **Deal Invoices** (`DINV-#####`): one-click
   **quote→invoice conversion** that generates a draft `accounting.Invoice` (line items, per-line + quote-level
@@ -185,8 +185,13 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   to close a self-approve gap); and **Resource Allocation** — **`ResourceAllocation`** (`RA-#####`) capacity
   bookings feeding a **workload board** that flags overbooked vs. free capacity (planned vs. logged vs. capacity
   per person).
-- **1.9 Document & Contract** — **Doc Templates** (`TPL-#####`, merge-variable HTML) and **Contracts**
-  (`CTR-#####`) with per-signer e-signature tracking and a **public token-based signing page**.
+- **1.9 Document & Contract** *(recreated in detail — all three NavERP.md bullets now live)* — **E-Signatures**:
+  **Contracts** (`CTR-#####`) with per-signer tracking + a **public token-based signing page**; **Document
+  Generation**: **Doc Templates** (`TPL-#####`, merge-variable HTML) rendered into a contract via a one-click
+  **Generate** action through an **isolated, escaping-only template engine** (no `include`/`extends`/`load`/`safe`
+  — server-side template-injection-safe); **File Repository**: **`DocumentVersion`** (immutable contract revisions
+  with body snapshot + allowlisted file uploads) and a **repository organized by account/deal** with version
+  counts. Template authoring is tenant-admin-gated.
 - **1.10 Automation & Workflow** — **Workflow Rules** (`WFR-#####`, declarative trigger/condition/action JSON),
   an append-only **Workflow Log**, and **Approval Requests** (`APR-#####`, admin approve/reject).
 - **1.11 Customer Success** — **Onboarding Plans** (`CS-#####`, step checklists + progress), **Health Scores**
