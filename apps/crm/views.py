@@ -1923,6 +1923,9 @@ def overview(request):
 # ============================================================================
 # ===== Module 1 Extension — Sub-modules 1.7–1.12 views ======================
 # ============================================================================
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+import json  # noqa: E402
 import secrets  # noqa: E402
 
 from django.contrib.auth import get_user_model  # noqa: E402
@@ -1949,6 +1952,7 @@ from .forms import (  # noqa: E402
     SignerRecordForm,
     SurveyForm,
     TimesheetForm,
+    WebhookForm,
     WorkflowRuleForm,
 )
 from .models import (  # noqa: E402
@@ -1973,6 +1977,8 @@ from .models import (  # noqa: E402
     SignerRecord,
     Survey,
     Timesheet,
+    Webhook,
+    WebhookDelivery,
     WorkflowLog,
     WorkflowRule,
     compute_health_score,
@@ -3091,6 +3097,204 @@ def approvalrequest_reject(request, pk):
         write_audit_log(request.user, obj, "update", {"action": "reject"})
         messages.success(request, f"{obj.number} rejected.")
     return redirect("crm:approvalrequest_detail", pk=obj.pk)
+
+
+# ---- 1.10 Workflow execution engine + Webhooks ------------------------------------------
+_RULE_ENTITY_MODELS = {
+    "lead": Lead, "opportunity": Opportunity, "case": Case, "expense": Expense,
+    "contract": ContractDocument, "health_score": HealthScore,
+}
+_RULE_RUN_LIMIT = 50  # cap records evaluated per manual run (bounded engine)
+
+
+def _safe_record_field(record, name):
+    """Read a scalar attribute off a record for condition evaluation. SAFE: rejects private/dunder
+    names and callables (no method calls / relation traversal) — only a plain stored value."""
+    if not name or name.startswith("_"):
+        return None
+    value = getattr(record, name, None)
+    return None if callable(value) else value
+
+
+def _eval_conditions(record, conditions):
+    """AND of ``[{field, operator, value}]``. Empty/invalid → matches (a rule with no conditions fires
+    on every candidate). Unknown operators or bad numeric casts → that condition fails (safe default)."""
+    if not isinstance(conditions, list):
+        return True
+    for cond in conditions:
+        if not isinstance(cond, dict):
+            return False
+        actual = _safe_record_field(record, str(cond.get("field", "")))
+        op, target = cond.get("operator", "eq"), cond.get("value", "")
+        a, t = ("" if actual is None else str(actual)), str(target)
+        try:
+            if op == "eq":
+                ok = a == t
+            elif op == "ne":
+                ok = a != t
+            elif op in ("gt", "lt", "gte", "lte"):
+                fa, ft = float(actual), float(target)
+                ok = {"gt": fa > ft, "lt": fa < ft, "gte": fa >= ft, "lte": fa <= ft}[op]
+            elif op == "contains":
+                ok = t in a
+            elif op == "icontains":
+                ok = t.lower() in a.lower()
+            else:
+                ok = False
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            return False
+    return True
+
+
+def _webhook_payload(event, record):
+    return json.dumps({"event": event, "record": str(record), "id": record.pk,
+                       "at": timezone.now().isoformat()}, default=str)
+
+
+def _deliver_webhook(webhook, event, payload):
+    """Record a (signed) delivery for a webhook. The real outbound HTTP POST is **deferred**.
+    # WARNING: SSRF — when implementing the real POST, require https, resolve the host and REJECT
+    # private/loopback/link-local/169.254.169.254 (cloud-metadata) ranges, disable redirects, set a
+    # short timeout, and cap the response size. Never POST to a raw user-supplied URL without that."""
+    sig = ""
+    if webhook.secret:
+        sig = hmac.new(webhook.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return WebhookDelivery.objects.create(
+        tenant=webhook.tenant, webhook=webhook, event=event, payload=payload,
+        signature=sig, status="pending")
+
+
+def _run_rule(rule, user):
+    """Evaluate ``rule`` against ≤``_RULE_RUN_LIMIT`` recent tenant records of its trigger entity and
+    fire matching actions, logging each to WorkflowLog. Bounded + tenant-scoped. Returns a summary."""
+    Model = _RULE_ENTITY_MODELS.get(rule.trigger_entity)
+    summary = {"evaluated": 0, "matched": 0, "actions": 0}
+    if Model is None:
+        WorkflowLog.objects.create(tenant=rule.tenant, rule=rule, record_label="(no entity)",
+                                   status="skipped", error_msg="Unknown trigger entity.")
+        return summary
+    event = f"{rule.trigger_entity}.{rule.trigger_event}"
+    actions = rule.actions if isinstance(rule.actions, list) else []
+    records = Model.objects.filter(tenant=rule.tenant).order_by("-id")[:_RULE_RUN_LIMIT]
+    with transaction.atomic():
+        for rec in records:
+            summary["evaluated"] += 1
+            if not _eval_conditions(rec, rule.conditions):
+                continue
+            summary["matched"] += 1
+            label = str(rec)[:255]
+            try:
+                for action in actions:
+                    atype = (action.get("type") if isinstance(action, dict) else "") or ""
+                    params = action.get("params", {}) if isinstance(action, dict) else {}
+                    if atype == "webhook":
+                        for wh in Webhook.objects.filter(tenant=rule.tenant, is_active=True,
+                                                         trigger_entity=rule.trigger_entity,
+                                                         trigger_event=rule.trigger_event):
+                            _deliver_webhook(wh, event, _webhook_payload(event, rec))
+                            summary["actions"] += 1
+                    elif atype == "approval":
+                        ApprovalRequest.objects.create(
+                            tenant=rule.tenant, rule=rule,
+                            subject=(params.get("subject") or rule.name)[:255],
+                            record_label=label, requested_by=user, status="pending")
+                        summary["actions"] += 1
+                    else:
+                        summary["actions"] += 1  # alert/assign/email — logged note (real send deferred)
+                WorkflowLog.objects.create(tenant=rule.tenant, rule=rule, record_label=label, status="success")
+            except Exception as e:  # one record's failure must not abort the whole run  # noqa: BLE001
+                WorkflowLog.objects.create(tenant=rule.tenant, rule=rule, record_label=label,
+                                           status="failed", error_msg=str(e)[:2000])
+    return summary
+
+
+@tenant_admin_required
+@require_POST
+def workflowrule_run(request, pk):
+    """1.10 — manually run a rule now (evaluate conditions + fire actions over recent records, bounded)."""
+    rule = get_object_or_404(WorkflowRule, pk=pk, tenant=request.tenant)
+    if not rule.is_active:
+        messages.error(request, "Activate the rule before running it.")
+        return redirect("crm:workflowrule_detail", pk=pk)
+    s = _run_rule(rule, request.user)
+    write_audit_log(request.user, rule, "update", {"action": "run", **s})
+    messages.success(request, f"Ran {rule.number}: {s['matched']}/{s['evaluated']} matched, "
+                              f"{s['actions']} action(s) fired.")
+    return redirect("crm:workflowrule_detail", pk=pk)
+
+
+@login_required
+def webhook_list(request):
+    return crud_list(
+        request,
+        (Webhook.objects.filter(tenant=request.tenant).annotate(delivery_count=Count("deliveries"))
+         .order_by("-created_at")),  # annotate()+GROUP BY drops the Meta default ordering
+        "crm/workflow/webhook/list.html",
+        search_fields=["number", "name", "target_url"],
+        filters=[("is_active", "is_active", False), ("trigger_entity", "trigger_entity", False),
+                 ("trigger_event", "trigger_event", False)],
+        extra_context={"entity_choices": WorkflowRule.ENTITY_CHOICES,
+                       "event_choices": WorkflowRule.EVENT_CHOICES},
+    )
+
+
+@login_required
+def webhook_create(request):
+    return crud_create(request, form_class=WebhookForm, template="crm/workflow/webhook/form.html",
+                       success_url="crm:webhook_list")
+
+
+@login_required
+def webhook_detail(request, pk):
+    obj = get_object_or_404(Webhook, pk=pk, tenant=request.tenant)
+    return render(request, "crm/workflow/webhook/detail.html",
+                  {"obj": obj, "deliveries": obj.deliveries.all()[:10]})
+
+
+@login_required
+def webhook_edit(request, pk):
+    return crud_edit(request, model=Webhook, pk=pk, form_class=WebhookForm,
+                     template="crm/workflow/webhook/form.html", success_url="crm:webhook_list")
+
+
+@login_required
+@require_POST
+def webhook_delete(request, pk):
+    return crud_delete(request, model=Webhook, pk=pk, success_url="crm:webhook_list")
+
+
+@tenant_admin_required
+@require_POST
+def webhook_test(request, pk):
+    """1.10 — fire a signed test delivery for a webhook (records a WebhookDelivery; HTTP deferred)."""
+    webhook = get_object_or_404(Webhook, pk=pk, tenant=request.tenant)
+    payload = json.dumps({"event": "manual.test", "webhook": webhook.number,
+                          "at": timezone.now().isoformat()})
+    _deliver_webhook(webhook, "manual.test", payload)
+    write_audit_log(request.user, webhook, "update", {"action": "test"})
+    messages.success(request, f"Test delivery recorded for {webhook.number} (real HTTP delivery is deferred).")
+    return redirect("crm:webhook_detail", pk=pk)
+
+
+@login_required
+def webhookdelivery_list(request):
+    return crud_list(
+        request,
+        WebhookDelivery.objects.filter(tenant=request.tenant).select_related("webhook").defer("payload"),
+        "crm/workflow/webhookdelivery/list.html",
+        search_fields=["event", "webhook__name"],
+        filters=[("status", "status", False), ("webhook", "webhook_id", True)],
+        extra_context={"status_choices": WebhookDelivery.STATUS_CHOICES,
+                       "webhooks": Webhook.objects.filter(tenant=request.tenant).only("id", "number", "name").order_by("name")},
+    )
+
+
+@login_required
+def webhookdelivery_detail(request, pk):
+    obj = get_object_or_404(WebhookDelivery.objects.select_related("webhook"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/workflow/webhookdelivery/detail.html", {"obj": obj})
 
 
 # ------------------------------------------------------------ 1.11 Onboarding plans
