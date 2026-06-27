@@ -3109,11 +3109,14 @@ _RULE_RUN_LIMIT = 50  # cap records evaluated per manual run (bounded engine)
 
 def _safe_record_field(record, name):
     """Read a scalar attribute off a record for condition evaluation. SAFE: rejects private/dunder
-    names and callables (no method calls / relation traversal) — only a plain stored value."""
+    names, callables (no method calls), and related managers (no relation traversal) — only a plain
+    stored value."""
     if not name or name.startswith("_"):
         return None
     value = getattr(record, name, None)
-    return None if callable(value) else value
+    if callable(value) or (hasattr(value, "all") and hasattr(value, "filter")):
+        return None  # reject methods + RelatedManagers (code-review)
+    return value
 
 
 def _eval_conditions(record, conditions):
@@ -3154,10 +3157,10 @@ def _webhook_payload(event, record):
 
 
 def _deliver_webhook(webhook, event, payload):
-    """Record a (signed) delivery for a webhook. The real outbound HTTP POST is **deferred**.
-    # WARNING: SSRF — when implementing the real POST, require https, resolve the host and REJECT
+    """Record a (signed) delivery for a webhook. The real outbound HTTP POST is **deferred**."""
+    # WARNING (SSRF): when implementing the real POST, require https, resolve the host and REJECT
     # private/loopback/link-local/169.254.169.254 (cloud-metadata) ranges, disable redirects, set a
-    # short timeout, and cap the response size. Never POST to a raw user-supplied URL without that."""
+    # short timeout, and cap the response size. Never POST to a raw user-supplied URL without that.
     sig = ""
     if webhook.secret:
         sig = hmac.new(webhook.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
@@ -3177,22 +3180,26 @@ def _run_rule(rule, user):
         return summary
     event = f"{rule.trigger_entity}.{rule.trigger_event}"
     actions = rule.actions if isinstance(rule.actions, list) else []
+    # Hoist the (constant) active-webhook set out of the record loop — no per-record N+1 (code-review).
+    active_webhooks = list(Webhook.objects.filter(
+        tenant=rule.tenant, is_active=True,
+        trigger_entity=rule.trigger_entity, trigger_event=rule.trigger_event))
     records = Model.objects.filter(tenant=rule.tenant).order_by("-id")[:_RULE_RUN_LIMIT]
-    with transaction.atomic():
-        for rec in records:
-            summary["evaluated"] += 1
-            if not _eval_conditions(rec, rule.conditions):
-                continue
-            summary["matched"] += 1
-            label = str(rec)[:255]
-            try:
+    for rec in records:
+        summary["evaluated"] += 1
+        if not _eval_conditions(rec, rule.conditions):
+            continue
+        summary["matched"] += 1
+        label = str(rec)[:255]
+        try:
+            # Per-record savepoint: a DB error here rolls back only this record, so the failure
+            # WorkflowLog below still commits (a poisoned shared atomic would lose it — code-review).
+            with transaction.atomic():
                 for action in actions:
                     atype = (action.get("type") if isinstance(action, dict) else "") or ""
                     params = action.get("params", {}) if isinstance(action, dict) else {}
                     if atype == "webhook":
-                        for wh in Webhook.objects.filter(tenant=rule.tenant, is_active=True,
-                                                         trigger_entity=rule.trigger_entity,
-                                                         trigger_event=rule.trigger_event):
+                        for wh in active_webhooks:
                             _deliver_webhook(wh, event, _webhook_payload(event, rec))
                             summary["actions"] += 1
                     elif atype == "approval":
@@ -3204,9 +3211,9 @@ def _run_rule(rule, user):
                     else:
                         summary["actions"] += 1  # alert/assign/email — logged note (real send deferred)
                 WorkflowLog.objects.create(tenant=rule.tenant, rule=rule, record_label=label, status="success")
-            except Exception as e:  # one record's failure must not abort the whole run  # noqa: BLE001
-                WorkflowLog.objects.create(tenant=rule.tenant, rule=rule, record_label=label,
-                                           status="failed", error_msg=str(e)[:2000])
+        except Exception as e:  # one record's failure must not abort the whole run  # noqa: BLE001
+            WorkflowLog.objects.create(tenant=rule.tenant, rule=rule, record_label=label,
+                                       status="failed", error_msg=str(e)[:2000])
     return summary
 
 
@@ -3240,7 +3247,7 @@ def webhook_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # webhook config (target URL = future SSRF surface + signing secret) is admin-level (code-review)
 def webhook_create(request):
     return crud_create(request, form_class=WebhookForm, template="crm/workflow/webhook/form.html",
                        success_url="crm:webhook_list")
@@ -3250,16 +3257,16 @@ def webhook_create(request):
 def webhook_detail(request, pk):
     obj = get_object_or_404(Webhook, pk=pk, tenant=request.tenant)
     return render(request, "crm/workflow/webhook/detail.html",
-                  {"obj": obj, "deliveries": obj.deliveries.all()[:10]})
+                  {"obj": obj, "deliveries": obj.deliveries.order_by("-created_at")[:10]})
 
 
-@login_required
+@tenant_admin_required  # admin-level (code-review)
 def webhook_edit(request, pk):
     return crud_edit(request, model=Webhook, pk=pk, form_class=WebhookForm,
                      template="crm/workflow/webhook/form.html", success_url="crm:webhook_list")
 
 
-@login_required
+@tenant_admin_required  # admin-level (code-review)
 @require_POST
 def webhook_delete(request, pk):
     return crud_delete(request, model=Webhook, pk=pk, success_url="crm:webhook_list")
