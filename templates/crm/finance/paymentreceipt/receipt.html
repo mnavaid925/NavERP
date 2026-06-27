@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Receipt {{ obj.number }}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; max-width: 720px; margin: 0 auto; padding: 48px 56px; line-height: 1.6; }
+    .letterhead { text-align: center; border-bottom: 2px solid #1f3a8a; padding-bottom: 16px; margin-bottom: 28px; }
+    .letterhead h1 { margin: 0; font-size: 22px; color: #1f3a8a; letter-spacing: 1px; }
+    .letterhead p { margin: 4px 0 0; font-size: 13px; color: #555; }
+    h2.doc-title { text-align: center; text-transform: uppercase; letter-spacing: 2px; font-size: 15px; margin: 20px 0; }
+    table.kv { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+    table.kv td { padding: 8px 6px; border-bottom: 1px solid #e5e7eb; }
+    table.kv td.k { color: #555; width: 45%; }
+    .amount-box { text-align: center; margin: 28px 0; padding: 18px; background: #f3f6ff; border: 1px solid #1f3a8a; border-radius: 8px; }
+    .amount-box .lbl { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+    .amount-box .val { font-size: 30px; color: #1f3a8a; font-weight: bold; }
+    .foot { margin-top: 40px; font-size: 12px; color: #777; text-align: center; }
+    .toolbar { text-align: center; margin-bottom: 24px; }
+    .toolbar button, .toolbar a { font-family: system-ui, sans-serif; font-size: 13px; padding: 8px 16px; border: 1px solid #1f3a8a; background: #1f3a8a; color: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; }
+    .toolbar a { background: #fff; color: #1f3a8a; margin-left: 8px; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <a href="{% url 'crm:paymentreceipt_detail' obj.pk %}">Back</a>
+  </div>
+
+  <div class="letterhead">
+    <h1>{{ tenant.name|default:"Receipt" }}</h1>
+    <p>Payment Receipt</p>
+  </div>
+
+  <h2 class="doc-title">Official Receipt</h2>
+
+  <table class="kv">
+    <tr><td class="k">Receipt number</td><td>{{ obj.number }}</td></tr>
+    <tr><td class="k">Date received</td><td>{{ obj.received_date|date:"F d, Y" }}</td></tr>
+    <tr><td class="k">Received from</td><td>{{ obj.deal_invoice.account.name|default:"—" }}</td></tr>
+    <tr><td class="k">For invoice</td><td>{{ obj.deal_invoice.invoice_number }} (deal {{ obj.deal_invoice.number }})</td></tr>
+    <tr><td class="k">Payment method</td><td>{{ obj.get_method_display }}</td></tr>
+    <tr><td class="k">Gateway</td><td>{{ obj.get_gateway_display }}{% if obj.gateway_txn_id %} · {{ obj.gateway_txn_id }}{% endif %}</td></tr>
+    {% if obj.payment %}<tr><td class="k">Ledger payment</td><td>{{ obj.payment.number }}</td></tr>{% endif %}
+  </table>
+
+  <div class="amount-box">
+    <div class="lbl">Amount received</div>
+    <div class="val">{{ obj.amount }}</div>
+  </div>
+
+  {% if obj.notes %}<p>{{ obj.notes|linebreaksbr }}</p>{% endif %}
+
+  <div class="foot">
+    Generated {{ obj.created_at|date:"M d, Y H:i" }} · This is a system-generated receipt.
+  </div>
+</body>
+</html>
