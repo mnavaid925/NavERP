@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}File Repository{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">File Repository</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Document &amp; Contract
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:contractdocument_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Contract</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, name, account, deal…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="account" class="form-select">
+          <option value="">All Accounts</option>
+          {% for a in accounts %}<option value="{{ a.pk }}" {% if request.GET.account == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="opportunity" class="form-select">
+          <option value="">All Deals</option>
+          {% for o in opportunities %}<option value="{{ o.pk }}" {% if request.GET.opportunity == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.number }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:document_repository' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Name</th>
+          <th>Account</th>
+          <th>Deal</th>
+          <th>Status</th>
+          <th>Versions</th>
+          <th>Updated</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td><a href="{% url 'crm:contractdocument_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+          <td>{{ obj.name }}</td>
+          <td>{{ obj.account.name|default:"—" }}</td>
+          <td>{% if obj.opportunity %}{{ obj.opportunity.number }}{% else %}—{% endif %}</td>
+          <td>
+            {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'viewed' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'signed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'declined' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'expired' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </td>
+          <td>v{{ obj.current_version }} <span class="text-muted">({{ obj.version_count }} saved)</span></td>
+          <td>{{ obj.updated_at|date:"M d, Y" }}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'crm:contractdocument_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">
+            <div class="empty-state">
+              <i data-lucide="folder"></i>
+              <h3>No documents found</h3>
+              <p>Create a contract and generate it from a template to populate the repository.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
