@@ -326,4 +326,27 @@ urlpatterns = [
     path("portal/", views.portal_dashboard, name="portal_dashboard"),
     path("portal/orders/", views.portal_po_list, name="portal_po_list"),
     path("portal/stock/", views.portal_stock, name="portal_stock"),
+
+    # ===== 1.6 Analytics & Reporting =====================================
+    # Dashboards (saved per-user) + their live widgets
+    path("dashboards/", views.dashboard_list, name="dashboard_list"),
+    path("dashboards/add/", views.dashboard_create, name="dashboard_create"),
+    path("dashboards/<int:pk>/", views.dashboard_detail, name="dashboard_detail"),
+    path("dashboards/<int:pk>/edit/", views.dashboard_edit, name="dashboard_edit"),
+    path("dashboards/<int:pk>/delete/", views.dashboard_delete, name="dashboard_delete"),
+    path("dashboards/<int:dash_pk>/widgets/add/", views.widget_create, name="widget_create"),
+    path("widgets/<int:pk>/edit/", views.widget_edit, name="widget_edit"),
+    path("widgets/<int:pk>/delete/", views.widget_delete, name="widget_delete"),
+    path("widgets/<int:pk>/move/<str:direction>/", views.widget_move, name="widget_move"),
+
+    # Standard reports + point-in-time snapshots
+    path("reports/", views.report_list, name="report_list"),
+    path("reports/add/", views.report_create, name="report_create"),
+    path("reports/<int:pk>/", views.report_detail, name="report_detail"),
+    path("reports/<int:pk>/edit/", views.report_edit, name="report_edit"),
+    path("reports/<int:pk>/delete/", views.report_delete, name="report_delete"),
+    path("reports/<int:pk>/favorite/", views.report_favorite, name="report_favorite"),
+    path("reports/<int:pk>/snapshot/", views.report_snapshot, name="report_snapshot"),
+    path("snapshots/<int:pk>/", views.snapshot_detail, name="snapshot_detail"),
+    path("snapshots/<int:pk>/delete/", views.snapshot_delete, name="snapshot_delete"),
 ]
