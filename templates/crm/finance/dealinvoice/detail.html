@@ -49,7 +49,7 @@
     <div class="detail-item"><dt>Account</dt><dd>{% if obj.account %}<a href="{% url 'crm:account_detail' obj.account.pk %}">{{ obj.account.name }}</a>{% else %}—{% endif %}</dd></div>
     <div class="detail-item"><dt>Opportunity</dt><dd>{% if obj.opportunity %}<a href="{% url 'crm:opportunity_detail' obj.opportunity.pk %}">{{ obj.opportunity.name }}</a>{% else %}—{% endif %}</dd></div>
     <div class="detail-item"><dt>Source quote</dt><dd>{% if obj.quote %}<a href="{% url 'crm:quote_detail' obj.quote.pk %}">{{ obj.quote.number }}</a>{% else %}—{% endif %}</dd></div>
-    <div class="detail-item"><dt>Recurring schedule</dt><dd>{% if obj.recurring_invoice %}<a href="{% url 'accounting:recurringinvoice_list' %}">{{ obj.recurring_invoice.number }}</a> <span class="text-muted">({{ obj.recurring_invoice.get_cadence_display }})</span>{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Recurring schedule</dt><dd>{% if obj.recurring_invoice %}<a href="{% url 'accounting:recurringinvoice_detail' obj.recurring_invoice.pk %}">{{ obj.recurring_invoice.number }}</a> <span class="text-muted">({{ obj.recurring_invoice.get_cadence_display }})</span>{% else %}—{% endif %}</dd></div>
     <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
   </dl>
   {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
