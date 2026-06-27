@@ -67,6 +67,8 @@ from apps.crm.models import (
     Survey,
     Territory,
     Timesheet,
+    Webhook,
+    WebhookDelivery,
     WorkflowLog,
     WorkflowRule,
     compute_health_score,
@@ -139,6 +141,8 @@ class Command(BaseCommand):
             self._seed_resource18(tenant)
             # 1.9 File Repository (recreated) — render a contract + capture versions; guards on DocumentVersion.
             self._seed_documents19(tenant)
+            # 1.10 Webhooks (recreated) — an endpoint + signed deliveries; guards on Webhook.
+            self._seed_webhooks110(tenant)
         self.stdout.write(self.style.SUCCESS("CRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view CRM data.")
         self.stdout.write(self.style.WARNING(
@@ -470,6 +474,27 @@ class Command(BaseCommand):
         DocumentVersion.objects.create(
             tenant=tenant, contract=contract, version_no=2, body_snapshot=rendered,
             change_note="Revised pricing terms.", created_by=owner)
+
+    def _seed_webhooks110(self, tenant):
+        """Idempotently seed 1.10 Webhooks — one Slack-style endpoint + two signed deliveries (a prior
+        success + a pending) so the webhook detail + deliveries log show data. Guard: skip if a Webhook
+        already exists."""
+        if Webhook.objects.filter(tenant=tenant).exists():
+            return
+        import hashlib  # local — only the webhook demo needs these
+        import hmac
+        import json
+        wh = Webhook.objects.create(
+            tenant=tenant, name="Slack — New Opportunity",
+            target_url="https://hooks.slack.example/T000/B000/demo",
+            trigger_entity="opportunity", trigger_event="created", secret=secrets.token_hex(16),
+            is_active=True, description="Posts to #sales when an opportunity is created.")
+        for event, status, code in [("opportunity.created", "success", 200), ("manual.test", "pending", None)]:
+            payload = json.dumps({"event": event, "demo": True, "at": timezone.now().isoformat()})
+            sig = hmac.new(wh.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+            WebhookDelivery.objects.create(
+                tenant=tenant, webhook=wh, event=event, payload=payload, signature=sig,
+                status=status, response_code=code)
 
     def _seed_service(self, tenant):
         """Idempotently seed 1.4 help-desk demo data — a default SLA policy, 2 KB categories, a
