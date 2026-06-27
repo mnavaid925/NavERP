@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Survey Analytics{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Survey Analytics</h1>
+    <nav class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a> <span class="sep">›</span> <a href="{% url 'crm:survey_list' %}">Surveys</a> <span class="sep">›</span> Analytics</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:survey_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All surveys</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">NPS Score</div>
+    <div class="stat-value">{% if nps_score is not None %}{{ nps_score }}{% else %}—{% endif %}</div>
+    <div class="form-help">{{ nps_total }} NPS response{{ nps_total|pluralize }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Response rate</div>
+    <div class="stat-value">{% if response_rate is not None %}{{ response_rate }}%{% else %}—{% endif %}</div>
+    <div class="form-help">{{ responded_total }} of {{ sent }} sent</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">CSAT avg</div>
+    <div class="stat-value">{% if csat_avg %}{{ csat_avg|floatformat:1 }}{% else %}—{% endif %}</div>
+    <div class="form-help">{{ csat_count }} CSAT response{{ csat_count|pluralize }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">CES avg</div>
+    <div class="stat-value">{% if ces_avg %}{{ ces_avg|floatformat:1 }}{% else %}—{% endif %}</div>
+    <div class="form-help">{{ ces_count }} CES response{{ ces_count|pluralize }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">NPS breakdown</h2></div>
+  <div class="card-body">
+    {% if nps_total %}
+    <p><span class="badge badge-green">Promoters</span> {{ promoters }} ({{ promoter_pct }}%)</p>
+    <div class="progress" style="margin:.25rem 0 1rem;"><div class="progress-bar" style="width:{{ promoter_pct }}%"></div></div>
+    <p><span class="badge badge-amber">Passives</span> {{ passives }} ({{ passive_pct }}%)</p>
+    <div class="progress" style="margin:.25rem 0 1rem;"><div class="progress-bar" style="width:{{ passive_pct }}%"></div></div>
+    <p><span class="badge badge-red">Detractors</span> {{ detractors }} ({{ detractor_pct }}%)</p>
+    <div class="progress" style="margin:.25rem 0 0;"><div class="progress-bar" style="width:{{ detractor_pct }}%"></div></div>
+    <p class="form-help" style="margin-top:1rem;">NPS = % promoters − % detractors = <strong>{{ nps_score }}</strong>.</p>
+    {% else %}
+    <div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No NPS responses yet</h3><p>Send NPS surveys and collect responses to see the score.</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
