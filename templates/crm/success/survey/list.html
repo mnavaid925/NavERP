@@ -23,19 +23,19 @@
         <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search surveys…">
       </div>
       <div class="form-group">
-        <select name="survey_type" class="form-select">
+        <select name="survey_type" class="form-select" aria-label="Filter by type">
           <option value="">All types</option>
           {% for val, label in type_choices %}<option value="{{ val }}" {% if request.GET.survey_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <select name="classification" class="form-select">
+        <select name="classification" class="form-select" aria-label="Filter by classification">
           <option value="">All classifications</option>
           {% for val, label in classification_choices %}<option value="{{ val }}" {% if request.GET.classification == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <select name="account" class="form-select">
+        <select name="account" class="form-select" aria-label="Filter by account">
           <option value="">All accounts</option>
           {% for o in accounts %}<option value="{{ o.pk }}" {% if request.GET.account == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
         </select>
