@@ -574,6 +574,13 @@ class DocumentVersionForm(TenantModelForm):
                 raise forms.ValidationError("File exceeds the 20 MB limit.")
         return f
 
+    def clean(self):
+        # A revision needs at least a file or a note — no empty version rows (code-review).
+        cleaned = super().clean()
+        if not cleaned.get("file") and not (cleaned.get("change_note") or "").strip():
+            raise forms.ValidationError("Provide an uploaded file or a change note (or both).")
+        return cleaned
+
 
 class SignerRecordForm(TenantModelForm):
     """Inline on the ContractDocument detail page; tenant/contract/token set in the view."""
