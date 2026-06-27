@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:paymentreceipt_list' %}">Payment Receipts</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:paymentreceipt_print' obj.pk %}" target="_blank" rel="noopener" class="btn btn-primary"><i data-lucide="printer"></i> Print receipt</a>
+    <a href="{% url 'crm:paymentreceipt_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:paymentreceipt_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this receipt?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <dl class="detail-grid">
+    <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+    <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount }}</dd></div>
+    <div class="detail-item"><dt>Received</dt><dd>{{ obj.received_date|date:"M d, Y" }}</dd></div>
+    <div class="detail-item"><dt>Method</dt><dd>{{ obj.get_method_display }}</dd></div>
+    <div class="detail-item"><dt>Gateway</dt><dd>{{ obj.get_gateway_display }}</dd></div>
+    <div class="detail-item"><dt>Gateway txn id</dt><dd>{{ obj.gateway_txn_id|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Deal invoice</dt><dd><a href="{% url 'crm:dealinvoice_detail' obj.deal_invoice.pk %}">{{ obj.deal_invoice.number }}</a> <span class="text-muted">({{ obj.deal_invoice.invoice_number }})</span></dd></div>
+    <div class="detail-item"><dt>Account</dt><dd>{% if obj.deal_invoice.account %}<a href="{% url 'crm:account_detail' obj.deal_invoice.account.pk %}">{{ obj.deal_invoice.account.name }}</a>{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Ledger payment</dt><dd>{% if obj.payment %}<a href="{% url 'accounting:payment_detail' obj.payment.pk %}">{{ obj.payment.number }}</a>{% else %}<span class="text-muted">— (manual receipt)</span>{% endif %}</dd></div>
+    <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+  </dl>
+  {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+</div></div>
+
+<a href="{% url 'crm:paymentreceipt_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
