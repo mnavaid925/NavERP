@@ -54,7 +54,9 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
             if val.isdigit():  # L11: never pass non-numeric to an int FK filter
                 qs = qs.filter(**{lookup: int(val)})
         else:
-            qs = qs.filter(**{lookup: val})
+            # Map stringified booleans so BooleanField filters work — `.filter(x="False")` would
+            # otherwise coerce via bool("False") == True and silently return every row.
+            qs = qs.filter(**{lookup: {"True": True, "False": False}.get(val, val)})
     page_obj = paginate(request, qs, per_page)
     ctx = {"object_list": page_obj.object_list, "page_obj": page_obj, "q": q}
     ctx.update(extra_context or {})
