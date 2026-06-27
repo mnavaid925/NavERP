@@ -102,6 +102,12 @@ html[data-sidebar="icon-hovered"] .sidebar:hover .nav-section-title { display: b
 html[data-collapsed="true"] { --sidebar-w: var(--sidebar-w-icon); }
 html[data-collapsed="true"] .nav-label,
 html[data-collapsed="true"] .nav-section-title { display: none; }
+/* Icon-width rail (collapsed toggle / small-icon / un-hovered icon-hovered): stay icon-only — never leave an
+   active sub-module's panel expanded, or its feature links (not .nav-label) overflow the 72px rail and add
+   stray indent lines + scrollbars. Selector outweighs `.nav-group.open > .nav-sub` so display:none wins. */
+html[data-collapsed="true"] .nav-group.open > .nav-sub,
+html[data-sidebar="small-icon"] .nav-group.open > .nav-sub,
+html[data-sidebar="icon-hovered"] .sidebar:not(:hover) .nav-group.open > .nav-sub { display: none; }
 
 /* Colored sidebar */
 html[data-sidebar-color="colored"] {
