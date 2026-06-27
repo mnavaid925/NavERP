@@ -6,7 +6,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * one-click Lead conversion (creates Party + roles + an Opportunity),
   * a CRM analytics overview (1.6) using the dashboard's json_script + Chart.js pattern.
 """
-from datetime import timezone as dt_timezone
+from datetime import timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 from django.contrib import messages
@@ -20,6 +20,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list, paginate
@@ -1942,6 +1943,7 @@ from .forms import (  # noqa: E402
     ProductStockForm,
     PurchaseOrderForm,
     PurchaseOrderLineForm,
+    ResourceAllocationForm,
     SignerRecordForm,
     SurveyForm,
     TimesheetForm,
@@ -1964,6 +1966,7 @@ from .models import (  # noqa: E402
     ProductStock,
     PurchaseOrder,
     PurchaseOrderLine,
+    ResourceAllocation,
     SignerRecord,
     Survey,
     Timesheet,
@@ -2287,10 +2290,14 @@ def paymentreceipt_print(request, pk):
 # ------------------------------------------------------------ 1.8 Projects
 @login_required
 def crmproject_list(request):
+    # Annotate milestone counts so the progress bar (progress_pct) doesn't query per row.
+    qs = (CrmProject.objects.filter(tenant=request.tenant)
+          .select_related("account", "owner", "source_opportunity")
+          .annotate(ms_total=Count("milestones"),
+                    ms_done=Count("milestones", filter=Q(milestones__status="completed")))
+          .order_by("-created_at"))  # explicit: annotate()+GROUP BY drops the Meta default ordering
     return crud_list(
-        request,
-        CrmProject.objects.filter(tenant=request.tenant).select_related(
-            "account", "owner", "source_opportunity"),
+        request, qs,
         "crm/projects/crmproject/list.html",
         search_fields=["number", "name", "account__name"],
         filters=[("status", "status", False)],
@@ -2441,6 +2448,173 @@ def timesheet_edit(request, pk):
 @require_POST
 def timesheet_delete(request, pk):
     return crud_delete(request, model=Timesheet, pk=pk, success_url="crm:timesheet_list")
+
+
+# ---- 1.8 Timesheet approval workflow (status off the form — advanced only here) ----------
+@login_required
+@require_POST
+def timesheet_submit(request, pk):
+    obj = get_object_or_404(Timesheet, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "submitted"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Timesheet {obj.number} submitted for approval.")
+    return redirect("crm:timesheet_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # approving is privileged — a manager/admin, not the time logger
+@require_POST
+def timesheet_approve(request, pk):
+    obj = get_object_or_404(Timesheet, pk=pk, tenant=request.tenant)
+    obj.status = "approved"
+    obj.approved_by = request.user
+    obj.save(update_fields=["status", "approved_by", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "approve"})
+    messages.success(request, f"Timesheet {obj.number} approved.")
+    return redirect("crm:timesheet_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def timesheet_reject(request, pk):
+    obj = get_object_or_404(Timesheet, pk=pk, tenant=request.tenant)
+    obj.status = "rejected"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reject"})
+    messages.success(request, f"Timesheet {obj.number} rejected.")
+    return redirect("crm:timesheet_detail", pk=obj.pk)
+
+
+# ------------------------------------------------------------ 1.8 Resource Allocation
+@login_required
+def resourceallocation_list(request):
+    return crud_list(
+        request,
+        ResourceAllocation.objects.filter(tenant=request.tenant).select_related("project", "assignee"),
+        "crm/projects/resourceallocation/list.html",
+        search_fields=["number", "role", "assignee__username", "project__name"],
+        filters=[("status", "status", False), ("project", "project_id", True),
+                 ("assignee", "assignee_id", True)],
+        extra_context={"status_choices": ResourceAllocation.STATUS_CHOICES,
+                       "projects": CrmProject.objects.filter(tenant=request.tenant).order_by("name"),
+                       "employees": User.objects.filter(tenant=request.tenant).order_by("username")},
+    )
+
+
+@login_required
+def resourceallocation_create(request):
+    return crud_create(request, form_class=ResourceAllocationForm,
+                       template="crm/projects/resourceallocation/form.html",
+                       success_url="crm:resourceallocation_list")
+
+
+@login_required
+def resourceallocation_detail(request, pk):
+    obj = get_object_or_404(
+        ResourceAllocation.objects.select_related("project", "assignee"), pk=pk, tenant=request.tenant)
+    return render(request, "crm/projects/resourceallocation/detail.html", {"obj": obj})
+
+
+@login_required
+def resourceallocation_edit(request, pk):
+    return crud_edit(request, model=ResourceAllocation, pk=pk, form_class=ResourceAllocationForm,
+                     template="crm/projects/resourceallocation/form.html",
+                     success_url="crm:resourceallocation_list")
+
+
+@login_required
+@require_POST
+def resourceallocation_delete(request, pk):
+    return crud_delete(request, model=ResourceAllocation, pk=pk, success_url="crm:resourceallocation_list")
+
+
+DEFAULT_WEEKLY_CAPACITY = Decimal("40")  # planned-hours capacity per person per week (future: per-employee)
+
+
+@login_required
+def resource_workload(request):
+    """1.8 Resource Allocation — the workload/capacity board: per person, planned (allocations) vs.
+    logged (timesheets) vs. capacity over a date window, flagging overbooked / free capacity. Two
+    grouped aggregates (allocations + timesheets) — no per-person N+1."""
+    today = timezone.localdate()
+    default_start = today - timedelta(days=today.weekday())  # this week's Monday
+    start = parse_date(request.GET.get("start", "") or "") or default_start
+    end = parse_date(request.GET.get("end", "") or "") or (start + timedelta(days=27))  # 4 weeks
+    if end < start:
+        end = start + timedelta(days=27)
+    weeks = Decimal((end - start).days + 1) / Decimal(7)
+    capacity = (DEFAULT_WEEKLY_CAPACITY * weeks).quantize(Decimal("0.01"))
+
+    # Planned: allocations overlapping the window (prorated in Python via overlap_hours).
+    allocs = list(ResourceAllocation.objects.filter(tenant=request.tenant)
+                  .exclude(status="cancelled")
+                  .filter(Q(end_date__gte=start) | Q(end_date__isnull=True), start_date__lte=end)
+                  .select_related("assignee"))
+    planned_by_user, name_by_user = {}, {}
+    for a in allocs:
+        if a.assignee_id is None:
+            continue
+        planned_by_user[a.assignee_id] = planned_by_user.get(a.assignee_id, Decimal("0")) + a.overlap_hours(start, end)
+        name_by_user[a.assignee_id] = a.assignee
+
+    # Logged: timesheet hours grouped by employee in the window (one query).
+    logged_by_user = {r["employee"]: (r["h"] or Decimal("0")) for r in
+                      Timesheet.objects.filter(tenant=request.tenant, date__gte=start, date__lte=end)
+                      .values("employee").annotate(h=Sum("hours"))}
+
+    user_ids = {uid for uid in (set(planned_by_user) | set(logged_by_user)) if uid is not None}
+    missing = [uid for uid in user_ids if uid not in name_by_user]
+    if missing:  # resolve names for people who only have timesheets (no allocation)
+        for u in User.objects.filter(tenant=request.tenant, pk__in=missing):
+            name_by_user[u.pk] = u
+
+    rows = []
+    for uid in user_ids:
+        planned = planned_by_user.get(uid, Decimal("0"))
+        logged = logged_by_user.get(uid, Decimal("0"))
+        util = int(planned / capacity * 100) if capacity else 0
+        rows.append({"user": name_by_user.get(uid), "planned": planned, "logged": logged,
+                     "capacity": capacity, "available": capacity - planned,
+                     "util_pct": util, "overbooked": planned > capacity})
+    rows.sort(key=lambda r: r["planned"], reverse=True)
+    return render(request, "crm/projects/workload.html",
+                  {"rows": rows, "start": start, "end": end, "capacity": capacity})
+
+
+@login_required
+def crmproject_board(request):
+    """1.8 Projects — Kanban board: milestones grouped into status columns (optional ?project=)."""
+    projects = CrmProject.objects.filter(tenant=request.tenant).order_by("name")
+    qs = CrmMilestone.objects.filter(tenant=request.tenant).select_related("project", "assignee")
+    project_id = request.GET.get("project", "").strip()
+    selected_project = None
+    if project_id.isdigit():
+        qs = qs.filter(project_id=int(project_id))
+        selected_project = projects.filter(pk=int(project_id)).first()
+    ms_list = list(qs)  # evaluate once; bucket per column in Python (no re-query)
+    columns = [{"value": v, "label": label, "cards": [m for m in ms_list if m.status == v]}
+               for v, label in CrmMilestone.STATUS_CHOICES]
+    return render(request, "crm/projects/board.html", {
+        "columns": columns, "projects": projects, "selected_project": selected_project,
+        "status_choices": CrmMilestone.STATUS_CHOICES,
+    })
+
+
+@login_required
+@require_POST
+def crmmilestone_move(request, pk):
+    """1.8 Kanban — move a milestone to a new status from the board (save() stamps completed_at)."""
+    obj = get_object_or_404(CrmMilestone, pk=pk, tenant=request.tenant)
+    new_status = request.POST.get("status", "")
+    if new_status in {v for v, _ in CrmMilestone.STATUS_CHOICES} and new_status != obj.status:
+        obj.status = new_status
+        obj.save()
+        write_audit_log(request.user, obj, "update", {"action": "move", "status": new_status})
+        messages.success(request, f"{obj.number} → {obj.get_status_display()}.")
+    url = reverse("crm:crmproject_board")
+    proj = request.POST.get("project", "")
+    return redirect(f"{url}?project={proj}" if proj.isdigit() else url)
 
 
 # ------------------------------------------------------------ 1.9 Document templates
