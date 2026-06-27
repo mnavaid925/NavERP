@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Payment Receipts{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Payment Receipts</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      Payment Tracking
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:paymentreceipt_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Receipt</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, deal invoice, txn id…">
+      </div>
+      <div class="form-group">
+        <select name="method" class="form-select">
+          <option value="">All Methods</option>
+          {% for val, label in method_choices %}<option value="{{ val }}" {% if request.GET.method == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="gateway" class="form-select">
+          <option value="">All Gateways</option>
+          {% for val, label in gateway_choices %}<option value="{{ val }}" {% if request.GET.gateway == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:paymentreceipt_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Deal Invoice</th>
+          <th>Amount</th>
+          <th>Method</th>
+          <th>Gateway</th>
+          <th>Received</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td><a href="{% url 'crm:paymentreceipt_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+          <td><a href="{% url 'crm:dealinvoice_detail' obj.deal_invoice.pk %}">{{ obj.deal_invoice.number }}</a></td>
+          <td>{{ obj.amount }}</td>
+          <td>{{ obj.get_method_display }}</td>
+          <td>{% if obj.gateway == 'manual' %}<span class="badge badge-muted">{{ obj.get_gateway_display }}</span>{% else %}<span class="badge badge-info">{{ obj.get_gateway_display }}</span>{% endif %}</td>
+          <td>{{ obj.received_date|date:"M d, Y" }}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'crm:paymentreceipt_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'crm:paymentreceipt_print' obj.pk %}" target="_blank" rel="noopener" class="btn-icon" title="Print"><i data-lucide="printer"></i></a>
+              <a href="{% url 'crm:paymentreceipt_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'crm:paymentreceipt_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this receipt?');">
+                {% csrf_token %}
+                <button type="submit" class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <i data-lucide="receipt"></i>
+              <h3>No receipts yet</h3>
+              <p>Record a customer payment receipt against a deal invoice.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
