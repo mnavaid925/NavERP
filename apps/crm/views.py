@@ -7,6 +7,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * a CRM analytics overview (1.6) using the dashboard's json_script + Chart.js pattern.
 """
 from datetime import timezone as dt_timezone
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -1928,6 +1929,7 @@ from .forms import (  # noqa: E402
     ContractDocumentForm,
     CrmMilestoneForm,
     CrmProjectForm,
+    DealInvoiceForm,
     DocTemplateForm,
     ExpenseForm,
     HealthScoreConfigForm,
@@ -1935,6 +1937,7 @@ from .forms import (  # noqa: E402
     OnboardingPlanForm,
     OnboardingStepForm,
     PartnerPortalAccessForm,
+    PaymentReceiptForm,
     ProductStockForm,
     PurchaseOrderForm,
     PurchaseOrderLineForm,
@@ -1948,6 +1951,7 @@ from .models import (  # noqa: E402
     ContractDocument,
     CrmMilestone,
     CrmProject,
+    DealInvoice,
     DocTemplate,
     Expense,
     HealthScore,
@@ -1955,6 +1959,7 @@ from .models import (  # noqa: E402
     OnboardingPlan,
     OnboardingStep,
     PartnerPortalAccess,
+    PaymentReceipt,
     ProductStock,
     PurchaseOrder,
     PurchaseOrderLine,
@@ -1965,6 +1970,9 @@ from .models import (  # noqa: E402
     WorkflowRule,
     compute_health_score,
 )
+# 1.7 Finance & Billing reuses the ACCOUNTING ledger (Module 2 owns it — lesson L29): the CRM
+# layer creates draft Invoices + reads their status/allocations, never a second ledger.
+from apps.accounting.models import Currency, Invoice, InvoiceLine  # noqa: E402
 
 User = get_user_model()
 
@@ -2060,6 +2068,193 @@ def expense_reject(request, pk):
     write_audit_log(request.user, obj, "update", {"action": "reject"})
     messages.success(request, f"Expense {obj.number} rejected.")
     return redirect("crm:expense_detail", pk=obj.pk)
+
+
+# ------------------------------------------------------------ 1.7 Invoicing (DealInvoice)
+# CRM-owned wrapper over the accounting ledger (L29): the conversion creates a DRAFT
+# accounting.Invoice; issuing/GL-posting + cash application stay in Accounting (draft hand-off).
+@login_required
+def dealinvoice_list(request):
+    return crud_list(
+        request,
+        DealInvoice.objects.filter(tenant=request.tenant).select_related(
+            "opportunity", "account", "invoice", "recurring_invoice"),
+        "crm/finance/dealinvoice/list.html",
+        search_fields=["number", "account__name", "opportunity__name", "invoice__number"],
+        filters=[("status", "invoice__status", False)],
+        extra_context={"status_choices": Invoice.STATUS_CHOICES},
+    )
+
+
+@login_required
+@require_POST
+def dealinvoice_from_quote(request, quote_pk):
+    """One-click quote→invoice conversion (1.7 Invoicing). Generates a DRAFT accounting.Invoice
+    from an ACCEPTED quote — carrying line items, per-line + quote-level discount, and tax — and
+    wraps it in a DealInvoice. The net unit price folds both discounts so invoice.total == quote.total."""
+    quote = get_object_or_404(
+        Quote.objects.select_related("account", "opportunity"), pk=quote_pk, tenant=request.tenant)
+    existing = DealInvoice.objects.filter(tenant=request.tenant, quote=quote).first()
+    if existing:  # idempotent — a converted quote jumps to its existing wrapper
+        messages.info(request, f"This quote was already converted ({existing.number}).")
+        return redirect("crm:dealinvoice_detail", pk=existing.pk)
+    if quote.status != "accepted":
+        messages.error(request, "Only an accepted quote can be converted to an invoice.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    if quote.account_id is None:
+        messages.error(request, "This quote has no account (bill-to). Set an account before converting.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+    lines = list(quote.lines.all())
+    if not lines:
+        messages.error(request, "This quote has no line items to invoice.")
+        return redirect("crm:quote_detail", pk=quote.pk)
+
+    code = (quote.currency_code or "USD").upper()
+    currency, _ = Currency.objects.get_or_create(code=code, defaults={"name": code, "symbol": ""})
+    quote_disc = (Decimal(100) - Decimal(quote.discount_pct or 0)) / Decimal(100)
+    with transaction.atomic():
+        inv = Invoice.objects.create(
+            tenant=request.tenant, party=quote.account, issue_date=timezone.localdate(),
+            status="draft", currency=currency,
+            notes=f"Generated from quote {quote.number}" + (f" — {quote.name}" if quote.name else ""))
+        for ln in lines:
+            line_disc = (Decimal(100) - Decimal(ln.discount_pct or 0)) / Decimal(100)
+            net_unit = (Decimal(ln.unit_price or 0) * line_disc * quote_disc).quantize(Decimal("0.01"))
+            InvoiceLine.objects.create(
+                invoice=inv, description=(ln.description or "Item")[:255],
+                quantity=(ln.quantity or Decimal(1)), unit_price=net_unit,
+                tax_rate_pct=(ln.tax_pct or Decimal(0)))
+        inv.recalc_totals()
+        deal = DealInvoice.objects.create(
+            tenant=request.tenant, opportunity=quote.opportunity, quote=quote,
+            account=quote.account, invoice=inv, notes=f"Converted from quote {quote.number}.")
+    write_audit_log(request.user, deal, "create",
+                    changes={"action": "convert_quote", "quote": quote.number, "invoice": inv.number})
+    messages.success(request, f"Quote {quote.number} converted → invoice {inv.number} (draft). "
+                              "Issue it from Accounting to post it to the ledger.")
+    return redirect("crm:dealinvoice_detail", pk=deal.pk)
+
+
+@login_required
+def dealinvoice_create(request):
+    # Custom create (not crud_create): ``invoice`` is editable=False on the model, so its value is
+    # taken from the form's explicit field and set here. The conversion action is the usual path.
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = DealInvoiceForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.invoice = form.cleaned_data.get("invoice")
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Deal invoice {obj.number} created.")
+            return redirect("crm:dealinvoice_detail", pk=obj.pk)
+    else:
+        form = DealInvoiceForm(tenant=request.tenant)
+    return render(request, "crm/finance/dealinvoice/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def dealinvoice_detail(request, pk):
+    obj = get_object_or_404(
+        DealInvoice.objects.select_related(
+            "opportunity", "account", "quote", "invoice", "invoice__currency", "recurring_invoice"),
+        pk=pk, tenant=request.tenant)
+    # Each ledger allocation against the linked invoice is a partial/milestone payment.
+    allocations = (obj.invoice.allocations.select_related("payment") if obj.invoice_id else [])
+    receipts = obj.receipts.select_related("payment")
+    # Deal margin = revenue (opportunity amount) − non-billable, non-rejected expenses on the deal.
+    margin = None
+    if obj.opportunity_id:
+        revenue = obj.opportunity.amount or Decimal("0")
+        cost = (Expense.objects.filter(tenant=request.tenant, opportunity_id=obj.opportunity_id,
+                                       is_billable=False).exclude(status="rejected")
+                .aggregate(s=Sum("amount"))["s"] or Decimal("0"))
+        margin = {"revenue": revenue, "cost": cost, "profit": revenue - cost,
+                  "pct": ((revenue - cost) / revenue * 100) if revenue else None}
+    return render(request, "crm/finance/dealinvoice/detail.html", {
+        "obj": obj, "allocations": allocations, "receipts": receipts, "margin": margin,
+    })
+
+
+@login_required
+def dealinvoice_edit(request, pk):
+    obj = get_object_or_404(DealInvoice, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = DealInvoiceForm(request.POST, instance=obj, tenant=request.tenant, editing=True)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Updated successfully.")
+            return redirect("crm:dealinvoice_detail", pk=obj.pk)
+    else:
+        form = DealInvoiceForm(instance=obj, tenant=request.tenant, editing=True)
+    return render(request, "crm/finance/dealinvoice/form.html", {"form": form, "obj": obj, "is_edit": True})
+
+
+@login_required
+@require_POST
+def dealinvoice_delete(request, pk):
+    # Deletes the CRM wrapper ONLY — the ledger invoice in Accounting is left untouched.
+    return crud_delete(request, model=DealInvoice, pk=pk, success_url="crm:dealinvoice_list")
+
+
+# ------------------------------------------------------------ 1.7 Payment Tracking (PaymentReceipt)
+@login_required
+def paymentreceipt_list(request):
+    return crud_list(
+        request,
+        PaymentReceipt.objects.filter(tenant=request.tenant).select_related(
+            "deal_invoice", "deal_invoice__invoice", "payment"),
+        "crm/finance/paymentreceipt/list.html",
+        search_fields=["number", "deal_invoice__number", "gateway_txn_id"],
+        filters=[("method", "method", False), ("gateway", "gateway", False)],
+        extra_context={"method_choices": PaymentReceipt.METHOD_CHOICES,
+                       "gateway_choices": PaymentReceipt.GATEWAY_CHOICES},
+    )
+
+
+@login_required
+def paymentreceipt_create(request):
+    return crud_create(request, form_class=PaymentReceiptForm,
+                       template="crm/finance/paymentreceipt/form.html",
+                       success_url="crm:paymentreceipt_list")
+
+
+@login_required
+def paymentreceipt_detail(request, pk):
+    obj = get_object_or_404(
+        PaymentReceipt.objects.select_related(
+            "deal_invoice", "deal_invoice__invoice", "deal_invoice__account", "payment"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/finance/paymentreceipt/detail.html", {"obj": obj})
+
+
+@login_required
+def paymentreceipt_edit(request, pk):
+    return crud_edit(request, model=PaymentReceipt, pk=pk, form_class=PaymentReceiptForm,
+                     template="crm/finance/paymentreceipt/form.html",
+                     success_url="crm:paymentreceipt_list")
+
+
+@login_required
+@require_POST
+def paymentreceipt_delete(request, pk):
+    return crud_delete(request, model=PaymentReceipt, pk=pk, success_url="crm:paymentreceipt_list")
+
+
+@login_required
+def paymentreceipt_print(request, pk):
+    """Standalone printable receipt (browser print → PDF). Server-side PDF (weasyprint) deferred."""
+    obj = get_object_or_404(
+        PaymentReceipt.objects.select_related(
+            "deal_invoice", "deal_invoice__invoice", "deal_invoice__account", "payment"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "crm/finance/paymentreceipt/receipt.html",
+                  {"obj": obj, "tenant": request.tenant})
 
 
 # ------------------------------------------------------------ 1.8 Projects
@@ -2960,8 +3155,6 @@ def portal_stock(request):
 # reports (4 canned types) with point-in-time snapshots. All compute lives in
 # apps/crm/analytics.py; views stay thin and tenant-scope every queryset.
 # ============================================================================
-from django.contrib.auth import get_user_model as _get_user_model  # noqa: E402
-
 from .analytics import compute_report, compute_widget  # noqa: E402
 from .forms import (  # noqa: E402
     AnalyticsDashboardForm,
@@ -2979,7 +3172,6 @@ from .models import (  # noqa: E402
 # ----- Dashboards -----------------------------------------------------------
 @login_required
 def dashboard_list(request):
-    User = _get_user_model()
     qs = AnalyticsDashboard.objects.filter(tenant=request.tenant).select_related("owner")
     return crud_list(
         request, qs, "crm/analytics/dashboard/list.html",
@@ -3000,16 +3192,18 @@ def dashboard_create(request):
 def dashboard_detail(request, pk):
     dashboard = get_object_or_404(
         AnalyticsDashboard.objects.select_related("owner"), pk=pk, tenant=request.tenant)
+    cols = {"one": 1, "two": 2, "three": 3}.get(dashboard.layout, 2)
+    span_map = {"small": 1, "medium": 2, "large": 3, "full": cols}
     rendered, chart_configs = [], []
     for w in dashboard.widgets.filter(tenant=request.tenant):
         result = compute_widget(w)
-        rendered.append({"widget": w, "result": result})
+        rendered.append({"widget": w, "result": result, "span": min(span_map.get(w.size, 1), cols)})
         # Only true Chart.js charts go to JS; KPI/gauge/table render as HTML.
         if result.get("kind") == "series" and w.chart_type in ("bar", "line", "pie", "doughnut"):
             chart_configs.append({"id": w.pk, "type": w.chart_type,
                                   "labels": result.get("labels", []), "data": result.get("data", [])})
     return render(request, "crm/analytics/dashboard/detail.html",
-                  {"obj": dashboard, "rendered_widgets": rendered, "chart_configs": chart_configs})
+                  {"obj": dashboard, "rendered_widgets": rendered, "chart_configs": chart_configs, "cols": cols})
 
 
 @login_required
@@ -3087,10 +3281,12 @@ def widget_move(request, pk, direction):
         swap = idx - 1 if direction == "up" else idx + 1
         if 0 <= swap < len(order):
             order[idx], order[swap] = order[swap], order[idx]
-            for i, w in enumerate(order):
-                if w.position != i:
-                    w.position = i
-                    w.save(update_fields=["position"])
+            with transaction.atomic():
+                for i, w in enumerate(order):
+                    if w.position != i:
+                        w.position = i
+                        w.save(update_fields=["position"])
+            write_audit_log(request.user, widget, "update", {"action": "move", "direction": direction})
     return redirect("crm:dashboard_detail", pk=widget.dashboard_id)
 
 
@@ -3157,16 +3353,17 @@ def report_favorite(request, pk):
 def report_snapshot(request, pk):
     report = get_object_or_404(AnalyticsReport, pk=pk, tenant=request.tenant)
     result = compute_report(report)
-    snap = ReportSnapshot.objects.create(
-        tenant=request.tenant, report=report,
-        title="{} — {:%Y-%m-%d %H:%M}".format(report.name, timezone.now()),
-        generated_by=request.user if request.user.is_authenticated else None,
-        summary=result.get("summary", []),
-        data={k: result.get(k) for k in
-              ("columns", "rows", "chart_type", "chart_label", "chart_labels", "chart_data")},
-    )
-    AnalyticsReport.objects.filter(pk=report.pk).update(last_run_at=timezone.now())
-    write_audit_log(request.user, snap, "create")
+    with transaction.atomic():
+        snap = ReportSnapshot.objects.create(
+            tenant=request.tenant, report=report,
+            title="{} — {:%Y-%m-%d %H:%M}".format(report.name, timezone.now()),
+            generated_by=request.user if request.user.is_authenticated else None,
+            summary=result.get("summary", []),
+            data={k: result.get(k) for k in
+                  ("columns", "rows", "chart_type", "chart_label", "chart_labels", "chart_data")},
+        )
+        AnalyticsReport.objects.filter(pk=report.pk).update(last_run_at=timezone.now())
+        write_audit_log(request.user, snap, "create")
     messages.success(request, "Snapshot saved.")
     return redirect("crm:snapshot_detail", pk=snap.pk)
 
