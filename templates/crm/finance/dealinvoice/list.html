@@ -64,7 +64,7 @@
             {% else %}<span class="badge badge-muted">{{ obj.invoice_status_display }}</span>{% endif %}
           </td>
           <td>{{ obj.invoice_total }}</td>
-          <td>{{ obj.balance_due }}</td>
+          <td>{{ obj.bal_due }}</td>
           <td>
             <div class="table-actions">
               <a href="{% url 'crm:dealinvoice_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
