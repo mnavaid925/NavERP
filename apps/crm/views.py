@@ -2453,6 +2453,12 @@ def timesheet_edit(request, pk):
 @login_required
 @require_POST
 def timesheet_delete(request, pk):
+    # An approved (audited) timesheet must not be silently erased; only draft/rejected are deletable
+    # (the template hides the button for other states — guard the view too) (security-review).
+    obj = get_object_or_404(Timesheet, pk=pk, tenant=request.tenant)
+    if obj.status not in ("draft", "rejected"):
+        messages.error(request, "Only a draft or rejected timesheet can be deleted.")
+        return redirect("crm:timesheet_detail", pk=obj.pk)
     return crud_delete(request, model=Timesheet, pk=pk, success_url="crm:timesheet_list")
 
 
@@ -2461,6 +2467,11 @@ def timesheet_delete(request, pk):
 @require_POST
 def timesheet_submit(request, pk):
     obj = get_object_or_404(Timesheet, pk=pk, tenant=request.tenant)
+    # Only the time logger (or an admin) may submit it — not an arbitrary colleague (security-review).
+    if not (obj.employee_id == request.user.pk or request.user.is_superuser
+            or request.user.is_tenant_admin):
+        messages.error(request, "You can only submit your own timesheet.")
+        return redirect("crm:timesheet_detail", pk=obj.pk)
     if obj.status == "draft":
         obj.status = "submitted"
         obj.save(update_fields=["status", "updated_at"])
