@@ -15,12 +15,14 @@
   <div class="page-actions">
     {% if obj.invoice %}
       <a href="{% url 'accounting:invoice_detail' obj.invoice.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open in Accounting</a>
-      {% if obj.invoice_status == 'draft' and request.user.is_superuser or obj.invoice_status == 'draft' and request.user.is_tenant_admin %}
-      {# Posting to the GL is @tenant_admin_required — only show the action to admins (explorer finding). #}
-      <form method="post" action="{% url 'accounting:invoice_post' obj.invoice.pk %}" style="display:inline;" onsubmit="return confirm('Issue this invoice and post it to the ledger?');">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-primary"><i data-lucide="send"></i> Issue invoice</button>
-      </form>
+      {% if obj.invoice_status == 'draft' %}
+        {# Posting to the GL is @tenant_admin_required — only show the action to admins (explorer finding). #}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'accounting:invoice_post' obj.invoice.pk %}" style="display:inline;" onsubmit="return confirm('Issue this invoice and post it to the ledger?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary"><i data-lucide="send"></i> Issue invoice</button>
+        </form>
+        {% endif %}
       {% endif %}
     {% endif %}
     <a href="{% url 'crm:dealinvoice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
@@ -85,7 +87,7 @@
           <td>{% if a.payment %}<span class="badge badge-muted">{{ a.payment.get_status_display }}</span>{% else %}—{% endif %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="5"><div class="empty-state"><i data-lucide="banknote"></i><p>No payments applied yet. Record a payment in Accounting — partial/milestone payments appear here.</p></div></td></tr>
+        <tr><td colspan="5"><div class="empty-state"><i data-lucide="banknote"></i><h3>No payments yet</h3><p>Record a payment in Accounting — partial/milestone payments appear here.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -111,7 +113,7 @@
           <td><div class="table-actions"><a href="{% url 'crm:paymentreceipt_print' r.pk %}" target="_blank" rel="noopener" class="btn-icon" title="Print"><i data-lucide="printer"></i></a></div></td>
         </tr>
         {% empty %}
-        <tr><td colspan="6"><div class="empty-state"><i data-lucide="receipt"></i><p>No receipts yet.</p></div></td></tr>
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="receipt"></i><h3>No receipts yet</h3><p>Record a customer receipt against this deal invoice.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>
