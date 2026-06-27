@@ -4825,3 +4825,50 @@ chart (progress % + Kanban cover the "Gantt/Kanban" bullet); per-person capacity
 40 h/wk default — a future `EmployeeProfile.weekly_capacity`); billable-timesheet → invoice bridge (could feed 1.7
 `DealInvoice` lines later); migrating people from `User` to HRM `EmployeeProfile`. App-wide follow-up (not forked
 here per L28): `expense_submit` has the same no-ownership-check pattern `timesheet_submit` just fixed.
+
+---
+
+## CRM 1.9 — Document & Contract Management (recreated in detail) — Review
+
+**Delivered scope (all three NavERP.md bullets now genuinely live; CRM-owned, `core.Document`/Module 13 DMS noted
+as the future general repository):**
+- **Document Generation** (was unimplemented — `body_snapshot` was hand-typed) — `contractdocument_generate`
+  renders the linked `DocTemplate` merge-vars into `body_snapshot` + captures a `DocumentVersion`. Rendered through
+  an **isolated `_DOC_ENGINE`** (restricted builtins: no `loader_tags`, no `safe`/`safeseq`/`json_script`/
+  `autoescape`; `libraries={}`, no loader dirs) against a **string-only `_safe_doc_context`** (no model instances)
+  → server-side **template-injection-safe** (can't `include`/`extends`/`load`, disable escaping, or traverse model
+  attrs/methods). Template authoring (`doctemplate_create/edit/delete`) is **`@tenant_admin_required`**.
+- **File Repository** (was a STUB → `contractdocument_list`) — new **`DocumentVersion`** immutable revisions
+  (version_no + body snapshot + allowlisted **file uploads** + change_note) via `contractdocument_version_add`,
+  a read-only `documentversion_detail`, and a **`document_repository`** organized by account/deal with version
+  counts. `current_version` is now backed by real version rows.
+- **E-Signatures** (already real) — kept the rich public `sign_document` flow; added `contractdocument_send`
+  (draft→sent, needs body + ≥1 signer) to complete generate→send→sign.
+- Migrations `0019` (DocumentVersion) + `0020` (ContractDocument `(tenant,account)` index); `LIVE_LINKS["1.9"]`
+  File Repository→`document_repository`; `seed_crm._seed_documents19`. `body_snapshot` removed from the form.
+
+**Verification:** all new pages 200/302; generation resolves merge-vars (account name in body, no literal `{{`);
+**SSTI sandbox proven** (`|safe`/`autoescape`/`include`/`load` all raise → caught, no version; XSS chars escaped);
+file-upload versioning; send guards; cross-tenant IDOR → 404. `apps/crm/tests/test_documents_19.py` = **82 tests,
+green**; full CRM suite **1796 passed** (no regression).
+
+**Review agents (all 7, in order; findings applied + committed between):**
+- **code-reviewer** — isolated engine (drop loader_tags so include/extends are invalid), restrict generate to
+  draft, version_add status guard, admin-gate doctemplate authoring, DocumentVersionForm.clean (file-or-note),
+  admin immutability, shared `_render_doc_body` in the seeder (DRY + try/except).
+- **explorer** — Generate button shown only on draft (matched the view guard); dropped a redundant Contracts
+  sidebar extra. Wiring otherwise consistent.
+- **frontend-reviewer** — `type=submit` on Delete; aria-labels on repository filters; read-only-Actions note.
+- **performance-reviewer** — `select_related` on the generate fetch; dropped an unused signer_party JOIN;
+  `(tenant,account)` index (migration 0020). Repository/detail otherwise optimal.
+- **qa-smoke-tester** — 34/34 PASS, no fixes.
+- **security-reviewer** — **completed the SSTI sandbox** (removed the `safe`/`safeseq`/`json_script` filters +
+  `autoescape` tag so a body can never disable escaping); admin-gated `doctemplate_delete`. Isolation/CSRF/
+  upload/mass-assignment confirmed sound.
+- **test-writer** — 82 tests (model, generation incl. malformed, SSTI sandbox, file-upload versioning, send
+  guards, doctemplate privilege, repository, IDOR, CSRF, query-count). All green.
+
+**Deferred (documented, not built):** rich-HTML rendering of `body_snapshot` (rendered ESCAPED today — needs an
+HTML sanitizer like nh3/bleach); real DocuSign/eIDAS e-signature (the sign flow is a token-based acknowledgement);
+server-side PDF of the signed contract; migrating the file store to `core.Document` / the Module 13 DMS; a
+version-diff view. App-wide note (per L28): `.zip` is in the shared upload allowlist across all upload points.
