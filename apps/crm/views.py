@@ -2130,7 +2130,7 @@ def dealinvoice_from_quote(request, quote_pk):
         messages.error(request, "This quote has no line items to invoice.")
         return redirect("crm:quote_detail", pk=quote.pk)
 
-    code = (quote.currency_code or "USD").upper()
+    code = (quote.currency_code or "USD").upper()[:3]  # clamp to the Currency.code max_length
     quote_disc = (Decimal(100) - Decimal(quote.discount_pct or 0)) / Decimal(100)
     with transaction.atomic():
         currency, _ = Currency.objects.get_or_create(
