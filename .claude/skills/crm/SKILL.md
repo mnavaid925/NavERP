@@ -1,6 +1,6 @@
 ---
 name: crm
-description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
+description: Work on the CRM module (Module 1 — 1.1–1.6 leads/opportunities/campaigns/cases/KB/tasks + accounts/contacts; 1.2 sales force automation = opportunities + splits + Kanban pipeline board, product catalog + price books + quote builder (printable), territories + sales quotas + forecast dashboard; 1.3 marketing automation = campaigns + campaign-members + email-templates + email-campaigns + landing-pages + form-submissions (public web-to-lead); 1.4 customer service = cases (SLA/breach + conversation thread + CSAT) + SLA policies + knowledge base (categories/feedback) + customer self-service portal (login) + public case-status & KB pages; 1.6 analytics & reporting = saved per-user dashboards + live-computed widgets (KPI/gauge/bar/line/pie/table) + standard reports (sales activity/performance/funnel/service) + report snapshots; 1.7–1.12 expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health-scores/surveys, product stock/purchase-orders/partner-portal). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, extend the CRM seeder, touch CRM sidebar wiring (LIVE_LINKS 1.1–1.12), or invokes /crm.
 ---
 
 # CRM Module (Module 1, sub-modules 1.1–1.12)
@@ -12,7 +12,8 @@ into core **by string**. App path: `apps/crm/`. Templates: `templates/crm/`. URL
 
 Covers: 1.1 Core Data Management (Contacts/Accounts/Leads), 1.2 SFA (Opportunities; Forecasting →
 overview), 1.3 Marketing (Campaigns), 1.4 Customer Service (Cases + Knowledge Base), 1.5 Activity
-(Tasks), 1.6 Analytics (overview dashboard). Quoting/Forecasting detail and the marketing
+(Tasks), 1.6 Analytics & Reporting (saved per-user dashboards + live widgets, standard reports +
+snapshots — recreated in detail, see §1.6). Quoting/Forecasting detail and the marketing
 email-builder / self-service portal / calendar-VoIP integrations are deferred to later passes /
 the Sales module (Module 8) per `NavERP.md`.
 
@@ -36,6 +37,10 @@ created_at)`; CrmTask uses `(tenant, due_date, created_at)`).
 | `CalendarEvent` | `EVT-` | title, event_type(meeting/call/demo/deadline/reminder/other), start, end, all_day, location, video_url, status(scheduled/confirmed/cancelled/completed), sync_source(manual/google/outlook/ical), reminder_minutes, description, **public_token**(system, editable=False); props `is_past`/`duration_display`; `save()` generates token | `owner`→User, `party`→`core.Party`, `related_opportunity`→`crm.Opportunity`, `related_case`→`crm.Case` |
 | `EventAttendee` | — (plain child) | event(related_name `attendees`), party, name, email, rsvp_status(no_response/accepted/declined/tentative), is_organizer, responded_at(system); `save()` NULLs blank email + stamps `responded_at` on RSVP; `unique_together(event, email)` | `event`→`crm.CalendarEvent`, `party`→`core.Party` |
 | `CommunicationLog` | `COM-` | channel(call/email/sms/note/meeting), direction(inbound/outbound), subject, body, occurred_at, duration_seconds, outcome(connected/voicemail/no_answer/busy/wrong_number), logged_via(manual/bcc_dropbox/voip/sync), email_message_id(system); props `duration_display`(mm:ss)/`is_call` | `party`→`core.Party`, `owner`→User, `related_opportunity`→`crm.Opportunity`, `related_case`→`crm.Case` |
+| `AnalyticsDashboard` | `DASH-` | **1.6** saved per-user dashboard: name, description, is_shared, is_default, layout(one/two/three); prop `widget_count`; ordering `["-is_default","name"]` (see §1.6) | `owner`→User |
+| `DashboardWidget` | — (plain child) | **1.6** tile: title, metric(20 choices→`analytics.WIDGET_METRICS`), chart_type(kpi/gauge/bar/line/pie/doughnut/table), date_range(last_7/30/90/quarter/year/all), size(small/medium/large/full), target_value, position; ordering `["position","id"]`; computed LIVE by `analytics.compute_widget` | `dashboard`→`crm.AnalyticsDashboard` (related_name `widgets`, CASCADE) |
+| `AnalyticsReport` | `RPT-` | **1.6** saved standard report: name, description, report_type(sales_activity/sales_performance/funnel/service), date_range, group_by(month/week/owner/priority/stage), is_favorite, **last_run_at**(system, editable=False); computed LIVE by `analytics.compute_report` | `owner`→User |
+| `ReportSnapshot` | — (plain child) | **1.6** frozen point-in-time run: title, generated_at(auto), summary(JSON KPI list), data(JSON columns/rows/chart_*); rendered as-stored (no recompute); ordering `["-generated_at"]` | `report`→`crm.AnalyticsReport` (related_name `snapshots`, CASCADE), `generated_by`→User |
 
 **System-set fields kept out of forms:** `number`, `resolved_at`, `completed_at`, `views_count`,
 `converted_party`. **Decimal note:** `weighted_amount`/`roi` cast to `Decimal` so they're correct on
@@ -64,6 +69,8 @@ is a module-level constant in `models.py`. `website`/`linkedin` use `forms.URLFi
   `knowledgearticle`, `task`, `calendarevent`, `communicationlog` (+ the 1.7–1.12 entities). 1.5 also adds
   inline `event_attendee_add`/`_delete` (POST) and the public token routes `event_invite`/`event_ics` (no
   login) — see §1.5.
+- **1.6** adds `dashboard_*` (+ `widget_create`/`widget_edit`/`widget_delete`/`widget_move <pk>/<direction>`),
+  `report_*` (+ POST `report_favorite`, `report_snapshot`), and `snapshot_detail`/`snapshot_delete` — see §1.6.
 - Custom: `crm:overview` (module landing, `/crm/`), `crm:lead_convert` (POST). **Accounts & Contacts
   have full CRUD**, keyed by **Party pk**: `crm:account_list/_create/_detail/_edit/_delete` and
   `crm:contact_*` (delete is POST-only **and `@tenant_admin_required`** — see Views). "View in Core"
@@ -132,8 +139,9 @@ an `AccountProfile`/`ContactProfile`** onto the first org/person Party per tenan
 `_backfill_profiles` (runs every time, independent of the lead-exists guard, so existing demo data
 gains firmographics/contact details without `--flush`), seeds **§1.3 marketing data** via `_seed_marketing`
 (self-guards on `EmailTemplate`), **§1.2 SFA data** via `_seed_sfa` (self-guards on `Product`), and **§1.4
-help-desk data** via `_seed_service` (self-guards on `SlaPolicy`), and **§1.5 activity data** via
-`_seed_activities` (self-guards on `CalendarEvent`). Prints the demo-login
+help-desk data** via `_seed_service` (self-guards on `SlaPolicy`), **§1.5 activity data** via
+`_seed_activities` (self-guards on `CalendarEvent`), and **§1.6 analytics data** via `_seed_analytics`
+(self-guards on `AnalyticsDashboard`: 2 dashboards w/ 7+4 widgets, 4 reports, a baseline snapshot). Prints the demo-login
 reminder and the `admin`-has-no-tenant warning. Run after `seed_core`/`seed_accounts`/`seed_tenants`.
 
 ## Sidebar wiring (`apps/core/navigation.py` → `LIVE_LINKS`)
@@ -158,7 +166,8 @@ Keys must match the `NavERP.md` §1 feature bullets verbatim to light up:
 - `1.5` (recreated in detail — all 3 bullets live): Task Management → `crm:task_list`; Calendar Integration →
   `crm:calendarevent_list`; Email & Call Integration → `crm:communicationlog_list` (the public
   `event_invite`/`event_ics` token pages are NOT sidebar targets — L32) (see "§1.5 Activity & Communication" section)
-- `1.6`: Dashboards → `crm:overview`; Standard Reports → `crm:overview`
+- `1.6` (recreated in detail — both bullets live): Dashboards → `crm:dashboard_list`; Standard Reports →
+  `crm:report_list`; + extra Analytics Overview → `crm:overview` (the module KPI landing) (see "§1.6 Analytics & Reporting" section)
 
 ## Conventions & gotchas
 
@@ -366,6 +375,47 @@ Seeder `_seed_activities` (self-guards on `CalendarEvent`): a weekly recurring t
 `apps/crm/tests/test_activities.py` (137). **Deferred** (see `todo.md`): OAuth calendar push, live BCC mail
 engine, VoIP/recording, email open/click tracking, per-invitee tokens, and a `recurrence_anchor_day` to fix
 monthly last-day drift on subsequent spawns.
+
+# §1.6 Analytics & Reporting (recreated in detail)
+
+The stub 1.6 (both bullets pointing at `crm:overview`) was rebuilt into a real sub-module covering both
+NavERP.md §1.6 bullets. Migration `0015` added 4 models. **The whole compute layer lives in
+`apps/crm/analytics.py`** — `models.py` owns only the field choice lists and never imports `analytics.py`
+(one-way edge → no circular import). Every figure is a **read-only aggregation over existing CRM data**
+(Opportunity/Case/Lead/Campaign/CrmTask/CommunicationLog); nothing stores a derived number except
+`ReportSnapshot`, which deliberately freezes one run for trend history.
+
+- **Dashboards** (`AnalyticsDashboard` [DASH] + `DashboardWidget`) — saved, per-user dashboards whose widgets are
+  **computed live on render** (real-time). `dashboard_detail` loops the widgets, calls `analytics.compute_widget`
+  per tile, and renders KPI cards / gauges (HTML + `.progress` bar) / tables (HTML) directly, while bar/line/
+  pie/doughnut series go to Chart.js via one `json_script` (`dash-charts`) the JS iterates. `layout` (one/two/
+  three cols) drives a CSS-grid `repeat(cols, minmax(200px,1fr))`; `size` → column span (computed in the view).
+  Widget order is `position`; **`widget_move <pk>/<direction>`** (POST) reorders via `bulk_update` (normalizes to
+  0..n-1). `is_shared`/`is_default` are **tenant-wide → only tenant admins see those form fields** (`can_share`
+  kwarg on `AnalyticsDashboardForm`; `dashboard_create`/`_edit` are hand-written to pass it).
+- **Standard Reports** (`AnalyticsReport` [RPT] + `ReportSnapshot`) — 4 canned `report_type`s computed by
+  `analytics.compute_report`: `sales_activity` (opps created / tasks done / comms logged per period, line),
+  `sales_performance` (top performers: owner | deals won | revenue | avg, bar), `funnel` (stage count/value +
+  drop-off %, single grouped query + Python cumulative roll-up), `service` (cases / resolved / avg resolution &
+  first-response hours / avg CSAT by priority-or-period, bar). `report_detail` computes live, stamps
+  `last_run_at` (via `.update()`, never `save()`), lists snapshots (capped 50, JSON cols `.only()`-deferred).
+  **`report_favorite`** (POST toggle) and **`report_snapshot`** (POST → freezes `compute_report` output into
+  `ReportSnapshot.summary`/`.data` JSON, atomic) are the custom actions; `snapshot_detail` re-renders the stored
+  JSON with no recompute.
+
+`analytics.WIDGET_METRICS` is the single source of truth for widget compute (key → kind scalar/series/table +
+allowed chart types + resolver); `DashboardWidgetForm.clean()` rejects a chart_type the metric can't render, and
+`AnalyticsReportForm.clean()` rejects a `group_by` the report_type doesn't honour (e.g. service ≠ owner). Date
+windows: `analytics.range_bounds(key)` (filters `created_at`; `_compute_service` averages durations in Python on
+purpose — `Avg(DurationField)` is float-µs on SQLite vs timedelta on MariaDB).
+
+Seeder `_seed_analytics` (self-guards on `AnalyticsDashboard`): a "Sales Command Center" (3-col, 7 widgets:
+KPIs + gauge + bar/line/doughnut + a top-performers table) and a "Service Desk" (2-col, 4 widgets), the 4
+standard reports, and a baseline snapshot of the top-performers report. Tests:
+`apps/crm/tests/test_analytics.py` (173). **Deferred** (see `todo.md`): drag-and-drop JS layout builder,
+scheduled email delivery, PDF/CSV export, cross-object custom report builder, nightly auto-snapshot, and the
+larger-scale indexes (`Opportunity(tenant,owner)`, `Campaign(tenant,actual_revenue)`,
+`ReportSnapshot(tenant,report,generated_at)`) + a per-request shared-base-queryset cache for many-widget dashboards.
 
 # Sub-modules 1.7–1.12 (extension — finance/delivery/docs/automation/success/vendor)
 
