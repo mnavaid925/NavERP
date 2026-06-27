@@ -7,6 +7,7 @@ import os
 
 from django import forms
 
+from apps.accounting.models import Invoice, Payment  # 1.7 reuses the accounting ledger (L29)
 from apps.core.forms import ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES, TenantModelForm
 from apps.core.models import Party
 
@@ -399,6 +400,7 @@ from .models import (  # noqa: E402  (after the base forms above)
     ContractDocument,
     CrmMilestone,
     CrmProject,
+    DealInvoice,
     DocTemplate,
     Expense,
     HealthScore,
@@ -406,6 +408,7 @@ from .models import (  # noqa: E402  (after the base forms above)
     OnboardingPlan,
     OnboardingStep,
     PartnerPortalAccess,
+    PaymentReceipt,
     ProductStock,
     PurchaseOrder,
     PurchaseOrderLine,
@@ -424,7 +427,7 @@ class ExpenseForm(TenantModelForm):
         # @tenant_admin_required approve/reject actions. Accepting them from POST would let any
         # member self-approve an expense.
         fields = ["opportunity", "project", "category", "amount", "currency_code",
-                  "expense_date", "description", "receipt"]
+                  "expense_date", "is_billable", "description", "receipt"]
 
     def clean_receipt(self):
         # WARNING: without an extension allowlist + size cap, a member could upload .html/.svg
@@ -437,6 +440,43 @@ class ExpenseForm(TenantModelForm):
             if getattr(f, "size", 0) and f.size > MAX_UPLOAD_BYTES:
                 raise forms.ValidationError("File exceeds the 20 MB limit.")
         return f
+
+
+class DealInvoiceForm(TenantModelForm):
+    """1.7 Invoicing wrapper. The conversion action (``dealinvoice_from_quote``) is the primary
+    create path; this manual form links an EXISTING ``accounting.Invoice`` to a deal. ``invoice``
+    is editable=False on the model, so it isn't a ModelForm field by default — it's declared here
+    explicitly and offered only on create (popped on edit so the link can't be re-pointed)."""
+
+    invoice = forms.ModelChoiceField(
+        queryset=Invoice.objects.all(), required=False,
+        help_text="Optionally link an existing Accounting invoice. (Tip: use Convert-to-Invoice "
+                  "on an accepted quote to generate one automatically.)")
+
+    class Meta:
+        model = DealInvoice
+        fields = ["opportunity", "quote", "account", "recurring_invoice", "notes"]
+
+    def __init__(self, *args, editing=False, **kwargs):
+        super().__init__(*args, **kwargs)  # base auto-scopes every FK dropdown (incl. invoice) to the tenant
+        if editing:
+            self.fields.pop("invoice", None)
+
+
+class PaymentReceiptForm(TenantModelForm):
+    """1.7 Payment Tracking. The optional ``payment`` link is scoped to INBOUND ledger payments
+    (customer receipts) for this tenant — outbound vendor payments are never a customer receipt."""
+
+    class Meta:
+        model = PaymentReceipt
+        fields = ["deal_invoice", "payment", "amount", "received_date", "method",
+                  "gateway", "gateway_txn_id", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["payment"].queryset = Payment.objects.filter(tenant=self.tenant, direction="in")
+        self.fields["payment"].required = False
 
 
 class CrmProjectForm(TenantModelForm):
@@ -624,8 +664,29 @@ class DashboardWidgetForm(TenantModelForm):
 
 
 class AnalyticsReportForm(TenantModelForm):
-    """Saved standard report. ``last_run_at`` is system-stamped (editable=False), never on the form."""
+    """Saved standard report. ``last_run_at`` is system-stamped (editable=False), never on the form.
+    ``clean()`` keeps ``group_by`` meaningful per report type so a grouping is never silently
+    ignored by the compute layer (e.g. a Service report can only group by month/week/priority)."""
+
+    # Which groupings each report type actually honours in apps/crm/analytics.py.
+    ALLOWED_GROUPINGS = {
+        "sales_activity": {"month", "week"},
+        "sales_performance": {"owner"},
+        "funnel": {"stage"},
+        "service": {"month", "week", "priority"},
+    }
 
     class Meta:
         model = AnalyticsReport
         fields = ["name", "description", "report_type", "date_range", "group_by", "is_favorite", "owner"]
+
+    def clean(self):
+        from .models import REPORT_GROUP_CHOICES
+        cleaned = super().clean()
+        rtype = cleaned.get("report_type")
+        grp = cleaned.get("group_by")
+        allowed = self.ALLOWED_GROUPINGS.get(rtype)
+        if rtype and grp and allowed and grp not in allowed:
+            labels = ", ".join(lbl for val, lbl in REPORT_GROUP_CHOICES if val in allowed)
+            self.add_error("group_by", f"This report type supports grouping by: {labels}.")
+        return cleaned
