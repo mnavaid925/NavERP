@@ -3015,7 +3015,8 @@ def workflowrule_delete(request, pk):
 def workflowlog_list(request):
     return crud_list(
         request,
-        WorkflowLog.objects.filter(tenant=request.tenant).select_related("rule").defer("error_msg"),
+        # error_msg is shown (truncated) in the list, so don't defer it (defer + template access = N+1).
+        WorkflowLog.objects.filter(tenant=request.tenant).select_related("rule"),
         "crm/workflow/workflowlog/list.html",
         search_fields=["record_label", "error_msg"],
         filters=[("status", "status", False), ("rule", "rule_id", True)],
