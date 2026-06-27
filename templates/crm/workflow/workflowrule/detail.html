@@ -13,10 +13,16 @@
     </nav>
   </div>
   <div class="page-actions">
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    <form method="post" action="{% url 'crm:workflowrule_run' obj.pk %}" style="display:inline;" onsubmit="return confirm('Run this rule now against recent {{ obj.get_trigger_entity_display }} records? Matching records fire the rule actions.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="play"></i> Run now</button>
+    </form>
+    {% endif %}
     <a href="{% url 'crm:workflowrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     <form method="post" action="{% url 'crm:workflowrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule?');" style="display:inline;">
       {% csrf_token %}
-      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
     </form>
   </div>
 </div>
@@ -47,6 +53,9 @@
       <div class="detail-item"><dt>Conditions</dt><dd><pre>{{ obj.conditions }}</pre></dd></div>
       <div class="detail-item"><dt>Actions</dt><dd><pre>{{ obj.actions }}</pre></dd></div>
     </dl>
+    <p class="form-help"><strong>Run now</strong> evaluates the conditions against the latest matching
+      {{ obj.get_trigger_entity_display }} records and fires the actions — <code>webhook</code> (signed delivery),
+      <code>approval</code> (creates an approval request), other types are logged. Each fire is recorded below.</p>
   </div>
 </div>
 
