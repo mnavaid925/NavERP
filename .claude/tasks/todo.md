@@ -4872,3 +4872,57 @@ green**; full CRM suite **1796 passed** (no regression).
 HTML sanitizer like nh3/bleach); real DocuSign/eIDAS e-signature (the sign flow is a token-based acknowledgement);
 server-side PDF of the signed contract; migrating the file store to `core.Document` / the Module 13 DMS; a
 version-diff view. App-wide note (per L28): `.zip` is in the shared upload allowlist across all upload points.
+
+---
+
+# CRM Sub-module 1.10 — Automation & Workflow Engine — REVIEW (recreated in detail, 2026-06-27)
+
+**Delivered scope (made two stubs real):**
+- **Trigger-Based Actions (If This, Then That)** — `WorkflowRule` (existing) now backs a real, **bounded
+  rule-execution engine**: `workflowrule_run` (admin, POST) → `_run_rule` maps `trigger_entity`→CRM model, loads
+  ≤50 recent tenant records, evaluates `conditions` via `_eval_conditions`/`_safe_record_field`, and fires
+  `actions` (webhook delivery / approval creation / logged note), writing one `WorkflowLog` per match inside a
+  per-record `transaction.atomic()` savepoint. The field reader is an **allowlist** (concrete non-relation columns
+  only — no method/property/FK/`pk`/token access; conditions are interpreted, never `eval()`'d).
+- **Webhooks** *(was a stub → workflowrule_list)* — new **`Webhook`** (`WH-#####`, write-only HMAC `secret`,
+  validated custom `headers`) + immutable **`WebhookDelivery`** log (HMAC-SHA256-signed JSON payloads). `webhook_*`
+  CRUD (create/edit/delete admin-gated), `webhook_test` (admin, signed `manual.test` delivery), read-only
+  `webhookdelivery_*`. **No outbound HTTP** — recorded + signed only; the real POST is deferred behind a documented
+  `# WARNING (SSRF)` guard (https-only, resolve-once + pin-IP for DNS-rebinding, port 443, no redirects, capped read).
+- **Approval Processes** — `ApprovalRequest` (existing, kept). Migrations `0021` (Webhook + WebhookDelivery) +
+  `0022` (WorkflowLog `(tenant,rule,-fired_at)` index). LIVE_LINKS["1.10"] Webhooks→`webhook_list` (real) +
+  Workflow Logs / Webhook Deliveries extras.
+
+**Verification:** `manage.py check` clean; `seed_crm` idempotent (`_seed_webhooks110`); throwaway
+`temp/verify_crm_110.py` all-pass (pages 200/302, secret masked + write-only, Run engine fires logs+signed
+deliveries, non-match fires nothing, guarded-field safe, inactive blocked, IDOR 404); query-count proves no
+per-record FK N+1. **160-test** suite (`apps/crm/tests/test_workflow_110.py`); **full project suite green (3,537
+tests, exit 0)** — the shared `crud.py` boolean-filter fix broke nothing.
+
+**Review agents (all 7, in order; findings applied + committed between):**
+- **code-reviewer** — per-record savepoint (failure log survives a DB error in the loop); hoisted the active-webhook
+  query out of the record loop (no N+1); reject RelatedManagers in the field guard; **app-wide `crud_list` bool fix**
+  (`bool("False")` was True → `is_active=False` silently returned all rows); webhook event-filter dropdown;
+  admin-gate webhook create/edit/delete; standalone SSRF `# WARNING`; `escapejs` on the Run confirm.
+- **explorer** — dropped `defer(error_msg)` on `workflowlog_list` (the list shows it → deferred-field N+1);
+  admin-gate webhook-detail Edit/Delete. Wiring/URLs/context-contract otherwise consistent.
+- **frontend-reviewer** — admin-gate the webhook-list row Edit/Delete; `.mono` signature + `.text-danger` error
+  (not `form-error`) + Back-to-list link on the delivery detail. Badges/classes otherwise clean.
+- **performance-reviewer** — (superseded by the security allowlist) condition-aware records query; explicit
+  `order_by` on the rule-detail logs; `(tenant,rule,-fired_at)` index (migration 0022). Lists/details otherwise optimal.
+- **qa-smoke-tester** — 49/49 PASS, no fixes.
+- **security-reviewer** — **admin-gate `workflowrule_create/edit/delete`** (rules are executable automation);
+  rewrote `_safe_record_field` as a **concrete-non-relation-column allowlist** (blocks token fields / FK objects /
+  properties / `pk` — and removes the FK lazy-load entirely, so the perf select_related became dead code and was
+  simplified out); extended the SSRF WARNING (DNS-rebinding pin-IP + port 443); `WebhookForm.clean_headers`
+  (flat str dict, no CRLF). SSRF/secret/tenant/CSRF/XSS/mass-assignment confirmed sound.
+- **test-writer** — 160 tests (models + `secret_masked`, WebhookForm secret write-only + `clean_headers`,
+  `_safe_record_field` allowlist, `_eval_conditions` operators, `_run_rule`/`workflowrule_run` fire/log/approval/
+  inactive/isolation, webhook CRUD admin-gating + Test signed delivery, boolean filter, read-only delivery routes,
+  cross-tenant IDOR, CSRF, query-count). All green.
+
+**Deferred (documented, not built):** the real outbound HTTP sender (recorded + HMAC-signed only today — must add
+the documented SSRF defenses + a `requests` dependency before going live); auto-on-save rule triggers (the engine
+is manual **Run**-only by design — no model save-hooks); retry/backoff on failed deliveries; per-action `params`
+beyond approval subject. Note: the allowlist intentionally blocks FK-id (`*_id`) condition fields — only plain
+scalar columns are matchable; a future carve-out would be needed for FK-id matching.
