@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.contract.number }} v{{ obj.version_no }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.contract.number }} — v{{ obj.version_no }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:document_repository' %}">File Repository</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:contractdocument_detail' obj.contract.pk %}">{{ obj.contract.number }}</a>
+      <span class="sep">›</span>
+      v{{ obj.version_no }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    {% if obj.file %}<a href="{{ obj.file.url }}" target="_blank" rel="noopener" class="btn btn-outline"><i data-lucide="download"></i> Download file</a>{% endif %}
+    <a href="{% url 'crm:contractdocument_detail' obj.contract.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to contract</a>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <dl class="detail-grid">
+    <div class="detail-item"><dt>Contract</dt><dd><a href="{% url 'crm:contractdocument_detail' obj.contract.pk %}">{{ obj.contract.number }} · {{ obj.contract.name }}</a></dd></div>
+    <div class="detail-item"><dt>Version</dt><dd>v{{ obj.version_no }}</dd></div>
+    <div class="detail-item"><dt>Change note</dt><dd>{{ obj.change_note|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    <div class="detail-item"><dt>File</dt><dd>{% if obj.file %}<a href="{{ obj.file.url }}" target="_blank" rel="noopener">Download</a>{% else %}—{% endif %}</dd></div>
+  </dl>
+</div></div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Body snapshot (v{{ obj.version_no }})</h2></div>
+  <div class="card-body"><pre style="white-space:pre-wrap;">{{ obj.body_snapshot|default:"(empty)" }}</pre></div>
+</div>
+{% endblock %}
