@@ -45,6 +45,7 @@
             <th>Number</th>
             <th>Category</th>
             <th>Amount</th>
+            <th>Billable</th>
             <th>Opportunity</th>
             <th>Status</th>
             <th>Date</th>
@@ -57,6 +58,7 @@
             <td><a href="{% url 'crm:expense_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
             <td>{{ obj.get_category_display }}</td>
             <td>{{ obj.amount }} {{ obj.currency_code }}</td>
+            <td>{% if obj.is_billable %}<span class="badge badge-info">Billable</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td>{{ obj.opportunity.name|default:"—" }}</td>
             <td>
               {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
@@ -89,7 +91,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="7">
+            <td colspan="8">
               <div class="empty-state">
                 <i data-lucide="receipt"></i>
                 <h3>No expenses found</h3>
