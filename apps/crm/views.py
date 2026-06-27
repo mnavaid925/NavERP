@@ -3587,10 +3587,11 @@ def recompute_health_score(request, pk):
 @require_POST
 def recompute_all_health_scores(request):
     account_ids = list(HealthScore.objects.filter(tenant=request.tenant).values_list("account_id", flat=True))
+    config, _ = HealthScoreConfig.objects.get_or_create(tenant=request.tenant)  # fetch weights once for the batch
     done, failed = 0, 0
     for party in Party.objects.filter(tenant=request.tenant, pk__in=account_ids):
         try:
-            compute_health_score(party, request.tenant)
+            compute_health_score(party, request.tenant, config=config)
             done += 1
         except Exception:  # noqa: BLE001 — isolate one bad account so the batch still completes
             failed += 1
@@ -3668,26 +3669,31 @@ _SURVEY_SCALE_MAX = {"nps": 10, "csat": 5, "ces": 7}  # per-type response scale 
 def survey_results(request):
     """Aggregate survey analytics (1.11): NPS = %promoters − %detractors, the P/P/D split,
     CSAT/CES averages, and the overall response rate — derived queries, no extra model."""
-    base = Survey.objects.filter(tenant=request.tenant)
-    responded = base.exclude(responded_at=None)
-    nps = responded.filter(survey_type="nps")
-    nps_total = nps.count()
-    promoters = nps.filter(classification="promoter").count()
-    passives = nps.filter(classification="passive").count()
-    detractors = nps.filter(classification="detractor").count()
-    sent = base.exclude(sent_at=None).count()
-    responded_total = responded.count()
-    csat = responded.filter(survey_type="csat")
-    ces = responded.filter(survey_type="ces")
+    responded = Q(responded_at__isnull=False)
+    nps_r = responded & Q(survey_type="nps")
+    a = Survey.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        sent=Count("id", filter=Q(sent_at__isnull=False)),
+        responded_total=Count("id", filter=responded),
+        nps_total=Count("id", filter=nps_r),
+        promoters=Count("id", filter=nps_r & Q(classification="promoter")),
+        passives=Count("id", filter=nps_r & Q(classification="passive")),
+        detractors=Count("id", filter=nps_r & Q(classification="detractor")),
+        csat_count=Count("id", filter=responded & Q(survey_type="csat")),
+        csat_avg=Avg("score", filter=responded & Q(survey_type="csat")),
+        ces_count=Count("id", filter=responded & Q(survey_type="ces")),
+        ces_avg=Avg("score", filter=responded & Q(survey_type="ces")),
+    )
+    nps_total = a["nps_total"]
     pct = lambda n: round(n / nps_total * 100) if nps_total else 0  # noqa: E731
     return render(request, "crm/success/survey/results.html", {
-        "total": base.count(), "sent": sent, "responded_total": responded_total,
-        "response_rate": round(responded_total / sent * 100) if sent else None,
-        "nps_total": nps_total, "promoters": promoters, "passives": passives, "detractors": detractors,
-        "nps_score": round((promoters - detractors) / nps_total * 100) if nps_total else None,
-        "promoter_pct": pct(promoters), "passive_pct": pct(passives), "detractor_pct": pct(detractors),
-        "csat_avg": csat.aggregate(a=Avg("score"))["a"], "csat_count": csat.count(),
-        "ces_avg": ces.aggregate(a=Avg("score"))["a"], "ces_count": ces.count(),
+        "total": a["total"], "sent": a["sent"], "responded_total": a["responded_total"],
+        "response_rate": round(a["responded_total"] / a["sent"] * 100) if a["sent"] else None,
+        "nps_total": nps_total, "promoters": a["promoters"], "passives": a["passives"], "detractors": a["detractors"],
+        "nps_score": round((a["promoters"] - a["detractors"]) / nps_total * 100) if nps_total else None,
+        "promoter_pct": pct(a["promoters"]), "passive_pct": pct(a["passives"]), "detractor_pct": pct(a["detractors"]),
+        "csat_avg": a["csat_avg"], "csat_count": a["csat_count"],
+        "ces_avg": a["ces_avg"], "ces_count": a["ces_count"],
     })
 
 
