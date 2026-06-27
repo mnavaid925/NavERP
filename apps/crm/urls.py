@@ -291,6 +291,17 @@ urlpatterns = [
     path("workflows/<int:pk>/", views.workflowrule_detail, name="workflowrule_detail"),
     path("workflows/<int:pk>/edit/", views.workflowrule_edit, name="workflowrule_edit"),
     path("workflows/<int:pk>/delete/", views.workflowrule_delete, name="workflowrule_delete"),
+    path("workflows/<int:pk>/run/", views.workflowrule_run, name="workflowrule_run"),
+
+    # Webhooks + deliveries (1.10)
+    path("webhooks/", views.webhook_list, name="webhook_list"),
+    path("webhooks/add/", views.webhook_create, name="webhook_create"),
+    path("webhooks/<int:pk>/", views.webhook_detail, name="webhook_detail"),
+    path("webhooks/<int:pk>/edit/", views.webhook_edit, name="webhook_edit"),
+    path("webhooks/<int:pk>/delete/", views.webhook_delete, name="webhook_delete"),
+    path("webhooks/<int:pk>/test/", views.webhook_test, name="webhook_test"),
+    path("webhook-deliveries/", views.webhookdelivery_list, name="webhookdelivery_list"),
+    path("webhook-deliveries/<int:pk>/", views.webhookdelivery_detail, name="webhookdelivery_detail"),
 
     # Workflow logs (1.10, read-only)
     path("workflow-logs/", views.workflowlog_list, name="workflowlog_list"),
