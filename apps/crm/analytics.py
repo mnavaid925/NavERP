@@ -119,6 +119,8 @@ def _r_weighted_forecast(tenant, start, end):
 
 
 def _r_win_rate(tenant, start, end):
+    # Date window filters on created_at, so this is the win rate of opportunities *created*
+    # in the window (not closed in it) — a deliberate cohort semantics.
     agg = _in_range(Opportunity.objects.filter(tenant=tenant), start, end).aggregate(
         won=Count("id", filter=Q(stage="closed_won")),
         closed=Count("id", filter=Q(stage__in=["closed_won", "closed_lost"])))
@@ -144,8 +146,9 @@ def _r_open_cases(tenant, start, end):
 
 def _r_avg_csat(tenant, start, end):
     qs = _in_range(Case.objects.filter(tenant=tenant, satisfaction_rating__isnull=False), start, end)
-    v = qs.aggregate(a=Avg("satisfaction_rating"))["a"] or 0
-    return {"value": float(v), "display": ("{:.1f}".format(float(v)) if v else "—")}
+    v = qs.aggregate(a=Avg("satisfaction_rating"))["a"]  # None when no rated cases in range
+    return {"value": float(v) if v is not None else 0,
+            "display": ("{:.1f}".format(v) if v is not None else "—")}
 
 
 def _r_open_tasks(tenant, start, end):
@@ -364,7 +367,7 @@ def _compute_funnel(report, tenant, start, end):
         agg = reached.aggregate(c=Count("id"), s=Sum("amount"))
         c = agg["c"] or 0
         s = float(agg["s"] or 0)
-        drop = "" if prev is None else (_pct((prev - c) / prev * 100) if prev else "0%")
+        drop = "—" if prev is None else (_pct((prev - c) / prev * 100) if prev else "0%")
         rows.append([label, c, _money(s), drop])
         labels.append(label)
         counts.append(c)
