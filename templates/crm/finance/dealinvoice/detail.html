@@ -15,7 +15,8 @@
   <div class="page-actions">
     {% if obj.invoice %}
       <a href="{% url 'accounting:invoice_detail' obj.invoice.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open in Accounting</a>
-      {% if obj.invoice_status == 'draft' %}
+      {% if obj.invoice_status == 'draft' and request.user.is_superuser or obj.invoice_status == 'draft' and request.user.is_tenant_admin %}
+      {# Posting to the GL is @tenant_admin_required — only show the action to admins (explorer finding). #}
       <form method="post" action="{% url 'accounting:invoice_post' obj.invoice.pk %}" style="display:inline;" onsubmit="return confirm('Issue this invoice and post it to the ledger?');">
         {% csrf_token %}
         <button type="submit" class="btn btn-primary"><i data-lucide="send"></i> Issue invoice</button>
