@@ -35,8 +35,8 @@
 
 <div class="stat-grid" style="margin-bottom:1rem;">
   <div class="stat-card"><div class="stat-label">Invoice total</div><div class="stat-value">{{ obj.invoice_total }}</div></div>
-  <div class="stat-card"><div class="stat-label">Paid</div><div class="stat-value">{{ obj.amount_paid }}</div></div>
-  <div class="stat-card"><div class="stat-label">Balance due</div><div class="stat-value">{{ obj.balance_due }}</div></div>
+  <div class="stat-card"><div class="stat-label">Paid</div><div class="stat-value">{{ amount_paid }}</div></div>
+  <div class="stat-card"><div class="stat-label">Balance due</div><div class="stat-value">{{ balance_due }}</div></div>
   <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value">
     {% if obj.invoice_status == 'paid' %}<span class="badge badge-green">{{ obj.invoice_status_display }}</span>
     {% elif obj.invoice_status == 'partial' %}<span class="badge badge-amber">{{ obj.invoice_status_display }}</span>
