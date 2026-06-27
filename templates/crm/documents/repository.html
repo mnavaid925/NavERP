@@ -22,19 +22,19 @@
         <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, name, account, deal…">
       </div>
       <div class="form-group">
-        <select name="status" class="form-select">
+        <select name="status" class="form-select" aria-label="Filter by status">
           <option value="">All Statuses</option>
           {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <select name="account" class="form-select">
+        <select name="account" class="form-select" aria-label="Filter by account">
           <option value="">All Accounts</option>
           {% for a in accounts %}<option value="{{ a.pk }}" {% if request.GET.account == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <select name="opportunity" class="form-select">
+        <select name="opportunity" class="form-select" aria-label="Filter by deal">
           <option value="">All Deals</option>
           {% for o in opportunities %}<option value="{{ o.pk }}" {% if request.GET.opportunity == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.number }}</option>{% endfor %}
         </select>
@@ -76,6 +76,7 @@
           </td>
           <td>v{{ obj.current_version }} <span class="text-muted">({{ obj.version_count }} saved)</span></td>
           <td>{{ obj.updated_at|date:"M d, Y" }}</td>
+          {# Read-only repository overview — edit/delete live on the contract detail page. #}
           <td>
             <div class="table-actions">
               <a href="{% url 'crm:contractdocument_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
