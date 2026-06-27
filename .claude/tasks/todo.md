@@ -4926,3 +4926,35 @@ the documented SSRF defenses + a `requests` dependency before going live); auto-
 is manual **Run**-only by design — no model save-hooks); retry/backoff on failed deliveries; per-action `params`
 beyond approval subject. Note: the allowlist intentionally blocks FK-id (`*_id`) condition fields — only plain
 scalar columns are matchable; a future carve-out would be needed for FK-id matching.
+
+---
+
+# CRM Sub-module 1.11 — Customer Success & Retention — BUILD PLAN (recreate in detail, 2026-06-27)
+
+Driven by `research-crm-1.7-1.12.md §1.11` (Gainsight/ChurnZero/Totango). As-built is real but shallow; bring each
+of the three NavERP.md bullets up to depth. CRM-owned, reuse the spine. Migration `0023`.
+
+## Models (`apps/crm/models.py`)
+- [ ] `OnboardingTemplate(TenantNumbered, NUMBER_PREFIX="OTPL")` — name, description, is_active; prop `step_count`; idx (tenant,is_active).
+- [ ] `OnboardingTemplateStep` (plain) — tenant, template(CASCADE related_name="steps"), order, title, description, offset_days, created_at.
+- [ ] `HealthScoreHistory` (plain, immutable) — tenant, account(core.Party), score, tier, breakdown JSON, computed_at; idx (tenant,account,-computed_at).
+- [ ] `Survey` — expand `classification` choices (NPS promoter/passive/detractor + CSAT satisfied/neutral/dissatisfied + CES easy/neutral/hard); set in `save()` by type/scale.
+- [ ] `compute_health_score()` — append a `HealthScoreHistory` row each run; on red tier, create a churn-risk `CrmTask` (guarded vs dup open alert).
+
+## Backend
+- [ ] forms: `OnboardingTemplateForm`, `OnboardingTemplateStepForm`; `HealthScoreConfigForm.clean()` weights-sum=100; `SurveyForm` drop `sent_at`.
+- [ ] views: onboardingtemplate CRUD + steps add/edit/delete + `onboardingtemplate_apply`; `onboardingstep_edit`; `recompute_all_health_scores` (admin); `survey_results`; `survey_send` (admin); type-aware `survey_respond`; audit on recompute.
+- [ ] urls: onboarding-templates/* + apply + steps; onboarding-steps/<pk>/edit; health-scores/recompute-all; surveys/results + surveys/<pk>/send.
+- [ ] admin: register OnboardingTemplate, OnboardingTemplateStep, HealthScoreHistory (readonly).
+- [ ] navigation: LIVE_LINKS["1.11"] + "Onboarding Templates" + "Survey Analytics" extras.
+- [ ] migration 0023.
+
+## Templates (`templates/crm/success/`)
+- [ ] onboardingtemplate/{list,detail,form}, onboardingtemplatestep/form, onboardingstep/form, survey/results (new).
+- [ ] edit onboardingplan/detail (+step edit), healthscore/{list,detail} (recompute-all + trend), health_config/form (sum hint), survey/{respond(type-aware),detail(send),list(results)}.
+
+## Seeder + Verify + Module Creation Sequence
+- [ ] seed_crm: 1 OnboardingTemplate + 3 steps; ensure a red account → churn task + history row; idempotent.
+- [ ] makemigrations/migrate/seed×2/check; throwaway temp verify (pages, apply, recompute-all, churn-task once, weights validation, type-aware respond, IDOR/admin gates).
+- [ ] review agents in order (code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer); commit between.
+- [ ] README 1.11 + skills/crm/SKILL.md 1.11 + this todo review section.
