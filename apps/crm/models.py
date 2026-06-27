@@ -1584,6 +1584,9 @@ class Expense(TenantNumbered):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_submitted_expenses")
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_approved_expenses")
+    is_billable = models.BooleanField(
+        default=False,
+        help_text="Billable costs are re-billed to the client, so they are excluded from the deal's true margin.")
 
     class Meta:
         ordering = ["-expense_date", "-created_at"]
@@ -1596,6 +1599,115 @@ class Expense(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.get_category_display()} {self.amount}"
+
+
+# ---- 1.7 Invoicing — a CRM wrapper over the ACCOUNTING ledger ----------------------------
+# The real AR invoice is an ``accounting.Invoice`` (Module 2 owns the ledger — lesson L29: reuse
+# it, never build a second one). ``DealInvoice`` records the *deal context* (opportunity / quote /
+# account) of a generated invoice and is created by the one-click quote→invoice conversion
+# (``dealinvoice_from_quote``). Issuing / GL-posting + confirmed cash-application stay in
+# Accounting (draft hand-off) — CRM only creates the draft and links it.
+class DealInvoice(TenantNumbered):
+    """Links a CRM deal (Opportunity / Quote) to the ``accounting.Invoice`` it generated."""
+
+    NUMBER_PREFIX = "DINV"
+
+    opportunity = models.ForeignKey("crm.Opportunity", on_delete=models.SET_NULL, null=True, blank=True, related_name="deal_invoices")
+    quote = models.ForeignKey("crm.Quote", on_delete=models.SET_NULL, null=True, blank=True, related_name="deal_invoices")
+    account = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_deal_invoices")
+    # The generated ledger document (system-of-record). editable=False → set by the view/seeder,
+    # never accepted from a form (a user must not re-point a wrapper at an arbitrary invoice).
+    invoice = models.ForeignKey("accounting.Invoice", on_delete=models.SET_NULL, null=True, blank=True, editable=False, related_name="crm_deal_invoices")
+    # Optional subscription schedule — recurring billing also lives in the ledger.
+    recurring_invoice = models.ForeignKey("accounting.RecurringInvoice", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_deal_invoices")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "opportunity"], name="crm_dinv_tnt_opp_idx"),
+            models.Index(fields=["tenant", "created_at"], name="crm_dinv_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.invoice_number}"
+
+    # Totals / status / paid amounts are READ THROUGH to the linked ledger invoice — never copied
+    # here, so there is a single source of truth. Every accessor guards a missing/unlinked invoice.
+    @property
+    def invoice_number(self):
+        return self.invoice.number if self.invoice_id else "—"
+
+    @property
+    def invoice_status(self):
+        return self.invoice.status if self.invoice_id else "unlinked"
+
+    @property
+    def invoice_status_display(self):
+        return self.invoice.get_status_display() if self.invoice_id else "Unlinked"
+
+    @property
+    def invoice_total(self):
+        return self.invoice.total if self.invoice_id else Decimal("0")
+
+    @property
+    def amount_paid(self):
+        return self.invoice.amount_paid() if self.invoice_id else Decimal("0")
+
+    @property
+    def balance_due(self):
+        return self.invoice.balance_due() if self.invoice_id else Decimal("0")
+
+
+# ---- 1.7 Payment Tracking — a CRM receipt document over a ledger payment -----------------
+class PaymentReceipt(TenantNumbered):
+    """A customer receipt for a (partial / milestone) payment against a deal invoice.
+
+    The money movement itself is an ``accounting.Payment`` (optional link); this model is the CRM
+    receipt *document* (printable) plus payment-gateway metadata. Real gateway webhooks (Stripe /
+    PayPal / Razorpay charge confirmation) are deferred — the gateway fields capture the reference."""
+
+    NUMBER_PREFIX = "RCPT"
+
+    METHOD_CHOICES = [
+        ("bank_transfer", "Bank Transfer"),
+        ("card", "Card"),
+        ("cash", "Cash"),
+        ("check", "Check"),
+        ("paypal", "PayPal"),
+        ("stripe", "Stripe"),
+        ("razorpay", "Razorpay"),
+        ("ach", "ACH"),
+        ("wire", "Wire Transfer"),
+        ("other", "Other"),
+    ]
+    GATEWAY_CHOICES = [
+        ("manual", "Manual / Offline"),
+        ("stripe", "Stripe"),
+        ("paypal", "PayPal"),
+        ("razorpay", "Razorpay"),
+    ]
+
+    deal_invoice = models.ForeignKey("crm.DealInvoice", on_delete=models.CASCADE, related_name="receipts")
+    # Optional link to the ledger money movement (Module 2 owns Payment + cash application).
+    payment = models.ForeignKey("accounting.Payment", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_receipts")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    received_date = models.DateField()
+    method = models.CharField(max_length=16, choices=METHOD_CHOICES, default="bank_transfer")
+    gateway = models.CharField(max_length=12, choices=GATEWAY_CHOICES, default="manual")
+    gateway_txn_id = models.CharField(max_length=120, blank=True, help_text="External gateway charge / transaction id.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-received_date", "-id"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "received_date"], name="crm_rcpt_tnt_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.amount}"
 
 
 # -------------------------------------------- 1.8 Project & Delivery Management (Post-Sale)
