@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Template{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <nav class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a> <span class="sep">›</span> <a href="{% url 'crm:onboardingtemplate_list' %}">Onboarding Templates</a> <span class="sep">›</span> {{ obj.number }}</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:onboardingtemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:onboardingtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <dl class="detail-grid">
+    <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+    <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+    <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    <div class="detail-item"><dt>Steps</dt><dd>{{ steps|length }}</dd></div>
+    <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+  </dl>
+  {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+</div></div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Apply to a client</h2></div>
+  <div class="card-body">
+    {% if steps %}
+    <form method="post" action="{% url 'crm:onboardingtemplate_apply' obj.pk %}" class="filter-bar">
+      {% csrf_token %}
+      <div class="form-group" style="flex:1; min-width:240px;">
+        <label class="form-label" for="apply_account">Account <span class="req">*</span></label>
+        <select name="account" id="apply_account" class="form-select" required>
+          <option value="" selected disabled>Choose an account…</option>
+          {% for o in accounts %}<option value="{{ o.pk }}">{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="rocket"></i> Create plan from template</button>
+    </form>
+    <p class="form-help" style="margin-top:.5rem;">Clones the {{ steps|length }} step(s) below into a new onboarding plan; each step's due date is set to today + its offset.</p>
+    {% else %}
+    <div class="empty-state"><i data-lucide="list-checks"></i><h3>Add steps first</h3><p>A template needs at least one step before it can be applied.</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Steps</h2></div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Order</th><th>Title</th><th>Due offset</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in steps %}
+          <tr>
+            <td>{{ s.order }}</td>
+            <td>{{ s.title }}</td>
+            <td>+{{ s.offset_days }} day{{ s.offset_days|pluralize }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'crm:onboardingtemplatestep_edit' s.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'crm:onboardingtemplatestep_delete' s.pk %}" onsubmit="return confirm('Delete this step?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No steps yet</h3><p>Add the first template step below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="{% url 'crm:onboardingtemplatestep_add' obj.pk %}" style="margin-top:1rem;">
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in step_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> Add step</button></div>
+    </form>
+  </div>
+</div>
+
+<a href="{% url 'crm:onboardingtemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
