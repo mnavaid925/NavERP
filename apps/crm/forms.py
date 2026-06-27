@@ -408,6 +408,8 @@ from .models import (  # noqa: E402  (after the base forms above)
     HealthScoreConfig,
     OnboardingPlan,
     OnboardingStep,
+    OnboardingTemplate,
+    OnboardingTemplateStep,
     PartnerPortalAccess,
     PaymentReceipt,
     ProductStock,
@@ -652,6 +654,20 @@ class OnboardingStepForm(TenantModelForm):
         fields = ["title", "description", "assignee", "due_date"]  # order auto-assigned in the view
 
 
+class OnboardingTemplateForm(TenantModelForm):
+    class Meta:
+        model = OnboardingTemplate
+        fields = ["name", "description", "is_active"]
+
+
+class OnboardingTemplateStepForm(TenantModelForm):
+    """Inline on the OnboardingTemplate detail page; tenant/template set in the view."""
+
+    class Meta:
+        model = OnboardingTemplateStep
+        fields = ["title", "description", "offset_days"]  # order auto-assigned in the view
+
+
 class HealthScoreForm(TenantModelForm):
     """Manual score entry/override; breakdown + computed_at are system-set."""
 
@@ -678,12 +694,24 @@ class HealthScoreConfigForm(TenantModelForm):
         fields = ["weight_tickets", "weight_nps", "weight_tasks", "weight_engagement",
                   "red_threshold", "yellow_threshold"]
 
+    def clean(self):
+        cleaned = super().clean()
+        weights = [cleaned.get("weight_tickets"), cleaned.get("weight_nps"),
+                   cleaned.get("weight_tasks"), cleaned.get("weight_engagement")]
+        if all(w is not None for w in weights) and sum(weights) != 100:
+            raise forms.ValidationError("Signal weights must add up to 100%.")
+        red, yellow = cleaned.get("red_threshold"), cleaned.get("yellow_threshold")
+        if red is not None and yellow is not None and red >= yellow:
+            raise forms.ValidationError("The Red threshold must be below the Yellow threshold.")
+        return cleaned
+
 
 class SurveyForm(TenantModelForm):
     class Meta:
         model = Survey
+        # sent_at is stamped by the survey_send action (admin), not typed by hand.
         fields = ["account", "contact", "survey_type", "trigger", "related_case",
-                  "score", "feedback_text", "sent_at"]
+                  "score", "feedback_text"]
 
 
 class ProductStockForm(TenantModelForm):
