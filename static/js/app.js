@@ -17,6 +17,13 @@
         var group = link.closest(".nav-group");
         if (group && group.querySelector(".nav-sub")) {
           e.preventDefault();
+          // If the sidebar is collapsed to the icon rail, a click should expand it and open this
+          // module's submenu — the accordion is invisible while collapsed, so toggling it is useless.
+          if (document.documentElement.getAttribute("data-collapsed") === "true") {
+            document.documentElement.setAttribute("data-collapsed", "false");
+            group.classList.add("open");
+            return;
+          }
           group.classList.toggle("open");
         }
       });
