@@ -527,6 +527,12 @@ class HealthScoreHistoryAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False  # append-only — written by compute_health_score, never by hand
 
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(Survey)
 class SurveyAdmin(admin.ModelAdmin):
