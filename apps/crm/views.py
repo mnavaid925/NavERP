@@ -14,7 +14,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Count, DecimalField, F, Q, Sum
+from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -1972,7 +1973,7 @@ from .models import (  # noqa: E402
 )
 # 1.7 Finance & Billing reuses the ACCOUNTING ledger (Module 2 owns it — lesson L29): the CRM
 # layer creates draft Invoices + reads their status/allocations, never a second ledger.
-from apps.accounting.models import Currency, Invoice, InvoiceLine  # noqa: E402
+from apps.accounting.models import Currency, Invoice, InvoiceLine, PaymentAllocation  # noqa: E402
 
 User = get_user_model()
 
@@ -2084,10 +2085,21 @@ def _ccy_symbol(code):
 
 @login_required
 def dealinvoice_list(request):
+    # Annotate confirmed amount-paid + derived balance via a correlated Subquery so the list does
+    # NOT fire one PaymentAllocation aggregate per row (performance-review N+1). Matches the
+    # property's ``payment__status="confirmed"`` filter exactly. invoice.total is free (select_related).
+    dec = DecimalField(max_digits=18, decimal_places=2)
+    paid_sq = Subquery(
+        PaymentAllocation.objects.filter(invoice=OuterRef("invoice"), payment__status="confirmed")
+        .values("invoice").annotate(t=Sum("allocated_amount")).values("t"),
+        output_field=DecimalField(max_digits=18, decimal_places=2))
+    qs = (DealInvoice.objects.filter(tenant=request.tenant)
+          .select_related("opportunity", "account", "invoice", "recurring_invoice")
+          .annotate(amt_paid=Coalesce(paid_sq, Value(Decimal("0")), output_field=dec))
+          .annotate(bal_due=Coalesce(F("invoice__total"), Value(Decimal("0")), output_field=dec)
+                    - F("amt_paid")))
     return crud_list(
-        request,
-        DealInvoice.objects.filter(tenant=request.tenant).select_related(
-            "opportunity", "account", "invoice", "recurring_invoice"),
+        request, qs,
         "crm/finance/dealinvoice/list.html",
         search_fields=["number", "account__name", "opportunity__name", "invoice__number"],
         filters=[("status", "invoice__status", False)],
@@ -2185,8 +2197,13 @@ def dealinvoice_detail(request, pk):
                 .aggregate(s=Sum("amount"))["s"] or Decimal("0"))
         margin = {"revenue": revenue, "cost": cost, "profit": revenue - cost,
                   "pct": ((revenue - cost) / revenue * 100) if revenue else None}
+    # Precompute paid/balance once (the property hits the DB) so the template doesn't call
+    # amount_paid() twice — once directly and once inside balance_due (performance-review #2).
+    amount_paid = obj.amount_paid
+    balance_due = obj.invoice_total - amount_paid
     return render(request, "crm/finance/dealinvoice/detail.html", {
         "obj": obj, "allocations": allocations, "receipts": receipts, "margin": margin,
+        "amount_paid": amount_paid, "balance_due": balance_due,
     })
 
 
