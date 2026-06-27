@@ -12,6 +12,8 @@ from apps.core.models import Party
 
 from .models import (
     AccountProfile,
+    AnalyticsDashboard,
+    AnalyticsReport,
     CalendarEvent,
     Campaign,
     CampaignMember,
@@ -21,6 +23,7 @@ from .models import (
     ContactProfile,
     CrmTask,
     CustomerPortalAccess,
+    DashboardWidget,
     EmailCampaign,
     EmailTemplate,
     EventAttendee,
@@ -588,3 +591,41 @@ class PartnerPortalAccessForm(TenantModelForm):
         model = PartnerPortalAccess
         fields = ["partner_party", "portal_user", "access_level", "can_view_stock",
                   "can_register_leads", "is_active"]
+
+
+# ===== 1.6 Analytics & Reporting ===========================================
+
+class AnalyticsDashboardForm(TenantModelForm):
+    class Meta:
+        model = AnalyticsDashboard
+        fields = ["name", "description", "owner", "is_shared", "is_default", "layout"]
+
+
+class DashboardWidgetForm(TenantModelForm):
+    """Widget tile editor. ``dashboard`` + ``tenant`` are set in the view (the widget is created
+    under a known dashboard), so they are out of the form. ``clean()`` rejects a chart type the
+    chosen metric can't render (e.g. a table metric drawn as a line)."""
+
+    class Meta:
+        model = DashboardWidget
+        fields = ["title", "metric", "chart_type", "date_range", "size", "target_value"]
+
+    def clean(self):
+        from .analytics import WIDGET_METRICS, allowed_charts
+        cleaned = super().clean()
+        metric = cleaned.get("metric")
+        chart_type = cleaned.get("chart_type")
+        if metric and chart_type and metric in WIDGET_METRICS:
+            ok = allowed_charts(metric)
+            if chart_type not in ok:
+                self.add_error("chart_type",
+                               "This metric supports: " + ", ".join(ok) + ".")
+        return cleaned
+
+
+class AnalyticsReportForm(TenantModelForm):
+    """Saved standard report. ``last_run_at`` is system-stamped (editable=False), never on the form."""
+
+    class Meta:
+        model = AnalyticsReport
+        fields = ["name", "description", "report_type", "date_range", "group_by", "is_favorite", "owner"]
