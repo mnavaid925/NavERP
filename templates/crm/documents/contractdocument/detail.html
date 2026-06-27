@@ -13,6 +13,18 @@
     </nav>
   </div>
   <div class="page-actions">
+    {% if obj.template and obj.status != 'signed' and obj.status != 'declined' %}
+    <form method="post" action="{% url 'crm:contractdocument_generate' obj.pk %}" style="display:inline;" onsubmit="return confirm('Generate the document body from the template? This captures a new version.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="file-text"></i> Generate from template</button>
+    </form>
+    {% endif %}
+    {% if obj.status == 'draft' %}
+    <form method="post" action="{% url 'crm:contractdocument_send' obj.pk %}" style="display:inline;" onsubmit="return confirm('Mark this contract as sent? It needs a generated body and at least one signer.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="send"></i> Send</button>
+    </form>
+    {% endif %}
     <a href="{% url 'crm:contractdocument_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     <form method="post" action="{% url 'crm:contractdocument_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');" style="display:inline;">
       {% csrf_token %}
@@ -120,6 +132,47 @@
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary"><i data-lucide="user-plus"></i> Add signer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Version history</h2></div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Version</th><th>Note</th><th>By</th><th>Date</th><th>File</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for v in versions %}
+          <tr>
+            <td class="fw-600">v{{ v.version_no }}</td>
+            <td>{{ v.change_note|default:"—" }}</td>
+            <td>{% if v.created_by %}{{ v.created_by.get_full_name|default:v.created_by.username }}{% else %}—{% endif %}</td>
+            <td>{{ v.created_at|date:"M d, Y H:i" }}</td>
+            <td>{% if v.file %}<a href="{{ v.file.url }}" target="_blank" rel="noopener">Download</a>{% else %}—{% endif %}</td>
+            <td><div class="table-actions"><a href="{% url 'crm:documentversion_detail' v.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="history"></i><h3>No versions yet</h3><p>Generate from a template or upload a revision below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <form method="post" action="{% url 'crm:contractdocument_version_add' obj.pk %}" enctype="multipart/form-data" style="margin-top:1rem;">
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in version_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="form-help">{{ field.help_text }}</p>{% endif %}
+          {% for error in field.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-outline"><i data-lucide="upload"></i> Add revision</button>
       </div>
     </form>
   </div>
