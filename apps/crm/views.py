@@ -19,7 +19,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.template import Context, Template
+from django.template import Context, Engine
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
@@ -2652,7 +2652,7 @@ def doctemplate_list(request):
     )
 
 
-@login_required
+@tenant_admin_required  # authoring a server-rendered template body is privileged (security-review)
 def doctemplate_create(request):
     return crud_create(request, form_class=DocTemplateForm, template="crm/documents/doctemplate/form.html",
                        success_url="crm:doctemplate_list")
@@ -2667,7 +2667,7 @@ def doctemplate_detail(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required  # authoring a server-rendered template body is privileged (security-review)
 def doctemplate_edit(request, pk):
     return crud_edit(request, model=DocTemplate, pk=pk, form_class=DocTemplateForm,
                      template="crm/documents/doctemplate/form.html", success_url="crm:doctemplate_list")
@@ -2817,21 +2817,34 @@ def _safe_doc_context(contract):
     }
 
 
+# Isolated engine for rendering user-authored DocTemplate bodies: NO loader_tags
+# ({% include %}/{% extends %}) and NO project ``{% load %}`` libraries — so a template body can only
+# use {{ vars }}, filters and {% if %}/{% for %}, never pull in internal templates or tag libs
+# (security-review). Combined with the string-only ``_safe_doc_context`` (no model instances).
+_DOC_ENGINE = Engine(dirs=[], app_dirs=False, libraries={},
+                     builtins=["django.template.defaulttags", "django.template.defaultfilters"])
+
+
+def _render_doc_body(contract):
+    """Render a contract's linked template body against the safe context + isolated engine."""
+    return _DOC_ENGINE.from_string(contract.template.body or "").render(Context(_safe_doc_context(contract)))
+
+
 @login_required
 @require_POST
 def contractdocument_generate(request, pk):
     """1.9 Document Generation — render the linked template's merge variables into the contract body
     and capture it as a new immutable DocumentVersion. Rendered with a restricted string-only context
-    (``_safe_doc_context``) so a template body can't reach model attributes/methods."""
+    + isolated engine so a template body can't reach model attributes/methods or include other files."""
     contract = get_object_or_404(ContractDocument, pk=pk, tenant=request.tenant)
-    if contract.status in ("signed", "declined"):
-        messages.error(request, "A signed or declined contract can't be regenerated.")
+    if contract.status != "draft":
+        messages.error(request, "Only a draft contract can be generated — its body is locked once sent.")
         return redirect("crm:contractdocument_detail", pk=pk)
     if contract.template_id is None:
         messages.error(request, "Link a document template first, then generate.")
         return redirect("crm:contractdocument_detail", pk=pk)
     try:
-        rendered = Template(contract.template.body or "").render(Context(_safe_doc_context(contract)))
+        rendered = _render_doc_body(contract)
     except Exception as e:  # a malformed template must not 500 the page  # noqa: BLE001
         messages.error(request, f"Template error: {e}")
         return redirect("crm:contractdocument_detail", pk=pk)
@@ -2853,6 +2866,9 @@ def contractdocument_generate(request, pk):
 def contractdocument_version_add(request, pk):
     """1.9 File Repository — capture a new revision: an uploaded file + the current body snapshot."""
     contract = get_object_or_404(ContractDocument, pk=pk, tenant=request.tenant)
+    if contract.status in ("signed", "declined"):
+        messages.error(request, "Can't add revisions to a signed or declined contract.")
+        return redirect("crm:contractdocument_detail", pk=pk)
     form = DocumentVersionForm(request.POST, request.FILES, tenant=request.tenant)
     if form.is_valid():
         with transaction.atomic():
