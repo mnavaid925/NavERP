@@ -1,10 +1,13 @@
 {% load static %}
 <header class="topbar">
   <button class="icon-btn" id="sidebar-toggle" aria-label="Toggle sidebar"><i data-lucide="menu"></i></button>
-  <div class="search">
+  <form class="search" method="get" action="{% url 'core:search' %}" role="search" autocomplete="off"
+        data-suggest-url="{% url 'core:search_suggest' %}">
     <i data-lucide="search"></i>
-    <input id="global-search" type="text" placeholder="Search…  ⌘K" aria-label="Search">
-  </div>
+    <input id="global-search" name="q" type="text" placeholder="Search…  ⌘K" aria-label="Search"
+           autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results">
+    <div class="search-results" id="search-results" role="listbox" hidden></div>
+  </form>
   <div style="margin-inline-start:auto; display:flex; align-items:center; gap:.25rem;">
     <button class="icon-btn" id="dark-toggle" aria-label="Toggle dark mode"><i data-lucide="moon"></i></button>
     <button class="icon-btn" aria-label="Notifications"><i data-lucide="bell"></i><span class="dot"></span></button>
