@@ -48,6 +48,8 @@ from apps.crm.models import (
     Lead,
     OnboardingPlan,
     OnboardingStep,
+    OnboardingTemplate,
+    OnboardingTemplateStep,
     Opportunity,
     OpportunitySplit,
     PartnerPortalAccess,
@@ -664,6 +666,18 @@ class Command(BaseCommand):
                 tenant=tenant, plan=plan, order=i, title=title, assignee=owner,
                 due_date=today + td(days=off), completed_at=(now if done else None))
 
+        # 1.11 reusable onboarding template (Apply clones these steps into a fresh plan).
+        otpl = OnboardingTemplate.objects.create(
+            tenant=tenant, name="Standard 90-Day SaaS Onboarding",
+            description="Reusable kickoff → training → go-live blueprint applied to new clients.")
+        for i, (t_title, off) in enumerate([
+            ("Welcome & kickoff call", 0),
+            ("Product training session", 14),
+            ("Go-live & 30-day review", 30),
+        ]):
+            OnboardingTemplateStep.objects.create(
+                tenant=tenant, template=otpl, order=i, title=t_title, offset_days=off)
+
         HealthScoreConfig.objects.get_or_create(tenant=tenant)
         Survey.objects.create(
             tenant=tenant, account=account, survey_type="nps", trigger="post_close", score=9,
@@ -679,6 +693,20 @@ class Command(BaseCommand):
         # Compute a health score per org Party (after surveys/cases/tasks exist).
         for party in Party.objects.filter(tenant=tenant, kind="organization")[:3]:
             compute_health_score(party, tenant)
+
+        # An at-risk account (5 open tickets, a detractor, no pipeline) → Red tier, which auto-raises
+        # a guarded churn-risk CrmTask and records a HealthScoreHistory point.
+        at_risk = Party.objects.create(
+            tenant=tenant, kind="organization", name="Northwind Holdings (At Risk)")
+        for n in range(5):
+            Case.objects.create(
+                tenant=tenant, account=at_risk, subject=f"Unresolved issue #{n + 1}",
+                status="new", priority="high", owner=owner)
+        Survey.objects.create(
+            tenant=tenant, account=at_risk, survey_type="nps", trigger="manual", score=2,
+            feedback_text="Considering alternatives.", sent_at=now - td(days=3),
+            responded_at=now - td(days=2))
+        compute_health_score(at_risk, tenant)
 
         # --- 1.12 Product stock + purchase order + partner portal
         widget = ProductStock.objects.create(
