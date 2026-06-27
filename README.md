@@ -159,6 +159,16 @@ Three design ideas hold the whole platform together:
 - A CRM **overview** (analytics) page: stat cards (open leads, pipeline, weighted forecast, win rate, open
   cases/tasks, active campaigns) + pipeline-by-stage and leads-by-rating charts.
 
+**Sub-module 1.6 — Analytics & Reporting** (recreated in detail, migration `0015`, 4 CRM-owned tables; all
+metrics are read-only aggregations over existing CRM data, computed in `apps/crm/analytics.py`):
+- **Dashboards** — saved, per-user **`AnalyticsDashboard`** (`DASH-#####`) holding **`DashboardWidget`** tiles
+  that are **computed live on render**: KPI cards, gauges (with optional target), bar/line/pie/doughnut charts
+  (Chart.js), and tables (top performers, campaign ROI) — 20 metrics over Opportunity/Case/Lead/Campaign/Task.
+  Per-widget date-range + size, drag-free up/down reordering, and admin-gated `is_shared`/`is_default` flags.
+- **Standard Reports** — saved **`AnalyticsReport`** (`RPT-#####`) in 4 canned types (sales activity, sales
+  performance/top-performers, funnel drop-off, service resolution-time + CSAT) computed live with a chart +
+  table + KPI summary, plus point-in-time **`ReportSnapshot`** runs frozen as JSON for period-over-period trends.
+
 **Sub-modules 1.7–1.12** (extension pass, 18 CRM-owned tables, migration `0005`):
 - **1.7 Finance & Billing** — **Expenses** (`EXP-#####`): deal/project cost logging with receipt upload
   (extension-allowlisted), an owner **submit** + tenant-admin **approve/reject** workflow.
@@ -178,7 +188,7 @@ Three design ideas hold the whole platform together:
   > (`core.Item`/`StockMove`/`PurchaseOrder`) and the Accounting ledger aren't built yet; they migrate onto
   > the spine when those modules land.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **1,315-test** suite.
+Full CRUD, tenant isolation, working filters, an idempotent `seed_crm`, and a **1,488-test** suite.
 
 ### Module 2 — Accounting & Finance (`accounting`) — 2.1–2.15
 
