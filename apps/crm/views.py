@@ -14,7 +14,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Count, DecimalField, F, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Avg, Count, DecimalField, F, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1943,6 +1943,8 @@ from .forms import (  # noqa: E402
     HealthScoreForm,
     OnboardingPlanForm,
     OnboardingStepForm,
+    OnboardingTemplateForm,
+    OnboardingTemplateStepForm,
     PartnerPortalAccessForm,
     PaymentReceiptForm,
     ProductStockForm,
@@ -1966,8 +1968,11 @@ from .models import (  # noqa: E402
     Expense,
     HealthScore,
     HealthScoreConfig,
+    HealthScoreHistory,
     OnboardingPlan,
     OnboardingStep,
+    OnboardingTemplate,
+    OnboardingTemplateStep,
     PartnerPortalAccess,
     PaymentReceipt,
     ProductStock,
@@ -3399,6 +3404,136 @@ def onboardingstep_delete(request, step_pk):
     return redirect("crm:onboardingplan_detail", pk=plan_id)
 
 
+@login_required
+def onboardingstep_edit(request, step_pk):
+    """Edit a plan step's title/description/assignee/due date (the missing CRUD piece)."""
+    step = get_object_or_404(OnboardingStep.objects.select_related("plan"), pk=step_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = OnboardingStepForm(request.POST, instance=step, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Step updated.")
+            return redirect("crm:onboardingplan_detail", pk=step.plan_id)
+    else:
+        form = OnboardingStepForm(instance=step, tenant=request.tenant)
+    return render(request, "crm/success/onboardingstep/form.html", {"form": form, "step": step})
+
+
+# ------------------------------------------------------------ 1.11 Onboarding templates (reusable blueprints)
+@login_required
+def onboardingtemplate_list(request):
+    return crud_list(
+        request,
+        OnboardingTemplate.objects.filter(tenant=request.tenant).annotate(n_steps=Count("steps")).order_by("-created_at"),
+        "crm/success/onboardingtemplate/list.html",
+        search_fields=["number", "name"],
+        filters=[("is_active", "is_active", False)],
+    )
+
+
+@login_required
+def onboardingtemplate_create(request):
+    return crud_create(request, form_class=OnboardingTemplateForm,
+                       template="crm/success/onboardingtemplate/form.html", success_url="crm:onboardingtemplate_list")
+
+
+@login_required
+def onboardingtemplate_detail(request, pk):
+    obj = get_object_or_404(OnboardingTemplate, pk=pk, tenant=request.tenant)
+    return render(request, "crm/success/onboardingtemplate/detail.html", {
+        "obj": obj,
+        "steps": list(obj.steps.all()),
+        "step_form": OnboardingTemplateStepForm(tenant=request.tenant),
+        "accounts": Party.objects.filter(tenant=request.tenant, kind="organization").order_by("name"),
+    })
+
+
+@login_required
+def onboardingtemplate_edit(request, pk):
+    return crud_edit(request, model=OnboardingTemplate, pk=pk, form_class=OnboardingTemplateForm,
+                     template="crm/success/onboardingtemplate/form.html", success_url="crm:onboardingtemplate_list")
+
+
+@login_required
+@require_POST
+def onboardingtemplate_delete(request, pk):
+    return crud_delete(request, model=OnboardingTemplate, pk=pk, success_url="crm:onboardingtemplate_list")
+
+
+@login_required
+@require_POST
+def onboardingtemplatestep_add(request, pk):
+    template = get_object_or_404(OnboardingTemplate, pk=pk, tenant=request.tenant)
+    form = OnboardingTemplateStepForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        step = form.save(commit=False)
+        step.tenant = request.tenant
+        step.template = template
+        step.order = template.steps.count()  # append after existing steps
+        step.save()
+        messages.success(request, "Template step added.")
+    else:
+        messages.error(request, "Could not add step — a title is required.")
+    return redirect("crm:onboardingtemplate_detail", pk=template.pk)
+
+
+@login_required
+def onboardingtemplatestep_edit(request, step_pk):
+    step = get_object_or_404(OnboardingTemplateStep.objects.select_related("template"),
+                             pk=step_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = OnboardingTemplateStepForm(request.POST, instance=step, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Template step updated.")
+            return redirect("crm:onboardingtemplate_detail", pk=step.template_id)
+    else:
+        form = OnboardingTemplateStepForm(instance=step, tenant=request.tenant)
+    return render(request, "crm/success/onboardingtemplatestep/form.html", {"form": form, "step": step})
+
+
+@login_required
+@require_POST
+def onboardingtemplatestep_delete(request, step_pk):
+    step = get_object_or_404(OnboardingTemplateStep, pk=step_pk, tenant=request.tenant)
+    template_id = step.template_id
+    step.delete()
+    messages.success(request, "Template step removed.")
+    return redirect("crm:onboardingtemplate_detail", pk=template_id)
+
+
+@login_required
+@require_POST
+def onboardingtemplate_apply(request, pk):
+    """Clone an active template's steps into a brand-new OnboardingPlan for a chosen tenant account."""
+    template = get_object_or_404(OnboardingTemplate, pk=pk, tenant=request.tenant)
+    if not template.is_active:
+        messages.error(request, "This template is inactive — activate it before applying.")
+        return redirect("crm:onboardingtemplate_detail", pk=template.pk)
+    account_id = (request.POST.get("account") or "").strip()
+    if not account_id.isdigit():
+        messages.error(request, "Choose an account to apply the template to.")
+        return redirect("crm:onboardingtemplate_detail", pk=template.pk)
+    account = get_object_or_404(Party, pk=int(account_id), tenant=request.tenant)  # tenant-scoped → cross-tenant 404
+    template_steps = list(template.steps.all())
+    if not template_steps:
+        messages.error(request, "This template has no steps to apply.")
+        return redirect("crm:onboardingtemplate_detail", pk=template.pk)
+    today = timezone.now().date()
+    with transaction.atomic():
+        plan = OnboardingPlan.objects.create(
+            tenant=request.tenant, account=account, owner=request.user, name=template.name,
+            status="active", description=f"Created from template {template.number}.")
+        OnboardingStep.objects.bulk_create([
+            OnboardingStep(tenant=request.tenant, plan=plan, order=ts.order, title=ts.title,
+                           description=ts.description, due_date=today + timedelta(days=ts.offset_days))
+            for ts in template_steps
+        ])
+        write_audit_log(request.user, plan, "create")
+    messages.success(request, f"Onboarding plan {plan.number} created from template ({len(template_steps)} steps).")
+    return redirect("crm:onboardingplan_detail", pk=plan.pk)
+
+
 # ------------------------------------------------------------ 1.11 Health scores
 @login_required
 def healthscore_list(request):
@@ -3421,7 +3556,9 @@ def healthscore_create(request):
 @login_required
 def healthscore_detail(request, pk):
     obj = get_object_or_404(HealthScore.objects.select_related("account"), pk=pk, tenant=request.tenant)
-    return render(request, "crm/success/healthscore/detail.html", {"obj": obj})
+    history = list(HealthScoreHistory.objects.filter(tenant=request.tenant, account=obj.account)
+                   .order_by("-computed_at")[:12])  # recent trend points (newest first)
+    return render(request, "crm/success/healthscore/detail.html", {"obj": obj, "history": history})
 
 
 @login_required
@@ -3441,8 +3578,20 @@ def healthscore_delete(request, pk):
 def recompute_health_score(request, pk):
     obj = get_object_or_404(HealthScore.objects.select_related("account"), pk=pk, tenant=request.tenant)
     compute_health_score(obj.account, request.tenant)
+    write_audit_log(request.user, obj, "update")
     messages.success(request, "Health score recomputed.")
     return redirect("crm:healthscore_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # bulk recompute is a privileged, tenant-wide operation
+@require_POST
+def recompute_all_health_scores(request):
+    account_ids = list(HealthScore.objects.filter(tenant=request.tenant).values_list("account_id", flat=True))
+    for party in Party.objects.filter(tenant=request.tenant, pk__in=account_ids):
+        compute_health_score(party, request.tenant)
+    write_audit_log(request.user, None, "update", tenant=request.tenant)
+    messages.success(request, f"Recomputed {len(account_ids)} health score(s).")
+    return redirect("crm:healthscore_list")
 
 
 @tenant_admin_required  # health-scoring weights are a tenant-wide privileged setting
@@ -3504,19 +3653,68 @@ def survey_delete(request, pk):
     return crud_delete(request, model=Survey, pk=pk, success_url="crm:survey_list")
 
 
+_SURVEY_SCALE_MAX = {"nps": 10, "csat": 5, "ces": 7}  # per-type response scale ceiling
+
+
+@login_required
+def survey_results(request):
+    """Aggregate survey analytics (1.11): NPS = %promoters − %detractors, the P/P/D split,
+    CSAT/CES averages, and the overall response rate — derived queries, no extra model."""
+    base = Survey.objects.filter(tenant=request.tenant)
+    responded = base.exclude(responded_at=None)
+    nps = responded.filter(survey_type="nps")
+    nps_total = nps.count()
+    promoters = nps.filter(classification="promoter").count()
+    passives = nps.filter(classification="passive").count()
+    detractors = nps.filter(classification="detractor").count()
+    sent = base.exclude(sent_at=None).count()
+    responded_total = responded.count()
+    csat = responded.filter(survey_type="csat")
+    ces = responded.filter(survey_type="ces")
+    pct = lambda n: round(n / nps_total * 100) if nps_total else 0  # noqa: E731
+    return render(request, "crm/success/survey/results.html", {
+        "total": base.count(), "sent": sent, "responded_total": responded_total,
+        "response_rate": round(responded_total / sent * 100) if sent else None,
+        "nps_total": nps_total, "promoters": promoters, "passives": passives, "detractors": detractors,
+        "nps_score": (promoters - detractors) * 100 // nps_total if nps_total else None,
+        "promoter_pct": pct(promoters), "passive_pct": pct(passives), "detractor_pct": pct(detractors),
+        "csat_avg": csat.aggregate(a=Avg("score"))["a"], "csat_count": csat.count(),
+        "ces_avg": ces.aggregate(a=Avg("score"))["a"], "ces_count": ces.count(),
+    })
+
+
+@tenant_admin_required  # sending a survey is a privileged outbound action
+@require_POST
+def survey_send(request, pk):
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    if survey.sent_at is None:
+        survey.sent_at = timezone.now()
+        survey.save(update_fields=["sent_at", "updated_at"])
+        # WARNING: real email delivery is deferred. When wired, send the respond link to survey.contact's
+        # email via a vetted transactional-email service; never expose the token to anyone but the recipient.
+        write_audit_log(request.user, survey, "update")
+        messages.success(request, f"Survey {survey.number} marked sent (email delivery deferred).")
+    else:
+        messages.info(request, "This survey was already sent.")
+    return redirect("crm:survey_detail", pk=survey.pk)
+
+
 def survey_respond(request, token):
-    """Public survey-response page (1.11) — token-scoped, no login."""
+    """Public survey-response page (1.11) — token-scoped, no login. Scale + clamp are type-aware."""
     survey = get_object_or_404(Survey, token=token)
+    scale_max = _SURVEY_SCALE_MAX.get(survey.survey_type, 10)
+    scale_min = 0 if survey.survey_type == "nps" else 1  # NPS is 0–10; CSAT/CES start at 1
     if request.method == "POST" and survey.responded_at is None:
         raw = request.POST.get("score", "")
-        # Clamp to the model's 0–10 range — this is a public endpoint, never trust the POST.
-        survey.score = max(0, min(10, int(raw))) if raw.isdigit() else None
+        # Clamp to the type's scale — this is a public endpoint, never trust the POST.
+        survey.score = max(scale_min, min(scale_max, int(raw))) if raw.isdigit() else None
         # Public endpoint — cap feedback length to prevent unbounded-storage abuse.
         survey.feedback_text = request.POST.get("feedback_text", "").strip()[:4000]
         survey.responded_at = timezone.now()
-        survey.save()  # save() auto-classifies NPS
+        survey.save()  # save() auto-classifies by type
         return redirect("crm:survey_respond", token=token)
-    return render(request, "crm/success/survey/respond.html", {"survey": survey})
+    return render(request, "crm/success/survey/respond.html", {
+        "survey": survey, "scale": list(range(scale_min, scale_max + 1))})
 
 
 # ------------------------------------------------------------ 1.12 Product stock
