@@ -231,6 +231,7 @@ urlpatterns = [
     # Projects (1.8)
     path("projects/", views.crmproject_list, name="crmproject_list"),
     path("projects/add/", views.crmproject_create, name="crmproject_create"),
+    path("projects/board/", views.crmproject_board, name="crmproject_board"),  # literal before <int:pk>
     path("projects/<int:pk>/", views.crmproject_detail, name="crmproject_detail"),
     path("projects/<int:pk>/edit/", views.crmproject_edit, name="crmproject_edit"),
     path("projects/<int:pk>/delete/", views.crmproject_delete, name="crmproject_delete"),
@@ -260,7 +261,6 @@ urlpatterns = [
     path("resource-allocations/<int:pk>/edit/", views.resourceallocation_edit, name="resourceallocation_edit"),
     path("resource-allocations/<int:pk>/delete/", views.resourceallocation_delete, name="resourceallocation_delete"),
     path("workload/", views.resource_workload, name="resource_workload"),
-    path("projects/board/", views.crmproject_board, name="crmproject_board"),
     path("milestones/<int:pk>/move/", views.crmmilestone_move, name="crmmilestone_move"),
 
     # Document templates (1.9)
