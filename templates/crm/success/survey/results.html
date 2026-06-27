@@ -13,23 +13,23 @@
 
 <div class="stat-grid">
   <div class="stat-card">
-    <div class="stat-label">NPS Score</div>
     <div class="stat-value">{% if nps_score is not None %}{{ nps_score }}{% else %}—{% endif %}</div>
+    <div class="stat-label">NPS Score</div>
     <div class="form-help">{{ nps_total }} NPS response{{ nps_total|pluralize }}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Response rate</div>
     <div class="stat-value">{% if response_rate is not None %}{{ response_rate }}%{% else %}—{% endif %}</div>
+    <div class="stat-label">Response rate</div>
     <div class="form-help">{{ responded_total }} of {{ sent }} sent</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">CSAT avg</div>
     <div class="stat-value">{% if csat_avg %}{{ csat_avg|floatformat:1 }}{% else %}—{% endif %}</div>
+    <div class="stat-label">CSAT avg</div>
     <div class="form-help">{{ csat_count }} CSAT response{{ csat_count|pluralize }}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">CES avg</div>
     <div class="stat-value">{% if ces_avg %}{{ ces_avg|floatformat:1 }}{% else %}—{% endif %}</div>
+    <div class="stat-label">CES avg</div>
     <div class="form-help">{{ ces_count }} CES response{{ ces_count|pluralize }}</div>
   </div>
 </div>
