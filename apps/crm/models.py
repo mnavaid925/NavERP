@@ -2504,7 +2504,7 @@ def compute_health_score(party, tenant):
         # Skip if an open churn task already exists for this account (no spam on every recompute).
         if tier == "red" and not CrmTask.objects.filter(
                 tenant=tenant, party=party, status__in=CrmTask.OPEN_STATUSES,
-                subject__startswith="Churn risk:").exists():
+                type="follow_up", subject__startswith="Churn risk:").exists():
             owner_id = (OnboardingPlan.objects.filter(tenant=tenant, account=party)
                         .exclude(owner=None).values_list("owner_id", flat=True).first())
             CrmTask.objects.create(
