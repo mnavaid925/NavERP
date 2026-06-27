@@ -38,7 +38,7 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'crm:report_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
-              <td>{% if obj.is_favorite %}<i data-lucide="star" title="Favorite"></i> {% endif %}{{ obj.name }}</td>
+              <td>{% if obj.is_favorite %}<span role="img" aria-label="Favorite"><i data-lucide="star"></i></span> {% endif %}{{ obj.name }}</td>
               <td><span class="badge badge-info">{{ obj.get_report_type_display }}</span></td>
               <td>{{ obj.get_date_range_display }}</td>
               <td>{% if obj.last_run_at %}{{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
