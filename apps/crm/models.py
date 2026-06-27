@@ -2257,3 +2257,206 @@ class PartnerPortalAccess(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.partner_party or 'Partner'}"
+
+
+# ============================================================================
+# ===== 1.6 Analytics & Reporting ============================================
+# Saved per-user dashboards whose widgets are computed LIVE on render, plus saved
+# standard reports with point-in-time snapshots. Every metric is a READ-ONLY
+# aggregation over the existing CRM models (Opportunity/Case/Lead/Campaign/
+# CrmTask/CommunicationLog), computed in ``apps/crm/analytics.py`` — nothing here
+# stores a derived figure EXCEPT ``ReportSnapshot``, which deliberately freezes a
+# single run for period-over-period trend history.
+#
+# Choice lists live here (the field definitions own them); the compute metadata
+# (which aggregation + which chart kinds each metric supports) lives in
+# ``analytics.py``, keyed by the same metric keys. analytics.py imports this
+# module — this module never imports analytics.py (no circular import).
+# ============================================================================
+
+# Shared date-window selector for both widgets and reports (filters ``created_at``).
+ANALYTICS_RANGE_CHOICES = [
+    ("last_7", "Last 7 days"),
+    ("last_30", "Last 30 days"),
+    ("last_90", "Last 90 days"),
+    ("quarter", "This quarter"),
+    ("year", "This year"),
+    ("all", "All time"),
+]
+
+DASHBOARD_LAYOUT_CHOICES = [
+    ("one", "Single column"),
+    ("two", "Two columns"),
+    ("three", "Three columns"),
+]
+
+WIDGET_CHART_CHOICES = [
+    ("kpi", "KPI Card"),
+    ("gauge", "Gauge"),
+    ("bar", "Bar Chart"),
+    ("line", "Line Chart"),
+    ("pie", "Pie Chart"),
+    ("doughnut", "Doughnut Chart"),
+    ("table", "Table"),
+]
+
+WIDGET_SIZE_CHOICES = [
+    ("small", "Small (quarter width)"),
+    ("medium", "Medium (half width)"),
+    ("large", "Large (three-quarter width)"),
+    ("full", "Full width"),
+]
+
+# (key, label) for every widget metric. The matching compute behaviour + the chart
+# kinds each one allows are declared in ``analytics.WIDGET_METRICS`` under the same keys.
+WIDGET_METRIC_CHOICES = [
+    # --- scalar (KPI card / gauge) -------------------------------------------------
+    ("kpi_open_pipeline", "KPI · Open Pipeline ($)"),
+    ("kpi_weighted_forecast", "KPI · Weighted Forecast ($)"),
+    ("kpi_win_rate", "KPI · Win Rate (%)"),
+    ("kpi_revenue_won", "KPI · Revenue Won ($)"),
+    ("kpi_new_leads", "KPI · New Leads (#)"),
+    ("kpi_open_cases", "KPI · Open Cases (#)"),
+    ("kpi_avg_csat", "KPI · Avg CSAT (1-5)"),
+    ("kpi_open_tasks", "KPI · Open Tasks (#)"),
+    # --- series (bar / line / pie / doughnut) -------------------------------------
+    ("pipeline_by_stage", "Chart · Pipeline by Stage (#)"),
+    ("pipeline_value_by_stage", "Chart · Pipeline Value by Stage ($)"),
+    ("win_loss", "Chart · Won vs Lost (#)"),
+    ("revenue_won_by_month", "Chart · Revenue Won by Month ($)"),
+    ("leads_by_rating", "Chart · Leads by Rating"),
+    ("leads_by_status", "Chart · Leads by Status"),
+    ("leads_by_source", "Chart · Leads by Source"),
+    ("cases_by_status", "Chart · Cases by Status"),
+    ("cases_by_priority", "Chart · Cases by Priority"),
+    ("tasks_by_type", "Chart · Tasks by Type"),
+    # --- table --------------------------------------------------------------------
+    ("top_performers", "Table · Top Performers"),
+    ("campaign_roi", "Table · Campaign ROI"),
+]
+
+REPORT_TYPE_CHOICES = [
+    ("sales_activity", "Sales Activity"),
+    ("sales_performance", "Sales Performance (Top Performers)"),
+    ("funnel", "Funnel Analysis (Drop-off)"),
+    ("service", "Service (Resolution Time & CSAT)"),
+]
+
+REPORT_GROUP_CHOICES = [
+    ("month", "By Month"),
+    ("week", "By Week"),
+    ("owner", "By Owner"),
+    ("priority", "By Priority"),
+    ("stage", "By Stage"),
+]
+
+
+class AnalyticsDashboard(TenantNumbered):
+    """A saved, per-user CRM dashboard (1.6). Holds a set of ``DashboardWidget`` tiles that are
+    computed live on render (real-time data). ``is_shared`` exposes it to the whole tenant;
+    ``is_default`` marks the one opened first. The owner can keep private dashboards."""
+
+    NUMBER_PREFIX = "DASH"
+
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_dashboards")
+    is_shared = models.BooleanField(default=False)  # visible to the whole tenant, not just the owner
+    is_default = models.BooleanField(default=False)  # the landing dashboard
+    layout = models.CharField(max_length=10, choices=DASHBOARD_LAYOUT_CHOICES, default="two")
+
+    class Meta:
+        ordering = ["-is_default", "name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "owner"], name="crm_dash_tnt_owner_idx"),
+            models.Index(fields=["tenant", "is_shared"], name="crm_dash_tnt_shared_idx"),
+        ]
+
+    @property
+    def widget_count(self):
+        return self.widgets.count()
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class DashboardWidget(models.Model):
+    """One tile on an ``AnalyticsDashboard`` (1.6). ``metric`` selects a read-only aggregation
+    (see ``analytics.WIDGET_METRICS``); ``chart_type`` chooses how to render it (the form's
+    ``clean()`` enforces a chart that the metric supports). Not ``TenantNumbered`` — it is a
+    child row, so it carries its own tenant FK + timestamps and no human-readable number.
+    ``target_value`` is an optional goal used by gauge/KPI widgets (progress-to-target)."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    dashboard = models.ForeignKey("AnalyticsDashboard", on_delete=models.CASCADE, related_name="widgets")
+    title = models.CharField(max_length=120)
+    metric = models.CharField(max_length=40, choices=WIDGET_METRIC_CHOICES, default="kpi_open_pipeline")
+    chart_type = models.CharField(max_length=10, choices=WIDGET_CHART_CHOICES, default="kpi")
+    date_range = models.CharField(max_length=10, choices=ANALYTICS_RANGE_CHOICES, default="last_30")
+    size = models.CharField(max_length=10, choices=WIDGET_SIZE_CHOICES, default="medium")
+    target_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)  # optional goal for gauge/KPI
+    position = models.PositiveIntegerField(default=0)  # manual ordering on the dashboard
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        indexes = [
+            models.Index(fields=["tenant", "dashboard"], name="crm_widget_tnt_dash_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.get_chart_type_display()})"
+
+
+class AnalyticsReport(TenantNumbered):
+    """A saved standard report (1.6) — one of four canned report types computed live over the
+    CRM data (see ``analytics.compute_report``). ``last_run_at`` is system-stamped whenever the
+    report is rendered or snapshotted (never on the form). ``is_favorite`` pins it to the top."""
+
+    NUMBER_PREFIX = "RPT"
+
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    report_type = models.CharField(max_length=20, choices=REPORT_TYPE_CHOICES, default="sales_activity")
+    date_range = models.CharField(max_length=10, choices=ANALYTICS_RANGE_CHOICES, default="last_90")
+    group_by = models.CharField(max_length=10, choices=REPORT_GROUP_CHOICES, default="month")
+    is_favorite = models.BooleanField(default=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_reports")
+    last_run_at = models.DateTimeField(null=True, blank=True, editable=False)  # system-set on render/snapshot
+
+    class Meta:
+        ordering = ["-is_favorite", "name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "report_type"], name="crm_rpt_tnt_type_idx"),
+            models.Index(fields=["tenant", "is_favorite"], name="crm_rpt_tnt_fav_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class ReportSnapshot(models.Model):
+    """A point-in-time saved run of an ``AnalyticsReport`` (1.6) — freezes the computed result so
+    a report can be compared period-over-period without re-querying historical state. Created
+    only by the ``report_snapshot`` POST action, never by a user form. ``summary`` is the KPI
+    card list, ``data`` is the full {columns, rows, chart_*} payload (rendered as-is, no recompute)."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    report = models.ForeignKey("AnalyticsReport", on_delete=models.CASCADE, related_name="snapshots")
+    title = models.CharField(max_length=160)
+    generated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_report_snapshots")
+    generated_at = models.DateTimeField(auto_now_add=True)
+    summary = models.JSONField(default=list, blank=True)   # [{label, value}, ...] KPI cards
+    data = models.JSONField(default=dict, blank=True)      # {columns, rows, chart_type, chart_labels, chart_data}
+
+    class Meta:
+        ordering = ["-generated_at"]
+        indexes = [
+            models.Index(fields=["tenant", "report"], name="crm_snap_tnt_report_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.generated_at:%Y-%m-%d %H:%M})"
