@@ -137,11 +137,15 @@ LIVE_LINKS = {
         "Recurring Invoices": "accounting:recurringinvoice_list", # extra — subscription schedules live in the ledger
     },
     # 1.8 Project & Delivery Management (Post-Sale)
+    # 1.8 recreated in detail — Resource Allocation now points at a REAL workload/capacity board
+    # (was a stub → timesheet_list); a Kanban Project Board fulfils the "Gantt/Kanban views" bullet.
     "1.8": {
-        "Projects": "crm:crmproject_list",               # bullet
-        "Time Tracking": "crm:timesheet_list",           # bullet
-        "Resource Allocation": "crm:timesheet_list",     # bullet (workload via employee filter)
-        "Milestones": "crm:crmmilestone_list",           # extra (project Gantt/Kanban board)
+        "Projects": "crm:crmproject_list",                  # bullet
+        "Time Tracking": "crm:timesheet_list",              # bullet
+        "Resource Allocation": "crm:resource_workload",     # bullet — workload/capacity board (overbooked vs free)
+        "Project Board": "crm:crmproject_board",            # extra (Kanban board)
+        "Milestones": "crm:crmmilestone_list",              # extra
+        "Allocations": "crm:resourceallocation_list",       # extra (capacity bookings)
     },
     # 1.9 Document & Contract Management
     "1.9": {
