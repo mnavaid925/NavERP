@@ -411,7 +411,8 @@ class DocumentVersionAdmin(admin.ModelAdmin):
     list_filter = ("tenant",)
     search_fields = ("contract__number", "change_note")
     raw_id_fields = ("contract", "created_by")
-    readonly_fields = ("version_no", "body_snapshot", "created_at")
+    # An immutable revision log — lock every field at the admin layer too.
+    readonly_fields = ("contract", "version_no", "body_snapshot", "file", "change_note", "created_by", "created_at")
 
 
 @admin.register(WorkflowRule)
