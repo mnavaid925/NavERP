@@ -33,7 +33,7 @@
         </div>
         {% endfor %}
       </div>
-      <p class="form-help">Weights are percentages; tier thresholds set the Red/Yellow cutoffs.</p>
+      <p class="form-help">The four signal weights must add up to <strong>100%</strong>; the Red threshold must be below the Yellow threshold.</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save</button>
         <a href="{% url 'crm:healthscore_list' %}" class="btn btn-outline">Cancel</a>
