@@ -14,7 +14,7 @@
   </div>
   <div class="page-actions">
     {% if request.user.is_superuser or request.user.is_tenant_admin %}
-    <form method="post" action="{% url 'crm:workflowrule_run' obj.pk %}" style="display:inline;" onsubmit="return confirm('Run this rule now against recent {{ obj.get_trigger_entity_display }} records? Matching records fire the rule actions.');">
+    <form method="post" action="{% url 'crm:workflowrule_run' obj.pk %}" style="display:inline;" onsubmit="return confirm('Run this rule now against recent {{ obj.get_trigger_entity_display|escapejs }} records? Matching records fire the rule actions.');">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary"><i data-lucide="play"></i> Run now</button>
     </form>
