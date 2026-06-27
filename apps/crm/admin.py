@@ -18,6 +18,7 @@ from .models import (
     CrmTask,
     CustomerPortalAccess,
     DashboardWidget,
+    DealInvoice,
     DocTemplate,
     EmailCampaign,
     EmailTemplate,
@@ -35,6 +36,7 @@ from .models import (
     Opportunity,
     OpportunitySplit,
     PartnerPortalAccess,
+    PaymentReceipt,
     PriceBook,
     Product,
     ProductStock,
@@ -313,10 +315,29 @@ class ContactProfileAdmin(admin.ModelAdmin):
 # ===== Module 1 Extension — Sub-modules 1.7–1.12 =============================
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ("number", "category", "amount", "status", "submitted_by", "opportunity", "tenant")
-    list_filter = ("status", "category", "tenant")
+    list_display = ("number", "category", "amount", "is_billable", "status", "submitted_by", "opportunity", "tenant")
+    list_filter = ("status", "category", "is_billable", "tenant")
     search_fields = ("number", "description")
     raw_id_fields = ("opportunity", "project")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DealInvoice)
+class DealInvoiceAdmin(admin.ModelAdmin):
+    list_display = ("number", "account", "opportunity", "invoice", "recurring_invoice", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("number", "account__name", "opportunity__name")
+    raw_id_fields = ("opportunity", "quote", "account", "invoice", "recurring_invoice")
+    # ``invoice`` is set by the conversion action, never edited by hand.
+    readonly_fields = ("number", "invoice", "created_at", "updated_at")
+
+
+@admin.register(PaymentReceipt)
+class PaymentReceiptAdmin(admin.ModelAdmin):
+    list_display = ("number", "deal_invoice", "amount", "method", "gateway", "received_date", "tenant")
+    list_filter = ("method", "gateway", "tenant")
+    search_fields = ("number", "deal_invoice__number", "gateway_txn_id")
+    raw_id_fields = ("deal_invoice", "payment")
     readonly_fields = ("number", "created_at", "updated_at")
 
 
