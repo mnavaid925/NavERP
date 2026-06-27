@@ -53,6 +53,8 @@ from .models import (
     Survey,
     Territory,
     Timesheet,
+    Webhook,
+    WebhookDelivery,
     WorkflowLog,
     WorkflowRule,
 )
@@ -439,6 +441,25 @@ class ApprovalRequestAdmin(admin.ModelAdmin):
     search_fields = ("number", "subject", "record_label")
     raw_id_fields = ("rule", "approver", "requested_by")
     readonly_fields = ("number", "approved_at", "rejected_at", "created_at", "updated_at")
+
+
+@admin.register(Webhook)
+class WebhookAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_url", "trigger_entity", "trigger_event", "is_active", "tenant")
+    list_filter = ("is_active", "trigger_entity", "tenant")
+    search_fields = ("number", "name", "target_url")
+    # secret excluded from the admin form too — it's write-only / never displayed.
+    exclude = ("secret",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(WebhookDelivery)
+class WebhookDeliveryAdmin(admin.ModelAdmin):
+    list_display = ("webhook", "event", "status", "response_code", "created_at", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("event",)
+    raw_id_fields = ("webhook",)
+    readonly_fields = ("webhook", "event", "payload", "signature", "status", "response_code", "error_msg", "created_at", "tenant")
 
 
 @admin.register(OnboardingPlan)
