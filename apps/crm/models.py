@@ -1876,6 +1876,10 @@ class ResourceAllocation(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "assignee"], name="crm_ra_tnt_assignee_idx"),
             models.Index(fields=["tenant", "project"], name="crm_ra_tnt_project_idx"),
+            # The workload board filters by status + a start/end date window (performance-review).
+            models.Index(fields=["tenant", "status"], name="crm_ra_tnt_status_idx"),
+            models.Index(fields=["tenant", "start_date"], name="crm_ra_tnt_start_idx"),
+            models.Index(fields=["tenant", "end_date"], name="crm_ra_tnt_end_idx"),
         ]
 
     def __str__(self):
