@@ -2086,6 +2086,8 @@ class WorkflowLog(models.Model):
         indexes = [
             models.Index(fields=["tenant", "status"], name="crm_wfl_tnt_status_idx"),
             models.Index(fields=["tenant", "fired_at"], name="crm_wfl_tnt_fired_idx"),
+            # rule detail shows this rule's recent logs; (tenant, rule, -fired_at) makes it a range scan (perf-review).
+            models.Index(fields=["tenant", "rule", "-fired_at"], name="crm_wfl_tnt_rule_fired_idx"),
         ]
 
     def __str__(self):
