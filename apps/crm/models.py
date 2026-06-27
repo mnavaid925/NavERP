@@ -2329,9 +2329,17 @@ class Survey(TenantNumbered):
         ("scheduled", "Scheduled"),
     ]
     CLASSIFICATION_CHOICES = [
+        # NPS
         ("promoter", "Promoter"),
         ("passive", "Passive"),
         ("detractor", "Detractor"),
+        # CSAT
+        ("satisfied", "Satisfied"),
+        ("neutral", "Neutral"),
+        ("dissatisfied", "Dissatisfied"),
+        # CES (effort) — "neutral" is shared with CSAT
+        ("easy", "Low Effort"),
+        ("hard", "High Effort"),
     ]
 
     account = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_surveys")
@@ -2341,7 +2349,7 @@ class Survey(TenantNumbered):
     related_case = models.ForeignKey("crm.Case", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_surveys")
     score = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(10)])
     feedback_text = models.TextField(blank=True)
-    classification = models.CharField(max_length=10, choices=CLASSIFICATION_CHOICES, blank=True)  # auto-set
+    classification = models.CharField(max_length=12, choices=CLASSIFICATION_CHOICES, blank=True)  # auto-set
     token = models.CharField(max_length=64, unique=True, null=True, blank=True)  # public respond link
     sent_at = models.DateTimeField(null=True, blank=True)
     responded_at = models.DateTimeField(null=True, blank=True)
@@ -2359,16 +2367,92 @@ class Survey(TenantNumbered):
         # Public respond-link token (random, URL-safe) generated once.
         if not self.token:
             self.token = secrets.token_urlsafe(24)
-        # Auto-classify NPS responses: 9–10 promoter, 7–8 passive, 0–6 detractor.
-        if self.survey_type == "nps" and self.score is not None:
+        # Auto-classify by type against each type's own scale (1.11 recreate):
+        #   NPS 0–10:  9–10 promoter / 7–8 passive / ≤6 detractor
+        #   CSAT 1–5:  ≥4 satisfied / 3 neutral / ≤2 dissatisfied
+        #   CES 1–7 (effort): ≤2 easy / 3–5 neutral / ≥6 hard
+        if self.score is None:
+            self.classification = ""
+        elif self.survey_type == "nps":
             self.classification = ("promoter" if self.score >= 9
                                    else "passive" if self.score >= 7 else "detractor")
-        elif self.survey_type != "nps":
+        elif self.survey_type == "csat":
+            self.classification = ("satisfied" if self.score >= 4
+                                   else "neutral" if self.score == 3 else "dissatisfied")
+        elif self.survey_type == "ces":
+            self.classification = ("easy" if self.score <= 2
+                                   else "neutral" if self.score <= 5 else "hard")
+        else:
             self.classification = ""
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.number} · {self.get_survey_type_display()}"
+
+
+class OnboardingTemplate(TenantNumbered):
+    """A reusable onboarding blueprint (1.11) whose ordered steps clone into a fresh
+    OnboardingPlan for any client in one click (Gainsight/ChurnZero success-plan pattern)."""
+
+    NUMBER_PREFIX = "OTPL"
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="crm_otpl_tnt_active_idx"),
+        ]
+
+    @property
+    def step_count(self):
+        return self.steps.count()
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class OnboardingTemplateStep(models.Model):
+    """An ordered step within an OnboardingTemplate (1.11). ``offset_days`` sets the cloned
+    step's due date relative to the plan start when the template is applied."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    template = models.ForeignKey("crm.OnboardingTemplate", on_delete=models.CASCADE, related_name="steps")
+    order = models.PositiveSmallIntegerField(default=0)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    offset_days = models.PositiveSmallIntegerField(default=0)  # cloned step due = plan start + N days
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.title
+
+
+class HealthScoreHistory(models.Model):
+    """Append-only health-score trend point (1.11) — one row per recompute, so the detail
+    page can show whether an account is improving or degrading. Immutable (list/detail only)."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    account = models.ForeignKey("core.Party", on_delete=models.CASCADE, related_name="crm_health_history")
+    score = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(100)])
+    tier = models.CharField(max_length=10, choices=HealthScore.TIER_CHOICES, default="green")
+    breakdown = models.JSONField(default=dict, blank=True)
+    computed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-computed_at"]
+        indexes = [
+            models.Index(fields=["tenant", "account", "-computed_at"], name="crm_hsh_tnt_acct_time_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.account_id} · {self.score} ({self.tier})"
 
 
 def compute_health_score(party, tenant):
@@ -2413,6 +2497,21 @@ def compute_health_score(party, tenant):
                       "breakdown": {"tickets": tickets_score, "nps": nps_score,
                                     "tasks": tasks_score, "engagement": engagement_score}},
         )
+        # Append-only trend point so the detail page can show score history/direction (1.11 recreate).
+        HealthScoreHistory.objects.create(
+            tenant=tenant, account=party, score=score, tier=tier, breakdown=obj.breakdown)
+        # Churn-risk alert: a red-tier account raises ONE open follow-up task for its CS owner.
+        # Skip if an open churn task already exists for this account (no spam on every recompute).
+        if tier == "red" and not CrmTask.objects.filter(
+                tenant=tenant, party=party, status__in=CrmTask.OPEN_STATUSES,
+                subject__startswith="Churn risk:").exists():
+            owner_id = (OnboardingPlan.objects.filter(tenant=tenant, account=party)
+                        .exclude(owner=None).values_list("owner_id", flat=True).first())
+            CrmTask.objects.create(
+                tenant=tenant, party=party, owner_id=owner_id,
+                subject=f"Churn risk: {party} health is critical ({score}/100)",
+                type="follow_up", priority="high", status="open",
+                description="Auto-raised by Customer Success health scoring — account dropped to the Red tier.")
     return obj
 
 
