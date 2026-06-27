@@ -412,6 +412,7 @@ from .models import (  # noqa: E402  (after the base forms above)
     ProductStock,
     PurchaseOrder,
     PurchaseOrderLine,
+    ResourceAllocation,
     SignerRecord,
     Survey,
     Timesheet,
@@ -511,10 +512,22 @@ class CrmMilestoneForm(TenantModelForm):
 class TimesheetForm(TenantModelForm):
     class Meta:
         model = Timesheet
-        # approved_by is system-set (not forgeable via the form); status stays editable as the
-        # timesheet's draft→submitted→approved workflow has no separate action view.
+        # WARNING: status + approved_by are system-managed and excluded from the form. status
+        # advances ONLY through the timesheet_submit (owner) / timesheet_approve|reject
+        # (@tenant_admin_required) action views — accepting it from POST would let a member
+        # self-approve their own timesheet (mirrors the Expense workflow).
         fields = ["project", "milestone", "employee", "client", "date", "hours",
-                  "description", "is_billable", "status"]
+                  "description", "is_billable"]
+
+
+class ResourceAllocationForm(TenantModelForm):
+    """1.8 Resource Allocation — a planned capacity booking. ``project``/``assignee`` dropdowns are
+    auto-scoped to the tenant by the base form."""
+
+    class Meta:
+        model = ResourceAllocation
+        fields = ["project", "assignee", "role", "hours_per_week", "start_date",
+                  "end_date", "status", "notes"]
 
 
 class DocTemplateForm(TenantModelForm):
