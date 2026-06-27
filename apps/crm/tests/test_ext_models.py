@@ -52,13 +52,17 @@ class TestSurveyAutoClassification:
         s = self._make_survey(tenant_a, score=None)
         assert s.classification == ""
 
-    def test_csat_type_leaves_classification_blank(self, tenant_a):
-        s = self._make_survey(tenant_a, survey_type="csat", score=8)
-        assert s.classification == ""
+    def test_csat_type_classifies_by_satisfaction(self, tenant_a):
+        # 1.11 recreate: CSAT now classifies on its 1–5 scale (≥4 satisfied / 3 neutral / ≤2 dissatisfied).
+        assert self._make_survey(tenant_a, survey_type="csat", score=5).classification == "satisfied"
+        assert self._make_survey(tenant_a, survey_type="csat", score=3).classification == "neutral"
+        assert self._make_survey(tenant_a, survey_type="csat", score=2).classification == "dissatisfied"
 
-    def test_ces_type_leaves_classification_blank(self, tenant_a):
-        s = self._make_survey(tenant_a, survey_type="ces", score=5)
-        assert s.classification == ""
+    def test_ces_type_classifies_by_effort(self, tenant_a):
+        # 1.11 recreate: CES now classifies on its 1–7 effort scale (≤2 easy / 3–5 neutral / ≥6 hard).
+        assert self._make_survey(tenant_a, survey_type="ces", score=2).classification == "easy"
+        assert self._make_survey(tenant_a, survey_type="ces", score=5).classification == "neutral"
+        assert self._make_survey(tenant_a, survey_type="ces", score=6).classification == "hard"
 
     def test_token_auto_generated(self, tenant_a):
         s = self._make_survey(tenant_a)
