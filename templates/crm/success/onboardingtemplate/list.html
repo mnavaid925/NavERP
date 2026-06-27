@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Onboarding Templates{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Onboarding Templates</h1>
+    <nav class="breadcrumb"><a href="{% url 'crm:overview' %}">CRM</a> <span class="sep">›</span> Onboarding Templates</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:onboardingplan_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Plans</a>
+    <a href="{% url 'crm:onboardingtemplate_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Template</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search templates…">
+      </div>
+      <div class="form-group">
+        <select name="is_active" class="form-select" aria-label="Filter by active">
+          <option value="">All</option>
+          <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+          <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'crm:onboardingtemplate_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Name</th>
+          <th>Steps</th>
+          <th>Active</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td><a href="{% url 'crm:onboardingtemplate_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+          <td>{{ obj.name }}</td>
+          <td>{{ obj.n_steps }}</td>
+          <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'crm:onboardingtemplate_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'crm:onboardingtemplate_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'crm:onboardingtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');" style="display:inline;">
+                {% csrf_token %}
+                <button class="btn-icon danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5">
+            <div class="empty-state">
+              <i data-lucide="copy"></i>
+              <h3>No onboarding templates yet</h3>
+              <p>Create a reusable blueprint, then apply it to any client in one click.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
