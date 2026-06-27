@@ -120,10 +120,12 @@ LIVE_LINKS = {
         "Calendar Integration": "crm:calendarevent_list",        # bullet (meetings + invite link + ICS)
         "Email & Call Integration": "crm:communicationlog_list", # bullet (call logging + email/BCC sync)
     },
-    # 1.6 Analytics & Reporting
+    # 1.6 Analytics & Reporting — both bullets now live (recreated in detail):
+    # saved per-user dashboards (live-computed widgets) + saved standard reports (+ snapshots).
     "1.6": {
-        "Dashboards": "crm:overview",                    # bullet
-        "Standard Reports": "crm:overview",              # bullet
+        "Dashboards": "crm:dashboard_list",              # bullet (saved dashboards + live widgets)
+        "Standard Reports": "crm:report_list",           # bullet (4 canned reports + snapshots)
+        "Analytics Overview": "crm:overview",            # extra (module KPI landing page)
     },
     # 1.7 Finance & Billing Management — only Expense Tracking is built; Invoicing &
     # Payment Tracking need the Accounting ledger (Module 2, not built) → stay roadmap.
