@@ -3587,10 +3587,18 @@ def recompute_health_score(request, pk):
 @require_POST
 def recompute_all_health_scores(request):
     account_ids = list(HealthScore.objects.filter(tenant=request.tenant).values_list("account_id", flat=True))
+    done, failed = 0, 0
     for party in Party.objects.filter(tenant=request.tenant, pk__in=account_ids):
-        compute_health_score(party, request.tenant)
+        try:
+            compute_health_score(party, request.tenant)
+            done += 1
+        except Exception:  # noqa: BLE001 — isolate one bad account so the batch still completes
+            failed += 1
     write_audit_log(request.user, None, "update", tenant=request.tenant)
-    messages.success(request, f"Recomputed {len(account_ids)} health score(s).")
+    if failed:
+        messages.warning(request, f"Recomputed {done} health score(s); {failed} failed.")
+    else:
+        messages.success(request, f"Recomputed {done} health score(s).")
     return redirect("crm:healthscore_list")
 
 
@@ -3676,7 +3684,7 @@ def survey_results(request):
         "total": base.count(), "sent": sent, "responded_total": responded_total,
         "response_rate": round(responded_total / sent * 100) if sent else None,
         "nps_total": nps_total, "promoters": promoters, "passives": passives, "detractors": detractors,
-        "nps_score": (promoters - detractors) * 100 // nps_total if nps_total else None,
+        "nps_score": round((promoters - detractors) / nps_total * 100) if nps_total else None,
         "promoter_pct": pct(promoters), "passive_pct": pct(passives), "detractor_pct": pct(detractors),
         "csat_avg": csat.aggregate(a=Avg("score"))["a"], "csat_count": csat.count(),
         "ces_avg": ces.aggregate(a=Avg("score"))["a"], "ces_count": ces.count(),
@@ -3704,17 +3712,20 @@ def survey_respond(request, token):
     survey = get_object_or_404(Survey, token=token)
     scale_max = _SURVEY_SCALE_MAX.get(survey.survey_type, 10)
     scale_min = 0 if survey.survey_type == "nps" else 1  # NPS is 0–10; CSAT/CES start at 1
+    error = ""
     if request.method == "POST" and survey.responded_at is None:
         raw = request.POST.get("score", "")
-        # Clamp to the type's scale — this is a public endpoint, never trust the POST.
-        survey.score = max(scale_min, min(scale_max, int(raw))) if raw.isdigit() else None
-        # Public endpoint — cap feedback length to prevent unbounded-storage abuse.
-        survey.feedback_text = request.POST.get("feedback_text", "").strip()[:4000]
-        survey.responded_at = timezone.now()
-        survey.save()  # save() auto-classifies by type
-        return redirect("crm:survey_respond", token=token)
+        if raw.isdigit():
+            # Clamp to the type's scale — this is a public endpoint, never trust the POST.
+            survey.score = max(scale_min, min(scale_max, int(raw)))
+            # Public endpoint — cap feedback length to prevent unbounded-storage abuse.
+            survey.feedback_text = request.POST.get("feedback_text", "").strip()[:4000]
+            survey.responded_at = timezone.now()
+            survey.save()  # save() auto-classifies by type
+            return redirect("crm:survey_respond", token=token)
+        error = "Please select a score before submitting."  # don't lock the survey on an empty submit
     return render(request, "crm/success/survey/respond.html", {
-        "survey": survey, "scale": list(range(scale_min, scale_max + 1))})
+        "survey": survey, "scale": list(range(scale_min, scale_max + 1)), "error": error})
 
 
 # ------------------------------------------------------------ 1.12 Product stock
