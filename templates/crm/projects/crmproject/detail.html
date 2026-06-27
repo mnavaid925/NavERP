@@ -16,7 +16,7 @@
     <a href="{% url 'crm:crmproject_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     <form method="post" action="{% url 'crm:crmproject_delete' obj.pk %}" onsubmit="return confirm('Delete this project?');" style="display:inline;">
       {% csrf_token %}
-      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
     </form>
   </div>
 </div>
