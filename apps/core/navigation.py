@@ -167,9 +167,11 @@ LIVE_LINKS = {
     },
     # 1.11 Customer Success & Retention
     "1.11": {
-        "Onboarding Pipelines": "crm:onboardingplan_list",  # bullet
-        "Health Scoring": "crm:healthscore_list",           # bullet
-        "Surveys & Feedback (NPS)": "crm:survey_list",      # bullet
+        "Onboarding Pipelines": "crm:onboardingplan_list",      # bullet
+        "Onboarding Templates": "crm:onboardingtemplate_list",  # extra (reusable blueprints)
+        "Health Scoring": "crm:healthscore_list",               # bullet
+        "Surveys & Feedback (NPS)": "crm:survey_list",          # bullet
+        "Survey Analytics": "crm:survey_results",               # extra (NPS aggregate)
     },
     # 1.12 Inventory & Vendor Management
     "1.12": {
