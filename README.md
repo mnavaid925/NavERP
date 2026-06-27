@@ -169,7 +169,7 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   performance/top-performers, funnel drop-off, service resolution-time + CSAT) computed live with a chart +
   table + KPI summary, plus point-in-time **`ReportSnapshot`** runs frozen as JSON for period-over-period trends.
 
-**Sub-modules 1.7–1.12** (extension pass, 20 CRM-owned tables, migrations `0005` + `0016` for the 1.7 recreation):
+**Sub-modules 1.7–1.12** (extension pass, 21 CRM-owned tables, migrations `0005` + `0016`–`0018` for the 1.7/1.8 recreations):
 - **1.7 Finance & Billing** *(recreated in detail — all three NavERP.md bullets now live, reusing the
   **Accounting ledger** per L29; draft hand-off)* — **Deal Invoices** (`DINV-#####`): one-click
   **quote→invoice conversion** that generates a draft `accounting.Invoice` (line items, per-line + quote-level
@@ -178,8 +178,13 @@ metrics are read-only aggregations over existing CRM data, computed in `apps/crm
   payment-gateway metadata (Stripe/PayPal/Razorpay); **Expenses** (`EXP-#####`, + **`is_billable`** for true
   margin): deal/project cost logging with allowlisted receipt upload + owner **submit** / tenant-admin
   **approve/reject**.
-- **1.8 Project & Delivery** — **Projects** (`PRJ-#####`, one-click **convert** from a won opportunity),
-  **Milestones** (`MS-#####`, Gantt/Kanban, sub-tasks), **Timesheets** (`TS-#####`, billable/non-billable).
+- **1.8 Project & Delivery** *(recreated in detail — all three NavERP.md bullets now live)* — **Projects**
+  (`PRJ-#####`, one-click **convert** from a won opportunity, derived **progress %** + overdue flag, a **Kanban
+  board** with status-move), **Milestones** (`MS-#####`, sub-tasks); **Time Tracking** **Timesheets**
+  (`TS-#####`, billable/non-billable, owner **submit** + tenant-admin **approve/reject** — `status` off the form
+  to close a self-approve gap); and **Resource Allocation** — **`ResourceAllocation`** (`RA-#####`) capacity
+  bookings feeding a **workload board** that flags overbooked vs. free capacity (planned vs. logged vs. capacity
+  per person).
 - **1.9 Document & Contract** — **Doc Templates** (`TPL-#####`, merge-variable HTML) and **Contracts**
   (`CTR-#####`) with per-signer e-signature tracking and a **public token-based signing page**.
 - **1.10 Automation & Workflow** — **Workflow Rules** (`WFR-#####`, declarative trigger/condition/action JSON),
