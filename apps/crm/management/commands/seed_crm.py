@@ -10,7 +10,6 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.template import Context, Template
 from django.utils import timezone
 
 from apps.accounting.models import Currency, Invoice, InvoiceLine  # 1.7 reuses the ledger (L29)
@@ -457,16 +456,11 @@ class Command(BaseCommand):
         contract = ContractDocument.objects.create(
             tenant=tenant, name="Service Agreement (Repository Demo)", template=tpl,
             account=account, status="draft", owner=owner)
-        acc, opp = contract.account, contract.opportunity
-        ctx = {
-            "today": timezone.localdate().isoformat(),
-            "contract": {"name": contract.name, "number": contract.number},
-            "account": {"name": acc.name if acc else ""},
-            "opportunity": {"name": opp.name if opp else "", "number": opp.number if opp else "",
-                            "amount": str(opp.amount) if opp else ""},
-            "owner": (owner.get_full_name() or owner.username) if owner else "",
-        }
-        rendered = Template(contract.template.body or "").render(Context(ctx))
+        from apps.crm.views import _render_doc_body  # shared safe render — DRY with the generate action
+        try:
+            rendered = _render_doc_body(contract)
+        except Exception:  # a malformed template must not abort the whole seed  # noqa: BLE001
+            rendered = ""
         contract.body_snapshot = rendered
         contract.current_version = 2
         contract.save(update_fields=["body_snapshot", "current_version", "updated_at"])
