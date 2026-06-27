@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:resourceallocation_list' %}">Allocations</a>
+      <span class="sep">›</span>
+      {{ obj.number }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:resource_workload' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Workload board</a>
+    <a href="{% url 'crm:resourceallocation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'crm:resourceallocation_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this allocation?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <dl class="detail-grid">
+    <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+    <div class="detail-item"><dt>Person</dt><dd>{% if obj.assignee %}{{ obj.assignee.get_full_name|default:obj.assignee.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Project</dt><dd><a href="{% url 'crm:crmproject_detail' obj.project.pk %}">{{ obj.project.name }}</a></dd></div>
+    <div class="detail-item"><dt>Role</dt><dd>{{ obj.role|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Hours / week</dt><dd>{{ obj.hours_per_week }}</dd></div>
+    <div class="detail-item"><dt>Start</dt><dd>{{ obj.start_date|date:"M d, Y" }}</dd></div>
+    <div class="detail-item"><dt>End</dt><dd>{% if obj.end_date %}{{ obj.end_date|date:"M d, Y" }}{% else %}<span class="text-muted">Ongoing</span>{% endif %}</dd></div>
+    <div class="detail-item"><dt>Status</dt><dd>
+      {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+      {% elif obj.status == 'planned' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+      {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+      {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+    </dd></div>
+    <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+  </dl>
+  {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+</div></div>
+
+<a href="{% url 'crm:resourceallocation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
