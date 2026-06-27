@@ -154,7 +154,6 @@ LIVE_LINKS = {
         "E-Signatures": "crm:contractdocument_list",     # bullet (contract + signer tracking + sign flow)
         "Document Generation": "crm:doctemplate_list",   # bullet (merge-var templates → generate on the contract)
         "File Repository": "crm:document_repository",     # bullet (versioned contract repo by account)
-        "Contracts": "crm:contractdocument_list",         # extra
     },
     # 1.10 Automation & Workflow Engine
     "1.10": {
