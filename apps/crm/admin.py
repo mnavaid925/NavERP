@@ -13,6 +13,7 @@ from .models import (
     CommunicationLog,
     ContactProfile,
     ContractDocument,
+    DocumentVersion,
     CrmMilestone,
     CrmProject,
     CrmTask,
@@ -402,6 +403,15 @@ class SignerRecordAdmin(admin.ModelAdmin):
     search_fields = ("signer_name", "signer_email")
     raw_id_fields = ("contract", "signer_party")
     readonly_fields = ("token", "viewed_at", "signed_at", "declined_at", "ip_address", "created_at")
+
+
+@admin.register(DocumentVersion)
+class DocumentVersionAdmin(admin.ModelAdmin):
+    list_display = ("contract", "version_no", "change_note", "created_by", "created_at", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("contract__number", "change_note")
+    raw_id_fields = ("contract", "created_by")
+    readonly_fields = ("version_no", "body_snapshot", "created_at")
 
 
 @admin.register(WorkflowRule)
