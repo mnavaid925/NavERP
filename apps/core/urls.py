@@ -29,5 +29,8 @@ urlpatterns = (
     + [
         path("audit-logs/", views.auditlog_list, name="auditlog_list"),
         path("audit-logs/<int:pk>/", views.auditlog_detail, name="auditlog_detail"),
+        # Global header search
+        path("search/", views.global_search, name="search"),
+        path("search/suggest/", views.global_search_suggest, name="search_suggest"),
     ]
 )
