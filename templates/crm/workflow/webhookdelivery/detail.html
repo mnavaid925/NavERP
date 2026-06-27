@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Delivery — {{ obj.event }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Delivery · {{ obj.event }}</h1>
+    <nav class="breadcrumb">
+      <a href="{% url 'crm:overview' %}">CRM</a>
+      <span class="sep">›</span>
+      <a href="{% url 'crm:webhookdelivery_list' %}">Webhook Deliveries</a>
+      <span class="sep">›</span>
+      {{ obj.event }}
+    </nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'crm:webhook_detail' obj.webhook.pk %}" class="btn btn-outline"><i data-lucide="webhook"></i> Webhook</a>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <dl class="detail-grid">
+    <div class="detail-item"><dt>Webhook</dt><dd><a href="{% url 'crm:webhook_detail' obj.webhook.pk %}">{{ obj.webhook.number }} · {{ obj.webhook.name }}</a></dd></div>
+    <div class="detail-item"><dt>Event</dt><dd>{{ obj.event }}</dd></div>
+    <div class="detail-item"><dt>Status</dt><dd>
+      {% if obj.status == 'success' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+      {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+      {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+      {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+    </dd></div>
+    <div class="detail-item"><dt>Response code</dt><dd>{{ obj.response_code|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Signature (HMAC-SHA256)</dt><dd style="word-break:break-all; font-family:monospace; font-size:.8rem;">{{ obj.signature|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>When</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+  </dl>
+  {% if obj.error_msg %}<p class="form-error" style="margin-top:1rem;">{{ obj.error_msg }}</p>{% endif %}
+</div></div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Payload</h2></div>
+  <div class="card-body"><pre style="white-space:pre-wrap; word-break:break-all;">{{ obj.payload|default:"(empty)" }}</pre></div>
+</div>
+{% endblock %}
