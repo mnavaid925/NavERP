@@ -373,6 +373,20 @@ LIVE_LINKS = {
         "Job Templates": "hrm:jobdescriptiontemplate_list",                        # bullet (reusable JD library)
         "Requisition Tracking": "hrm:jobrequisition_list",                         # bullet (all-status tracking)
     },
+    # 3.6 Candidate Management — ATS candidate database, applications pipeline, talent-pool tags,
+    # recruiting email templates + an append-only communication log, and the public career portal.
+    # Resume Parser/Database/Search all resolve to the one candidate list (its filter bar covers
+    # name/skill/resume-text search; NLP parsing is deferred) — they co-highlight on that page.
+    "3.6": {
+        "Application Portal": "hrm:application_list",           # bullet (applications pipeline — staff view)
+        "Resume Parser": "hrm:candidate_list",                 # bullet (candidate DB w/ resume_text search)
+        "Candidate Database": "hrm:candidate_list",            # bullet (talent pool + filters)
+        "Resume Search": "hrm:candidate_list",                 # bullet (skill / full-text filter bar)
+        "Candidate Communication": "hrm:communication_list",   # bullet (append-only email log)
+        "Email Templates": "hrm:emailtemplate_list",           # extra (recruiting template library)
+        "Talent Pool Tags": "hrm:candidatetag_list",           # extra (tag catalog)
+        "Public Careers Page": "hrm:careers_list",             # extra (web-to-candidate portal)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
