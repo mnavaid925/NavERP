@@ -2841,9 +2841,9 @@ def _send_candidate_email(application, *, template=None, template_type=None, sub
     body = _apply_merge(body, ctx)
     status = "sent"
     try:
-        sent = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [candidate.email], fail_silently=True)
+        sent = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [candidate.email])
         status = "sent" if sent else "failed"
-    except Exception:  # pragma: no cover — never let a mail failure 500 the request
+    except Exception:  # never let a mail/transport failure 500 the request — log it as failed instead
         status = "failed"
     return CandidateCommunication.objects.create(
         tenant=tenant, candidate=candidate, application=application, template=template,
@@ -2905,6 +2905,10 @@ def candidate_create(request):
                 obj = form.save(commit=False)
                 obj.tenant = request.tenant
                 obj.party = party
+                # Stamp the consent timestamp when a staff member records consent (the public apply
+                # flow does the same), so a ticked consent is never left undated.
+                if obj.gdpr_consent and not obj.gdpr_consent_date:
+                    obj.gdpr_consent_date = timezone.now()
                 obj.save()
                 form.save_m2m()
             write_audit_log(request.user, obj, "create")
@@ -2940,6 +2944,10 @@ def candidate_edit(request, pk):
         form = CandidateProfileForm(request.POST, request.FILES, instance=obj, tenant=request.tenant)
         if form.is_valid():
             obj = form.save()
+            # Stamp the consent timestamp the first time consent is recorded via the staff form.
+            if obj.gdpr_consent and not obj.gdpr_consent_date:
+                obj.gdpr_consent_date = timezone.now()
+                obj.save(update_fields=["gdpr_consent_date"])
             # Keep the Party display name in sync with the denormalized candidate name.
             new_name = obj.name
             if obj.party_id and obj.party.name != new_name:
@@ -2960,8 +2968,9 @@ def candidate_delete(request, pk):
     obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant)
                             .select_related("party"), pk=pk)
     party = obj.party
-    write_audit_log(request.user, obj, "delete")
     with transaction.atomic():
+        # Audit inside the transaction so the row only survives if the delete commits.
+        write_audit_log(request.user, obj, "delete")
         # The candidate Party is dedicated (minted per candidate); deleting it cascades the profile,
         # its PartyRole, skills, applications and communications in one shot.
         if party_has_only_candidate_role(party):
@@ -2973,7 +2982,7 @@ def candidate_delete(request, pk):
 
 
 def party_has_only_candidate_role(party):
-    roles = set(party.roles.values_list("role", flat=True))
+    roles = set(party.roles.filter(tenant=party.tenant_id).values_list("role", flat=True))
     return roles <= {"candidate"}
 
 
@@ -3079,10 +3088,22 @@ def application_list(request):
 
 @login_required
 def application_create(request):
-    return crud_create(
-        request, form_class=JobApplicationForm,
-        template="hrm/candidates/application/form.html",
-        success_url="hrm:application_list")
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = JobApplicationForm(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Application {obj.number} created.")
+            # Land on the new application so the recruiter can immediately work its pipeline.
+            return redirect("hrm:application_detail", pk=obj.pk)
+    else:
+        form = JobApplicationForm(tenant=request.tenant)
+    return render(request, "hrm/candidates/application/form.html", {"form": form, "is_edit": False})
 
 
 @login_required
@@ -3149,6 +3170,9 @@ def application_reject(request, pk):
     obj = get_object_or_404(
         JobApplication.objects.filter(tenant=request.tenant).select_related("candidate", "requisition"),
         pk=pk)
+    if obj.stage in APPLICATION_TERMINAL_STAGES:
+        messages.error(request, "This application is already closed.")
+        return redirect("hrm:application_detail", pk=obj.pk)
     reason = request.POST.get("rejection_reason", "")
     if reason and reason not in dict(REJECTION_REASON_CHOICES):
         reason = "other"
@@ -3171,6 +3195,9 @@ def application_reject(request, pk):
 @require_POST
 def application_withdraw(request, pk):
     obj = get_object_or_404(JobApplication.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.stage in APPLICATION_TERMINAL_STAGES:
+        messages.error(request, "This application is already closed.")
+        return redirect("hrm:application_detail", pk=obj.pk)
     obj.stage = "withdrawn"
     obj.stage_changed_at = timezone.now()
     obj.save(update_fields=["stage", "stage_changed_at", "updated_at"])
@@ -3185,6 +3212,9 @@ def application_hold(request, pk):
     obj = get_object_or_404(
         JobApplication.objects.filter(tenant=request.tenant).select_related("candidate", "requisition"),
         pk=pk)
+    if obj.stage in APPLICATION_TERMINAL_STAGES:
+        messages.error(request, "This application is already closed.")
+        return redirect("hrm:application_detail", pk=obj.pk)
     obj.stage = "on_hold"
     obj.stage_changed_at = timezone.now()
     obj.save(update_fields=["stage", "stage_changed_at", "updated_at"])
@@ -3338,6 +3368,7 @@ def careers_list(request):
         requisitions = (JobRequisition.objects
                         .filter(tenant=tenant_obj, status="posted",
                                 posting_type__in=["external", "both"])
+                        .exclude(public_token__isnull=True)  # only tokenized openings have a working Apply link
                         .select_related("department", "designation").order_by("-posted_at"))
     return render(request, "hrm/candidates/careers_list.html", {
         "tenant_obj": tenant_obj, "slug": slug, "requisitions": requisitions,
@@ -3378,6 +3409,8 @@ def careers_apply(request, token):
                 messages.info(request, "You have already applied for this position.")
             else:
                 write_audit_log(None, application, "create", {"via": "careers_portal"})
+                # Reuse the already-loaded requisition so the merge-render doesn't refetch it.
+                application.requisition = req
                 _send_candidate_email(application, template_type="application_received", sent_by=None)
             return redirect(f"{reverse('hrm:careers_apply', args=[token])}?submitted=1")
     return render(request, "hrm/candidates/careers_apply.html", {
