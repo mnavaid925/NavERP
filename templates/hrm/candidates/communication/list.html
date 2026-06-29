@@ -45,7 +45,7 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Candidate</th><th>Channel</th><th>Subject</th><th>Status</th><th>Sent By</th><th>Sent</th></tr></thead>
+        <thead><tr><th>Number</th><th>Candidate</th><th>Channel</th><th>Subject</th><th>Status</th><th>Sent By</th><th>Sent</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -56,9 +56,10 @@
               <td><span class="badge badge-{% if obj.delivery_status == 'sent' or obj.delivery_status == 'delivered' %}green{% elif obj.delivery_status == 'failed' %}red{% else %}muted{% endif %}">{{ obj.get_delivery_status_display }}</span></td>
               <td>{% if obj.sent_by %}{{ obj.sent_by.get_full_name|default:obj.sent_by.username }}{% else %}System{% endif %}</td>
               <td>{{ obj.sent_at|date:"Y-m-d H:i" }}</td>
+              <td><div class="table-actions"><a href="{% url 'hrm:communication_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
             </tr>
           {% empty %}
-            <tr><td colspan="7"><div class="empty-state"><i data-lucide="mail"></i><h3>No communications yet</h3><p>Emails sent from an application are logged here automatically.</p></div></td></tr>
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="mail"></i><h3>No communications yet</h3><p>Emails sent from an application are logged here automatically.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
