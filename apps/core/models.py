@@ -91,6 +91,7 @@ class PartyRole(models.Model):
         ("supplier", "Supplier"),
         ("employee", "Employee"),
         ("lead", "Lead"),
+        ("candidate", "Candidate"),
         ("contact", "Contact"),
         ("partner", "Partner"),
     ]
