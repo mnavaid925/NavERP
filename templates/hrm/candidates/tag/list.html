@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Talent-Pool Tags{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Talent-Pool Tags</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:candidate_list' %}">Candidates</a><span class="sep">›</span><span>Tags</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:candidatetag_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Tag</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search tags…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:candidatetag_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tag</th><th>Description</th><th class="text-right">Candidates</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="badge" style="background:{{ obj.color }};color:#fff;">{{ obj.name }}</span></td>
+              <td>{{ obj.description|default:"—" }}</td>
+              <td class="text-right">{{ obj.candidate_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:candidatetag_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'hrm:candidatetag_delete' obj.pk %}" onsubmit="return confirm('Delete this tag?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="tags"></i><h3>No tags yet</h3><p>Create tags to group candidates into talent pools.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
