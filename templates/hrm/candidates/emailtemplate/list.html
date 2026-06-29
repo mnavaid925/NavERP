@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Recruiting Email Templates{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Email Templates</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:candidate_list' %}">Candidates</a><span class="sep">›</span><span>Email Templates</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:emailtemplate_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Template</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by name or subject…">
+        </div>
+        <div class="form-group">
+          <select name="type" class="form-select" aria-label="Type">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="active" class="form-select" aria-label="Active">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:emailtemplate_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Type</th><th>Subject</th><th>Active</th><th>Auto-send</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:emailtemplate_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.name }}</td>
+              <td><span class="badge badge-info">{{ obj.get_template_type_display }}</span></td>
+              <td>{{ obj.subject|truncatechars:50 }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>{% if obj.is_auto_send %}<span class="badge badge-amber">Auto</span>{% else %}<span class="badge badge-muted">Manual</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:emailtemplate_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:emailtemplate_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'hrm:emailtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="mail"></i><h3>No email templates</h3><p>Create reusable templates for application acknowledgements, interview invites, and rejections.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
