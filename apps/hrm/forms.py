@@ -5,6 +5,7 @@ system-computed fields (``days``, ``hours_worked``, ``approved_at``, ``confirmed
 ``rejected_reason``/``cancelled_reason`` — set by the workflow actions in the view).
 """
 import os
+import re
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -552,6 +553,15 @@ class CandidateTagForm(TenantModelForm):
         model = CandidateTag
         fields = ["name", "color", "description"]
         widgets = {"color": forms.TextInput(attrs={"type": "color"})}
+
+    def clean_color(self):
+        # Defense-in-depth: the value is interpolated into a CSS `style=` attribute on the badge, so a
+        # non-hex value (e.g. "red;background:url(//evil)") would be CSS-injection. Enforce strict hex
+        # here too, not only via the model validator.
+        color = (self.cleaned_data.get("color") or "").strip()
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
+            raise forms.ValidationError("Enter a valid hex color, e.g. #3B82F6.")
+        return color
 
 
 class CandidateProfileForm(TenantModelForm):
