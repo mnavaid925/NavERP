@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} {% include "hrm/candidates/_stage_badge.html" with stage=obj.stage label=obj.get_stage_display %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:application_list' %}">Applications</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:application_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:application_delete' obj.pk %}" onsubmit="return confirm('Delete this application?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Pipeline</h2></div>
+    <div class="card-body">
+      {% if obj.stage == 'hired' or obj.stage == 'rejected' or obj.stage == 'withdrawn' %}
+        <p class="text-muted">This application is closed at <strong>{{ obj.get_stage_display }}</strong>.{% if obj.rejection_reason %} Reason: {{ obj.get_rejection_reason_display }}.{% endif %}</p>
+      {% else %}
+        <div class="filter-bar">
+          <form method="post" action="{% url 'hrm:application_advance_stage' obj.pk %}" class="filter-bar" style="margin:0;">
+            {% csrf_token %}
+            <div class="form-group">
+              <select name="new_stage" class="form-select" aria-label="Move to stage">
+                {% for val, label in stage_choices %}
+                  {% if val != 'rejected' and val != 'withdrawn' %}<option value="{{ val }}" {% if val == obj.stage %}selected{% endif %}>{{ label }}</option>{% endif %}
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="arrow-right-circle"></i> Move Stage</button>
+          </form>
+          <form method="post" action="{% url 'hrm:application_hold' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="pause"></i> Hold</button></form>
+          <form method="post" action="{% url 'hrm:application_withdraw' obj.pk %}" style="margin:0;" onsubmit="return confirm('Mark this application withdrawn?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="undo-2"></i> Withdraw</button></form>
+        </div>
+        <form method="post" action="{% url 'hrm:application_reject' obj.pk %}" class="filter-bar" style="margin-top:1rem;" onsubmit="return confirm('Reject this application?');">
+          {% csrf_token %}
+          <div class="form-group">
+            <select name="rejection_reason" class="form-select" aria-label="Rejection reason">
+              <option value="">Reason…</option>
+              {% for val, label in rejection_reason_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:200px;"><input type="text" name="rejection_notes" class="form-input" placeholder="Rejection notes (optional)"></div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Application Details</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Candidate</dt><dd><a href="{% url 'hrm:candidate_detail' obj.candidate.pk %}">{{ obj.candidate.name }}</a></dd></div>
+        <div class="detail-item"><dt>Requisition</dt><dd><a href="{% url 'hrm:jobrequisition_detail' obj.requisition.pk %}">{{ obj.requisition.number }} · {{ obj.requisition.title }}</a></dd></div>
+        <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}</dd></div>
+        <div class="detail-item"><dt>Referred By</dt><dd>{% if obj.referred_by %}{{ obj.referred_by.party.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Rating</dt><dd>{% if obj.rating %}{{ obj.rating }}/5{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Applied</dt><dd>{{ obj.applied_at|date:"Y-m-d H:i" }}</dd></div>
+        <div class="detail-item"><dt>Stage Changed</dt><dd>{% if obj.stage_changed_at %}{{ obj.stage_changed_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+        {% if obj.hired_on %}<div class="detail-item"><dt>Hired On</dt><dd>{{ obj.hired_on|date:"Y-m-d" }}</dd></div>{% endif %}
+        {% if obj.cover_letter_file %}<div class="detail-item"><dt>Cover Letter</dt><dd><a href="{{ obj.cover_letter_file.url }}" target="_blank" rel="noopener noreferrer">Download</a></dd></div>{% endif %}
+        {% if obj.cover_letter_text %}<div class="detail-item" style="grid-column:1/-1;"><dt>Cover Letter</dt><dd>{{ obj.cover_letter_text|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.rejection_notes %}<div class="detail-item" style="grid-column:1/-1;"><dt>Rejection Notes</dt><dd>{{ obj.rejection_notes|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.notes %}<div class="detail-item" style="grid-column:1/-1;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>{% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Send Email</h2></div>
+    <div class="card-body">
+      {% if obj.candidate.do_not_contact %}
+        <p class="text-muted"><i data-lucide="mail-x"></i> This candidate is marked do-not-contact — email is disabled.</p>
+      {% else %}
+        <form method="post" action="{% url 'hrm:application_send_email' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Template</label>
+              <select name="template_id" class="form-select" aria-label="Email template">
+                <option value="">— No template (write below) —</option>
+                {% for t in email_templates %}<option value="{{ t.pk }}">{{ t.get_template_type_display }} · {{ t.name }}</option>{% endfor %}
+              </select>
+              <div class="form-help">Pick a template, or write a custom subject + body. Merge fields like {% templatetag openvariable %}candidate_name{% templatetag closevariable %} are filled in on send.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Subject</label>
+              <input type="text" name="subject" class="form-input" placeholder="Overrides the template subject">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Body</label>
+              <textarea name="body" class="form-textarea" rows="5" placeholder="Overrides the template body"></textarea>
+            </div>
+          </div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send Email</button></div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Communications</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Channel</th><th>Subject</th><th>Status</th><th>Sent By</th><th>Sent</th></tr></thead>
+          <tbody>
+            {% for c in communications %}
+              <tr>
+                <td><a href="{% url 'hrm:communication_detail' c.pk %}" class="fw-600">{{ c.number }}</a></td>
+                <td>{{ c.get_channel_display }}</td>
+                <td>{{ c.subject|default:"—"|truncatechars:60 }}</td>
+                <td><span class="badge badge-{% if c.delivery_status == 'sent' or c.delivery_status == 'delivered' %}green{% elif c.delivery_status == 'failed' %}red{% else %}muted{% endif %}">{{ c.get_delivery_status_display }}</span></td>
+                <td>{% if c.sent_by %}{{ c.sent_by.get_full_name|default:c.sent_by.username }}{% else %}System{% endif %}</td>
+                <td>{{ c.sent_at|date:"Y-m-d H:i" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6"><span class="text-muted">No communications logged yet.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:application_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
