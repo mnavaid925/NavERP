@@ -21,7 +21,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import IntegrityError, models, transaction
 from django.db.models import Sum
 
@@ -1651,6 +1651,12 @@ class JobRequisition(TenantNumbered):
     posted_at = models.DateTimeField(null=True, blank=True, editable=False)
     filled_at = models.DateTimeField(null=True, blank=True, editable=False)
 
+    # 3.6 Candidate Management — public career-portal bearer credential. Set (once) when the req is
+    # posted; an unguessable token resolves the public application page (mirrors crm.LandingPage).
+    public_token = models.CharField(
+        max_length=64, blank=True, db_index=True, editable=False,
+        help_text="URL-safe token minted when the req is posted; powers the public careers portal.")
+
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
@@ -1740,3 +1746,340 @@ class RequisitionApproval(TenantOwned):
     def __str__(self):
         return (f"Step {self.step_order} — {self.get_approver_role_display()} "
                 f"— {self.get_status_display()}")
+
+
+# ---------------------------------------------------------------------------
+# 3.6 Candidate Management — the ATS / talent-acquisition slice.
+#
+# A candidate is a real person → ``core.Party`` + ``PartyRole(role="candidate")``;
+# ``CandidateProfile`` is the thin tenant-scoped extension carrying the ATS fields
+# (mirrors how ``EmployeeProfile`` extends ``Party``). ``JobApplication`` links a
+# candidate to an already-built ``JobRequisition`` (3.5) and runs the recruiting
+# pipeline state machine. Communications are an append-only typed email log.
+# ---------------------------------------------------------------------------
+
+# Hex-color validator for tag badges (no shared core validator exists yet).
+HEX_COLOR_VALIDATOR = RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Enter a valid hex color, e.g. #3B82F6.")
+
+CANDIDATE_STATUS_CHOICES = [
+    ("active", "Active"),
+    ("inactive", "Inactive"),
+    ("hired", "Hired"),
+    ("blacklisted", "Blacklisted"),
+    ("do_not_contact", "Do Not Contact"),
+]
+
+QUALIFICATION_CHOICES = [
+    ("high_school", "High School / Secondary"),
+    ("diploma", "Diploma / Certificate"),
+    ("bachelors", "Bachelor's Degree"),
+    ("masters", "Master's Degree"),
+    ("phd", "PhD / Doctorate"),
+    ("other", "Other"),
+]
+
+CANDIDATE_GENDER_CHOICES = [
+    ("male", "Male"),
+    ("female", "Female"),
+    ("non_binary", "Non-Binary"),
+    ("prefer_not_to_say", "Prefer Not to Say"),
+]
+
+CANDIDATE_SOURCE_CHOICES = [
+    ("careers_page", "Company Careers Page"),
+    ("referral", "Employee Referral"),
+    ("linkedin", "LinkedIn"),
+    ("indeed", "Indeed"),
+    ("glassdoor", "Glassdoor"),
+    ("job_board", "Other Job Board"),
+    ("agency", "Recruitment Agency"),
+    ("direct_approach", "Direct / Sourced"),
+    ("walk_in", "Walk-in"),
+    ("other", "Other"),
+]
+
+SKILL_PROFICIENCY_CHOICES = [
+    ("beginner", "Beginner"),
+    ("intermediate", "Intermediate"),
+    ("advanced", "Advanced"),
+    ("expert", "Expert"),
+]
+
+SKILL_SOURCE_CHOICES = [
+    ("parsed", "Resume Parsed"),
+    ("manual", "Manually Added"),
+    ("self_reported", "Self-Reported"),
+]
+
+APPLICATION_STAGE_CHOICES = [
+    ("applied", "Applied"),
+    ("screening", "Screening"),
+    ("phone_screen", "Phone Screen"),
+    ("assessment", "Assessment / Test"),
+    ("interview", "Interview"),
+    ("offer", "Offer"),
+    ("hired", "Hired"),
+    ("rejected", "Rejected"),
+    ("withdrawn", "Withdrawn"),
+    ("on_hold", "On Hold"),
+]
+
+# Terminal stages an application can't be "advanced" out of without an explicit restore.
+APPLICATION_TERMINAL_STAGES = ("hired", "rejected", "withdrawn")
+
+REJECTION_REASON_CHOICES = [
+    ("overqualified", "Overqualified"),
+    ("underqualified", "Underqualified"),
+    ("position_filled", "Position Filled"),
+    ("no_response", "No Response / Unresponsive"),
+    ("failed_screening", "Failed Screening"),
+    ("other", "Other"),
+]
+
+EMAIL_TEMPLATE_TYPE_CHOICES = [
+    ("application_received", "Application Received"),
+    ("shortlisted", "Application Shortlisted"),
+    ("phone_screen_invite", "Phone Screen Invitation"),
+    ("interview_invite", "Interview Invitation"),
+    ("stage_advance", "Advance to Next Stage"),
+    ("assessment_invite", "Assessment / Test Invitation"),
+    ("rejection", "Application Rejected"),
+    ("on_hold", "Application On Hold"),
+    ("offer", "Offer Communication"),
+    ("general", "General / Ad-hoc"),
+]
+
+COMMUNICATION_CHANNEL_CHOICES = [
+    ("email", "Email"),
+    ("sms", "SMS"),
+    ("whatsapp", "WhatsApp"),
+]
+
+COMMUNICATION_DIRECTION_CHOICES = [
+    ("outbound", "Outbound"),
+    ("inbound", "Inbound"),
+]
+
+DELIVERY_STATUS_CHOICES = [
+    ("sent", "Sent"),
+    ("delivered", "Delivered"),
+    ("failed", "Failed"),
+    ("pending", "Pending"),
+]
+
+
+class CandidateTag(TenantOwned):
+    """Reusable talent-pool / segmentation label (3.6). A simple tenant catalog (name + color)
+    M2M'd onto ``CandidateProfile`` — mirrors the Greenhouse/Ashby/Workable profile-tag pattern.
+    No detail page (too few fields); list/create/edit/delete only."""
+
+    name = models.CharField(max_length=100)
+    color = models.CharField(max_length=7, default="#6B7280", validators=[HEX_COLOR_VALIDATOR],
+                             help_text="Hex color for the tag badge, e.g. #3B82F6.")
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "name"], name="hrm_ctag_tenant_name_idx"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class CandidateProfile(TenantNumbered):
+    """The ATS candidate record (3.6) — a 1:1 extension of ``core.Party`` (with a
+    ``PartyRole(role="candidate")`` marker), exactly mirroring ``EmployeeProfile``. Carries the
+    talent-acquisition fields (contact, resume, skills, sourcing, GDPR consent). ``status`` is the
+    candidate-level lifecycle state (distinct from a per-application ``stage``) and is workflow-owned."""
+
+    NUMBER_PREFIX = "CAND"
+
+    party = models.OneToOneField("core.Party", on_delete=models.CASCADE, related_name="candidate_profile")
+    first_name = models.CharField(max_length=150)
+    last_name = models.CharField(max_length=150)
+    email = models.EmailField(help_text="Unique per tenant — the duplicate-detection anchor.")
+    phone = models.CharField(max_length=30, blank=True)
+    linkedin_url = models.URLField(blank=True)
+    current_job_title = models.CharField(max_length=255, blank=True)
+    current_employer = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=2, blank=True, help_text="ISO 3166-1 alpha-2 country code.")
+    years_of_experience = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    highest_qualification = models.CharField(max_length=20, choices=QUALIFICATION_CHOICES, blank=True)
+    skill_set = models.TextField(blank=True,
+        help_text="Comma-delimited free-text skills. Structured skills live in CandidateSkill.")
+    resume_file = models.FileField(upload_to="hrm/candidates/resumes/%Y/%m/", null=True, blank=True)
+    resume_text = models.TextField(blank=True,
+        help_text="Raw text extracted from the resume — powers keyword search (NLP parsing deferred).")
+    photo = models.ImageField(upload_to="hrm/candidates/photos/%Y/%m/", null=True, blank=True)
+    gender = models.CharField(max_length=20, choices=CANDIDATE_GENDER_CHOICES, blank=True)
+    status = models.CharField(max_length=20, choices=CANDIDATE_STATUS_CHOICES, default="active",
+                              editable=False)
+    source = models.CharField(max_length=20, choices=CANDIDATE_SOURCE_CHOICES, blank=True)
+    do_not_contact = models.BooleanField(default=False,
+        help_text="Suppresses all automated candidate emails.")
+    gdpr_consent = models.BooleanField(default=False)
+    gdpr_consent_date = models.DateTimeField(null=True, blank=True, editable=False)
+    gdpr_consent_expires = models.DateField(null=True, blank=True,
+        help_text="Data-retention window; after this date the record is eligible for anonymization.")
+    notes = models.TextField(blank=True)
+    sourced_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name="sourced_candidates")
+    expected_salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    notice_period_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    tags = models.ManyToManyField("hrm.CandidateTag", blank=True, related_name="candidates")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "email"], name="hrm_cand_tenant_email_uniq"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_cand_tenant_status_idx"),
+            models.Index(fields=["tenant", "source"], name="hrm_cand_tenant_source_idx"),
+            models.Index(fields=["tenant", "do_not_contact"], name="hrm_cand_tenant_dnc_idx"),
+        ]
+
+    @property
+    def name(self):
+        return f"{self.first_name} {self.last_name}".strip()
+
+    def __str__(self):
+        return f"{self.number} · {self.name}" if self.number else self.name
+
+
+class CandidateSkill(TenantOwned):
+    """A structured skill on a candidate (3.6). Child of ``CandidateProfile`` — rows are added/removed
+    via POST actions on the candidate detail hub (no standalone form), mirroring the
+    ``RequisitionApproval`` / ``ClearanceItem`` inline-child pattern. Powers filter-by-skill search."""
+
+    candidate = models.ForeignKey("hrm.CandidateProfile", on_delete=models.CASCADE, related_name="skills")
+    skill_name = models.CharField(max_length=100)
+    proficiency = models.CharField(max_length=20, choices=SKILL_PROFICIENCY_CHOICES, blank=True)
+    source = models.CharField(max_length=20, choices=SKILL_SOURCE_CHOICES, default="manual")
+
+    class Meta:
+        ordering = ["skill_name"]
+        unique_together = ("candidate", "skill_name")
+        indexes = [
+            models.Index(fields=["tenant", "skill_name"], name="hrm_cskill_tenant_name_idx"),
+        ]
+
+    def __str__(self):
+        label = self.get_proficiency_display() if self.proficiency else "—"
+        return f"{self.skill_name} ({label})"
+
+
+class JobApplication(TenantNumbered):
+    """A candidate's application to a requisition (3.6) — the recruiting pipeline record. ``stage`` is
+    the workflow-owned state machine (set only by the stage-move POST actions, never the form);
+    rating/notes are recruiter annotations. Unique per (candidate, requisition) so one person can't
+    double-apply to the same opening."""
+
+    NUMBER_PREFIX = "APP"
+
+    candidate = models.ForeignKey("hrm.CandidateProfile", on_delete=models.CASCADE, related_name="applications")
+    requisition = models.ForeignKey("hrm.JobRequisition", on_delete=models.CASCADE, related_name="applications")
+    stage = models.CharField(max_length=20, choices=APPLICATION_STAGE_CHOICES, default="applied",
+                             editable=False)
+    source = models.CharField(max_length=20, choices=CANDIDATE_SOURCE_CHOICES, default="careers_page")
+    referred_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name="referrals")
+    cover_letter_text = models.TextField(blank=True)
+    cover_letter_file = models.FileField(upload_to="hrm/candidates/covers/%Y/%m/", null=True, blank=True)
+    screening_answers = models.JSONField(default=dict, blank=True,
+        help_text="Per-requisition screening questions and answers, stored as a {question: answer} map.")
+    rating = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Recruiter rating, 1–5.")
+    rejection_reason = models.CharField(max_length=30, choices=REJECTION_REASON_CHOICES, blank=True)
+    rejection_notes = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    applied_at = models.DateTimeField(auto_now_add=True)
+    stage_changed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    hired_on = models.DateField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-applied_at"]
+        unique_together = ("tenant", "number")
+        constraints = [
+            models.UniqueConstraint(fields=["candidate", "requisition"], name="hrm_app_cand_req_uniq"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "stage"], name="hrm_app_tenant_stage_idx"),
+            models.Index(fields=["tenant", "source"], name="hrm_app_tenant_source_idx"),
+            models.Index(fields=["tenant", "requisition"], name="hrm_app_tenant_req_idx"),
+            models.Index(fields=["tenant", "candidate"], name="hrm_app_tenant_cand_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.rating is not None and not (1 <= self.rating <= 5):
+            raise ValidationError({"rating": "Rating must be between 1 and 5."})
+
+    def __str__(self):
+        return f"{self.number} · {self.candidate.name} → {self.requisition.title}"
+
+
+class CandidateEmailTemplate(TenantNumbered):
+    """Reusable recruiting email template (3.6). HRM-owned (peer apps don't cross-import crm's). An
+    ``is_auto_send`` template whose ``template_type`` matches a stage transition is fired automatically
+    by the application stage-move actions."""
+
+    NUMBER_PREFIX = "CETMPL"
+
+    name = models.CharField(max_length=255)
+    template_type = models.CharField(max_length=30, choices=EMAIL_TEMPLATE_TYPE_CHOICES, default="general")
+    subject = models.CharField(max_length=500)
+    body_html = models.TextField(
+        help_text="Merge fields: {{candidate_name}}, {{job_title}}, {{company_name}}, "
+                  "{{recruiter_name}}, {{application_number}}.")
+    is_active = models.BooleanField(default=True)
+    is_auto_send = models.BooleanField(default=False,
+        help_text="Auto-send when a JobApplication stage transition matches this template type.")
+
+    class Meta:
+        ordering = ["template_type", "name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "template_type", "is_active"], name="hrm_cetmpl_type_active_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.name}" if self.number else self.name
+
+
+class CandidateCommunication(TenantNumbered):
+    """Append-only typed communication log (3.6). Created only by the send-email POST action /
+    ``_send_candidate_email`` helper (no create form; admin blocks add/change). ``sent_by=None`` marks a
+    system auto-send. Distinct from the broader ``core.Activity`` ledger — this is the ATS email trail."""
+
+    NUMBER_PREFIX = "CC"
+
+    candidate = models.ForeignKey("hrm.CandidateProfile", on_delete=models.CASCADE, related_name="communications")
+    application = models.ForeignKey("hrm.JobApplication", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="communications")
+    template = models.ForeignKey("hrm.CandidateEmailTemplate", on_delete=models.SET_NULL, null=True,
+                                 blank=True, related_name="communications")
+    channel = models.CharField(max_length=10, choices=COMMUNICATION_CHANNEL_CHOICES, default="email")
+    direction = models.CharField(max_length=10, choices=COMMUNICATION_DIRECTION_CHOICES, default="outbound")
+    subject = models.CharField(max_length=500, blank=True)
+    body = models.TextField()
+    sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="candidate_communications")
+    sent_at = models.DateTimeField(auto_now_add=True)
+    delivery_status = models.CharField(max_length=10, choices=DELIVERY_STATUS_CHOICES, default="sent")
+
+    class Meta:
+        ordering = ["-sent_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "candidate"], name="hrm_cc_tenant_cand_idx"),
+            models.Index(fields=["tenant", "application"], name="hrm_cc_tenant_app_idx"),
+            models.Index(fields=["tenant", "delivery_status"], name="hrm_cc_tenant_dstatus_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.get_channel_display()} → {self.candidate.name}"
