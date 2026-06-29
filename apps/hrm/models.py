@@ -1652,9 +1652,10 @@ class JobRequisition(TenantNumbered):
     filled_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     # 3.6 Candidate Management — public career-portal bearer credential. Set (once) when the req is
-    # posted; an unguessable token resolves the public application page (mirrors crm.LandingPage).
+    # posted; an unguessable token resolves the public application page (mirrors crm.Case/LandingPage:
+    # unique + null when unposted so the empty values don't collide on the unique constraint).
     public_token = models.CharField(
-        max_length=64, blank=True, db_index=True, editable=False,
+        max_length=64, unique=True, null=True, blank=True, editable=False,
         help_text="URL-safe token minted when the req is posted; powers the public careers portal.")
 
     class Meta:
