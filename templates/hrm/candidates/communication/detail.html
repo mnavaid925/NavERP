@@ -24,7 +24,7 @@
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Message</h2></div>
-    <div class="card-body"><pre style="white-space:pre-wrap;">{{ obj.body }}</pre></div>
+    <div class="card-body"><pre style="white-space:pre-wrap;overflow-x:auto;">{{ obj.body }}</pre></div>
   </div>
 
   <a href="{% url 'hrm:communication_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
