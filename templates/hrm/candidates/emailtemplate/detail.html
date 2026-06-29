@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:emailtemplate_list' %}">Email Templates</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:emailtemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:emailtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-info">{{ obj.get_template_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Auto-send</dt><dd>{% if obj.is_auto_send %}<span class="badge badge-amber">Auto-sends on matching stage</span>{% else %}<span class="badge badge-muted">Manual</span>{% endif %}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Subject</dt><dd>{{ obj.subject }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Body</h2></div>
+    <div class="card-body">
+      {# Rendered ESCAPED on purpose — this shows the template source (with merge fields), not a preview. #}
+      <pre style="white-space:pre-wrap;">{{ obj.body_html }}</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Merge Fields</h2></div>
+    <div class="card-body">
+      <p class="text-muted">These placeholders are replaced when the email is sent:</p>
+      <p><code>{% templatetag openvariable %}candidate_name{% templatetag closevariable %}</code>
+         <code>{% templatetag openvariable %}job_title{% templatetag closevariable %}</code>
+         <code>{% templatetag openvariable %}company_name{% templatetag closevariable %}</code>
+         <code>{% templatetag openvariable %}recruiter_name{% templatetag closevariable %}</code>
+         <code>{% templatetag openvariable %}application_number{% templatetag closevariable %}</code></p>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:emailtemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
