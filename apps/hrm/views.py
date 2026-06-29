@@ -2976,7 +2976,7 @@ def candidate_edit(request, pk):
                   {"form": form, "obj": obj, "is_edit": True})
 
 
-@login_required
+@tenant_admin_required  # destructive — cascades the Party, its roles, applications and communications
 @require_POST
 def candidate_delete(request, pk):
     obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant)
@@ -3011,7 +3011,7 @@ def candidate_mark_hired(request, pk):
     return redirect("hrm:candidate_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # contact-suppression is an authoritative HR decision
 @require_POST
 def candidate_blacklist(request, pk):
     obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
@@ -3023,7 +3023,7 @@ def candidate_blacklist(request, pk):
     return redirect("hrm:candidate_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # inverse of blacklist — same authoritative bar
 @require_POST
 def candidate_restore(request, pk):
     obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
@@ -3315,7 +3315,7 @@ def emailtemplate_list(request):
         extra_context={"type_choices": EMAIL_TEMPLATE_TYPE_CHOICES})
 
 
-@login_required
+@tenant_admin_required  # templates auto-fire to external candidate emails — admin-authored only
 def emailtemplate_create(request):
     return crud_create(request, form_class=CandidateEmailTemplateForm,
                        template="hrm/candidates/emailtemplate/form.html",
@@ -3328,14 +3328,14 @@ def emailtemplate_detail(request, pk):
                        template="hrm/candidates/emailtemplate/detail.html")
 
 
-@login_required
+@tenant_admin_required  # templates auto-fire to external candidate emails — admin-authored only
 def emailtemplate_edit(request, pk):
     return crud_edit(request, model=CandidateEmailTemplate, pk=pk, form_class=CandidateEmailTemplateForm,
                      template="hrm/candidates/emailtemplate/form.html",
                      success_url="hrm:emailtemplate_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def emailtemplate_delete(request, pk):
     return crud_delete(request, model=CandidateEmailTemplate, pk=pk, success_url="hrm:emailtemplate_list")
