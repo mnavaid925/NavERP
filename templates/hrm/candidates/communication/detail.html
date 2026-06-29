@@ -29,4 +29,5 @@
 
   <a href="{% url 'hrm:communication_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
   <a href="{% url 'hrm:candidate_detail' obj.candidate.pk %}" class="btn btn-outline"><i data-lucide="user"></i> Candidate</a>
+  {% if obj.application %}<a href="{% url 'hrm:application_detail' obj.application.pk %}" class="btn btn-outline"><i data-lucide="inbox"></i> Application</a>{% endif %}
 {% endblock %}
