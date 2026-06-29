@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:communication_list' %}">Communications</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Candidate</dt><dd><a href="{% url 'hrm:candidate_detail' obj.candidate.pk %}">{{ obj.candidate.name }}</a></dd></div>
+      <div class="detail-item"><dt>Application</dt><dd>{% if obj.application %}<a href="{% url 'hrm:application_detail' obj.application.pk %}">{{ obj.application.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Template</dt><dd>{% if obj.template %}{{ obj.template.name }}{% else %}— (custom){% endif %}</dd></div>
+      <div class="detail-item"><dt>Channel</dt><dd>{{ obj.get_channel_display }}</dd></div>
+      <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.delivery_status == 'sent' or obj.delivery_status == 'delivered' %}green{% elif obj.delivery_status == 'failed' %}red{% else %}muted{% endif %}">{{ obj.get_delivery_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Sent By</dt><dd>{% if obj.sent_by %}{{ obj.sent_by.get_full_name|default:obj.sent_by.username }}{% else %}System (auto){% endif %}</dd></div>
+      <div class="detail-item"><dt>Sent At</dt><dd>{{ obj.sent_at|date:"Y-m-d H:i" }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Subject</dt><dd>{{ obj.subject|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Message</h2></div>
+    <div class="card-body"><pre style="white-space:pre-wrap;">{{ obj.body }}</pre></div>
+  </div>
+
+  <a href="{% url 'hrm:communication_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+  <a href="{% url 'hrm:candidate_detail' obj.candidate.pk %}" class="btn btn-outline"><i data-lucide="user"></i> Candidate</a>
+{% endblock %}
