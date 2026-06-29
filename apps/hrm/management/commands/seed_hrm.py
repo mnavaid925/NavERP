@@ -773,7 +773,8 @@ class Command(BaseCommand):
 
         # Mint career-portal tokens on posted requisitions (the seeder sets status directly, bypassing
         # the post action that would normally mint them).
-        for req in JobRequisition.objects.filter(tenant=tenant, status="posted", public_token=""):
+        for req in JobRequisition.objects.filter(
+                tenant=tenant, status="posted", public_token__isnull=True):
             req.public_token = secrets.token_urlsafe(32)
             req.save(update_fields=["public_token"])
 
