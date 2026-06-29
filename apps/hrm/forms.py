@@ -21,6 +21,10 @@ MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 ALLOWED_ONBOARDING_DOC_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}
 MAX_ONBOARDING_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# Resume / cover-letter upload safety (3.6): documents only (no images) + 10 MB cap.
+ALLOWED_RESUME_EXTENSIONS = {".pdf", ".doc", ".docx"}
+MAX_RESUME_BYTES = 10 * 1024 * 1024  # 10 MB
+
 from .models import (
     AssetAllocation,
     AttendanceRecord,
@@ -50,6 +54,14 @@ from .models import (
     SeparationCase,
     Shift,
     ShiftAssignment,
+)
+from .models import (  # noqa: E402  — 3.6 Candidate Management
+    CANDIDATE_SOURCE_CHOICES,
+    CandidateEmailTemplate,
+    CandidateProfile,
+    CandidateSkill,
+    CandidateTag,
+    JobApplication,
 )
 
 
@@ -532,3 +544,134 @@ class RequisitionApprovalForm(TenantModelForm):
                 .order_by("username"))
         else:
             self.fields["approver"].queryset = get_user_model().objects.none()
+
+
+# ----------------------------------------------------------------------- 3.6 Candidate Management
+class CandidateTagForm(TenantModelForm):
+    class Meta:
+        model = CandidateTag
+        fields = ["name", "color", "description"]
+        widgets = {"color": forms.TextInput(attrs={"type": "color"})}
+
+
+class CandidateProfileForm(TenantModelForm):
+    # SECURITY: `party` is set in the view (a fresh person Party is minted per candidate); `status`,
+    # `gdpr_consent_date` are workflow-owned; `tags` are managed via inline POST actions on the hub.
+    class Meta:
+        model = CandidateProfile
+        fields = ["first_name", "last_name", "email", "phone", "linkedin_url", "current_job_title",
+                  "current_employer", "city", "country", "years_of_experience", "highest_qualification",
+                  "skill_set", "resume_file", "resume_text", "photo", "gender", "source",
+                  "expected_salary", "notice_period_days", "sourced_by", "do_not_contact",
+                  "gdpr_consent", "gdpr_consent_expires", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["sourced_by"].queryset = (
+                get_user_model().objects.filter(tenant=self.tenant, is_active=True).order_by("username"))
+        else:
+            self.fields["sourced_by"].queryset = get_user_model().objects.none()
+
+    def clean_email(self):
+        # Enforce the (tenant, email) uniqueness as a friendly form error rather than a 500 on the
+        # DB constraint (mirrors the duplicate-detection anchor in every ATS product).
+        email = self.cleaned_data["email"]
+        if self.tenant is not None:
+            qs = CandidateProfile.objects.filter(tenant=self.tenant, email__iexact=email)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError("A candidate with this email already exists in this workspace.")
+        return email
+
+    def clean_resume_file(self):
+        return _validate_resume(self.cleaned_data.get("resume_file"))
+
+    def clean_photo(self):
+        f = self.cleaned_data.get("photo")
+        if f and hasattr(f, "name") and hasattr(f, "size"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_PHOTO_EXTENSIONS:
+                raise forms.ValidationError(f"Photo type '{ext}' is not allowed. Use JPG, PNG, WebP or GIF.")
+            if f.size and f.size > MAX_PHOTO_BYTES:
+                raise forms.ValidationError("Photo exceeds the 5 MB limit.")
+        return f
+
+
+class CandidateSkillForm(TenantModelForm):
+    # Inline-add on the candidate detail hub; `candidate` is set in the view.
+    class Meta:
+        model = CandidateSkill
+        fields = ["skill_name", "proficiency", "source"]
+
+
+class JobApplicationForm(TenantModelForm):
+    # SECURITY: `stage`, `stage_changed_at`, `hired_on`, `rejection_reason`, `rejection_notes` are
+    # workflow-owned (set only by the stage-move / reject actions). `screening_answers` is captured by
+    # the public apply flow, not hand-edited here.
+    class Meta:
+        model = JobApplication
+        fields = ["candidate", "requisition", "source", "referred_by", "cover_letter_text",
+                  "cover_letter_file", "rating", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["candidate"].queryset = (
+                CandidateProfile.objects.filter(tenant=self.tenant).order_by("-created_at"))
+            self.fields["referred_by"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant)
+                .select_related("party").order_by("party__name"))
+
+    def clean_cover_letter_file(self):
+        return _validate_resume(self.cleaned_data.get("cover_letter_file"))
+
+    def clean_rating(self):
+        rating = self.cleaned_data.get("rating")
+        if rating is not None and not (1 <= rating <= 5):
+            raise forms.ValidationError("Rating must be between 1 and 5.")
+        return rating
+
+
+class CandidateEmailTemplateForm(TenantModelForm):
+    class Meta:
+        model = CandidateEmailTemplate
+        fields = ["name", "template_type", "subject", "body_html", "is_active", "is_auto_send"]
+
+
+class PublicApplicationForm(forms.Form):
+    """Unauthenticated career-portal application form (3.6) — a plain ``forms.Form`` (no tenant binding;
+    the requisition's public_token already pins the tenant in the view). Resume is required."""
+
+    first_name = forms.CharField(max_length=150, widget=forms.TextInput(attrs={"class": "form-input"}))
+    last_name = forms.CharField(max_length=150, widget=forms.TextInput(attrs={"class": "form-input"}))
+    email = forms.EmailField(widget=forms.EmailInput(attrs={"class": "form-input"}))
+    phone = forms.CharField(max_length=30, required=False, widget=forms.TextInput(attrs={"class": "form-input"}))
+    linkedin_url = forms.URLField(required=False, widget=forms.URLInput(attrs={"class": "form-input"}))
+    city = forms.CharField(max_length=100, required=False, widget=forms.TextInput(attrs={"class": "form-input"}))
+    resume_file = forms.FileField(widget=forms.ClearableFileInput(attrs={"class": "form-input",
+                                                                         "accept": ".pdf,.doc,.docx"}))
+    cover_letter_text = forms.CharField(required=False, widget=forms.Textarea(
+        attrs={"class": "form-textarea", "rows": 5}))
+    source = forms.ChoiceField(choices=CANDIDATE_SOURCE_CHOICES, initial="careers_page",
+                               widget=forms.Select(attrs={"class": "form-select"}))
+    gdpr_consent = forms.BooleanField(required=True, widget=forms.CheckboxInput(attrs={"class": "form-check"}),
+        label="I consent to the storage and processing of my personal data for recruitment purposes.")
+
+    def clean_resume_file(self):
+        return _validate_resume(self.cleaned_data.get("resume_file"))
+
+
+def _validate_resume(f):
+    """Shared resume/cover-letter upload guard — documents only (PDF/DOC/DOCX), 10 MB cap.
+    Validates a freshly-uploaded file only (an existing FieldFile has no new size to re-check)."""
+    if f and hasattr(f, "name") and hasattr(f, "size"):
+        ext = os.path.splitext(f.name)[1].lower()
+        if ext not in ALLOWED_RESUME_EXTENSIONS:
+            raise forms.ValidationError(f"File type '{ext}' is not allowed. Use PDF, DOC or DOCX.")
+        if f.size and f.size > MAX_RESUME_BYTES:
+            raise forms.ValidationError("File exceeds the 10 MB limit.")
+        # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve uploads with
+        # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
+    return f
