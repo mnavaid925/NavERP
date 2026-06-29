@@ -4,12 +4,12 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">{{ req.title }}</h1>
-      <p style="color:var(--text-muted);">{{ req.tenant.name }}{% if req.department %} · {{ req.department.name }}{% endif %}{% if req.location %} · {{ req.location }}{% endif %}</p>
+      <p class="text-muted">{{ req.tenant.name }}{% if req.department %} · {{ req.department.name }}{% endif %}{% if req.location %} · {{ req.location }}{% endif %}</p>
     </div>
   </div>
 
   {% if submitted %}
-    <div class="card" style="border-left:4px solid #10b981;"><div class="card-body">
+    <div class="card" style="border-left:4px solid var(--ok);"><div class="card-body" role="status">
       <div class="empty-state"><i data-lucide="check-circle"></i><h3>Thank you for applying!</h3><p>We've received your application for {{ req.title }} and will be in touch.</p></div>
     </div></div>
   {% else %}
