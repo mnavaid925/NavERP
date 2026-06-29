@@ -1,14 +1,14 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition/recruiting, 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
 
 NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix `/hrm/`
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
-3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.9 Attendance Management,
-3.10 Leave Management, 3.12 Holiday Management.** Reuses the
+3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
+3.9 Attendance Management, 3.10 Leave Management, 3.12 Holiday Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -17,7 +17,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 28 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition)
+## Models (`apps/hrm/models.py`) — 34 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -91,6 +91,23 @@ properties.
 
 **Requisition services (`apps/hrm/services.py`):** `generate_approval_chain(requisition)` — idempotent (returns existing rows if any) default 2-step (HR, Executive) `bulk_create`. `apply_template_to_requisition(requisition, template)` — copies the 4 `jd_*` fields + sets `template`, deliberately leaves `employment_type`; request-free.
 
+### 3.6 Candidate Management (6 tables) — ATS candidate DB + application pipeline + recruiting email/comms + public career portal
+
+A **candidate is a `core.Party`(person) + `PartyRole(role="candidate")`** (the `"candidate"` role was added to `core.PartyRole.ROLE_CHOICES`, migration `core/0004`) + a thin `CandidateProfile` extension — exactly mirroring how `EmployeeProfile` extends `Party`. `JobApplication` FKs the candidate to the **already-built `JobRequisition` (3.5)**. Migrations: `hrm/0011` (the 6 models + `JobRequisition.public_token`), `hrm/0012` (token → unique+null), `hrm/0013` (two ordering indexes).
+
+| Model | Number | Key fields | Reuses core / notes |
+|-------|--------|-----------|---------------------|
+| `CandidateTag` (3.6) | — | name, color(hex, `HEX_COLOR_VALIDATOR`), description | Talent-pool label, M2M'd onto `CandidateProfile.tags`. CRUD = list/create/edit/delete (**no detail page** — too few fields). `unique_together=(tenant,name)`. |
+| `CandidateProfile` (3.6) | `CAND-` | **party→`core.Party`(1:1)**, first_name, last_name, **email(unique per tenant)**, phone, linkedin_url, current_job_title/employer, city, country, years_of_experience, highest_qualification, skill_set(free-text), resume_file, resume_text(keyword search), photo, gender, **status(editable=False)**, source, do_not_contact, gdpr_consent, **gdpr_consent_date(editable=False)**, gdpr_consent_expires, notes, sourced_by→`User`, expected_salary, notice_period_days, **tags→M2M `CandidateTag`** | Mirrors `EmployeeProfile`. `@property name`="First Last". `UniqueConstraint(tenant,email)` = dedup anchor (`clean_email` surfaces a friendly form error). Indexes (tenant,status)/(tenant,source)/(tenant,do_not_contact)/(tenant,created_at). `status` workflow-owned (mark-hired/blacklist/restore actions). |
+| `CandidateSkill` (3.6) | — | candidate→`CandidateProfile`(CASCADE), skill_name, proficiency, source(parsed/manual/self_reported) | **Inline child** of the candidate hub (added/removed via POST actions, no own templates — mirrors `RequisitionApproval`/`ClearanceItem`). Powers `skills__skill_name__icontains` filter. `unique_together=(candidate,skill_name)`. |
+| `JobApplication` (3.6) | `APP-` | candidate→`CandidateProfile`(CASCADE), **requisition→`JobRequisition`(CASCADE)**, **stage(editable=False)**, source, referred_by→`EmployeeProfile`(SET_NULL), cover_letter_text/file, screening_answers(JSON), rating(1–5), rejection_reason/notes, applied_at, **stage_changed_at/hired_on(editable=False)**, notes | The pipeline record. `APPLICATION_STAGE_CHOICES` (10): applied→screening→phone_screen→assessment→interview→offer→hired (+rejected/withdrawn/on_hold). `APPLICATION_TERMINAL_STAGES=(hired,rejected,withdrawn)`. `UniqueConstraint(candidate,requisition)` (no double-apply). `clean()` rating 1–5. Indexes (tenant,stage)/(tenant,source)/(tenant,requisition)/(tenant,candidate)/(tenant,applied_at). |
+| `CandidateEmailTemplate` (3.6) | `CETMPL-` | name, template_type(10 types), subject, body_html(merge fields), is_active, is_auto_send | HRM-owned (does NOT reuse `crm.EmailTemplate`). An `is_auto_send` template whose `template_type` matches a stage transition fires automatically. Merge fields: `{{candidate_name}}/{{job_title}}/{{company_name}}/{{recruiter_name}}/{{application_number}}`. Index (tenant,template_type,is_active). |
+| `CandidateCommunication` (3.6) | `CC-` | candidate→`CandidateProfile`(CASCADE), application→`JobApplication`(SET_NULL), template→`CandidateEmailTemplate`(SET_NULL), channel(email/sms/whatsapp), direction, subject, body, sent_by→`User`(null=system auto-send), sent_at, delivery_status | **Append-only** typed email log (created only via the send-email action / `_send_candidate_email`; admin blocks add+change). Indexes (tenant,candidate)/(tenant,application)/(tenant,delivery_status). |
+
+**Application flow:** create a `JobApplication` (stage=applied) — internally via `application_create` (pre-selects `?candidate=`/`?requisition=`, lands on the new detail) or via the **public career portal**. On the application hub: **Move Stage** (`application_advance_stage`, blocked once terminal) — moving to `hired` also stamps `hired_on` + flips `candidate.status="hired"`; **Reject** (reason + notes), **Withdraw**, **Hold** — all guard against terminal stages. Stage-into-a-type with a matching `is_auto_send` template (or an explicit **Send Email**) renders merge fields and logs a `CandidateCommunication`. `_send_candidate_email(application, …)` (in `views.py`): honors `do_not_contact` (sends/logs nothing), resolves a template by instance or active type, renders merge fields, `send_mail` (console backend in dev) wrapped so a transport failure logs `delivery_status="failed"` instead of 500ing.
+
+**Public career portal (UNAUTHENTICATED, `apps/hrm/views.py`):** `careers_list` (per-tenant job board — `?tenant=<slug>` for anon, auto-resolves `request.tenant` for staff; only posted reqs with a token) + `careers_apply(token)` (resolves a `status="posted"` req by its unguessable `public_token`, minted in `jobrequisition_post`). POST creates `Party`+`PartyRole(candidate)`+`CandidateProfile`+`JobApplication(source="careers_page")` under **`req.tenant`** in `transaction.atomic()`, dedups the candidate by email + the application by `get_or_create` (no double-apply), stamps `gdpr_consent_date`, fires the `application_received` auto-template, PRG-redirects `?submitted=1`. `# WARNING:` rate-limiting deferred (django-ratelimit) — flagged in code.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -132,6 +149,19 @@ properties.
   actions `approval_add` (`/requisitions/<jr_pk>/approval/add/`) / `approval_delete`
   (`/requisition-approvals/<pk>/delete/`). **All JobRequisition + JobDescriptionTemplate writes (CRUD + workflow)
   are `@tenant_admin_required`** — list/detail reads are `@login_required`.
+- **Candidate Management (3.6):** `candidate_list/_create/_detail/_edit/_delete` (`/hrm/candidates/`),
+  `application_list/_create/_detail/_edit/_delete` (`/hrm/applications/`), `candidatetag_list/_create/_edit/_delete`
+  (`/hrm/candidate-tags/`, **no detail**), `emailtemplate_list/_create/_detail/_edit/_delete`
+  (`/hrm/candidate-email-templates/`), `communication_list/_detail` (`/hrm/candidate-communications/`, **read-only
+  list+detail**, no create/edit/delete). **Candidate hub inline + status actions (POST):** `candidate_mark_hired`
+  (`@login_required`), `candidate_blacklist`/`candidate_restore`/`candidate_delete` (**`@tenant_admin_required`**),
+  `candidate_skill_add`/`candidate_skill_delete`, `candidate_tag_add`/`candidate_tag_remove`. **Application pipeline
+  actions (POST, `@login_required`):** `application_advance_stage`/`application_reject`/`application_withdraw`/
+  `application_hold`/`application_send_email`. **Email-template authoring is `@tenant_admin_required`**
+  (`emailtemplate_create/_edit/_delete` — shared auto-firing templates). **Public portal (NO login):**
+  `careers_list` (`/hrm/careers/`) + `careers_apply` (`/hrm/careers/<token>/apply/`). `application_create` honors
+  `?candidate=`/`?requisition=` pre-select; the requisition hub links to `application_list?requisition=<pk>` and
+  `application_create?requisition=<pk>`.
 
 ## Views (`apps/hrm/views.py`)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
@@ -174,7 +204,7 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   `_JR_CLONE_FK_FIELDS`/`_JR_CLONE_PLAIN_FIELDS` (status→draft, all `*_at` null).
 
 ## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
-88 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+104 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
 filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — the main employee is single-entity so
 `employee/list.html` etc.; its child entities get their own folders `employee/document/{list,detail,form}.html` and
 `employee/lifecycle/{list,detail,form}.html` — the `budget/line/` child-entity precedent),
@@ -189,6 +219,11 @@ and the two print pages `offboarding/relieving_letter.html` / `offboarding/exper
 the sub-module level and do NOT extend base.html])**,
 **`recruitment/` (3.5 — entity folders `jobrequisition/` [the hub] and `jobdescriptiontemplate/`, each with
 `list/detail/form.html`; `RequisitionApproval` rows render inline on the requisition hub, no own templates)**,
+**`candidates/` (3.6 — entity folders `candidate/` [the hub: inline skills/tags/applications/communications],
+`application/` [the hub: pipeline actions + send-email], `tag/` [list+form, no detail], `emailtemplate/`,
+`communication/` [list+detail only]; the reusable `candidates/_stage_badge.html` partial; the public standalone
+pages `candidates/careers_list.html` + `candidates/careers_apply.html` which extend `base_auth.html` (not
+`base.html`); `CandidateSkill` renders inline on the candidate hub, no own templates)**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
@@ -226,6 +261,15 @@ designations/departments) to the tenant.
 hiring_manager/recruiter querysets to the tenant; `clean()` validates salary_min≤max and headcount≥1.
 `RequisitionApprovalForm` excludes `status`/`decided_at`/`decided_by` and scopes `approver` to **tenant users**
 (`get_user_model().filter(tenant=…)`). `JobDescriptionTemplateForm` scopes `designation` to active tenant rows.
+**Candidate-management form security (3.6):** `CandidateProfileForm` excludes `party`/`status`/`gdpr_consent_date`/
+`tags` (set in the view / managed via inline actions), `clean_email` enforces (tenant,email) uniqueness as a
+friendly error, `clean_resume_file` (pdf/doc/docx + 10 MB via the shared `_validate_resume`), `clean_photo` (img + 5
+MB). `JobApplicationForm` excludes `stage`/`stage_changed_at`/`hired_on`/`rejection_*`/`screening_answers`
+(workflow-owned) + explicitly scopes candidate/requisition/referred_by querysets to the tenant; `clean_rating` 1–5.
+`CandidateTagForm.clean_color` enforces strict hex (`#RRGGBB`) — defense-in-depth since the value is interpolated
+into a CSS `style=` attribute. `CandidateEmailTemplateForm` = name/template_type/subject/body_html/is_active/
+is_auto_send. `PublicApplicationForm` is a plain `forms.Form` (no model binding — no mass-assignment surface),
+resume required, `gdpr_consent` required, `clean_resume_file` allowlist.
 
 ## Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
@@ -248,7 +292,13 @@ list): for the first 3 employees — 3 `EmployeeDocument`s each (national_id [ve
 `EmployeeLifecycleEvent`. **Job requisitions (3.5)** are seeded by `_seed_job_requisition(tenant)` (guarded by its
 own `JobRequisition.exists()` check; the 3 models self-flush): 2 `JobDescriptionTemplate`s + 3 `JobRequisition`s
 across the lifecycle (1 posted, 1 draft, 1 approved with a fully-approved 2-step `RequisitionApproval` chain),
-reusing the seeded designations/employees/department + cost-center OrgUnits.
+reusing the seeded designations/employees/department + cost-center OrgUnits. **Candidate Management (3.6)** is seeded
+by `_seed_candidates(tenant)` (guarded by its own `CandidateProfile.exists()` check; the 3.6 models are in its own
+`--flush` block — candidate Parties are deleted by id): mints `public_token` on posted requisitions (the seeder sets
+`status="posted"` directly, bypassing the post action), then 3 talent-pool tags, 2 recruiting email templates (1
+auto-send `application_received`, 1 manual `rejection`), 6 candidates (each a fresh `core.Party`+`PartyRole(role=
+"candidate")`) with 2 skills each + tags on the first two, 8 `JobApplication`s spread across stages against the
+seeded requisitions (`get_or_create` on (candidate,requisition)), and 2 `CandidateCommunication`s on the first app.
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -269,6 +319,12 @@ tenant and sees nothing.
 - 3.5 (all 5 bullets live): Job Posting / Budget Management / Requisition Tracking → `hrm:jobrequisition_list`;
   Approval Workflow → `hrm:jobrequisition_list?status=pending_approval` (filtered to the pending queue, suffix
   handled by `_safe_reverse`); Job Templates → `hrm:jobdescriptiontemplate_list`.
+- 3.6 (all 5 bullets live): Application Portal → `hrm:application_list`; Resume Parser / Candidate Database /
+  Resume Search → `hrm:candidate_list` (the one candidate DB — its filter bar covers name/skill/resume-text search,
+  NLP parsing deferred — so the three co-highlight there); Candidate Communication → `hrm:communication_list`; +
+  extras Email Templates → `hrm:emailtemplate_list`, Talent Pool Tags → `hrm:candidatetag_list`, Public Careers
+  Page → `hrm:careers_list`. The HRM overview adds 3 clickable recruiting stat cards (open reqs / active
+  applications / new candidates); a posted requisition's detail hub shows its applications + the shareable apply URL.
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
   + Shift Assignments → `hrm:shiftassignment_list`.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
@@ -321,8 +377,19 @@ splitting a sensitive-fields sub-form behind `@tenant_admin_required` is a Modul
 `EmployeeDocument` files are served via the dev `/media/` helper with no auth gate (same as onboarding docs/photos/
 resignation letters — keep `MEDIA_ROOT` outside the web root in production, or add a protected `X-Accel-Redirect`
 serve view project-wide).
+**3.6 candidate-management deferrals:** resume NLP/AI field extraction (`resume_text` is captured now, parsing
+deferred — needs Celery/SMTP), structured `CandidateEducation`/`CandidateExperience` child tables (v1 uses free-text
+`skill_set` + inline `CandidateSkill`), a candidate self-service status portal (signed token link), CAPTCHA/honeypot
++ **per-IP rate-limiting on the public `careers_apply`/`careers_list`** (WARNING in code — django-ratelimit before
+prod), GDPR auto-anonymization scheduled task (`gdpr_consent_expires` captured now), bulk SMS/WhatsApp send
+(`CandidateCommunication.channel` supports it; only email actually sends), bulk-email-to-segment, a formal
+`post_save` signal for auto-send templates (v1 fires inline in the stage-move actions), talent-rediscovery/AI
+matching, side-by-side candidate comparison, and DEI/diversity analytics (`gender` captured now). Uploaded resumes/
+cover-letters are served via the dev `/media/` helper with no `Content-Disposition: attachment` (project-wide
+WARNING — extension-allowlist only, no content sniffing; harden before prod).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), the rest of recruiting/
-ATS — **3.6 Candidate / 3.7 Interview / 3.8 Offer (these FK into the built 3.5 `JobRequisition`)** — plus
+ATS — **3.7 Interview / 3.8 Offer (these FK into the built 3.5 `JobRequisition` / 3.6 `JobApplication`; the
+`stage="interview"`/`"offer"` values are the 3.6→3.7/3.8 handoff)** — plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
 upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
