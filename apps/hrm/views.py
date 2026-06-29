@@ -2879,10 +2879,12 @@ def _auto_send_for_stage(application, stage, sent_by):
 # --------------------------------------------------------------- Candidates (3.6) CRUD + hub
 @login_required
 def candidate_list(request):
+    # The Count annotation's GROUP BY already collapses the skill/tag join-filter rows to one per
+    # candidate; .distinct() makes that explicit so the list stays unique even if the annotation changes.
     qs = (CandidateProfile.objects.filter(tenant=request.tenant)
           .select_related("party").prefetch_related("tags", "skills")
           .annotate(application_count=Count("applications", distinct=True))
-          .order_by("-created_at"))
+          .order_by("-created_at").distinct())
     return crud_list(
         request, qs, "hrm/candidates/candidate/list.html",
         search_fields=["first_name", "last_name", "email", "phone", "current_job_title",
@@ -2895,7 +2897,7 @@ def candidate_list(request):
             "source_choices": CANDIDATE_SOURCE_CHOICES,
             "gender_choices": CANDIDATE_GENDER_CHOICES,
             "qualification_choices": QUALIFICATION_CHOICES,
-            "tags": CandidateTag.objects.filter(tenant=request.tenant),
+            "tags": CandidateTag.objects.filter(tenant=request.tenant).only("pk", "name", "color"),
         },
     )
 
@@ -2936,7 +2938,7 @@ def candidate_detail(request, pk):
     obj = get_object_or_404(
         CandidateProfile.objects.filter(tenant=request.tenant).select_related("party", "sourced_by"),
         pk=pk)
-    applications = (obj.applications.select_related("requisition").order_by("-applied_at"))
+    applications = (obj.applications.select_related("requisition").order_by("-applied_at")[:25])
     communications = (obj.communications.select_related("template", "sent_by").order_by("-sent_at")[:20])
     return render(request, "hrm/candidates/candidate/detail.html", {
         "obj": obj,
@@ -3131,7 +3133,7 @@ def application_detail(request, pk):
         .select_related("candidate__party", "requisition", "referred_by__party"), pk=pk)
     return render(request, "hrm/candidates/application/detail.html", {
         "obj": obj,
-        "communications": obj.communications.select_related("template", "sent_by").order_by("-sent_at"),
+        "communications": obj.communications.select_related("template", "sent_by").order_by("-sent_at")[:50],
         "email_templates": CandidateEmailTemplate.objects.filter(tenant=request.tenant, is_active=True),
         "stage_choices": APPLICATION_STAGE_CHOICES,
         "rejection_reason_choices": REJECTION_REASON_CHOICES,
