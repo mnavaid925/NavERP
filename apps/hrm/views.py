@@ -159,7 +159,8 @@ def _used_days_subquery():
 def hrm_overview(request):
     tenant = request.tenant
     stats = {"employees": 0, "new_this_month": 0, "on_leave_today": 0,
-             "present_today": 0, "absent_today": 0}
+             "present_today": 0, "absent_today": 0,
+             "open_requisitions": 0, "active_applications": 0, "new_candidates": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
         today = timezone.localdate()
@@ -172,6 +173,12 @@ def hrm_overview(request):
         att_today = AttendanceRecord.objects.filter(tenant=tenant, date=today)
         stats["present_today"] = att_today.filter(status="present").count()
         stats["absent_today"] = att_today.filter(status="absent").count()
+        # 3.6 recruiting pipeline at a glance.
+        stats["open_requisitions"] = JobRequisition.objects.filter(tenant=tenant, status="posted").count()
+        stats["active_applications"] = (JobApplication.objects.filter(tenant=tenant)
+                                        .exclude(stage__in=APPLICATION_TERMINAL_STAGES).count())
+        stats["new_candidates"] = CandidateProfile.objects.filter(
+            tenant=tenant, created_at__year=today.year, created_at__month=today.month).count()
         pending_requests = (LeaveRequest.objects.filter(tenant=tenant, status="pending")
                             .select_related("employee__party", "leave_type")
                             .order_by("start_date")[:10])
@@ -2483,6 +2490,9 @@ def jobrequisition_detail(request, pk):
     approval_progress = int(round(approved_count / total_count * 100)) if total_count else 0
     # Current pending step (lowest order) computed from the already-fetched list (no extra query).
     current_step = next((a for a in approvals if a.status == "pending"), None)
+    # 3.6 — surface the applicants on the requisition hub (was a dead-end before Candidate Management).
+    applications = list(obj.applications.select_related("candidate").order_by("-applied_at")[:10])
+    application_count = obj.applications.count()
     return render(request, "hrm/recruitment/jobrequisition/detail.html", {
         "obj": obj,
         "approvals": approvals,
@@ -2490,6 +2500,8 @@ def jobrequisition_detail(request, pk):
         "total_count": total_count,
         "approval_progress": approval_progress,
         "current_step": current_step,
+        "applications": applications,
+        "application_count": application_count,
         "approval_form": RequisitionApprovalForm(tenant=request.tenant),
         "is_hr_admin": _is_hr_admin(request.user),  # gates the admin-only action UI in the template
         "jd_templates": JobDescriptionTemplate.objects.filter(tenant=request.tenant, is_active=True)
@@ -3082,6 +3094,8 @@ def application_list(request):
             "stage_choices": APPLICATION_STAGE_CHOICES,
             "source_choices": CANDIDATE_SOURCE_CHOICES,
             "requisitions": JobRequisition.objects.filter(tenant=request.tenant).only("pk", "number", "title"),
+            "candidates": CandidateProfile.objects.filter(tenant=request.tenant)
+            .only("pk", "first_name", "last_name", "number"),
         },
     )
 
@@ -3102,7 +3116,11 @@ def application_create(request):
             # Land on the new application so the recruiter can immediately work its pipeline.
             return redirect("hrm:application_detail", pk=obj.pk)
     else:
-        form = JobApplicationForm(tenant=request.tenant)
+        # Pre-select the candidate/requisition when arriving from a candidate hub or a requisition hub.
+        form = JobApplicationForm(tenant=request.tenant, initial={
+            "candidate": request.GET.get("candidate") or None,
+            "requisition": request.GET.get("requisition") or None,
+        })
     return render(request, "hrm/candidates/application/form.html", {"form": form, "is_edit": False})
 
 
