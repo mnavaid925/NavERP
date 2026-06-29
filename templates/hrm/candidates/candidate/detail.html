@@ -25,8 +25,8 @@
   </div>
 
   {% if obj.do_not_contact %}
-    <div class="card" style="border-left:4px solid #f59e0b;">
-      <div class="card-body" style="display:flex;align-items:center;gap:.5rem;">
+    <div class="card" style="border-left:4px solid var(--warn);">
+      <div class="card-body" role="status" style="display:flex;align-items:center;gap:.5rem;">
         <i data-lucide="mail-x"></i><span>This candidate is marked <strong>do-not-contact</strong> — automated and manual emails are suppressed.</span>
       </div>
     </div>
@@ -60,7 +60,7 @@
     <div class="card-body">
       {% if obj.resume_file %}<p><a href="{{ obj.resume_file.url }}" class="btn btn-outline" target="_blank" rel="noopener noreferrer"><i data-lucide="file-down"></i> Download Resume</a></p>{% endif %}
       {% if obj.skill_set %}<p><strong>Skills (free-text):</strong> {{ obj.skill_set }}</p>{% endif %}
-      {% if obj.resume_text %}<details><summary class="text-muted">Resume text (searchable)</summary><pre style="white-space:pre-wrap;">{{ obj.resume_text }}</pre></details>{% endif %}
+      {% if obj.resume_text %}<details><summary class="text-muted">Resume text (searchable)</summary><pre style="white-space:pre-wrap;overflow-x:auto;">{{ obj.resume_text }}</pre></details>{% endif %}
       {% if not obj.resume_file and not obj.resume_text and not obj.skill_set %}<div class="empty-state"><i data-lucide="file-text"></i><h3>No resume on file</h3><p>Edit the candidate to attach a resume or paste its text for keyword search.</p></div>{% endif %}
     </div>
   </div>
@@ -70,9 +70,12 @@
     <div class="card-body">
       <form method="post" action="{% url 'hrm:candidate_skill_add' obj.pk %}" class="filter-bar" style="margin-bottom:1rem;">
         {% csrf_token %}
-        <div class="form-group" style="flex:1;min-width:160px;"><input type="text" name="skill_name" class="form-input" placeholder="Skill name" required></div>
-        <div class="form-group">{{ skill_form.proficiency }}</div>
-        <div class="form-group">{{ skill_form.source }}</div>
+        <div class="form-group" style="flex:1;min-width:160px;">
+          <label class="sr-only" for="id_skill_name_add">Skill name</label>
+          <input id="id_skill_name_add" type="text" name="skill_name" class="form-input" placeholder="Skill name" required>
+        </div>
+        <div class="form-group"><label class="sr-only" for="{{ skill_form.proficiency.id_for_label }}">Proficiency</label>{{ skill_form.proficiency }}</div>
+        <div class="form-group"><label class="sr-only" for="{{ skill_form.source.id_for_label }}">Skill source</label>{{ skill_form.source }}</div>
         <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Skill</button>
       </form>
       <div class="table-wrap">
@@ -103,7 +106,7 @@
       <p>
         {% for t in candidate_tags %}
           <span class="badge" style="background:{{ t.color }};color:#fff;">{{ t.name }}
-            <form method="post" action="{% url 'hrm:candidate_tag_remove' obj.pk t.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" title="Remove tag" style="background:none;border:none;color:#fff;cursor:pointer;padding:0 0 0 .25rem;">×</button></form>
+            <form method="post" action="{% url 'hrm:candidate_tag_remove' obj.pk t.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" title="Remove {{ t.name }}" aria-label="Remove tag {{ t.name }}" style="background:none;border:none;color:#fff;cursor:pointer;padding:0 0 0 .25rem;">×</button></form>
           </span>
         {% empty %}<span class="text-muted">No tags yet.</span>{% endfor %}
       </p>
