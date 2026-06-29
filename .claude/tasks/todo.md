@@ -871,6 +871,39 @@ NOTE: Both "Candidate Database" and "Resume Search" resolve to `hrm:candidate_li
 
 ---
 
-## Review notes
+## Review notes — DELIVERED (2026-06-30)
 
-(filled in after review agents run)
+**Shipped:** all 6 models (CandidateProfile[CAND-], CandidateSkill, JobApplication[APP-], CandidateTag,
+CandidateEmailTemplate[CETMPL-], CandidateCommunication[CC-]) + the 2 prereqs (core.PartyRole `candidate` role →
+`core/0004`; JobRequisition.public_token → `hrm/0011`, made unique+null in `hrm/0012`; ordering indexes in
+`hrm/0013`). Full CRUD + candidate hub (inline skills/tags/applications/communications) + the application pipeline
+state machine + merge-field email (`_send_candidate_email`, console backend) + the public web-to-candidate career
+portal (`careers_list`/`careers_apply`). Navigation `LIVE_LINKS["3.6"]`, admin (append-only CC blocked),
+`_seed_candidates` (6 candidates / 8 applications / 3 tags / 2 templates per tenant).
+
+**Verification:** `manage.py check` clean; migrations apply; seeder idempotent (2nd run skips, `--flush` re-seeds);
+qa-smoke-tester **98/98** end-to-end (render + CRUD/workflow POSTs + public apply + IDOR + comment-leak); **108**
+pytest tests in `apps/hrm/tests/test_candidate_management.py`; **full suite green**.
+
+**Review-agent findings applied (commit-per-file):**
+- **code-reviewer** (7): terminal-stage guard on reject/withdraw/hold; `public_token` unique+null (migration 0012);
+  reuse loaded requisition in `careers_apply`; tenant-scope the party role check; audit inside the delete
+  transaction; stamp `gdpr_consent_date` on staff create/edit; drop `send_mail(fail_silently)`;
+  `application_create`→detail.
+- **explorer** (7): requisition hub now lists its applications + shows the shareable public apply URL; HRM overview
+  recruiting stat cards; `application_create` `?candidate`/`?requisition` pre-select; application-list candidate
+  filter UI; communication→application back-link.
+- **frontend-reviewer** (≈9): all 10 stages explicit in `_stage_badge`; `var(--warn)`/`var(--ok)` instead of hex;
+  sr-only labels + tag-remove aria-label; `role="status"` banners; `<pre>` overflow; comm-list View action.
+- **performance-reviewer** (6): `.distinct()` guard + `.only()` on the tags dropdown; bounded
+  candidate_detail(25)/application_detail(50) reverse-FK loads; `(tenant,created_at)`+`(tenant,applied_at)` indexes.
+  (The flagged "skill-filter duplication" was a false positive — the `Count` annotation's GROUP BY already dedupes;
+  verified empirically.)
+- **security-reviewer** (2 code + deferrals): `@tenant_admin_required` on candidate delete/blacklist/restore +
+  email-template authoring (a raw POST bypassed the template gate); `CandidateTagForm.clean_color` strict hex
+  (CSS-context). Deferred-with-WARNING: rate-limiting on the public endpoints, media `Content-Disposition` hardening.
+
+**Deferred** (see the "Later passes" list above): resume NLP parsing, structured education/experience tables,
+candidate self-service portal, CAPTCHA + rate-limiting, GDPR auto-anonymization, bulk SMS/WhatsApp, a post_save
+auto-send signal, talent-rediscovery AI, candidate comparison, DEI analytics. 3.7 Interview / 3.8 Offer FK into the
+built 3.6 `JobApplication` (`stage="interview"`/`"offer"` are the handoff).
