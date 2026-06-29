@@ -253,4 +253,51 @@ urlpatterns = [
     # Requisition approval steps (3.5) — inline add/remove from the requisition hub
     path("requisitions/<int:jr_pk>/approval/add/", views.approval_add, name="approval_add"),
     path("requisition-approvals/<int:pk>/delete/", views.approval_delete, name="approval_delete"),
+
+    # Candidates (3.6) — CRUD + candidate hub + inline skill/tag actions
+    path("candidates/", views.candidate_list, name="candidate_list"),
+    path("candidates/add/", views.candidate_create, name="candidate_create"),
+    path("candidates/<int:pk>/", views.candidate_detail, name="candidate_detail"),
+    path("candidates/<int:pk>/edit/", views.candidate_edit, name="candidate_edit"),
+    path("candidates/<int:pk>/delete/", views.candidate_delete, name="candidate_delete"),
+    path("candidates/<int:pk>/hire/", views.candidate_mark_hired, name="candidate_mark_hired"),
+    path("candidates/<int:pk>/blacklist/", views.candidate_blacklist, name="candidate_blacklist"),
+    path("candidates/<int:pk>/restore/", views.candidate_restore, name="candidate_restore"),
+    path("candidates/<int:pk>/skills/add/", views.candidate_skill_add, name="candidate_skill_add"),
+    path("candidates/<int:pk>/skills/<int:skill_pk>/delete/", views.candidate_skill_delete, name="candidate_skill_delete"),
+    path("candidates/<int:pk>/tags/add/", views.candidate_tag_add, name="candidate_tag_add"),
+    path("candidates/<int:pk>/tags/<int:tag_pk>/remove/", views.candidate_tag_remove, name="candidate_tag_remove"),
+
+    # Job Applications (3.6) — CRUD + pipeline stage actions + send-email
+    path("applications/", views.application_list, name="application_list"),
+    path("applications/add/", views.application_create, name="application_create"),
+    path("applications/<int:pk>/", views.application_detail, name="application_detail"),
+    path("applications/<int:pk>/edit/", views.application_edit, name="application_edit"),
+    path("applications/<int:pk>/delete/", views.application_delete, name="application_delete"),
+    path("applications/<int:pk>/advance/", views.application_advance_stage, name="application_advance_stage"),
+    path("applications/<int:pk>/reject/", views.application_reject, name="application_reject"),
+    path("applications/<int:pk>/withdraw/", views.application_withdraw, name="application_withdraw"),
+    path("applications/<int:pk>/hold/", views.application_hold, name="application_hold"),
+    path("applications/<int:pk>/send-email/", views.application_send_email, name="application_send_email"),
+
+    # Candidate Tags (3.6) — catalog CRUD (no detail page)
+    path("candidate-tags/", views.candidatetag_list, name="candidatetag_list"),
+    path("candidate-tags/add/", views.candidatetag_create, name="candidatetag_create"),
+    path("candidate-tags/<int:pk>/edit/", views.candidatetag_edit, name="candidatetag_edit"),
+    path("candidate-tags/<int:pk>/delete/", views.candidatetag_delete, name="candidatetag_delete"),
+
+    # Candidate Email Templates (3.6) — CRUD
+    path("candidate-email-templates/", views.emailtemplate_list, name="emailtemplate_list"),
+    path("candidate-email-templates/add/", views.emailtemplate_create, name="emailtemplate_create"),
+    path("candidate-email-templates/<int:pk>/", views.emailtemplate_detail, name="emailtemplate_detail"),
+    path("candidate-email-templates/<int:pk>/edit/", views.emailtemplate_edit, name="emailtemplate_edit"),
+    path("candidate-email-templates/<int:pk>/delete/", views.emailtemplate_delete, name="emailtemplate_delete"),
+
+    # Candidate Communications (3.6) — append-only log (list + detail only)
+    path("candidate-communications/", views.communication_list, name="communication_list"),
+    path("candidate-communications/<int:pk>/", views.communication_detail, name="communication_detail"),
+
+    # Public career portal (3.6) — UNAUTHENTICATED. WARNING: add rate-limiting in production.
+    path("careers/", views.careers_list, name="careers_list"),
+    path("careers/<str:token>/apply/", views.careers_apply, name="careers_apply"),
 ]
