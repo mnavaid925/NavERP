@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Applications{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Applications</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Applications</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:candidate_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Candidates</a>
+      <a href="{% url 'hrm:application_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Application</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, candidate, or requisition…">
+        </div>
+        <div class="form-group">
+          <select name="stage" class="form-select" aria-label="Stage">
+            <option value="">All stages</option>
+            {% for val, label in stage_choices %}
+              <option value="{{ val }}" {% if request.GET.stage == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" class="form-select" aria-label="Source">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="requisition" class="form-select" aria-label="Requisition">
+            <option value="">All requisitions</option>
+            {% for r in requisitions %}
+              <option value="{{ r.pk }}" {% if request.GET.requisition == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }} · {{ r.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:application_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Candidate</th><th>Requisition</th><th>Stage</th><th>Source</th><th>Applied</th><th>Rating</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:application_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'hrm:candidate_detail' obj.candidate.pk %}">{{ obj.candidate.name }}</a><br><span class="text-muted">{{ obj.candidate.email }}</span></td>
+              <td>{{ obj.requisition.title }}</td>
+              <td>{% include "hrm/candidates/_stage_badge.html" with stage=obj.stage label=obj.get_stage_display %}</td>
+              <td>{{ obj.get_source_display }}</td>
+              <td>{{ obj.applied_at|date:"Y-m-d" }}</td>
+              <td>{% if obj.rating %}{{ obj.rating }}/5{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:application_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:application_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'hrm:application_delete' obj.pk %}" onsubmit="return confirm('Delete this application?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="inbox"></i><h3>No applications found</h3><p>Applications arrive via the careers portal or can be added manually.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
