@@ -5,6 +5,7 @@ tenant. Idempotent: a tenant that already has ``EmployeeProfile`` rows is skippe
 duplicate person records. Run after the core/accounts/tenants seeders.
 """
 import datetime
+import secrets
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -42,6 +43,14 @@ from apps.hrm.models import (
     SeparationCase,
     Shift,
     ShiftAssignment,
+)
+from apps.hrm.models import (  # 3.6 Candidate Management
+    CandidateCommunication,
+    CandidateEmailTemplate,
+    CandidateProfile,
+    CandidateSkill,
+    CandidateTag,
+    JobApplication,
 )
 
 # Fallback person names if a tenant has too few persons to staff the demo.
@@ -147,6 +156,7 @@ class Command(BaseCommand):
             self._seed_offboarding(tenant, flush=options["flush"])
             self._seed_employee_records(tenant, flush=options["flush"])
             self._seed_job_requisition(tenant, flush=options["flush"])
+            self._seed_candidates(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -738,3 +748,173 @@ class Command(BaseCommand):
             f"{JobDescriptionTemplate.objects.filter(tenant=tenant).count()} templates, "
             f"{JobRequisition.objects.filter(tenant=tenant).count()} requisitions, "
             f"{RequisitionApproval.objects.filter(tenant=tenant).count()} approval step(s)."))
+
+    @transaction.atomic
+    def _seed_candidates(self, tenant, *, flush):
+        """Seed 3.6 Candidate Management demo data — talent-pool tags, 2 recruiting email templates,
+        6 candidates (each a fresh ``core.Party`` + ``PartyRole(role="candidate")``) with structured
+        skills, 8 applications spread across the pipeline against the already-seeded requisitions, and
+        a couple of logged communications. Also mints ``public_token`` on posted requisitions so the
+        public careers portal resolves. Guarded on CandidateProfile existence (own check)."""
+        if flush:
+            CandidateCommunication.objects.filter(tenant=tenant).delete()
+            JobApplication.objects.filter(tenant=tenant).delete()
+            CandidateSkill.objects.filter(tenant=tenant).delete()
+            cand_party_ids = list(
+                CandidateProfile.objects.filter(tenant=tenant).values_list("party_id", flat=True))
+            CandidateProfile.objects.filter(tenant=tenant).delete()
+            Party.objects.filter(tenant=tenant, id__in=cand_party_ids).delete()
+            CandidateEmailTemplate.objects.filter(tenant=tenant).delete()
+            CandidateTag.objects.filter(tenant=tenant).delete()
+        if CandidateProfile.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Candidate data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        # Mint career-portal tokens on posted requisitions (the seeder sets status directly, bypassing
+        # the post action that would normally mint them).
+        for req in JobRequisition.objects.filter(tenant=tenant, status="posted", public_token=""):
+            req.public_token = secrets.token_urlsafe(32)
+            req.save(update_fields=["public_token"])
+
+        # --- 3 talent-pool tags ---
+        tags = {}
+        for name, color in [("Python Engineers Pool", "#3B82F6"), ("Strong Culture Fit", "#10B981"),
+                            ("Re-engage Later", "#F59E0B")]:
+            tags[name], _ = CandidateTag.objects.get_or_create(
+                tenant=tenant, name=name, defaults={"color": color})
+
+        # --- 2 recruiting email templates ---
+        tmpl_received, _ = CandidateEmailTemplate.objects.get_or_create(
+            tenant=tenant, name="Application Received — Standard",
+            defaults={
+                "template_type": "application_received", "is_active": True, "is_auto_send": True,
+                "subject": "Thank you for applying, {{candidate_name}}",
+                "body_html": ("Dear {{candidate_name}},\n\nThank you for applying for the {{job_title}} "
+                              "position at {{company_name}}. We have received your application "
+                              "({{application_number}}) and will review it shortly.\n\nBest regards,\n"
+                              "{{recruiter_name}}")})
+        CandidateEmailTemplate.objects.get_or_create(
+            tenant=tenant, name="Application Rejected — Standard",
+            defaults={
+                "template_type": "rejection", "is_active": True, "is_auto_send": False,
+                "subject": "Update on your application for {{job_title}}",
+                "body_html": ("Dear {{candidate_name}},\n\nThank you for your interest in the "
+                              "{{job_title}} position at {{company_name}}. After careful consideration, "
+                              "we will not be moving forward with your application at this time.\n\nWe "
+                              "wish you the best in your search.\n\nBest regards,\n{{recruiter_name}}")})
+
+        # --- 6 candidates (fresh Party + candidate role) with structured skills ---
+        cand_specs = [
+            {"first_name": "Alice", "last_name": "Johnson", "email": "alice.johnson@example.com",
+             "phone": "+1-555-0101", "current_job_title": "Senior Software Engineer",
+             "current_employer": "TechCorp", "city": "Austin", "country": "US",
+             "years_of_experience": Decimal("7.0"), "highest_qualification": "masters",
+             "source": "linkedin", "skill_set": "Python, Django, React",
+             "skills": [("Python", "expert"), ("Django", "advanced")]},
+            {"first_name": "Bob", "last_name": "Martinez", "email": "bob.martinez@example.com",
+             "phone": "+1-555-0102", "current_job_title": "Product Manager",
+             "current_employer": "ProductCo", "city": "Denver", "country": "US",
+             "years_of_experience": Decimal("5.0"), "highest_qualification": "bachelors",
+             "source": "referral", "skill_set": "Product Management, Agile",
+             "skills": [("Product Management", "advanced"), ("Agile", "expert")]},
+            {"first_name": "Carol", "last_name": "Singh", "email": "carol.singh@example.com",
+             "phone": "+1-555-0103", "current_job_title": "UX Designer",
+             "current_employer": "DesignStudio", "city": "Seattle", "country": "US",
+             "years_of_experience": Decimal("4.0"), "highest_qualification": "bachelors",
+             "source": "careers_page", "skill_set": "Figma, User Research",
+             "skills": [("Figma", "expert"), ("User Research", "advanced")]},
+            {"first_name": "David", "last_name": "Lee", "email": "david.lee@example.com",
+             "phone": "+1-555-0104", "current_job_title": "DevOps Engineer",
+             "current_employer": "CloudCo", "city": "Portland", "country": "US",
+             "years_of_experience": Decimal("6.0"), "highest_qualification": "bachelors",
+             "source": "indeed", "skill_set": "Docker, Kubernetes",
+             "skills": [("Docker", "expert"), ("Kubernetes", "advanced")]},
+            {"first_name": "Eva", "last_name": "Brown", "email": "eva.brown@example.com",
+             "phone": "+1-555-0105", "current_job_title": "Data Analyst",
+             "current_employer": "DataCorp", "city": "Chicago", "country": "US",
+             "years_of_experience": Decimal("3.0"), "highest_qualification": "masters",
+             "source": "glassdoor", "status": "hired", "skill_set": "SQL, Python",
+             "skills": [("SQL", "advanced"), ("Python", "intermediate")]},
+            {"first_name": "Frank", "last_name": "Wilson", "email": "frank.wilson@example.com",
+             "phone": "+1-555-0106", "current_job_title": "Sales Executive",
+             "current_employer": "SalesCo", "city": "Miami", "country": "US",
+             "years_of_experience": Decimal("8.0"), "highest_qualification": "bachelors",
+             "source": "agency", "skill_set": "CRM, B2B Sales",
+             "skills": [("CRM", "advanced"), ("B2B Sales", "expert")]},
+        ]
+        candidates = []
+        for spec in cand_specs:
+            skills = spec.pop("skills")
+            party = Party.objects.create(
+                tenant=tenant, kind="person", name=f"{spec['first_name']} {spec['last_name']}")
+            PartyRole.objects.get_or_create(tenant=tenant, party=party, role="candidate")
+            cand = CandidateProfile.objects.create(
+                tenant=tenant, party=party, gdpr_consent=True,
+                gdpr_consent_date=timezone.now(), **spec)
+            for skill_name, proficiency in skills:
+                CandidateSkill.objects.create(
+                    tenant=tenant, candidate=cand, skill_name=skill_name,
+                    proficiency=proficiency, source="manual")
+            candidates.append(cand)
+
+        candidates[0].tags.add(tags["Python Engineers Pool"], tags["Strong Culture Fit"])
+        candidates[1].tags.add(tags["Strong Culture Fit"])
+
+        # --- 8 applications across the pipeline (distinct candidate↔requisition pairs) ---
+        reqs = list(JobRequisition.objects.filter(tenant=tenant).order_by("created_at"))
+        applications = []
+        if reqs:
+            def req(i):
+                return reqs[i] if len(reqs) > i else reqs[0]
+
+            # (candidate_idx, req_idx, stage, source, rating, rejection_reason)
+            app_specs = [
+                (0, 0, "interview", "linkedin", 4, ""),
+                (1, 0, "screening", "referral", 3, ""),
+                (2, 0, "applied", "careers_page", None, ""),
+                (3, 0, "phone_screen", "indeed", 4, ""),
+                (4, 0, "hired", "glassdoor", 5, ""),
+                (5, 2, "screening", "agency", 3, ""),
+                (0, 2, "applied", "linkedin", None, ""),
+                (1, 1, "rejected", "referral", 2, "position_filled"),
+            ]
+            for c_idx, r_idx, stage, source, rating, reject in app_specs:
+                defaults = {"stage": stage, "source": source, "rating": rating}
+                if stage not in ("applied",):
+                    defaults["stage_changed_at"] = timezone.now()
+                if stage == "hired":
+                    defaults["hired_on"] = timezone.localdate()
+                if reject:
+                    defaults["rejection_reason"] = reject
+                app, _ = JobApplication.objects.get_or_create(
+                    tenant=tenant, candidate=candidates[c_idx], requisition=req(r_idx),
+                    defaults=defaults)
+                applications.append(app)
+
+        # --- A couple of logged communications on the first application ---
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        if applications:
+            first = applications[0]
+            CandidateCommunication.objects.create(
+                tenant=tenant, candidate=first.candidate, application=first, template=tmpl_received,
+                channel="email", direction="outbound", delivery_status="sent", sent_by=None,
+                subject=f"Thank you for applying, {first.candidate.name}",
+                body=(f"Dear {first.candidate.name},\n\nThank you for applying for the "
+                      f"{first.requisition.title} position at {tenant.name}. We have received your "
+                      f"application ({first.number}) and will review it shortly.\n\nBest regards,\n"
+                      "The hiring team"))
+            CandidateCommunication.objects.create(
+                tenant=tenant, candidate=first.candidate, application=first, channel="email",
+                direction="outbound", delivery_status="sent", sent_by=actor,
+                subject="You've been shortlisted",
+                body=(f"Hi {first.candidate.name},\n\nGreat news — you've been shortlisted for the "
+                      f"{first.requisition.title} role. We'll reach out shortly to schedule a call.\n\n"
+                      "Best,\nRecruiting"))
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Candidates seeded for '{tenant.name}': "
+            f"{CandidateProfile.objects.filter(tenant=tenant).count()} candidates, "
+            f"{JobApplication.objects.filter(tenant=tenant).count()} applications, "
+            f"{CandidateTag.objects.filter(tenant=tenant).count()} tags, "
+            f"{CandidateEmailTemplate.objects.filter(tenant=tenant).count()} email templates."))
