@@ -122,7 +122,10 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Applications</h2>
-      <a href="{% url 'hrm:application_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> New Application</a>
+      <div class="page-actions">
+        <a href="{% url 'hrm:application_list' %}?candidate={{ obj.pk }}" class="btn btn-outline"><i data-lucide="list"></i> View All</a>
+        <a href="{% url 'hrm:application_create' %}?candidate={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> New Application</a>
+      </div>
     </div>
     <div class="card-body">
       <div class="table-wrap">
