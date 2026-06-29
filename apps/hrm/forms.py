@@ -620,6 +620,10 @@ class JobApplicationForm(TenantModelForm):
         if self.tenant is not None:
             self.fields["candidate"].queryset = (
                 CandidateProfile.objects.filter(tenant=self.tenant).order_by("-created_at"))
+            # Explicit tenant scope (not just the TenantModelForm base) — a recruiter can only file an
+            # application against a requisition in their own workspace.
+            self.fields["requisition"].queryset = (
+                JobRequisition.objects.filter(tenant=self.tenant).order_by("-created_at"))
             self.fields["referred_by"].queryset = (
                 EmployeeProfile.objects.filter(tenant=self.tenant)
                 .select_related("party").order_by("party__name"))
