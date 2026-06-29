@@ -7,6 +7,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * the leave-request workflow actions (submit / approve / reject / cancel),
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
+import secrets
 from datetime import date as _date
 from decimal import Decimal
 
@@ -17,12 +18,16 @@ from django.db import IntegrityError, transaction
 from django.db.models import (Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list
+from django.conf import settings
+from django.core.mail import send_mail
+
+from apps.core.crud import crud_create, crud_delete, crud_detail, crud_edit, crud_list
 from apps.core.decorators import tenant_admin_required
-from apps.core.models import Employment, OrgUnit
+from apps.core.models import Employment, OrgUnit, Party, PartyRole
 from apps.core.utils import write_audit_log
 
 from .services import (
@@ -63,14 +68,38 @@ from .forms import (
     ShiftAssignmentForm,
     ShiftForm,
 )
+from .forms import (  # 3.6 Candidate Management
+    CandidateEmailTemplateForm,
+    CandidateProfileForm,
+    CandidateSkillForm,
+    CandidateTagForm,
+    JobApplicationForm,
+    PublicApplicationForm,
+)
 from .models import (
+    APPLICATION_STAGE_CHOICES,
+    APPLICATION_TERMINAL_STAGES,
+    CANDIDATE_GENDER_CHOICES,
+    CANDIDATE_SOURCE_CHOICES,
+    CANDIDATE_STATUS_CHOICES,
+    COMMUNICATION_CHANNEL_CHOICES,
+    DELIVERY_STATUS_CHOICES,
+    EMAIL_TEMPLATE_TYPE_CHOICES,
     EMPLOYMENT_TYPE_CHOICES,
     JR_STATUS_CHOICES,
     LIFECYCLE_EVENT_TYPE_CHOICES,
     PHASE_CHOICES,
     PRIORITY_CHOICES,
+    QUALIFICATION_CHOICES,
+    REJECTION_REASON_CHOICES,
     REQ_TYPE_CHOICES,
     TASK_CATEGORY_CHOICES,
+    CandidateCommunication,
+    CandidateEmailTemplate,
+    CandidateProfile,
+    CandidateSkill,
+    CandidateTag,
+    JobApplication,
     AssetAllocation,
     AttendanceRecord,
     ClearanceItem,
@@ -2653,7 +2682,12 @@ def jobrequisition_post(request, pk):
         return redirect("hrm:jobrequisition_detail", pk=obj.pk)
     obj.status = "posted"
     obj.posted_at = timezone.now()
-    obj.save(update_fields=["status", "posted_at", "updated_at"])
+    fields = ["status", "posted_at", "updated_at"]
+    # Mint the public careers-portal token once (3.6) so the posted opening gets a shareable apply URL.
+    if not obj.public_token:
+        obj.public_token = secrets.token_urlsafe(32)
+        fields.append("public_token")
+    obj.save(update_fields=fields)
     write_audit_log(request.user, obj, "update", {"action": "post"})
     messages.success(request, f"Requisition {obj.number} posted.")
     return redirect("hrm:jobrequisition_detail", pk=obj.pk)
@@ -2748,3 +2782,603 @@ def jobrequisition_clone(request, pk):
     write_audit_log(request.user, new_req, "create", {"cloned_from": source.number})
     messages.success(request, f"Requisition cloned from {source.number} as {new_req.number}.")
     return redirect("hrm:jobrequisition_detail", pk=new_req.pk)
+
+
+# ===========================================================================
+# 3.6 Candidate Management — candidates, applications, tags, email templates,
+# communications, and the public career portal.
+# ===========================================================================
+
+# Stage → the auto-send template type fired when an application advances into that stage.
+_STAGE_AUTO_TEMPLATE = {
+    "screening": "shortlisted",
+    "phone_screen": "phone_screen_invite",
+    "assessment": "assessment_invite",
+    "interview": "interview_invite",
+    "offer": "offer",
+}
+
+
+def _user_display(user):
+    if user is None:
+        return ""
+    return user.get_full_name() or user.get_username()
+
+
+def _apply_merge(text, ctx):
+    for key, value in ctx.items():
+        text = text.replace(key, str(value))
+    return text
+
+
+def _send_candidate_email(application, *, template=None, template_type=None, subject=None, body=None,
+                          sent_by=None):
+    """Render merge fields, send a candidate email (console backend in dev), and log an append-only
+    ``CandidateCommunication``. Honors ``do_not_contact`` (skips, returns None). Resolves a template by
+    instance or by an active type. Returns the logged row, or None when nothing was sent."""
+    candidate = application.candidate
+    if candidate.do_not_contact:
+        return None
+    tenant = application.tenant
+    if template is None and template_type:
+        template = (CandidateEmailTemplate.objects
+                    .filter(tenant=tenant, template_type=template_type, is_active=True)
+                    .order_by("pk").first())
+    if subject is None and template is not None:
+        subject = template.subject
+    if body is None and template is not None:
+        body = template.body_html
+    if not body:
+        return None
+    ctx = {
+        "{{candidate_name}}": candidate.name,
+        "{{job_title}}": application.requisition.title,
+        "{{company_name}}": getattr(tenant, "name", ""),
+        "{{recruiter_name}}": _user_display(sent_by) or "the hiring team",
+        "{{application_number}}": application.number or "",
+    }
+    subject = _apply_merge(subject or "", ctx)
+    body = _apply_merge(body, ctx)
+    status = "sent"
+    try:
+        sent = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [candidate.email], fail_silently=True)
+        status = "sent" if sent else "failed"
+    except Exception:  # pragma: no cover — never let a mail failure 500 the request
+        status = "failed"
+    return CandidateCommunication.objects.create(
+        tenant=tenant, candidate=candidate, application=application, template=template,
+        channel="email", direction="outbound", subject=subject[:500], body=body,
+        sent_by=sent_by, delivery_status=status)
+
+
+def _auto_send_for_stage(application, stage, sent_by):
+    """Fire the matching ``is_auto_send`` template (if any) for a stage transition."""
+    template_type = _STAGE_AUTO_TEMPLATE.get(stage)
+    if not template_type:
+        return
+    template = (CandidateEmailTemplate.objects
+                .filter(tenant=application.tenant, template_type=template_type,
+                        is_active=True, is_auto_send=True)
+                .order_by("pk").first())
+    if template is not None:
+        _send_candidate_email(application, template=template, sent_by=sent_by)
+
+
+# --------------------------------------------------------------- Candidates (3.6) CRUD + hub
+@login_required
+def candidate_list(request):
+    qs = (CandidateProfile.objects.filter(tenant=request.tenant)
+          .select_related("party").prefetch_related("tags", "skills")
+          .annotate(application_count=Count("applications", distinct=True))
+          .order_by("-created_at"))
+    return crud_list(
+        request, qs, "hrm/candidates/candidate/list.html",
+        search_fields=["first_name", "last_name", "email", "phone", "current_job_title",
+                       "current_employer", "skill_set", "resume_text", "number"],
+        filters=[("status", "status", False), ("source", "source", False),
+                 ("gender", "gender", False), ("qualification", "highest_qualification", False),
+                 ("tag", "tags__id", True), ("skill", "skills__skill_name__icontains", False)],
+        extra_context={
+            "status_choices": CANDIDATE_STATUS_CHOICES,
+            "source_choices": CANDIDATE_SOURCE_CHOICES,
+            "gender_choices": CANDIDATE_GENDER_CHOICES,
+            "qualification_choices": QUALIFICATION_CHOICES,
+            "tags": CandidateTag.objects.filter(tenant=request.tenant),
+        },
+    )
+
+
+@login_required
+def candidate_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = CandidateProfileForm(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            cd = form.cleaned_data
+            with transaction.atomic():
+                party = Party.objects.create(
+                    tenant=request.tenant, kind="person",
+                    name=f"{cd['first_name']} {cd['last_name']}".strip())
+                PartyRole.objects.create(tenant=request.tenant, party=party, role="candidate")
+                obj = form.save(commit=False)
+                obj.tenant = request.tenant
+                obj.party = party
+                obj.save()
+                form.save_m2m()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Candidate {obj.number} created.")
+            return redirect("hrm:candidate_detail", pk=obj.pk)
+    else:
+        form = CandidateProfileForm(tenant=request.tenant)
+    return render(request, "hrm/candidates/candidate/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def candidate_detail(request, pk):
+    obj = get_object_or_404(
+        CandidateProfile.objects.filter(tenant=request.tenant).select_related("party", "sourced_by"),
+        pk=pk)
+    applications = (obj.applications.select_related("requisition").order_by("-applied_at"))
+    communications = (obj.communications.select_related("template", "sent_by").order_by("-sent_at")[:20])
+    return render(request, "hrm/candidates/candidate/detail.html", {
+        "obj": obj,
+        "skills": obj.skills.all(),
+        "applications": applications,
+        "communications": communications,
+        "candidate_tags": obj.tags.all(),
+        "all_tags": CandidateTag.objects.filter(tenant=request.tenant),
+        "skill_form": CandidateSkillForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def candidate_edit(request, pk):
+    obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    if request.method == "POST":
+        form = CandidateProfileForm(request.POST, request.FILES, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            # Keep the Party display name in sync with the denormalized candidate name.
+            new_name = obj.name
+            if obj.party_id and obj.party.name != new_name:
+                obj.party.name = new_name
+                obj.party.save(update_fields=["name"])
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Candidate updated.")
+            return redirect("hrm:candidate_detail", pk=obj.pk)
+    else:
+        form = CandidateProfileForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/candidates/candidate/form.html",
+                  {"form": form, "obj": obj, "is_edit": True})
+
+
+@login_required
+@require_POST
+def candidate_delete(request, pk):
+    obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant)
+                            .select_related("party"), pk=pk)
+    party = obj.party
+    write_audit_log(request.user, obj, "delete")
+    with transaction.atomic():
+        # The candidate Party is dedicated (minted per candidate); deleting it cascades the profile,
+        # its PartyRole, skills, applications and communications in one shot.
+        if party_has_only_candidate_role(party):
+            party.delete()
+        else:
+            obj.delete()
+    messages.success(request, "Candidate deleted.")
+    return redirect("hrm:candidate_list")
+
+
+def party_has_only_candidate_role(party):
+    roles = set(party.roles.values_list("role", flat=True))
+    return roles <= {"candidate"}
+
+
+@login_required
+@require_POST
+def candidate_mark_hired(request, pk):
+    obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    obj.status = "hired"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "mark_hired"})
+    messages.success(request, f"{obj.name} marked as hired.")
+    return redirect("hrm:candidate_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def candidate_blacklist(request, pk):
+    obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    obj.status = "blacklisted"
+    obj.do_not_contact = True
+    obj.save(update_fields=["status", "do_not_contact", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "blacklist"})
+    messages.success(request, f"{obj.name} blacklisted and marked do-not-contact.")
+    return redirect("hrm:candidate_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def candidate_restore(request, pk):
+    obj = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    obj.status = "active"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "restore"})
+    messages.success(request, f"{obj.name} restored to active.")
+    return redirect("hrm:candidate_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def candidate_skill_add(request, pk):
+    candidate = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    form = CandidateSkillForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        cd = form.cleaned_data
+        CandidateSkill.objects.get_or_create(
+            candidate=candidate, skill_name=cd["skill_name"],
+            defaults={"tenant": request.tenant, "proficiency": cd["proficiency"],
+                      "source": cd["source"]})
+        messages.success(request, "Skill added.")
+    else:
+        messages.error(request, "Enter a skill name.")
+    return redirect("hrm:candidate_detail", pk=candidate.pk)
+
+
+@login_required
+@require_POST
+def candidate_skill_delete(request, pk, skill_pk):
+    candidate = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    skill = get_object_or_404(CandidateSkill, pk=skill_pk, candidate=candidate, tenant=request.tenant)
+    skill.delete()
+    messages.success(request, "Skill removed.")
+    return redirect("hrm:candidate_detail", pk=candidate.pk)
+
+
+@login_required
+@require_POST
+def candidate_tag_add(request, pk):
+    candidate = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    tag = get_object_or_404(CandidateTag, pk=request.POST.get("tag"), tenant=request.tenant)
+    candidate.tags.add(tag)
+    messages.success(request, f'Tag "{tag.name}" added.')
+    return redirect("hrm:candidate_detail", pk=candidate.pk)
+
+
+@login_required
+@require_POST
+def candidate_tag_remove(request, pk, tag_pk):
+    candidate = get_object_or_404(CandidateProfile.objects.filter(tenant=request.tenant), pk=pk)
+    tag = get_object_or_404(CandidateTag, pk=tag_pk, tenant=request.tenant)
+    candidate.tags.remove(tag)
+    messages.success(request, f'Tag "{tag.name}" removed.')
+    return redirect("hrm:candidate_detail", pk=candidate.pk)
+
+
+# --------------------------------------------------------------- Job Applications (3.6)
+@login_required
+def application_list(request):
+    qs = (JobApplication.objects.filter(tenant=request.tenant)
+          .select_related("candidate", "requisition", "referred_by__party"))
+    return crud_list(
+        request, qs, "hrm/candidates/application/list.html",
+        search_fields=["number", "candidate__first_name", "candidate__last_name",
+                       "candidate__email", "requisition__title", "requisition__number"],
+        filters=[("stage", "stage", False), ("source", "source", False),
+                 ("requisition", "requisition_id", True), ("candidate", "candidate_id", True)],
+        extra_context={
+            "stage_choices": APPLICATION_STAGE_CHOICES,
+            "source_choices": CANDIDATE_SOURCE_CHOICES,
+            "requisitions": JobRequisition.objects.filter(tenant=request.tenant).only("pk", "number", "title"),
+        },
+    )
+
+
+@login_required
+def application_create(request):
+    return crud_create(
+        request, form_class=JobApplicationForm,
+        template="hrm/candidates/application/form.html",
+        success_url="hrm:application_list")
+
+
+@login_required
+def application_detail(request, pk):
+    obj = get_object_or_404(
+        JobApplication.objects.filter(tenant=request.tenant)
+        .select_related("candidate__party", "requisition", "referred_by__party"), pk=pk)
+    return render(request, "hrm/candidates/application/detail.html", {
+        "obj": obj,
+        "communications": obj.communications.select_related("template", "sent_by").order_by("-sent_at"),
+        "email_templates": CandidateEmailTemplate.objects.filter(tenant=request.tenant, is_active=True),
+        "stage_choices": APPLICATION_STAGE_CHOICES,
+        "rejection_reason_choices": REJECTION_REASON_CHOICES,
+    })
+
+
+@login_required
+def application_edit(request, pk):
+    return crud_edit(
+        request, model=JobApplication, pk=pk, form_class=JobApplicationForm,
+        template="hrm/candidates/application/form.html",
+        success_url="hrm:application_list")
+
+
+@login_required
+@require_POST
+def application_delete(request, pk):
+    return crud_delete(request, model=JobApplication, pk=pk, success_url="hrm:application_list")
+
+
+@login_required
+@require_POST
+def application_advance_stage(request, pk):
+    obj = get_object_or_404(
+        JobApplication.objects.filter(tenant=request.tenant).select_related("candidate", "requisition"),
+        pk=pk)
+    new_stage = request.POST.get("new_stage", "")
+    valid = dict(APPLICATION_STAGE_CHOICES)
+    if new_stage not in valid:
+        messages.error(request, "Invalid stage.")
+        return redirect("hrm:application_detail", pk=obj.pk)
+    if obj.stage in APPLICATION_TERMINAL_STAGES:
+        messages.error(request, "This application is closed. Reopen it before changing the stage.")
+        return redirect("hrm:application_detail", pk=obj.pk)
+    obj.stage = new_stage
+    obj.stage_changed_at = timezone.now()
+    fields = ["stage", "stage_changed_at", "updated_at"]
+    if new_stage == "hired":
+        obj.hired_on = _date.today()
+        fields.append("hired_on")
+        if obj.candidate.status != "hired":
+            obj.candidate.status = "hired"
+            obj.candidate.save(update_fields=["status", "updated_at"])
+    obj.save(update_fields=fields)
+    write_audit_log(request.user, obj, "update", {"action": "advance_stage", "stage": new_stage})
+    _auto_send_for_stage(obj, new_stage, request.user)
+    messages.success(request, f"Application moved to {valid[new_stage]}.")
+    return redirect("hrm:application_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def application_reject(request, pk):
+    obj = get_object_or_404(
+        JobApplication.objects.filter(tenant=request.tenant).select_related("candidate", "requisition"),
+        pk=pk)
+    reason = request.POST.get("rejection_reason", "")
+    if reason and reason not in dict(REJECTION_REASON_CHOICES):
+        reason = "other"
+    obj.stage = "rejected"
+    obj.stage_changed_at = timezone.now()
+    obj.rejection_reason = reason
+    obj.rejection_notes = request.POST.get("rejection_notes", "").strip()
+    obj.save(update_fields=["stage", "stage_changed_at", "rejection_reason", "rejection_notes", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reject", "reason": reason})
+    template = (CandidateEmailTemplate.objects
+                .filter(tenant=request.tenant, template_type="rejection", is_active=True, is_auto_send=True)
+                .order_by("pk").first())
+    if template is not None:
+        _send_candidate_email(obj, template=template, sent_by=request.user)
+    messages.success(request, "Application rejected.")
+    return redirect("hrm:application_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def application_withdraw(request, pk):
+    obj = get_object_or_404(JobApplication.objects.filter(tenant=request.tenant), pk=pk)
+    obj.stage = "withdrawn"
+    obj.stage_changed_at = timezone.now()
+    obj.save(update_fields=["stage", "stage_changed_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "withdraw"})
+    messages.success(request, "Application withdrawn.")
+    return redirect("hrm:application_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def application_hold(request, pk):
+    obj = get_object_or_404(
+        JobApplication.objects.filter(tenant=request.tenant).select_related("candidate", "requisition"),
+        pk=pk)
+    obj.stage = "on_hold"
+    obj.stage_changed_at = timezone.now()
+    obj.save(update_fields=["stage", "stage_changed_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "hold"})
+    template = (CandidateEmailTemplate.objects
+                .filter(tenant=request.tenant, template_type="on_hold", is_active=True, is_auto_send=True)
+                .order_by("pk").first())
+    if template is not None:
+        _send_candidate_email(obj, template=template, sent_by=request.user)
+    messages.success(request, "Application placed on hold.")
+    return redirect("hrm:application_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def application_send_email(request, pk):
+    obj = get_object_or_404(
+        JobApplication.objects.filter(tenant=request.tenant).select_related("candidate", "requisition"),
+        pk=pk)
+    if obj.candidate.do_not_contact:
+        messages.error(request, "This candidate is marked do-not-contact; email not sent.")
+        return redirect("hrm:application_detail", pk=obj.pk)
+    template = None
+    template_id = request.POST.get("template_id")
+    if template_id:
+        template = CandidateEmailTemplate.objects.filter(
+            tenant=request.tenant, pk=template_id).first()
+    subject = request.POST.get("subject", "").strip() or None
+    body = request.POST.get("body", "").strip() or None
+    if not body and template is None:
+        messages.error(request, "Pick a template or write a message body.")
+        return redirect("hrm:application_detail", pk=obj.pk)
+    comm = _send_candidate_email(obj, template=template, subject=subject, body=body, sent_by=request.user)
+    if comm is None:
+        messages.error(request, "Nothing to send.")
+    else:
+        write_audit_log(request.user, comm, "create", {"to": obj.candidate.email})
+        messages.success(request, f"Email sent to {obj.candidate.name}.")
+    return redirect("hrm:application_detail", pk=obj.pk)
+
+
+# --------------------------------------------------------------- Candidate Tags (3.6)
+@login_required
+def candidatetag_list(request):
+    return crud_list(
+        request, CandidateTag.objects.filter(tenant=request.tenant)
+        .annotate(candidate_count=Count("candidates", distinct=True)).order_by("name"),
+        "hrm/candidates/tag/list.html",
+        search_fields=["name", "description"])
+
+
+@login_required
+def candidatetag_create(request):
+    return crud_create(request, form_class=CandidateTagForm, template="hrm/candidates/tag/form.html",
+                       success_url="hrm:candidatetag_list")
+
+
+@login_required
+def candidatetag_edit(request, pk):
+    return crud_edit(request, model=CandidateTag, pk=pk, form_class=CandidateTagForm,
+                     template="hrm/candidates/tag/form.html", success_url="hrm:candidatetag_list")
+
+
+@login_required
+@require_POST
+def candidatetag_delete(request, pk):
+    return crud_delete(request, model=CandidateTag, pk=pk, success_url="hrm:candidatetag_list")
+
+
+# --------------------------------------------------------------- Candidate Email Templates (3.6)
+@login_required
+def emailtemplate_list(request):
+    return crud_list(
+        request, CandidateEmailTemplate.objects.filter(tenant=request.tenant),
+        "hrm/candidates/emailtemplate/list.html",
+        search_fields=["name", "subject", "number"],
+        filters=[("type", "template_type", False), ("active", "is_active", False)],
+        extra_context={"type_choices": EMAIL_TEMPLATE_TYPE_CHOICES})
+
+
+@login_required
+def emailtemplate_create(request):
+    return crud_create(request, form_class=CandidateEmailTemplateForm,
+                       template="hrm/candidates/emailtemplate/form.html",
+                       success_url="hrm:emailtemplate_list")
+
+
+@login_required
+def emailtemplate_detail(request, pk):
+    return crud_detail(request, model=CandidateEmailTemplate, pk=pk,
+                       template="hrm/candidates/emailtemplate/detail.html")
+
+
+@login_required
+def emailtemplate_edit(request, pk):
+    return crud_edit(request, model=CandidateEmailTemplate, pk=pk, form_class=CandidateEmailTemplateForm,
+                     template="hrm/candidates/emailtemplate/form.html",
+                     success_url="hrm:emailtemplate_list")
+
+
+@login_required
+@require_POST
+def emailtemplate_delete(request, pk):
+    return crud_delete(request, model=CandidateEmailTemplate, pk=pk, success_url="hrm:emailtemplate_list")
+
+
+# --------------------------------------------------------------- Candidate Communications (3.6, read-only)
+@login_required
+def communication_list(request):
+    return crud_list(
+        request, CandidateCommunication.objects.filter(tenant=request.tenant)
+        .select_related("candidate", "application", "sent_by"),
+        "hrm/candidates/communication/list.html",
+        search_fields=["number", "subject", "body", "candidate__first_name", "candidate__last_name"],
+        filters=[("channel", "channel", False), ("status", "delivery_status", False),
+                 ("candidate", "candidate_id", True)],
+        extra_context={
+            "channel_choices": COMMUNICATION_CHANNEL_CHOICES,
+            "delivery_status_choices": DELIVERY_STATUS_CHOICES,
+            "candidates": CandidateProfile.objects.filter(tenant=request.tenant)
+            .only("pk", "first_name", "last_name", "number"),
+        })
+
+
+@login_required
+def communication_detail(request, pk):
+    return crud_detail(request, model=CandidateCommunication, pk=pk,
+                       template="hrm/candidates/communication/detail.html",
+                       select_related=("candidate", "application", "template", "sent_by"))
+
+
+# --------------------------------------------------------------- Public career portal (3.6, UNAUTHENTICATED)
+# WARNING: these two views are intentionally login-free. The requisition's unguessable public_token is
+# the bearer credential. Add per-IP rate-limiting (django-ratelimit) / WAF throttling in production to
+# stop scripted application floods. CSRF is enforced by the form's {% csrf_token %}; tenant-authored
+# text is rendered ESCAPED by the templates.
+def careers_list(request):
+    """Public job board for ONE tenant, resolved via ``?tenant=<slug>`` (no cross-tenant listing)."""
+    slug = request.GET.get("tenant", "").strip()
+    tenant_obj = None
+    requisitions = JobRequisition.objects.none()
+    # Anonymous visitors pin the tenant via ?tenant=<slug>; a logged-in staff member with no slug
+    # sees their own workspace's openings (so the sidebar "Public Careers Page" link isn't blank).
+    if not slug and getattr(request, "tenant", None) is not None:
+        tenant_obj = request.tenant
+        slug = request.tenant.slug
+    elif slug:
+        from apps.core.models import Tenant
+        tenant_obj = Tenant.objects.filter(slug=slug, is_active=True).first()
+    if tenant_obj is not None:
+        requisitions = (JobRequisition.objects
+                        .filter(tenant=tenant_obj, status="posted",
+                                posting_type__in=["external", "both"])
+                        .select_related("department", "designation").order_by("-posted_at"))
+    return render(request, "hrm/candidates/careers_list.html", {
+        "tenant_obj": tenant_obj, "slug": slug, "requisitions": requisitions,
+        "submitted": request.GET.get("submitted") == "1"})
+
+
+def careers_apply(request, token):
+    """Public application page for one posted requisition (resolved by its public_token)."""
+    req = get_object_or_404(
+        JobRequisition.objects.select_related("tenant", "department"),
+        public_token=token, status="posted")
+    form = PublicApplicationForm()
+    if request.method == "POST":
+        form = PublicApplicationForm(request.POST, request.FILES)
+        if form.is_valid():
+            cd = form.cleaned_data
+            with transaction.atomic():
+                candidate = (CandidateProfile.objects
+                             .filter(tenant=req.tenant, email__iexact=cd["email"]).first())
+                if candidate is None:
+                    party = Party.objects.create(
+                        tenant=req.tenant, kind="person",
+                        name=f"{cd['first_name']} {cd['last_name']}".strip())
+                    PartyRole.objects.create(tenant=req.tenant, party=party, role="candidate")
+                    candidate = CandidateProfile.objects.create(
+                        tenant=req.tenant, party=party, first_name=cd["first_name"],
+                        last_name=cd["last_name"], email=cd["email"], phone=cd["phone"],
+                        linkedin_url=cd["linkedin_url"], city=cd["city"], source=cd["source"],
+                        resume_file=cd["resume_file"])
+                if cd["gdpr_consent"] and not candidate.gdpr_consent:
+                    candidate.gdpr_consent = True
+                    candidate.gdpr_consent_date = timezone.now()
+                    candidate.save(update_fields=["gdpr_consent", "gdpr_consent_date", "updated_at"])
+                application, created = JobApplication.objects.get_or_create(
+                    tenant=req.tenant, candidate=candidate, requisition=req,
+                    defaults={"source": "careers_page", "cover_letter_text": cd["cover_letter_text"]})
+            if not created:
+                messages.info(request, "You have already applied for this position.")
+            else:
+                write_audit_log(None, application, "create", {"via": "careers_portal"})
+                _send_candidate_email(application, template_type="application_received", sent_by=None)
+            return redirect(f"{reverse('hrm:careers_apply', args=[token])}?submitted=1")
+    return render(request, "hrm/candidates/careers_apply.html", {
+        "req": req, "form": form, "submitted": request.GET.get("submitted") == "1"})
