@@ -1943,6 +1943,8 @@ class CandidateProfile(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="hrm_cand_tenant_status_idx"),
             models.Index(fields=["tenant", "source"], name="hrm_cand_tenant_source_idx"),
             models.Index(fields=["tenant", "do_not_contact"], name="hrm_cand_tenant_dnc_idx"),
+            # Supports the default ``-created_at`` ordering of the candidate list under the tenant filter.
+            models.Index(fields=["tenant", "created_at"], name="hrm_cand_tenant_created_idx"),
         ]
 
     @property
@@ -2013,6 +2015,8 @@ class JobApplication(TenantNumbered):
             models.Index(fields=["tenant", "source"], name="hrm_app_tenant_source_idx"),
             models.Index(fields=["tenant", "requisition"], name="hrm_app_tenant_req_idx"),
             models.Index(fields=["tenant", "candidate"], name="hrm_app_tenant_cand_idx"),
+            # Supports the default ``-applied_at`` ordering of the application list under the tenant filter.
+            models.Index(fields=["tenant", "applied_at"], name="hrm_app_tenant_applied_idx"),
         ]
 
     def clean(self):
