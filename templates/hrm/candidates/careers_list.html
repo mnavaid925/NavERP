@@ -1,0 +1,38 @@
+{% extends "base_auth.html" %}
+{% block title %}{% if tenant_obj %}Careers at {{ tenant_obj.name }}{% else %}Careers{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if tenant_obj %}Open Positions at {{ tenant_obj.name }}{% else %}Careers{% endif %}</h1>
+      {% if tenant_obj %}<p style="color:var(--text-muted);">Browse our current openings and apply online.</p>{% endif %}
+    </div>
+  </div>
+
+  {% if submitted %}
+    <div class="card" style="border-left:4px solid #10b981;"><div class="card-body"><i data-lucide="check-circle"></i> Application submitted — thank you! We'll be in touch.</div></div>
+  {% endif %}
+
+  {% if not tenant_obj %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="building"></i><h3>Pick a company</h3><p>Add <code>?tenant=&lt;workspace-slug&gt;</code> to this URL to view a company's open roles (e.g. <code>?tenant=acme</code>).</p></div>
+    </div></div>
+  {% else %}
+    {% for r in requisitions %}
+      <div class="card">
+        <div class="card-body">
+          <h2 class="card-title">{{ r.title }}</h2>
+          <p style="color:var(--text-muted);">
+            {% if r.department %}{{ r.department.name }} · {% endif %}{{ r.get_employment_type_display }}{% if r.location %} · {{ r.location }}{% endif %}
+            {% if r.posted_at %} · Posted {{ r.posted_at|date:"M j, Y" }}{% endif %}
+          </p>
+          {% if r.jd_summary %}<p>{{ r.jd_summary|truncatewords:40 }}</p>{% endif %}
+          <a href="{% url 'hrm:careers_apply' r.public_token %}" class="btn btn-primary"><i data-lucide="send"></i> Apply Now</a>
+        </div>
+      </div>
+    {% empty %}
+      <div class="card"><div class="card-body">
+        <div class="empty-state"><i data-lucide="briefcase"></i><h3>No open positions right now</h3><p>Please check back soon.</p></div>
+      </div></div>
+    {% endfor %}
+  {% endif %}
+{% endblock %}
