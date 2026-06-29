@@ -31,6 +31,14 @@ from .models import (
     Shift,
     ShiftAssignment,
 )
+from .models import (  # 3.6 Candidate Management
+    CandidateCommunication,
+    CandidateEmailTemplate,
+    CandidateProfile,
+    CandidateSkill,
+    CandidateTag,
+    JobApplication,
+)
 
 
 @admin.register(JobGrade)
@@ -317,3 +325,73 @@ class RequisitionApprovalAdmin(admin.ModelAdmin):
     search_fields = ("requisition__number", "approver__username")
     readonly_fields = ("status", "decided_at", "decided_by", "created_at", "updated_at")
     raw_id_fields = ("requisition", "approver", "decided_by")
+
+
+# --------------------------------------------------------------------- 3.6 Candidate Management
+class CandidateSkillInline(admin.TabularInline):
+    model = CandidateSkill
+    extra = 0
+    raw_id_fields = ("candidate",)
+
+
+@admin.register(CandidateTag)
+class CandidateTagAdmin(admin.ModelAdmin):
+    list_display = ("name", "color", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("name", "description")
+
+
+@admin.register(CandidateProfile)
+class CandidateProfileAdmin(admin.ModelAdmin):
+    list_display = ("number", "first_name", "last_name", "email", "status", "source",
+                    "do_not_contact", "tenant", "created_at")
+    list_filter = ("status", "source", "gender", "highest_qualification", "do_not_contact", "tenant")
+    search_fields = ("number", "first_name", "last_name", "email")
+    readonly_fields = ("number", "status", "gdpr_consent_date", "created_at", "updated_at")
+    raw_id_fields = ("party", "sourced_by")
+    filter_horizontal = ("tags",)
+    inlines = [CandidateSkillInline]
+
+
+@admin.register(CandidateSkill)
+class CandidateSkillAdmin(admin.ModelAdmin):
+    list_display = ("candidate", "skill_name", "proficiency", "source", "tenant")
+    list_filter = ("source", "proficiency", "tenant")
+    search_fields = ("skill_name", "candidate__first_name", "candidate__last_name")
+    raw_id_fields = ("candidate",)
+
+
+@admin.register(JobApplication)
+class JobApplicationAdmin(admin.ModelAdmin):
+    list_display = ("number", "candidate", "requisition", "stage", "source", "rating",
+                    "applied_at", "tenant")
+    list_filter = ("stage", "source", "tenant")
+    search_fields = ("number", "candidate__first_name", "candidate__email", "requisition__title")
+    readonly_fields = ("number", "stage", "stage_changed_at", "hired_on", "applied_at",
+                       "created_at", "updated_at")
+    raw_id_fields = ("candidate", "requisition", "referred_by")
+
+
+@admin.register(CandidateEmailTemplate)
+class CandidateEmailTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "template_type", "is_active", "is_auto_send", "tenant")
+    list_filter = ("template_type", "is_active", "is_auto_send", "tenant")
+    search_fields = ("number", "name", "subject")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(CandidateCommunication)
+class CandidateCommunicationAdmin(admin.ModelAdmin):
+    """Append-only log — visible in admin for support, but add/change are blocked."""
+
+    list_display = ("number", "candidate", "channel", "subject", "delivery_status", "sent_by", "sent_at")
+    list_filter = ("channel", "direction", "delivery_status", "tenant")
+    search_fields = ("number", "subject", "candidate__first_name", "candidate__last_name")
+    readonly_fields = ("number", "sent_at", "created_at", "updated_at")
+    raw_id_fields = ("candidate", "application", "template", "sent_by")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
