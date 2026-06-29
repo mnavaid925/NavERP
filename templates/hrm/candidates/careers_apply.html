@@ -1,0 +1,42 @@
+{% extends "base_auth.html" %}
+{% block title %}Apply · {{ req.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ req.title }}</h1>
+      <p style="color:var(--text-muted);">{{ req.tenant.name }}{% if req.department %} · {{ req.department.name }}{% endif %}{% if req.location %} · {{ req.location }}{% endif %}</p>
+    </div>
+  </div>
+
+  {% if submitted %}
+    <div class="card" style="border-left:4px solid #10b981;"><div class="card-body">
+      <div class="empty-state"><i data-lucide="check-circle"></i><h3>Thank you for applying!</h3><p>We've received your application for {{ req.title }} and will be in touch.</p></div>
+    </div></div>
+  {% else %}
+    {% if req.jd_summary %}
+      <div class="card"><div class="card-body"><h2 class="card-title">About the Role</h2><p>{{ req.jd_summary|linebreaksbr }}</p>
+        {% if req.jd_responsibilities %}<h3>Responsibilities</h3><p>{{ req.jd_responsibilities|linebreaksbr }}</p>{% endif %}
+        {% if req.jd_requirements %}<h3>Requirements</h3><p>{{ req.jd_requirements|linebreaksbr }}</p>{% endif %}
+      </div></div>
+    {% endif %}
+
+    <div class="card"><div class="card-body">
+      <h2 class="card-title">Apply</h2>
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group"{% if field.name == "cover_letter_text" or field.name == "gdpr_consent" %} style="grid-column:1/-1;"{% endif %}>
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "resume_file" %}<div class="form-help">PDF, DOC or DOCX, up to 10 MB.</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit Application</button></div>
+      </form>
+    </div></div>
+  {% endif %}
+{% endblock %}
