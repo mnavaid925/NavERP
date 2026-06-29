@@ -7,7 +7,9 @@
       <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:candidate_list' %}">Candidates</a><span class="sep">›</span><span>Email Templates</span></div>
     </div>
     <div class="page-actions">
-      <a href="{% url 'hrm:emailtemplate_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Template</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'hrm:emailtemplate_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Template</a>
+      {% endif %}
     </div>
   </div>
 
@@ -52,8 +54,8 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'hrm:emailtemplate_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'hrm:emailtemplate_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                   {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <a href="{% url 'hrm:emailtemplate_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                     <form method="post" action="{% url 'hrm:emailtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template?');">
                       {% csrf_token %}
                       <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
