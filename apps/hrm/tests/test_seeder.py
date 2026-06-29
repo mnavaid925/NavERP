@@ -79,7 +79,11 @@ class TestSeedHRM:
 
         self._run_seeder()
 
-        count_after = Party.objects.filter(tenant=tenant_a, kind="person").count()
+        # Exclude candidate-role persons: 3.6 candidates are genuinely new applicants (not existing
+        # staff), so the candidate seeder DOES mint fresh person Parties for them — by design. This
+        # test asserts the *employee* seeding reuses the existing persons rather than duplicating them.
+        count_after = (Party.objects.filter(tenant=tenant_a, kind="person")
+                       .exclude(roles__role="candidate").count())
         # The seeder should have reused the existing persons and added AT MOST 0 new ones
         # (it needs at least 4, we pre-created 5 so no new persons needed)
         assert count_after == count_before
