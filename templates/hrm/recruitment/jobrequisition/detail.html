@@ -83,6 +83,15 @@
         <div class="detail-item"><dt>Approved</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Posted</dt><dd>{{ obj.posted_at|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Filled</dt><dd>{{ obj.filled_at|default:"—" }}</dd></div>
+        {% if obj.public_token %}
+          <div class="detail-item" style="grid-column:1/-1;">
+            <dt>Public Apply URL <span class="text-muted">(3.6 careers portal)</span></dt>
+            <dd>
+              <a href="{% url 'hrm:careers_apply' obj.public_token %}" target="_blank" rel="noopener noreferrer">{{ request.scheme }}://{{ request.get_host }}{% url 'hrm:careers_apply' obj.public_token %}</a>
+              &nbsp;<a href="{% url 'hrm:careers_list' %}?tenant={{ request.tenant.slug }}" class="btn btn-outline" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i> Job Board</a>
+            </dd>
+          </div>
+        {% endif %}
       </dl>
     </div>
   </div>
@@ -205,6 +214,35 @@
       <div class="card-body">{{ obj.notes|linebreaksbr }}</div>
     </div>
   {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Applications <span class="badge badge-muted">{{ application_count }}</span></h2>
+      <div class="page-actions">
+        <a href="{% url 'hrm:application_create' %}?requisition={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add Application</a>
+        <a href="{% url 'hrm:application_list' %}?requisition={{ obj.pk }}" class="btn btn-outline"><i data-lucide="list"></i> View All</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Candidate</th><th>Stage</th><th>Applied</th></tr></thead>
+          <tbody>
+            {% for a in applications %}
+              <tr>
+                <td><a href="{% url 'hrm:application_detail' a.pk %}" class="fw-600">{{ a.number }}</a></td>
+                <td><a href="{% url 'hrm:candidate_detail' a.candidate.pk %}">{{ a.candidate.name }}</a></td>
+                <td>{% include "hrm/candidates/_stage_badge.html" with stage=a.stage label=a.get_stage_display %}</td>
+                <td>{{ a.applied_at|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="inbox"></i><h3>No applications yet</h3><p>Applicants arrive via the public careers portal, or add one manually.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <a href="{% url 'hrm:jobrequisition_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
