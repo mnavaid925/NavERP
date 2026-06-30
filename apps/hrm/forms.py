@@ -746,11 +746,20 @@ class InterviewFeedbackForm(TenantModelForm):
             self.fields["interview"].queryset = (
                 Interview.objects.filter(tenant=self.tenant)
                 .select_related("application__candidate").order_by("-scheduled_at"))
-            # On the edit path the interview is fixed, so scope the panelist picker to that interview's
-            # panel. On create the interview isn't known until POST, so the full tenant list is shown and
-            # clean() (below) rejects a cross-interview pick server-side.
+            # Scope the panelist picker to the chosen interview's panel: on edit the interview is fixed;
+            # on create it comes from ?interview= (initial) or the bound POST (data). When it can't be
+            # resolved (or is junk), fall back to the full tenant list — clean() (below) still rejects a
+            # cross-interview pick server-side, and the isdigit guard stops a hand-edited ?interview=abc
+            # from raising ValueError while building the queryset.
+            interview_id = None
             if self.instance and self.instance.pk and self.instance.interview_id:
-                panel_qs = InterviewPanelist.objects.filter(interview=self.instance.interview)
+                interview_id = self.instance.interview_id
+            else:
+                raw = (self.initial or {}).get("interview") or (self.data or {}).get("interview")
+                if raw and str(raw).isdigit():
+                    interview_id = int(raw)
+            if interview_id:
+                panel_qs = InterviewPanelist.objects.filter(interview_id=interview_id, tenant=self.tenant)
             else:
                 panel_qs = InterviewPanelist.objects.filter(tenant=self.tenant)
             self.fields["panelist"].queryset = (
