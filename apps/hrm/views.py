@@ -3584,8 +3584,8 @@ def interview_edit(request, pk):
                   {"form": form, "obj": obj, "is_edit": True})
 
 
-@login_required
-@require_POST
+@tenant_admin_required  # destructive — cascades panelists, scorecards and criteria; matches the
+@require_POST           # admin-only delete button in the templates (security-review #2)
 def interview_delete(request, pk):
     return crud_delete(request, model=Interview, pk=pk, success_url="hrm:interview_list")
 
@@ -3839,8 +3839,8 @@ def interviewfeedback_edit(request, pk):
                   {"form": form, "obj": obj, "is_edit": True})
 
 
-@login_required
-@require_POST
+@tenant_admin_required  # a submitted scorecard is an auditable attestation; admin-only delete to match
+@require_POST           # the template's gated delete button (security-review #2)
 def interviewfeedback_delete(request, pk):
     return crud_delete(request, model=InterviewFeedback, pk=pk, success_url="hrm:interviewfeedback_list")
 
