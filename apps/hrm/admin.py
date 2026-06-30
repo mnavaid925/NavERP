@@ -39,6 +39,12 @@ from .models import (  # 3.6 Candidate Management
     CandidateTag,
     JobApplication,
 )
+from .models import (  # 3.7 Interview Process
+    FeedbackCriterion,
+    Interview,
+    InterviewFeedback,
+    InterviewPanelist,
+)
 
 
 @admin.register(JobGrade)
@@ -395,3 +401,59 @@ class CandidateCommunicationAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+# --------------------------------------------------------------------- 3.7 Interview Process
+class InterviewPanelistInline(admin.TabularInline):
+    model = InterviewPanelist
+    extra = 0
+    readonly_fields = ("notified_at", "created_at", "updated_at")
+    raw_id_fields = ("interviewer",)
+
+
+@admin.register(Interview)
+class InterviewAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "application", "round_number", "mode", "status",
+                    "scheduled_at", "tenant")
+    list_filter = ("status", "mode", "video_provider", "tenant")
+    search_fields = ("number", "title", "application__number",
+                     "application__candidate__first_name", "application__candidate__last_name")
+    readonly_fields = ("number", "status", "scheduled_by", "reminder_sent_at",
+                       "feedback_reminder_sent_at", "created_at", "updated_at")
+    raw_id_fields = ("application", "scheduled_by")
+    inlines = [InterviewPanelistInline]
+
+
+@admin.register(InterviewPanelist)
+class InterviewPanelistAdmin(admin.ModelAdmin):
+    list_display = ("interview", "interviewer", "role", "rsvp_status", "notified_at", "tenant")
+    list_filter = ("role", "rsvp_status", "tenant")
+    search_fields = ("interview__number", "interviewer__username")
+    readonly_fields = ("notified_at", "created_at", "updated_at")
+    raw_id_fields = ("interview", "interviewer")
+
+
+class FeedbackCriterionInline(admin.TabularInline):
+    model = FeedbackCriterion
+    extra = 0
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(InterviewFeedback)
+class InterviewFeedbackAdmin(admin.ModelAdmin):
+    list_display = ("number", "interview", "overall_recommendation", "is_submitted",
+                    "submitted_by", "submitted_at", "tenant")
+    list_filter = ("overall_recommendation", "is_submitted", "tenant")
+    search_fields = ("number", "summary", "interview__number")
+    readonly_fields = ("number", "submitted_by", "submitted_at", "created_at", "updated_at")
+    raw_id_fields = ("interview", "panelist", "submitted_by")
+    inlines = [FeedbackCriterionInline]
+
+
+@admin.register(FeedbackCriterion)
+class FeedbackCriterionAdmin(admin.ModelAdmin):
+    list_display = ("feedback", "criterion_name", "rating", "tenant")
+    list_filter = ("rating", "tenant")
+    search_fields = ("criterion_name", "feedback__number")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("feedback",)
