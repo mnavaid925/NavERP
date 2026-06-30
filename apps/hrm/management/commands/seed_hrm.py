@@ -52,6 +52,12 @@ from apps.hrm.models import (  # 3.6 Candidate Management
     CandidateTag,
     JobApplication,
 )
+from apps.hrm.models import (  # 3.7 Interview Process
+    FeedbackCriterion,
+    Interview,
+    InterviewFeedback,
+    InterviewPanelist,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -157,6 +163,7 @@ class Command(BaseCommand):
             self._seed_employee_records(tenant, flush=options["flush"])
             self._seed_job_requisition(tenant, flush=options["flush"])
             self._seed_candidates(tenant, flush=options["flush"])
+            self._seed_interviews(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -919,3 +926,96 @@ class Command(BaseCommand):
             f"{JobApplication.objects.filter(tenant=tenant).count()} applications, "
             f"{CandidateTag.objects.filter(tenant=tenant).count()} tags, "
             f"{CandidateEmailTemplate.objects.filter(tenant=tenant).count()} email templates."))
+
+    def _seed_interviews(self, tenant, *, flush):
+        """Seed 3.7 Interview Process demo data — interview-invite/reminder email templates, 2 interviews
+        (a completed video round + an upcoming in-person round) scheduled on existing 3.6 applications,
+        1–2 panelists each, and a submitted scorecard with 3 rating criteria on the completed round.
+        Reuses existing JobApplication rows + tenant Users — no duplicate masters. Guarded on Interview
+        existence; skipped (with a notice) if the tenant has no applications yet."""
+        from datetime import timedelta
+
+        if flush:
+            Interview.objects.filter(tenant=tenant).delete()  # cascades panelists/feedback/criteria
+        if Interview.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Interview data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        # Prefer applications already in/past the interview stage; fall back to any application.
+        apps_qs = list(JobApplication.objects.filter(
+            tenant=tenant, stage__in=["phone_screen", "assessment", "interview", "offer", "hired"]
+        ).select_related("candidate", "requisition").order_by("applied_at")[:2])
+        if not apps_qs:
+            apps_qs = list(JobApplication.objects.filter(tenant=tenant)
+                           .select_related("candidate", "requisition").order_by("applied_at")[:2])
+        if not apps_qs:
+            self.stdout.write(self.style.NOTICE(
+                f"No applications for '{tenant.name}' — skipping interview seed (seed candidates first)."))
+            return
+
+        # Recruiting email templates the invite/reminder send-actions resolve (idempotent).
+        CandidateEmailTemplate.objects.get_or_create(
+            tenant=tenant, name="Interview Invitation — Standard",
+            defaults={
+                "template_type": "interview_invite", "is_active": True, "is_auto_send": False,
+                "subject": "Interview invitation for {{job_title}}",
+                "body_html": ("Dear {{candidate_name}},\n\nWe'd like to invite you to interview for the "
+                              "{{job_title}} role at {{company_name}}. The details are below.\n\nBest "
+                              "regards,\n{{recruiter_name}}")})
+        CandidateEmailTemplate.objects.get_or_create(
+            tenant=tenant, name="Interview Reminder — Standard",
+            defaults={
+                "template_type": "interview_reminder", "is_active": True, "is_auto_send": False,
+                "subject": "Reminder: your interview for {{job_title}}",
+                "body_html": ("Hi {{candidate_name}},\n\nA friendly reminder about your upcoming interview "
+                              "for the {{job_title}} role. The details are below.\n\nSee you then,\n"
+                              "{{recruiter_name}}")})
+
+        users = list(get_user_model().objects.filter(tenant=tenant, is_active=True).order_by("id")[:3])
+        actor = users[0] if users else None
+        now = timezone.now()
+
+        intv_specs = [
+            {"title": "Technical Round", "round_number": 1, "mode": "video", "status": "completed",
+             "video_provider": "zoom", "meeting_url": "https://zoom.us/j/1234567890",
+             "location": "", "delta_days": -2, "duration": 60, "make_feedback": True,
+             "reco": "yes", "summary": "Strong technical depth; clear communicator.",
+             "criteria": [("Technical Skills", 4), ("Problem Solving", 5), ("Communication", 4)]},
+            {"title": "HR / Culture-fit Round", "round_number": 2, "mode": "in_person",
+             "status": "scheduled", "video_provider": "", "meeting_url": "",
+             "location": "Meeting Room 2, HQ", "delta_days": 4, "duration": 45, "make_feedback": False,
+             "reco": "", "summary": "", "criteria": []},
+        ]
+        for i, spec in enumerate(intv_specs):
+            application = apps_qs[i % len(apps_qs)]
+            interview = Interview.objects.create(
+                tenant=tenant, application=application, title=spec["title"],
+                round_number=spec["round_number"], mode=spec["mode"], status=spec["status"],
+                scheduled_at=now + timedelta(days=spec["delta_days"]), duration_minutes=spec["duration"],
+                location=spec["location"], video_provider=spec["video_provider"],
+                meeting_url=spec["meeting_url"], scheduled_by=actor,
+                interviewer_instructions="Focus on role-relevant competencies; use structured questions.")
+            panel = []
+            for j, role in [(0, "lead"), (1, "interviewer")]:
+                if len(users) > j:
+                    panelist, _ = InterviewPanelist.objects.get_or_create(
+                        interview=interview, interviewer=users[j],
+                        defaults={"tenant": tenant, "role": role, "rsvp_status": "accepted",
+                                  "notified_at": now})
+                    panel.append(panelist)
+            if spec["make_feedback"]:
+                feedback = InterviewFeedback.objects.create(
+                    tenant=tenant, interview=interview, panelist=panel[0] if panel else None,
+                    submitted_by=actor, overall_recommendation=spec["reco"], summary=spec["summary"],
+                    is_submitted=True, submitted_at=now)
+                for crit_name, rating in spec["criteria"]:
+                    FeedbackCriterion.objects.create(
+                        tenant=tenant, feedback=feedback, criterion_name=crit_name, rating=rating)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Interviews seeded for '{tenant.name}': "
+            f"{Interview.objects.filter(tenant=tenant).count()} interviews, "
+            f"{InterviewPanelist.objects.filter(tenant=tenant).count()} panelists, "
+            f"{InterviewFeedback.objects.filter(tenant=tenant).count()} scorecards, "
+            f"{FeedbackCriterion.objects.filter(tenant=tenant).count()} criteria."))
