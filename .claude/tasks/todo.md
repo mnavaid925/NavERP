@@ -1688,5 +1688,47 @@ already exist — no new files needed.
 
 ---
 
-## Review notes
-(filled in at close-out)
+## Review notes — HRM 3.7 Interview Process (close-out)
+
+**Delivered (one sub-module, per the build unit).** 4 tenant-scoped models on the existing 3.6 `JobApplication`
+spine: `Interview` [INTV-] (round + mode + 7-status workflow machine + video link + reminder stamps),
+`InterviewPanelist` (interviewer seat + role + RSVP, inline), `InterviewFeedback` [IFB-] (per-panelist scorecard,
+5-level recommendation, action-only submit), `FeedbackCriterion` (1–5 per-competency rating, inline). Full CRUD +
+status machine (confirm/start/complete/cancel/no_show + terminal guard + reschedule-reopen), panel add/remove/RSVP,
+candidate invite/reminder (reuse `_send_candidate_email` + `CandidateCommunication`, honor `do_not_contact`), panel
+feedback-request, scorecard submit + inline criteria. Wired: `LIVE_LINKS["3.7"]` (5 bullets; Video Interview deep-
+links `?mode=video`), idempotent `_seed_interviews`, migrations `0014`+`0015`, 8 templates (`interview/` submodule).
+
+**Verification.** `manage.py check` clean; migrate clean to `nav_erp`; seed idempotent (2 interviews / 4 panelists /
+1 scorecard / 3 criteria per tenant); my smoke test (9 routes 200/302, IDOR→404, no leaks); qa-smoke-tester 49/49
+PASS (GET + POST-action + IDOR sweep); test-writer **141 new tests**, full HRM suite **1,297 passed / 0 failed**
+(3,944 project-wide), zero regressions, no product bugs.
+
+**Review-agent sequence (all 7 ran).**
+- `code-reviewer` — 2 critical + 4 important fixed: scorecard could be un-submitted via the edit form (removed
+  `is_submitted` from the form — submit is action-only); no one-scorecard-per-panelist constraint (added
+  `unique_together (interview,panelist)`, portable on MariaDB via NULL-distinct UNIQUE); edits now land on the detail
+  hub with `_form_changes` audit diffs; dropped an unused `feedback_count` annotation; module-level `parse_datetime`;
+  past-time reschedule warning.
+- `explorer` — clean (URL/arg, context-var, FK-null guards, LIVE_LINKS, badge choices all consistent).
+- `frontend-reviewer` — 3 applied (reschedule label `for`/`id`; `<p>`→`<div>` button wrapper; `.text-muted` for
+  status confirmations). `avg_rating` flag was a false positive (the detail view passes it as a context var; `obj`
+  isn't annotated there). `th-actions`/sub-table-empty nits left as app-wide reference patterns (L28).
+- `performance-reviewer` — clean across all 8 categories (every loop FK `select_related`, all counts/averages are SQL
+  annotations, composite indexes cover every filter+sort, dropdowns select_related their `__str__` traversals).
+- `qa-smoke-tester` — 49/49 pass, no code changes needed.
+- `security-reviewer` — no Critical/High; 3 hardening fixes applied: a new reusable `core` `|safe_external_url` filter
+  guards the `meeting_url` href against `javascript:`/`data:` (defense-in-depth beyond URLField); `interview_delete`
+  + `interviewfeedback_delete` gated to `@tenant_admin_required` (matched the templates' admin-only buttons); create-
+  path panelist dropdown scoped to the selected interview (clean() backstop retained).
+- `test-writer` — the 141-test suite above (covers the 4 flagged gaps: edit-can't-unsubmit, cross-interview
+  panelist, reschedule-reopen, no-template email fallback; + IDOR, admin-gated deletes, the URL-safety filter).
+
+**Deferred (carried forward, see the skill's Deferred section):** live calendar OAuth + ICS; Zoom/Teams/Meet auto-
+link generation; candidate self-scheduling portal; SMS/WhatsApp reminders; one-way async video capture; AI scorecard
+summarization + AI video scoring; interviewer load-balancing; interview-kit/question-bank catalog; strict queryset-
+level feedback blinding; admin-gated scorecard edit window; and the Celery beat task for timed reminder dispatch
+(reminders/invites are manual actions; `reminder_sent_at`/`feedback_reminder_sent_at` record the last send).
+
+**Next sub-module:** 3.8 Offer Management (FKs into the built `JobApplication`; an offer follows a completed 3.7
+interview/scorecards).
