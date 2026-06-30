@@ -1,0 +1,2 @@
+{% comment %}Interview recommendation badge. Usage: {% include "hrm/interview/_reco_badge.html" with reco=obj.overall_recommendation label=obj.get_overall_recommendation_display %}
+All 5 RECOMMENDATION_CHOICES are named explicitly; an unknown value falls through to muted.{% endcomment %}<span class="badge badge-{% if reco == 'strong_yes' or reco == 'yes' %}green{% elif reco == 'maybe' %}amber{% elif reco == 'no' or reco == 'strong_no' %}red{% else %}muted{% endif %}">{{ label }}</span>
