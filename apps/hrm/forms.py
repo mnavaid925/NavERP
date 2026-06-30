@@ -64,6 +64,12 @@ from .models import (  # noqa: E402  — 3.6 Candidate Management
     CandidateTag,
     JobApplication,
 )
+from .models import (  # noqa: E402  — 3.7 Interview Process
+    FeedbackCriterion,
+    Interview,
+    InterviewFeedback,
+    InterviewPanelist,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -689,3 +695,71 @@ def _validate_resume(f):
         # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve uploads with
         # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
     return f
+
+
+# ----------------------------------------------------------------------- 3.7 Interview Process
+class InterviewForm(TenantModelForm):
+    # SECURITY/workflow: `status` (state machine), `scheduled_by` (set to request.user in the view),
+    # `reminder_sent_at`/`feedback_reminder_sent_at` (stamped by the send-reminder actions) are OUT of
+    # the form. `scheduled_at` gets the round-tripping datetime-local widget from TenantModelForm.
+    class Meta:
+        model = Interview
+        fields = ["application", "title", "round_number", "mode", "scheduled_at", "duration_minutes",
+                  "location", "video_provider", "meeting_url", "interviewer_instructions", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            # select_related the dropdown's __str__ traversal (candidate + requisition) to avoid an
+            # N+1 per option; the base already tenant-scopes the queryset.
+            self.fields["application"].queryset = (
+                JobApplication.objects.filter(tenant=self.tenant)
+                .select_related("candidate", "requisition").order_by("-applied_at"))
+
+
+class InterviewPanelistForm(TenantModelForm):
+    # Inline-add on the interview detail hub; `interview` is set in the view. `rsvp_status`/`notified_at`
+    # are workflow-owned (the rsvp action / send-invite stamp them).
+    class Meta:
+        model = InterviewPanelist
+        fields = ["interviewer", "role", "briefing_notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["interviewer"].queryset = (
+                get_user_model().objects.filter(tenant=self.tenant, is_active=True).order_by("username"))
+        else:
+            self.fields["interviewer"].queryset = get_user_model().objects.none()
+
+
+class InterviewFeedbackForm(TenantModelForm):
+    # `number` auto; `submitted_by`/`submitted_at` are stamped in the view when `is_submitted` flips.
+    class Meta:
+        model = InterviewFeedback
+        fields = ["interview", "panelist", "overall_recommendation", "summary", "is_submitted"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["interview"].queryset = (
+                Interview.objects.filter(tenant=self.tenant)
+                .select_related("application__candidate").order_by("-scheduled_at"))
+            self.fields["panelist"].queryset = (
+                InterviewPanelist.objects.filter(tenant=self.tenant)
+                .select_related("interviewer", "interview").order_by("interview__pk", "role"))
+        self.fields["panelist"].required = False
+
+
+class FeedbackCriterionForm(TenantModelForm):
+    # Inline-add on the feedback detail hub; `feedback` is set in the view.
+    class Meta:
+        model = FeedbackCriterion
+        fields = ["criterion_name", "rating", "notes"]
+        widgets = {"rating": forms.NumberInput(attrs={"min": 1, "max": 5})}
+
+    def clean_rating(self):
+        rating = self.cleaned_data.get("rating")
+        if rating is not None and not (1 <= rating <= 5):
+            raise forms.ValidationError("Rating must be between 1 and 5.")
+        return rating
