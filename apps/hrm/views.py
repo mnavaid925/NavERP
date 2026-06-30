@@ -20,6 +20,7 @@ from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 
 from django.conf import settings
@@ -3497,13 +3498,18 @@ def _interview_or_404(request, pk):
         .select_related("application__candidate", "application__requisition"), pk=pk)
 
 
+def _form_changes(form):
+    """Compact {field: new_value} of changed fields for the audit log (the 3.7 forms carry no
+    sensitive fields, so no redaction needed — mirrors apps.core.crud._changed)."""
+    return {name: str(form.cleaned_data.get(name))[:200] for name in getattr(form, "changed_data", [])}
+
+
 # --------------------------------------------------------------- Interviews (3.7) CRUD + hub
 @login_required
 def interview_list(request):
     qs = (Interview.objects.filter(tenant=request.tenant)
           .select_related("application__candidate", "application__requisition")
-          .annotate(panelist_count=Count("panelists", distinct=True),
-                    feedback_count=Count("feedback_entries", distinct=True))
+          .annotate(panelist_count=Count("panelists", distinct=True))
           .order_by("-scheduled_at"))  # explicit ordering after annotate (paginator needs it)
     return crud_list(
         request, qs, "hrm/interview/interview/list.html",
@@ -3562,9 +3568,20 @@ def interview_detail(request, pk):
 
 @login_required
 def interview_edit(request, pk):
-    # `status`/`scheduled_by`/reminder stamps aren't on the form, so crud_edit preserves them.
-    return crud_edit(request, model=Interview, pk=pk, form_class=InterviewForm,
-                     template="hrm/interview/interview/form.html", success_url="hrm:interview_list")
+    # `status`/`scheduled_by`/reminder stamps aren't on the form, so they're preserved. Land back on the
+    # detail hub (not the list) so the user can keep managing the panel/status after editing.
+    obj = get_object_or_404(Interview.objects.filter(tenant=request.tenant), pk=pk)
+    if request.method == "POST":
+        form = InterviewForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update", _form_changes(form))
+            messages.success(request, "Interview updated.")
+            return redirect("hrm:interview_detail", pk=obj.pk)
+    else:
+        form = InterviewForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/interview/interview/form.html",
+                  {"form": form, "obj": obj, "is_edit": True})
 
 
 @login_required
@@ -3618,7 +3635,6 @@ def interview_no_show(request, pk):
 @login_required
 @require_POST
 def interview_reschedule(request, pk):
-    from django.utils.dateparse import parse_datetime
     obj = _interview_or_404(request, pk)
     raw = request.POST.get("scheduled_at", "").strip()
     dt = parse_datetime(raw) if raw else None
@@ -3631,7 +3647,10 @@ def interview_reschedule(request, pk):
     obj.status = "rescheduled"  # reopens a closed round so it can proceed again
     obj.save(update_fields=["scheduled_at", "status", "updated_at"])
     write_audit_log(request.user, obj, "update", {"action": "reschedule", "scheduled_at": dt.isoformat()})
-    messages.success(request, "Interview rescheduled.")
+    if dt < timezone.now():
+        messages.warning(request, "Interview rescheduled — note the new time is in the past.")
+    else:
+        messages.success(request, "Interview rescheduled.")
     return redirect("hrm:interview_detail", pk=obj.pk)
 
 
@@ -3778,10 +3797,8 @@ def interviewfeedback_create(request):
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
-            # Stamp the submission metadata if the scorecard is created already-submitted.
-            if obj.is_submitted and obj.submitted_at is None:
-                obj.submitted_at = timezone.now()
-                obj.submitted_by = request.user
+            # Scorecards are created as drafts; submission is the dedicated submit action (stamps
+            # submitted_by/at), so there's no submission metadata to set here.
             obj.save()
             write_audit_log(request.user, obj, "create")
             messages.success(request, f"Scorecard {obj.number} created.")
@@ -3811,12 +3828,9 @@ def interviewfeedback_edit(request, pk):
     if request.method == "POST":
         form = InterviewFeedbackForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save(commit=False)
-            if obj.is_submitted and obj.submitted_at is None:
-                obj.submitted_at = timezone.now()
-                obj.submitted_by = request.user
-            obj.save()
-            write_audit_log(request.user, obj, "update")
+            # `is_submitted` isn't on the form, so editing a submitted card can't un-submit it.
+            obj = form.save()
+            write_audit_log(request.user, obj, "update", _form_changes(form))
             messages.success(request, "Scorecard updated.")
             return redirect("hrm:interviewfeedback_detail", pk=obj.pk)
     else:
