@@ -1,0 +1,2 @@
+{% comment %}Interview status badge. Usage: {% include "hrm/interview/_status_badge.html" with status=obj.status label=obj.get_status_display %}
+All 7 INTERVIEW_STATUS_CHOICES are named explicitly so a new status falls through to muted with intent, not by accident.{% endcomment %}<span class="badge badge-{% if status == 'completed' %}green{% elif status == 'confirmed' %}info{% elif status == 'in_progress' or status == 'rescheduled' %}amber{% elif status == 'cancelled' or status == 'no_show' %}red{% else %}muted{% endif %}">{{ label }}</span>
