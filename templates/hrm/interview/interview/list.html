@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Interviews{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Interviews</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Interviews</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:interviewfeedback_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Scorecards</a>
+      <a href="{% url 'hrm:interview_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Schedule Interview</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, title, candidate, or requisition…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="mode" class="form-select" aria-label="Mode">
+            <option value="">All modes</option>
+            {% for val, label in mode_choices %}
+              <option value="{{ val }}" {% if request.GET.mode == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="application" class="form-select" aria-label="Application">
+            <option value="">All applications</option>
+            {% for a in applications %}
+              <option value="{{ a.pk }}" {% if request.GET.application == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.number }} · {{ a.candidate.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:interview_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Candidate</th><th>Mode</th><th>Scheduled</th><th>Panel</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:interview_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }} <span class="text-muted">· R{{ obj.round_number }}</span></td>
+              <td><a href="{% url 'hrm:candidate_detail' obj.application.candidate.pk %}">{{ obj.application.candidate.name }}</a><br><span class="text-muted">{{ obj.application.requisition.title }}</span></td>
+              <td>{{ obj.get_mode_display }}</td>
+              <td>{{ obj.scheduled_at|date:"Y-m-d H:i" }}</td>
+              <td>{{ obj.panelist_count }}</td>
+              <td>{% include "hrm/interview/_status_badge.html" with status=obj.status label=obj.get_status_display %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:interview_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:interview_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'hrm:interview_delete' obj.pk %}" onsubmit="return confirm('Delete this interview?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="calendar-clock"></i><h3>No interviews found</h3><p>Schedule an interview against a job application to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
