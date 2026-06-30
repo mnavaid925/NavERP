@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load safe_url %}
 {% block title %}{{ obj.number }}{% endblock %}
 {% block content %}
   <div class="page-header">
@@ -58,7 +59,7 @@
         <div class="detail-item"><dt>Mode</dt><dd>{{ obj.get_mode_display }}</dd></div>
         <div class="detail-item"><dt>Scheduled</dt><dd>{{ obj.scheduled_at|date:"Y-m-d H:i" }} ({{ obj.duration_minutes }} min)</dd></div>
         {% if obj.location %}<div class="detail-item"><dt>Location</dt><dd>{{ obj.location }}</dd></div>{% endif %}
-        {% if obj.video_provider %}<div class="detail-item"><dt>Video</dt><dd>{{ obj.get_video_provider_display }}{% if obj.meeting_url %} · <a href="{{ obj.meeting_url }}" target="_blank" rel="noopener noreferrer">Join link</a>{% endif %}</dd></div>{% endif %}
+        {% if obj.video_provider %}<div class="detail-item"><dt>Video</dt><dd>{{ obj.get_video_provider_display }}{% if obj.meeting_url %} · {% with link=obj.meeting_url|safe_external_url %}{% if link %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">Join link</a>{% else %}<span class="text-muted">{{ obj.meeting_url }}</span>{% endif %}{% endwith %}{% endif %}</dd></div>{% endif %}
         <div class="detail-item"><dt>Scheduled By</dt><dd>{% if obj.scheduled_by %}{{ obj.scheduled_by.get_full_name|default:obj.scheduled_by.username }}{% else %}—{% endif %}</dd></div>
         {% if obj.interviewer_instructions %}<div class="detail-item" style="grid-column:1/-1;"><dt>Interviewer Instructions</dt><dd>{{ obj.interviewer_instructions|linebreaksbr }}</dd></div>{% endif %}
         {% if obj.notes %}<div class="detail-item" style="grid-column:1/-1;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>{% endif %}
