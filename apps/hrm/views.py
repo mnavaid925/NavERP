@@ -3503,7 +3503,8 @@ def interview_list(request):
     qs = (Interview.objects.filter(tenant=request.tenant)
           .select_related("application__candidate", "application__requisition")
           .annotate(panelist_count=Count("panelists", distinct=True),
-                    feedback_count=Count("feedback_entries", distinct=True)))
+                    feedback_count=Count("feedback_entries", distinct=True))
+          .order_by("-scheduled_at"))  # explicit ordering after annotate (paginator needs it)
     return crud_list(
         request, qs, "hrm/interview/interview/list.html",
         search_fields=["number", "title", "application__candidate__first_name",
@@ -3750,7 +3751,8 @@ def interviewfeedback_list(request):
     qs = (InterviewFeedback.objects.filter(tenant=request.tenant)
           .select_related("interview__application__candidate", "submitted_by")
           .annotate(avg_rating=Avg("criteria__rating"),
-                    criteria_count=Count("criteria", distinct=True)))
+                    criteria_count=Count("criteria", distinct=True))
+          .order_by("-created_at"))  # explicit ordering after annotate (paginator needs it)
     return crud_list(
         request, qs, "hrm/interview/interviewfeedback/list.html",
         search_fields=["number", "summary", "interview__title",
