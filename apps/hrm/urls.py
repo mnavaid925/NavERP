@@ -300,4 +300,33 @@ urlpatterns = [
     # Public career portal (3.6) — UNAUTHENTICATED. WARNING: add rate-limiting in production.
     path("careers/", views.careers_list, name="careers_list"),
     path("careers/<str:token>/apply/", views.careers_apply, name="careers_apply"),
+
+    # Interviews (3.7) — CRUD + hub + status machine + panel + invite/reminder actions
+    path("interviews/", views.interview_list, name="interview_list"),
+    path("interviews/add/", views.interview_create, name="interview_create"),
+    path("interviews/<int:pk>/", views.interview_detail, name="interview_detail"),
+    path("interviews/<int:pk>/edit/", views.interview_edit, name="interview_edit"),
+    path("interviews/<int:pk>/delete/", views.interview_delete, name="interview_delete"),
+    path("interviews/<int:pk>/confirm/", views.interview_confirm, name="interview_confirm"),
+    path("interviews/<int:pk>/start/", views.interview_start, name="interview_start"),
+    path("interviews/<int:pk>/complete/", views.interview_complete, name="interview_complete"),
+    path("interviews/<int:pk>/cancel/", views.interview_cancel, name="interview_cancel"),
+    path("interviews/<int:pk>/no-show/", views.interview_no_show, name="interview_no_show"),
+    path("interviews/<int:pk>/reschedule/", views.interview_reschedule, name="interview_reschedule"),
+    path("interviews/<int:pk>/panelists/add/", views.interview_panelist_add, name="interview_panelist_add"),
+    path("interviews/<int:pk>/panelists/<int:panelist_pk>/remove/", views.interview_panelist_remove, name="interview_panelist_remove"),
+    path("interviews/<int:pk>/panelists/<int:panelist_pk>/rsvp/", views.interview_panelist_rsvp, name="interview_panelist_rsvp"),
+    path("interviews/<int:pk>/send-invite/", views.interview_send_invite, name="interview_send_invite"),
+    path("interviews/<int:pk>/send-reminder/", views.interview_send_reminder, name="interview_send_reminder"),
+    path("interviews/<int:pk>/request-feedback/", views.interview_request_feedback, name="interview_request_feedback"),
+
+    # Interview feedback / scorecards (3.7) — CRUD + hub + submit + inline criteria
+    path("interview-feedback/", views.interviewfeedback_list, name="interviewfeedback_list"),
+    path("interview-feedback/add/", views.interviewfeedback_create, name="interviewfeedback_create"),
+    path("interview-feedback/<int:pk>/", views.interviewfeedback_detail, name="interviewfeedback_detail"),
+    path("interview-feedback/<int:pk>/edit/", views.interviewfeedback_edit, name="interviewfeedback_edit"),
+    path("interview-feedback/<int:pk>/delete/", views.interviewfeedback_delete, name="interviewfeedback_delete"),
+    path("interview-feedback/<int:pk>/submit/", views.interviewfeedback_submit, name="interviewfeedback_submit"),
+    path("interview-feedback/<int:pk>/criteria/add/", views.feedbackcriterion_add, name="feedbackcriterion_add"),
+    path("interview-feedback/<int:pk>/criteria/<int:criterion_pk>/delete/", views.feedbackcriterion_delete, name="feedbackcriterion_delete"),
 ]
