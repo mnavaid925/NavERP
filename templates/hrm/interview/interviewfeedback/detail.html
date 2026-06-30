@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} {% include "hrm/interview/_reco_badge.html" with reco=obj.overall_recommendation label=obj.get_overall_recommendation_display %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:interviewfeedback_list' %}">Scorecards</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_submitted %}
+        <form method="post" action="{% url 'hrm:interviewfeedback_submit' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Submit</button></form>
+      {% endif %}
+      <a href="{% url 'hrm:interviewfeedback_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:interviewfeedback_delete' obj.pk %}" onsubmit="return confirm('Delete this scorecard?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Scorecard</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Interview</dt><dd><a href="{% url 'hrm:interview_detail' obj.interview.pk %}">{{ obj.interview.number }} · {{ obj.interview.title }}</a></dd></div>
+        <div class="detail-item"><dt>Candidate</dt><dd>{{ obj.interview.application.candidate.name }}</dd></div>
+        <div class="detail-item"><dt>Panelist</dt><dd>{% if obj.panelist %}{{ obj.panelist.interviewer.get_full_name|default:obj.panelist.interviewer.username }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Recommendation</dt><dd>{{ obj.get_overall_recommendation_display }}</dd></div>
+        <div class="detail-item"><dt>Average Rating</dt><dd>{% if avg_rating %}{{ avg_rating|floatformat:1 }}/5{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_submitted %}<span class="badge badge-green">Submitted</span>{% else %}<span class="badge badge-muted">Draft</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Submitted By</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% else %}—{% endif %}</dd></div>
+        {% if obj.submitted_at %}<div class="detail-item"><dt>Submitted At</dt><dd>{{ obj.submitted_at|date:"Y-m-d H:i" }}</dd></div>{% endif %}
+        {% if obj.summary %}<div class="detail-item" style="grid-column:1/-1;"><dt>Summary</dt><dd>{{ obj.summary|linebreaksbr }}</dd></div>{% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rating Criteria</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Criterion</th><th>Rating</th><th>Notes</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for c in criteria %}
+              <tr>
+                <td>{{ c.criterion_name }}</td>
+                <td>{{ c.rating }}/5</td>
+                <td>{{ c.notes|default:"—"|truncatechars:80 }}</td>
+                <td>
+                  <div class="table-actions">
+                    <form method="post" action="{% url 'hrm:feedbackcriterion_delete' obj.pk c.pk %}" onsubmit="return confirm('Remove this criterion?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><span class="text-muted">No criteria rated yet.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <form method="post" action="{% url 'hrm:feedbackcriterion_add' obj.pk %}" style="margin-top:1rem;">
+        {% csrf_token %}
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label" for="{{ criterion_form.criterion_name.id_for_label }}">Criterion</label>{{ criterion_form.criterion_name }}</div>
+          <div class="form-group"><label class="form-label" for="{{ criterion_form.rating.id_for_label }}">Rating (1–5)</label>{{ criterion_form.rating }}</div>
+          <div class="form-group" style="grid-column:1/-1;"><label class="form-label" for="{{ criterion_form.notes.id_for_label }}">Notes</label>{{ criterion_form.notes }}</div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Criterion</button></div>
+      </form>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:interviewfeedback_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
