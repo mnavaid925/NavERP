@@ -1842,6 +1842,7 @@ EMAIL_TEMPLATE_TYPE_CHOICES = [
     ("shortlisted", "Application Shortlisted"),
     ("phone_screen_invite", "Phone Screen Invitation"),
     ("interview_invite", "Interview Invitation"),
+    ("interview_reminder", "Interview Reminder"),
     ("stage_advance", "Advance to Next Stage"),
     ("assessment_invite", "Assessment / Test Invitation"),
     ("rejection", "Application Rejected"),
@@ -2088,3 +2089,207 @@ class CandidateCommunication(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.get_channel_display()} → {self.candidate.name}"
+
+
+# ---------------------------------------------------------------------------
+# 3.7 Interview Process — scheduling, panel assignment, and structured feedback/
+# scorecards. Interviews hang off the 3.6 ``JobApplication`` spine (candidate +
+# requisition are reached through it). Invites/reminders REUSE the 3.6
+# ``CandidateEmailTemplate`` + ``CandidateCommunication`` log via the
+# ``_send_candidate_email`` view helper — no new email model. Live calendar /
+# Zoom-Teams-Meet auto-link / SMS dispatch + AI scoring are DEFERRED (the meeting
+# link is a plain field; reminders are a manual, audited action).
+# ---------------------------------------------------------------------------
+INTERVIEW_MODE_CHOICES = [
+    ("in_person", "In Person"),
+    ("phone", "Phone"),
+    ("video", "Video Call"),
+    ("one_way_video", "One-way Video"),
+]
+
+INTERVIEW_STATUS_CHOICES = [
+    ("scheduled", "Scheduled"),
+    ("confirmed", "Confirmed"),
+    ("in_progress", "In Progress"),
+    ("completed", "Completed"),
+    ("cancelled", "Cancelled"),
+    ("no_show", "No Show"),
+    ("rescheduled", "Rescheduled"),
+]
+
+# Closed statuses an interview can't be transitioned out of without an explicit reschedule
+# (mirrors APPLICATION_TERMINAL_STAGES). A no-show/cancelled round is re-run by rescheduling.
+INTERVIEW_TERMINAL_STATUSES = ("completed", "cancelled", "no_show")
+
+VIDEO_PROVIDER_CHOICES = [
+    ("zoom", "Zoom"),
+    ("teams", "Microsoft Teams"),
+    ("google_meet", "Google Meet"),
+    ("other", "Other"),
+]
+
+PANELIST_ROLE_CHOICES = [
+    ("lead", "Lead Interviewer"),
+    ("interviewer", "Interviewer"),
+    ("shadow", "Shadow / Trainee"),
+    ("observer", "Observer"),
+]
+
+RSVP_STATUS_CHOICES = [
+    ("pending", "Pending"),
+    ("accepted", "Accepted"),
+    ("declined", "Declined"),
+]
+
+# 5-level hire signal (Greenhouse/Zoho convention: Strong No … Strong Yes).
+RECOMMENDATION_CHOICES = [
+    ("strong_no", "Strong No"),
+    ("no", "No"),
+    ("maybe", "Maybe"),
+    ("yes", "Yes"),
+    ("strong_yes", "Strong Yes"),
+]
+
+
+class Interview(TenantNumbered):
+    """A scheduled interview round on a ``JobApplication`` (3.7). ``status`` is the workflow-owned state
+    machine — set only by the status-action POSTs (confirm/start/complete/cancel/no_show/reschedule),
+    never the form (``editable=False``), mirroring ``JobApplication.stage``. Candidate + requisition are
+    reached through ``application``. ``meeting_url``/``video_provider`` hold the video link (live
+    Zoom/Teams/Meet generation deferred); ``reminder_sent_at``/``feedback_reminder_sent_at`` are stamped
+    by the manual send-reminder actions (automated Celery dispatch deferred)."""
+
+    NUMBER_PREFIX = "INTV"
+
+    application = models.ForeignKey("hrm.JobApplication", on_delete=models.CASCADE, related_name="interviews")
+    title = models.CharField(max_length=255, help_text='e.g. "Technical Round 2" or "HR Screen".')
+    round_number = models.PositiveSmallIntegerField(default=1)
+    mode = models.CharField(max_length=20, choices=INTERVIEW_MODE_CHOICES, default="video")
+    status = models.CharField(max_length=20, choices=INTERVIEW_STATUS_CHOICES, default="scheduled",
+                              editable=False)
+    scheduled_at = models.DateTimeField()
+    duration_minutes = models.PositiveSmallIntegerField(default=60)
+    location = models.CharField(max_length=255, blank=True,
+                                help_text="Physical room / address for in-person rounds.")
+    video_provider = models.CharField(max_length=20, choices=VIDEO_PROVIDER_CHOICES, blank=True)
+    meeting_url = models.URLField(blank=True,
+        help_text="Video meeting link (paste from Zoom/Teams/Meet — auto-generation is deferred).")
+    interviewer_instructions = models.TextField(blank=True,
+        help_text="Briefing shown to the panel (focus areas, must-asks).")
+    notes = models.TextField(blank=True)
+    scheduled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                     blank=True, related_name="scheduled_interviews")
+    reminder_sent_at = models.DateTimeField(null=True, blank=True, editable=False)
+    feedback_reminder_sent_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-scheduled_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_intv_tenant_status_idx"),
+            models.Index(fields=["tenant", "mode"], name="hrm_intv_tenant_mode_idx"),
+            models.Index(fields=["tenant", "application"], name="hrm_intv_tenant_app_idx"),
+            # Supports the default ``-scheduled_at`` ordering of the interview list under the tenant filter.
+            models.Index(fields=["tenant", "scheduled_at"], name="hrm_intv_tenant_sched_idx"),
+        ]
+
+    @property
+    def candidate(self):
+        """The interviewee, via the application. Views that list interviews must
+        ``select_related("application__candidate")`` to keep this O(1)."""
+        return self.application.candidate
+
+    @property
+    def requisition(self):
+        """The open position, via the application (select_related in list views)."""
+        return self.application.requisition
+
+    @property
+    def is_closed(self):
+        return self.status in INTERVIEW_TERMINAL_STATUSES
+
+    def __str__(self):
+        return f"{self.number} · {self.title}" if self.number else self.title
+
+
+class InterviewPanelist(TenantOwned):
+    """An interviewer assigned to an ``Interview`` (3.7). Managed inline on the interview detail hub
+    (add/remove/rsvp POST actions) like ``CandidateSkill`` / ``RequisitionApproval`` — no standalone
+    pages. ``role`` labels the panel seat; ``rsvp_status`` tracks the interviewer's acceptance;
+    ``notified_at`` is stamped when an invite is sent. Unique per (interview, interviewer)."""
+
+    interview = models.ForeignKey("hrm.Interview", on_delete=models.CASCADE, related_name="panelists")
+    interviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                    related_name="interview_panels")
+    role = models.CharField(max_length=20, choices=PANELIST_ROLE_CHOICES, default="interviewer")
+    rsvp_status = models.CharField(max_length=20, choices=RSVP_STATUS_CHOICES, default="pending")
+    briefing_notes = models.TextField(blank=True)
+    notified_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["role", "pk"]
+        unique_together = ("interview", "interviewer")
+        indexes = [
+            models.Index(fields=["tenant", "interview"], name="hrm_ipan_tenant_intv_idx"),
+        ]
+
+    def __str__(self):
+        who = self.interviewer.get_full_name() or self.interviewer.username
+        return f"{who} ({self.get_role_display()})"
+
+
+class InterviewFeedback(TenantNumbered):
+    """A structured interview scorecard (3.7) — one per panelist per interview. ``overall_recommendation``
+    is the 5-level hire signal; ``is_submitted`` flips via the submit action (enabling anti-anchoring
+    blinding — strict queryset-level blinding is deferred). Per-competency ratings live in child
+    ``FeedbackCriterion`` rows; averages are annotated/aggregated in the views (no query-in-property)."""
+
+    NUMBER_PREFIX = "IFB"
+
+    interview = models.ForeignKey("hrm.Interview", on_delete=models.CASCADE, related_name="feedback_entries")
+    panelist = models.ForeignKey("hrm.InterviewPanelist", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="+")
+    submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="interview_feedback")
+    overall_recommendation = models.CharField(max_length=20, choices=RECOMMENDATION_CHOICES, default="maybe")
+    summary = models.TextField(blank=True, help_text="Overall impression / key takeaways.")
+    is_submitted = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "interview"], name="hrm_ifb_tenant_intv_idx"),
+            models.Index(fields=["tenant", "overall_recommendation"], name="hrm_ifb_tenant_reco_idx"),
+            models.Index(fields=["tenant", "is_submitted"], name="hrm_ifb_tenant_sub_idx"),
+        ]
+
+    def __str__(self):
+        reco = self.get_overall_recommendation_display()
+        return f"{self.number} · {reco}" if self.number else reco
+
+
+class FeedbackCriterion(TenantOwned):
+    """A per-competency rating line on an ``InterviewFeedback`` scorecard (3.7). Managed inline on the
+    feedback detail (add/remove POSTs) — no standalone pages. ``rating`` is 1–5 (guarded in
+    ``clean()`` and at the form/view layer)."""
+
+    feedback = models.ForeignKey("hrm.InterviewFeedback", on_delete=models.CASCADE, related_name="criteria")
+    criterion_name = models.CharField(max_length=150)
+    rating = models.PositiveSmallIntegerField(help_text="1 (poor) – 5 (excellent).")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["pk"]
+        indexes = [
+            models.Index(fields=["tenant", "feedback"], name="hrm_fcrit_tenant_fb_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.rating is not None and not (1 <= self.rating <= 5):
+            raise ValidationError({"rating": "Rating must be between 1 and 5."})
+
+    def __str__(self):
+        return f"{self.criterion_name}: {self.rating}/5"
