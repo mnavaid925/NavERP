@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -8,7 +8,7 @@ description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designation
 NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix `/hrm/`
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
 3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
-3.9 Attendance Management, 3.10 Leave Management, 3.12 Holiday Management.** Reuses the
+3.7 Interview Process, 3.9 Attendance Management, 3.10 Leave Management, 3.12 Holiday Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -17,7 +17,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 34 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management)
+## Models (`apps/hrm/models.py`) — 38 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -108,6 +108,19 @@ A **candidate is a `core.Party`(person) + `PartyRole(role="candidate")`** (the `
 
 **Public career portal (UNAUTHENTICATED, `apps/hrm/views.py`):** `careers_list` (per-tenant job board — `?tenant=<slug>` for anon, auto-resolves `request.tenant` for staff; only posted reqs with a token) + `careers_apply(token)` (resolves a `status="posted"` req by its unguessable `public_token`, minted in `jobrequisition_post`). POST creates `Party`+`PartyRole(candidate)`+`CandidateProfile`+`JobApplication(source="careers_page")` under **`req.tenant`** in `transaction.atomic()`, dedups the candidate by email + the application by `get_or_create` (no double-apply), stamps `gdpr_consent_date`, fires the `application_received` auto-template, PRG-redirects `?submitted=1`. `# WARNING:` rate-limiting deferred (django-ratelimit) — flagged in code.
 
+### 3.7 Interview Process (4 tables) — scheduling + panel + structured scorecards over the 3.6 application
+
+Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requisition are reached through it — `Interview.candidate`/`requisition` are convenience props that traverse `application`, so list views must `select_related("application__candidate","application__requisition")`). Candidate **invites/reminders REUSE the 3.6 pipeline** — `_send_interview_email` composes a body and calls `_send_candidate_email`, honoring `do_not_contact` and logging a `CandidateCommunication` (no new email model); `EMAIL_TEMPLATE_TYPE_CHOICES` gained `interview_reminder` (alongside the existing `interview_invite`). Migrations: `hrm/0014` (the 4 models + the choice add), `hrm/0015` (the `(interview,panelist)` unique_together).
+
+| Model | Number | Key fields | Reuses core / notes |
+|-------|--------|-----------|---------------------|
+| `Interview` (3.7) | `INTV-` | **application→`JobApplication`(CASCADE)**, title, round_number, mode(in_person/phone/video/one_way_video), **status(editable=False)**, scheduled_at, duration_minutes, location, video_provider(zoom/teams/google_meet/other), meeting_url, interviewer_instructions, notes, scheduled_by→`User`(SET_NULL, set in view), **reminder_sent_at/feedback_reminder_sent_at(editable=False)** | The scheduled round. `INTERVIEW_STATUS_CHOICES` (7): scheduled→confirmed→in_progress→completed (+cancelled/no_show/rescheduled). `INTERVIEW_TERMINAL_STATUSES=(completed,cancelled,no_show)` (reschedule reopens). `@property candidate`/`requisition`/`is_closed`. Indexes (tenant,status)/(tenant,mode)/(tenant,application)/(tenant,scheduled_at). |
+| `InterviewPanelist` (3.7) | — | interview→`Interview`(CASCADE), interviewer→`User`(CASCADE), role(lead/interviewer/shadow/observer), rsvp_status(pending/accepted/declined), briefing_notes, notified_at(editable=False) | **Inline child** of the interview hub (add/remove/rsvp POST actions, no own templates — mirrors `CandidateSkill`/`RequisitionApproval`). `unique_together=(interview,interviewer)`. Index (tenant,interview). |
+| `InterviewFeedback` (3.7) | `IFB-` | interview→`Interview`(CASCADE), panelist→`InterviewPanelist`(SET_NULL, `related_name="+"`), submitted_by→`User`(SET_NULL), overall_recommendation(strong_no/no/maybe/yes/strong_yes), summary, **is_submitted/submitted_at(editable=False)** | Structured scorecard, one per panelist per interview. `unique_together=[(tenant,number),(interview,panelist)]` — the (interview,panelist) UNIQUE allows multiple panelist=NULL cards (MariaDB/SQLite treat NULLs distinct) but rejects a duplicate non-null panelist. **`is_submitted` is workflow-owned** (the `interviewfeedback_submit` action stamps it + submitted_by/at; NOT a form field, so an edit can't un-submit). Indexes (tenant,interview)/(tenant,overall_recommendation)/(tenant,is_submitted). |
+| `FeedbackCriterion` (3.7) | — | feedback→`InterviewFeedback`(CASCADE), criterion_name, rating(1–5), notes | **Inline child** of the scorecard hub (add/remove POST actions, no own templates). `clean()` rejects rating outside 1–5 (also enforced in the form). Index (tenant,feedback). Averages are annotated/aggregated in the views (`Avg("criteria__rating")`), never a query-in-property. |
+
+**Interview flow:** create an `Interview` against an application (status=scheduled; `interview_create` honors `?application=`, stamps `scheduled_by`, lands on the detail hub) → on the hub: **Confirm / Start / Complete / Cancel / No-show** (status machine, blocked once terminal) and **Reschedule** (sets a new `scheduled_at` and reopens a closed round to `rescheduled`); add/remove **panelists** + inline **RSVP**; **Send Invite / Send Reminder** to the candidate (reuse `_send_candidate_email`; reminder stamps `reminder_sent_at`; do_not_contact suppresses) and **Request Feedback** (emails panelist Users best-effort, stamps `feedback_reminder_sent_at`). Scorecards: create an `InterviewFeedback` (draft; `?interview=` pre-select) → add/remove `FeedbackCriterion` rating lines on its hub → **Submit** (stamps is_submitted/submitted_at/submitted_by). **Workflow fields are excluded from every form** — status/scheduled_by/reminder stamps, rsvp/notified_at, is_submitted/submitted_by/submitted_at — set only by the audited POST actions. **Deletes are `@tenant_admin_required`** (auditable records); the rest is `@login_required` (scheduling/feedback are normal recruiter actions). `meeting_url` is rendered through the `core` `|safe_external_url` filter so only http/https schemes become a clickable link (defense-in-depth vs a `javascript:` href).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -162,6 +175,16 @@ A **candidate is a `core.Party`(person) + `PartyRole(role="candidate")`** (the `
   `careers_list` (`/hrm/careers/`) + `careers_apply` (`/hrm/careers/<token>/apply/`). `application_create` honors
   `?candidate=`/`?requisition=` pre-select; the requisition hub links to `application_list?requisition=<pk>` and
   `application_create?requisition=<pk>`.
+- **Interview Process (3.7):** `interview_list/_create/_detail/_edit/_delete` (`/hrm/interviews/`) and
+  `interviewfeedback_list/_create/_detail/_edit/_delete` (`/hrm/interview-feedback/`). **Interview workflow extras
+  (POST-only, `@login_required`):** `interview_confirm/_start/_complete/_cancel/_no_show/_reschedule`;
+  `interview_panelist_add` + `interview_panelist_remove`/`interview_panelist_rsvp` (`/interviews/<pk>/panelists/
+  <panelist_pk>/...`); `interview_send_invite`/`interview_send_reminder`/`interview_request_feedback`. **Scorecard
+  extras:** `interviewfeedback_submit` (POST), `feedbackcriterion_add` + `feedbackcriterion_delete`
+  (`/interview-feedback/<pk>/criteria/<criterion_pk>/delete/`). **`interview_delete` + `interviewfeedback_delete` are
+  `@tenant_admin_required`** (security-review #2); all reads + scheduling/feedback writes are `@login_required`.
+  `interview_create` honors `?application=<pk>`; `interviewfeedback_create` honors `?interview=<pk>` (the interview
+  hub's "Add Scorecard" passes it). Edits redirect to the detail hub.
 
 ## Views (`apps/hrm/views.py`)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
@@ -202,9 +225,19 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   `rejected` (resets the prior chain on re-submit). `jobrequisition_approve_step` advances the lowest pending step
   and flips the req to `approved` when the last clears. `jobrequisition_clone` copies non-workflow fields via
   `_JR_CLONE_FK_FIELDS`/`_JR_CLONE_PLAIN_FIELDS` (status→draft, all `*_at` null).
+- **Interview Process (3.7):** `interview_detail` is the hub — workflow action bar (status buttons + reschedule +
+  send invite/reminder/request-feedback, all do_not_contact/terminal guarded), details, the inline **panel** table
+  (add/remove/RSVP) and the **scorecards** table; lists carry `select_related("application__candidate",
+  "application__requisition")` + a `Count("panelists")` annotation (explicit `.order_by()` after `.annotate()` —
+  L9/UnorderedObjectListWarning). `_transition_interview(request, pk, new_status, msg)` is the shared status helper
+  (terminal-guarded); `_interview_or_404` is the tenant-scoped fetch used by every action; `_send_interview_email`
+  /`_interview_detail_lines` compose the candidate email; `_form_changes(form)` is the local audit-diff helper for
+  the two custom edits. `interviewfeedback_detail` is the scorecard hub (inline criteria add/remove + submit);
+  `interviewfeedback_list` annotates `Avg("criteria__rating")` + `Count("criteria")`. `interviewfeedback_submit`
+  stamps is_submitted/submitted_at/submitted_by; create/edit never set them (is_submitted is off the form).
 
 ## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
-104 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+112 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
 filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — the main employee is single-entity so
 `employee/list.html` etc.; its child entities get their own folders `employee/document/{list,detail,form}.html` and
 `employee/lifecycle/{list,detail,form}.html` — the `budget/line/` child-entity precedent),
@@ -224,6 +257,11 @@ the sub-module level and do NOT extend base.html])**,
 `communication/` [list+detail only]; the reusable `candidates/_stage_badge.html` partial; the public standalone
 pages `candidates/careers_list.html` + `candidates/careers_apply.html` which extend `base_auth.html` (not
 `base.html`); `CandidateSkill` renders inline on the candidate hub, no own templates)**,
+**`interview/` (3.7 — entity folders `interview/` [the hub: inline panel add/remove/RSVP + scorecards table + the
+status/reschedule/invite-reminder action bar] and `interviewfeedback/` [the scorecard hub: inline criteria + submit],
+each with `list/detail/form.html`; the reusable `interview/_status_badge.html` + `interview/_reco_badge.html`
+partials; `InterviewPanelist` + `FeedbackCriterion` render inline on their parent hubs, no own templates. The detail
+hub does `{% load safe_url %}` to render `meeting_url` through `|safe_external_url`)**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
@@ -270,6 +308,15 @@ MB). `JobApplicationForm` excludes `stage`/`stage_changed_at`/`hired_on`/`reject
 into a CSS `style=` attribute. `CandidateEmailTemplateForm` = name/template_type/subject/body_html/is_active/
 is_auto_send. `PublicApplicationForm` is a plain `forms.Form` (no model binding — no mass-assignment surface),
 resume required, `gdpr_consent` required, `clean_resume_file` allowlist.
+**Interview-process form security (3.7):** `InterviewForm` excludes `status`/`scheduled_by`/`reminder_sent_at`/
+`feedback_reminder_sent_at` (workflow-owned) and scopes the `application` dropdown to the tenant (select_related
+candidate+requisition to kill the `__str__` N+1); `scheduled_at` gets the round-tripping `datetime-local` widget.
+`InterviewPanelistForm` excludes `interview`/`rsvp_status`/`notified_at` and scopes `interviewer` to active tenant
+users. `InterviewFeedbackForm` excludes `is_submitted`/`submitted_by`/`submitted_at` (submission is the action-only
+workflow — a form checkbox could un-submit), scopes `panelist` to the selected interview's panel (edit instance, or
+the `?interview=` initial / bound data on create, isdigit-guarded), and `clean()` rejects a panelist that is not on
+the selected interview (the DB `(interview,panelist)` unique is the backstop). `FeedbackCriterionForm` = criterion_
+name/rating/notes with a `NumberInput(min=1,max=5)` widget + `clean_rating` 1–5.
 
 ## Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
@@ -299,6 +346,11 @@ by `_seed_candidates(tenant)` (guarded by its own `CandidateProfile.exists()` ch
 auto-send `application_received`, 1 manual `rejection`), 6 candidates (each a fresh `core.Party`+`PartyRole(role=
 "candidate")`) with 2 skills each + tags on the first two, 8 `JobApplication`s spread across stages against the
 seeded requisitions (`get_or_create` on (candidate,requisition)), and 2 `CandidateCommunication`s on the first app.
+**Interview Process (3.7)** is seeded by `_seed_interviews(tenant)` (guarded by its own `Interview.exists()` check;
+`--flush` cascades from `Interview`): adds 2 recruiting templates (`interview_invite` + `interview_reminder`), then 2
+interviews on existing `JobApplication`s (a completed video round + an upcoming in-person round), 1–2 `InterviewPanelist`s
+each from the tenant Users, and a submitted `InterviewFeedback` scorecard with 3 `FeedbackCriterion` lines on the
+completed round; skipped (with a notice) if the tenant has no applications yet.
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -325,6 +377,11 @@ tenant and sees nothing.
   extras Email Templates → `hrm:emailtemplate_list`, Talent Pool Tags → `hrm:candidatetag_list`, Public Careers
   Page → `hrm:careers_list`. The HRM overview adds 3 clickable recruiting stat cards (open reqs / active
   applications / new candidates); a posted requisition's detail hub shows its applications + the shareable apply URL.
+- 3.7 (all 5 bullets live): Interview Scheduling / Interview Panel / Interview Reminders → `hrm:interview_list`
+  (panel is managed on the interview detail; reminders are detail-page actions — these co-highlight there);
+  Interview Feedback → `hrm:interviewfeedback_list` (the scorecards list); Video Interview →
+  `hrm:interview_list?mode=video` (the video-mode filtered slice — most-specific match highlights it distinctly,
+  suffix handled by `_safe_reverse`).
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
   + Shift Assignments → `hrm:shiftassignment_list`.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
@@ -387,9 +444,18 @@ prod), GDPR auto-anonymization scheduled task (`gdpr_consent_expires` captured n
 matching, side-by-side candidate comparison, and DEI/diversity analytics (`gender` captured now). Uploaded resumes/
 cover-letters are served via the dev `/media/` helper with no `Content-Disposition: attachment` (project-wide
 WARNING — extension-allowlist only, no content sniffing; harden before prod).
+**3.7 interview-process deferrals:** live calendar (Google/Outlook) OAuth sync + ICS invites (`scheduled_at` is set
+manually now), automatic Zoom/Teams/Meet meeting-link generation (`meeting_url` is pasted manually), a candidate
+self-scheduling portal (EasyBook/Calendly-style slot picking), SMS/WhatsApp reminders (only candidate email + a
+best-effort panel email actually send), one-way async video interview capture/playback (`mode="one_way_video"` is a
+label only), AI scorecard summarization + AI video scoring, interviewer load-balancing/auto-assignment, a reusable
+interview-kit / question-bank template catalog, strict queryset-level feedback **blinding** (the `is_submitted` flag
+models the anti-anchoring intent but feedback isn't hidden from other panelists pre-submission), an admin-gated
+scorecard edit window, and the **Celery beat task for timed reminder dispatch** (reminders/invites are manual
+actions; `reminder_sent_at`/`feedback_reminder_sent_at` record the last manual send).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), the rest of recruiting/
-ATS — **3.7 Interview / 3.8 Offer (these FK into the built 3.5 `JobRequisition` / 3.6 `JobApplication`; the
-`stage="interview"`/`"offer"` values are the 3.6→3.7/3.8 handoff)** — plus
+ATS — **3.8 Offer (FKs into the built 3.6 `JobApplication`; the `stage="offer"` value is the 3.6/3.7→3.8 handoff,
+and an offer follows a completed 3.7 `Interview`/scorecards)** — plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
 upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
