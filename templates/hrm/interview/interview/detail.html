@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }} {% include "hrm/interview/_status_badge.html" with status=obj.status label=obj.get_status_display %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:interview_list' %}">Interviews</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:interview_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:interview_delete' obj.pk %}" onsubmit="return confirm('Delete this interview?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+    <div class="card-body">
+      {% if obj.is_closed %}
+        <p class="text-muted">This interview is closed at <strong>{{ obj.get_status_display }}</strong>. Reschedule it below to reopen.</p>
+      {% else %}
+        <div class="filter-bar">
+          <form method="post" action="{% url 'hrm:interview_confirm' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Confirm</button></form>
+          <form method="post" action="{% url 'hrm:interview_start' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="play"></i> Start</button></form>
+          <form method="post" action="{% url 'hrm:interview_complete' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Complete</button></form>
+          <form method="post" action="{% url 'hrm:interview_no_show' obj.pk %}" style="margin:0;" onsubmit="return confirm('Mark the candidate as a no-show?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="user-x"></i> No-show</button></form>
+          <form method="post" action="{% url 'hrm:interview_cancel' obj.pk %}" style="margin:0;" onsubmit="return confirm('Cancel this interview?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Cancel</button></form>
+        </div>
+      {% endif %}
+      <form method="post" action="{% url 'hrm:interview_reschedule' obj.pk %}" class="filter-bar" style="margin-top:1rem;">
+        {% csrf_token %}
+        <div class="form-group"><label class="form-label">New date &amp; time</label><input type="datetime-local" name="scheduled_at" class="form-input" aria-label="New date and time"></div>
+        <button class="btn btn-outline" type="submit"><i data-lucide="calendar-clock"></i> Reschedule</button>
+      </form>
+      <div class="filter-bar" style="margin-top:1rem;">
+        {% if obj.application.candidate.do_not_contact %}
+          <span class="text-muted"><i data-lucide="mail-x"></i> Candidate is marked do-not-contact — invites and reminders are disabled.</span>
+        {% else %}
+          <form method="post" action="{% url 'hrm:interview_send_invite' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="mail"></i> Send Invite</button></form>
+          <form method="post" action="{% url 'hrm:interview_send_reminder' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="bell"></i> Send Reminder</button></form>
+        {% endif %}
+        <form method="post" action="{% url 'hrm:interview_request_feedback' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="clipboard-pen"></i> Request Feedback</button></form>
+      </div>
+      {% if obj.reminder_sent_at %}<p class="form-help" style="margin-top:.5rem;"><i data-lucide="check"></i> Candidate reminder last sent {{ obj.reminder_sent_at|date:"Y-m-d H:i" }}.</p>{% endif %}
+      {% if obj.feedback_reminder_sent_at %}<p class="form-help"><i data-lucide="check"></i> Panel feedback last requested {{ obj.feedback_reminder_sent_at|date:"Y-m-d H:i" }}.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Interview Details</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Candidate</dt><dd><a href="{% url 'hrm:candidate_detail' obj.application.candidate.pk %}">{{ obj.application.candidate.name }}</a></dd></div>
+        <div class="detail-item"><dt>Application</dt><dd><a href="{% url 'hrm:application_detail' obj.application.pk %}">{{ obj.application.number }}</a></dd></div>
+        <div class="detail-item"><dt>Requisition</dt><dd>{{ obj.application.requisition.title }}</dd></div>
+        <div class="detail-item"><dt>Round</dt><dd>{{ obj.round_number }}</dd></div>
+        <div class="detail-item"><dt>Mode</dt><dd>{{ obj.get_mode_display }}</dd></div>
+        <div class="detail-item"><dt>Scheduled</dt><dd>{{ obj.scheduled_at|date:"Y-m-d H:i" }} ({{ obj.duration_minutes }} min)</dd></div>
+        {% if obj.location %}<div class="detail-item"><dt>Location</dt><dd>{{ obj.location }}</dd></div>{% endif %}
+        {% if obj.video_provider %}<div class="detail-item"><dt>Video</dt><dd>{{ obj.get_video_provider_display }}{% if obj.meeting_url %} · <a href="{{ obj.meeting_url }}" target="_blank" rel="noopener noreferrer">Join link</a>{% endif %}</dd></div>{% endif %}
+        <div class="detail-item"><dt>Scheduled By</dt><dd>{% if obj.scheduled_by %}{{ obj.scheduled_by.get_full_name|default:obj.scheduled_by.username }}{% else %}—{% endif %}</dd></div>
+        {% if obj.interviewer_instructions %}<div class="detail-item" style="grid-column:1/-1;"><dt>Interviewer Instructions</dt><dd>{{ obj.interviewer_instructions|linebreaksbr }}</dd></div>{% endif %}
+        {% if obj.notes %}<div class="detail-item" style="grid-column:1/-1;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>{% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Interview Panel</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Interviewer</th><th>Role</th><th>RSVP</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for p in panelists %}
+              <tr>
+                <td>{{ p.interviewer.get_full_name|default:p.interviewer.username }}</td>
+                <td>{{ p.get_role_display }}</td>
+                <td>
+                  <form method="post" action="{% url 'hrm:interview_panelist_rsvp' obj.pk p.pk %}" style="margin:0;">
+                    {% csrf_token %}
+                    <select name="rsvp_status" class="form-select" onchange="this.form.submit()" aria-label="RSVP status">
+                      {% for val, label in rsvp_choices %}<option value="{{ val }}" {% if val == p.rsvp_status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                  </form>
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <form method="post" action="{% url 'hrm:interview_panelist_remove' obj.pk p.pk %}" onsubmit="return confirm('Remove this panelist?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><span class="text-muted">No panelists assigned yet.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <form method="post" action="{% url 'hrm:interview_panelist_add' obj.pk %}" style="margin-top:1rem;">
+        {% csrf_token %}
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label" for="{{ panelist_form.interviewer.id_for_label }}">Interviewer</label>{{ panelist_form.interviewer }}</div>
+          <div class="form-group"><label class="form-label" for="{{ panelist_form.role.id_for_label }}">Role</label>{{ panelist_form.role }}</div>
+          <div class="form-group" style="grid-column:1/-1;"><label class="form-label" for="{{ panelist_form.briefing_notes.id_for_label }}">Briefing notes</label>{{ panelist_form.briefing_notes }}</div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Add Panelist</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Scorecards</h2></div>
+    <div class="card-body">
+      <p><a href="{% url 'hrm:interviewfeedback_create' %}?interview={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add Scorecard</a></p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Recommendation</th><th>Avg Rating</th><th>Submitted</th><th>By</th></tr></thead>
+          <tbody>
+            {% for f in feedback_entries %}
+              <tr>
+                <td><a href="{% url 'hrm:interviewfeedback_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+                <td>{% include "hrm/interview/_reco_badge.html" with reco=f.overall_recommendation label=f.get_overall_recommendation_display %}</td>
+                <td>{% if f.avg_rating %}{{ f.avg_rating|floatformat:1 }}/5{% else %}—{% endif %}</td>
+                <td>{% if f.is_submitted %}<span class="badge badge-green">Submitted</span>{% else %}<span class="badge badge-muted">Draft</span>{% endif %}</td>
+                <td>{% if f.submitted_by %}{{ f.submitted_by.get_full_name|default:f.submitted_by.username }}{% else %}—{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><span class="text-muted">No scorecards yet.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:interview_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
