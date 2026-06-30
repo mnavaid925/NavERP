@@ -734,10 +734,11 @@ class InterviewPanelistForm(TenantModelForm):
 
 
 class InterviewFeedbackForm(TenantModelForm):
-    # `number` auto; `submitted_by`/`submitted_at` are stamped in the view when `is_submitted` flips.
+    # `number` auto; `submitted_by`/`submitted_at` AND `is_submitted` are workflow-owned — submission is
+    # the dedicated submit POST action only (a form checkbox would let a submitted card be un-submitted).
     class Meta:
         model = InterviewFeedback
-        fields = ["interview", "panelist", "overall_recommendation", "summary", "is_submitted"]
+        fields = ["interview", "panelist", "overall_recommendation", "summary"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -745,10 +746,24 @@ class InterviewFeedbackForm(TenantModelForm):
             self.fields["interview"].queryset = (
                 Interview.objects.filter(tenant=self.tenant)
                 .select_related("application__candidate").order_by("-scheduled_at"))
+            # On the edit path the interview is fixed, so scope the panelist picker to that interview's
+            # panel. On create the interview isn't known until POST, so the full tenant list is shown and
+            # clean() (below) rejects a cross-interview pick server-side.
+            if self.instance and self.instance.pk and self.instance.interview_id:
+                panel_qs = InterviewPanelist.objects.filter(interview=self.instance.interview)
+            else:
+                panel_qs = InterviewPanelist.objects.filter(tenant=self.tenant)
             self.fields["panelist"].queryset = (
-                InterviewPanelist.objects.filter(tenant=self.tenant)
-                .select_related("interviewer", "interview").order_by("interview__pk", "role"))
+                panel_qs.select_related("interviewer", "interview").order_by("interview__pk", "role"))
         self.fields["panelist"].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        interview = cleaned.get("interview")
+        panelist = cleaned.get("panelist")
+        if panelist and interview and panelist.interview_id != interview.id:
+            self.add_error("panelist", "That panelist is not on the selected interview.")
+        return cleaned
 
 
 class FeedbackCriterionForm(TenantModelForm):
