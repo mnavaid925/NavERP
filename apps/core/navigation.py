@@ -387,6 +387,18 @@ LIVE_LINKS = {
         "Talent Pool Tags": "hrm:candidatetag_list",           # extra (tag catalog)
         "Public Careers Page": "hrm:careers_list",             # extra (web-to-candidate portal)
     },
+    # 3.7 Interview Process — interview scheduling + panel + structured scorecards over the 3.6
+    # JobApplication spine. Scheduling/Panel/Reminders resolve to the interview list (panel is managed
+    # on the interview detail; reminders are detail-page actions); Video Interview deep-links to the
+    # video-mode filter (most-specific match highlights it distinctly); Feedback is its own scorecard
+    # list. Live calendar/Zoom-Teams-Meet/SMS dispatch + AI scoring are deferred.
+    "3.7": {
+        "Interview Scheduling": "hrm:interview_list",          # bullet (calendar/slot list)
+        "Interview Panel": "hrm:interview_list",               # bullet (panel managed on interview detail)
+        "Interview Feedback": "hrm:interviewfeedback_list",    # bullet (structured scorecards)
+        "Video Interview": "hrm:interview_list?mode=video",    # bullet (video-mode filtered slice)
+        "Interview Reminders": "hrm:interview_list",           # bullet (invite/reminder = detail actions)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
