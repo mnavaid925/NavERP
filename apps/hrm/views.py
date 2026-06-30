@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
-from django.db.models import (Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
+from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -76,6 +76,12 @@ from .forms import (  # 3.6 Candidate Management
     JobApplicationForm,
     PublicApplicationForm,
 )
+from .forms import (  # 3.7 Interview Process
+    FeedbackCriterionForm,
+    InterviewFeedbackForm,
+    InterviewForm,
+    InterviewPanelistForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -128,6 +134,19 @@ from .models import (
     SeparationCase,
     Shift,
     ShiftAssignment,
+)
+from .models import (  # 3.7 Interview Process
+    INTERVIEW_MODE_CHOICES,
+    INTERVIEW_STATUS_CHOICES,
+    INTERVIEW_TERMINAL_STATUSES,
+    PANELIST_ROLE_CHOICES,
+    RECOMMENDATION_CHOICES,
+    RSVP_STATUS_CHOICES,
+    VIDEO_PROVIDER_CHOICES,
+    FeedbackCriterion,
+    Interview,
+    InterviewFeedback,
+    InterviewPanelist,
 )
 
 
@@ -3435,3 +3454,418 @@ def careers_apply(request, token):
             return redirect(f"{reverse('hrm:careers_apply', args=[token])}?submitted=1")
     return render(request, "hrm/candidates/careers_apply.html", {
         "req": req, "form": form, "submitted": request.GET.get("submitted") == "1"})
+
+
+# ============================================================ 3.7 Interview Process
+# Interviews hang off the 3.6 JobApplication spine. Invites/reminders to the CANDIDATE reuse the 3.6
+# _send_candidate_email pipeline (honors do_not_contact + logs CandidateCommunication); the panel
+# feedback request emails internal panelist Users directly (best-effort). Status is workflow-owned —
+# only the action POSTs below mutate it. Live calendar/Zoom/Teams/Meet/SMS dispatch is deferred.
+def _interview_detail_lines(interview):
+    """Compose the interview-specific lines appended to an invite/reminder email body (the template
+    body's merge fields cover candidate/job; these literal lines carry the schedule + link)."""
+    lines = [
+        f"Interview: {interview.title} (Round {interview.round_number})",
+        f"When: {interview.scheduled_at:%Y-%m-%d %H:%M} ({interview.duration_minutes} min)",
+        f"Mode: {interview.get_mode_display()}",
+    ]
+    if interview.location:
+        lines.append(f"Location: {interview.location}")
+    if interview.meeting_url:
+        lines.append(f"Meeting link: {interview.meeting_url}")
+    return "\n".join(lines)
+
+
+def _send_interview_email(interview, *, template_type, default_subject, sent_by):
+    """Send an interview invite/reminder to the candidate, reusing the 3.6 candidate-email pipeline +
+    append-only log. Resolves the matching active CandidateEmailTemplate (if any) for the body, then
+    appends the interview specifics. Returns the logged CandidateCommunication, or None (do_not_contact
+    / nothing to send)."""
+    application = interview.application
+    template = (CandidateEmailTemplate.objects
+                .filter(tenant=interview.tenant, template_type=template_type, is_active=True)
+                .order_by("pk").first())
+    base_body = template.body_html if template is not None else ""
+    body = (base_body + "\n\n" if base_body else "") + _interview_detail_lines(interview)
+    subject = template.subject if template is not None else default_subject
+    return _send_candidate_email(application, template=template, subject=subject, body=body, sent_by=sent_by)
+
+
+def _interview_or_404(request, pk):
+    return get_object_or_404(
+        Interview.objects.filter(tenant=request.tenant)
+        .select_related("application__candidate", "application__requisition"), pk=pk)
+
+
+# --------------------------------------------------------------- Interviews (3.7) CRUD + hub
+@login_required
+def interview_list(request):
+    qs = (Interview.objects.filter(tenant=request.tenant)
+          .select_related("application__candidate", "application__requisition")
+          .annotate(panelist_count=Count("panelists", distinct=True),
+                    feedback_count=Count("feedback_entries", distinct=True)))
+    return crud_list(
+        request, qs, "hrm/interview/interview/list.html",
+        search_fields=["number", "title", "application__candidate__first_name",
+                       "application__candidate__last_name", "application__requisition__title",
+                       "application__number"],
+        filters=[("status", "status", False), ("mode", "mode", False),
+                 ("application", "application_id", True)],
+        extra_context={
+            "status_choices": INTERVIEW_STATUS_CHOICES,
+            "mode_choices": INTERVIEW_MODE_CHOICES,
+            "applications": JobApplication.objects.filter(tenant=request.tenant)
+            .select_related("candidate", "requisition").order_by("-applied_at")[:200],
+        },
+    )
+
+
+@login_required
+def interview_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = InterviewForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.scheduled_by = request.user
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Interview {obj.number} scheduled.")
+            return redirect("hrm:interview_detail", pk=obj.pk)
+    else:
+        # Pre-select the application when arriving from an application/candidate hub.
+        form = InterviewForm(tenant=request.tenant,
+                             initial={"application": request.GET.get("application") or None})
+    return render(request, "hrm/interview/interview/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def interview_detail(request, pk):
+    obj = get_object_or_404(
+        Interview.objects.filter(tenant=request.tenant)
+        .select_related("application__candidate", "application__requisition", "scheduled_by"), pk=pk)
+    panelists = obj.panelists.select_related("interviewer").all()
+    feedback_entries = (obj.feedback_entries.select_related("submitted_by", "panelist__interviewer")
+                        .annotate(avg_rating=Avg("criteria__rating")).order_by("-created_at"))
+    return render(request, "hrm/interview/interview/detail.html", {
+        "obj": obj,
+        "panelists": panelists,
+        "feedback_entries": feedback_entries,
+        "panelist_form": InterviewPanelistForm(tenant=request.tenant),
+        "rsvp_choices": RSVP_STATUS_CHOICES,
+    })
+
+
+@login_required
+def interview_edit(request, pk):
+    # `status`/`scheduled_by`/reminder stamps aren't on the form, so crud_edit preserves them.
+    return crud_edit(request, model=Interview, pk=pk, form_class=InterviewForm,
+                     template="hrm/interview/interview/form.html", success_url="hrm:interview_list")
+
+
+@login_required
+@require_POST
+def interview_delete(request, pk):
+    return crud_delete(request, model=Interview, pk=pk, success_url="hrm:interview_list")
+
+
+def _transition_interview(request, pk, new_status, success_msg):
+    obj = _interview_or_404(request, pk)
+    if obj.status in INTERVIEW_TERMINAL_STATUSES:
+        messages.error(request, "This interview is closed. Reschedule it to reopen.")
+        return redirect("hrm:interview_detail", pk=obj.pk)
+    obj.status = new_status
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": f"status:{new_status}"})
+    messages.success(request, success_msg)
+    return redirect("hrm:interview_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def interview_confirm(request, pk):
+    return _transition_interview(request, pk, "confirmed", "Interview confirmed.")
+
+
+@login_required
+@require_POST
+def interview_start(request, pk):
+    return _transition_interview(request, pk, "in_progress", "Interview marked in progress.")
+
+
+@login_required
+@require_POST
+def interview_complete(request, pk):
+    return _transition_interview(request, pk, "completed", "Interview completed.")
+
+
+@login_required
+@require_POST
+def interview_cancel(request, pk):
+    return _transition_interview(request, pk, "cancelled", "Interview cancelled.")
+
+
+@login_required
+@require_POST
+def interview_no_show(request, pk):
+    return _transition_interview(request, pk, "no_show", "Interview marked as no-show.")
+
+
+@login_required
+@require_POST
+def interview_reschedule(request, pk):
+    from django.utils.dateparse import parse_datetime
+    obj = _interview_or_404(request, pk)
+    raw = request.POST.get("scheduled_at", "").strip()
+    dt = parse_datetime(raw) if raw else None
+    if dt is None:
+        messages.error(request, "Enter a valid new date and time to reschedule.")
+        return redirect("hrm:interview_detail", pk=obj.pk)
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    obj.scheduled_at = dt
+    obj.status = "rescheduled"  # reopens a closed round so it can proceed again
+    obj.save(update_fields=["scheduled_at", "status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reschedule", "scheduled_at": dt.isoformat()})
+    messages.success(request, "Interview rescheduled.")
+    return redirect("hrm:interview_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def interview_panelist_add(request, pk):
+    interview = _interview_or_404(request, pk)
+    form = InterviewPanelistForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        cd = form.cleaned_data
+        _, created = InterviewPanelist.objects.get_or_create(
+            interview=interview, interviewer=cd["interviewer"],
+            defaults={"tenant": request.tenant, "role": cd["role"],
+                      "briefing_notes": cd["briefing_notes"]})
+        if created:
+            messages.success(request, "Panelist added.")
+        else:
+            messages.info(request, "That interviewer is already on the panel.")
+    else:
+        messages.error(request, "Select an interviewer to add to the panel.")
+    return redirect("hrm:interview_detail", pk=interview.pk)
+
+
+@login_required
+@require_POST
+def interview_panelist_remove(request, pk, panelist_pk):
+    interview = _interview_or_404(request, pk)
+    panelist = get_object_or_404(InterviewPanelist, pk=panelist_pk, interview=interview, tenant=request.tenant)
+    panelist.delete()
+    messages.success(request, "Panelist removed.")
+    return redirect("hrm:interview_detail", pk=interview.pk)
+
+
+@login_required
+@require_POST
+def interview_panelist_rsvp(request, pk, panelist_pk):
+    interview = _interview_or_404(request, pk)
+    panelist = get_object_or_404(InterviewPanelist, pk=panelist_pk, interview=interview, tenant=request.tenant)
+    new_rsvp = request.POST.get("rsvp_status", "")
+    if new_rsvp not in dict(RSVP_STATUS_CHOICES):
+        messages.error(request, "Invalid RSVP status.")
+        return redirect("hrm:interview_detail", pk=interview.pk)
+    panelist.rsvp_status = new_rsvp
+    panelist.save(update_fields=["rsvp_status", "updated_at"])
+    messages.success(request, "RSVP updated.")
+    return redirect("hrm:interview_detail", pk=interview.pk)
+
+
+@login_required
+@require_POST
+def interview_send_invite(request, pk):
+    interview = _interview_or_404(request, pk)
+    if interview.application.candidate.do_not_contact:
+        messages.error(request, "This candidate is marked do-not-contact; invite not sent.")
+        return redirect("hrm:interview_detail", pk=interview.pk)
+    comm = _send_interview_email(interview, template_type="interview_invite",
+                                 default_subject="Interview Invitation", sent_by=request.user)
+    # The panel is invited alongside the candidate — stamp not-yet-notified seats.
+    interview.panelists.filter(notified_at__isnull=True).update(notified_at=timezone.now())
+    if comm is None:
+        messages.error(request, "Nothing sent — the candidate has no email or is do-not-contact.")
+    else:
+        write_audit_log(request.user, comm, "create",
+                        {"to": interview.application.candidate.email, "kind": "interview_invite"})
+        messages.success(request, f"Invite sent to {interview.application.candidate.name}.")
+    return redirect("hrm:interview_detail", pk=interview.pk)
+
+
+@login_required
+@require_POST
+def interview_send_reminder(request, pk):
+    interview = _interview_or_404(request, pk)
+    if interview.application.candidate.do_not_contact:
+        messages.error(request, "This candidate is marked do-not-contact; reminder not sent.")
+        return redirect("hrm:interview_detail", pk=interview.pk)
+    comm = _send_interview_email(interview, template_type="interview_reminder",
+                                 default_subject="Interview Reminder", sent_by=request.user)
+    if comm is None:
+        messages.error(request, "Nothing sent — the candidate has no email or is do-not-contact.")
+    else:
+        interview.reminder_sent_at = timezone.now()
+        interview.save(update_fields=["reminder_sent_at", "updated_at"])
+        write_audit_log(request.user, comm, "create",
+                        {"to": interview.application.candidate.email, "kind": "interview_reminder"})
+        messages.success(request, "Reminder sent to the candidate.")
+    return redirect("hrm:interview_detail", pk=interview.pk)
+
+
+@login_required
+@require_POST
+def interview_request_feedback(request, pk):
+    """Nudge the panel to submit their scorecards — emails the panelist Users directly (best-effort) and
+    stamps ``feedback_reminder_sent_at``. Internal email only; SMS/automated dispatch deferred."""
+    interview = _interview_or_404(request, pk)
+    emails = [p.interviewer.email for p in interview.panelists.select_related("interviewer")
+              if p.interviewer.email]
+    if emails:
+        candidate_name = interview.application.candidate.name
+        subject = f"Please submit your scorecard — {interview.title}"
+        body = (f"You interviewed {candidate_name} ({interview.title}, Round {interview.round_number}).\n"
+                f"Please submit your interview feedback / scorecard in NavERP HRM.")
+        try:
+            send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, emails, fail_silently=True)
+        except Exception:  # never let a transport failure 500 the request
+            pass
+    interview.feedback_reminder_sent_at = timezone.now()
+    interview.save(update_fields=["feedback_reminder_sent_at", "updated_at"])
+    write_audit_log(request.user, interview, "update",
+                    {"action": "request_feedback", "panelists": len(emails)})
+    messages.success(request, f"Feedback requested from {len(emails)} panelist(s).")
+    return redirect("hrm:interview_detail", pk=interview.pk)
+
+
+# --------------------------------------------------------------- Interview Feedback / Scorecards (3.7)
+@login_required
+def interviewfeedback_list(request):
+    qs = (InterviewFeedback.objects.filter(tenant=request.tenant)
+          .select_related("interview__application__candidate", "submitted_by")
+          .annotate(avg_rating=Avg("criteria__rating"),
+                    criteria_count=Count("criteria", distinct=True)))
+    return crud_list(
+        request, qs, "hrm/interview/interviewfeedback/list.html",
+        search_fields=["number", "summary", "interview__title",
+                       "interview__application__candidate__first_name",
+                       "interview__application__candidate__last_name"],
+        filters=[("recommendation", "overall_recommendation", False),
+                 ("submitted", "is_submitted", False),
+                 ("interview", "interview_id", True)],
+        extra_context={
+            "recommendation_choices": RECOMMENDATION_CHOICES,
+            "interviews": Interview.objects.filter(tenant=request.tenant).order_by("-scheduled_at")[:200],
+        },
+    )
+
+
+@login_required
+def interviewfeedback_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = InterviewFeedbackForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            # Stamp the submission metadata if the scorecard is created already-submitted.
+            if obj.is_submitted and obj.submitted_at is None:
+                obj.submitted_at = timezone.now()
+                obj.submitted_by = request.user
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Scorecard {obj.number} created.")
+            return redirect("hrm:interviewfeedback_detail", pk=obj.pk)
+    else:
+        form = InterviewFeedbackForm(tenant=request.tenant,
+                                     initial={"interview": request.GET.get("interview") or None})
+    return render(request, "hrm/interview/interviewfeedback/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def interviewfeedback_detail(request, pk):
+    obj = get_object_or_404(
+        InterviewFeedback.objects.filter(tenant=request.tenant)
+        .select_related("interview__application__candidate", "submitted_by", "panelist__interviewer"), pk=pk)
+    return render(request, "hrm/interview/interviewfeedback/detail.html", {
+        "obj": obj,
+        "criteria": obj.criteria.all(),
+        "avg_rating": obj.criteria.aggregate(avg=Avg("rating"))["avg"],
+        "criterion_form": FeedbackCriterionForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def interviewfeedback_edit(request, pk):
+    obj = get_object_or_404(InterviewFeedback.objects.filter(tenant=request.tenant), pk=pk)
+    if request.method == "POST":
+        form = InterviewFeedbackForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if obj.is_submitted and obj.submitted_at is None:
+                obj.submitted_at = timezone.now()
+                obj.submitted_by = request.user
+            obj.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Scorecard updated.")
+            return redirect("hrm:interviewfeedback_detail", pk=obj.pk)
+    else:
+        form = InterviewFeedbackForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/interview/interviewfeedback/form.html",
+                  {"form": form, "obj": obj, "is_edit": True})
+
+
+@login_required
+@require_POST
+def interviewfeedback_delete(request, pk):
+    return crud_delete(request, model=InterviewFeedback, pk=pk, success_url="hrm:interviewfeedback_list")
+
+
+@login_required
+@require_POST
+def interviewfeedback_submit(request, pk):
+    obj = get_object_or_404(InterviewFeedback.objects.filter(tenant=request.tenant), pk=pk)
+    if not obj.is_submitted:
+        obj.is_submitted = True
+        obj.submitted_at = timezone.now()
+        obj.submitted_by = request.user
+        obj.save(update_fields=["is_submitted", "submitted_at", "submitted_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, "Scorecard submitted.")
+    else:
+        messages.info(request, "This scorecard is already submitted.")
+    return redirect("hrm:interviewfeedback_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def feedbackcriterion_add(request, pk):
+    feedback = get_object_or_404(InterviewFeedback.objects.filter(tenant=request.tenant), pk=pk)
+    form = FeedbackCriterionForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        cd = form.cleaned_data
+        FeedbackCriterion.objects.create(
+            tenant=request.tenant, feedback=feedback, criterion_name=cd["criterion_name"],
+            rating=cd["rating"], notes=cd["notes"])
+        messages.success(request, "Criterion added.")
+    else:
+        messages.error(request, "Enter a criterion name and a rating of 1–5.")
+    return redirect("hrm:interviewfeedback_detail", pk=feedback.pk)
+
+
+@login_required
+@require_POST
+def feedbackcriterion_delete(request, pk, criterion_pk):
+    feedback = get_object_or_404(InterviewFeedback.objects.filter(tenant=request.tenant), pk=pk)
+    crit = get_object_or_404(FeedbackCriterion, pk=criterion_pk, feedback=feedback, tenant=request.tenant)
+    crit.delete()
+    messages.success(request, "Criterion removed.")
+    return redirect("hrm:interviewfeedback_detail", pk=feedback.pk)
