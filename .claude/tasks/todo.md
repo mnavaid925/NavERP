@@ -907,3 +907,786 @@ pytest tests in `apps/hrm/tests/test_candidate_management.py`; **full suite gree
 candidate self-service portal, CAPTCHA + rate-limiting, GDPR auto-anonymization, bulk SMS/WhatsApp, a post_save
 auto-send signal, talent-rediscovery AI, candidate comparison, DEI analytics. 3.7 Interview / 3.8 Offer FK into the
 built 3.6 `JobApplication` (`stage="interview"`/`"offer"` are the handoff).
+
+---
+# HRM Sub-module 3.7 — Interview Process (hrm) — plan from research-interview-process.md  (2026-06-30)
+
+**Extending `apps/hrm`** — NOT a new app. `apps.py`, `__init__.py`, `settings.py`, `config/urls.py`
+are already in place. The only new wire-up is ONE `LIVE_LINKS["3.7"]` entry + URL patterns appended
+to the existing `apps/hrm/urls.py`. Four models: `Interview` [INTV-], `InterviewPanelist` (child
+inline, no standalone list), `InterviewFeedback` [IFB-], `FeedbackCriterion` (child inline, no
+standalone list). Sub-module template folder: `templates/hrm/interview/`. One choices addition:
+`interview_reminder` tuple appended to the existing `EMAIL_TEMPLATE_TYPE_CHOICES` in `apps/hrm/models.py`
+(no migration needed — `choices` are a Python-layer annotation; `interview_invite` is already present).
+Next migration: `apps/hrm/migrations/0014_interview_process.py`.
+
+---
+
+## 0. Template-folder decision
+
+3.7 is a multi-entity sub-module. Per CLAUDE.md rule 2, the folder shape is
+`templates/hrm/interview/<entity>/<page>.html`.
+
+- [ ] Confirm folder paths:
+  - `templates/hrm/interview/interview/{list,detail,form}.html` — Interview CRUD
+    (detail = the interview hub: schedule header + panelist inline + feedback list + action buttons)
+  - `templates/hrm/interview/interviewfeedback/{list,detail,form}.html` — InterviewFeedback CRUD
+    (detail = scorecard hub with per-criterion inline rows + submit action)
+  - NOTE: `InterviewPanelist` rows render **inline on the Interview detail hub** — add/remove via POST
+    actions on that page; no standalone list/detail/form templates.
+  - NOTE: `FeedbackCriterion` rows render **inline on the InterviewFeedback detail/form** — added
+    dynamically during feedback creation/edit; no standalone templates.
+
+---
+
+## 1. Choices additions (`apps/hrm/models.py`)
+
+### 1a. Module-level CHOICES constants (add above the `Interview` class definition)
+
+- [ ] Add to `apps/hrm/models.py` (in the 3.7 section, after the existing 3.6 choices block):
+
+```python
+# ── 3.7 Interview Process choices ──────────────────────────────────────────────
+
+INTERVIEW_MODE_CHOICES = [
+    ("in_person", "In Person"),
+    ("phone",     "Phone Screen"),
+    ("video",     "Video Call"),
+    ("one_way_video", "One-Way Video"),
+]
+
+INTERVIEW_STATUS_CHOICES = [
+    ("scheduled",   "Scheduled"),
+    ("confirmed",   "Confirmed"),
+    ("in_progress", "In Progress"),
+    ("completed",   "Completed"),
+    ("cancelled",   "Cancelled"),
+    ("no_show",     "No Show"),
+    ("rescheduled", "Rescheduled"),
+]
+
+VIDEO_PROVIDER_CHOICES = [
+    ("none",        "None / N/A"),
+    ("zoom",        "Zoom"),
+    ("teams",       "Microsoft Teams"),
+    ("meet",        "Google Meet"),
+    ("other",       "Other"),
+]
+
+PANELIST_ROLE_CHOICES = [
+    ("lead",        "Lead Interviewer"),
+    ("interviewer", "Interviewer"),
+    ("shadow",      "Shadow / Observer-in-Training"),
+    ("observer",    "Observer"),
+]
+
+RSVP_STATUS_CHOICES = [
+    ("pending",  "Pending"),
+    ("accepted", "Accepted"),
+    ("declined", "Declined"),
+]
+
+RECOMMENDATION_CHOICES = [
+    ("strong_no",  "Strong No"),
+    ("no",         "No"),
+    ("maybe",      "Maybe / On Hold"),
+    ("yes",        "Yes"),
+    ("strong_yes", "Strong Yes"),
+]
+```
+
+### 1b. Extend `EMAIL_TEMPLATE_TYPE_CHOICES`
+
+- [ ] In `apps/hrm/models.py`, locate `EMAIL_TEMPLATE_TYPE_CHOICES` and append the `interview_reminder`
+  tuple **after** the existing `("interview_invite", "Interview Invitation")` line:
+
+```python
+    ("interview_invite",    "Interview Invitation"),   # already present
+    ("interview_reminder",  "Interview Reminder"),     # ADD THIS
+```
+
+  NOTE: `interview_invite` is already present (confirmed in models.py grep). No data migration
+  is needed for a choices-only addition.
+
+---
+
+## 2. Models (add to `apps/hrm/models.py`)
+
+### 2a. `Interview` [INTV-] — `TenantNumbered`, `NUMBER_PREFIX = "INTV"`
+
+Drivers: all 10 products surveyed (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Zoho Recruit,
+Recruitee, GoodTime, Workday, Spark Hire). Fields derived from research:
+- `title` — Greenhouse "interview name"; Zoho interview title
+- `round_number` — Greenhouse/Lever/Ashby/SmartRecruiters round ordering
+- `mode` — Greenhouse in-person/phone/video; Zoho formal/video/log
+- `status` — workflow-owned lifecycle; all products surface this
+- `scheduled_at` / `duration_minutes` — Lever/Greenhouse/Zoho/Workable core event metadata
+- `location` — Zoho/SmartRecruiters/Workable physical room
+- `video_provider` + `meeting_url` — Greenhouse/Lever/Recruitee/Zoho meeting link metadata
+- `interviewer_instructions` — Ashby "briefing views" (panel-wide)
+- `scheduled_by` — Greenhouse "scheduled by" attribution
+- `reminder_sent_at` / `feedback_reminder_sent_at` — metadata stubs for Celery dispatch (deferred)
+- `notes` — recruiter internal notes (all products have internal notes)
+
+DEFERRED (not built as live features — plain fields OMITTED to keep scope tight):
+- `calendar_event_id` — future Google Calendar / Outlook OAuth sync; OMIT this pass
+- `candidate_self_schedule_url` — future Calendly integration; OMIT this pass
+
+- [ ] Add `Interview(TenantNumbered)` with `NUMBER_PREFIX = "INTV"`:
+  - `application` — `ForeignKey("hrm.JobApplication", on_delete=models.CASCADE, related_name="interviews")`
+    (the application this interview round belongs to; candidate + requisition reached through it)
+  - `title` — `CharField(max_length=200)` (e.g. "Technical Round 2", "HR Final")
+  - `round_number` — `PositiveSmallIntegerField(default=1)` (1-based; defines ordering within an application)
+  - `mode` — `CharField(max_length=20, choices=INTERVIEW_MODE_CHOICES, default="in_person")`
+  - `status` — `CharField(max_length=20, choices=INTERVIEW_STATUS_CHOICES, default="scheduled", editable=False)`
+    (workflow-owned — set ONLY by POST status-transition actions, never the form)
+  - `scheduled_at` — `DateTimeField()` (UTC; user sets this; displayed in views)
+  - `duration_minutes` — `PositiveSmallIntegerField(default=60)`
+  - `location` — `CharField(max_length=255, blank=True)` (physical room or address; optional)
+  - `video_provider` — `CharField(max_length=10, choices=VIDEO_PROVIDER_CHOICES, default="none", blank=True)`
+  - `meeting_url` — `URLField(blank=True)` (manually entered for now; OAuth auto-generate deferred)
+  - `interviewer_instructions` — `TextField(blank=True)` (panel-wide briefing; visible to all panelists)
+  - `notes` — `TextField(blank=True)` (recruiter internal notes)
+  - `scheduled_by` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="scheduled_interviews")`
+    (set in the create view to `request.user`; editable on form)
+  - `reminder_sent_at` — `DateTimeField(null=True, blank=True, editable=False)` (stamped by the
+    send-reminder POST action; Celery task to actually dispatch deferred)
+  - `feedback_reminder_sent_at` — `DateTimeField(null=True, blank=True, editable=False)` (stamped by a
+    feedback-nudge action; Celery dispatch deferred)
+
+- [ ] Meta:
+  ```python
+  class Meta:
+      ordering = ["scheduled_at"]
+      unique_together = ("tenant", "number")
+      indexes = [
+          models.Index(fields=["tenant", "application"], name="hrm_intv_tenant_app_idx"),
+          models.Index(fields=["tenant", "status"],      name="hrm_intv_tenant_status_idx"),
+          models.Index(fields=["tenant", "scheduled_at"],name="hrm_intv_tenant_sched_idx"),
+          models.Index(fields=["tenant", "mode"],        name="hrm_intv_tenant_mode_idx"),
+      ]
+  ```
+- [ ] `__str__`: `f"{self.number} · {self.title} ({self.get_status_display()})"`
+- [ ] Reuses: `hrm.JobApplication` (3.6 built), `core.Tenant`, `settings.AUTH_USER_MODEL`
+
+### 2b. `InterviewPanelist` — `TenantOwned` (child of Interview, NO standalone list page)
+
+Drivers: Greenhouse/Lever/Ashby/GoodTime/Workday — M2M interviewers with role labels + RSVP tracking;
+Ashby "briefing views" (per-panelist prep notes). Managed inline on the Interview detail hub via
+add/remove POST actions (mirrors `CandidateSkill` / `RequisitionApproval` inline pattern).
+
+- [ ] Add `InterviewPanelist(TenantOwned)`:
+  - `interview` — `ForeignKey("hrm.Interview", on_delete=models.CASCADE, related_name="panelists")`
+  - `interviewer` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="interview_assignments")`
+  - `role` — `CharField(max_length=20, choices=PANELIST_ROLE_CHOICES, default="interviewer")`
+  - `rsvp_status` — `CharField(max_length=10, choices=RSVP_STATUS_CHOICES, default="pending")`
+  - `briefing_notes` — `TextField(blank=True)` (per-panelist prep instructions; Ashby briefing view)
+  - `notified_at` — `DateTimeField(null=True, blank=True, editable=False)` (stamped when assignment
+    email is sent; set in the add-panelist POST action)
+
+- [ ] Meta:
+  ```python
+  class Meta:
+      ordering = ["role", "id"]
+      unique_together = ("interview", "interviewer")
+      indexes = [
+          models.Index(fields=["tenant", "interview"], name="hrm_pan_tenant_intv_idx"),
+          models.Index(fields=["tenant", "interviewer"], name="hrm_pan_tenant_user_idx"),
+      ]
+  ```
+- [ ] `__str__`: `f"{self.get_role_display()} – {self.interviewer}"`
+- [ ] NOTE: No standalone list, detail, or form templates — managed exclusively from the Interview detail hub.
+
+### 2c. `InterviewFeedback` [IFB-] — `TenantNumbered`, `NUMBER_PREFIX = "IFB"`
+
+Drivers: all 10 products for the scorecard concept; Greenhouse (strong_no/no/yes/strong_yes +
+key-takeaways summary); Zoho Recruit (Strongly Hired → Strongly Rejected 5-level scale);
+Workable/Ashby (draft vs. submitted flag enabling anti-anchoring feedback blinding);
+Ashby/Greenhouse/Workable (per-criteria competency rows — see FeedbackCriterion below).
+
+- [ ] Add `InterviewFeedback(TenantNumbered)` with `NUMBER_PREFIX = "IFB"`:
+  - `interview` — `ForeignKey("hrm.Interview", on_delete=models.CASCADE, related_name="feedback_entries")`
+  - `panelist` — `ForeignKey("hrm.InterviewPanelist", on_delete=models.SET_NULL, null=True, blank=True, related_name="feedback_entries")`
+    (SET_NULL so feedback survives if a panelist row is removed; links back to the assignment slot)
+  - `submitted_by` — `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="submitted_feedback")`
+    (denormalized for query convenience; set in the view, never the form)
+  - `overall_recommendation` — `CharField(max_length=20, choices=RECOMMENDATION_CHOICES)`
+    (maps to Greenhouse Definitely Not/No/Yes/Strong Yes + Zoho On Hold → "maybe")
+  - `summary` — `TextField(blank=True)` (free-text overall summary / Greenhouse "key takeaways")
+  - `is_submitted` — `BooleanField(default=False)` (draft vs. formally submitted; enables
+    anti-anchoring blinding logic in views — panelists see only their own draft until they submit)
+  - `submitted_at` — `DateTimeField(null=True, blank=True, editable=False)` (stamped by the
+    submit-feedback POST action; set in view, never form)
+
+- [ ] Meta:
+  ```python
+  class Meta:
+      ordering = ["-created_at"]
+      unique_together = ("tenant", "number")
+      constraints = [
+          models.UniqueConstraint(fields=["interview", "panelist"],
+                                  name="hrm_ifb_intv_pan_uniq")
+      ]
+      indexes = [
+          models.Index(fields=["tenant", "interview"],            name="hrm_ifb_tenant_intv_idx"),
+          models.Index(fields=["tenant", "overall_recommendation"],name="hrm_ifb_tenant_rec_idx"),
+          models.Index(fields=["tenant", "is_submitted"],         name="hrm_ifb_tenant_sub_idx"),
+      ]
+  ```
+- [ ] `__str__`: `f"{self.number} · {self.get_overall_recommendation_display()} by {self.submitted_by}"`
+- [ ] Reuses: `hrm.Interview`, `hrm.InterviewPanelist`, `settings.AUTH_USER_MODEL`, `core.Tenant`
+
+### 2d. `FeedbackCriterion` — `TenantOwned` (child of InterviewFeedback, NO standalone list page)
+
+Drivers: Greenhouse "focus attributes"; SmartRecruiters (up to 20 competencies per scorecard);
+Workable/Zoho Recruit (per-criterion rating + notes); 1–5 integer scale across all reviewed products.
+Managed inline on the InterviewFeedback detail/form — created/edited/deleted during scorecard
+submission.
+
+- [ ] Add `FeedbackCriterion(TenantOwned)`:
+  - `feedback` — `ForeignKey("hrm.InterviewFeedback", on_delete=models.CASCADE, related_name="criteria")`
+  - `criterion_name` — `CharField(max_length=150)` (e.g. "Problem Solving", "Communication", "Culture Fit")
+  - `rating` — `PositiveSmallIntegerField(null=True, blank=True)` (1=poor to 5=excellent; validated in clean())
+  - `notes` — `TextField(blank=True)` (free-text note for this criterion; Greenhouse "key takeaways per criterion")
+
+- [ ] Meta:
+  ```python
+  class Meta:
+      ordering = ["criterion_name"]
+      unique_together = ("feedback", "criterion_name")
+      indexes = [
+          models.Index(fields=["tenant", "feedback"], name="hrm_fc_tenant_fb_idx"),
+      ]
+  ```
+- [ ] `clean()`: if `self.rating` is not None, validate `1 <= self.rating <= 5` else raise
+  `ValidationError({"rating": "Rating must be between 1 and 5."})` (mirrors `CandidateSkill`
+  rating guard pattern)
+- [ ] `__str__`: `f"{self.criterion_name}: {self.rating}/5"`
+- [ ] NOTE: No standalone list, detail, or form templates — managed exclusively from the
+  InterviewFeedback detail/form hub.
+
+---
+
+## 3. Migration
+
+- [ ] `python manage.py makemigrations hrm --name interview_process` → produces
+  `apps/hrm/migrations/0014_interview_process.py` (covers `Interview`, `InterviewPanelist`,
+  `InterviewFeedback`, `FeedbackCriterion`; choices additions to `EMAIL_TEMPLATE_TYPE_CHOICES`
+  do NOT require a migration — Python-layer only)
+- [ ] `python manage.py migrate` — verify no errors; confirm `0014_interview_process` applied cleanly
+- [ ] `python manage.py check` — zero errors/warnings
+
+---
+
+## 4. Forms (`apps/hrm/forms.py`)
+
+Exclude from all forms: `tenant` (set in view), auto-`number` (set in `save()`), `status`
+(workflow-owned, set by POST actions), `editable=False` timestamp fields (`reminder_sent_at`,
+`feedback_reminder_sent_at`, `submitted_at`, `notified_at`). Tenant-scope FK querysets in
+`__init__`. Reference: CLAUDE.md lessons L20 (no system fields on forms) and L22
+(tenant FK scoping in form init).
+
+- [ ] **`InterviewForm`** — fields: `application`, `title`, `round_number`, `mode`, `scheduled_at`,
+  `duration_minutes`, `location`, `video_provider`, `meeting_url`, `interviewer_instructions`,
+  `notes`, `scheduled_by`. Exclude: `tenant`, `number`, `status`, `reminder_sent_at`,
+  `feedback_reminder_sent_at`.
+  - In `__init__`, limit `application` queryset to `JobApplication.objects.filter(tenant=self.tenant)`
+    (display as `APP- number · candidate → requisition`).
+  - In `__init__`, limit `scheduled_by` queryset to `User.objects.filter(tenant_memberships__tenant=self.tenant).distinct()` (or the equivalent pattern used in existing HRM forms — check `apps/hrm/forms.py` for the User queryset pattern already in use).
+  - `scheduled_at` widget: `DateTimeInput(attrs={"type": "datetime-local"})` so the browser renders a
+    datetime picker. Format `"%Y-%m-%dT%H:%M"`.
+
+- [ ] **`InterviewPanelistForm`** — fields: `interviewer`, `role`, `briefing_notes`. Exclude `interview`
+  (set in view), `rsvp_status` (set by the RSVP action), `notified_at` (set by the add action),
+  `tenant`.
+  - In `__init__`, limit `interviewer` queryset to `User.objects.filter(...)` scoped to tenant
+    (same pattern as `InterviewForm.scheduled_by`).
+  - Used only on the Interview detail hub (inline add panel); no standalone form template.
+
+- [ ] **`InterviewFeedbackForm`** — fields: `interview`, `panelist`, `overall_recommendation`, `summary`,
+  `is_submitted`. Exclude: `tenant`, `number`, `submitted_by`, `submitted_at`.
+  - In `__init__`, limit `interview` queryset to `Interview.objects.filter(tenant=self.tenant)`.
+  - In `__init__`, limit `panelist` queryset to `InterviewPanelist.objects.filter(tenant=self.tenant)`.
+  - NOTE on `is_submitted`: include on the form but render as read-only on the list view. The
+    "Submit Scorecard" action (a separate POST button on the detail page) is the canonical
+    `is_submitted=True` + `submitted_at=now()` setter — the form field allows a draft to be
+    explicitly marked submitted inline as well.
+
+- [ ] **`FeedbackCriterionForm`** — fields: `criterion_name`, `rating`, `notes`. Exclude `feedback`
+  (set in view), `tenant`.
+  - Used only on the InterviewFeedback detail hub (inline add); no standalone template.
+  - Widget for `rating`: `NumberInput(attrs={"min": 1, "max": 5})`.
+
+---
+
+## 5. Views (`apps/hrm/views.py`)
+
+All views are `@login_required` + `tenant=request.tenant` scoped. DELETE/action views are also
+`@require_POST`. Status-transition POST actions mirror the `application_advance_stage` /
+`jobrequisition_post` pattern from 3.5/3.6. Audit via `log_action` on meaningful state changes.
+Per CLAUDE.md CRUD Completeness Rules: every model with a list page has list + create + detail +
+edit + delete. Privilege: CRUD on Interviews is normal `@login_required` (recruiters schedule
+interviews); template-authoring (email templates) retains `@tenant_admin_required` from 3.6.
+
+### 5a. `Interview` views
+
+- [ ] **`interview_list`** — `@login_required`. Filter by: `q` (searches `title`, `application__candidate__first_name`,
+  `application__candidate__last_name`, `number`), `status` (exact), `mode` (exact),
+  `application` (FK pk). `select_related("application__candidate", "application__requisition")`.
+  `prefetch_related("panelists__interviewer")`. Context: `status_choices=INTERVIEW_STATUS_CHOICES`,
+  `mode_choices=INTERVIEW_MODE_CHOICES`, `applications=JobApplication.objects.filter(tenant=...).only("pk", "number")`.
+  Template: `"hrm/interview/interview/list.html"`.
+
+- [ ] **`interview_create`** — `@login_required`. On form valid: set `interview.tenant = request.tenant`,
+  `interview.scheduled_by = request.user` (if not set on the form). Save. `log_action`. Redirect to
+  `hrm:interview_detail`. Template: `"hrm/interview/interview/form.html"`.
+
+- [ ] **`interview_detail`** — `@login_required`. The interview hub:
+  - `obj = get_object_or_404(Interview.objects.filter(tenant=request.tenant).select_related("application__candidate", "application__requisition", "scheduled_by"), pk=pk)`
+  - `panelists = obj.panelists.select_related("interviewer").all()`
+  - `feedback_entries = obj.feedback_entries.select_related("submitted_by", "panelist__interviewer").prefetch_related("criteria").all()`
+  - `panelist_form = InterviewPanelistForm(tenant=request.tenant)`
+  - Anti-anchoring logic: if the logged-in user is a panelist, show OTHER panelists' feedback only if
+    the current user has already submitted theirs (`is_submitted=True` for their own feedback).
+    Recruiters / tenant admins see all feedback regardless.
+  - Context: `panelist_form`, `feedback_entries`, `panelists`, `status_choices=INTERVIEW_STATUS_CHOICES`
+  - Template: `"hrm/interview/interview/detail.html"`.
+
+- [ ] **`interview_edit`** — `@login_required`. Exclude `status` from form (workflow-owned). Template:
+  `"hrm/interview/interview/form.html"`. On save: `log_action`.
+
+- [ ] **`interview_delete`** — `@login_required`, `@require_POST`. `get_object_or_404` tenant-scoped.
+  Delete. `log_action`. Redirect to `hrm:interview_list`.
+
+### 5b. Interview status-transition actions (POST-only)
+
+Each action mirrors `application_advance_stage`; all are `@login_required` + `@require_POST`.
+
+- [ ] **`interview_confirm`** — sets `status = "confirmed"`. `log_action`. Redirect to detail.
+- [ ] **`interview_start`** — sets `status = "in_progress"`. `log_action`. Redirect to detail.
+- [ ] **`interview_complete`** — sets `status = "completed"`. `log_action`. Redirect to detail.
+- [ ] **`interview_cancel`** — sets `status = "cancelled"`. `log_action`. Redirect to detail.
+- [ ] **`interview_no_show`** — sets `status = "no_show"`. `log_action`. Redirect to detail.
+- [ ] **`interview_reschedule`** — sets `status = "rescheduled"`. `log_action`. Redirect to detail.
+  NOTE: all transitions allowed from any non-terminal status; completed/cancelled/no_show are
+  considered terminal (add a guard: reject repeated transitions into the same terminal status with
+  an info message, but do not hard-block reschedule from terminal — recruiters may need to re-open).
+
+### 5c. Panelist management actions (POST-only on Interview detail)
+
+- [ ] **`interview_panelist_add`** — `@login_required`, `@require_POST`. Accepts `interview_pk` in URL.
+  Validates `InterviewPanelistForm`. Creates `InterviewPanelist(interview=obj, tenant=request.tenant, ...)`.
+  On success: send a plain `django.core.mail.send_mail()` notification to `panelist.interviewer.email`
+  (subject: "You have been assigned as an interviewer", body includes interview title, date, candidate
+  name). Stamp `notified_at = now()`. `log_action`. Redirect to `hrm:interview_detail`.
+  Enforce `unique_together` with `get_or_create`; on duplicate, show info message "Panelist already
+  assigned" and do not create a duplicate.
+
+- [ ] **`interview_panelist_remove`** — `@login_required`, `@require_POST`. Accepts `interview_pk` +
+  `panelist_pk` in URL. `get_object_or_404(InterviewPanelist, pk=panelist_pk, interview=obj,
+  interview__tenant=request.tenant)`. Delete. `log_action`. Redirect to `hrm:interview_detail`.
+
+- [ ] **`interview_panelist_rsvp`** — `@login_required`, `@require_POST`. Accepts `interview_pk` +
+  `panelist_pk`. Accepts `rsvp_status` from POST body (validated against RSVP_STATUS_CHOICES).
+  Updates `panelist.rsvp_status`. `log_action`. Redirect to `hrm:interview_detail`.
+
+### 5d. Reminder actions (POST-only on Interview detail)
+
+- [ ] **`interview_send_invite`** — `@login_required`, `@require_POST`. Reuses the existing
+  `_send_candidate_email` helper (apps/hrm/views.py). Resolves `template_type="interview_invite"`.
+  Calls `_send_candidate_email(application=obj.application, template_type="interview_invite",
+  sent_by=request.user, company_name=request.tenant.name)`. Stamps `reminder_sent_at = now()`
+  on the `Interview` object. `log_action`. Redirect to `hrm:interview_detail`.
+  NOTE: if `candidate.do_not_contact` is True, `_send_candidate_email` suppresses the send and
+  logs a CandidateCommunication with delivery_status="failed"; no extra guard needed here.
+
+- [ ] **`interview_send_reminder`** — `@login_required`, `@require_POST`. Same pattern but uses
+  `template_type="interview_reminder"`. Stamps `reminder_sent_at = now()`. Redirect to detail.
+
+### 5e. `InterviewFeedback` views
+
+- [ ] **`interviewfeedback_list`** — `@login_required`. Filter by: `q` (searches `number`,
+  `interview__title`, `submitted_by__username`), `recommendation` (exact `overall_recommendation`),
+  `is_submitted` (`"true"`/`"false"` → `BooleanField`), `interview` (FK pk).
+  `select_related("interview__application__candidate", "submitted_by", "panelist__interviewer")`.
+  Context: `recommendation_choices=RECOMMENDATION_CHOICES`,
+  `status_choices=[("true","Submitted"),("false","Draft")]`,
+  `interviews=Interview.objects.filter(tenant=...).only("pk","number","title")`.
+  Template: `"hrm/interview/interviewfeedback/list.html"`.
+
+- [ ] **`interviewfeedback_create`** — `@login_required`. On form valid: set `feedback.tenant=request.tenant`,
+  `feedback.submitted_by=request.user`. Save. Redirect to `hrm:interviewfeedback_detail`. Template:
+  `"hrm/interview/interviewfeedback/form.html"`. Context also includes a `FeedbackCriterionForm` for
+  the inline criterion section.
+
+- [ ] **`interviewfeedback_detail`** — `@login_required`. The scorecard hub:
+  - `obj = get_object_or_404(InterviewFeedback.objects.filter(tenant=request.tenant).select_related("interview__application__candidate", "interview__application__requisition", "submitted_by", "panelist__interviewer"), pk=pk)`
+  - `criteria = obj.criteria.all()`
+  - `criterion_form = FeedbackCriterionForm()`
+  - Anti-anchoring: only show "edit/delete" on criteria if `not obj.is_submitted` (submitted
+    scorecards are read-only).
+  - Template: `"hrm/interview/interviewfeedback/detail.html"`.
+
+- [ ] **`interviewfeedback_edit`** — `@login_required`. Guard: if `obj.is_submitted`, redirect to
+  detail with message "Submitted scorecards cannot be edited." (prevents edits after formal submission).
+  Template: `"hrm/interview/interviewfeedback/form.html"`.
+
+- [ ] **`interviewfeedback_delete`** — `@login_required`, `@require_POST`. Guard: if `obj.is_submitted`,
+  return 403/redirect with message "Cannot delete a submitted scorecard." Else delete + `log_action`.
+  Redirect to `hrm:interviewfeedback_list`.
+
+- [ ] **`interviewfeedback_submit`** — `@login_required`, `@require_POST`. Sets `obj.is_submitted=True`,
+  `obj.submitted_at=now()`. `log_action`. Redirect to `hrm:interviewfeedback_detail`.
+
+- [ ] **`feedbackcriterion_add`** — `@login_required`, `@require_POST`. Accepts `feedback_pk` in URL.
+  Guard: if feedback.is_submitted, reject (message + redirect). Validates `FeedbackCriterionForm`.
+  Creates `FeedbackCriterion(feedback=obj, tenant=request.tenant, ...)`. Enforces unique
+  (feedback, criterion_name) with `get_or_create`. Redirect to `hrm:interviewfeedback_detail`.
+
+- [ ] **`feedbackcriterion_delete`** — `@login_required`, `@require_POST`. Accepts `feedback_pk` +
+  `criterion_pk`. Guard: if feedback.is_submitted, reject. Delete. Redirect to
+  `hrm:interviewfeedback_detail`.
+
+---
+
+## 6. URLs (`apps/hrm/urls.py`) — append to existing urlpatterns
+
+- [ ] Append to `urlpatterns` in `apps/hrm/urls.py`:
+
+```python
+# ── 3.7 Interview Process ────────────────────────────────────────────────────────
+# Interviews — full CRUD
+path("interviews/",                               views.interview_list,              name="interview_list"),
+path("interviews/add/",                           views.interview_create,            name="interview_create"),
+path("interviews/<int:pk>/",                      views.interview_detail,            name="interview_detail"),
+path("interviews/<int:pk>/edit/",                 views.interview_edit,              name="interview_edit"),
+path("interviews/<int:pk>/delete/",               views.interview_delete,            name="interview_delete"),
+
+# Interview status-transition actions (POST-only)
+path("interviews/<int:pk>/confirm/",              views.interview_confirm,           name="interview_confirm"),
+path("interviews/<int:pk>/start/",                views.interview_start,             name="interview_start"),
+path("interviews/<int:pk>/complete/",             views.interview_complete,          name="interview_complete"),
+path("interviews/<int:pk>/cancel/",               views.interview_cancel,            name="interview_cancel"),
+path("interviews/<int:pk>/no-show/",              views.interview_no_show,           name="interview_no_show"),
+path("interviews/<int:pk>/reschedule/",           views.interview_reschedule,        name="interview_reschedule"),
+
+# Panelist inline management (POST-only; no standalone list)
+path("interviews/<int:pk>/panelists/add/",        views.interview_panelist_add,      name="interview_panelist_add"),
+path("interviews/<int:pk>/panelists/<int:panelist_pk>/remove/", views.interview_panelist_remove, name="interview_panelist_remove"),
+path("interviews/<int:pk>/panelists/<int:panelist_pk>/rsvp/",   views.interview_panelist_rsvp,   name="interview_panelist_rsvp"),
+
+# Reminder / invite send actions (POST-only)
+path("interviews/<int:pk>/send-invite/",          views.interview_send_invite,       name="interview_send_invite"),
+path("interviews/<int:pk>/send-reminder/",        views.interview_send_reminder,     name="interview_send_reminder"),
+
+# Interview Feedback — full CRUD
+path("interview-feedback/",                       views.interviewfeedback_list,      name="interviewfeedback_list"),
+path("interview-feedback/add/",                   views.interviewfeedback_create,    name="interviewfeedback_create"),
+path("interview-feedback/<int:pk>/",              views.interviewfeedback_detail,    name="interviewfeedback_detail"),
+path("interview-feedback/<int:pk>/edit/",         views.interviewfeedback_edit,      name="interviewfeedback_edit"),
+path("interview-feedback/<int:pk>/delete/",       views.interviewfeedback_delete,    name="interviewfeedback_delete"),
+path("interview-feedback/<int:pk>/submit/",       views.interviewfeedback_submit,    name="interviewfeedback_submit"),
+
+# Feedback criterion inline management (POST-only; no standalone list)
+path("interview-feedback/<int:pk>/criteria/add/", views.feedbackcriterion_add,       name="feedbackcriterion_add"),
+path("interview-feedback/<int:pk>/criteria/<int:criterion_pk>/delete/", views.feedbackcriterion_delete, name="feedbackcriterion_delete"),
+```
+
+---
+
+## 7. `apps/hrm/admin.py`
+
+- [ ] Register `Interview` with `list_display=["number","title","round_number","mode","status","scheduled_at","duration_minutes","scheduled_by"]`, `list_filter=["status","mode","video_provider"]`, `search_fields=["number","title","application__candidate__first_name","application__candidate__last_name"]`, `readonly_fields=["number","status","reminder_sent_at","feedback_reminder_sent_at"]`
+- [ ] Register `InterviewPanelist` with `list_display=["interview","interviewer","role","rsvp_status","notified_at"]`, `list_filter=["role","rsvp_status"]`, `raw_id_fields=["interview","interviewer"]`, `readonly_fields=["notified_at"]`
+- [ ] Register `InterviewFeedback` with `list_display=["number","interview","submitted_by","overall_recommendation","is_submitted","submitted_at"]`, `list_filter=["overall_recommendation","is_submitted"]`, `search_fields=["number","interview__title"]`, `readonly_fields=["number","submitted_by","submitted_at"]`
+- [ ] Register `FeedbackCriterion` with `list_display=["feedback","criterion_name","rating"]`, `list_filter=["rating"]`, `raw_id_fields=["feedback"]`
+
+---
+
+## 8. Navigation — `apps/core/navigation.py` LIVE_LINKS["3.7"]
+
+The NavERP.md 3.7 bullets are: Interview Scheduling / Interview Panel / Interview Feedback /
+Video Interview / Interview Reminders. Map each to a meaningful, staff-reachable destination
+(per L30/L32 — distinct routes where possible).
+
+Decision rationale:
+- "Interview Scheduling" → `hrm:interview_list` (the main interview list; scheduling is the core action)
+- "Interview Panel" → `hrm:interview_list` (panelists are managed on the interview detail hub, not a
+  separate list; this co-highlights with Interview Scheduling, which is correct — panel management
+  is accessed from the same interview list)
+- "Interview Feedback" → `hrm:interviewfeedback_list` (distinct list page for scorecards)
+- "Video Interview" → `hrm:interview_list?mode=video` (deep-link filtered to video-mode interviews
+  only; most-specific-match wins in active-item flagging, so this highlights distinctly)
+- "Interview Reminders" → `hrm:interview_list` (reminders are inline actions on the interview detail;
+  no dedicated reminder list; co-highlights with Interview Scheduling — automated dispatch deferred)
+
+- [ ] Add to `LIVE_LINKS` dict in `apps/core/navigation.py` (after the `"3.6"` block, before the
+  closing `}`):
+
+```python
+# 3.7 Interview Process — scheduling, panel, feedback/scorecards, video links, reminders.
+# Panel management lives on the interview detail hub (inline add/remove) so "Interview Panel"
+# co-highlights with interview_list. "Video Interview" deep-links to mode=video filtered list.
+# "Interview Reminders" surfaces the send-invite/send-reminder actions on interview detail.
+"3.7": {
+    "Interview Scheduling": "hrm:interview_list",                  # bullet (interview schedule hub)
+    "Interview Panel":      "hrm:interview_list",                  # bullet (panel on interview detail)
+    "Interview Feedback":   "hrm:interviewfeedback_list",          # bullet (scorecard list)
+    "Video Interview":      "hrm:interview_list?mode=video",       # bullet (filtered: video mode only)
+    "Interview Reminders":  "hrm:interview_list",                  # bullet (reminder actions on detail)
+},
+```
+
+---
+
+## 9. Templates (`templates/hrm/interview/`)
+
+### 9a. `interview/interview/list.html`
+
+- [ ] Extends `base.html`. Page title: "Interviews". Filter bar with:
+  - Text search (`q`) — searches title, candidate name, number
+  - Status dropdown (`status`) — from `status_choices`; badge colors: scheduled=blue, confirmed=green,
+    in_progress=purple, completed=emerald, cancelled=red, no_show=orange, rescheduled=amber
+  - Mode dropdown (`mode`) — from `mode_choices`
+  - Application dropdown (`application`) — from `applications` queryset; FK comparison with
+    `|stringformat:"d"`
+  - Clear filters link when any filter active
+- [ ] Table columns: Number, Title, Round, Candidate (from application.candidate), Mode badge, Status
+  badge, Scheduled At, Duration (mins), Panelists count, Actions
+- [ ] Actions column: eye → `interview_detail`, pencil → `interview_edit`, bin → POST `interview_delete`
+  with confirm ("Delete this interview? This cannot be undone.")
+- [ ] Empty state: "No interviews found." with "Schedule Interview" CTA
+- [ ] Pagination using `page_obj`
+
+### 9b. `interview/interview/detail.html`
+
+- [ ] Interview hub. Header: INTV- number, title, status badge. Back to interview list link.
+- [ ] **Sidebar** (action panel):
+  - Status-transition buttons (POST forms with csrf_token): Confirm, Start, Complete, Cancel, No Show,
+    Reschedule — each conditionally rendered (hide if already in that state; grey-out terminal states
+    per status)
+  - Edit button → `interview_edit`
+  - Delete button (POST confirm) — only if not completed/cancelled
+  - Send Interview Invite button (POST → `interview_send_invite`) — reuses `_send_candidate_email` with
+    `interview_invite` template
+  - Send Reminder button (POST → `interview_send_reminder`) — uses `interview_reminder` template;
+    show label "Reminder Sent [date]" if `reminder_sent_at` is not null
+- [ ] **Interview Details section**: application link (candidate name → `candidate_detail`, req title →
+  `jobrequisition_detail`), round number, mode, scheduled_at (formatted), duration_minutes, location,
+  video_provider + meeting_url (show as clickable link if present), interviewer_instructions, notes,
+  scheduled_by
+- [ ] **Panel section** (inline):
+  - Table of `panelists` (interviewer name, role badge, RSVP status badge, briefing_notes truncated,
+    notified_at). Per-row: RSVP update buttons (POST form → `interview_panelist_rsvp`); Remove button
+    (POST → `interview_panelist_remove` with confirm)
+  - "Add Panelist" mini-form (POST → `interview_panelist_add`): `InterviewPanelistForm` fields inline —
+    interviewer dropdown, role dropdown, briefing_notes textarea
+  - Empty state: "No panelists assigned."
+- [ ] **Feedback section** (inline):
+  - Table of `feedback_entries` per panelist (panelist name, recommendation badge, is_submitted badge,
+    submitted_at, link to feedback detail)
+  - Anti-anchoring note: "Other panelists' feedback is hidden until you submit your own." (shown to
+    non-admin users who have an unsubmitted draft)
+  - "Add Scorecard" link → `interviewfeedback_create?interview=<pk>` (pre-selects this interview)
+- [ ] NOTE: pass `panelist_form`, `feedback_entries`, `panelists`, `status_choices` as context vars.
+  Pass `request.user` so the template can apply anti-anchoring logic.
+
+### 9c. `interview/interview/form.html`
+
+- [ ] Shared create/edit form. `{% if is_edit %}Edit Interview{% else %}Schedule Interview{% endif %}`.
+- [ ] Fields grouped: Basic Info (title, round_number, application), Schedule (scheduled_at with
+  datetime-local input, duration_minutes, scheduled_by), Location (mode, location — shown if
+  `mode == in_person`), Video (video_provider, meeting_url — shown when `mode == video`),
+  Instructions (interviewer_instructions, notes).
+- [ ] Help text on status: "Status is managed via the pipeline actions on the interview detail page."
+- [ ] Show link: if `meeting_url` is populated on edit, display it as a clickable preview.
+
+### 9d. `interview/interviewfeedback/list.html`
+
+- [ ] Extends `base.html`. Page title: "Interview Scorecards". Filter bar with:
+  - Text search (`q`)
+  - Recommendation dropdown (`recommendation`) — from `recommendation_choices`; badge colors:
+    strong_no=red, no=orange, maybe=amber, yes=blue, strong_yes=green
+  - Submitted filter (`is_submitted`) — from `[("true","Submitted"),("false","Draft")]`
+  - Interview dropdown (`interview`) — from `interviews` queryset; FK `|stringformat:"d"`
+  - Clear filters
+- [ ] Table: Number, Interview (title + link), Submitted By, Recommendation badge, Criteria count
+  (`obj.criteria.count()`), Submitted badge (Yes/Draft), Submitted At, Actions (view/edit/delete)
+- [ ] Actions: eye → `interviewfeedback_detail`, pencil → `interviewfeedback_edit`, bin → POST delete
+  (disabled with tooltip if `is_submitted`)
+- [ ] Empty state: "No scorecards found." with "Add Scorecard" CTA
+
+### 9e. `interview/interviewfeedback/detail.html`
+
+- [ ] Scorecard hub. Header: IFB- number, recommendation badge, submitted badge. Back to feedback list link.
+- [ ] **Sidebar**: Submit Scorecard button (POST → `interviewfeedback_submit`; disabled if
+  `is_submitted`). Edit button → `interviewfeedback_edit` (disabled if submitted). Delete button (POST;
+  disabled if submitted). Back to interview detail link.
+- [ ] **Feedback Details section**: interview link, panelist name (via `panelist.interviewer`), submitted_by,
+  overall_recommendation display, summary, is_submitted, submitted_at.
+- [ ] **Criteria inline section**:
+  - Table of `criteria` (criterion_name, rating badge (1-5 colored stars or number badge), notes
+    truncated). Per-row: Remove button (POST → `feedbackcriterion_delete` — disabled if submitted).
+  - "Add Criterion" mini-form (POST → `feedbackcriterion_add`): `FeedbackCriterionForm` fields inline —
+    criterion_name, rating (1-5 number input), notes.
+  - If submitted: hide add/remove forms; show "Submitted scorecards are read-only." notice.
+  - Empty state: "No criteria added yet."
+
+### 9f. `interview/interviewfeedback/form.html`
+
+- [ ] Shared create/edit form. `{% if is_edit %}Edit Scorecard{% else %}Add Scorecard{% endif %}`.
+- [ ] Fields: interview (FK dropdown, pre-selectable from `?interview=<pk>` GET param — set `initial`
+  in view if GET param present), panelist (FK dropdown — filtered to panelists of the selected
+  interview if possible; otherwise all tenant panelists), overall_recommendation, summary,
+  is_submitted checkbox.
+- [ ] Help text on `submitted_by`: "Automatically set to the current user when the scorecard is created."
+- [ ] Help text on `is_submitted`: "Once submitted, the scorecard becomes read-only. Use the 'Submit
+  Scorecard' action on the detail page for formal submission."
+
+---
+
+## 10. Seeder — extend `apps/hrm/management/commands/seed_hrm.py`
+
+All new 3.7 seed logic is added as a new idempotent block inside the existing `handle()` method
+(after the 3.6 candidate block). The management command file and both `__init__.py` files
+already exist — no new files needed.
+
+- [ ] Add a per-tenant guard at the top of the 3.7 block:
+  ```python
+  if Interview.objects.filter(tenant=tenant).exists():
+      self.stdout.write("3.7 Interview data already exists. Skipping.")
+  else:
+      # ... seed 3.7 data
+  ```
+
+- [ ] Import the new models at the top of `seed_hrm.py`:
+  `from apps.hrm.models import Interview, InterviewPanelist, InterviewFeedback, FeedbackCriterion`
+
+- [ ] Add an `interview_reminder` `CandidateEmailTemplate` per tenant (idempotent via
+  `get_or_create(tenant=tenant, name="Interview Reminder — Standard")`):
+  - name: "Interview Reminder — Standard"
+  - template_type: "interview_reminder"
+  - subject: "Reminder: Your interview for {{job_title}} is coming up"
+  - body_html: "Dear {{candidate_name}},\n\nThis is a friendly reminder that your interview for the
+    {{job_title}} position at {{company_name}} is scheduled. Please contact us if you have any
+    questions.\n\nBest regards,\n{{recruiter_name}}"
+  - is_active: True, is_auto_send: False
+
+- [ ] Seed **2 `Interview` records** per tenant (idempotent: check `Interview.objects.filter(tenant=tenant,
+  number=number).first()` — use `next_number` to compute the expected number, or simply check
+  `Interview.objects.filter(tenant=tenant, title=title, application=app).first()`):
+  - Requires existing `JobApplication` rows (from 3.6 seed). Check
+    `JobApplication.objects.filter(tenant=tenant).first()` — skip with a warning if none exist.
+  - Interview 1: `title="Technical Round 1"`, `round_number=1`, `mode="video"`,
+    `scheduled_at=now()+timedelta(days=3)`, `duration_minutes=60`, `video_provider="meet"`,
+    `meeting_url="https://meet.google.com/demo-link"`, `status="scheduled"`,
+    linked to the first application at stage "interview" (or first available application)
+  - Interview 2: `title="HR Final Round"`, `round_number=2`, `mode="in_person"`,
+    `scheduled_at=now()+timedelta(days=7)`, `duration_minutes=45`, `location="Board Room A"`,
+    `status="confirmed"`, linked to the same or second application
+
+- [ ] Seed **1–2 `InterviewPanelist` records** per interview (idempotent via
+  `get_or_create(interview=intv, interviewer=user)`):
+  - Use the tenant admin user (or any user returned by
+    `User.objects.filter(tenant_memberships__tenant=tenant).first()`) as the panelist.
+  - `role="lead"`, `rsvp_status="accepted"`, `notified_at=now()`
+
+- [ ] Seed **1 `InterviewFeedback` + 3 `FeedbackCriterion` records** per interview (idempotent):
+  - Feedback: `overall_recommendation="yes"`, `summary="Strong candidate; clear technical knowledge
+    and good cultural fit."`, `is_submitted=True`, `submitted_at=now()`, `submitted_by=tenant_admin`
+  - Criteria (idempotent via `get_or_create(feedback=fb, criterion_name=name)`):
+    - ("Problem Solving", 4, "Solved the technical problem with a clear approach.")
+    - ("Communication",  5, "Articulate and well-organized answers.")
+    - ("Culture Fit",    4, "Aligns with company values.")
+
+- [ ] Print after seeding: `"3.7 Interview data seeded for tenant <slug>."` and remind:
+  `"Login as admin_<slug> to see Interview data. Superuser 'admin' has no tenant."`
+
+---
+
+## 11. Verify
+
+- [ ] `python manage.py makemigrations` — confirm no unapplied changes remain
+- [ ] `python manage.py migrate` — confirm `0014_interview_process` applied cleanly
+- [ ] `python manage.py seed_hrm` (run twice — second run must print "already exists" guard and skip
+  the 3.7 block cleanly without errors)
+- [ ] `python manage.py check` — zero errors/warnings
+
+- [ ] **Smoke script** — create `temp/smoke_37.py`:
+  1. Log in as `admin_acme` (tenant user). GET all 3.7 routes — expect 200:
+     - `hrm:interview_list`, `hrm:interview_create`
+     - `hrm:interview_detail` (pk of first seeded interview)
+     - `hrm:interview_edit` (same pk)
+     - `hrm:interviewfeedback_list`, `hrm:interviewfeedback_create`
+     - `hrm:interviewfeedback_detail` (pk of first seeded feedback)
+     - `hrm:interviewfeedback_edit` (same pk)
+  2. POST status transitions — expect 302:
+     - `hrm:interview_confirm` (pk of first scheduled interview)
+     - `hrm:interview_complete` (same)
+  3. POST panelist add — expect 302:
+     - `hrm:interview_panelist_add` (pk=first interview) with valid interviewer pk + role
+  4. POST feedback submit — expect 302:
+     - `hrm:interviewfeedback_submit` (pk of first draft feedback)
+  5. POST feedback criterion add — expect 302 or 400 if already submitted:
+     - `hrm:feedbackcriterion_add` (pk of first feedback) with criterion_name + rating
+  6. **Cross-tenant IDOR**: GET `hrm:interview_detail` (pk from acme) as `admin_beta` user — expect 404
+  7. **Template leak scan**: search rendered HTML for `{#` or `{% comment` — expect zero hits
+  8. **`?mode=video` filter**: GET `hrm:interview_list?mode=video` — expect 200 and only video-mode rows
+  9. Print "ALL 3.7 SMOKE CHECKS PASSED" or list failures
+
+- [ ] Verify sidebar shows 3.7 sub-module bullets as **Live** (green links) when logged in as `admin_acme`
+
+---
+
+## 12. Close-out
+
+- [ ] Run the full Module Creation Sequence review agents (in order, one at a time):
+  1. `code-reviewer` agent
+  2. `explorer` agent
+  3. `frontend-reviewer` agent
+  4. `performance-reviewer` agent
+  5. `qa-smoke-tester` agent
+  6. `security-reviewer` agent
+  7. `test-writer` agent
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add 3.7 models (`Interview`/`InterviewPanelist`/
+  `InterviewFeedback`/`FeedbackCriterion`), URL names, templates
+  (`hrm/interview/interview/`, `hrm/interview/interviewfeedback/`), seeder additions
+  (`Interview`/`InterviewPanelist`/`InterviewFeedback`/`FeedbackCriterion` + interview_reminder
+  CandidateEmailTemplate), and the `LIVE_LINKS["3.7"]` wiring. Update "table count" and "templates
+  count" in the skill header.
+
+---
+
+## Later passes / deferred (from research-interview-process.md)
+
+- **Live calendar sync (Google Calendar / Outlook OAuth)** — two-way calendar sync via OAuth2 + webhook.
+  `calendar_event_id` field OMITTED this pass; add as a plain CharField when OAuth is plumbed.
+  (Seen: all 10 products)
+- **Candidate self-scheduling portal** — slot picker backed by real calendar availability. Store
+  `candidate_self_schedule_url` OMITTED this pass (use `meeting_url` for a manual Calendly link).
+  (Seen: Greenhouse, Lever, Ashby, GoodTime)
+- **Zoom/Teams/Meet OAuth auto-link generation** — call provider API on interview save; `meeting_url`
+  is stored manually for now. (Seen: Recruitee, BambooHR, Workable)
+- **SMS/WhatsApp reminders** — Twilio/WhatsApp Business API; `CandidateCommunication.channel` already
+  supports the value. (Seen: GoodTime, Recruitee)
+- **One-way / async video interviews** — candidates record answers; requires video hosting (Spark Hire /
+  HireVue embed). (Seen: Spark Hire, HireVue, Zoho, SmartRecruiters)
+- **AI scorecard summarization** — LLM-powered summary across all panelist scorecards. (Seen: Greenhouse,
+  Ashby, Lever)
+- **AI video scoring** — Spark Hire/HireVue dimensions (Communication, Enthusiasm, Comprehension).
+  (Deferred)
+- **Interviewer load balancing (AI)** — GoodTime-style AI-driven panelist selection by availability
+  and past load. (Deferred)
+- **Interview kit / question bank templates** — re-usable default `FeedbackCriterion` name sets per job
+  type so scorecards are consistently pre-populated. Simple catalog table; next pass candidate.
+- **Scorecard editing window (admin-gated)** — Greenhouse allows editing up to 30 days post-submission
+  for admins. Add a time-window guard + `@tenant_admin_required` gate in a future pass.
+- **Celery/async reminder dispatch** — `reminder_sent_at` / `feedback_reminder_sent_at` stubs are in
+  place; the actual Celery beat task that reads those fields and fires emails is a separate infra pass.
+- **Feedback blinding enforcement (strict)** — current pass uses view-level conditional display;
+  a future pass can enforce it at the queryset level (ORM annotation) for airtight anti-anchoring.
+
+---
+
+## Review notes
+(filled in at close-out)
