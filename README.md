@@ -306,7 +306,22 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   status fields workflow-owned, never on the form); on submit a `generate_approval_chain` service auto-builds the
   default HR→Executive chain. A reusable `JobDescriptionTemplate` (`JDTMPL-`) library pre-fills the JD via a
   copy-on-apply `apply_template_to_requisition` service; plus per-step approve/reject/return, clone, and an
-  overdue indicator. Candidate/interview/offer linkage deferred to 3.6–3.8.
+  overdue indicator. Offer linkage deferred to 3.8.
+- **3.6 Candidate Management** — the ATS. A `CandidateProfile` (`CAND-`) is a `core.Party`(person) +
+  `PartyRole(candidate)` lens (mirrors `EmployeeProfile`) with resume/skills/source/GDPR consent + talent-pool
+  `CandidateTag`s and structured `CandidateSkill`s. `JobApplication` (`APP-`) is the pipeline record against a
+  3.5 `JobRequisition` (10-stage machine applied→…→interview→offer→hired, no double-apply). Recruiting
+  `CandidateEmailTemplate`s (auto-send on stage transitions) log to an append-only `CandidateCommunication` trail
+  (honors `do_not_contact`); plus a **public, unauthenticated career portal** (`careers_list`/`careers_apply` via an
+  unguessable `public_token`) that mints the Party+application on submit.
+- **3.7 Interview Process** — scheduling + panel + structured scorecards over the 3.6 application. An `Interview`
+  (`INTV-`) is a scheduled round on a `JobApplication` (mode in-person/phone/video; status machine scheduled→
+  confirmed→in_progress→completed +cancelled/no_show/rescheduled, with reschedule reopening a closed round); an
+  `InterviewPanelist` assigns interviewers (role + RSVP); an `InterviewFeedback` (`IFB-`) scorecard (one per panelist,
+  5-level hire recommendation, action-only submit) holds per-competency `FeedbackCriterion` ratings (1–5). Candidate
+  invites/reminders reuse the 3.6 email pipeline (`interview_invite`/`interview_reminder` templates →
+  `CandidateCommunication`); a panel feedback-request nudge emails the interviewers. Calendar/Zoom-Teams-Meet/SMS
+  auto-dispatch + AI scoring deferred.
 - **3.9 Attendance Management** — `AttendanceRecord` (`ATT-`, auto `hours_worked` incl. overnight, late-arrival
   badge, source/status), `Shift` (grace window) + `ShiftAssignment`.
 - **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
@@ -314,8 +329,8 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and an **844-test** HRM suite
-(**1,906 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,297-test** HRM suite
+(**3,944 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -722,7 +737,7 @@ Before deploying:
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built (0.1 complete) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built (leads, **1.2 SFA recreated in detail: opportunities + splits + Kanban board, product catalog + price books + quote builder, territories + sales quotas + forecast dashboard**, **1.3 marketing automation recreated in detail: campaigns + members + email templates/campaigns + landing pages + public web-to-lead form submissions**, **1.4 customer service recreated in detail: cases (SLA policies/breach + conversation thread + CSAT) + knowledge base (categories/feedback) + customer self-service portal + public case-status/KB pages**, tasks, accounts/contacts; expenses, projects/milestones/timesheets, doc templates/contracts+e-sign, workflow rules/approvals, onboarding/health/surveys, stock/POs/partner portal) |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built (dashboard + cash-forecast; GL: chart of accounts, journal entries, fiscal periods, currencies/FX; AP/AR: vendor/customer profiles, bills, invoices, recurring invoicing, payments + cash application, aging, payment schedule; Cash: bank accounts, CSV import, reconciliation; **advanced** — Fixed Assets + depreciation/disposal, Cost Allocation, Payroll journal, Project/Job Costing, Intercompany, Tax codes/returns, Balance Sheet/P&L/Scheduled reports, Budgeting + variance, Internal Controls, Integrations) |
-| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.5/3.9/3.10/3.12 built — 8 of 41 sub-modules (**employee management** — full personnel-file profiles on `core.Party`/`core.Employment` with a document vault [verify/reject + expiry + confidential] and a dated lifecycle/job-history timeline; **organizational structure** — job grades + designations (salary bands/JD), department & cost-center companion profiles (head/owner/budget) on `core.OrgUnit`, a derived org chart + company-setup view; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; **job requisition** — a `JobRequisition` authorization-to-hire hub with budget/headcount/JD, a sequential `RequisitionApproval` chain (draft→pending→approved→posted→filled), reusable `JobDescriptionTemplate` copy-on-apply, and clone; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.6 Candidate Management |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.9/3.10/3.12 built — 10 of 41 sub-modules (**employee management** — full personnel-file profiles on `core.Party`/`core.Employment` with a document vault [verify/reject + expiry + confidential] and a dated lifecycle/job-history timeline; **organizational structure** — job grades + designations (salary bands/JD), department & cost-center companion profiles (head/owner/budget) on `core.OrgUnit`, a derived org chart + company-setup view; **employee onboarding** — reusable templates → per-hire programs with auto-generated tasks, document/e-sign tracking, asset issue/return, orientation scheduling; **employee offboarding** — separation cases driving resignation→approval→clearance→F&F→completion with auto-generated department clearance (asset-return on clear), exit interviews, full-&-final settlement with derived net payable, and relieving/experience letter print views; **job requisition** — a `JobRequisition` authorization-to-hire hub with budget/headcount/JD, a sequential `RequisitionApproval` chain (draft→pending→approved→posted→filled), reusable `JobDescriptionTemplate` copy-on-apply, and clone; **candidate management** — an ATS `CandidateProfile` (on `core.Party`) + talent-pool tags/skills, a `JobApplication` pipeline against requisitions with auto-firing recruiting email templates + an append-only communication log, and a public unauthenticated career portal; **interview process** — `Interview` scheduling (mode/status machine + reschedule) with an `InterviewPanelist` panel (role + RSVP) and structured `InterviewFeedback` scorecards (per-competency 1–5 ratings + hire recommendation), candidate invites/reminders reusing the recruiting email pipeline; attendance with shifts + late detection; leave types/allocations/requests with derived balances + approval workflow; public-holiday calendar; idempotent `seed_hrm`). Next: 3.8 Offer Management |
 | 4 | Supply Chain Management (SCM) | `scm` | Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | Roadmap |
 | 6 | Procurement Management System | `procurement` | Roadmap |
