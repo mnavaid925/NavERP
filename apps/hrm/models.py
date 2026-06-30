@@ -2258,7 +2258,11 @@ class InterviewFeedback(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at"]
-        unique_together = ("tenant", "number")
+        # ("interview", "panelist") enforces one scorecard per panelist per interview (the docstring
+        # contract). On MariaDB/SQLite a UNIQUE index treats NULLs as distinct, so multiple
+        # panelist=NULL (unassigned) cards on one interview are still allowed — exactly what we want,
+        # and portable (a conditional UniqueConstraint would silently no-op on MariaDB: no partial idx).
+        unique_together = [("tenant", "number"), ("interview", "panelist")]
         indexes = [
             models.Index(fields=["tenant", "interview"], name="hrm_ifb_tenant_intv_idx"),
             models.Index(fields=["tenant", "overall_recommendation"], name="hrm_ifb_tenant_reco_idx"),
