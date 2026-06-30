@@ -30,7 +30,7 @@
       {% endif %}
       <form method="post" action="{% url 'hrm:interview_reschedule' obj.pk %}" class="filter-bar" style="margin-top:1rem;">
         {% csrf_token %}
-        <div class="form-group"><label class="form-label">New date &amp; time</label><input type="datetime-local" name="scheduled_at" class="form-input" aria-label="New date and time"></div>
+        <div class="form-group"><label class="form-label" for="id_reschedule_at">New date &amp; time</label><input type="datetime-local" name="scheduled_at" id="id_reschedule_at" class="form-input" aria-label="New date and time"></div>
         <button class="btn btn-outline" type="submit"><i data-lucide="calendar-clock"></i> Reschedule</button>
       </form>
       <div class="filter-bar" style="margin-top:1rem;">
@@ -42,8 +42,8 @@
         {% endif %}
         <form method="post" action="{% url 'hrm:interview_request_feedback' obj.pk %}" style="margin:0;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="clipboard-pen"></i> Request Feedback</button></form>
       </div>
-      {% if obj.reminder_sent_at %}<p class="form-help" style="margin-top:.5rem;"><i data-lucide="check"></i> Candidate reminder last sent {{ obj.reminder_sent_at|date:"Y-m-d H:i" }}.</p>{% endif %}
-      {% if obj.feedback_reminder_sent_at %}<p class="form-help"><i data-lucide="check"></i> Panel feedback last requested {{ obj.feedback_reminder_sent_at|date:"Y-m-d H:i" }}.</p>{% endif %}
+      {% if obj.reminder_sent_at %}<p class="text-muted" style="margin-top:.5rem;"><i data-lucide="check"></i> Candidate reminder last sent {{ obj.reminder_sent_at|date:"Y-m-d H:i" }}.</p>{% endif %}
+      {% if obj.feedback_reminder_sent_at %}<p class="text-muted"><i data-lucide="check"></i> Panel feedback last requested {{ obj.feedback_reminder_sent_at|date:"Y-m-d H:i" }}.</p>{% endif %}
     </div>
   </div>
 
@@ -112,7 +112,7 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Scorecards</h2></div>
     <div class="card-body">
-      <p><a href="{% url 'hrm:interviewfeedback_create' %}?interview={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add Scorecard</a></p>
+      <div style="margin-bottom:1rem;"><a href="{% url 'hrm:interviewfeedback_create' %}?interview={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add Scorecard</a></div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Number</th><th>Recommendation</th><th>Avg Rating</th><th>Submitted</th><th>By</th></tr></thead>
