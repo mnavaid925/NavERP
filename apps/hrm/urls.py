@@ -329,4 +329,48 @@ urlpatterns = [
     path("interview-feedback/<int:pk>/submit/", views.interviewfeedback_submit, name="interviewfeedback_submit"),
     path("interview-feedback/<int:pk>/criteria/add/", views.feedbackcriterion_add, name="feedbackcriterion_add"),
     path("interview-feedback/<int:pk>/criteria/<int:criterion_pk>/delete/", views.feedbackcriterion_delete, name="feedbackcriterion_delete"),
+
+    # Offer Letter Templates (3.8) — CRUD (printable-letter body library)
+    path("offer-letter-templates/", views.offerlettertemplate_list, name="offerlettertemplate_list"),
+    path("offer-letter-templates/add/", views.offerlettertemplate_create, name="offerlettertemplate_create"),
+    path("offer-letter-templates/<int:pk>/", views.offerlettertemplate_detail, name="offerlettertemplate_detail"),
+    path("offer-letter-templates/<int:pk>/edit/", views.offerlettertemplate_edit, name="offerlettertemplate_edit"),
+    path("offer-letter-templates/<int:pk>/delete/", views.offerlettertemplate_delete, name="offerlettertemplate_delete"),
+
+    # Offers (3.8) — CRUD + hub + approval chain + status machine + printable letter
+    path("offers/", views.offer_list, name="offer_list"),
+    path("offers/add/", views.offer_create, name="offer_create"),
+    path("offers/<int:pk>/", views.offer_detail, name="offer_detail"),
+    path("offers/<int:pk>/edit/", views.offer_edit, name="offer_edit"),
+    path("offers/<int:pk>/delete/", views.offer_delete, name="offer_delete"),
+    path("offers/<int:pk>/submit/", views.offer_submit, name="offer_submit"),
+    path("offers/<int:pk>/approve-step/", views.offer_approve_step, name="offer_approve_step"),
+    path("offers/<int:pk>/reject-step/", views.offer_reject_step, name="offer_reject_step"),
+    path("offers/<int:pk>/extend/", views.offer_extend, name="offer_extend"),
+    path("offers/<int:pk>/accept/", views.offer_accept, name="offer_accept"),
+    path("offers/<int:pk>/decline/", views.offer_decline, name="offer_decline"),
+    path("offers/<int:pk>/rescind/", views.offer_rescind, name="offer_rescind"),
+    path("offers/<int:pk>/expire/", views.offer_expire, name="offer_expire"),
+    path("offers/<int:pk>/send-email/", views.offer_send_email, name="offer_send_email"),
+    path("offers/<int:pk>/letter/", views.offer_letter_print, name="offer_letter_print"),
+    path("offers/<int:pk>/approvals/add/", views.offerapproval_add, name="offerapproval_add"),
+    path("offer-approvals/<int:pk>/delete/", views.offerapproval_delete, name="offerapproval_delete"),
+
+    # Pre-boarding items (3.8) — inline on the offer hub (add/remove/submit/verify/reject/send-invite)
+    path("offers/<int:pk>/preboarding/add/", views.preboardingitem_add, name="preboardingitem_add"),
+    path("preboarding-items/<int:pk>/delete/", views.preboardingitem_delete, name="preboardingitem_delete"),
+    path("preboarding-items/<int:pk>/submit/", views.preboardingitem_mark_submitted, name="preboardingitem_mark_submitted"),
+    path("preboarding-items/<int:pk>/verify/", views.preboardingitem_verify, name="preboardingitem_verify"),
+    path("preboarding-items/<int:pk>/reject/", views.preboardingitem_reject, name="preboardingitem_reject"),
+    path("preboarding-items/<int:pk>/send-invite/", views.preboardingitem_send_invite, name="preboardingitem_send_invite"),
+
+    # Background Verification (3.8) — CRUD + lifecycle actions
+    path("background-checks/", views.backgroundverification_list, name="backgroundverification_list"),
+    path("background-checks/add/", views.backgroundverification_create, name="backgroundverification_create"),
+    path("background-checks/<int:pk>/", views.backgroundverification_detail, name="backgroundverification_detail"),
+    path("background-checks/<int:pk>/edit/", views.backgroundverification_edit, name="backgroundverification_edit"),
+    path("background-checks/<int:pk>/delete/", views.backgroundverification_delete, name="backgroundverification_delete"),
+    path("background-checks/<int:pk>/initiate/", views.backgroundverification_initiate, name="backgroundverification_initiate"),
+    path("background-checks/<int:pk>/mark-status/", views.backgroundverification_mark_status, name="backgroundverification_mark_status"),
+    path("background-checks/<int:pk>/complete/", views.backgroundverification_complete, name="backgroundverification_complete"),
 ]
