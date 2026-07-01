@@ -3524,7 +3524,7 @@ def _interview_or_404(request, pk):
 
 
 def _form_changes(form):
-    """Compact {field: new_value} of changed fields for the audit log (the 3.7 forms carry no
+    """Compact {field: new_value} of changed fields for the audit log (the 3.7/3.8 forms carry no
     sensitive fields, so no redaction needed — mirrors apps.core.crud._changed)."""
     return {name: str(form.cleaned_data.get(name))[:200] for name in getattr(form, "changed_data", [])}
 
@@ -4029,11 +4029,14 @@ def offer_detail(request, pk):
 
 @login_required
 def offer_edit(request, pk):
-    # Editable only while draft/pending_approval (mirrors the requisition's editable-before-approval guard);
-    # `status` and the workflow stamps aren't on the form, so they're preserved.
+    # Editable only while a draft (mirrors jobrequisition_edit locking during the approval flow). Editing is
+    # locked once submitted because the approval chain — including the executive-step comp threshold — is
+    # built at submit time and not recomputed; a comp change under approval would silently invalidate it.
+    # A pending-approval offer is reopened for edits via reject-step (back to draft). `status` and the
+    # workflow stamps aren't on the form, so they're preserved.
     obj = get_object_or_404(Offer.objects.filter(tenant=request.tenant), pk=pk)
-    if obj.status not in ("draft", "pending_approval"):
-        messages.error(request, "Only a draft or pending-approval offer can be edited.")
+    if obj.status != "draft":
+        messages.error(request, "Only a draft offer can be edited. Reject the approval to reopen it for changes.")
         return redirect("hrm:offer_detail", pk=obj.pk)
     if request.method == "POST":
         form = OfferForm(request.POST, request.FILES, instance=obj, tenant=request.tenant)
@@ -4406,6 +4409,12 @@ def backgroundverification_detail(request, pk):
 
 @login_required
 def backgroundverification_edit(request, pk):
+    # Locked once completed (mirrors offer_edit / jobrequisition_edit) — a completed check's vendor/type/
+    # consent/report is an audited record, not re-editable.
+    obj = get_object_or_404(BackgroundVerification.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.status == "completed":
+        messages.error(request, "A completed background check can no longer be edited.")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
     return crud_edit(request, model=BackgroundVerification, pk=pk, form_class=BackgroundVerificationForm,
                      template="hrm/offer/backgroundverification/form.html",
                      success_url="hrm:backgroundverification_list")
@@ -4499,6 +4508,10 @@ def _preboarding_or_404(request, pk):
 @require_POST
 def preboardingitem_add(request, pk):
     offer = get_object_or_404(Offer, pk=pk, tenant=request.tenant)
+    # Pre-boarding is only meaningful before/at joining — don't add items to a dead offer.
+    if offer.is_closed and offer.status != "accepted":
+        messages.error(request, "Pre-boarding items can't be added to a declined, rescinded or expired offer.")
+        return redirect("hrm:offer_detail", pk=offer.pk)
     form = PreboardingItemForm(request.POST, request.FILES, tenant=request.tenant)
     if form.is_valid():
         item = form.save(commit=False)
@@ -4525,9 +4538,14 @@ def preboardingitem_delete(request, pk):
 @require_POST
 def preboardingitem_mark_submitted(request, pk):
     item = _preboarding_or_404(request, pk)
+    if item.status not in ("pending", "rejected"):
+        messages.error(request, "Only a pending or rejected pre-boarding item can be (re)submitted.")
+        return redirect("hrm:offer_detail", pk=item.offer_id)
     item.status = "submitted"
     item.submitted_at = timezone.now()
-    item.save(update_fields=["status", "submitted_at", "updated_at"])
+    item.verified_by = None  # clear any stale verification from a prior reject so history stays consistent
+    item.verified_at = None
+    item.save(update_fields=["status", "submitted_at", "verified_by", "verified_at", "updated_at"])
     messages.success(request, "Pre-boarding item marked submitted.")
     return redirect("hrm:offer_detail", pk=item.offer_id)
 
