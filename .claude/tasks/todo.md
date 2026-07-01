@@ -1732,3 +1732,512 @@ level feedback blinding; admin-gated scorecard edit window; and the Celery beat 
 
 **Next sub-module:** 3.8 Offer Management (FKs into the built `JobApplication`; an offer follows a completed 3.7
 interview/scorecards).
+
+---
+# HRM Sub-module 3.8 — Offer Management (hrm) — plan from research-hrm-offer-management.md  (2026-07-01)
+
+**Extending `apps/hrm`** — NOT a new app. `apps.py`, `__init__.py`, `config/settings.py`, `config/urls.py` are
+already wired for `hrm`. The only new wire-up is ONE `LIVE_LINKS["3.8"]` entry + URL patterns appended to the
+existing `apps/hrm/urls.py`. **5 models** (research's optional 5th is IN SCOPE — see decision below): `Offer`
+[OFR-], `OfferApproval` (child, no number), `BackgroundVerification` [BGV-], `PreboardingItem` (child, no number),
+`OfferLetterTemplate` [OLTMPL-]. Sub-module template folder: `templates/hrm/offer/`. Builds on the existing 3.5
+`JobRequisition` (salary band + `is_overdue` pattern), 3.6 `JobApplication`/`CandidateEmailTemplate`/
+`CandidateCommunication`/`_send_candidate_email`, and mirrors the 3.5 `RequisitionApproval` + 3.7
+`InterviewPanelist`/`FeedbackCriterion` inline-child conventions exactly. Next migration file:
+`apps/hrm/migrations/0016_offer_management.py` (last is `0015_alter_interviewfeedback_unique_together.py`).
+
+## 0. Template-folder decision + OfferLetterTemplate call
+
+- [ ] Confirm folder shape (CLAUDE.md rule 2 — multi-entity sub-module):
+  `templates/hrm/offer/offer/{list,detail,form}.html`,
+  `templates/hrm/offer/backgroundverification/{list,detail,form}.html`,
+  `templates/hrm/offer/offerlettertemplate/{list,detail,form}.html`.
+  `OfferApproval` + `PreboardingItem` are child rows managed on `offer/offer/detail.html` (no standalone
+  list/CRUD pages — mirrors `RequisitionApproval` and `InterviewPanelist`/`FeedbackCriterion`).
+- [ ] Standalone printable letter page at the sub-module root (rule 6, mirrors `relieving_letter.html`):
+  `templates/hrm/offer/offer_letter.html`.
+- [ ] **Decision: include `OfferLetterTemplate` as the 5th model** (research flagged this as optional/
+  todo's-call). Rationale: it costs one small `TenantNumbered` catalog table (mirrors
+  `CandidateEmailTemplate` exactly — same `name`/`is_active`/`body_html` shape), keeps the printable
+  letter body reusable + merge-tokenized across offers instead of freezing it into a single TextField on
+  `Offer`, and gives 3.8's "Offer Letter Generation" bullet a real list page to point `LIVE_LINKS` at. A
+  bare `body_html` TextField directly on `Offer` was rejected — it would force copy/pasting the same
+  boilerplate letter body onto every new offer with no template reuse.
+
+## 1. Models (apps/hrm/models.py) — fields driven by research features
+
+- [ ] **`OfferLetterTemplate(TenantNumbered)`** [`NUMBER_PREFIX = "OLTMPL"`] — mirrors
+  `CandidateEmailTemplate`'s shape (driver: Offer Letter Generation — Greenhouse/Lever/Workday/Oracle
+  Taleo template-token pattern):
+  - `name` CharField(255)
+  - `is_active` BooleanField(default=True)
+  - `body_html` TextField — help_text documents merge fields: `{{candidate_name}}, {{job_title}},
+    {{base_salary}}, {{currency}}, {{start_date}}, {{company_name}}, {{hiring_manager_name}}`
+  - `Meta`: `ordering = ["name"]`, `unique_together = ("tenant", "name")`,
+    index `["tenant", "is_active"]` (name `hrm_oltmpl_tenant_active_idx`)
+  - No FK reuse beyond `TenantNumbered` — a standalone catalog like `CandidateEmailTemplate`.
+
+- [ ] **`Offer(TenantNumbered)`** [`NUMBER_PREFIX = "OFR"`] — the offer-management hub, FK'd to
+  `hrm.JobApplication` (not hard 1:1 — a re-issued offer supersedes rather than multiplies, mirrors how
+  `Interview` FKs `JobApplication`):
+  - `application` FK `hrm.JobApplication` (`on_delete=CASCADE`, `related_name="offers"`)
+  - `offer_letter_template` FK `hrm.OfferLetterTemplate` (`on_delete=SET_NULL`, `null=True`, `blank=True`,
+    `related_name="offers"`) — driver: Offer Letter Generation template-token pattern
+  - Compensation breakdown (driver: "Variable compensation breakdown on the offer" — Workday comp bands /
+    SAP SuccessFactors Offer Detail / CompUp+HiBob letter conventions):
+    - `base_salary` DecimalField(max_digits=14, decimal_places=2)
+    - `currency` CharField(max_length=3, default="USD") — help_text: "Defaults from the requisition's
+      salary_currency at creation time" (view-layer default, not a DB default — mirrors how
+      `JobRequisition.salary_currency` is a plain field, not derived)
+    - `bonus_amount` DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    - `bonus_terms` TextField(blank=True)
+    - `signing_bonus` DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    - `equity_terms` TextField(blank=True, help_text="Grant description / vesting schedule — equity plans
+      aren't modeled as a structured table yet.")
+    - `relocation_assistance` DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    - `benefits_summary` TextField(blank=True)
+  - `start_date` DateField — proposed joining date
+  - `expires_on` DateField(null=True, blank=True) + `is_overdue` property (driver: "Expected response/
+    expiry date with overdue flag" — mirrors `JobRequisition.is_overdue` exactly: `expires_on is not None
+    and expires_on < date.today() and status not in OFFER_TERMINAL_STATUSES`)
+  - Workflow-owned (driver: "Offer status lifecycle" — universal P0 across all 10 surveyed products;
+    "Approval blocks offer extension" — all 10 surveyed):
+    - `status` CharField(max_length=20, choices=`OFFER_STATUS_CHOICES`, default="draft",
+      `editable=False`) — choices: `draft / pending_approval / approved / extended / accepted / declined
+      / rescinded / expired`
+  - Decline tracking (driver: "Decline/rescind reason codes" — mirrors `JobApplication.rejection_reason`/
+    `rejection_notes` exactly):
+    - `decline_reason` CharField(max_length=30, choices=`OFFER_DECLINE_REASON_CHOICES`, blank=True) —
+      choices: `salary / competing_offer / counteroffer / role_fit / culture_fit / timing / other`
+    - `decline_notes` TextField(blank=True)
+  - E-signature fields now, vendor wiring deferred (driver: "E-signature integration" P1):
+    - `signed_document` FileField(upload_to="hrm/offers/signed/%Y/%m/", null=True, blank=True)
+    - `signature_status` CharField(max_length=20, choices=`SIGNATURE_STATUS_CHOICES`, default="not_sent")
+      — choices: `not_sent / sent / viewed / signed / declined`
+  - Workflow stamps (`editable=False`, set only by POST actions):
+    - `extended_by` FK `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank, `related_name="extended_offers"`)
+    - `extended_at`, `accepted_at`, `declined_at`, `rescinded_at` — DateTimeField(null=True, blank=True,
+      editable=False)
+    - `created_by` FK `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank, `related_name="created_offers"`)
+  - `notes` TextField(blank=True)
+  - `Meta`: `ordering = ["-created_at"]`, `unique_together = ("tenant", "number")`, indexes:
+    `["tenant", "status"]` (`hrm_ofr_tenant_status_idx`), `["tenant", "application"]`
+    (`hrm_ofr_tenant_app_idx`), `["tenant", "created_at"]` (`hrm_ofr_tenant_created_idx`)
+  - `clean()`: `expires_on` must be >= `start_date` when both set is NOT required (expiry is response
+    deadline, start_date is joining date — they're independent); instead guard `bonus_amount`/
+    `signing_bonus`/`relocation_assistance` >= 0 when set (`ValidationError` per field) — mirrors the
+    `JobRequisition.clean()` guard-per-field pattern.
+  - `is_overdue` property (see above).
+  - `@property is_closed` — `status in OFFER_TERMINAL_STATUSES` where
+    `OFFER_TERMINAL_STATUSES = ("accepted", "declined", "rescinded", "expired")` (mirrors
+    `Interview.is_closed`/`INTERVIEW_TERMINAL_STATUSES`).
+  - `@property approval_progress` — `(approved_count, total_count)` over `self.approvals.all()`, mirrors
+    `JobRequisition.approval_progress` verbatim (same PERF docstring warning re: prefetch).
+  - `@property current_approval_step` — lowest-`step_order` still-`pending` `OfferApproval`, mirrors
+    `JobRequisition.current_approval_step` (same PERF warning).
+  - `candidate`/`requisition` convenience properties via `self.application.candidate` /
+    `self.application.requisition` (mirrors `Interview.candidate`/`Interview.requisition` — views that
+    list offers must `select_related("application__candidate", "application__requisition")`).
+  - Reuses: `hrm.JobApplication` (candidate + requisition reached through it — no duplicate candidate/req
+    FK on `Offer`), `hrm.OfferLetterTemplate` (new, this pass). Drives `JobApplication.stage` → `"hired"` +
+    `hired_on` stamp on the accept POST action (reuses existing fields, no schema change — mirrors how
+    3.7's interview actions never touched `stage` and 3.6's own stage-advance actions do).
+
+- [ ] **`OfferApproval(TenantOwned)`** — no number, child of `Offer`, mirrors `RequisitionApproval` field-
+  for-field (driver: "Multi-level/multi-step approval chain" — P0 across Lever/Workday/Oracle
+  Taleo/SAP SuccessFactors/Ashby; "Approver picked from configurable approver roles" — reuse
+  `APPROVER_ROLE_CHOICES` verbatim, same choice set as `RequisitionApproval`):
+  - `offer` FK `hrm.Offer` (`on_delete=CASCADE`, `related_name="approvals"`)
+  - `step_order` PositiveSmallIntegerField(default=1)
+  - `approver` FK `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank, `related_name="hrm_offer_approvals"`)
+  - `approver_role` CharField(max_length=20, choices=`APPROVER_ROLE_CHOICES` — REUSE the existing
+    hrm.models constant, do not redefine, default="hr")
+  - `status` CharField(max_length=20, choices=`APPROVAL_STEP_STATUS_CHOICES` — REUSE the existing
+    constant, default="pending", `editable=False`)
+  - `decided_at` DateTimeField(null=True, blank=True, editable=False)
+  - `decided_by` FK `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank,
+    `related_name="hrm_offer_approval_decisions"`, editable=False)
+  - `comments` TextField(blank=True)
+  - `Meta`: `ordering = ["step_order"]`, `unique_together = ("offer", "step_order")`, indexes:
+    `["offer", "status"]` (`hrm_oa_offer_status_idx`), `["approver", "status"]`
+    (`hrm_oa_approver_status_idx`)
+  - `clean()`: `step_order >= 1` guard (mirrors `RequisitionApproval.clean()`)
+  - The "approval blocks extension" P0 finding = the `Offer.status` gate in the `offer_extend` view action
+    (can't extend while `status == "pending_approval"` or any step not approved) — no schema impact,
+    view-layer guard exactly like `jobrequisition_post` gates on `status == "approved"`.
+  - Conditional/threshold-based extra-step insertion (Lever/Ashby P1) — a simple constant threshold check
+    in the chain-builder service function (see Services below), NOT a configurable rule engine this pass.
+
+- [ ] **`BackgroundVerification(TenantNumbered)`** [`NUMBER_PREFIX = "BGV"`] — FK'd to `Offer` (checks are
+  ordered post-offer-extension in every surveyed workflow):
+  - `offer` FK `hrm.Offer` (`on_delete=CASCADE`, `related_name="background_checks"`)
+  - `vendor` CharField(max_length=30, choices=`BGV_VENDOR_CHOICES`, blank=True) — choices: `checkr /
+    hireright / sterling / other` (driver: "vendor-integrated ordering" — iCIMS/Zoho/BambooHR partner
+    marketplace pattern, field only, no live API)
+  - `check_type` CharField(max_length=30, choices=`BGV_CHECK_TYPE_CHOICES`, default="employment") —
+    choices: `criminal / employment / education / professional_license / identity / credit` (driver:
+    Checkr's typed-verification-category finding)
+  - `status` CharField(max_length=20, choices=`BGV_STATUS_CHOICES`, default="not_started",
+    `editable=False`) — choices: `not_started / consent_pending / initiated / in_progress /
+    action_needed / ready_for_review / completed` (driver: Checkr/Sterling/HireRight standardized
+    lifecycle)
+  - `result` CharField(max_length=20, choices=`BGV_RESULT_CHOICES`, blank=True) — choices: `clear /
+    consider / not_applicable` (driver: same standardized-lifecycle finding — separate overall result)
+  - `consent_given` BooleanField(default=False), `consent_date` DateTimeField(null=True, blank=True,
+    editable=False) (driver: "Consent capture before initiating a check" P1)
+  - `report_file` FileField(upload_to="hrm/offers/bgv_reports/%Y/%m/", null=True, blank=True) (driver:
+    "Report/document attachment" P1)
+  - `initiated_at`, `completed_at` — DateTimeField(null=True, blank=True, editable=False)
+  - `initiated_by` FK `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank,
+    `related_name="initiated_bgv_checks"`)
+  - `notes` TextField(blank=True)
+  - `Meta`: `ordering = ["-created_at"]`, `unique_together = ("tenant", "number")`, indexes:
+    `["tenant", "status"]` (`hrm_bgv_tenant_status_idx"`), `["tenant", "offer"]` (`hrm_bgv_tenant_ofr_idx`),
+    `["tenant", "check_type"]` (`hrm_bgv_tenant_type_idx`)
+  - Reuses `hrm.Offer` → `hrm.JobApplication` → `hrm.CandidateProfile` chain for candidate identity —
+    NEVER re-store name/DOB/address on `BackgroundVerification` (iCIMS "pre-populated candidate data"
+    finding — view-layer convenience when rendering the initiate form, not a schema change).
+  - Adverse-action/dispute sub-flow explicitly OUT of scope (see Deferred).
+
+- [ ] **`PreboardingItem(TenantOwned)`** — no number, child of `Offer`, deliberately distinct from the
+  existing 3.3 `OnboardingDocument`/`OnboardingTask` (those own post-start collection; this owns pre-start,
+  offer-tied, candidate-facing collection):
+  - `offer` FK `hrm.Offer` (`on_delete=CASCADE`, `related_name="preboarding_items"`)
+  - `document_type` CharField(max_length=30, choices=`PREBOARDING_DOC_TYPE_CHOICES`, default="other") —
+    choices: `id_proof / address_proof / tax_form / bank_details / nda / education_certificate /
+    background_check_consent / other` (driver: HiBob/iCIMS document-collection convention)
+  - `is_required` BooleanField(default=True)
+  - `status` CharField(max_length=20, choices=`PREBOARDING_STATUS_CHOICES`, default="pending",
+    `editable=False`) — choices: `pending / submitted / verified / rejected` (driver: mirrors
+    `OnboardingTask`/`ClearanceItem` status-child convention already in HRM)
+  - `uploaded_file` FileField(upload_to="hrm/offers/preboarding/%Y/%m/", null=True, blank=True)
+  - `submitted_at` DateTimeField(null=True, blank=True, editable=False)
+  - `verified_by` FK `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank, `related_name="verified_preboarding_items"`)
+  - `verified_at` DateTimeField(null=True, blank=True, editable=False)
+  - `reminder_sent_at` DateTimeField(null=True, blank=True, editable=False) — manual-action stamp,
+    mirrors `Interview.reminder_sent_at` exactly; reuses `_send_candidate_email`/`CandidateCommunication`
+    for the invite/reminder send (driver: "scheduled/timed invitation to complete pre-boarding" —
+    manual-trigger this pass, Celery-style auto-scheduling deferred)
+  - `notes` TextField(blank=True)
+  - `Meta`: `ordering = ["document_type", "pk"]`, indexes: `["tenant", "offer"]` (`hrm_pbi_tenant_ofr_idx`),
+    `["tenant", "status"]` (`hrm_pbi_tenant_status_idx`)
+  - Hand-off to full 3.3 onboarding on full completion (all `is_required` items `verified`) is a view-layer
+    trigger point noted in the `offer_accept` action's docstring — no new model, no forced auto-creation
+    of `OnboardingProgram` this pass (flag as a TODO comment at the trigger point instead of building it,
+    since 3.3's `OnboardingProgram` creation flow already has its own entry points).
+
+- [ ] Add module-level `CHOICES` constants above `Offer`: `OFFER_STATUS_CHOICES`,
+  `OFFER_DECLINE_REASON_CHOICES`, `SIGNATURE_STATUS_CHOICES`, `OFFER_TERMINAL_STATUSES` (tuple),
+  `BGV_VENDOR_CHOICES`, `BGV_CHECK_TYPE_CHOICES`, `BGV_STATUS_CHOICES`, `BGV_RESULT_CHOICES`,
+  `PREBOARDING_DOC_TYPE_CHOICES`, `PREBOARDING_STATUS_CHOICES` — grouped under a `# 3.8 Offer Management`
+  section-comment banner (mirrors the `# 3.7 Interview Process` banner style at line ~2094), documenting
+  the reuse-vs-new spine call per the module docstring convention.
+- [ ] Confirm `APPROVER_ROLE_CHOICES` / `APPROVAL_STEP_STATUS_CHOICES` (defined ~line 1533-1547) are
+  imported/reused as-is for `OfferApproval` — do NOT redefine a parallel choice set.
+
+## 2. Services (apps/hrm/services.py)
+
+- [ ] `_DEFAULT_OFFER_APPROVAL_CHAIN = [(1, "hiring_manager"), (2, "hr")]` constant (offer approval chain
+  is simpler than the requisition's hr→executive chain per research — HR + hiring manager sign-off is the
+  P0 baseline; append a 3rd `executive` step when `total_compensation > settings.OFFER_APPROVAL_THRESHOLD`
+  or a simple hardcoded constant, e.g. `Decimal("150000")` annual base — implements the Lever/Ashby
+  conditional-routing P1 finding as a **simple threshold**, not a rule engine).
+- [ ] `generate_offer_approval_chain(offer)` — idempotent, mirrors `generate_approval_chain(requisition)`
+  verbatim: returns existing chain untouched if any `OfferApproval` rows exist; else bulk-creates the
+  default chain (+ the conditional executive step if base_salary+bonus+signing_bonus exceeds the
+  threshold); shared by `views.offer_submit` and the seeder.
+- [ ] `_PREBOARDING_CHECKLIST = [(doc_type, is_required), ...]` default lines (mirrors `_CLEARANCE_LINES`)
+  covering `id_proof(required)/address_proof(required)/tax_form(required)/bank_details(required)/
+  nda(required)/background_check_consent(required)/education_certificate(optional)`.
+- [ ] `generate_preboarding_checklist(offer)` — idempotent (keyed on `document_type`), mirrors
+  `generate_clearance_checklist(case)`; called on offer acceptance (offer_accept view action) and by the
+  seeder.
+
+## 3. Forms (apps/hrm/forms.py)
+
+- [ ] `OfferForm(ModelForm)` — Meta.model=Offer, exclude `tenant`, `number`, `status`, `extended_by`,
+  `extended_at`, `accepted_at`, `declined_at`, `rescinded_at`, `created_by` (workflow-owned/derived —
+  never on the form). Include: `application`, `offer_letter_template`, `base_salary`, `currency`,
+  `bonus_amount`, `bonus_terms`, `signing_bonus`, `equity_terms`, `relocation_assistance`,
+  `benefits_summary`, `start_date`, `expires_on`, `decline_reason`, `decline_notes`, `signed_document`,
+  `signature_status`, `notes`. `application` queryset scoped to `tenant` filtered to applications without
+  an existing non-terminal offer (or all applications on create with a form-level warning) — follow the
+  `__init__(self, *args, tenant=None, **kwargs)` convention used by every other HRM form.
+  `decline_reason`/`decline_notes`/`signature_status` stay on the form (not workflow-status but
+  recruiter-editable annotations, same as `JobApplication.rejection_reason` being form-editable).
+- [ ] `OfferApprovalForm(ModelForm)` — Meta.model=OfferApproval, exclude `tenant`, `offer`, `status`,
+  `decided_at`, `decided_by` (mirrors `RequisitionApprovalForm`). Fields: `step_order`, `approver`,
+  `approver_role`, `comments`. `approver` queryset = tenant Users.
+- [ ] `BackgroundVerificationForm(ModelForm)` — Meta.model=BackgroundVerification, exclude `tenant`,
+  `number`, `offer`(set in view from URL), `status`, `initiated_at`, `completed_at`, `initiated_by`.
+  Fields: `vendor`, `check_type`, `result`, `consent_given`, `consent_date`, `report_file`, `notes`.
+- [ ] `PreboardingItemForm(ModelForm)` — Meta.model=PreboardingItem, exclude `tenant`, `offer`, `status`,
+  `submitted_at`, `verified_by`, `verified_at`, `reminder_sent_at`. Fields: `document_type`, `is_required`,
+  `uploaded_file`, `notes`. Used for the inline add-item action on the offer detail hub.
+- [ ] `OfferLetterTemplateForm(ModelForm)` — Meta.model=OfferLetterTemplate, exclude `tenant`, `number`.
+  Fields: `name`, `is_active`, `body_html`.
+
+## 4. Views (apps/hrm/views.py)
+
+- [ ] **`Offer` full CRUD**: `offer_list` (`crud_list`, search_fields=`["number",
+  "application__candidate__first_name", "application__candidate__last_name",
+  "application__requisition__title"]`, filters=`[("status","status",False),
+  ("signature_status","signature_status",False), ("currency","currency",False)]`,
+  extra_context passes `status_choices`, `signature_status_choices`); `offer_create`
+  (`@login_required`, stamps `created_by=request.user`, `currency` defaults from
+  `application.requisition.salary_currency` when left blank); `offer_detail` (select_related
+  `application__candidate`, `application__requisition`, `offer_letter_template`; prefetch `approvals`,
+  `background_checks`, `preboarding_items`; passes `approval_progress`, forms for the inline add actions);
+  `offer_edit` (only while `status in ("draft", "pending_approval")` — mirrors requisition's editable-
+  while-draft-or-rejected guard, adapted); `offer_delete` (`@tenant_admin_required`, only `status ==
+  "draft"`, mirrors `jobrequisition_delete`).
+- [ ] **Offer status-machine actions** (all `@tenant_admin_required` + `@require_POST`, mirror
+  `jobrequisition_submit`/`_approve_step`/`_reject`/`interview_confirm` patterns):
+  - `offer_submit` — draft/rejected-equivalent → pending_approval; calls
+    `generate_offer_approval_chain(obj)` inside `transaction.atomic()`; guard: only from `"draft"`.
+  - `offer_approve_step` — approves the lowest-pending `OfferApproval`; when the last step clears, sets
+    `Offer.status = "approved"`; guard: only while `status == "pending_approval"`.
+  - `offer_reject_step` — rejects the pending step + sets `Offer.status = "rejected"`... **NOTE**:
+    research's status list has no plain `"rejected"` — reuse `"declined"` is wrong (that's post-extension
+    candidate action). Resolve by adding an internal-only terminal outcome: on approval rejection, set
+    `Offer.status` back to `"draft"` (mirrors `jobrequisition_return`'s reopen-to-draft behavior) with a
+    `comments` stamp on the step, rather than inventing a new status value — keeps `OFFER_STATUS_CHOICES`
+    exactly as researched (draft/pending_approval/approved/extended/accepted/declined/rescinded/expired).
+  - `offer_extend` — `status == "approved"` → `"extended"`; stamps `extended_by`/`extended_at`; sends the
+    offer email via `_send_candidate_email(application, template_type="offer", ...)` reusing the existing
+    `"offer"` `EMAIL_TEMPLATE_TYPE_CHOICES` value already defined on `CandidateEmailTemplate` (no new
+    template-type choice needed); guard: all `approvals` must be `"approved"` (the P0 "approval blocks
+    extension" gate) — else `messages.error` + no-op.
+  - `offer_accept` — `status == "extended"` → `"accepted"`; stamps `accepted_at`; sets
+    `application.stage = "hired"` + `application.hired_on = date.today()` inside `transaction.atomic()`
+    (mirrors the 3.6 stage-advance convention — reuse existing fields, no new column); calls
+    `generate_preboarding_checklist(obj)`; logs a `CandidateCommunication` via `_send_candidate_email` for
+    the acceptance confirmation.
+  - `offer_decline` — `status == "extended"` → `"declined"`; requires `decline_reason` from POST body
+    (validated against `OFFER_DECLINE_REASON_CHOICES`); stamps `declined_at`, `decline_notes`.
+  - `offer_rescind` — `status in ("extended", "approved", "pending_approval")` → `"rescinded"`; stamps
+    `rescinded_at`; `@tenant_admin_required` (a rescission is a sensitive HR action).
+  - `offer_expire` — `status == "extended"` and `is_overdue` → `"expired"`; manual-trigger action (button
+    on detail page when overdue), mirrors the manual-action convention used throughout (no Celery cron
+    this pass).
+  - `offer_send_email` — `@require_POST`, ad-hoc resend of the offer-letter email via
+    `_send_candidate_email(..., template_type="offer")`; available at any non-terminal status.
+- [ ] **`OfferApproval` inline child actions** (mirror `approval_add`/`approval_delete` exactly):
+  `offerapproval_add` (`@tenant_admin_required`, `@require_POST`, only while `offer.status == "draft"`,
+  `IntegrityError` guard on duplicate `step_order`), `offerapproval_delete` (`@tenant_admin_required`,
+  `@require_POST`, only while `offer.status == "draft"`).
+- [ ] **`BackgroundVerification` full CRUD**: `backgroundverification_list` (filters:
+  `status`, `check_type`, `vendor`), `backgroundverification_create` (offer set from URL `?offer=<pk>` or
+  a FK dropdown scoped to tenant offers, `initiated_by=request.user` stamped on `initiate` action not on
+  plain create), `backgroundverification_detail`, `backgroundverification_edit`,
+  `backgroundverification_delete` (`@tenant_admin_required`). Plus status-machine POSTs:
+  `backgroundverification_initiate` (`not_started`/`consent_pending` → `initiated`, requires
+  `consent_given=True` first — else `messages.error` per the "consent before initiating" P1 finding;
+  stamps `initiated_at`/`initiated_by`), `backgroundverification_mark_status` (generic POST accepting a
+  `status` value from `{in_progress, action_needed, ready_for_review}`, validated against
+  `BGV_STATUS_CHOICES`, manual stand-in for the deferred webhook), `backgroundverification_complete`
+  (→ `"completed"`, requires a `result` value from POST, stamps `completed_at`).
+- [ ] **`PreboardingItem` inline child actions** (mirror `feedbackcriterion_add`/`_delete` +
+  `interview_send_reminder`): `preboardingitem_add` (`@require_POST`, uses `PreboardingItemForm`),
+  `preboardingitem_delete` (`@require_POST`), `preboardingitem_mark_submitted` (candidate/HR marks
+  uploaded — stamps `submitted_at`; sets `status="submitted"`),
+  `preboardingitem_verify`/`preboardingitem_reject` (`@tenant_admin_required`, `@require_POST`, stamps
+  `verified_by`/`verified_at`, sets `status` accordingly), `preboardingitem_send_invite` (reuses
+  `_send_candidate_email(application, template_type="general", ...)` or a dedicated future
+  `"preboarding_invite"` type — for this pass, fixed body via `default_subject`/`body` kwargs mirroring
+  `interview_send_invite`'s `_send_interview_email` call shape; stamps `reminder_sent_at` on send).
+- [ ] **`OfferLetterTemplate` full CRUD**: `offerlettertemplate_list` (search_fields=`["name",
+  "body_html"]`, filters=`[("is_active","is_active",False)]`), `_create`, `_detail`, `_edit`, `_delete`
+  (`@tenant_admin_required`).
+- [ ] **Printable offer-letter view**: `offer_letter_print(request, pk)` — `@login_required`, renders
+  `templates/hrm/offer/offer_letter.html` with `{"offer": obj, "application": obj.application, "candidate":
+  ..., "tenant": request.tenant, "today": timezone.localdate()}`; merges `offer_letter_template.body_html`
+  tokens the same way `_apply_merge`/`_send_candidate_email` does (reuse `_apply_merge` helper); sets
+  `response["Content-Disposition"] = "inline"` — mirrors `_generate_letter`/`offboarding_letters` pattern.
+  No DB write (pure read/render, unlike `_generate_letter`'s stamp-on-first-generate — an offer letter can
+  be reprinted freely).
+- [ ] Add a small `_offer_or_404(request, pk)` private helper (mirrors `_interview_or_404`) with the
+  standard `select_related`.
+- [ ] Every `@tenant_admin_required` placement above follows the existing convention: sensitive/authority
+  actions (approve/reject/rescind/delete/verify) are admin-gated; candidate-facing sends and status marks
+  a regular tenant user can perform stay `@login_required` only (matches 3.5/3.7's split).
+
+## 5. URLs (apps/hrm/urls.py) — `app_name = "hrm"` (existing), append these path() lines
+
+- [ ] Offer CRUD: `offers/` (`offer_list`), `offers/add/` (`offer_create`), `offers/<int:pk>/`
+  (`offer_detail`), `offers/<int:pk>/edit/` (`offer_edit`), `offers/<int:pk>/delete/` (`offer_delete`)
+- [ ] Offer actions: `offers/<int:pk>/submit/` (`offer_submit`), `offers/<int:pk>/approve-step/`
+  (`offer_approve_step`), `offers/<int:pk>/reject-step/` (`offer_reject_step`),
+  `offers/<int:pk>/extend/` (`offer_extend`), `offers/<int:pk>/accept/` (`offer_accept`),
+  `offers/<int:pk>/decline/` (`offer_decline`), `offers/<int:pk>/rescind/` (`offer_rescind`),
+  `offers/<int:pk>/expire/` (`offer_expire`), `offers/<int:pk>/send-email/` (`offer_send_email`),
+  `offers/<int:pk>/letter/` (`offer_letter_print`)
+- [ ] OfferApproval child: `offers/<int:pk>/approvals/add/` (`offerapproval_add`),
+  `offer-approvals/<int:pk>/delete/` (`offerapproval_delete`)
+- [ ] BackgroundVerification CRUD + actions: `background-checks/` (`backgroundverification_list`),
+  `background-checks/add/` (`_create`), `background-checks/<int:pk>/` (`_detail`),
+  `background-checks/<int:pk>/edit/` (`_edit`), `background-checks/<int:pk>/delete/` (`_delete`),
+  `background-checks/<int:pk>/initiate/` (`_initiate`), `background-checks/<int:pk>/mark-status/`
+  (`_mark_status`), `background-checks/<int:pk>/complete/` (`_complete`)
+- [ ] PreboardingItem child: `offers/<int:pk>/preboarding/add/` (`preboardingitem_add`),
+  `preboarding-items/<int:pk>/delete/` (`preboardingitem_delete`),
+  `preboarding-items/<int:pk>/submit/` (`preboardingitem_mark_submitted`),
+  `preboarding-items/<int:pk>/verify/` (`preboardingitem_verify`),
+  `preboarding-items/<int:pk>/reject/` (`preboardingitem_reject`),
+  `preboarding-items/<int:pk>/send-invite/` (`preboardingitem_send_invite`)
+- [ ] OfferLetterTemplate CRUD: `offer-letter-templates/` (`offerlettertemplate_list`), `.../add/`
+  (`_create`), `.../<int:pk>/` (`_detail`), `.../<int:pk>/edit/` (`_edit`), `.../<int:pk>/delete/`
+  (`_delete`)
+
+## 6. Admin (apps/hrm/admin.py)
+
+- [ ] Register `Offer` (list_display: number, application, status, base_salary, currency, start_date,
+  expires_on; list_filter: status, signature_status; search_fields: number,
+  application__candidate__first_name/last_name), `OfferApproval` (inline `TabularInline` on `Offer`'s
+  admin, read-only `decided_at`/`decided_by`), `BackgroundVerification` (list_display: number, offer,
+  vendor, check_type, status, result), `PreboardingItem` (inline `TabularInline` on `Offer`'s admin),
+  `OfferLetterTemplate` (list_display: number, name, is_active). Mirror `RequisitionApproval`'s admin
+  inline pattern and `Interview`'s admin registration style exactly.
+
+## 7. Migration
+
+- [ ] `python manage.py makemigrations hrm` → produces `apps/hrm/migrations/0016_offer_management.py`
+  (verify the auto-generated number matches; rename only if Django picks a different auto-slug, keep the
+  `0016_` prefix). Single migration file for all 5 new models (mirrors `0014_interview_process.py`
+  covering Interview+InterviewPanelist+InterviewFeedback+FeedbackCriterion in one file) — one commit.
+
+## 8. Seed data (apps/hrm/management/commands/seed_hrm.py)
+
+- [ ] New `_seed_offers(self, tenant, *, flush)` method, called from `handle()` alongside
+  `_seed_interviews` — reuses EXISTING seeded `JobApplication` rows (prefer applications with
+  `stage="offer"` or `"hired"`, falling back to any application — mirrors `_seed_interviews`'s apps_qs
+  fallback pattern exactly). Idempotent: `if flush: Offer.objects.filter(tenant=tenant).delete()`
+  (cascades approvals/bgv/preboarding); `if Offer.objects.filter(tenant=tenant).exists(): ... return`
+  notice.
+- [ ] Seed 1 `OfferLetterTemplate` ("Standard Offer Letter") with a realistic `body_html` using the
+  documented merge tokens (`get_or_create` keyed on name).
+- [ ] Seed 2 offers over the 2 existing applications used by `_seed_interviews` (or the next 2 available):
+  one **accepted** end-to-end (status walked through submit→approve→extend→accept via the service
+  functions / direct field assignment mirroring the seeder's existing style of calling `generate_*`
+  helpers directly rather than re-deriving the state machine) with 2 `OfferApproval` rows (both approved)
+  + a `BackgroundVerification` (`status="completed"`, `result="clear"`) + 3-4 `PreboardingItem` rows (mix
+  of verified/submitted/pending); one **pending_approval** (draft submitted, 1 approved + 1 pending
+  `OfferApproval` step) with no bgv/preboarding yet (not accepted). Uses `generate_offer_approval_chain`/
+  `generate_preboarding_checklist` from `services.py` so the seeder and the views build identical shapes.
+  Reuses existing tenant `Users` for `approver`/`extended_by`/`created_by` (no duplicate Users created).
+- [ ] Print summary counts (Offers/OfferApprovals/BackgroundVerifications/PreboardingItems/
+  OfferLetterTemplates seeded) in the same `self.stdout.write(self.style.SUCCESS(...))` style as
+  `_seed_interviews`.
+
+## 9. Wire-up
+
+- [ ] `apps/core/navigation.py` — add `"3.8"` to `LIVE_LINKS` mapping the 5 exact NavERP.md bullet strings:
+  ```python
+  "3.8": {
+      "Offer Letter Generation": "hrm:offerlettertemplate_list",   # bullet (template library)
+      "Offer Approval": "hrm:offer_list?status=pending_approval",  # bullet (pending queue)
+      "Offer Tracking": "hrm:offer_list",                          # bullet (all-status tracking)
+      "Background Verification": "hrm:backgroundverification_list", # bullet (BGV records)
+      "Pre-boarding": "hrm:offer_list?status=accepted",            # bullet (accepted offers = active preboarding)
+  },
+  ```
+- [ ] No `settings.py`/`config/urls.py` changes needed — `hrm` app + include already registered (3.6/3.7
+  precedent).
+
+## 10. Templates (templates/hrm/offer/)
+
+- [ ] `offer/offer/list.html` — filter bar (status, signature_status, currency dropdowns fed from
+  `status_choices`/`signature_status_choices` passed by the view per Filter Implementation Rules), Actions
+  column (view/edit-if-draft-or-pending_approval/delete-if-draft), badges for `status`/`is_overdue`
+  (red "Overdue" pill mirroring `JobRequisition`'s), empty-state, pagination.
+- [ ] `offer/offer/detail.html` — hub layout mirroring `jobrequisition_detail`/`interview_detail`: header
+  (number, candidate name, requisition title, status badge, overdue flag), compensation-breakdown card,
+  status-action buttons conditional on current `status` (submit/approve-step/reject-step/extend/accept/
+  decline/rescind/expire/send-email/print-letter), inline `OfferApproval` chain table + add-step
+  mini-form (admin-only, draft-only), inline `BackgroundVerification` list + "Order Check" link to create,
+  inline `PreboardingItem` checklist + add-item mini-form + verify/reject buttons per row, decline-reason
+  fields shown only when `status == "declined"`, signed-document download link guarded by
+  `|safe_external_url` if ever rendered as an href (file field itself is safe — apply the filter only if a
+  vendor URL field is later added).
+- [ ] `offer/offer/form.html` — standard create/edit form (application dropdown, compensation fields
+  grouped visually, `is_edit` conditional).
+- [ ] `offer/backgroundverification/{list,detail,form}.html` — list has filter bar (status/check_type/
+  vendor), Actions column (view/edit/delete + initiate/mark-status/complete buttons conditional on
+  `status`), detail shows consent capture state + report_file download, form excludes workflow fields.
+- [ ] `offer/offerlettertemplate/{list,detail,form}.html` — standard CRUD triple mirroring
+  `candidateemailtemplate` templates (is_active toggle, merge-token help text shown on the form).
+- [ ] `offer/offer_letter.html` — standalone printable letter (sub-module root per rule 6), mirrors
+  `hrm/offboarding/relieving_letter.html` layout: letterhead, merged `offer_letter_template.body_html`,
+  print-only CSS (`@media print`), a "Print" button hidden in print media.
+- [ ] Every list template: no `{#`/`{% comment %}` leaks; every status/choice badge has an `{% else
+  %}{{ obj.get_status_display }}{% endif %}` fallback (Filter Implementation Rule 5).
+
+## 11. Verify
+
+- [ ] `python manage.py makemigrations hrm` then `python manage.py migrate` — clean, no missing-migration
+  warnings.
+- [ ] `python manage.py seed_hrm` **twice** in a row — second run must be a no-op (idempotency check) and
+  must print the "already exists... use --flush" notice for the offer section.
+- [ ] `python manage.py check` — no errors.
+- [ ] `temp/` smoke sweep (write a throwaway script under `temp/`, not committed... actually DO commit per
+  the qa-smoke-tester convention if that's this repo's pattern — check existing `temp/` usage): as
+  `admin_acme`, GET every new `hrm:offer_*`, `hrm:backgroundverification_*`, `hrm:offerlettertemplate_*`,
+  `hrm:offerapproval_*` (POST-only, skip GET), `hrm:preboardingitem_*` (POST-only, skip GET) URL name →
+  expect 200 (list/detail/form) or 302 (POST actions redirect); no `{#`/`{% comment` leaks in rendered
+  HTML; cross-tenant IDOR check — as `admin_acme`, GET/POST another tenant's `Offer`/
+  `BackgroundVerification`/`OfferLetterTemplate` pk → expect 404.
+- [ ] Confirm sidebar shows all 5 new "3.8 Offer Management" bullets as **Live** (not "Coming Soon") after
+  the `LIVE_LINKS["3.8"]` entry lands.
+
+## 12. Close-out
+
+- [ ] Update `.claude/tasks/todo.md` with a **Review notes — HRM 3.8 Offer Management (close-out)** section
+  once built + reviewed (delivered scope, verification results, all 7 review-agent findings/fixes,
+  deferred items, next sub-module pointer) — same shape as the 3.7 close-out above.
+- [ ] Run the 7 review agents **in order**, one at a time, committing after each: `code-reviewer` →
+  `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer` →
+  `test-writer`.
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add the 3.8 models/routes/templates/seeder/LIVE_LINKS
+  sections (mirrors how 3.6/3.7 were folded in), bump the model/route/template counts.
+- [ ] Update `README.md` roadmap — add a 3.8 Offer Management detail line, bump the HRM sub-module count
+  (currently 10 of 41 after 3.7) to 11 of 41, refresh HRM + project-wide test counts once `test-writer`
+  lands.
+
+## Later passes / deferred (from research-hrm-offer-management.md)
+
+- **Live e-signature vendor wiring** (DocuSign / Adobe Acrobat Sign / Dropbox Sign / Zoho Sign API) —
+  `signed_document`/`signature_status` fields ship now; the actual send-for-signature + webhook + auto-
+  attach flow is integration/later (mirrors 3.7's deferred live Zoom/Teams auto-link).
+- **Live background-check vendor API wiring** (Checkr/HireRight/Sterling order-and-webhook automation) —
+  `BackgroundVerification` ships as a manually-updated status/result record this pass.
+- **Formal adverse-action/dispute compliance workflow** (pre-adverse notice → candidate response window →
+  final adverse notice) for "Consider" results — legally significant, distinct compliance sub-flow, not
+  blocking this pass's scope. Flag as a compliance gap in the skill's Deferred section.
+- **Parallel (all-at-once) approval routing** — this pass ships sequential `step_order` chains only
+  (matches `RequisitionApproval`); true parallel/any-N-of-M routing is a state-machine expansion.
+- **Configurable conditional-routing rule engine** (per-department/per-level comp thresholds editable by
+  admins) — ships as one hardcoded threshold constant this pass; a full rule-builder UI is deferred.
+- **Configurable approval-notification field picker** (Greenhouse Oct-2025 style) — notifications reuse a
+  fixed internal-approver notification body this pass.
+- **Companion-document bundling** (NDA/drug-screening authorization sent alongside the offer letter as one
+  package) — `PreboardingItem` covers ad-hoc document collection; a bundled multi-doc send workflow is
+  deferred.
+- **Offer acceptance-rate / decline-reason analytics dashboard** — underlying `status`/`decline_reason`
+  fields ship this pass; a dedicated reporting/dashboard page is a later pass (fits under 3.32 Analytics
+  Dashboard).
+- **Welcome kit / policy acknowledgment** — already owned by the existing 3.3 Onboarding feature set; not
+  duplicated under pre-boarding.
+- **Template-usage scoping rules** (Ashby-style "only show templates valid for this candidate's
+  level/department") — `OfferLetterTemplate` ships without a scoping filter this pass; add a simple FK/
+  choice filter later if needed.
+- **Scheduled/automated pre-boarding invite dispatch** (Celery-style "send N days before start date") —
+  this pass ships a manual, audited send action (`reminder_sent_at`); automated scheduled dispatch is
+  deferred, consistent with 3.7's own Celery-dispatch deferral.
+- **Webhook receiver endpoint** for background-check vendor status push-back — `BackgroundVerification`
+  ships the fields a webhook would write to (`status`, `result`, `report_file`); the receiver itself is
+  integration/later.
+
+## Review notes
+
+(filled in at the end — see Close-out section above for what must land here: delivered scope, verification
+results, review-agent findings/fixes per agent, deferred carry-forward, next sub-module pointer.)
