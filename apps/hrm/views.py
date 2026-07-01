@@ -4118,6 +4118,11 @@ def offer_submit(request, pk):
         return redirect("hrm:offer_detail", pk=obj.pk)
     with transaction.atomic():
         generate_offer_approval_chain(obj)  # idempotent: builds the default chain only when none exist
+        # Reset any prior decisions so a re-submit (after a rejected step reopened the offer to draft)
+        # re-approves cleanly from the top — otherwise a step left at "rejected" would never return to
+        # pending and offer_approve_step would flip the offer to approved once the other steps cleared,
+        # skipping it. Mirrors jobrequisition_submit's rejected-resubmit chain reset.
+        obj.approvals.update(status="pending", decided_at=None, decided_by=None, comments="")
         obj.status = "pending_approval"
         obj.save(update_fields=["status", "updated_at"])
         write_audit_log(request.user, obj, "update", {"action": "submit", "to": obj.status})
@@ -4369,8 +4374,6 @@ def backgroundverification_list(request):
             "status_choices": BGV_STATUS_CHOICES,
             "check_type_choices": BGV_CHECK_TYPE_CHOICES,
             "vendor_choices": BGV_VENDOR_CHOICES,
-            "offers": Offer.objects.filter(tenant=request.tenant)
-            .select_related("application__candidate").order_by("-created_at")[:200],
         },
     )
 
