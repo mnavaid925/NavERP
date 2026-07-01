@@ -399,6 +399,20 @@ LIVE_LINKS = {
         "Video Interview": "hrm:interview_list?mode=video",    # bullet (video-mode filtered slice)
         "Interview Reminders": "hrm:interview_list",           # bullet (invite/reminder = detail actions)
     },
+    # 3.8 Offer Management — offer letter + multi-step approval + tracking + background check + pre-boarding
+    # over the 3.6 JobApplication spine. Offer Letter Generation → the reusable letter-template library;
+    # Offer Approval deep-links to the pending-approval queue (most-specific slice highlights it distinctly);
+    # Offer Tracking → the all-status offer list; Background Verification → its own BGV records; Pre-boarding
+    # → the accepted offers whose pre-boarding checklist is active (managed on the offer detail). Approval
+    # chain + status machine mirror 3.5 Job Requisition; emails reuse the 3.6 candidate pipeline. Live
+    # e-sign / background-check vendor APIs + acceptance-rate analytics are deferred.
+    "3.8": {
+        "Offer Letter Generation": "hrm:offerlettertemplate_list",     # bullet (letter-template library)
+        "Offer Approval": "hrm:offer_list?status=pending_approval",    # bullet (pending-approval queue)
+        "Offer Tracking": "hrm:offer_list",                            # bullet (all-status offer list)
+        "Background Verification": "hrm:backgroundverification_list",  # bullet (BGV records)
+        "Pre-boarding": "hrm:offer_list?status=accepted",              # bullet (accepted offers = active preboarding)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
