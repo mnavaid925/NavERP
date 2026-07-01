@@ -22,6 +22,8 @@
     <div class="card-body">
       {% if obj.status == 'completed' %}
         <p class="text-muted">This check is <strong>completed</strong> with result <strong>{{ obj.get_result_display }}</strong>.</p>
+      {% elif not request.user.is_superuser and not request.user.is_tenant_admin %}
+        <p class="text-muted">Running and completing background checks is a privileged HR action.</p>
       {% else %}
         <div class="filter-bar">
           {% if obj.status == 'not_started' or obj.status == 'consent_pending' %}
