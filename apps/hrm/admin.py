@@ -45,6 +45,13 @@ from .models import (  # 3.7 Interview Process
     InterviewFeedback,
     InterviewPanelist,
 )
+from .models import (  # 3.8 Offer Management
+    BackgroundVerification,
+    Offer,
+    OfferApproval,
+    OfferLetterTemplate,
+    PreboardingItem,
+)
 
 
 @admin.register(JobGrade)
@@ -457,3 +464,74 @@ class FeedbackCriterionAdmin(admin.ModelAdmin):
     search_fields = ("criterion_name", "feedback__number")
     readonly_fields = ("created_at", "updated_at")
     raw_id_fields = ("feedback",)
+
+
+# --------------------------------------------------------------------- 3.8 Offer Management
+@admin.register(OfferLetterTemplate)
+class OfferLetterTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+class OfferApprovalInline(admin.TabularInline):
+    model = OfferApproval
+    extra = 0
+    readonly_fields = ("status", "decided_at", "decided_by", "created_at", "updated_at")
+    raw_id_fields = ("approver", "decided_by")
+
+
+class PreboardingItemInline(admin.TabularInline):
+    model = PreboardingItem
+    extra = 0
+    readonly_fields = ("status", "submitted_at", "verified_by", "verified_at", "reminder_sent_at",
+                       "created_at", "updated_at")
+    raw_id_fields = ("verified_by",)
+
+
+@admin.register(Offer)
+class OfferAdmin(admin.ModelAdmin):
+    list_display = ("number", "application", "status", "base_salary", "currency", "start_date",
+                    "expires_on", "signature_status", "tenant")
+    list_filter = ("status", "signature_status", "currency", "tenant")
+    search_fields = ("number", "application__number", "application__candidate__first_name",
+                     "application__candidate__last_name")
+    readonly_fields = ("number", "status", "extended_by", "extended_at", "accepted_at", "declined_at",
+                       "rescinded_at", "created_by", "created_at", "updated_at")
+    raw_id_fields = ("application", "offer_letter_template")
+    inlines = [OfferApprovalInline, PreboardingItemInline]
+
+
+@admin.register(OfferApproval)
+class OfferApprovalAdmin(admin.ModelAdmin):
+    list_display = ("offer", "step_order", "approver", "approver_role", "status",
+                    "decided_at", "decided_by", "tenant")
+    list_filter = ("status", "approver_role", "tenant")
+    search_fields = ("offer__number", "approver__username")
+    readonly_fields = ("status", "decided_at", "decided_by", "created_at", "updated_at")
+    raw_id_fields = ("offer", "approver", "decided_by")
+
+
+@admin.register(BackgroundVerification)
+class BackgroundVerificationAdmin(admin.ModelAdmin):
+    list_display = ("number", "offer", "vendor", "check_type", "status", "result",
+                    "consent_given", "tenant")
+    list_filter = ("status", "result", "check_type", "vendor", "tenant")
+    search_fields = ("number", "offer__number", "offer__application__candidate__first_name",
+                     "offer__application__candidate__last_name")
+    readonly_fields = ("number", "status", "consent_date", "initiated_at", "completed_at",
+                       "initiated_by", "created_at", "updated_at")
+    raw_id_fields = ("offer", "initiated_by")
+
+
+@admin.register(PreboardingItem)
+class PreboardingItemAdmin(admin.ModelAdmin):
+    list_display = ("offer", "document_type", "is_required", "status", "submitted_at",
+                    "verified_by", "tenant")
+    list_filter = ("status", "document_type", "is_required", "tenant")
+    search_fields = ("offer__number", "offer__application__candidate__first_name",
+                     "offer__application__candidate__last_name")
+    readonly_fields = ("status", "submitted_at", "verified_by", "verified_at", "reminder_sent_at",
+                       "created_at", "updated_at")
+    raw_id_fields = ("offer", "verified_by")
