@@ -70,6 +70,13 @@ from .models import (  # noqa: E402  — 3.7 Interview Process
     InterviewFeedback,
     InterviewPanelist,
 )
+from .models import (  # noqa: E402  — 3.8 Offer Management
+    BackgroundVerification,
+    Offer,
+    OfferApproval,
+    OfferLetterTemplate,
+    PreboardingItem,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -787,3 +794,88 @@ class FeedbackCriterionForm(TenantModelForm):
         if rating is not None and not (1 <= rating <= 5):
             raise forms.ValidationError("Rating must be between 1 and 5.")
         return rating
+
+
+# ----------------------------------------------------------------------- 3.8 Offer Management
+class OfferLetterTemplateForm(TenantModelForm):
+    class Meta:
+        model = OfferLetterTemplate
+        fields = ["name", "is_active", "body_html"]
+
+
+class OfferForm(TenantModelForm):
+    # SECURITY/workflow: `status` (state machine), the workflow stamps (`extended_by`/`extended_at`/
+    # `accepted_at`/`declined_at`/`rescinded_at`/`created_by`) and the auto `number` are excluded — set
+    # only by the audited POST actions. `decline_reason`/`decline_notes`/`signature_status` stay on the
+    # form as recruiter-editable annotations (mirrors JobApplication.rejection_* being form-editable).
+    class Meta:
+        model = Offer
+        fields = ["application", "offer_letter_template", "base_salary", "currency", "bonus_amount",
+                  "bonus_terms", "signing_bonus", "equity_terms", "relocation_assistance",
+                  "benefits_summary", "start_date", "expires_on", "decline_reason", "decline_notes",
+                  "signed_document", "signature_status", "notes"]
+        widgets = {"start_date": forms.DateInput(attrs={"type": "date"}),
+                   "expires_on": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Optional on the form so a blank submission defaults from the requisition's salary_currency in
+        # the view; the model still carries "USD" as the ultimate fallback.
+        self.fields["currency"].required = False
+        if self.tenant is not None:
+            # select_related the dropdown's __str__ traversal (candidate) to avoid an N+1 per option.
+            self.fields["application"].queryset = (
+                JobApplication.objects.filter(tenant=self.tenant)
+                .select_related("candidate", "requisition").order_by("-applied_at"))
+            self.fields["offer_letter_template"].queryset = (
+                OfferLetterTemplate.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        for field in ("base_salary", "bonus_amount", "signing_bonus", "relocation_assistance"):
+            value = cleaned.get(field)
+            if value is not None and value < 0:
+                self.add_error(field, "Amount cannot be negative.")
+        return cleaned
+
+
+class OfferApprovalForm(TenantModelForm):
+    # SECURITY: `status`, `decided_at`, `decided_by` are excluded — set only by the approve/reject
+    # actions. `offer` is set in the view (the step is added from the offer hub). Mirrors
+    # RequisitionApprovalForm exactly.
+    class Meta:
+        model = OfferApproval
+        fields = ["step_order", "approver", "approver_role", "comments"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["approver"].queryset = (
+                get_user_model().objects.filter(tenant=self.tenant, is_active=True).order_by("username"))
+        else:
+            self.fields["approver"].queryset = get_user_model().objects.none()
+
+
+class BackgroundVerificationForm(TenantModelForm):
+    # SECURITY/workflow: `status` (lifecycle), `initiated_at`/`completed_at`/`initiated_by`/`consent_date`
+    # (workflow stamps) and the auto `number` are excluded — set only by the initiate/mark-status/complete
+    # actions. `offer` is set in the view (from ?offer= or the FK dropdown on plain create).
+    class Meta:
+        model = BackgroundVerification
+        fields = ["offer", "vendor", "check_type", "result", "consent_given", "report_file", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields["offer"].queryset = (
+                Offer.objects.filter(tenant=self.tenant)
+                .select_related("application__candidate").order_by("-created_at"))
+
+
+class PreboardingItemForm(TenantModelForm):
+    # Inline-add on the offer detail hub; `offer` is set in the view. `status`/`submitted_at`/
+    # `verified_by`/`verified_at`/`reminder_sent_at` are workflow-owned (the submit/verify/reject/
+    # send-invite actions stamp them).
+    class Meta:
+        model = PreboardingItem
+        fields = ["document_type", "is_required", "uploaded_file", "notes"]
