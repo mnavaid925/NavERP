@@ -4442,7 +4442,7 @@ def _bgv_or_404(request, pk):
         .select_related("offer__application__candidate"), pk=pk)
 
 
-@login_required
+@tenant_admin_required  # running a background check is a privileged HR/compliance action
 @require_POST
 def backgroundverification_initiate(request, pk):
     # Consent-before-initiation gate (the Checkr/BambooHR "candidate must authorize" finding).
@@ -4466,7 +4466,7 @@ def backgroundverification_initiate(request, pk):
     return redirect("hrm:backgroundverification_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # advancing a compliance check is a privileged HR action
 @require_POST
 def backgroundverification_mark_status(request, pk):
     # Manual stand-in for the deferred vendor webhook: move the check through its intermediate statuses.
@@ -4485,7 +4485,7 @@ def backgroundverification_mark_status(request, pk):
     return redirect("hrm:backgroundverification_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required  # stamping the Clear/Consider verdict is a hire-relevant compliance decision
 @require_POST
 def backgroundverification_complete(request, pk):
     obj = _bgv_or_404(request, pk)
@@ -4532,11 +4532,12 @@ def preboardingitem_add(request, pk):
     return redirect("hrm:offer_detail", pk=offer.pk)
 
 
-@login_required
+@tenant_admin_required  # destructive — dropping a required compliance item is a privileged HR action
 @require_POST
 def preboardingitem_delete(request, pk):
     item = _preboarding_or_404(request, pk)
     offer_pk = item.offer_id
+    write_audit_log(request.user, item, "delete", {"action": "remove_preboarding_item"})
     item.delete()
     messages.success(request, "Pre-boarding item removed.")
     return redirect("hrm:offer_detail", pk=offer_pk)
