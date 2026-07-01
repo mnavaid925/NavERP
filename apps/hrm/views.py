@@ -3920,7 +3920,8 @@ def feedbackcriterion_delete(request, pk, criterion_pk):
 def _offer_or_404(request, pk):
     return get_object_or_404(
         Offer.objects.filter(tenant=request.tenant)
-        .select_related("application__candidate", "application__requisition", "offer_letter_template"), pk=pk)
+        .select_related("application__candidate", "application__requisition__hiring_manager__party",
+                        "offer_letter_template"), pk=pk)
 
 
 # --------------------------------------------------------------- Offer Letter Templates (3.8)
