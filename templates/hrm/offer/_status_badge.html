@@ -1,0 +1,2 @@
+{% comment %}Offer status badge. Usage: {% include "hrm/offer/_status_badge.html" with status=obj.status label=obj.get_status_display %}
+All 8 OFFER_STATUS_CHOICES are named explicitly so a new status falls through to muted with intent, not by accident.{% endcomment %}<span class="badge badge-{% if status == 'accepted' %}green{% elif status == 'approved' %}info{% elif status == 'extended' or status == 'pending_approval' %}amber{% elif status == 'declined' or status == 'rescinded' or status == 'expired' %}red{% else %}muted{% endif %}">{{ label }}</span>
