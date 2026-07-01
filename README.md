@@ -341,8 +341,8 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,297-test** HRM suite
-(**3,944 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,548-test** HRM suite
+(**4,195 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
