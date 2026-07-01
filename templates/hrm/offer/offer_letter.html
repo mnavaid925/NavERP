@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offer Letter — {{ candidate.name }}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 48px 56px; line-height: 1.7; }
+    .letterhead { text-align: center; border-bottom: 2px solid #1f3a8a; padding-bottom: 16px; margin-bottom: 32px; }
+    .letterhead h1 { margin: 0; font-size: 24px; color: #1f3a8a; letter-spacing: 1px; }
+    .letterhead p { margin: 4px 0 0; font-size: 13px; color: #555; }
+    .meta { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 28px; }
+    h2.doc-title { text-align: center; text-transform: uppercase; letter-spacing: 2px; font-size: 16px; margin: 24px 0; text-decoration: underline; }
+    .body-text { white-space: pre-line; }
+    .comp-table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 14px; }
+    .comp-table th, .comp-table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #ddd; }
+    .comp-table th { width: 40%; color: #555; }
+    .sign { margin-top: 56px; }
+    .toolbar { text-align: center; margin-bottom: 24px; }
+    .toolbar button, .toolbar a { font-family: system-ui, sans-serif; font-size: 13px; padding: 8px 16px; border: 1px solid #1f3a8a; background: #1f3a8a; color: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; }
+    .toolbar a { background: #fff; color: #1f3a8a; margin-left: 8px; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <a href="{% url 'hrm:offer_detail' offer.pk %}">Back to offer</a>
+  </div>
+
+  <div class="letterhead">
+    <h1>{{ offer.tenant.name|default:"Company" }}</h1>
+    <p>Human Resources Department</p>
+  </div>
+
+  <div class="meta">
+    <span>Ref: OFR/{{ offer.number }}</span>
+    <span>Date: {{ today|date:"F j, Y" }}</span>
+  </div>
+
+  <h2 class="doc-title">Offer of Employment</h2>
+
+  <p class="body-text">{{ letter_body }}</p>
+
+  <table class="comp-table">
+    <tr><th>Position</th><td>{{ offer.application.requisition.title }}</td></tr>
+    <tr><th>Annual Base Salary</th><td>{{ offer.currency }} {{ offer.base_salary|floatformat:2 }}</td></tr>
+    {% if offer.bonus_amount %}<tr><th>Bonus</th><td>{{ offer.currency }} {{ offer.bonus_amount|floatformat:2 }}{% if offer.bonus_terms %} — {{ offer.bonus_terms }}{% endif %}</td></tr>{% endif %}
+    {% if offer.signing_bonus %}<tr><th>Signing Bonus</th><td>{{ offer.currency }} {{ offer.signing_bonus|floatformat:2 }}</td></tr>{% endif %}
+    {% if offer.relocation_assistance %}<tr><th>Relocation Assistance</th><td>{{ offer.currency }} {{ offer.relocation_assistance|floatformat:2 }}</td></tr>{% endif %}
+    {% if offer.equity_terms %}<tr><th>Equity</th><td>{{ offer.equity_terms }}</td></tr>{% endif %}
+    {% if offer.benefits_summary %}<tr><th>Benefits</th><td>{{ offer.benefits_summary }}</td></tr>{% endif %}
+    <tr><th>Proposed Start Date</th><td>{{ offer.start_date|date:"F j, Y" }}</td></tr>
+    {% if offer.expires_on %}<tr><th>Offer Valid Until</th><td>{{ offer.expires_on|date:"F j, Y" }}</td></tr>{% endif %}
+  </table>
+
+  <div class="sign">
+    <p>For {{ offer.tenant.name|default:"the Company" }},</p>
+    <br><br>
+    <p>__________________________<br>
+       Authorized Signatory<br>
+       Human Resources</p>
+  </div>
+</body>
+</html>
