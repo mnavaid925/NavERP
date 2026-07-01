@@ -36,6 +36,8 @@ from .services import (
     compute_leave_encashment,
     generate_approval_chain,
     generate_clearance_checklist,
+    generate_offer_approval_chain,
+    generate_preboarding_checklist,
     generate_tasks_from_template,
 )
 
@@ -82,6 +84,13 @@ from .forms import (  # 3.7 Interview Process
     InterviewFeedbackForm,
     InterviewForm,
     InterviewPanelistForm,
+)
+from .forms import (  # 3.8 Offer Management
+    BackgroundVerificationForm,
+    OfferApprovalForm,
+    OfferForm,
+    OfferLetterTemplateForm,
+    PreboardingItemForm,
 )
 from .models import (
     APPLICATION_STAGE_CHOICES,
@@ -148,6 +157,22 @@ from .models import (  # 3.7 Interview Process
     Interview,
     InterviewFeedback,
     InterviewPanelist,
+)
+from .models import (  # 3.8 Offer Management
+    BGV_CHECK_TYPE_CHOICES,
+    BGV_RESULT_CHOICES,
+    BGV_STATUS_CHOICES,
+    BGV_VENDOR_CHOICES,
+    OFFER_DECLINE_REASON_CHOICES,
+    OFFER_STATUS_CHOICES,
+    PREBOARDING_DOC_TYPE_CHOICES,
+    PREBOARDING_STATUS_CHOICES,
+    SIGNATURE_STATUS_CHOICES,
+    BackgroundVerification,
+    Offer,
+    OfferApproval,
+    OfferLetterTemplate,
+    PreboardingItem,
 )
 
 
@@ -3885,3 +3910,674 @@ def feedbackcriterion_delete(request, pk, criterion_pk):
     crit.delete()
     messages.success(request, "Criterion removed.")
     return redirect("hrm:interviewfeedback_detail", pk=feedback.pk)
+
+
+# ============================================================ Offer Management (3.8)
+# Offers hang off the 3.6 JobApplication spine; the approval chain + status machine mirror 3.5
+# JobRequisition; offer/pre-boarding emails reuse the 3.6 _send_candidate_email pipeline.
+
+def _offer_or_404(request, pk):
+    return get_object_or_404(
+        Offer.objects.filter(tenant=request.tenant)
+        .select_related("application__candidate", "application__requisition", "offer_letter_template"), pk=pk)
+
+
+# --------------------------------------------------------------- Offer Letter Templates (3.8)
+@login_required
+def offerlettertemplate_list(request):
+    return crud_list(
+        request, OfferLetterTemplate.objects.filter(tenant=request.tenant),
+        "hrm/offer/offerlettertemplate/list.html",
+        search_fields=["number", "name", "body_html"],
+        filters=[("is_active", "is_active", False)],
+    )
+
+
+@login_required
+def offerlettertemplate_create(request):
+    return crud_create(request, form_class=OfferLetterTemplateForm,
+                       template="hrm/offer/offerlettertemplate/form.html",
+                       success_url="hrm:offerlettertemplate_list")
+
+
+@login_required
+def offerlettertemplate_detail(request, pk):
+    return crud_detail(request, model=OfferLetterTemplate, pk=pk,
+                       template="hrm/offer/offerlettertemplate/detail.html")
+
+
+@login_required
+def offerlettertemplate_edit(request, pk):
+    return crud_edit(request, model=OfferLetterTemplate, pk=pk, form_class=OfferLetterTemplateForm,
+                     template="hrm/offer/offerlettertemplate/form.html",
+                     success_url="hrm:offerlettertemplate_list")
+
+
+@tenant_admin_required
+@require_POST
+def offerlettertemplate_delete(request, pk):
+    return crud_delete(request, model=OfferLetterTemplate, pk=pk,
+                       success_url="hrm:offerlettertemplate_list")
+
+
+# --------------------------------------------------------------- Offers (3.8) CRUD + hub
+@login_required
+def offer_list(request):
+    qs = (Offer.objects.filter(tenant=request.tenant)
+          .select_related("application__candidate", "application__requisition")
+          .order_by("-created_at"))
+    return crud_list(
+        request, qs, "hrm/offer/offer/list.html",
+        search_fields=["number", "application__candidate__first_name",
+                       "application__candidate__last_name", "application__requisition__title"],
+        filters=[("status", "status", False), ("signature_status", "signature_status", False),
+                 ("currency", "currency", False)],
+        extra_context={
+            "status_choices": OFFER_STATUS_CHOICES,
+            "signature_status_choices": SIGNATURE_STATUS_CHOICES,
+        },
+    )
+
+
+@login_required
+def offer_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = OfferForm(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.created_by = request.user
+            # Default the currency from the requisition's salary_currency when the recruiter left it blank.
+            if not obj.currency:
+                obj.currency = obj.application.requisition.salary_currency or "USD"
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Offer {obj.number} created.")
+            return redirect("hrm:offer_detail", pk=obj.pk)
+    else:
+        form = OfferForm(tenant=request.tenant,
+                         initial={"application": request.GET.get("application") or None})
+    return render(request, "hrm/offer/offer/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def offer_detail(request, pk):
+    obj = get_object_or_404(
+        Offer.objects.filter(tenant=request.tenant)
+        .select_related("application__candidate", "application__requisition", "offer_letter_template",
+                        "created_by", "extended_by"), pk=pk)
+    approvals = obj.approvals.select_related("approver", "decided_by").all()
+    background_checks = obj.background_checks.select_related("initiated_by").all()
+    preboarding_items = obj.preboarding_items.select_related("verified_by").all()
+    approved = sum(1 for s in approvals if s.status == "approved")
+    all_approved = len(approvals) > 0 and approved == len(approvals)
+    return render(request, "hrm/offer/offer/detail.html", {
+        "obj": obj,
+        "approvals": approvals,
+        "background_checks": background_checks,
+        "preboarding_items": preboarding_items,
+        "approval_progress": (approved, len(approvals)),
+        "all_approved": all_approved,
+        "approval_form": OfferApprovalForm(tenant=request.tenant),
+        "preboarding_form": PreboardingItemForm(tenant=request.tenant),
+        "decline_reason_choices": OFFER_DECLINE_REASON_CHOICES,
+    })
+
+
+@login_required
+def offer_edit(request, pk):
+    # Editable only while draft/pending_approval (mirrors the requisition's editable-before-approval guard);
+    # `status` and the workflow stamps aren't on the form, so they're preserved.
+    obj = get_object_or_404(Offer.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.status not in ("draft", "pending_approval"):
+        messages.error(request, "Only a draft or pending-approval offer can be edited.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    if request.method == "POST":
+        form = OfferForm(request.POST, request.FILES, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if not obj.currency:
+                obj.currency = obj.application.requisition.salary_currency or "USD"
+            obj.save()
+            write_audit_log(request.user, obj, "update", _form_changes(form))
+            messages.success(request, "Offer updated.")
+            return redirect("hrm:offer_detail", pk=obj.pk)
+    else:
+        form = OfferForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/offer/offer/form.html", {"form": form, "obj": obj, "is_edit": True})
+
+
+@tenant_admin_required  # destructive — cascades approvals/background-checks/preboarding items; admin-only
+@require_POST           # and only while a draft (mirrors jobrequisition_delete)
+def offer_delete(request, pk):
+    obj = get_object_or_404(Offer.objects.filter(tenant=request.tenant), pk=pk)
+    if obj.status != "draft":
+        messages.error(request, "Only a draft offer can be deleted.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Offer deleted.")
+    return redirect("hrm:offer_list")
+
+
+# --- Offer approval-chain steps (inline on the offer hub; admin-only, steps only before submit) ---
+@tenant_admin_required
+@require_POST
+def offerapproval_add(request, pk):
+    offer = get_object_or_404(Offer, pk=pk, tenant=request.tenant)
+    if offer.status != "draft":
+        messages.error(request, "Approval steps can only be added while the offer is a draft.")
+        return redirect("hrm:offer_detail", pk=offer.pk)
+    form = OfferApprovalForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        step = form.save(commit=False)
+        step.tenant = request.tenant
+        step.offer = offer
+        step.status = "pending"
+        try:
+            step.save()
+        except IntegrityError:
+            messages.error(request, f"An approval step #{step.step_order} already exists.")
+            return redirect("hrm:offer_detail", pk=offer.pk)
+        write_audit_log(request.user, step, "create",
+                        {"action": "add_offer_approval_step", "step": step.step_order})
+        messages.success(request, f"Approval step #{step.step_order} added.")
+    else:
+        messages.error(request, "Could not add the approval step — check the step order and approver.")
+    return redirect("hrm:offer_detail", pk=offer.pk)
+
+
+@tenant_admin_required
+@require_POST
+def offerapproval_delete(request, pk):
+    step = get_object_or_404(OfferApproval.objects.select_related("offer"), pk=pk, tenant=request.tenant)
+    offer = step.offer
+    if offer.status != "draft":
+        messages.error(request, "Approval steps can only be removed while the offer is a draft.")
+        return redirect("hrm:offer_detail", pk=offer.pk)
+    write_audit_log(request.user, step, "delete",
+                    {"action": "remove_offer_approval_step", "step": step.step_order})
+    step.delete()
+    messages.success(request, "Approval step removed.")
+    return redirect("hrm:offer_detail", pk=offer.pk)
+
+
+# --- Offer workflow state-machine actions (all privileged; the form never sets these fields) ---
+@tenant_admin_required
+@require_POST
+def offer_submit(request, pk):
+    obj = get_object_or_404(Offer, pk=pk, tenant=request.tenant)
+    if obj.status != "draft":
+        messages.error(request, "Only a draft offer can be submitted for approval.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    with transaction.atomic():
+        generate_offer_approval_chain(obj)  # idempotent: builds the default chain only when none exist
+        obj.status = "pending_approval"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit", "to": obj.status})
+    messages.success(request, f"Offer {obj.number} submitted for approval.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def offer_approve_step(request, pk):
+    obj = get_object_or_404(Offer, pk=pk, tenant=request.tenant)
+    if obj.status != "pending_approval":
+        messages.error(request, "Only an offer pending approval can be approved.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    step = obj.approvals.filter(status="pending").order_by("step_order").first()
+    if step is None:
+        messages.error(request, "No pending approval step to approve.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    with transaction.atomic():
+        step.status = "approved"
+        step.decided_at = timezone.now()
+        step.decided_by = request.user
+        step.save(update_fields=["status", "decided_at", "decided_by", "updated_at"])
+        # When the last pending step clears, the whole offer is approved.
+        if not obj.approvals.filter(status="pending").exists():
+            obj.status = "approved"
+            obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update",
+                        {"action": "approve_step", "step": step.step_order, "to": obj.status})
+    if obj.status == "approved":
+        messages.success(request, f"Final approval recorded — {obj.number} is approved.")
+    else:
+        messages.success(request, f"Approval step #{step.step_order} approved.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def offer_reject_step(request, pk):
+    # A rejected step reopens the offer to draft (mirrors jobrequisition_return) rather than inventing a
+    # terminal "rejected" status — OFFER_STATUS_CHOICES stays exactly as researched. The chain is reset so
+    # a fresh submit re-approves from the top.
+    obj = get_object_or_404(Offer, pk=pk, tenant=request.tenant)
+    if obj.status != "pending_approval":
+        messages.error(request, "Only an offer pending approval can be rejected.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    step = obj.approvals.filter(status="pending").order_by("step_order").first()
+    with transaction.atomic():
+        if step is not None:
+            step.status = "rejected"
+            step.decided_at = timezone.now()
+            step.decided_by = request.user
+            step.comments = request.POST.get("comments", "").strip()[:2000]
+            step.save(update_fields=["status", "decided_at", "decided_by", "comments", "updated_at"])
+        # Reset the rest of the chain and reopen for revision.
+        obj.approvals.exclude(pk=step.pk if step else None).update(
+            status="pending", decided_at=None, decided_by=None, comments="")
+        obj.status = "draft"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject_step"})
+    messages.success(request, f"Offer {obj.number} sent back for revision.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def offer_extend(request, pk):
+    # The P0 "approval blocks extension" gate: an offer can only be extended once fully approved.
+    obj = _offer_or_404(request, pk)
+    if obj.status != "approved":
+        messages.error(request, "Only a fully-approved offer can be extended to the candidate.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    obj.status = "extended"
+    obj.extended_by = request.user
+    obj.extended_at = timezone.now()
+    if obj.signature_status == "not_sent":
+        obj.signature_status = "sent"
+    obj.save(update_fields=["status", "extended_by", "extended_at", "signature_status", "updated_at"])
+    # Email the candidate the offer (reuses the existing "offer" template-type + append-only log).
+    comm = _send_candidate_email(obj.application, template_type="offer", sent_by=request.user)
+    write_audit_log(request.user, obj, "update", {"action": "extend"})
+    if comm is None:
+        messages.warning(request, f"Offer {obj.number} extended — but no email was sent "
+                                  "(candidate has no email or is do-not-contact).")
+    else:
+        messages.success(request, f"Offer {obj.number} extended to {obj.application.candidate.name}.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def offer_accept(request, pk):
+    # Marks the candidate's acceptance: advances the application to "hired" (existing 3.6 fields), raises
+    # the pre-boarding checklist, and logs an acceptance communication. A regular tenant user can record
+    # this (it's data entry of the candidate's response, not an authority action).
+    obj = _offer_or_404(request, pk)
+    if obj.status != "extended":
+        messages.error(request, "Only an extended offer can be marked accepted.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    with transaction.atomic():
+        obj.status = "accepted"
+        obj.accepted_at = timezone.now()
+        if obj.signature_status in ("not_sent", "sent", "viewed"):
+            obj.signature_status = "signed"
+        obj.save(update_fields=["status", "accepted_at", "signature_status", "updated_at"])
+        # Drive the recruiting pipeline to hired (reuse existing JobApplication fields — no schema change).
+        app = obj.application
+        app.stage = "hired"
+        app.hired_on = _date.today()
+        app.stage_changed_at = timezone.now()
+        app.save(update_fields=["stage", "hired_on", "stage_changed_at", "updated_at"])
+        # TODO (3.3 hand-off): full onboarding (OnboardingProgram) is created from its own entry points on
+        # the join date; pre-boarding here only collects pre-start documents.
+        generate_preboarding_checklist(obj)
+        write_audit_log(request.user, obj, "update", {"action": "accept", "application": app.number})
+    _send_candidate_email(obj.application, template_type="offer",
+                          subject="Offer Accepted — Welcome Aboard",
+                          body=f"Dear {obj.application.candidate.name},\n\nThank you for accepting our offer "
+                               f"for {obj.application.requisition.title}. We'll be in touch with pre-boarding "
+                               f"next steps.", sent_by=request.user)
+    messages.success(request, f"Offer {obj.number} accepted — {obj.application.candidate.name} marked hired.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def offer_decline(request, pk):
+    obj = _offer_or_404(request, pk)
+    if obj.status != "extended":
+        messages.error(request, "Only an extended offer can be marked declined.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    reason = request.POST.get("decline_reason", "").strip()
+    if reason not in dict(OFFER_DECLINE_REASON_CHOICES):
+        messages.error(request, "Select a valid decline reason.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    obj.status = "declined"
+    obj.declined_at = timezone.now()
+    obj.decline_reason = reason
+    obj.decline_notes = request.POST.get("decline_notes", "").strip()[:2000]
+    obj.save(update_fields=["status", "declined_at", "decline_reason", "decline_notes", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "decline", "reason": reason})
+    messages.success(request, f"Offer {obj.number} marked declined.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # rescinding a live offer is a sensitive HR action
+@require_POST
+def offer_rescind(request, pk):
+    obj = _offer_or_404(request, pk)
+    if obj.status not in ("pending_approval", "approved", "extended"):
+        messages.error(request, "Only a pending, approved or extended offer can be rescinded.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    obj.status = "rescinded"
+    obj.rescinded_at = timezone.now()
+    obj.save(update_fields=["status", "rescinded_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "rescind"})
+    messages.success(request, f"Offer {obj.number} rescinded.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def offer_expire(request, pk):
+    # Manual "let it lapse" action, available once an extended offer is past its response deadline
+    # (automated cron expiry is deferred, mirroring the manual-action convention throughout HRM).
+    obj = _offer_or_404(request, pk)
+    if obj.status != "extended":
+        messages.error(request, "Only an extended offer can be expired.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    if not obj.is_overdue:
+        messages.error(request, "This offer's response deadline hasn't passed yet.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    obj.status = "expired"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "expire"})
+    messages.success(request, f"Offer {obj.number} marked expired.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def offer_send_email(request, pk):
+    # Ad-hoc resend of the offer-letter email at any non-terminal status.
+    obj = _offer_or_404(request, pk)
+    if obj.is_closed:
+        messages.error(request, "This offer is closed — no email sent.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    if obj.application.candidate.do_not_contact:
+        messages.error(request, "This candidate is marked do-not-contact; email not sent.")
+        return redirect("hrm:offer_detail", pk=obj.pk)
+    comm = _send_candidate_email(obj.application, template_type="offer", sent_by=request.user)
+    if comm is None:
+        messages.error(request, "Nothing sent — the candidate has no email or is do-not-contact.")
+    else:
+        write_audit_log(request.user, comm, "create",
+                        {"to": obj.application.candidate.email, "kind": "offer"})
+        messages.success(request, f"Offer email sent to {obj.application.candidate.name}.")
+    return redirect("hrm:offer_detail", pk=obj.pk)
+
+
+@login_required
+def offer_letter_print(request, pk):
+    """Server-rendered printable offer letter (3.8). Merges the chosen ``OfferLetterTemplate.body_html``
+    tokens against the offer/candidate/tenant (reusing ``_apply_merge``), falling back to a generated body
+    when no template is linked. Pure read/render — an offer letter can be reprinted freely (mirrors the
+    offboarding relieving/experience letters)."""
+    obj = _offer_or_404(request, pk)
+    candidate = obj.application.candidate
+    hiring_manager = obj.requisition.hiring_manager
+    ctx = {
+        "{{candidate_name}}": candidate.name,
+        "{{job_title}}": obj.requisition.title,
+        "{{base_salary}}": f"{obj.base_salary:,.2f}",
+        "{{currency}}": obj.currency,
+        "{{start_date}}": obj.start_date.strftime("%B %d, %Y") if obj.start_date else "",
+        "{{company_name}}": getattr(request.tenant, "name", ""),
+        "{{hiring_manager_name}}": (hiring_manager.party.name if hiring_manager else "the hiring team"),
+    }
+    if obj.offer_letter_template:
+        letter_body = _apply_merge(obj.offer_letter_template.body_html, ctx)
+    else:
+        letter_body = (
+            f"Dear {candidate.name},\n\nWe are delighted to offer you the position of "
+            f"{obj.requisition.title} at {ctx['{{company_name}}']}. Your annual base salary will be "
+            f"{obj.currency} {obj.base_salary:,.2f}, with a proposed start date of "
+            f"{ctx['{{start_date}}'] or 'a date to be confirmed'}.\n\nWe look forward to welcoming you "
+            f"to the team.\n\nSincerely,\n{ctx['{{hiring_manager_name}}']}")
+    return render(request, "hrm/offer/offer_letter.html", {
+        "offer": obj,
+        "application": obj.application,
+        "candidate": candidate,
+        "letter_body": letter_body,
+        "today": timezone.localdate(),
+    })
+
+
+# --------------------------------------------------------------- Background Verification (3.8)
+@login_required
+def backgroundverification_list(request):
+    qs = (BackgroundVerification.objects.filter(tenant=request.tenant)
+          .select_related("offer__application__candidate").order_by("-created_at"))
+    return crud_list(
+        request, qs, "hrm/offer/backgroundverification/list.html",
+        search_fields=["number", "offer__number", "offer__application__candidate__first_name",
+                       "offer__application__candidate__last_name"],
+        filters=[("status", "status", False), ("check_type", "check_type", False),
+                 ("vendor", "vendor", False)],
+        extra_context={
+            "status_choices": BGV_STATUS_CHOICES,
+            "check_type_choices": BGV_CHECK_TYPE_CHOICES,
+            "vendor_choices": BGV_VENDOR_CHOICES,
+            "offers": Offer.objects.filter(tenant=request.tenant)
+            .select_related("application__candidate").order_by("-created_at")[:200],
+        },
+    )
+
+
+@login_required
+def backgroundverification_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = BackgroundVerificationForm(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Background check {obj.number} created.")
+            return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    else:
+        form = BackgroundVerificationForm(tenant=request.tenant,
+                                          initial={"offer": request.GET.get("offer") or None})
+    return render(request, "hrm/offer/backgroundverification/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def backgroundverification_detail(request, pk):
+    obj = get_object_or_404(
+        BackgroundVerification.objects.filter(tenant=request.tenant)
+        .select_related("offer__application__candidate", "initiated_by"), pk=pk)
+    return render(request, "hrm/offer/backgroundverification/detail.html", {
+        "obj": obj,
+        "status_choices": BGV_STATUS_CHOICES,
+        "result_choices": BGV_RESULT_CHOICES,
+    })
+
+
+@login_required
+def backgroundverification_edit(request, pk):
+    return crud_edit(request, model=BackgroundVerification, pk=pk, form_class=BackgroundVerificationForm,
+                     template="hrm/offer/backgroundverification/form.html",
+                     success_url="hrm:backgroundverification_list")
+
+
+@tenant_admin_required
+@require_POST
+def backgroundverification_delete(request, pk):
+    return crud_delete(request, model=BackgroundVerification, pk=pk,
+                       success_url="hrm:backgroundverification_list")
+
+
+def _bgv_or_404(request, pk):
+    return get_object_or_404(
+        BackgroundVerification.objects.filter(tenant=request.tenant)
+        .select_related("offer__application__candidate"), pk=pk)
+
+
+@login_required
+@require_POST
+def backgroundverification_initiate(request, pk):
+    # Consent-before-initiation gate (the Checkr/BambooHR "candidate must authorize" finding).
+    obj = _bgv_or_404(request, pk)
+    if obj.status not in ("not_started", "consent_pending"):
+        messages.error(request, "This check has already been initiated.")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    if not obj.consent_given:
+        obj.status = "consent_pending"
+        obj.save(update_fields=["status", "updated_at"])
+        messages.error(request, "Candidate consent is required before initiating the check.")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    obj.status = "initiated"
+    obj.initiated_at = timezone.now()
+    obj.initiated_by = request.user
+    if obj.consent_date is None:
+        obj.consent_date = timezone.now()
+    obj.save(update_fields=["status", "initiated_at", "initiated_by", "consent_date", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "initiate", "vendor": obj.vendor})
+    messages.success(request, f"Background check {obj.number} initiated.")
+    return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def backgroundverification_mark_status(request, pk):
+    # Manual stand-in for the deferred vendor webhook: move the check through its intermediate statuses.
+    obj = _bgv_or_404(request, pk)
+    new_status = request.POST.get("status", "")
+    allowed = {"in_progress", "action_needed", "ready_for_review"}
+    if new_status not in allowed:
+        messages.error(request, "Invalid status transition.")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    if obj.status in ("not_started", "consent_pending"):
+        messages.error(request, "Initiate the check before updating its progress.")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    obj.status = new_status
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": f"status:{new_status}"})
+    messages.success(request, "Background-check status updated.")
+    return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def backgroundverification_complete(request, pk):
+    obj = _bgv_or_404(request, pk)
+    if obj.status == "completed":
+        messages.info(request, "This check is already completed.")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    result = request.POST.get("result", "")
+    if result not in dict(BGV_RESULT_CHOICES):
+        messages.error(request, "Select a valid result (Clear / Consider / Not Applicable).")
+        return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+    obj.status = "completed"
+    obj.result = result
+    obj.completed_at = timezone.now()
+    obj.save(update_fields=["status", "result", "completed_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "complete", "result": result})
+    messages.success(request, f"Background check {obj.number} completed ({obj.get_result_display()}).")
+    return redirect("hrm:backgroundverification_detail", pk=obj.pk)
+
+
+# --------------------------------------------------------------- Pre-boarding Items (3.8, inline on offer)
+def _preboarding_or_404(request, pk):
+    return get_object_or_404(
+        PreboardingItem.objects.filter(tenant=request.tenant).select_related("offer__application__candidate"),
+        pk=pk)
+
+
+@login_required
+@require_POST
+def preboardingitem_add(request, pk):
+    offer = get_object_or_404(Offer, pk=pk, tenant=request.tenant)
+    form = PreboardingItemForm(request.POST, request.FILES, tenant=request.tenant)
+    if form.is_valid():
+        item = form.save(commit=False)
+        item.tenant = request.tenant
+        item.offer = offer
+        item.save()
+        messages.success(request, "Pre-boarding item added.")
+    else:
+        messages.error(request, "Could not add the pre-boarding item — check the document type.")
+    return redirect("hrm:offer_detail", pk=offer.pk)
+
+
+@login_required
+@require_POST
+def preboardingitem_delete(request, pk):
+    item = _preboarding_or_404(request, pk)
+    offer_pk = item.offer_id
+    item.delete()
+    messages.success(request, "Pre-boarding item removed.")
+    return redirect("hrm:offer_detail", pk=offer_pk)
+
+
+@login_required
+@require_POST
+def preboardingitem_mark_submitted(request, pk):
+    item = _preboarding_or_404(request, pk)
+    item.status = "submitted"
+    item.submitted_at = timezone.now()
+    item.save(update_fields=["status", "submitted_at", "updated_at"])
+    messages.success(request, "Pre-boarding item marked submitted.")
+    return redirect("hrm:offer_detail", pk=item.offer_id)
+
+
+@tenant_admin_required  # verifying/rejecting a submitted document is a privileged HR action
+@require_POST
+def preboardingitem_verify(request, pk):
+    item = _preboarding_or_404(request, pk)
+    item.status = "verified"
+    item.verified_by = request.user
+    item.verified_at = timezone.now()
+    item.save(update_fields=["status", "verified_by", "verified_at", "updated_at"])
+    write_audit_log(request.user, item, "update", {"action": "verify_preboarding"})
+    messages.success(request, "Pre-boarding item verified.")
+    return redirect("hrm:offer_detail", pk=item.offer_id)
+
+
+@tenant_admin_required
+@require_POST
+def preboardingitem_reject(request, pk):
+    item = _preboarding_or_404(request, pk)
+    item.status = "rejected"
+    item.verified_by = request.user
+    item.verified_at = timezone.now()
+    item.save(update_fields=["status", "verified_by", "verified_at", "updated_at"])
+    write_audit_log(request.user, item, "update", {"action": "reject_preboarding"})
+    messages.success(request, "Pre-boarding item rejected — the candidate can re-submit.")
+    return redirect("hrm:offer_detail", pk=item.offer_id)
+
+
+@login_required
+@require_POST
+def preboardingitem_send_invite(request, pk):
+    # Reuses the 3.6 candidate-email pipeline for a pre-boarding document-collection nudge (manual action;
+    # scheduled dispatch deferred). Stamps reminder_sent_at, honoring do_not_contact via the helper.
+    item = _preboarding_or_404(request, pk)
+    candidate = item.offer.application.candidate
+    if candidate.do_not_contact:
+        messages.error(request, "This candidate is marked do-not-contact; invite not sent.")
+        return redirect("hrm:offer_detail", pk=item.offer_id)
+    body = (f"Dear {candidate.name},\n\nPlease upload your {item.get_document_type_display()} to complete "
+            f"pre-boarding for your upcoming start. Reply to this email if you have any questions.")
+    comm = _send_candidate_email(item.offer.application, template_type="general",
+                                 subject="Pre-boarding — document requested", body=body, sent_by=request.user)
+    if comm is None:
+        messages.error(request, "Nothing sent — the candidate has no email or is do-not-contact.")
+    else:
+        item.reminder_sent_at = timezone.now()
+        item.save(update_fields=["reminder_sent_at", "updated_at"])
+        write_audit_log(request.user, comm, "create",
+                        {"to": candidate.email, "kind": "preboarding_invite"})
+        messages.success(request, "Pre-boarding invite sent to the candidate.")
+    return redirect("hrm:offer_detail", pk=item.offer_id)
