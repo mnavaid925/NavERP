@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -8,7 +8,8 @@ description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designation
 NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix `/hrm/`
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
 3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
-3.7 Interview Process, 3.9 Attendance Management, 3.10 Leave Management, 3.12 Holiday Management.** Reuses the
+3.7 Interview Process, 3.8 Offer Management, 3.9 Attendance Management, 3.10 Leave Management,
+3.12 Holiday Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -17,7 +18,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 38 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process)
+## Models (`apps/hrm/models.py`) — 43 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -121,6 +122,18 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
 
 **Interview flow:** create an `Interview` against an application (status=scheduled; `interview_create` honors `?application=`, stamps `scheduled_by`, lands on the detail hub) → on the hub: **Confirm / Start / Complete / Cancel / No-show** (status machine, blocked once terminal) and **Reschedule** (sets a new `scheduled_at` and reopens a closed round to `rescheduled`); add/remove **panelists** + inline **RSVP**; **Send Invite / Send Reminder** to the candidate (reuse `_send_candidate_email`; reminder stamps `reminder_sent_at`; do_not_contact suppresses) and **Request Feedback** (emails panelist Users best-effort, stamps `feedback_reminder_sent_at`). Scorecards: create an `InterviewFeedback` (draft; `?interview=` pre-select) → add/remove `FeedbackCriterion` rating lines on its hub → **Submit** (stamps is_submitted/submitted_at/submitted_by). **Workflow fields are excluded from every form** — status/scheduled_by/reminder stamps, rsvp/notified_at, is_submitted/submitted_by/submitted_at — set only by the audited POST actions. **Deletes are `@tenant_admin_required`** (auditable records); the rest is `@login_required` (scheduling/feedback are normal recruiter actions). `meeting_url` is rendered through the `core` `|safe_external_url` filter so only http/https schemes become a clickable link (defense-in-depth vs a `javascript:` href).
 
+### 3.8 Offer Management (5 tables) — offer letter + multi-step approval + tracking + background check + pre-boarding over the 3.6 application
+
+| Model | Prefix | Key fields | Notes |
+|---|---|---|---|
+| `OfferLetterTemplate` (3.8) | `OLTMPL-` | name, is_active, body_html (merge tokens `{{candidate_name}}/{{job_title}}/{{base_salary}}/{{currency}}/{{start_date}}/{{company_name}}/{{hiring_manager_name}}`) | Reusable printable letter body (mirrors `CandidateEmailTemplate`). `unique_together=(tenant,name)`. Index (tenant,is_active). The `offer_letter_print` view merges its tokens via `_apply_merge`. |
+| `Offer` (3.8) | `OFR-` | **application→`JobApplication`(CASCADE)**, offer_letter_template→`OfferLetterTemplate`(SET_NULL), base_salary, currency (defaults from requisition), bonus_amount/bonus_terms, signing_bonus, equity_terms, relocation_assistance, benefits_summary, start_date, expires_on, **status(editable=False)**, decline_reason/decline_notes, signed_document(FileField), signature_status, **+ workflow stamps (editable=False): extended_by/extended_at/accepted_at/declined_at/rescinded_at/created_by** | The offer hub. `OFFER_STATUS_CHOICES`: draft→pending_approval→approved→extended→accepted/declined/rescinded/expired. `OFFER_TERMINAL_STATUSES=(accepted,declined,rescinded,expired)`. **Derived props** `is_overdue` (expires_on past + non-terminal), `is_closed`, `total_compensation` (base+bonus+signing — drives the approval threshold), `approval_progress`/`current_approval_step` (fire a SELECT — the detail view computes from the fetched list). `@property candidate`/`requisition` via application. `clean()` rejects negative amounts. Indexes (tenant,status)/(tenant,application)/(tenant,created_at). |
+| `OfferApproval` (3.8) | — | offer→`Offer`(CASCADE), step_order, approver→`User`(SET_NULL), approver_role(reuses `APPROVER_ROLE_CHOICES`), **status(editable=False, reuses `APPROVAL_STEP_STATUS_CHOICES`)**, decided_at/decided_by(editable=False), comments | **Inline child** of the offer hub (add/delete POST actions, draft-only + admin — mirrors `RequisitionApproval`). `unique_together=(offer,step_order)`. `clean()` step_order≥1. Indexes (offer,status)/(approver,status). |
+| `BackgroundVerification` (3.8) | `BGV-` | offer→`Offer`(CASCADE), vendor(checkr/hireright/sterling/other), check_type(criminal/employment/education/professional_license/identity/credit), **status(editable=False)**, result(clear/consider/not_applicable), consent_given/consent_date(editable=False), report_file(FileField), initiated_at/completed_at/initiated_by(editable=False), notes | `BGV_STATUS_CHOICES`: not_started/consent_pending→initiated→in_progress/action_needed/ready_for_review→completed (Checkr/Sterling lifecycle). `result` is set only by `backgroundverification_complete`, NOT the form. `BGV_MANUAL_TRANSITION_STATUSES=(in_progress,action_needed,ready_for_review)` shared by the mark-status guard + the detail dropdown. Indexes (tenant,status)/(tenant,offer)/(tenant,check_type)/(tenant,created_at). |
+| `PreboardingItem` (3.8) | — | offer→`Offer`(CASCADE), document_type(id_proof/address_proof/tax_form/bank_details/nda/education_certificate/background_check_consent/other), is_required, **status(editable=False)** (pending/submitted/verified/rejected), uploaded_file(FileField), submitted_at/verified_by/verified_at/reminder_sent_at(editable=False), notes | **Inline child** of the offer hub (add/delete/submit/verify/reject/send-invite POST actions, no own templates — distinct from post-start 3.3 `OnboardingDocument`). Indexes (tenant,offer)/(tenant,status). |
+
+**Offer flow:** create an `Offer` against an application (status=draft; `offer_create` honors `?application=`, stamps `created_by`, defaults `currency` from the requisition, lands on the detail hub) → optionally add/remove **approval steps** (draft + admin only) → **Submit** (builds the default chain via `generate_offer_approval_chain` if none, resets the whole chain to pending so a reject→resubmit re-approves from the top) → **Approve Step** ×N (last step clears → status=approved) or **Reject Step** (reopens to draft) → **Extend** (gated on all steps approved; stamps extended_by/at, sends the offer email via `_send_candidate_email` template_type="offer", sets signature_status=sent) → **Accept** (status=accepted, drives `JobApplication.stage`→hired + hired_on, raises the pre-boarding checklist via `generate_preboarding_checklist`) / **Decline** (requires a valid decline_reason) / **Rescind** (admin) / **Expire** (only when extended + overdue). **Background checks** are ordered from the hub (`?offer=`): consent → **Initiate** (admin; blocked without consent) → **Update Status** (admin) → **Complete** with a result (admin). **Pre-boarding**: auto-raised on accept; per-item **Mark Submitted** (candidate/HR; clears stale verify stamps), **Send Invite** (reuses `_send_candidate_email`, stamps reminder_sent_at, do_not_contact suppresses), **Verify/Reject/Delete** (admin). **Workflow fields are excluded from every form** — status + all `*_at`/`*_by` stamps, BGV `result` — set only by the audited POST actions. **Privileged actions are `@tenant_admin_required`** (submit/approve/reject/extend/rescind/expire/delete, approval add/delete, preboarding verify/reject/delete, BGV initiate/mark-status/complete, letter-template delete); accept/decline/send-email + preboarding add/submit/send-invite are `@login_required`. File uploads (signed_document/report_file/uploaded_file) are extension+size validated via `_validate_upload`. The printable offer letter is a standalone page (`offer_letter.html`, not a base.html child; mirrors `relieving_letter.html`). **Deferred:** live e-sign / background-check vendor APIs, adverse-action dispute flow, parallel/rule-engine approval routing, acceptance-rate analytics, scheduled pre-boarding dispatch.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -185,6 +198,19 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   `@tenant_admin_required`** (security-review #2); all reads + scheduling/feedback writes are `@login_required`.
   `interview_create` honors `?application=<pk>`; `interviewfeedback_create` honors `?interview=<pk>` (the interview
   hub's "Add Scorecard" passes it). Edits redirect to the detail hub.
+- **Offer Management (3.8):** `offer_list/_create/_detail/_edit/_delete` (`/hrm/offers/`),
+  `backgroundverification_list/_create/_detail/_edit/_delete` (`/hrm/background-checks/`),
+  `offerlettertemplate_list/_create/_detail/_edit/_delete` (`/hrm/offer-letter-templates/`). **Offer workflow extras
+  (POST-only):** `offer_submit/_approve_step/_reject_step/_extend/_rescind/_expire` (`@tenant_admin_required`),
+  `offer_accept/_decline/_send_email` (`@login_required`), `offer_letter_print` (`/hrm/offers/<pk>/letter/`, GET,
+  standalone print page); inline approval steps `offerapproval_add` (`/offers/<pk>/approvals/add/`) /
+  `offerapproval_delete` (`/offer-approvals/<pk>/delete/`) (both `@tenant_admin_required`). **Pre-boarding items
+  (POST, inline on the offer hub):** `preboardingitem_add`/`_mark_submitted`/`_send_invite` (`@login_required`),
+  `preboardingitem_verify`/`_reject`/`_delete` (`@tenant_admin_required`) at `/offers/<pk>/preboarding/add/` +
+  `/preboarding-items/<pk>/...`. **Background-check lifecycle (POST):** `backgroundverification_initiate/_mark_status/
+  _complete` (all `@tenant_admin_required`); `backgroundverification_edit` is blocked once completed;
+  `backgroundverification_delete` + `offerlettertemplate_delete` are `@tenant_admin_required`. `offer_create` honors
+  `?application=<pk>`; `backgroundverification_create` honors `?offer=<pk>`. Edits redirect to the detail hub.
 
 ## Views (`apps/hrm/views.py`)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
@@ -235,9 +261,21 @@ Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` help
   the two custom edits. `interviewfeedback_detail` is the scorecard hub (inline criteria add/remove + submit);
   `interviewfeedback_list` annotates `Avg("criteria__rating")` + `Count("criteria")`. `interviewfeedback_submit`
   stamps is_submitted/submitted_at/submitted_by; create/edit never set them (is_submitted is off the form).
+- **Offer Management (3.8):** `offer_detail` is the hub — a workflow action bar (submit/approve-step/reject-step/
+  extend/accept/decline/rescind/expire/send-email, gated by status + admin), a compensation card, the inline
+  **approval chain** (add-step form draft+admin, per-row remove), the **background-checks** list (+ Order Check),
+  and the **pre-boarding** checklist (per-row submit/verify/reject/send-invite/delete + add-item form). `approved`/
+  `all_approved`/`approval_progress` are computed from the already-fetched `approvals` list (the model props
+  re-query). Status helpers mirror 3.5/3.7: `_offer_or_404` (select_related incl. `requisition__hiring_manager__party`
+  for the letter merge), `_bgv_or_404`, `_preboarding_or_404`. `offer_submit` calls `generate_offer_approval_chain`
+  then **resets the whole chain to pending** so a reject→resubmit re-approves from the top (the fix for the
+  explorer's stuck-rejected-step bug). `offer_accept` drives `JobApplication.stage`→hired inside `transaction.atomic()`.
+  `offer_letter_print` merges `OfferLetterTemplate.body_html` via `_apply_merge` (or a generated fallback body) and
+  renders the standalone print page. `backgroundverification_detail` passes `transition_status_choices` (the
+  `BGV_MANUAL_TRANSITION_STATUSES` subset) so the Update-Status dropdown never drifts from the view guard.
 
 ## Templates (`templates/hrm/<submodule>/<entity>/<page>.html`)
-112 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
+123 files, **one folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page
 filename** (CLAUDE.md "Template Folder Structure"): `employee/` (3.1 — the main employee is single-entity so
 `employee/list.html` etc.; its child entities get their own folders `employee/document/{list,detail,form}.html` and
 `employee/lifecycle/{list,detail,form}.html` — the `budget/line/` child-entity precedent),
@@ -262,6 +300,12 @@ status/reschedule/invite-reminder action bar] and `interviewfeedback/` [the scor
 each with `list/detail/form.html`; the reusable `interview/_status_badge.html` + `interview/_reco_badge.html`
 partials; `InterviewPanelist` + `FeedbackCriterion` render inline on their parent hubs, no own templates. The detail
 hub does `{% load safe_url %}` to render `meeting_url` through `|safe_external_url`)**,
+**`offer/` (3.8 — entity folders `offer/` [the workflow hub: status action bar + inline approval chain +
+background-checks list + pre-boarding checklist], `backgroundverification/` [list/detail with the initiate/
+update-status/complete lifecycle], `offerlettertemplate/` [list/detail/form; the detail uses `{% verbatim %}` for
+the merge-token reference], each with `list/detail/form.html`; the reusable `offer/_status_badge.html` partial; the
+standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirrors `relieving_letter.html`];
+`OfferApproval` + `PreboardingItem` render inline on the offer hub, no own templates)**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
@@ -317,6 +361,16 @@ workflow — a form checkbox could un-submit), scopes `panelist` to the selected
 the `?interview=` initial / bound data on create, isdigit-guarded), and `clean()` rejects a panelist that is not on
 the selected interview (the DB `(interview,panelist)` unique is the backstop). `FeedbackCriterionForm` = criterion_
 name/rating/notes with a `NumberInput(min=1,max=5)` widget + `clean_rating` 1–5.
+**Offer-management form security (3.8):** `OfferForm` excludes `status` + all workflow stamps (extended_by/at,
+accepted_at, declined_at, rescinded_at, created_by) + `number`; makes `currency` optional so the view defaults it
+from the requisition; `clean()` rejects negative amounts; `clean_signed_document` allowlists pdf/doc/docx + 10 MB
+via the shared `_validate_upload`. `OfferApprovalForm` excludes `status`/`decided_at`/`decided_by` and scopes
+`approver` to tenant users (mirrors `RequisitionApprovalForm`). **`BackgroundVerificationForm` excludes `result`**
+(set only by `backgroundverification_complete` — a form-editable verdict would bypass the consent→initiate→complete
+gate) + `status`/lifecycle stamps; `clean_report_file` allowlists pdf/doc/docx + 10 MB. `PreboardingItemForm`
+excludes the workflow stamps; `clean_uploaded_file` allowlists pdf/doc/docx/jpg/jpeg/png + 10 MB (ID-proof photos).
+`OfferLetterTemplateForm` = name/is_active/body_html. The shared `_validate_upload(f, *, allowed_ext, max_bytes,
+label)` helper backs all four upload guards (and `_validate_resume`).
 
 ## Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
@@ -351,6 +405,13 @@ seeded requisitions (`get_or_create` on (candidate,requisition)), and 2 `Candida
 interviews on existing `JobApplication`s (a completed video round + an upcoming in-person round), 1–2 `InterviewPanelist`s
 each from the tenant Users, and a submitted `InterviewFeedback` scorecard with 3 `FeedbackCriterion` lines on the
 completed round; skipped (with a notice) if the tenant has no applications yet.
+**Offer Management (3.8)** is seeded by `_seed_offers(tenant)` (guarded by its own `Offer.exists()` check; `--flush`
+cascades from `Offer`): 1 `OfferLetterTemplate` ("Standard Offer Letter" with merge tokens), then 2 offers on
+existing `JobApplication`s — one **accepted** end-to-end (2-step chain both approved via
+`generate_offer_approval_chain`, a completed clear `BackgroundVerification`, and a `generate_preboarding_checklist`
+with a mix of verified/submitted/pending items; drives its application → hired), and one **pending_approval** (first
+step approved, second pending). Reuses the seeded applications/Users; skipped (with a notice) if the tenant has no
+applications yet.
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -382,6 +443,11 @@ tenant and sees nothing.
   Interview Feedback → `hrm:interviewfeedback_list` (the scorecards list); Video Interview →
   `hrm:interview_list?mode=video` (the video-mode filtered slice — most-specific match highlights it distinctly,
   suffix handled by `_safe_reverse`).
+- 3.8 (all 5 bullets live): Offer Letter Generation → `hrm:offerlettertemplate_list` (the letter-template library);
+  Offer Approval → `hrm:offer_list?status=pending_approval` (the pending-approval queue, suffix handled by
+  `_safe_reverse`); Offer Tracking → `hrm:offer_list` (the all-status offer list); Background Verification →
+  `hrm:backgroundverification_list`; Pre-boarding → `hrm:offer_list?status=accepted` (accepted offers = active
+  pre-boarding, managed on the offer detail hub).
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
   + Shift Assignments → `hrm:shiftassignment_list`.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
@@ -453,9 +519,22 @@ interview-kit / question-bank template catalog, strict queryset-level feedback *
 models the anti-anchoring intent but feedback isn't hidden from other panelists pre-submission), an admin-gated
 scorecard edit window, and the **Celery beat task for timed reminder dispatch** (reminders/invites are manual
 actions; `reminder_sent_at`/`feedback_reminder_sent_at` record the last manual send).
-Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), the rest of recruiting/
-ATS — **3.8 Offer (FKs into the built 3.6 `JobApplication`; the `stage="offer"` value is the 3.6/3.7→3.8 handoff,
-and an offer follows a completed 3.7 `Interview`/scorecards)** — plus
+**3.8 offer-management deferrals:** live e-signature vendor wiring (DocuSign/Adobe Sign/Zoho Sign — `signed_document`
+/`signature_status` are fields only, no send-for-signature/webhook/auto-attach), live background-check vendor APIs
+(Checkr/HireRight/Sterling order + webhook status push-back — `BackgroundVerification` is a manually-advanced record;
+the fields a webhook would write already exist), the formal **adverse-action / dispute compliance flow** for a
+"Consider" result (pre-adverse notice → response window → final notice), **parallel** (all-at-once) approval routing
+(the chain is sequential-by-`step_order`), a configurable **conditional-routing rule engine** (only a single
+hardcoded `OFFER_APPROVAL_EXEC_THRESHOLD` constant adds the executive step today), a configurable
+approval-notification field-picker, companion-document bundling (NDA/authorization sent alongside the offer),
+offer **acceptance-rate / decline-reason analytics** (the `status`/`decline_reason` fields ship now; the dashboard
+is a later analytics pass), template-usage scoping rules, and **scheduled/automated pre-boarding invite dispatch**
+(Celery — invites/reminders are manual actions stamping `reminder_sent_at`). The pre-boarding→3.3 onboarding
+hand-off on the join date is a TODO comment at the `offer_accept` trigger point (no forced `OnboardingProgram`
+creation this pass). The three new uploads (`signed_document`/`report_file`/`uploaded_file`) are extension+size
+validated but served via the dev `/media/` helper — keep `MEDIA_ROOT` outside the web root + `Content-Disposition:
+attachment` in production (project-wide WARNING).
+Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
 upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
