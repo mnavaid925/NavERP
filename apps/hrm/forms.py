@@ -26,6 +26,12 @@ MAX_ONBOARDING_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_RESUME_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_RESUME_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# 3.8 offer/background-check/pre-boarding upload safety: signed offers + vendor reports are
+# documents only; pre-boarding docs also allow ID-proof photos. 10 MB cap (mirrors onboarding docs).
+ALLOWED_OFFER_DOC_EXTENSIONS = {".pdf", ".doc", ".docx"}
+ALLOWED_PREBOARDING_DOC_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}
+MAX_OFFER_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
+
 from .models import (
     AssetAllocation,
     AttendanceRecord,
@@ -693,12 +699,19 @@ class PublicApplicationForm(forms.Form):
 def _validate_resume(f):
     """Shared resume/cover-letter upload guard — documents only (PDF/DOC/DOCX), 10 MB cap.
     Validates a freshly-uploaded file only (an existing FieldFile has no new size to re-check)."""
+    return _validate_upload(f, allowed_ext=ALLOWED_RESUME_EXTENSIONS, max_bytes=MAX_RESUME_BYTES)
+
+
+def _validate_upload(f, *, allowed_ext, max_bytes, label="File"):
+    """Generic upload guard — extension allowlist + size cap. Validates a freshly-uploaded file only
+    (an existing FieldFile has no new size to re-check)."""
     if f and hasattr(f, "name") and hasattr(f, "size"):
         ext = os.path.splitext(f.name)[1].lower()
-        if ext not in ALLOWED_RESUME_EXTENSIONS:
-            raise forms.ValidationError(f"File type '{ext}' is not allowed. Use PDF, DOC or DOCX.")
-        if f.size and f.size > MAX_RESUME_BYTES:
-            raise forms.ValidationError("File exceeds the 10 MB limit.")
+        if ext not in allowed_ext:
+            raise forms.ValidationError(
+                f"{label} type '{ext}' is not allowed. Use {', '.join(sorted(allowed_ext))}.")
+        if f.size and f.size > max_bytes:
+            raise forms.ValidationError(f"{label} exceeds the {max_bytes // (1024 * 1024)} MB limit.")
         # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve uploads with
         # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
     return f
@@ -838,6 +851,11 @@ class OfferForm(TenantModelForm):
                 self.add_error(field, "Amount cannot be negative.")
         return cleaned
 
+    def clean_signed_document(self):
+        return _validate_upload(self.cleaned_data.get("signed_document"),
+                                allowed_ext=ALLOWED_OFFER_DOC_EXTENSIONS, max_bytes=MAX_OFFER_DOC_BYTES,
+                                label="Signed document")
+
 
 class OfferApprovalForm(TenantModelForm):
     # SECURITY: `status`, `decided_at`, `decided_by` are excluded — set only by the approve/reject
@@ -872,6 +890,11 @@ class BackgroundVerificationForm(TenantModelForm):
                 Offer.objects.filter(tenant=self.tenant)
                 .select_related("application__candidate").order_by("-created_at"))
 
+    def clean_report_file(self):
+        return _validate_upload(self.cleaned_data.get("report_file"),
+                                allowed_ext=ALLOWED_OFFER_DOC_EXTENSIONS, max_bytes=MAX_OFFER_DOC_BYTES,
+                                label="Report")
+
 
 class PreboardingItemForm(TenantModelForm):
     # Inline-add on the offer detail hub; `offer` is set in the view. `status`/`submitted_at`/
@@ -880,3 +903,8 @@ class PreboardingItemForm(TenantModelForm):
     class Meta:
         model = PreboardingItem
         fields = ["document_type", "is_required", "uploaded_file", "notes"]
+
+    def clean_uploaded_file(self):
+        return _validate_upload(self.cleaned_data.get("uploaded_file"),
+                                allowed_ext=ALLOWED_PREBOARDING_DOC_EXTENSIONS, max_bytes=MAX_OFFER_DOC_BYTES,
+                                label="Document")
