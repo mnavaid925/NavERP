@@ -8,11 +8,11 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'hrm:offer_letter_print' obj.pk %}" class="btn btn-outline" target="_blank"><i data-lucide="printer"></i> Print Letter</a>
-      {% if obj.status == 'draft' or obj.status == 'pending_approval' %}
+      {% if obj.status == 'draft' %}
         <a href="{% url 'hrm:offer_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
-      {% endif %}
-      {% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin %}
-        <form method="post" action="{% url 'hrm:offer_delete' obj.pk %}" onsubmit="return confirm('Delete this draft offer?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:offer_delete' obj.pk %}" onsubmit="return confirm('Delete this draft offer?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        {% endif %}
       {% endif %}
     </div>
   </div>
@@ -53,13 +53,13 @@
           {% endif %}
         </div>
 
-        {% if obj.status == 'pending_approval' and request.user.is_superuser or obj.status == 'pending_approval' and request.user.is_tenant_admin %}
+        {% if obj.status == 'pending_approval' %}{% if request.user.is_superuser or request.user.is_tenant_admin %}
           <form method="post" action="{% url 'hrm:offer_reject_step' obj.pk %}" class="filter-bar" style="margin-top:1rem;" onsubmit="return confirm('Reject the current step and reopen the offer for revision?');">
             {% csrf_token %}
             <div class="form-group" style="flex:1; min-width:200px;"><label class="form-label" for="id_reject_comments">Rejection comments</label><input type="text" name="comments" id="id_reject_comments" class="form-input" placeholder="Why is this step rejected?"></div>
             <button class="btn btn-outline" type="submit"><i data-lucide="corner-up-left"></i> Reject Step</button>
           </form>
-        {% endif %}
+        {% endif %}{% endif %}
 
         {% if obj.status == 'extended' %}
           <form method="post" action="{% url 'hrm:offer_decline' obj.pk %}" class="filter-bar" style="margin-top:1rem;" onsubmit="return confirm('Record the candidate declining this offer?');">
@@ -144,7 +144,7 @@
           </tbody>
         </table>
       </div>
-      {% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin %}
+      {% if obj.status == 'draft' %}{% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'hrm:offerapproval_add' obj.pk %}" style="margin-top:1rem;">
           {% csrf_token %}
           <div class="form-grid">
@@ -155,7 +155,7 @@
           </div>
           <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Step</button></div>
         </form>
-      {% endif %}
+      {% endif %}{% endif %}
     </div>
   </div>
 
