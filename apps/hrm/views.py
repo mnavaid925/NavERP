@@ -160,6 +160,7 @@ from .models import (  # 3.7 Interview Process
 )
 from .models import (  # 3.8 Offer Management
     BGV_CHECK_TYPE_CHOICES,
+    BGV_MANUAL_TRANSITION_STATUSES,
     BGV_RESULT_CHOICES,
     BGV_STATUS_CHOICES,
     BGV_VENDOR_CHOICES,
@@ -4407,6 +4408,10 @@ def backgroundverification_detail(request, pk):
         "obj": obj,
         "status_choices": BGV_STATUS_CHOICES,
         "result_choices": BGV_RESULT_CHOICES,
+        # The manual-transition subset the "Update Status" dropdown offers (kept in lockstep with the
+        # view guard below via the shared BGV_MANUAL_TRANSITION_STATUSES constant).
+        "transition_status_choices": [(v, lbl) for v, lbl in BGV_STATUS_CHOICES
+                                      if v in BGV_MANUAL_TRANSITION_STATUSES],
     })
 
 
@@ -4466,8 +4471,7 @@ def backgroundverification_mark_status(request, pk):
     # Manual stand-in for the deferred vendor webhook: move the check through its intermediate statuses.
     obj = _bgv_or_404(request, pk)
     new_status = request.POST.get("status", "")
-    allowed = {"in_progress", "action_needed", "ready_for_review"}
-    if new_status not in allowed:
+    if new_status not in BGV_MANUAL_TRANSITION_STATUSES:
         messages.error(request, "Invalid status transition.")
         return redirect("hrm:backgroundverification_detail", pk=obj.pk)
     if obj.status in ("not_started", "consent_pending"):
