@@ -2626,6 +2626,8 @@ class BackgroundVerification(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="hrm_bgv_tenant_status_idx"),
             models.Index(fields=["tenant", "offer"], name="hrm_bgv_tenant_ofr_idx"),
             models.Index(fields=["tenant", "check_type"], name="hrm_bgv_tenant_type_idx"),
+            # Backs the default -created_at ordering under the tenant filter (mirrors Offer's index).
+            models.Index(fields=["tenant", "created_at"], name="hrm_bgv_tenant_created_idx"),
         ]
 
     @property
