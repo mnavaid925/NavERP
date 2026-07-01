@@ -212,8 +212,8 @@
                     {% if request.user.is_superuser or request.user.is_tenant_admin %}
                       <form method="post" action="{% url 'hrm:preboardingitem_verify' item.pk %}" style="margin:0;">{% csrf_token %}<button class="btn-icon" type="submit" title="Verify"><i data-lucide="check"></i></button></form>
                       <form method="post" action="{% url 'hrm:preboardingitem_reject' item.pk %}" style="margin:0;" onsubmit="return confirm('Reject this document?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject"><i data-lucide="x"></i></button></form>
+                      <form method="post" action="{% url 'hrm:preboardingitem_delete' item.pk %}" style="margin:0;" onsubmit="return confirm('Remove this pre-boarding item?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form>
                     {% endif %}
-                    <form method="post" action="{% url 'hrm:preboardingitem_delete' item.pk %}" style="margin:0;" onsubmit="return confirm('Remove this pre-boarding item?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form>
                   </div>
                 </td>
               </tr>
