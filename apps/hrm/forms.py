@@ -857,12 +857,13 @@ class OfferApprovalForm(TenantModelForm):
 
 
 class BackgroundVerificationForm(TenantModelForm):
-    # SECURITY/workflow: `status` (lifecycle), `initiated_at`/`completed_at`/`initiated_by`/`consent_date`
-    # (workflow stamps) and the auto `number` are excluded — set only by the initiate/mark-status/complete
-    # actions. `offer` is set in the view (from ?offer= or the FK dropdown on plain create).
+    # SECURITY/workflow: `status` (lifecycle), `result` (set only by the complete action — a form-editable
+    # result would bypass the consent→initiate→complete gate), `initiated_at`/`completed_at`/`initiated_by`/
+    # `consent_date` (workflow stamps) and the auto `number` are excluded. `offer` is set in the view (from
+    # ?offer= or the FK dropdown on plain create).
     class Meta:
         model = BackgroundVerification
-        fields = ["offer", "vendor", "check_type", "result", "consent_given", "report_file", "notes"]
+        fields = ["offer", "vendor", "check_type", "consent_given", "report_file", "notes"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
