@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Offers{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Offers</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Offers</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:offerlettertemplate_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Letter Templates</a>
+      <a href="{% url 'hrm:backgroundverification_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Background Checks</a>
+      <a href="{% url 'hrm:offer_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Offer</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, candidate, or requisition…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="signature_status" class="form-select" aria-label="Signature status">
+            <option value="">All signatures</option>
+            {% for val, label in signature_status_choices %}
+              <option value="{{ val }}" {% if request.GET.signature_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="text" name="currency" value="{{ request.GET.currency }}" aria-label="Currency" class="form-input" placeholder="Currency" style="max-width:120px;">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:offer_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Candidate</th><th>Requisition</th><th>Base Salary</th><th>Start</th><th>Expires</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:offer_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'hrm:candidate_detail' obj.application.candidate.pk %}">{{ obj.application.candidate.name }}</a></td>
+              <td>{{ obj.application.requisition.title }}</td>
+              <td>{{ obj.currency }} {{ obj.base_salary|floatformat:2 }}</td>
+              <td>{{ obj.start_date|date:"Y-m-d" }}</td>
+              <td>{% if obj.expires_on %}{{ obj.expires_on|date:"Y-m-d" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+              <td>{% include "hrm/offer/_status_badge.html" with status=obj.status label=obj.get_status_display %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:offer_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'pending_approval' %}
+                    <a href="{% url 'hrm:offer_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% if obj.status == 'draft' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'hrm:offer_delete' obj.pk %}" onsubmit="return confirm('Delete this draft offer?');">
+                        {% csrf_token %}
+                        <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-badge"></i><h3>No offers found</h3><p>Create an offer against a job application to get started.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
