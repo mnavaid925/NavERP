@@ -58,6 +58,13 @@ from apps.hrm.models import (  # 3.7 Interview Process
     InterviewFeedback,
     InterviewPanelist,
 )
+from apps.hrm.models import (  # 3.8 Offer Management
+    BackgroundVerification,
+    Offer,
+    OfferApproval,
+    OfferLetterTemplate,
+    PreboardingItem,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -164,6 +171,7 @@ class Command(BaseCommand):
             self._seed_job_requisition(tenant, flush=options["flush"])
             self._seed_candidates(tenant, flush=options["flush"])
             self._seed_interviews(tenant, flush=options["flush"])
+            self._seed_offers(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -1019,3 +1027,119 @@ class Command(BaseCommand):
             f"{InterviewPanelist.objects.filter(tenant=tenant).count()} panelists, "
             f"{InterviewFeedback.objects.filter(tenant=tenant).count()} scorecards, "
             f"{FeedbackCriterion.objects.filter(tenant=tenant).count()} criteria."))
+
+    def _seed_offers(self, tenant, *, flush):
+        """Seed 3.8 Offer Management demo data — 1 reusable offer-letter template, 2 offers over existing
+        3.6 applications (one accepted end-to-end with a fully-approved 2-step chain, a completed clear
+        background check, and a pre-boarding checklist; one pending-approval with a partly-decided chain),
+        using the same ``generate_offer_approval_chain``/``generate_preboarding_checklist`` services the
+        views use so seeded + live shapes match. Reuses existing applications + tenant Users — no duplicate
+        masters. Guarded on Offer existence; skipped (with a notice) if the tenant has no applications."""
+        from datetime import timedelta
+
+        from apps.hrm.services import generate_offer_approval_chain, generate_preboarding_checklist
+
+        if flush:
+            Offer.objects.filter(tenant=tenant).delete()  # cascades approvals/background-checks/preboarding
+        if Offer.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Offer data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        # Prefer applications already at/past the offer stage; fall back to any application.
+        apps_qs = list(JobApplication.objects.filter(
+            tenant=tenant, stage__in=["offer", "hired"]
+        ).select_related("candidate", "requisition").order_by("applied_at")[:2])
+        if len(apps_qs) < 2:
+            apps_qs = list(JobApplication.objects.filter(tenant=tenant)
+                           .select_related("candidate", "requisition").order_by("applied_at")[:2])
+        if not apps_qs:
+            self.stdout.write(self.style.NOTICE(
+                f"No applications for '{tenant.name}' — skipping offer seed (seed candidates first)."))
+            return
+
+        letter_tmpl, _ = OfferLetterTemplate.objects.get_or_create(
+            tenant=tenant, name="Standard Offer Letter",
+            defaults={"is_active": True,
+                      "body_html": (
+                          "Dear {{candidate_name}},\n\nWe are pleased to offer you the position of "
+                          "{{job_title}} at {{company_name}}. Your annual base salary will be "
+                          "{{currency}} {{base_salary}}, with a proposed start date of {{start_date}}.\n\n"
+                          "We are excited about the prospect of you joining us and look forward to your "
+                          "response.\n\nSincerely,\n{{hiring_manager_name}}")})
+
+        users = list(get_user_model().objects.filter(tenant=tenant, is_active=True).order_by("id")[:3])
+        actor = users[0] if users else None
+        now = timezone.now()
+        today = timezone.localdate()
+
+        # ---- Offer 1: accepted end-to-end (2-step chain both approved + clear BGV + pre-boarding) ----
+        app1 = apps_qs[0]
+        offer1 = Offer.objects.create(
+            tenant=tenant, application=app1, offer_letter_template=letter_tmpl,
+            base_salary=Decimal("120000.00"), currency="USD",
+            bonus_amount=Decimal("12000.00"), bonus_terms="10% annual performance bonus.",
+            signing_bonus=Decimal("5000.00"), equity_terms="1,000 RSUs vesting over 4 years.",
+            relocation_assistance=Decimal("3000.00"),
+            benefits_summary="Health, dental, vision, 401(k) match, 20 days PTO.",
+            start_date=today + timedelta(days=30), expires_on=today + timedelta(days=7),
+            status="accepted", accepted_at=now, extended_by=actor, extended_at=now - timedelta(days=3),
+            signature_status="signed", created_by=actor,
+            notes="Extended after a strong final round.")
+        generate_offer_approval_chain(offer1)  # total comp <= threshold → 2 steps (hiring_manager, hr)
+        for step in offer1.approvals.all():
+            step.status = "approved"
+            step.approver = actor
+            step.decided_by = actor
+            step.decided_at = now - timedelta(days=4)
+            step.save()
+        # Advance the recruiting pipeline to hired (mirrors offer_accept).
+        app1.stage = "hired"
+        app1.hired_on = today
+        app1.stage_changed_at = now
+        app1.save(update_fields=["stage", "hired_on", "stage_changed_at", "updated_at"])
+        BackgroundVerification.objects.create(
+            tenant=tenant, offer=offer1, vendor="checkr", check_type="employment",
+            status="completed", result="clear", consent_given=True, consent_date=now - timedelta(days=6),
+            initiated_at=now - timedelta(days=6), completed_at=now - timedelta(days=1), initiated_by=actor,
+            notes="Employment history verified — no discrepancies.")
+        generate_preboarding_checklist(offer1)
+        pb_items = list(offer1.preboarding_items.order_by("document_type"))
+        for idx, item in enumerate(pb_items):
+            if idx < 2:  # first two verified
+                item.status = "verified"
+                item.submitted_at = now - timedelta(days=2)
+                item.verified_by = actor
+                item.verified_at = now - timedelta(days=1)
+                item.save()
+            elif idx == 2:  # one submitted awaiting review
+                item.status = "submitted"
+                item.submitted_at = now - timedelta(days=1)
+                item.save()
+
+        # ---- Offer 2: pending approval (2-step chain, first approved / second pending) ----
+        app2 = apps_qs[1] if len(apps_qs) > 1 else None
+        if app2 is not None and app2.pk != app1.pk:
+            offer2 = Offer.objects.create(
+                tenant=tenant, application=app2, offer_letter_template=letter_tmpl,
+                base_salary=Decimal("95000.00"), currency="USD",
+                benefits_summary="Health, dental, 15 days PTO.",
+                start_date=today + timedelta(days=45), expires_on=today + timedelta(days=10),
+                status="pending_approval", created_by=actor, notes="Awaiting HR sign-off.")
+            generate_offer_approval_chain(offer2)  # 2 steps
+            steps2 = list(offer2.approvals.order_by("step_order"))
+            if steps2:  # approve the first step (hiring manager), leave HR pending
+                first = steps2[0]
+                first.status = "approved"
+                first.approver = actor
+                first.decided_by = actor
+                first.decided_at = now
+                first.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Offers seeded for '{tenant.name}': "
+            f"{Offer.objects.filter(tenant=tenant).count()} offers, "
+            f"{OfferApproval.objects.filter(tenant=tenant).count()} approval steps, "
+            f"{BackgroundVerification.objects.filter(tenant=tenant).count()} background checks, "
+            f"{PreboardingItem.objects.filter(tenant=tenant).count()} pre-boarding items, "
+            f"{OfferLetterTemplate.objects.filter(tenant=tenant).count()} letter templates."))
