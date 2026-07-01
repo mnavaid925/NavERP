@@ -175,7 +175,7 @@
                 <td>{% if c.vendor %}{{ c.get_vendor_display }}{% else %}—{% endif %}</td>
                 <td><span class="badge badge-{% if c.status == 'completed' %}green{% elif c.status == 'action_needed' %}red{% elif c.status == 'not_started' or c.status == 'consent_pending' %}muted{% else %}amber{% endif %}">{{ c.get_status_display }}</span></td>
                 <td>{% if c.result %}<span class="badge badge-{% if c.result == 'clear' %}green{% elif c.result == 'consider' %}red{% else %}muted{% endif %}">{{ c.get_result_display }}</span>{% else %}—{% endif %}</td>
-                <td>{% if c.consent_given %}<i data-lucide="check" class="text-green"></i>{% else %}<i data-lucide="minus" class="text-muted"></i>{% endif %}</td>
+                <td>{% if c.consent_given %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
               </tr>
             {% empty %}
               <tr><td colspan="6"><span class="text-muted">No background checks ordered yet.</span></td></tr>
