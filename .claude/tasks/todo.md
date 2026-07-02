@@ -46,5 +46,42 @@ offboarding-only). This pass completes 3.10 with a policy **engine** + an **enca
 - [ ] review agents: code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer
 - [ ] update `.claude/skills/hrm/SKILL.md` 3.10 section
 
-## Review
-_(filled in after build)_
+## Review — delivered 2026-07-03
+
+**Scope built.** Completed HRM 3.10 by adding the missing "Leave Policy" bullet as a working engine + an encashment
+workflow. New `LeaveEncashment` (`ENC-`, draft→pending→approved→paid/rejected/cancelled; approve consumes balance)
++ `LeaveAllocation.carried_forward`/`encashed_days` fields. **Leave Policy engine** (`leave_policy` page, no model):
+admin `leave_accrual_run` (annual grant / monthly rate×elapsed-months, capped at max_balance) and
+`leave_carryforward_run` (min(balance, max_carry_forward) → next year), both idempotent + atomic + audit-logged.
+Wired into `LIVE_LINKS["3.10"]` (all 5 bullets live + Encashment extra), admin, seeder (2 encashments/tenant),
+2 migrations (0020 model+carried_forward, 0021 encashed_days).
+
+**Key correctness insight (encashed_days).** Encashment approve records days in a **separate `encashed_days`** field,
+not by shrinking `allocated_days` — because the accrual engine recomputes `allocated_days`, and reducing it directly
+would let a routine accrual re-run silently restore cashed-out days (double-spend). `balance = allocated − used −
+encashed`; carry-forward and offboarding both net out encashed days.
+
+**Review-agent sequence (all applied + committed):**
+- code-reviewer → 4: AuditLog.action truncation (10-char field → verb moved to `changes`); carry-forward dest-year
+  `max_balance` cap; `LeaveAllocationForm` resets `carried_forward` on manual edit; `_accrual_target` 0 months for a
+  future year.
+- explorer → **double-spend bug** (accrual re-run restored encashed days) fixed via the `encashed_days` field; carry-
+  forward + `compute_leave_encashment` net encashed days; allocation↔encashment cross-link; pending-encashments KPI.
+- frontend-reviewer → 1 (always-render the allocation-detail Encashments card with an empty-state); else clean.
+- performance-reviewer → clean (no N+1s; engine `get_or_create`-in-loop is O(employees×types), demo-acceptable —
+  deferred the bulk_create/bulk_update rewrite as a scaling note).
+- qa-smoke-tester → clean (independent migrate+seed+engine/workflow sweep, double-spend regression confirmed).
+- security-reviewer → 1 applied (bound `_policy_year` to 2000–2100 vs oversized-year DB 500); 1 **rejected** (adding
+  `tenant=` to `LeaveEncashment.clean()` would filter tenant=None pre-validation on create and break it — not
+  exploitable, employee_id is already tenant-bound).
+- test-writer → **102 tests** in `test_leave_encashment_and_policy.py`; HRM suite **1,775** green, project-wide **4,422**.
+
+**Skill/README** updated (table 45→46, LeaveEncashment + LeaveAllocation fields, routes/engine actions, template
+folders, LIVE_LINKS 3.10, seeder, Deferred pruned + scaling/offboarding notes; test counts refreshed).
+
+**Deferred (future 3.10 passes):** engine bulk-write rewrite (prefetch-dict + bulk_create/bulk_update, pre-assigning
+LA- numbers) or background task before ~hundreds of employees; auto-cancel/net open (draft/pending) encashments on
+separation so final settlement can't double-pay (spawned as a background task); per-employee↔user ownership scoping
+on request/encashment creation (app-wide convention).
+
+**Next unbuilt sub-module:** 3.11 Time Tracking.
