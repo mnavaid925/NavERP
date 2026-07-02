@@ -212,6 +212,7 @@ def hrm_overview(request):
     tenant = request.tenant
     stats = {"employees": 0, "new_this_month": 0, "on_leave_today": 0,
              "present_today": 0, "absent_today": 0, "pending_regularizations": 0,
+             "pending_encashments": 0,
              "open_requisitions": 0, "active_applications": 0, "new_candidates": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
@@ -226,6 +227,8 @@ def hrm_overview(request):
         stats["present_today"] = att_today.filter(status="present").count()
         stats["absent_today"] = att_today.filter(status="absent").count()
         stats["pending_regularizations"] = AttendanceRegularization.objects.filter(
+            tenant=tenant, status="pending").count()
+        stats["pending_encashments"] = LeaveEncashment.objects.filter(
             tenant=tenant, status="pending").count()
         # 3.6 recruiting pipeline at a glance.
         stats["open_requisitions"] = JobRequisition.objects.filter(tenant=tenant, status="posted").count()
@@ -708,7 +711,8 @@ def leaveallocation_list(request):
         LeaveAllocation.objects.filter(tenant=request.tenant)
         .select_related("employee__party", "leave_type")
         .annotate(used_days_db=used_subq)
-        .annotate(balance_db=ExpressionWrapper(F("allocated_days") - F("used_days_db"), output_field=_DEC)),
+        .annotate(balance_db=ExpressionWrapper(
+            F("allocated_days") - F("used_days_db") - F("encashed_days"), output_field=_DEC)),
         "hrm/leave/allocation/list.html",
         search_fields=["number", "employee__party__name", "leave_type__name"],
         filters=[("status", "status", False), ("year", "year", True),
@@ -737,6 +741,9 @@ def leaveallocation_detail(request, pk):
         "requests": LeaveRequest.objects.filter(
             tenant=request.tenant, employee=obj.employee, leave_type=obj.leave_type,
             start_date__year=obj.year).order_by("-start_date")[:20],
+        "encashments": LeaveEncashment.objects.filter(
+            tenant=request.tenant, employee=obj.employee, leave_type=obj.leave_type,
+            year=obj.year).order_by("-created_at")[:20],
     })
 
 
@@ -972,10 +979,11 @@ def leaveencashment_approve(request, pk):
             obj.approved_at = timezone.now()
             obj.decision_note = request.POST.get("decision_note", "").strip()[:2000]
             obj.save(update_fields=["status", "approver", "approved_at", "decision_note", "updated_at"])
-            # Encashment consumes leave: reduce the allocation's entitlement by the encashed days.
+            # Encashment consumes leave: record it in encashed_days (NOT by shrinking allocated_days,
+            # which the accrual engine recomputes — that would silently restore the cashed-out days).
             if alloc:
-                alloc.allocated_days = (alloc.allocated_days or Decimal("0")) - obj.days
-                alloc.save(update_fields=["allocated_days", "updated_at"])
+                alloc.encashed_days = (alloc.encashed_days or Decimal("0")) + obj.days
+                alloc.save(update_fields=["encashed_days", "updated_at"])
         write_audit_log(request.user, obj, "update", {"action": "approve", "days_consumed": str(obj.days)})
         messages.success(request, f"Encashment {obj.number} approved ({obj.days} day(s) consumed).")
     return redirect("hrm:leaveencashment_detail", pk=obj.pk)
@@ -1137,7 +1145,9 @@ def leave_carryforward_run(request):
         for src in (LeaveAllocation.objects
                     .filter(tenant=tenant, year=year, leave_type_id__in=type_ids)):
             used = used_map.get((src.employee_id, src.leave_type_id), ZERO)
-            balance = (src.allocated_days or ZERO) - used
+            # Net out both taken (LeaveRequest) and cashed-out (LeaveEncashment) days — a day already
+            # encashed must not also be carried forward (a type can be both encashable + carriable).
+            balance = (src.allocated_days or ZERO) - used - (src.encashed_days or ZERO)
             carry = min(max(balance, ZERO), cf_cap.get(src.leave_type_id, ZERO))
             dst, _ = LeaveAllocation.objects.get_or_create(
                 tenant=tenant, employee_id=src.employee_id, leave_type_id=src.leave_type_id, year=dest_year,
