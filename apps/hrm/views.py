@@ -1037,7 +1037,12 @@ def _accrual_target(leave_type, year, current_year, current_month):
     if leave_type.accrual_rule == "annual":
         return rate
     if leave_type.accrual_rule == "monthly":
-        months = 12 if year < current_year else current_month
+        if year > current_year:
+            months = 0          # nothing has accrued yet for a future year
+        elif year < current_year:
+            months = 12         # a past year has fully accrued
+        else:
+            months = current_month
         return rate * Decimal(months)
     return Decimal("0")  # "none"
 
@@ -1101,8 +1106,10 @@ def leave_accrual_run(request):
                     alloc.status = "active"
                     alloc.save(update_fields=["allocated_days", "status", "updated_at"])
                     touched += 1
-    write_audit_log(request.user, None, "leave_accrual_run",
-                    changes={"year": year, "allocations_updated": touched}, tenant=tenant)
+    # AuditLog.action is a 10-char choices field (create/update/delete) — keep the verb in `changes`.
+    write_audit_log(request.user, None, "update",
+                    changes={"action": "leave_accrual_run", "year": year, "allocations_updated": touched},
+                    tenant=tenant)
     messages.success(request, f"Accrual run for {year}: {touched} allocation(s) updated "
                               f"across {len(leave_types)} accruing leave type(s).")
     return redirect(f"{reverse('hrm:leave_policy')}?year={year}")
@@ -1118,6 +1125,7 @@ def leave_carryforward_run(request):
     leave_types = list(LeaveType.objects.filter(tenant=tenant, is_active=True, max_carry_forward__gt=0))
     type_ids = [lt.pk for lt in leave_types]
     cf_cap = {lt.pk: (lt.max_carry_forward or ZERO) for lt in leave_types}
+    bal_cap = {lt.pk: (lt.max_balance or ZERO) for lt in leave_types}  # dest-year total cap
     # Source-year approved usage per (employee, leave_type) in one grouped query (avoids per-row N+1).
     used_map = {}
     for r in (LeaveRequest.objects.filter(tenant=tenant, status="approved", start_date__year=year,
@@ -1136,14 +1144,18 @@ def leave_carryforward_run(request):
                 defaults={"allocated_days": ZERO, "status": "active"})
             # Replace this run's own prior contribution instead of double-adding (idempotent).
             new_total = (dst.allocated_days or ZERO) - (dst.carried_forward or ZERO) + carry
+            cap = bal_cap.get(src.leave_type_id, ZERO)
+            if cap > ZERO:
+                new_total = min(new_total, cap)  # never push the dest-year total past max_balance
             if dst.allocated_days != new_total or dst.carried_forward != carry or dst.status != "active":
                 dst.allocated_days = new_total
                 dst.carried_forward = carry
                 dst.status = "active"
                 dst.save(update_fields=["allocated_days", "carried_forward", "status", "updated_at"])
                 touched += 1
-    write_audit_log(request.user, None, "leave_carryforward_run",
-                    changes={"from_year": year, "to_year": dest_year, "allocations_updated": touched}, tenant=tenant)
+    write_audit_log(request.user, None, "update",
+                    changes={"action": "leave_carryforward_run", "from_year": year, "to_year": dest_year,
+                             "allocations_updated": touched}, tenant=tenant)
     messages.success(request, f"Carry-forward {year} → {dest_year}: {touched} allocation(s) updated.")
     return redirect(f"{reverse('hrm:leave_policy')}?year={dest_year}")
 
