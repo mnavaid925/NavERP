@@ -119,6 +119,24 @@ urlpatterns = [
     path("attendance/<int:pk>/edit/", views.attendancerecord_edit, name="attendancerecord_edit"),
     path("attendance/<int:pk>/delete/", views.attendancerecord_delete, name="attendancerecord_delete"),
 
+    # Geofences (3.9)
+    path("geofences/", views.geofence_list, name="geofence_list"),
+    path("geofences/add/", views.geofence_create, name="geofence_create"),
+    path("geofences/<int:pk>/", views.geofence_detail, name="geofence_detail"),
+    path("geofences/<int:pk>/edit/", views.geofence_edit, name="geofence_edit"),
+    path("geofences/<int:pk>/delete/", views.geofence_delete, name="geofence_delete"),
+
+    # Attendance Regularization (3.9)
+    path("regularizations/", views.attendanceregularization_list, name="attendanceregularization_list"),
+    path("regularizations/add/", views.attendanceregularization_create, name="attendanceregularization_create"),
+    path("regularizations/<int:pk>/", views.attendanceregularization_detail, name="attendanceregularization_detail"),
+    path("regularizations/<int:pk>/edit/", views.attendanceregularization_edit, name="attendanceregularization_edit"),
+    path("regularizations/<int:pk>/delete/", views.attendanceregularization_delete, name="attendanceregularization_delete"),
+    path("regularizations/<int:pk>/submit/", views.attendanceregularization_submit, name="attendanceregularization_submit"),
+    path("regularizations/<int:pk>/approve/", views.attendanceregularization_approve, name="attendanceregularization_approve"),
+    path("regularizations/<int:pk>/reject/", views.attendanceregularization_reject, name="attendanceregularization_reject"),
+    path("regularizations/<int:pk>/cancel/", views.attendanceregularization_cancel, name="attendanceregularization_cancel"),
+
     # Onboarding Templates (3.3)
     path("onboarding-templates/", views.onboardingtemplate_list, name="onboardingtemplate_list"),
     path("onboarding-templates/add/", views.onboardingtemplate_create, name="onboardingtemplate_create"),
