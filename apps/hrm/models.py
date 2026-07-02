@@ -617,6 +617,8 @@ class AttendanceRecord(TenantNumbered):
             models.Index(fields=["tenant", "employee", "date"], name="hrm_att_tenant_emp_date_idx"),
             models.Index(fields=["tenant", "date", "status"], name="hrm_att_tenant_date_stat_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_att_tenant_status_idx"),
+            # Geofence-scoped lookups: geofence_detail's recent-punches list + geofence_delete's guard.
+            models.Index(fields=["tenant", "geofence"], name="hrm_att_tenant_geofence_idx"),
         ]
 
     def _recompute_hours(self):
