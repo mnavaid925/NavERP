@@ -209,7 +209,7 @@ def _used_days_subquery():
 def hrm_overview(request):
     tenant = request.tenant
     stats = {"employees": 0, "new_this_month": 0, "on_leave_today": 0,
-             "present_today": 0, "absent_today": 0,
+             "present_today": 0, "absent_today": 0, "pending_regularizations": 0,
              "open_requisitions": 0, "active_applications": 0, "new_candidates": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
@@ -223,6 +223,8 @@ def hrm_overview(request):
         att_today = AttendanceRecord.objects.filter(tenant=tenant, date=today)
         stats["present_today"] = att_today.filter(status="present").count()
         stats["absent_today"] = att_today.filter(status="absent").count()
+        stats["pending_regularizations"] = AttendanceRegularization.objects.filter(
+            tenant=tenant, status="pending").count()
         # 3.6 recruiting pipeline at a glance.
         stats["open_requisitions"] = JobRequisition.objects.filter(tenant=tenant, status="posted").count()
         stats["active_applications"] = (JobApplication.objects.filter(tenant=tenant)
@@ -1051,7 +1053,10 @@ def attendancerecord_create(request):
 def attendancerecord_detail(request, pk):
     obj = get_object_or_404(
         AttendanceRecord.objects.select_related("employee__party", "shift", "geofence"), pk=pk, tenant=request.tenant)
-    return render(request, "hrm/attendance/record/detail.html", {"obj": obj})
+    return render(request, "hrm/attendance/record/detail.html", {
+        "obj": obj,
+        "regularizations": obj.regularizations.select_related("approver").order_by("-created_at"),
+    })
 
 
 @login_required
