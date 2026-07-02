@@ -91,6 +91,23 @@ urlpatterns = [
     path("leave-requests/<int:pk>/reject/", views.leaverequest_reject, name="leaverequest_reject"),
     path("leave-requests/<int:pk>/cancel/", views.leaverequest_cancel, name="leaverequest_cancel"),
 
+    # Leave Encashment (3.10) — CRUD + workflow actions
+    path("leave-encashments/", views.leaveencashment_list, name="leaveencashment_list"),
+    path("leave-encashments/add/", views.leaveencashment_create, name="leaveencashment_create"),
+    path("leave-encashments/<int:pk>/", views.leaveencashment_detail, name="leaveencashment_detail"),
+    path("leave-encashments/<int:pk>/edit/", views.leaveencashment_edit, name="leaveencashment_edit"),
+    path("leave-encashments/<int:pk>/delete/", views.leaveencashment_delete, name="leaveencashment_delete"),
+    path("leave-encashments/<int:pk>/submit/", views.leaveencashment_submit, name="leaveencashment_submit"),
+    path("leave-encashments/<int:pk>/approve/", views.leaveencashment_approve, name="leaveencashment_approve"),
+    path("leave-encashments/<int:pk>/reject/", views.leaveencashment_reject, name="leaveencashment_reject"),
+    path("leave-encashments/<int:pk>/mark-paid/", views.leaveencashment_mark_paid, name="leaveencashment_mark_paid"),
+    path("leave-encashments/<int:pk>/cancel/", views.leaveencashment_cancel, name="leaveencashment_cancel"),
+
+    # Leave Policy engine (3.10) — standalone page + admin run actions
+    path("leave-policy/", views.leave_policy, name="leave_policy"),
+    path("leave-policy/accrual-run/", views.leave_accrual_run, name="leave_accrual_run"),
+    path("leave-policy/carry-forward-run/", views.leave_carryforward_run, name="leave_carryforward_run"),
+
     # Public Holidays (3.12)
     path("holidays/", views.publicholiday_list, name="publicholiday_list"),
     path("holidays/add/", views.publicholiday_create, name="publicholiday_create"),
