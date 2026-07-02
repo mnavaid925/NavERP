@@ -22,6 +22,7 @@
       <div class="detail-item"><dt>Leave Type</dt><dd>{{ obj.leave_type.name }}</dd></div>
       <div class="detail-item"><dt>Year</dt><dd>{{ obj.year }}</dd></div>
       <div class="detail-item"><dt>Allocated</dt><dd>{{ obj.allocated_days }}</dd></div>
+      <div class="detail-item"><dt>Carried Forward In</dt><dd>{{ obj.carried_forward }}</dd></div>
       <div class="detail-item"><dt>Used</dt><dd>{{ obj.used_days }}</dd></div>
       <div class="detail-item"><dt>Balance</dt><dd>{{ obj.balance }}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'draft' %}amber{% elif obj.status == 'expired' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
