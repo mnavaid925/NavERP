@@ -4,6 +4,7 @@ from django.contrib import admin
 from .models import (
     AssetAllocation,
     AttendanceRecord,
+    AttendanceRegularization,
     ClearanceItem,
     CostCenterProfile,
     DepartmentProfile,
@@ -13,6 +14,7 @@ from .models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    GeoFence,
     JobDescriptionTemplate,
     JobGrade,
     JobRequisition,
@@ -180,7 +182,24 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     list_filter = ("status", "source", "tenant")
     search_fields = ("number", "employee__party__name")
     readonly_fields = ("number", "hours_worked", "created_at", "updated_at")
-    raw_id_fields = ("employee", "shift")
+    raw_id_fields = ("employee", "shift", "geofence")
+
+
+@admin.register(GeoFence)
+class GeoFenceAdmin(admin.ModelAdmin):
+    list_display = ("name", "latitude", "longitude", "radius_m", "is_active", "tenant")
+    list_filter = ("is_active", "tenant")
+    search_fields = ("name", "address")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AttendanceRegularization)
+class AttendanceRegularizationAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "date", "reason_type", "status", "approver", "tenant")
+    list_filter = ("status", "reason_type", "tenant")
+    search_fields = ("number", "employee__party__name", "reason")
+    readonly_fields = ("number", "approved_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "attendance_record", "approver")
 
 
 # ----------------------------------------------------------------- 3.3 Employee Onboarding
