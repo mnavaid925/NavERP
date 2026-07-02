@@ -128,7 +128,9 @@ def compute_leave_encashment(employee):
                                               Decimal("0"), output_field=_dec)))
     days = ZERO
     for alloc in allocations:
-        bal = (alloc.allocated_days or ZERO) - alloc.used_db  # only positive balances are encashed
+        # Net out days already cashed out via an approved LeaveEncashment (3.10) so the final
+        # settlement doesn't pay the same balance twice.
+        bal = (alloc.allocated_days or ZERO) - alloc.used_db - (alloc.encashed_days or ZERO)
         if bal > ZERO:
             days += bal
     basic_salary = ZERO
