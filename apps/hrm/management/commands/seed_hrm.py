@@ -17,6 +17,7 @@ from apps.core.models import Employment, OrgUnit, Party, PartyRole, Tenant
 from apps.hrm.models import (
     AssetAllocation,
     AttendanceRecord,
+    AttendanceRegularization,
     ClearanceItem,
     CostCenterProfile,
     DepartmentProfile,
@@ -26,6 +27,7 @@ from apps.hrm.models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    GeoFence,
     JobDescriptionTemplate,
     JobGrade,
     JobRequisition,
@@ -117,6 +119,11 @@ SHIFTS = [
     ("Morning Shift", datetime.time(9, 0), datetime.time(18, 0), 15, True),
     ("Night Shift", datetime.time(21, 0), datetime.time(6, 0), 30, False),
 ]
+# 3.9 Geofencing — GPS zones for field/site attendance. (name, address, lat, lng, radius_m)
+GEOFENCES = [
+    ("Head Office", "1 Corporate Plaza", Decimal("40.712776"), Decimal("-74.005974"), 150),
+    ("Client Site — North", "88 Industrial Ave", Decimal("40.730610"), Decimal("-73.935242"), 200),
+]
 
 # 3.3 Employee Onboarding — reusable templates. Each task line:
 # (title, task_category, assignee_role, due_offset_days, phase, is_mandatory).
@@ -184,7 +191,8 @@ class Command(BaseCommand):
                           OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
                           OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
                           CostCenterProfile, DepartmentProfile,
-                          AttendanceRecord, ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
+                          AttendanceRegularization, AttendanceRecord, GeoFence,
+                          ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
                           LeaveType, PublicHoliday, EmployeeProfile, Designation, JobGrade):
                 model.objects.filter(tenant=tenant).delete()
 
@@ -294,24 +302,57 @@ class Command(BaseCommand):
                 tenant=tenant, employee=emp, effective_from=datetime.date(year, 1, 1),
                 defaults={"shift": morning})
 
-        # --- Attendance: last 5 working days per employee ---
+        # --- Geofences (3.9): GPS zones for field attendance ---
+        geofences = []
+        for name, address, lat, lng, radius in GEOFENCES:
+            g, _ = GeoFence.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"address": address, "latitude": lat, "longitude": lng, "radius_m": radius})
+            geofences.append(g)
+        hq = geofences[0]
+
+        # --- Attendance: last 5 working days per employee (present punches tagged to the HQ geofence) ---
         workdays = self._last_workdays(today, 5)
         att_statuses = ["present", "present", "present", "absent", "on_leave"]
         for emp in employees:
             for n, day in enumerate(workdays):
                 status = att_statuses[n % len(att_statuses)]
                 ci = co = None
+                lat = lng = geofence = None
                 if status in ("present", "regularized", "half_day"):
                     ci, co = datetime.time(9, 5), datetime.time(18, 0)
+                    geofence = hq
+                    # First present day sits outside the fence (demo), the rest at its centre (verified).
+                    if n == 0:
+                        lat, lng = Decimal("40.732776"), Decimal("-74.005974")  # ~2 km north → outside
+                    else:
+                        lat, lng = hq.latitude, hq.longitude
                 AttendanceRecord.objects.get_or_create(
                     tenant=tenant, employee=emp, date=day,
                     defaults={"check_in": ci, "check_out": co, "shift": morning,
-                              "status": status, "source": "manual"})
+                              "status": status, "source": "manual",
+                              "latitude": lat, "longitude": lng, "geofence": geofence})
+
+        # --- Attendance regularization (3.9): a request to fix a missed/absent punch ---
+        for idx, emp in enumerate(employees[:2]):
+            absent_rec = (AttendanceRecord.objects
+                          .filter(tenant=tenant, employee=emp, status="absent")
+                          .order_by("date").first())
+            if absent_rec and not AttendanceRegularization.objects.filter(
+                    tenant=tenant, employee=emp, date=absent_rec.date).exists():
+                AttendanceRegularization.objects.create(
+                    tenant=tenant, employee=emp, attendance_record=absent_rec, date=absent_rec.date,
+                    reason_type="missed_punch",
+                    requested_check_in=datetime.time(9, 0), requested_check_out=datetime.time(18, 0),
+                    reason="Was present but the biometric device failed to log the punch.",
+                    status="pending" if idx == 0 else "draft")
 
         self.stdout.write(self.style.SUCCESS(
             f"HRM seeded for '{tenant.name}': {len(employees)} employees, "
             f"{LeaveAllocation.objects.filter(tenant=tenant).count()} allocations, "
-            f"{AttendanceRecord.objects.filter(tenant=tenant).count()} attendance rows."))
+            f"{AttendanceRecord.objects.filter(tenant=tenant).count()} attendance rows, "
+            f"{GeoFence.objects.filter(tenant=tenant).count()} geofences, "
+            f"{AttendanceRegularization.objects.filter(tenant=tenant).count()} regularizations."))
 
     @transaction.atomic
     def _seed_org_structure(self, tenant, *, flush):
