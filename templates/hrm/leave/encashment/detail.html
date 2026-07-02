@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:leaveencashment_list' %}">Leave Encashment</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:leaveencashment_submit' obj.pk %}" onsubmit="return confirm('Submit this encashment for approval?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'pending' %}
+        <a href="{% url 'hrm:leaveencashment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:leaveencashment_delete' obj.pk %}" onsubmit="return confirm('Delete this encashment?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Leave Type</dt><dd>{{ obj.leave_type.name }}</dd></div>
+      <div class="detail-item"><dt>Year</dt><dd>{{ obj.year }}</dd></div>
+      <div class="detail-item"><dt>Days</dt><dd>{{ obj.days }}</dd></div>
+      <div class="detail-item"><dt>Rate / Day</dt><dd>{{ obj.rate_per_day }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd><strong>{{ obj.amount }}</strong></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'pending' %}amber{% elif obj.status == 'approved' %}info{% elif obj.status == 'paid' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Approver</dt><dd>{% if obj.approver %}{{ obj.approver.get_full_name|default:obj.approver.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved At</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Paid On</dt><dd>{{ obj.paid_on|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Payment Reference</dt><dd>{{ obj.payment_reference|default:"—" }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Decision Note</dt><dd>{{ obj.decision_note|default:"—" }}</dd></div>
+    </dl>
+    {% if allocation %}
+      <p style="margin-top:1rem;">Balance for {{ obj.leave_type.name }} ({{ obj.year }}): <strong>{{ allocation.balance }}</strong> of {{ allocation.allocated_days }} allocated day(s).</p>
+    {% else %}
+      <p class="text-muted" style="margin-top:1rem;">No allocation found for {{ obj.leave_type.name }} in {{ obj.year }}.</p>
+    {% endif %}
+  </div></div>
+
+  {% if obj.status == 'pending' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Approval</h2></div>
+      <div class="card-body">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <p class="form-help" style="margin-bottom:1rem;"><i data-lucide="shield"></i> Approving deducts {{ obj.days }} day(s) from the employee's allocation and locks the payout amount.</p>
+          <form method="post" action="{% url 'hrm:leaveencashment_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this encashment and deduct the days from the allocation?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_note_a">Decision note</label>
+              <textarea id="id_decision_note_a" name="decision_note" class="form-textarea" placeholder="Note (optional)"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'hrm:leaveencashment_reject' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_note_r">Reject reason</label>
+              <textarea id="id_decision_note_r" name="decision_note" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to approve or reject this request.</span>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'approved' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Payment</h2></div>
+      <div class="card-body">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:leaveencashment_mark_paid' obj.pk %}" onsubmit="return confirm('Mark this encashment as paid?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_payment_reference">Payment reference</label>
+              <input type="text" id="id_payment_reference" name="payment_reference" class="form-input" placeholder="e.g. PAY-2026-0142">
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Paid</button>
+          </form>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Approved — awaiting a tenant admin to record the payout.</span>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'draft' or obj.status == 'pending' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'hrm:leaveencashment_cancel' obj.pk %}" onsubmit="return confirm('Cancel this encashment?');">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_decision_note_c">Cancel reason</label>
+            <textarea id="id_decision_note_c" name="decision_note" class="form-textarea" placeholder="Reason (optional)"></textarea>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel Request</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:leaveencashment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
