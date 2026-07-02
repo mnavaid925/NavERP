@@ -406,6 +406,10 @@ class LeaveAllocation(TenantNumbered):
     # Days rolled in from the prior year by the carry-forward run (a subset of allocated_days). Kept
     # separate so a re-run replaces its own prior contribution instead of double-adding (idempotent).
     carried_forward = models.DecimalField(max_digits=5, decimal_places=2, default=0, editable=False)
+    # Days consumed by APPROVED LeaveEncashment payouts. Tracked separately from allocated_days so the
+    # accrual engine (which recomputes allocated_days = accrued + carried_forward) can't silently
+    # restore cashed-out days on a re-run — balance nets this out instead.
+    encashed_days = models.DecimalField(max_digits=5, decimal_places=2, default=0, editable=False)
     note = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
 
@@ -436,7 +440,7 @@ class LeaveAllocation(TenantNumbered):
 
     @property
     def balance(self):
-        return (self.allocated_days or ZERO) - self.used_days
+        return (self.allocated_days or ZERO) - self.used_days - (self.encashed_days or ZERO)
 
     def __str__(self):
         return f"{self.number} · {self.employee} · {self.leave_type} · {self.year}"
