@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -18,7 +18,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 45 tables (14 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
+## Models (`apps/hrm/models.py`) — 46 tables (15 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -32,8 +32,9 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 | `CostCenterProfile` (3.2) | — | **org_unit→`core.OrgUnit`(1:1, kind=cost_center)**, code, description, owner→`EmployeeProfile`, budget_annual, budget_year, is_active | HRM companion to a cost-center OrgUnit (budget/owner). `clean()` rejects non-cc org_unit. `unique_together=(tenant,org_unit)`. Budget-vs-actuals reporting deferred to Accounting. |
 | `EmployeeProfile` | `EMP-` | party→`core.Party`(1:1), employment→`core.Employment`(1:1), designation→`Designation`, employee_type, gender, dob, blood_group, marital_status, nationality, personal_email, work_email, mobile, work_location, notice_period_days, father_name, spouse_name, national_id(+_type), passport_number/_expiry, current/permanent_address, bank_*, probation_end_date, confirmed_on, emergency_*(×2), photo, notes | **The anchor — every other HRM model FKs here, not to core.Party.** Props: `department`/`manager` (via employment), `name` (party.name). **Masked PII accessors — always use in templates, never the raw field:** `masked_bank_account()`/`masked_bank_routing()`/`masked_national_id()`/`masked_passport_number()` (last-4 via `_mask_last4`). `national_id`/`passport_number` (+ bank_*) redacted from AuditLog via `core.crud._SENSITIVE_AUDIT_FIELDS`; plaintext at rest (WARNING — encrypt later). |
 | `LeaveType` | — | name, code, is_paid, accrual_rule(none/monthly/annual), accrual_days, max_balance, max_carry_forward, encashable, is_active | `clean()`: accrual_days>0 when accruing. `unique_together=(tenant,code)` |
-| `LeaveAllocation` | `LA-` | employee, leave_type, year, allocated_days, note, status(draft/active/expired) | `used_days`/`balance` are **derived properties** (sum of approved requests); `unique_together` also on (tenant,employee,leave_type,year) |
+| `LeaveAllocation` | `LA-` | employee, leave_type, year, allocated_days, **carried_forward**(editable=False, engine-set), **encashed_days**(editable=False, workflow-set), note, status(draft/active/expired) | `used_days` derived (sum of approved requests); **`balance` = allocated_days − used_days − encashed_days**; `carried_forward` = days rolled in by the carry-forward run (kept separate for idempotency); `encashed_days` = APPROVED encashment payouts (kept separate so accrual can't restore cashed-out days); `unique_together` also (tenant,employee,leave_type,year). `LeaveAllocationForm.save()` zeroes carried_forward on a manual allocated_days edit |
 | `LeaveRequest` | `LR-` | employee, leave_type, start_date, end_date, **days**(editable=False), reason, status(draft/pending/approved/rejected/cancelled), approver, approved_at, rejected_reason, cancelled_reason | `save()` recomputes `days` from range minus non-optional holidays; `clean()`: end ≥ start. `OPEN_STATUSES=(draft,pending)` |
+| `LeaveEncashment` (3.10) | `ENC-` | employee, leave_type(encashable), year, days, rate_per_day, **amount**(editable=False), status(draft/pending/approved/paid/rejected/cancelled), approver, approved_at, paid_on, payment_reference, decision_note | Encash unused leave → payout. `save()` sets `amount = days × rate_per_day`; `clean()`: days>0 + leave_type.encashable + days ≤ balance (tenant-less query — employee is already tenant-bound, tenant unset pre-validation on create). `OPEN_STATUSES=(draft,pending)`. **On approve** (view, `@tenant_admin_required`, atomic, re-checks balance) increments the linked allocation's `encashed_days` (NOT allocated_days). Indexes (tenant,employee,status)/(tenant,status)/(tenant,leave_type,year) |
 | `PublicHoliday` | — | date, name, is_optional | non-optional holidays excluded from leave `days`; `unique_together=(tenant,date,name)` |
 | `Shift` | — | name, start_time, end_time, grace_minutes, is_default, is_active | overnight shifts allowed (end < start) |
 | `ShiftAssignment` | — | employee, shift, effective_from, effective_to(null=ongoing) | `clean()`: effective_to ≥ effective_from; `unique_together=(tenant,employee,effective_from)` |
@@ -139,7 +140,7 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
-  `leaveallocation`, `leaverequest`, `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
+  `leaveallocation`, `leaverequest`, **`leaveencashment`** (3.10), `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
   **`geofence`, `attendanceregularization`** (3.9),
   **`onboardingtemplate`, `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`,
   `assetallocation`, `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`,
@@ -156,6 +157,12 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   are created/managed in `core:orgunit_list`; the HRM pages enrich them (head/owner/budget/code). Delete removes
   only the companion row, never the OrgUnit.
 - Leave workflow extras: `hrm:leaverequest_submit/_approve/_reject/_cancel` (all POST-only).
+- **Leave encashment workflow (3.10, all POST-only):** `hrm:leaveencashment_submit` (owner), `_approve`/`_reject`/
+  `_mark_paid` (`@tenant_admin_required`; approve increments the allocation's `encashed_days`), `_cancel` (owner).
+- **Leave Policy engine (3.10, no model):** `hrm:leave_policy` (`/hrm/leave-policy/`, GET — leave-type config +
+  per-year allocation summary; `?year=` bounded 2000–2100) + POST `hrm:leave_accrual_run` / `hrm:leave_carryforward_run`
+  (both `@tenant_admin_required`, atomic, idempotent; accrual sets allocated_days = accrued + carried_forward capped
+  at max_balance, carry-forward rolls min(balance, max_carry_forward) into next year via the `carried_forward` field).
 - **Attendance-regularization workflow extras (3.9, all POST-only):** `hrm:attendanceregularization_submit`
   (owner, draft→pending), `_approve`/`_reject` (`@tenant_admin_required`; approve rewrites the linked/created
   punch), `_cancel` (draft/pending→cancelled). Geofence delete is guarded when attendance rows reference it.
@@ -312,7 +319,7 @@ update-status/complete lifecycle], `offerlettertemplate/` [list/detail/form; the
 the merge-token reference], each with `list/detail/form.html`; the reusable `offer/_status_badge.html` partial; the
 standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirrors `relieving_letter.html`];
 `OfferApproval` + `PreboardingItem` render inline on the offer hub, no own templates)**,
-`attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/`),
+`attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/ encashment/` + the standalone engine page `leave/policy.html`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
@@ -382,7 +389,8 @@ label)` helper backs all four upload guards (and `_validate_resume`).
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
 has `EmployeeProfile` rows). Per tenant: 3 designations, up to 5 employees **reusing existing `core.Party`
 persons** (tops up with unique names if too few), 4 leave types + allocations, 2 leave requests (1 approved/1
-pending), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee (present punches tagged to the HQ
+pending), **2 leave encashments** (1 pending / 1 draft on the encashable Annual type, rate = designation
+min_salary/30), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee (present punches tagged to the HQ
 geofence — one outside/rest verified), **2 geofences** (HQ + client site) and **2 attendance regularizations**
 (1 pending / 1 draft on the absent punches) per tenant. **Org structure (3.2)** is seeded by a
 separate `_seed_org_structure(tenant)` (guarded by its own `JobGrade.exists()` check): 5 job grades (G1–M2), links
@@ -459,8 +467,9 @@ tenant and sees nothing.
 - 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Attendance Regularization →
   `hrm:attendanceregularization_list`; Shift Management → `hrm:shift_list`; Geofencing → `hrm:geofence_list`;
   + Shift Assignments → `hrm:shiftassignment_list` (extra). All 5 NavERP.md 3.9 bullets are now live.
-- 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
-  Calendar → `hrm:leaverequest_list`.
+- 3.10: Leave Types → `hrm:leavetype_list`; Leave Policy → `hrm:leave_policy` (accrual/carry-forward engine);
+  Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave Calendar → `hrm:leaverequest_list`;
+  + Leave Encashment → `hrm:leaveencashment_list` (extra). All 5 NavERP.md 3.10 bullets are now live.
 - 3.12: Holiday Calendar → `hrm:publicholiday_list`.
 
 ## Conventions & gotchas
@@ -547,9 +556,12 @@ Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT dupl
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
 upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
-statutory/tax (3.13–3.17), optional-holiday selection, leave
-carry-forward/encashment batch, employee self-service portal, and a per-employee↔user link for ownership-scoped
-leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
+statutory/tax (3.13–3.17), optional-holiday selection, employee self-service portal, and a per-employee↔user link
+for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
+**3.10 Leave Policy deferrals:** the accrual/carry-forward run engine is O(employees × leave-types) `get_or_create`
++ per-row `save()` (fine at demo scale, atomic + idempotent) — move to a prefetch-dict + `bulk_create`/`bulk_update`
+(pre-assigning `LA-` numbers) or a background task before a tenant reaches ~hundreds of employees; auto-cancel/net
+open (draft/pending) `LeaveEncashment` rows on separation so final settlement can't double-pay a still-open request.
 **3.3 onboarding deferrals:** live e-sign API (DocuSign/HelloSign — `external_ref` is the stub), preboarding
 before an `EmployeeProfile` exists (needs ATS 3.6–3.8), automated task reminders / calendar invites, IT
 provisioning automation, AI 30-60-90-day plan generation, a new-hire self-service portal, and a real FK to the
