@@ -646,10 +646,19 @@ class AttendanceRecord(TenantNumbered):
     def geo_status(self):
         """DERIVED geofence verification for display/reporting (never stored):
         ``"verified"`` inside the linked zone, ``"outside"`` beyond its radius, ``""`` when
-        there is no coordinate pair or no zone to check against."""
+        there is no coordinate pair or no zone to check against. Evaluated against the zone's
+        live radius regardless of ``is_active`` — a punch reflects where it happened."""
         if not (self.has_geo() and self.geofence_id and self.geofence):
             return ""
         return "verified" if self.geofence.contains(self.latitude, self.longitude) else "outside"
+
+    def clean(self):
+        super().clean()
+        # GPS coordinates are a pair (both or neither); a geofence needs coordinates to check against.
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValidationError({"longitude": "Provide both latitude and longitude, or neither."})
+        if self.geofence_id and self.latitude is None:
+            raise ValidationError({"geofence": "Set the punch coordinates to check against this geofence."})
 
     def save(self, *args, **kwargs):
         self._recompute_hours()
