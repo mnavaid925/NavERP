@@ -24,6 +24,7 @@
       <div class="detail-item"><dt>Allocated</dt><dd>{{ obj.allocated_days }}</dd></div>
       <div class="detail-item"><dt>Carried Forward In</dt><dd>{{ obj.carried_forward }}</dd></div>
       <div class="detail-item"><dt>Used</dt><dd>{{ obj.used_days }}</dd></div>
+      <div class="detail-item"><dt>Encashed</dt><dd>{{ obj.encashed_days }}</dd></div>
       <div class="detail-item"><dt>Balance</dt><dd>{{ obj.balance }}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'draft' %}amber{% elif obj.status == 'expired' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Note</dt><dd>{{ obj.note|default:"—" }}</dd></div>
@@ -50,6 +51,27 @@
       </table>
     </div>
   </div>
+
+  {% if encashments %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Encashments</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Days</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for e in encashments %}
+              <tr>
+                <td><a href="{% url 'hrm:leaveencashment_detail' e.pk %}" class="fw-600">{{ e.number }}</a></td>
+                <td>{{ e.days }}</td>
+                <td>{{ e.amount }}</td>
+                <td><span class="badge badge-{% if e.status == 'pending' %}amber{% elif e.status == 'approved' %}info{% elif e.status == 'paid' %}green{% elif e.status == 'rejected' %}red{% elif e.status == 'cancelled' %}muted{% elif e.status == 'draft' %}slate{% else %}muted{% endif %}">{{ e.get_status_display }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
 
   <a href="{% url 'hrm:leaveallocation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
