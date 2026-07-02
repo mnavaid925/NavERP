@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Attendance Regularization{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Attendance Regularization</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Regularizations</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:attendanceregularization_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search regularizations…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reason_type" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_type_choices %}
+              <option value="{{ val }}" {% if request.GET.reason_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:attendanceregularization_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Date</th><th>Reason</th><th>Requested In</th><th>Requested Out</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:attendanceregularization_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.date }}</td>
+              <td>{{ obj.get_reason_type_display }}</td>
+              <td>{{ obj.requested_check_in|default:"—" }}</td>
+              <td>{{ obj.requested_check_out|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.status == 'pending' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:attendanceregularization_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'pending' %}
+                    <a href="{% url 'hrm:attendanceregularization_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:attendanceregularization_delete' obj.pk %}" onsubmit="return confirm('Delete this regularization?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>No regularization requests found</h3><p>Raise a request to correct a missed or wrong attendance punch.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
