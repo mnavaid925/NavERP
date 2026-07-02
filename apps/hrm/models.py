@@ -16,6 +16,7 @@ recomputed in ``save()`` from their dates/times, never hand-edited on the form.
 Payroll/GL posting is **owned by ``accounting.PayrollRun`` (PRUN-…)** — HRM does NOT duplicate
 it. The HRM payroll/payslip layer (FKing into ``accounting.PayrollRun``) is a later pass.
 """
+import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -600,6 +601,13 @@ class AttendanceRecord(TenantNumbered):
     shift = models.ForeignKey("hrm.Shift", on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_records")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="present")
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="web")
+    # Geofencing (3.9): GPS coordinates captured at the punch + the zone it is checked against.
+    # ``is_within_geofence`` (verified/outside/unknown) is DERIVED via ``geo_status()`` — not stored.
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True,
+                                   validators=[MinValueValidator(Decimal("-90")), MaxValueValidator(Decimal("90"))])
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True,
+                                    validators=[MinValueValidator(Decimal("-180")), MaxValueValidator(Decimal("180"))])
+    geofence = models.ForeignKey("hrm.GeoFence", on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_records")
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -631,9 +639,132 @@ class AttendanceRecord(TenantNumbered):
         check_in_min = self.check_in.hour * 60 + self.check_in.minute
         return check_in_min > start_min + self.shift.grace_minutes
 
+    def has_geo(self):
+        """True when a GPS coordinate pair was captured for this punch."""
+        return self.latitude is not None and self.longitude is not None
+
+    def geo_status(self):
+        """DERIVED geofence verification for display/reporting (never stored):
+        ``"verified"`` inside the linked zone, ``"outside"`` beyond its radius, ``""`` when
+        there is no coordinate pair or no zone to check against."""
+        if not (self.has_geo() and self.geofence_id and self.geofence):
+            return ""
+        return "verified" if self.geofence.contains(self.latitude, self.longitude) else "outside"
+
     def save(self, *args, **kwargs):
         self._recompute_hours()
         return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.date} · {self.get_status_display()}"
+
+
+# ---------------------------------------------------------------------------
+# 3.9 Attendance Management — Geofencing (GeoFence) + Attendance Regularization
+# ---------------------------------------------------------------------------
+class GeoFence(TenantOwned):
+    """A GPS geofence zone for field/site attendance (3.9). A punch's coordinates are checked
+    against the zone centre + ``radius_m`` via the haversine ``distance_to`` — real proximity
+    maths, not a stub. Small per-tenant catalog identified by name (not auto-numbered)."""
+
+    EARTH_RADIUS_M = 6_371_000  # mean Earth radius, metres
+
+    name = models.CharField(max_length=100)
+    address = models.CharField(max_length=255, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6,
+                                   validators=[MinValueValidator(Decimal("-90")), MaxValueValidator(Decimal("90"))])
+    longitude = models.DecimalField(max_digits=9, decimal_places=6,
+                                    validators=[MinValueValidator(Decimal("-180")), MaxValueValidator(Decimal("180"))])
+    radius_m = models.PositiveIntegerField(default=100, validators=[MinValueValidator(1)],
+                                           help_text="Allowed radius from the centre point, in metres.")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_geo_tenant_active_idx"),
+        ]
+
+    def distance_to(self, lat, lng):
+        """Great-circle distance in metres from this zone's centre to (lat, lng) via the
+        haversine formula. Accepts Decimal or float; returns a float (metres)."""
+        lat1, lng1 = math.radians(float(self.latitude)), math.radians(float(self.longitude))
+        lat2, lng2 = math.radians(float(lat)), math.radians(float(lng))
+        dlat, dlng = lat2 - lat1, lng2 - lng1
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
+        return self.EARTH_RADIUS_M * 2 * math.asin(math.sqrt(a))
+
+    def contains(self, lat, lng):
+        """True when (lat, lng) is within ``radius_m`` of the zone centre."""
+        if lat is None or lng is None:
+            return False
+        return self.distance_to(lat, lng) <= self.radius_m
+
+    def __str__(self):
+        return f"{self.name} (r={self.radius_m}m)"
+
+
+class AttendanceRegularization(TenantNumbered):
+    """Employee-raised request to correct an attendance punch (3.9) — missed/forgotten/erroneous
+    check-in-out. Approval workflow ``draft → pending → approved/rejected`` (+ ``cancelled``),
+    mirroring ``LeaveRequest``. On approval the requested times are written back onto the linked
+    ``AttendanceRecord`` and its status set to ``regularized`` (see ``views.attendanceregularization_approve``)."""
+
+    NUMBER_PREFIX = "REG"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    ]
+    OPEN_STATUSES = ("draft", "pending")
+
+    REASON_TYPE_CHOICES = [
+        ("missed_punch", "Missed Punch"),
+        ("forgot_checkin", "Forgot Check-In"),
+        ("forgot_checkout", "Forgot Check-Out"),
+        ("wrong_time", "Wrong Time Recorded"),
+        ("on_duty", "On Official Duty"),
+        ("work_from_home", "Work From Home"),
+        ("system_error", "System / Device Error"),
+        ("other", "Other"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="attendance_regularizations")
+    # The record being corrected. SET_NULL (not CASCADE) keeps the regularization audit trail even if
+    # the attendance row is later purged; optional so an employee can raise one before any row exists.
+    attendance_record = models.ForeignKey("hrm.AttendanceRecord", on_delete=models.SET_NULL,
+                                          null=True, blank=True, related_name="regularizations")
+    date = models.DateField()
+    reason_type = models.CharField(max_length=20, choices=REASON_TYPE_CHOICES, default="missed_punch")
+    requested_check_in = models.TimeField(null=True, blank=True)
+    requested_check_out = models.TimeField(null=True, blank=True)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_regularization_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-date"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_reg_tenant_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_reg_tenant_status_idx"),
+            models.Index(fields=["tenant", "date"], name="hrm_reg_tenant_date_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        # A linked record must belong to the same employee — otherwise approval would rewrite
+        # another person's punch.
+        if self.attendance_record_id and self.employee_id and self.attendance_record.employee_id != self.employee_id:
+            raise ValidationError({"attendance_record": "The linked attendance record belongs to a different employee."})
+        if not (self.requested_check_in or self.requested_check_out):
+            raise ValidationError({"requested_check_in": "Provide at least one of requested check-in / check-out."})
 
     def __str__(self):
         return f"{self.number} · {self.employee} · {self.date} · {self.get_status_display()}"
