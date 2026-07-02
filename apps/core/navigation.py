@@ -346,9 +346,11 @@ LIVE_LINKS = {
     # 3.10 Leave Management
     "3.10": {
         "Leave Types": "hrm:leavetype_list",             # bullet
+        "Leave Policy": "hrm:leave_policy",              # bullet (accrual/carry-forward engine + config)
         "Leave Balance": "hrm:leaveallocation_list",     # bullet (per-employee allocation + balance)
         "Leave Application": "hrm:leaverequest_list",    # bullet
         "Leave Calendar": "hrm:leaverequest_list",       # bullet (request list as calendar source)
+        "Leave Encashment": "hrm:leaveencashment_list",  # extra (encash unused balance → payout workflow)
     },
     # 3.4 Employee Offboarding — resignation→clearance→F&F→letters. Experience Letter opens the
     # dedicated letters landing page (eligible cases + relieving/experience letter actions).
