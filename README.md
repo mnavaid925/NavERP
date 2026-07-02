@@ -335,14 +335,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   candidate pipeline (`offer` template type → `CandidateCommunication`). Live e-signature / background-check vendor
   APIs, adverse-action dispute flow, parallel/rule-engine approval routing + acceptance-rate analytics deferred.
 - **3.9 Attendance Management** — `AttendanceRecord` (`ATT-`, auto `hours_worked` incl. overnight, late-arrival
-  badge, source/status), `Shift` (grace window) + `ShiftAssignment`.
+  badge, source/status, + GPS `latitude`/`longitude`/`geofence` capture with a derived `geo_status()`), `Shift`
+  (grace window) + `ShiftAssignment`, `GeoFence` (GPS zones with real haversine proximity), and
+  `AttendanceRegularization` (`REG-`, draft→pending→approved/rejected/cancelled punch-correction workflow —
+  admin approval rewrites the linked punch to `regularized`, materialising a punch when none is linked).
 - **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
   **derived** used/balance from approved requests), `LeaveRequest` (`LR-`) with a draft→pending→approved/rejected/
   cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,548-test** HRM suite
-(**4,195 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,673-test** HRM suite
+(**4,320 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
