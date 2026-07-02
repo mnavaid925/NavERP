@@ -19,6 +19,7 @@ from .models import (
     JobGrade,
     JobRequisition,
     LeaveAllocation,
+    LeaveEncashment,
     LeaveRequest,
     LeaveType,
     OnboardingDocument,
@@ -147,6 +148,15 @@ class LeaveRequestAdmin(admin.ModelAdmin):
     list_filter = ("status", "tenant")
     search_fields = ("number", "employee__party__name", "reason")
     readonly_fields = ("number", "days", "approved_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "leave_type", "approver")
+
+
+@admin.register(LeaveEncashment)
+class LeaveEncashmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "leave_type", "year", "days", "rate_per_day", "amount", "status", "approver", "tenant")
+    list_filter = ("status", "year", "tenant")
+    search_fields = ("number", "employee__party__name", "payment_reference")
+    readonly_fields = ("number", "amount", "approved_at", "created_at", "updated_at")
     raw_id_fields = ("employee", "leave_type", "approver")
 
 
