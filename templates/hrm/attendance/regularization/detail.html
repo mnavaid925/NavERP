@@ -45,7 +45,7 @@
       <div class="card-header"><h2 class="card-title">Approval</h2></div>
       <div class="card-body">
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
-          <p class="form-help privileged-note" style="margin-bottom:1rem;"><i data-lucide="shield"></i> Approving overwrites the linked punch with the requested times and flags it Regularized.</p>
+          <p class="form-help" style="margin-bottom:1rem;"><i data-lucide="shield"></i> Approving overwrites the linked punch with the requested times and flags it Regularized.</p>
           <form method="post" action="{% url 'hrm:attendanceregularization_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this regularization and update the punch?');">
             {% csrf_token %}
             <div class="form-group">
