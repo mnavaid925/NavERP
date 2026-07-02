@@ -59,6 +59,7 @@ from .forms import (
     JobGradeForm,
     JobRequisitionForm,
     LeaveAllocationForm,
+    LeaveEncashmentForm,
     LeaveRequestForm,
     LeaveTypeForm,
     OnboardingDocumentForm,
@@ -135,6 +136,7 @@ from .models import (
     JobGrade,
     JobRequisition,
     LeaveAllocation,
+    LeaveEncashment,
     LeaveRequest,
     LeaveType,
     OnboardingDocument,
@@ -879,6 +881,271 @@ def leaverequest_cancel(request, pk):
             "action": "cancel", "attendance_reverted_rows": reverted})
         messages.success(request, f"Leave request {obj.number} cancelled.")
     return redirect("hrm:leaverequest_detail", pk=obj.pk)
+
+
+# ============================================================ Leave Encashment (3.10)
+@login_required
+def leaveencashment_list(request):
+    return crud_list(
+        request,
+        LeaveEncashment.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "leave_type", "approver"),
+        "hrm/leave/encashment/list.html",
+        search_fields=["number", "employee__party__name"],
+        filters=[("status", "status", False), ("employee", "employee_id", True),
+                 ("leave_type", "leave_type_id", True)],
+        extra_context={"status_choices": LeaveEncashment.STATUS_CHOICES,
+                       "employees": EmployeeProfile.objects.filter(tenant=request.tenant)
+                       .select_related("party").order_by("party__name"),
+                       "leave_types": LeaveType.objects.filter(tenant=request.tenant, encashable=True).order_by("name")},
+    )
+
+
+@login_required
+def leaveencashment_create(request):
+    return crud_create(request, form_class=LeaveEncashmentForm,
+                       template="hrm/leave/encashment/form.html", success_url="hrm:leaveencashment_list")
+
+
+@login_required
+def leaveencashment_detail(request, pk):
+    obj = get_object_or_404(
+        LeaveEncashment.objects.select_related("employee__party", "leave_type", "approver"),
+        pk=pk, tenant=request.tenant)
+    allocation = LeaveAllocation.objects.filter(
+        tenant=request.tenant, employee=obj.employee, leave_type=obj.leave_type, year=obj.year).first()
+    return render(request, "hrm/leave/encashment/detail.html", {"obj": obj, "allocation": allocation})
+
+
+@login_required
+def leaveencashment_edit(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    if obj.status not in LeaveEncashment.OPEN_STATUSES:
+        messages.error(request, "Only a draft or pending encashment can be edited.")
+        return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+    return crud_edit(request, model=LeaveEncashment, pk=pk, form_class=LeaveEncashmentForm,
+                     template="hrm/leave/encashment/form.html", success_url="hrm:leaveencashment_list")
+
+
+@login_required
+@require_POST
+def leaveencashment_delete(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    if obj.status not in LeaveEncashment.OPEN_STATUSES:
+        messages.error(request, "A decided encashment cannot be deleted — cancel it instead.")
+        return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Encashment deleted.")
+    return redirect("hrm:leaveencashment_list")
+
+
+@login_required
+@require_POST
+def leaveencashment_submit(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "pending"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Encashment {obj.number} submitted for approval.")
+    return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # approving an encashment consumes leave balance — privileged manager/admin action
+@require_POST
+def leaveencashment_approve(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    if obj.status == "pending":
+        alloc = (LeaveAllocation.objects
+                 .filter(tenant=request.tenant, employee=obj.employee, leave_type=obj.leave_type, year=obj.year)
+                 .first())
+        available = alloc.balance if alloc else Decimal("0")
+        # Re-check balance at approval time — a pending request could exceed the balance if another
+        # encashment was approved after it was raised.
+        if obj.days > available:
+            messages.error(request, f"Cannot approve — only {available} day(s) available to encash.")
+            return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+        with transaction.atomic():
+            obj.status = "approved"
+            obj.approver = request.user
+            obj.approved_at = timezone.now()
+            obj.decision_note = request.POST.get("decision_note", "").strip()[:2000]
+            obj.save(update_fields=["status", "approver", "approved_at", "decision_note", "updated_at"])
+            # Encashment consumes leave: reduce the allocation's entitlement by the encashed days.
+            if alloc:
+                alloc.allocated_days = (alloc.allocated_days or Decimal("0")) - obj.days
+                alloc.save(update_fields=["allocated_days", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "approve", "days_consumed": str(obj.days)})
+        messages.success(request, f"Encashment {obj.number} approved ({obj.days} day(s) consumed).")
+    return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # rejecting is a privileged manager/admin action
+@require_POST
+def leaveencashment_reject(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    if obj.status == "pending":
+        obj.status = "rejected"
+        obj.approver = request.user
+        obj.decision_note = request.POST.get("decision_note", "").strip()[:2000]
+        obj.save(update_fields=["status", "approver", "decision_note", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject"})
+        messages.success(request, f"Encashment {obj.number} rejected.")
+    return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # recording the payout is a privileged finance/admin action
+@require_POST
+def leaveencashment_mark_paid(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    if obj.status == "approved":
+        obj.status = "paid"
+        obj.paid_on = timezone.localdate()
+        obj.payment_reference = request.POST.get("payment_reference", "").strip()[:100]
+        obj.save(update_fields=["status", "paid_on", "payment_reference", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_paid", "reference": obj.payment_reference})
+        messages.success(request, f"Encashment {obj.number} marked paid.")
+    return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def leaveencashment_cancel(request, pk):
+    obj = get_object_or_404(LeaveEncashment, pk=pk, tenant=request.tenant)
+    # Cancellable only before a decision — an approved one already consumed balance (final).
+    if obj.status in ("draft", "pending"):
+        obj.status = "cancelled"
+        obj.decision_note = request.POST.get("decision_note", "").strip()[:2000]
+        obj.save(update_fields=["status", "decision_note", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "cancel"})
+        messages.success(request, f"Encashment {obj.number} cancelled.")
+    return redirect("hrm:leaveencashment_detail", pk=obj.pk)
+
+
+# ============================================================ Leave Policy engine (3.10)
+def _policy_year(request):
+    """Resolve the ?year / POSTed year param to an int, defaulting to the current year."""
+    raw = (request.POST.get("year") or request.GET.get("year") or "").strip()
+    return int(raw) if raw.isdigit() else timezone.localdate().year
+
+
+def _accrual_target(leave_type, year, current_year, current_month):
+    """Days accrued for a leave type by ``year``: annual → the full grant; monthly → the per-month
+    rate × elapsed months (12 for a past year, the current month for the current year)."""
+    rate = leave_type.accrual_days or Decimal("0")
+    if leave_type.accrual_rule == "annual":
+        return rate
+    if leave_type.accrual_rule == "monthly":
+        months = 12 if year < current_year else current_month
+        return rate * Decimal(months)
+    return Decimal("0")  # "none"
+
+
+@login_required
+def leave_policy(request):
+    """Standalone Leave Policy page (no model, mirrors ``org_chart``): each ``LeaveType``'s accrual /
+    carry-forward / encashment config for a selected year + admin run actions that mutate allocations."""
+    tenant = request.tenant
+    year = _policy_year(request)
+    leave_types = (LeaveType.objects.filter(tenant=tenant).order_by("name")
+                   if tenant is not None else LeaveType.objects.none())
+    rows_by_type = {}
+    active_employees = 0
+    if tenant is not None:
+        for r in (LeaveAllocation.objects.filter(tenant=tenant, year=year)
+                  .values("leave_type_id")
+                  .annotate(n=Count("pk"), total=Sum("allocated_days"), carried=Sum("carried_forward"))):
+            rows_by_type[r["leave_type_id"]] = r
+        active_employees = (EmployeeProfile.objects.filter(tenant=tenant)
+                            .exclude(employment__status="terminated").count())
+    policy_rows = [{
+        "lt": lt,
+        "alloc_count": rows_by_type.get(lt.pk, {}).get("n", 0),
+        "total_days": rows_by_type.get(lt.pk, {}).get("total") or Decimal("0"),
+        "carried": rows_by_type.get(lt.pk, {}).get("carried") or Decimal("0"),
+    } for lt in leave_types]
+    return render(request, "hrm/leave/policy.html", {
+        "policy_rows": policy_rows,
+        "year": year,
+        "next_year": year + 1,
+        "prev_year": year - 1,
+        "active_employees": active_employees,
+        "current_year": timezone.localdate().year,
+    })
+
+
+@tenant_admin_required  # accrual mutates every employee's entitlement — privileged
+@require_POST
+def leave_accrual_run(request):
+    tenant = request.tenant
+    year = _policy_year(request)
+    today = timezone.localdate()
+    ZERO = Decimal("0")
+    employees = list(EmployeeProfile.objects.filter(tenant=tenant).exclude(employment__status="terminated"))
+    leave_types = list(LeaveType.objects.filter(tenant=tenant, is_active=True).exclude(accrual_rule="none"))
+    touched = 0
+    with transaction.atomic():
+        for lt in leave_types:
+            target = _accrual_target(lt, year, today.year, today.month)
+            cap = lt.max_balance or ZERO
+            for emp in employees:
+                alloc, _ = LeaveAllocation.objects.get_or_create(
+                    tenant=tenant, employee=emp, leave_type=lt, year=year,
+                    defaults={"allocated_days": ZERO, "status": "active"})
+                total = target + (alloc.carried_forward or ZERO)
+                if cap > ZERO:
+                    total = min(total, cap)
+                if alloc.allocated_days != total or alloc.status != "active":
+                    alloc.allocated_days = total
+                    alloc.status = "active"
+                    alloc.save(update_fields=["allocated_days", "status", "updated_at"])
+                    touched += 1
+    write_audit_log(request.user, None, "leave_accrual_run",
+                    changes={"year": year, "allocations_updated": touched}, tenant=tenant)
+    messages.success(request, f"Accrual run for {year}: {touched} allocation(s) updated "
+                              f"across {len(leave_types)} accruing leave type(s).")
+    return redirect(f"{reverse('hrm:leave_policy')}?year={year}")
+
+
+@tenant_admin_required  # carry-forward mutates next-year entitlements — privileged
+@require_POST
+def leave_carryforward_run(request):
+    tenant = request.tenant
+    year = _policy_year(request)
+    dest_year = year + 1
+    ZERO = Decimal("0")
+    leave_types = list(LeaveType.objects.filter(tenant=tenant, is_active=True, max_carry_forward__gt=0))
+    type_ids = [lt.pk for lt in leave_types]
+    cf_cap = {lt.pk: (lt.max_carry_forward or ZERO) for lt in leave_types}
+    # Source-year approved usage per (employee, leave_type) in one grouped query (avoids per-row N+1).
+    used_map = {}
+    for r in (LeaveRequest.objects.filter(tenant=tenant, status="approved", start_date__year=year,
+                                          leave_type_id__in=type_ids)
+              .values("employee_id", "leave_type_id").annotate(s=Sum("days"))):
+        used_map[(r["employee_id"], r["leave_type_id"])] = r["s"] or ZERO
+    touched = 0
+    with transaction.atomic():
+        for src in (LeaveAllocation.objects
+                    .filter(tenant=tenant, year=year, leave_type_id__in=type_ids)):
+            used = used_map.get((src.employee_id, src.leave_type_id), ZERO)
+            balance = (src.allocated_days or ZERO) - used
+            carry = min(max(balance, ZERO), cf_cap.get(src.leave_type_id, ZERO))
+            dst, _ = LeaveAllocation.objects.get_or_create(
+                tenant=tenant, employee_id=src.employee_id, leave_type_id=src.leave_type_id, year=dest_year,
+                defaults={"allocated_days": ZERO, "status": "active"})
+            # Replace this run's own prior contribution instead of double-adding (idempotent).
+            new_total = (dst.allocated_days or ZERO) - (dst.carried_forward or ZERO) + carry
+            if dst.allocated_days != new_total or dst.carried_forward != carry or dst.status != "active":
+                dst.allocated_days = new_total
+                dst.carried_forward = carry
+                dst.status = "active"
+                dst.save(update_fields=["allocated_days", "carried_forward", "status", "updated_at"])
+                touched += 1
+    write_audit_log(request.user, None, "leave_carryforward_run",
+                    changes={"from_year": year, "to_year": dest_year, "allocations_updated": touched}, tenant=tenant)
+    messages.success(request, f"Carry-forward {year} → {dest_year}: {touched} allocation(s) updated.")
+    return redirect(f"{reverse('hrm:leave_policy')}?year={dest_year}")
 
 
 # ============================================================ Public Holidays (3.12)
