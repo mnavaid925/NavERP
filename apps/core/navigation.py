@@ -338,7 +338,9 @@ LIVE_LINKS = {
     "3.9": {
         "Check-in/Check-out": "hrm:attendancerecord_list",  # bullet
         "Attendance Calendar": "hrm:attendancerecord_list",  # bullet (date-filtered list)
+        "Attendance Regularization": "hrm:attendanceregularization_list",  # bullet (correction requests + approval)
         "Shift Management": "hrm:shift_list",                # bullet
+        "Geofencing": "hrm:geofence_list",                  # bullet (GPS zones for field attendance)
         "Shift Assignments": "hrm:shiftassignment_list",     # extra (employee↔shift mapping)
     },
     # 3.10 Leave Management
