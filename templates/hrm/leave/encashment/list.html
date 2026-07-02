@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Leave Encashment{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Leave Encashment</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Leave Encashment</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:leaveencashment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Encashment</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search encashments…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="leave_type" class="form-select">
+            <option value="">All leave types</option>
+            {% for lt in leave_types %}
+              <option value="{{ lt.pk }}" {% if request.GET.leave_type == lt.pk|stringformat:"d" %}selected{% endif %}>{{ lt.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:leaveencashment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Leave Type</th><th>Year</th><th>Days</th><th>Rate/Day</th><th>Amount</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:leaveencashment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.leave_type.name }}</td>
+              <td>{{ obj.year }}</td>
+              <td>{{ obj.days }}</td>
+              <td>{{ obj.rate_per_day }}</td>
+              <td>{{ obj.amount }}</td>
+              <td><span class="badge badge-{% if obj.status == 'pending' %}amber{% elif obj.status == 'approved' %}info{% elif obj.status == 'paid' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:leaveencashment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'pending' %}
+                    <a href="{% url 'hrm:leaveencashment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:leaveencashment_delete' obj.pk %}" onsubmit="return confirm('Delete this encashment?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="banknote"></i><h3>No encashments found</h3><p>Raise a request to encash unused, encashable leave into a cash payout.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
