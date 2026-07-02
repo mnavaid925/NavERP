@@ -54,7 +54,7 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Employee</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th><th>Source</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Number</th><th>Employee</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th><th>Source</th><th>Geo</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -66,6 +66,7 @@
               <td>{{ obj.hours_worked }}</td>
               <td><span class="badge badge-{% if obj.status == 'present' %}green{% elif obj.status == 'absent' %}red{% elif obj.status == 'half_day' %}amber{% elif obj.status == 'on_leave' %}info{% elif obj.status == 'holiday' %}slate{% elif obj.status == 'regularized' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.get_source_display }}</td>
+              <td>{% if obj.geo_status == 'verified' %}<span class="badge badge-green" title="{{ obj.geofence.name }}">Verified</span>{% elif obj.geo_status == 'outside' %}<span class="badge badge-red" title="{{ obj.geofence.name }}">Outside</span>{% else %}<span class="badge badge-muted">—</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'hrm:attendancerecord_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
@@ -78,7 +79,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="9"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>No attendance records found</h3><p>Add your first attendance record to get started.</p></div></td></tr>
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>No attendance records found</h3><p>Add your first attendance record to get started.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
