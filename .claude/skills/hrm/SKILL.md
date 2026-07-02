@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts, 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management, 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -18,7 +18,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 43 tables (12 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
+## Models (`apps/hrm/models.py`) — 45 tables (14 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -37,7 +37,9 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 | `PublicHoliday` | — | date, name, is_optional | non-optional holidays excluded from leave `days`; `unique_together=(tenant,date,name)` |
 | `Shift` | — | name, start_time, end_time, grace_minutes, is_default, is_active | overnight shifts allowed (end < start) |
 | `ShiftAssignment` | — | employee, shift, effective_from, effective_to(null=ongoing) | `clean()`: effective_to ≥ effective_from; `unique_together=(tenant,employee,effective_from)` |
-| `AttendanceRecord` | `ATT-` | employee, date, check_in, check_out, **hours_worked**(editable=False), shift, status(present/absent/half_day/on_leave/holiday/regularized), source(web/mobile/biometric/manual), notes | `save()` recomputes `hours_worked` (handles overnight); `is_late()` (minutes-of-day vs shift start+grace); `unique_together` also (tenant,employee,date) |
+| `AttendanceRecord` | `ATT-` | employee, date, check_in, check_out, **hours_worked**(editable=False), shift, status(present/absent/half_day/on_leave/holiday/regularized), source(web/mobile/biometric/manual), **latitude, longitude, geofence→`GeoFence`(SET_NULL)** (3.9 geofencing), notes | `save()` recomputes `hours_worked` (handles overnight); `is_late()` (minutes-of-day vs shift start+grace); **`has_geo()`**, **`geo_status()`** → `verified`/`outside`/`""` (DERIVED, checks the zone's live radius regardless of `is_active`); `clean()`: lat/long are a pair (both or neither), a geofence needs coords; `unique_together` also (tenant,employee,date); index (tenant,geofence) |
+| `GeoFence` (3.9) | — | name, address, latitude, longitude (Decimal 9,6 + range validators), radius_m(PositiveInt, MinValue 1), is_active | GPS zone for field attendance. **Real haversine** `distance_to(lat,lng)`→metres + `contains(lat,lng)` (≤ radius; guards None); `EARTH_RADIUS_M=6_371_000`; `unique_together=(tenant,name)`; index (tenant,is_active). Delete guarded when punches reference it (deactivate instead). |
+| `AttendanceRegularization` (3.9) | `REG-` | employee, **attendance_record→`AttendanceRecord`(SET_NULL, optional)**, date, reason_type(missed_punch/forgot_checkin/forgot_checkout/wrong_time/on_duty/work_from_home/system_error/other), requested_check_in, requested_check_out, reason, status(draft/pending/approved/rejected/cancelled), approver, approved_at, decision_note | Punch-correction request; `OPEN_STATUSES=(draft,pending)`; `clean()`: linked record must be same employee + at least one requested time. **On approve** (view, `@tenant_admin_required`, atomic) the requested times are written onto the linked punch (→ `regularized`, hours recompute); if none is linked it finds the (employee,date) row or materialises a fresh `ATT-` punch and links it back. `unique_together=(tenant,number)`; indexes (tenant,employee,status)/(tenant,status)/(tenant,date) |
 
 ### 3.3 Employee Onboarding (7 tables) — reusable template → per-hire program → tasks/docs/assets/sessions
 
@@ -138,6 +140,7 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
   `leaveallocation`, `leaverequest`, `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
+  **`geofence`, `attendanceregularization`** (3.9),
   **`onboardingtemplate`, `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`,
   `assetallocation`, `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`,
   `finalsettlement`**}: `<entity>_list/_create/_detail/_edit/_delete`.
@@ -153,6 +156,9 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   are created/managed in `core:orgunit_list`; the HRM pages enrich them (head/owner/budget/code). Delete removes
   only the companion row, never the OrgUnit.
 - Leave workflow extras: `hrm:leaverequest_submit/_approve/_reject/_cancel` (all POST-only).
+- **Attendance-regularization workflow extras (3.9, all POST-only):** `hrm:attendanceregularization_submit`
+  (owner, draft→pending), `_approve`/`_reject` (`@tenant_admin_required`; approve rewrites the linked/created
+  punch), `_cancel` (draft/pending→cancelled). Geofence delete is guarded when attendance rows reference it.
 - **Onboarding workflow extras (all POST-only):** `onboardingprogram_activate/_generate_tasks/_complete/_cancel`
   (complete + cancel are `@tenant_admin_required`), `onboardingtask_complete/_reopen/_skip`,
   `onboardingdocument_mark_signed`, `assetallocation_issue/_return`,
@@ -306,7 +312,7 @@ update-status/complete lifecycle], `offerlettertemplate/` [list/detail/form; the
 the merge-token reference], each with `list/detail/form.html`; the reusable `offer/_status_badge.html` partial; the
 standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirrors `relieving_letter.html`];
 `OfferApproval` + `PreboardingItem` render inline on the offer hub, no own templates)**,
-`attendance/` (3.9 — `shift/ shiftassignment/ record/`), `leave/` (3.10 — `type/ allocation/ request/`),
+`attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
@@ -376,7 +382,9 @@ label)` helper backs all four upload guards (and `_validate_resume`).
 `venv\Scripts\python.exe manage.py seed_hrm` (`--flush` to wipe+reseed). Idempotent (skips a tenant that already
 has `EmployeeProfile` rows). Per tenant: 3 designations, up to 5 employees **reusing existing `core.Party`
 persons** (tops up with unique names if too few), 4 leave types + allocations, 2 leave requests (1 approved/1
-pending), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee. **Org structure (3.2)** is seeded by a
+pending), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee (present punches tagged to the HQ
+geofence — one outside/rest verified), **2 geofences** (HQ + client site) and **2 attendance regularizations**
+(1 pending / 1 draft on the absent punches) per tenant. **Org structure (3.2)** is seeded by a
 separate `_seed_org_structure(tenant)` (guarded by its own `JobGrade.exists()` check): 5 job grades (G1–M2), links
 the seeded designations to grades + fills mid-salary/budgeted-headcount, creates 2 **cost-center `core.OrgUnit`
 nodes** (core seeds none) with `CostCenterProfile`s (budget + owner), and a `DepartmentProfile` (code + head) over
@@ -448,8 +456,9 @@ tenant and sees nothing.
   `_safe_reverse`); Offer Tracking → `hrm:offer_list` (the all-status offer list); Background Verification →
   `hrm:backgroundverification_list`; Pre-boarding → `hrm:offer_list?status=accepted` (accepted offers = active
   pre-boarding, managed on the offer detail hub).
-- 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Shift Management → `hrm:shift_list`;
-  + Shift Assignments → `hrm:shiftassignment_list`.
+- 3.9: Check-in/Check-out + Attendance Calendar → `hrm:attendancerecord_list`; Attendance Regularization →
+  `hrm:attendanceregularization_list`; Shift Management → `hrm:shift_list`; Geofencing → `hrm:geofence_list`;
+  + Shift Assignments → `hrm:shiftassignment_list` (extra). All 5 NavERP.md 3.9 bullets are now live.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave
   Calendar → `hrm:leaverequest_list`.
 - 3.12: Holiday Calendar → `hrm:publicholiday_list`.
@@ -538,7 +547,7 @@ Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT dupl
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
 upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
-statutory/tax (3.13–3.17), attendance regularization & geofencing, optional-holiday selection, leave
+statutory/tax (3.13–3.17), optional-holiday selection, leave
 carry-forward/encashment batch, employee self-service portal, and a per-employee↔user link for ownership-scoped
 leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
 **3.3 onboarding deferrals:** live e-sign API (DocuSign/HelloSign — `external_ref` is the stub), preboarding
