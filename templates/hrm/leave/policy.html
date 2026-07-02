@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Leave Policy{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Leave Policy</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Leave Policy</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="get" class="filter-bar" style="margin:0;">
+        <label class="form-label" for="id_year" style="margin:0 .5rem 0 0;">Year</label>
+        <input type="number" id="id_year" name="year" value="{{ year }}" class="form-input" style="width:120px;">
+        <button class="btn btn-outline" type="submit"><i data-lucide="calendar"></i> Go</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ active_employees }}</div><div class="stat-label">Active Employees</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="calendar-range"></i></div><div class="stat-value">{{ year }}</div><div class="stat-label">Policy Year</div></div>
+  </div>
+
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Policy Engine</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin-bottom:1rem;"><i data-lucide="shield"></i> Admin actions — both are idempotent (safe to re-run). Accrual tops up each active employee's {{ year }} allocation per the leave type's rule; carry-forward rolls unused {{ year }} balance into {{ next_year }} (capped by each type's max carry-forward).</p>
+        <div class="table-actions" style="gap:1rem;">
+          <form method="post" action="{% url 'hrm:leave_accrual_run' %}" onsubmit="return confirm('Run accrual for {{ year }}? This updates every active employee\'s allocation.');">
+            {% csrf_token %}
+            <input type="hidden" name="year" value="{{ year }}">
+            <button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i> Run Accrual ({{ year }})</button>
+          </form>
+          <form method="post" action="{% url 'hrm:leave_carryforward_run' %}" onsubmit="return confirm('Carry forward unused {{ year }} balance into {{ next_year }}?');">
+            {% csrf_token %}
+            <input type="hidden" name="year" value="{{ year }}">
+            <button class="btn btn-outline" type="submit"><i data-lucide="corner-down-right"></i> Carry Forward {{ year }} → {{ next_year }}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Leave Types &amp; Policy ({{ year }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Leave Type</th><th>Accrual</th><th>Accrual Days</th><th>Max Balance</th><th>Carry Fwd</th><th>Encashable</th><th>Allocations</th><th>Total Days</th><th>Carried In</th></tr></thead>
+        <tbody>
+          {% for row in policy_rows %}
+            <tr>
+              <td><a href="{% url 'hrm:leavetype_detail' row.lt.pk %}" class="fw-600">{{ row.lt.name }}</a> <span class="text-muted">({{ row.lt.code }})</span></td>
+              <td><span class="badge badge-{% if row.lt.accrual_rule == 'annual' %}info{% elif row.lt.accrual_rule == 'monthly' %}green{% else %}muted{% endif %}">{{ row.lt.get_accrual_rule_display }}</span></td>
+              <td>{{ row.lt.accrual_days }}</td>
+              <td>{% if row.lt.max_balance %}{{ row.lt.max_balance }}{% else %}∞{% endif %}</td>
+              <td>{{ row.lt.max_carry_forward }}</td>
+              <td>{% if row.lt.encashable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td>{{ row.alloc_count }}</td>
+              <td>{{ row.total_days }}</td>
+              <td>{{ row.carried }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="scroll-text"></i><h3>No leave types</h3><p>Define leave types first to configure accrual, carry-forward, and encashment policy.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-actions" style="margin-top:1rem;">
+    <a href="{% url 'hrm:leavetype_list' %}" class="btn btn-outline"><i data-lucide="settings-2"></i> Edit Leave Types</a>
+    <a href="{% url 'hrm:leaveallocation_list' %}?year={{ year }}" class="btn btn-outline"><i data-lucide="list"></i> View Allocations</a>
+    <a href="{% url 'hrm:leaveencashment_list' %}" class="btn btn-outline"><i data-lucide="banknote"></i> Encashments</a>
+  </div>
+{% endblock %}
