@@ -1094,10 +1094,16 @@ def geofence_create(request):
 @login_required
 def geofence_detail(request, pk):
     obj = get_object_or_404(GeoFence, pk=pk, tenant=request.tenant)
+    # Materialise the punches and prime each row's geofence FK cache with the zone we already hold
+    # — the template calls rec.geo_status() per row (touches rec.geofence); without this each row
+    # would fire its own SELECT (Django caches the FK per-instance, not per-value).
+    recent_punches = list(AttendanceRecord.objects.filter(tenant=request.tenant, geofence=obj)
+                          .select_related("employee__party").order_by("-date")[:20])
+    for rec in recent_punches:
+        rec.geofence = obj
     return render(request, "hrm/attendance/geofence/detail.html", {
         "obj": obj,
-        "recent_punches": AttendanceRecord.objects.filter(tenant=request.tenant, geofence=obj)
-        .select_related("employee__party").order_by("-date")[:20],
+        "recent_punches": recent_punches,
     })
 
 
