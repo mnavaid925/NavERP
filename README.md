@@ -340,12 +340,15 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `AttendanceRegularization` (`REG-`, draft→pending→approved/rejected/cancelled punch-correction workflow —
   admin approval rewrites the linked punch to `regularized`, materialising a punch when none is linked).
 - **3.10 Leave Management** — `LeaveType` (accrual/carry-forward/encashment policy), `LeaveAllocation` (`LA-`,
-  **derived** used/balance from approved requests), `LeaveRequest` (`LR-`) with a draft→pending→approved/rejected/
-  cancelled workflow (approve/reject are admin-only; days auto-computed minus non-optional holidays).
+  **derived** balance = allocated − used − encashed, with `carried_forward`/`encashed_days` bookkeeping),
+  `LeaveRequest` (`LR-`) with a draft→pending→approved/rejected/cancelled workflow (days auto-computed minus
+  non-optional holidays); a **Leave Policy engine** (idempotent admin accrual + year-end carry-forward runs over
+  allocations); and `LeaveEncashment` (`ENC-`) to encash unused leave into a payout (draft→pending→approved→paid,
+  approval consumes balance via `encashed_days` so a later accrual re-run can't restore cashed-out days).
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,673-test** HRM suite
-(**4,320 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,775-test** HRM suite
+(**4,422 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
