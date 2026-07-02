@@ -1192,25 +1192,32 @@ def attendanceregularization_approve(request, pk):
     obj = get_object_or_404(AttendanceRegularization, pk=pk, tenant=request.tenant)
     if obj.status == "pending":
         with transaction.atomic():
+            # Resolve the punch to correct: the explicitly linked one, else an existing row for
+            # (employee, date), else materialise a fresh regularized punch (handles a request raised
+            # before any attendance row existed — the workflow always produces a corrected record).
+            rec = obj.attendance_record
+            if rec is None:
+                rec = (AttendanceRecord.objects
+                       .filter(tenant=request.tenant, employee=obj.employee, date=obj.date)
+                       .first())
+                if rec is None:
+                    rec = AttendanceRecord(tenant=request.tenant, employee=obj.employee, date=obj.date)
+            if obj.requested_check_in is not None:
+                rec.check_in = obj.requested_check_in
+            if obj.requested_check_out is not None:
+                rec.check_out = obj.requested_check_out
+            rec.status = "regularized"
+            rec.source = "manual"
+            rec.save()  # save() recomputes hours_worked + assigns an ATT- number when newly created
             obj.status = "approved"
             obj.approver = request.user
             obj.approved_at = timezone.now()
             obj.decision_note = request.POST.get("decision_note", "").strip()[:2000]
-            obj.save(update_fields=["status", "approver", "approved_at", "decision_note", "updated_at"])
-            # Apply the corrected times to the linked punch (if any) and flag it regularized.
-            applied = "no linked record"
-            rec = obj.attendance_record
-            if rec is not None:
-                if obj.requested_check_in is not None:
-                    rec.check_in = obj.requested_check_in
-                if obj.requested_check_out is not None:
-                    rec.check_out = obj.requested_check_out
-                rec.status = "regularized"
-                rec.source = "manual"
-                rec.save()  # save() recomputes hours_worked from the new times
-                applied = f"record {rec.number} → regularized"
-        write_audit_log(request.user, obj, "update", {"action": "approve", "applied": applied})
-        messages.success(request, f"Regularization {obj.number} approved ({applied}).")
+            obj.attendance_record = rec  # link back so the audit trail records which punch was fixed
+            obj.save(update_fields=["status", "approver", "approved_at", "decision_note",
+                                    "attendance_record", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "approve", "applied": f"record {rec.number} → regularized"})
+        messages.success(request, f"Regularization {obj.number} approved (record {rec.number} → regularized).")
     return redirect("hrm:attendanceregularization_detail", pk=obj.pk)
 
 
