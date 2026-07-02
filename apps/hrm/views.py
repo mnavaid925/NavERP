@@ -1033,9 +1033,15 @@ def leaveencashment_cancel(request, pk):
 
 # ============================================================ Leave Policy engine (3.10)
 def _policy_year(request):
-    """Resolve the ?year / POSTed year param to an int, defaulting to the current year."""
+    """Resolve the ?year / POSTed year param to an int, defaulting to the current year. Bounded to
+    a sane window so an oversized all-digit string can't overflow PositiveSmallIntegerField and raise
+    an unhandled DB error/500 (security-review: DoS / stack-trace leak if DEBUG)."""
     raw = (request.POST.get("year") or request.GET.get("year") or "").strip()
-    return int(raw) if raw.isdigit() else timezone.localdate().year
+    if raw.isdigit():
+        year = int(raw)
+        if 2000 <= year <= 2100:
+            return year
+    return timezone.localdate().year
 
 
 def _accrual_target(leave_type, year, current_year, current_month):
