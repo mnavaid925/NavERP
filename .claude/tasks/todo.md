@@ -43,5 +43,41 @@ A GPS zone for field/site attendance; real haversine `distance_to`/`contains` (n
 - [ ] review agents: code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer
 - [ ] update `.claude/skills/hrm/SKILL.md` 3.9 section
 
-## Review
-_(filled in after build)_
+## Review — delivered 2026-07-03
+
+**Scope built.** Completed HRM 3.9 by adding the two missing NavERP.md bullets. 2 new models over the
+existing attendance spine: `GeoFence` (GPS zones, real haversine `distance_to`/`contains`, delete-guarded)
+and `AttendanceRegularization` (`REG-`, draft→pending→approved/rejected/cancelled; admin approve rewrites the
+linked punch to `regularized` and, when none is linked, finds the (employee,date) row or materialises a fresh
+`ATT-` punch). `AttendanceRecord` gained `latitude`/`longitude`/`geofence` + derived `geo_status()`. Full CRUD +
+workflow, admin-gated approve/reject, wired into `LIVE_LINKS["3.9"]` (all 5 bullets now live), seeded, 2 migrations
+(0018 models, 0019 geofence index).
+
+**Verification.** `manage.py check` clean; migrates cleanly; `seed_hrm` idempotent (2 geofences + 2 regularizations
+/tenant). Smoke script (temp/, gitignored): every new URL 200/302, filters work, no `{#` leaks, both approve
+branches correct (linked punch → regularized; unlinked → new ATT- punch materialised + linked back), cross-tenant
+IDOR → 404 (incl. the privileged POST, row unmutated), `geofence_detail` flat 9 queries for 15 punches.
+
+**Review-agent sequence (all applied + committed one file per commit):**
+- code-reviewer → 2 fixes: approve always produces a corrected punch (was a silent no-op with no linked record);
+  approve/reject panel admin-gated (`is_superuser`/`is_tenant_admin`), mirroring 3.8.
+- explorer → 4: `AttendanceRecord.clean()` lat/long pairing; dead `privileged-note` CSS removed; punch↔regularization
+  back-link section on the record detail; "Pending Regularizations" KPI on the HRM overview.
+- frontend-reviewer → clean (only pre-existing-pattern nits; no changes).
+- performance-reviewer → 2: `geofence_detail` N+1 fixed via FK-cache priming (24→9 queries); `(tenant, geofence)`
+  composite index (migration 0019).
+- qa-smoke-tester → clean (independent migrate+seed+sweep all green).
+- security-reviewer → no Critical/High/Medium; one pre-existing app-wide Low (any tenant user can file for any
+  employee, same as LeaveRequest) left as-is.
+- test-writer → **125 tests** in `apps/hrm/tests/test_attendance_management.py`; HRM suite **1,673** green,
+  project-wide **4,320** green.
+
+**Skill.** `.claude/skills/hrm/SKILL.md` updated (frontmatter, table count 43→45, 2 new model rows + AttendanceRecord
+geo fields, routes + workflow extras, template folders, LIVE_LINKS 3.9, seeder, Deferred pruned).
+
+**Deferred (future 3.9 passes):** live GPS capture from a mobile/biometric device (coords are manual on the form
+now); reverse-geocoding of coordinates to addresses; auto-suggesting the nearest active geofence at punch time;
+regularization SLA/escalation + bulk approve; per-employee↔user ownership scoping on request creation (app-wide
+convention, tracked separately).
+
+**Next unbuilt sub-module:** 3.11 Time Tracking.
