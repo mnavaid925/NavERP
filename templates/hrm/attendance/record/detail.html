@@ -27,6 +27,9 @@
       <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'present' %}green{% elif obj.status == 'absent' %}red{% elif obj.status == 'half_day' %}amber{% elif obj.status == 'on_leave' %}info{% elif obj.status == 'holiday' %}slate{% elif obj.status == 'regularized' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}</dd></div>
       <div class="detail-item"><dt>Late?</dt><dd>{% if obj.is_late %}<span class="badge badge-amber">Late</span>{% else %}<span class="badge badge-green">On time</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Geofence</dt><dd>{% if obj.geofence %}<a href="{% url 'hrm:geofence_detail' obj.geofence.pk %}">{{ obj.geofence.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Coordinates</dt><dd>{% if obj.has_geo %}{{ obj.latitude }}, {{ obj.longitude }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Geo Check</dt><dd>{% if obj.geo_status == 'verified' %}<span class="badge badge-green">Verified</span>{% elif obj.geo_status == 'outside' %}<span class="badge badge-red">Outside zone</span>{% else %}<span class="badge badge-muted">—</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
     </dl>
   </div></div>
