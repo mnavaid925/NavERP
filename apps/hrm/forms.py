@@ -35,6 +35,7 @@ MAX_OFFER_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
 from .models import (
     AssetAllocation,
     AttendanceRecord,
+    AttendanceRegularization,
     ClearanceItem,
     CostCenterProfile,
     DepartmentProfile,
@@ -44,6 +45,7 @@ from .models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    GeoFence,
     JobDescriptionTemplate,
     JobGrade,
     JobRequisition,
@@ -285,10 +287,36 @@ class ShiftAssignmentForm(TenantModelForm):
 class AttendanceRecordForm(TenantModelForm):
     class Meta:
         model = AttendanceRecord
-        fields = ["employee", "date", "check_in", "check_out", "shift", "status", "source", "notes"]
+        fields = ["employee", "date", "check_in", "check_out", "shift", "status", "source",
+                  "latitude", "longitude", "geofence", "notes"]
         widgets = {
             "check_in": forms.TimeInput(attrs={"type": "time", "class": "form-input"}),
             "check_out": forms.TimeInput(attrs={"type": "time", "class": "form-input"}),
+            "latitude": forms.NumberInput(attrs={"step": "0.000001", "class": "form-input"}),
+            "longitude": forms.NumberInput(attrs={"step": "0.000001", "class": "form-input"}),
+        }
+
+
+class GeoFenceForm(TenantModelForm):
+    class Meta:
+        model = GeoFence
+        fields = ["name", "address", "latitude", "longitude", "radius_m", "is_active"]
+        widgets = {
+            "latitude": forms.NumberInput(attrs={"step": "0.000001", "class": "form-input"}),
+            "longitude": forms.NumberInput(attrs={"step": "0.000001", "class": "form-input"}),
+        }
+
+
+class AttendanceRegularizationForm(TenantModelForm):
+    class Meta:
+        model = AttendanceRegularization
+        # status / approver / approved_at / decision_note are workflow-set in the view, not on the form.
+        fields = ["employee", "attendance_record", "date", "reason_type",
+                  "requested_check_in", "requested_check_out", "reason"]
+        widgets = {
+            "requested_check_in": forms.TimeInput(attrs={"type": "time", "class": "form-input"}),
+            "requested_check_out": forms.TimeInput(attrs={"type": "time", "class": "form-input"}),
+            "reason": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         }
 
 
