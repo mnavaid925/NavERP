@@ -32,6 +32,7 @@ from apps.hrm.models import (
     JobGrade,
     JobRequisition,
     LeaveAllocation,
+    LeaveEncashment,
     LeaveRequest,
     LeaveType,
     OnboardingDocument,
@@ -192,7 +193,7 @@ class Command(BaseCommand):
                           OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
                           CostCenterProfile, DepartmentProfile,
                           AttendanceRegularization, AttendanceRecord, GeoFence,
-                          ShiftAssignment, Shift, LeaveRequest, LeaveAllocation,
+                          ShiftAssignment, Shift, LeaveEncashment, LeaveRequest, LeaveAllocation,
                           LeaveType, PublicHoliday, EmployeeProfile, Designation, JobGrade):
                 model.objects.filter(tenant=tenant).delete()
 
@@ -282,6 +283,21 @@ class Command(BaseCommand):
                 end_date=today + datetime.timedelta(days=8),
                 reason="Medical appointment.", status="pending")
 
+        # --- Leave encashment (3.10): requests to encash unused, encashable (Annual) leave ---
+        encashable_type = next((lt for lt in leave_types if lt.encashable), None)
+        if employees and encashable_type:
+            for idx, emp in enumerate(employees[:2]):
+                if LeaveEncashment.objects.filter(
+                        tenant=tenant, employee=emp, leave_type=encashable_type, year=year).exists():
+                    continue
+                rate = Decimal("120.00")
+                if emp.designation_id and emp.designation and emp.designation.min_salary:
+                    rate = (emp.designation.min_salary / Decimal("30")).quantize(Decimal("0.01"))
+                LeaveEncashment.objects.create(
+                    tenant=tenant, employee=emp, leave_type=encashable_type, year=year,
+                    days=Decimal("3"), rate_per_day=rate,
+                    status="pending" if idx == 0 else "draft")
+
         # --- Public holidays ---
         for month, day, name, optional in HOLIDAYS:
             PublicHoliday.objects.get_or_create(
@@ -352,7 +368,8 @@ class Command(BaseCommand):
             f"{LeaveAllocation.objects.filter(tenant=tenant).count()} allocations, "
             f"{AttendanceRecord.objects.filter(tenant=tenant).count()} attendance rows, "
             f"{GeoFence.objects.filter(tenant=tenant).count()} geofences, "
-            f"{AttendanceRegularization.objects.filter(tenant=tenant).count()} regularizations."))
+            f"{AttendanceRegularization.objects.filter(tenant=tenant).count()} regularizations, "
+            f"{LeaveEncashment.objects.filter(tenant=tenant).count()} encashments."))
 
     @transaction.atomic
     def _seed_org_structure(self, tenant, *, flush):
