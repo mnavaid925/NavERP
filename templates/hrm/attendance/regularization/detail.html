@@ -44,23 +44,27 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Approval</h2></div>
       <div class="card-body">
-        <p class="form-help privileged-note" style="margin-bottom:1rem;"><i data-lucide="shield"></i> Approving overwrites the linked punch with the requested times and flags it Regularized. Admin only.</p>
-        <form method="post" action="{% url 'hrm:attendanceregularization_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this regularization and update the punch?');">
-          {% csrf_token %}
-          <div class="form-group">
-            <label class="form-label" for="id_decision_note_a">Decision note</label>
-            <textarea id="id_decision_note_a" name="decision_note" class="form-textarea" placeholder="Note (optional)"></textarea>
-          </div>
-          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
-        </form>
-        <form method="post" action="{% url 'hrm:attendanceregularization_reject' obj.pk %}">
-          {% csrf_token %}
-          <div class="form-group">
-            <label class="form-label" for="id_decision_note_r">Reject reason</label>
-            <textarea id="id_decision_note_r" name="decision_note" class="form-textarea" placeholder="Reason (optional)"></textarea>
-          </div>
-          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
-        </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <p class="form-help privileged-note" style="margin-bottom:1rem;"><i data-lucide="shield"></i> Approving overwrites the linked punch with the requested times and flags it Regularized.</p>
+          <form method="post" action="{% url 'hrm:attendanceregularization_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this regularization and update the punch?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_note_a">Decision note</label>
+              <textarea id="id_decision_note_a" name="decision_note" class="form-textarea" placeholder="Note (optional)"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'hrm:attendanceregularization_reject' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_note_r">Reject reason</label>
+              <textarea id="id_decision_note_r" name="decision_note" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to approve or reject this request.</span>
+        {% endif %}
       </div>
     </div>
   {% endif %}
