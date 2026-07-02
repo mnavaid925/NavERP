@@ -34,5 +34,27 @@
     </dl>
   </div></div>
 
+  {% if regularizations %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Regularization Requests</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Reason</th><th>Requested In</th><th>Requested Out</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for reg in regularizations %}
+              <tr>
+                <td><a href="{% url 'hrm:attendanceregularization_detail' reg.pk %}" class="fw-600">{{ reg.number }}</a></td>
+                <td>{{ reg.get_reason_type_display }}</td>
+                <td>{{ reg.requested_check_in|default:"—" }}</td>
+                <td>{{ reg.requested_check_out|default:"—" }}</td>
+                <td><span class="badge badge-{% if reg.status == 'pending' %}amber{% elif reg.status == 'approved' %}green{% elif reg.status == 'rejected' %}red{% elif reg.status == 'cancelled' %}muted{% elif reg.status == 'draft' %}info{% else %}muted{% endif %}">{{ reg.get_status_display }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
   <a href="{% url 'hrm:attendancerecord_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
 {% endblock %}
