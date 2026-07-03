@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Project Time Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Project Time</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:timesheet_list' %}">Timesheets</a><span class="sep">›</span><span>Project Time</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:timesheet_utilization_report' %}" class="btn btn-outline"><i data-lucide="pie-chart"></i> Utilization</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Logged hours by project</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Project</th><th>Name</th><th>Logged Hours</th><th>Billable Hours</th><th>Budget</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td class="fw-600">{{ r.number }}</td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.hours }}</td>
+              <td>{{ r.billable_hours }}</td>
+              <td>{{ r.budget }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="folder-kanban"></i><h3>No project time logged</h3><p>Tag timesheet entries to a project to see logged hours here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:timesheet_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to timesheets</a>
+{% endblock %}
