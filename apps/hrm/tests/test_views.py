@@ -991,3 +991,302 @@ class TestAttendanceDateRangeFilter:
         resp = client_a.get(reverse("hrm:attendancerecord_list") + "?date_to=2026-06-15")
         pks = [obj.pk for obj in resp.context["object_list"]]
         assert attendance_a.pk not in pks
+
+
+# ================================================================ Holiday Policies (3.12)
+class TestHolidayPolicyListView:
+    def test_list_200(self, client_a, default_holiday_policy_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, default_holiday_policy_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert default_holiday_policy_a.pk in pks
+
+
+class TestHolidayPolicyCreateView:
+    def test_get_200(self, client_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_create"))
+        assert resp.status_code == 200
+
+    def test_post_creates(self, client_a, tenant_a):
+        from apps.hrm.models import HolidayPolicy
+        resp = client_a.post(reverse("hrm:holidaypolicy_create"), {
+            "name": "Remote Staff Policy",
+            "location": "",
+            "org_unit": "",
+            "employee_type": "",
+            "designation": "",
+            "is_default": "",
+            "floating_holiday_quota": "2",
+            "holidays": [],
+            "is_active": "on",
+            "description": "",
+        })
+        assert resp.status_code == 302
+        assert HolidayPolicy.objects.filter(tenant=tenant_a, name="Remote Staff Policy").exists()
+
+
+class TestHolidayPolicyDetailAndEdit:
+    def test_detail_200(self, client_a, default_holiday_policy_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_detail", args=[default_holiday_policy_a.pk]))
+        assert resp.status_code == 200
+
+    def test_detail_context(self, client_a, default_holiday_policy_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_detail", args=[default_holiday_policy_a.pk]))
+        assert "obj" in resp.context
+        assert "policy_holidays" in resp.context
+        assert "recent_elections" in resp.context
+
+    def test_edit_get_200(self, client_a, default_holiday_policy_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_edit", args=[default_holiday_policy_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_updates(self, client_a, default_holiday_policy_a):
+        resp = client_a.post(
+            reverse("hrm:holidaypolicy_edit", args=[default_holiday_policy_a.pk]), {
+                "name": "Company Default Updated",
+                "location": "",
+                "org_unit": "",
+                "employee_type": "",
+                "designation": "",
+                "is_default": "on",
+                "floating_holiday_quota": "3",
+                "holidays": [],
+                "is_active": "on",
+                "description": "",
+            })
+        assert resp.status_code == 302
+        default_holiday_policy_a.refresh_from_db()
+        assert default_holiday_policy_a.name == "Company Default Updated"
+        assert default_holiday_policy_a.floating_holiday_quota == 3
+
+
+class TestHolidayPolicyDeleteView:
+    def test_post_deletes(self, client_a, default_holiday_policy_a):
+        from apps.hrm.models import HolidayPolicy
+        pk = default_holiday_policy_a.pk
+        resp = client_a.post(reverse("hrm:holidaypolicy_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not HolidayPolicy.objects.filter(pk=pk).exists()
+
+    def test_get_not_allowed(self, client_a, default_holiday_policy_a):
+        resp = client_a.get(reverse("hrm:holidaypolicy_delete", args=[default_holiday_policy_a.pk]))
+        assert resp.status_code == 405
+
+
+# ================================================================ Floating Holiday Elections (3.12)
+class TestFloatingHolidayElectionListView:
+    def test_list_200(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert pending_election_a.pk in pks
+
+    def test_list_has_status_choices(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_list"))
+        assert "status_choices" in resp.context
+
+
+class TestFloatingHolidayElectionCreateView:
+    def test_get_200(self, client_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_create"))
+        assert resp.status_code == 200
+
+    def test_post_creates_and_auto_resolves_policy(
+        self, client_a, tenant_a, employee_a, optional_holiday_a, default_holiday_policy_a
+    ):
+        from apps.hrm.models import FloatingHolidayElection
+        resp = client_a.post(reverse("hrm:floatingholidayelection_create"), {
+            "employee": employee_a.pk,
+            "holiday": optional_holiday_a.pk,
+            "policy": "",
+            "note": "",
+        })
+        assert resp.status_code == 302
+        election = FloatingHolidayElection.objects.filter(
+            tenant=tenant_a, employee=employee_a, holiday=optional_holiday_a
+        ).first()
+        assert election is not None
+        assert election.status == "pending"
+        assert election.policy_id == default_holiday_policy_a.pk
+
+    def test_post_non_optional_holiday_rejected(self, client_a, employee_a, holiday_a):
+        """Electing a non-optional holiday must fail form validation (clean() ValidationError),
+        re-rendering the form rather than redirecting."""
+        from apps.hrm.models import FloatingHolidayElection
+        resp = client_a.post(reverse("hrm:floatingholidayelection_create"), {
+            "employee": employee_a.pk,
+            "holiday": holiday_a.pk,
+            "policy": "",
+            "note": "",
+        })
+        # holiday_a isn't in the form's optional-only queryset, so this is an invalid-choice form error.
+        assert resp.status_code == 200
+        assert not FloatingHolidayElection.objects.filter(employee=employee_a, holiday=holiday_a).exists()
+
+    def test_post_exceeding_quota_rejected(
+        self, client_a, tenant_a, employee_a, optional_holiday_a, optional_holiday_a2,
+        default_holiday_policy_a
+    ):
+        from apps.hrm.models import FloatingHolidayElection
+        FloatingHolidayElection.objects.create(
+            tenant=tenant_a, employee=employee_a, holiday=optional_holiday_a, status="pending",
+        )
+        resp = client_a.post(reverse("hrm:floatingholidayelection_create"), {
+            "employee": employee_a.pk,
+            "holiday": optional_holiday_a2.pk,
+            "policy": "",
+            "note": "",
+        })
+        assert resp.status_code == 200  # form re-rendered with the quota ValidationError
+        form = resp.context.get("form")
+        assert form is not None and not form.is_valid()
+        assert not FloatingHolidayElection.objects.filter(
+            employee=employee_a, holiday=optional_holiday_a2
+        ).exists()
+
+
+class TestFloatingHolidayElectionDetailAndEdit:
+    def test_detail_200(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_detail", args=[pending_election_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_get_200_when_pending(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_edit", args=[pending_election_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_updates_when_pending(self, client_a, pending_election_a, employee_a, optional_holiday_a):
+        resp = client_a.post(
+            reverse("hrm:floatingholidayelection_edit", args=[pending_election_a.pk]), {
+                "employee": employee_a.pk,
+                "holiday": optional_holiday_a.pk,
+                "policy": "",
+                "note": "Updated note",
+            })
+        assert resp.status_code == 302
+        pending_election_a.refresh_from_db()
+        assert pending_election_a.note == "Updated note"
+
+    def test_edit_blocked_when_approved(
+        self, client_a, tenant_a, employee_a, optional_holiday_a, default_holiday_policy_a
+    ):
+        """A decided (approved) election is locked — edit redirects to detail, row unchanged."""
+        from apps.hrm.models import FloatingHolidayElection
+        election = FloatingHolidayElection.objects.create(
+            tenant=tenant_a, employee=employee_a, holiday=optional_holiday_a, status="approved",
+        )
+        resp = client_a.post(
+            reverse("hrm:floatingholidayelection_edit", args=[election.pk]), {
+                "employee": employee_a.pk,
+                "holiday": optional_holiday_a.pk,
+                "policy": "",
+                "note": "Sneaky edit",
+            })
+        assert resp.status_code == 302
+        assert resp.url == reverse("hrm:floatingholidayelection_detail", args=[election.pk])
+        election.refresh_from_db()
+        assert election.note != "Sneaky edit"
+
+
+class TestFloatingHolidayElectionDeleteView:
+    def test_post_deletes_when_pending(self, client_a, pending_election_a):
+        from apps.hrm.models import FloatingHolidayElection
+        pk = pending_election_a.pk
+        resp = client_a.post(reverse("hrm:floatingholidayelection_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not FloatingHolidayElection.objects.filter(pk=pk).exists()
+
+    def test_get_not_allowed(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_delete", args=[pending_election_a.pk]))
+        assert resp.status_code == 405
+
+    def test_delete_blocked_when_approved(
+        self, client_a, tenant_a, employee_a, optional_holiday_a
+    ):
+        """A decided (approved) election cannot be deleted via direct POST."""
+        from apps.hrm.models import FloatingHolidayElection
+        election = FloatingHolidayElection.objects.create(
+            tenant=tenant_a, employee=employee_a, holiday=optional_holiday_a, status="approved",
+        )
+        resp = client_a.post(reverse("hrm:floatingholidayelection_delete", args=[election.pk]))
+        assert resp.status_code == 302
+        assert resp.url == reverse("hrm:floatingholidayelection_detail", args=[election.pk])
+        assert FloatingHolidayElection.objects.filter(pk=election.pk).exists()
+
+
+class TestFloatingHolidayElectionApproveReject:
+    def test_approve_sets_status_and_approver(self, client_a, admin_user, pending_election_a):
+        resp = client_a.post(
+            reverse("hrm:floatingholidayelection_approve", args=[pending_election_a.pk])
+        )
+        assert resp.status_code == 302
+        pending_election_a.refresh_from_db()
+        assert pending_election_a.status == "approved"
+        assert pending_election_a.approved_by_id == admin_user.pk
+        assert pending_election_a.approved_at is not None
+
+    def test_reject_sets_status_and_note(self, client_a, admin_user, pending_election_a):
+        resp = client_a.post(
+            reverse("hrm:floatingholidayelection_reject", args=[pending_election_a.pk]),
+            {"note": "Insufficient coverage"},
+        )
+        assert resp.status_code == 302
+        pending_election_a.refresh_from_db()
+        assert pending_election_a.status == "rejected"
+        assert pending_election_a.approved_by_id == admin_user.pk
+        assert pending_election_a.note == "Insufficient coverage"
+
+    def test_approve_get_not_allowed(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_approve", args=[pending_election_a.pk]))
+        assert resp.status_code == 405
+
+    def test_reject_get_not_allowed(self, client_a, pending_election_a):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_reject", args=[pending_election_a.pk]))
+        assert resp.status_code == 405
+
+    def test_approve_already_decided_is_noop(self, client_a, tenant_a, employee_a, optional_holiday_a):
+        """Approving an already-rejected election must not flip it back to approved (only acts on pending)."""
+        from apps.hrm.models import FloatingHolidayElection
+        election = FloatingHolidayElection.objects.create(
+            tenant=tenant_a, employee=employee_a, holiday=optional_holiday_a, status="rejected",
+        )
+        resp = client_a.post(reverse("hrm:floatingholidayelection_approve", args=[election.pk]))
+        assert resp.status_code == 302
+        election.refresh_from_db()
+        assert election.status == "rejected"
+
+
+class TestFloatingHolidayElectionPermissions:
+    def test_non_admin_cannot_approve(self, member_client, pending_election_a):
+        resp = member_client.post(
+            reverse("hrm:floatingholidayelection_approve", args=[pending_election_a.pk])
+        )
+        assert resp.status_code == 403
+        pending_election_a.refresh_from_db()
+        assert pending_election_a.status == "pending"
+
+    def test_non_admin_cannot_reject(self, member_client, pending_election_a):
+        resp = member_client.post(
+            reverse("hrm:floatingholidayelection_reject", args=[pending_election_a.pk]),
+            {"note": "Attempt"},
+        )
+        assert resp.status_code == 403
+        pending_election_a.refresh_from_db()
+        assert pending_election_a.status == "pending"
+
+
+class TestHolidayPolicyQueryCount:
+    def test_detail_bounded_queries(self, client_a, default_holiday_policy_a, django_assert_max_num_queries):
+        with django_assert_max_num_queries(15):
+            client_a.get(reverse("hrm:holidaypolicy_detail", args=[default_holiday_policy_a.pk]))
+
+
+class TestFloatingHolidayElectionQueryCount:
+    def test_list_bounded_queries(self, client_a, pending_election_a, django_assert_max_num_queries):
+        with django_assert_max_num_queries(15):
+            client_a.get(reverse("hrm:floatingholidayelection_list"))
