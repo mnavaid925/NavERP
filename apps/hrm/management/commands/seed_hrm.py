@@ -41,8 +41,11 @@ from apps.hrm.models import (
     OnboardingTemplate,
     OnboardingTemplateTask,
     OrientationSession,
+    OvertimeRequest,
     PublicHoliday,
     RequisitionApproval,
+    Timesheet,
+    TimesheetEntry,
     SeparationCase,
     Shift,
     ShiftAssignment,
@@ -180,6 +183,7 @@ class Command(BaseCommand):
             self._seed_candidates(tenant, flush=options["flush"])
             self._seed_interviews(tenant, flush=options["flush"])
             self._seed_offers(tenant, flush=options["flush"])
+            self._seed_timetracking(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -1201,3 +1205,67 @@ class Command(BaseCommand):
             f"{BackgroundVerification.objects.filter(tenant=tenant).count()} background checks, "
             f"{PreboardingItem.objects.filter(tenant=tenant).count()} pre-boarding items, "
             f"{OfferLetterTemplate.objects.filter(tenant=tenant).count()} letter templates."))
+
+    @transaction.atomic
+    def _seed_timetracking(self, tenant, *, flush):
+        """Seed 3.11 Time Tracking demo data — 2 timesheets per (up to 3) seeded employee (one approved
+        last week, one pending this week), each with 4 ``TimesheetEntry`` lines against a seeded
+        ``accounting.Project`` where one exists (else free-text tasks + no project), plus 1 pending
+        ``OvertimeRequest``. Guarded on Timesheet existence; reuses existing EmployeeProfile +
+        accounting.Project — no duplicate masters. Totals set via ``refresh_totals()`` (never hand-typed)."""
+        from apps.accounting.models_advanced import Project
+
+        if flush:
+            OvertimeRequest.objects.filter(tenant=tenant).delete()
+            Timesheet.objects.filter(tenant=tenant).delete()  # cascades TimesheetEntry
+        if Timesheet.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Time-tracking data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party")[:3])
+        if not employees:
+            self.stdout.write(self.style.NOTICE(
+                f"No employees for '{tenant.name}' — skipping time-tracking seed (seed employees first)."))
+            return
+        project = Project.objects.filter(tenant=tenant).first()  # optional — may be None
+        today = datetime.date.today()
+        this_monday = today - datetime.timedelta(days=today.weekday())
+        last_monday = this_monday - datetime.timedelta(days=7)
+        tasks = ["Feature development", "Code review", "Client meeting", "Bug fixing", "Documentation"]
+
+        ts_count = entry_count = 0
+        for idx, emp in enumerate(employees):
+            for start, target in [(last_monday, "approved"), (this_monday, "pending")]:
+                ts = Timesheet.objects.create(
+                    tenant=tenant, employee=emp, period_start=start,
+                    period_end=start + datetime.timedelta(days=6), status="draft")
+                ts_count += 1
+                for d in range(4):  # Mon–Thu
+                    billable = (d % 2 == 0)
+                    TimesheetEntry.objects.create(
+                        tenant=tenant, timesheet=ts, date=start + datetime.timedelta(days=d),
+                        project=project if billable else None,
+                        task_description=tasks[(idx + d) % len(tasks)],
+                        hours=Decimal("8.00") if d < 3 else Decimal("6.00"),
+                        is_billable=billable,
+                        billable_rate=Decimal("75.00") if billable else Decimal("0"))
+                    entry_count += 1
+                ts.refresh_totals()
+                if target == "approved":
+                    ts.status, ts.approved_at = "approved", timezone.now()
+                    ts.save(update_fields=["status", "approved_at", "updated_at"])
+                else:
+                    ts.status = "pending"
+                    ts.save(update_fields=["status", "updated_at"])
+
+        first_approved = Timesheet.objects.filter(tenant=tenant, status="approved").order_by("period_start").first()
+        OvertimeRequest.objects.create(
+            tenant=tenant, employee=employees[0], timesheet=first_approved,
+            date=last_monday + datetime.timedelta(days=2), hours_claimed=Decimal("3.00"),
+            multiplier=Decimal("1.50"), payout_method="pay",
+            reason="Production incident response after hours.", status="pending")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Time-tracking seeded for '{tenant.name}': {ts_count} timesheets, {entry_count} entries, "
+            f"{OvertimeRequest.objects.filter(tenant=tenant).count()} overtime requests."))
