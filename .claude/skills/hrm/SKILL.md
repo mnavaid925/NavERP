@@ -38,7 +38,9 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 | `Timesheet` (3.11) | `TS-` | employee, period_start, period_end, **total_hours**/**billable_hours**(editable=False), status(draft/pending/approved/rejected/cancelled), approver, approved_at, decision_note, rejected_reason | Weekly header. `total_hours`/`billable_hours` **derived** — recomputed by `refresh_totals()` (one `entries.aggregate(Sum, Sum filter=is_billable)`) after every entry add/edit/delete + on approve; never hand-typed. `clean()`: end≥start + (on edit) the period must still cover every existing entry. `OPEN_STATUSES=(draft,pending)`; unique (tenant,employee,period_start); indexes (tenant,employee,status)/(tenant,status)/(tenant,period_start) |
 | `TimesheetEntry` (3.11) | — | timesheet→`Timesheet`(CASCADE, related_name=entries), date, **project→`accounting.Project`**(SET_NULL, optional), task_description(free text), hours, is_billable, billable_rate, notes | Inline child line managed on the timesheet hub (POST `timesheetentry_add/_edit/_delete`), **locked once the timesheet is approved** (view guard). `clean()`: hours>0 + date within parent period. Derived `billable_value` (hours×rate when billable). Reuses the 2.9 job-costing `accounting.Project` (task FK deferred to Module 7). Indexes (tenant,timesheet)/(tenant,project)/(tenant,date) |
 | `OvertimeRequest` (3.11) | `OT-` | employee, timesheet→`Timesheet`(SET_NULL, optional), date, hours_claimed, multiplier(default 1.50), payout_method(pay/comp_leave), reason, status(draft/pending/approved/rejected/cancelled), approver, approved_at, decision_note | OT claim; derived `overtime_pay_equivalent_hours` (hours×multiplier) — no stored currency amount (no pay-rate source until 3.13). `clean()`: hours_claimed>0 + linked timesheet must be the same employee. `OPEN_STATUSES=(draft,pending)`; indexes (tenant,employee,status)/(tenant,status)/(tenant,date) |
-| `PublicHoliday` | — | date, name, is_optional | non-optional holidays excluded from leave `days`; `unique_together=(tenant,date,name)` |
+| `PublicHoliday` (3.12) | — | date, name, is_optional, **category**(national/regional/company/observance) | non-optional holidays excluded from leave `days`; optional (floating) holidays are elected via `FloatingHolidayElection`, not auto-off; `unique_together=(tenant,date,name)`; index (tenant,date) |
+| `HolidayPolicy` (3.12) | — | name, location(free-text, contains-match vs `EmployeeProfile.work_location`), org_unit→`core.OrgUnit`, employee_type(reuses `EmployeeProfile.EMPLOYEE_TYPE_CHOICES`), designation→`Designation`, is_default, floating_holiday_quota, **holidays**(M2M→`PublicHoliday`), is_active, description | Location/eligibility-scoped policy. Classmethod **`for_employee(employee)`** resolves the governing policy: each SET scope field must match the employee (blank=wildcard), most matched fields wins, `is_default` breaks ties → falls back to the default → else `None`. `unique_together=(tenant,name)`; index (tenant,is_default) |
+| `FloatingHolidayElection` (3.12) | — | employee, holiday(must be `is_optional=True`), policy→`HolidayPolicy`(auto-resolved), status(pending/approved/rejected), requested_on, **approved_by**(editable=False), approved_at(editable=False), note | Employee elects an optional holiday. `clean()`: only optional holidays are electable; quota check counts the employee's pending+approved elections in the holiday's year vs the resolved policy's `floating_holiday_quota` (tenant derived from the employee — instance tenant is unset pre-validation on create). `save()` auto-resolves `policy` when blank (`clean()` stores it so `save()` doesn't re-scan). Approve/reject workflow (`@tenant_admin_required` + `@require_POST`); edit/delete locked once decided (status≠pending). `unique_together=(tenant,employee,holiday)`; indexes (tenant,employee,status)/(tenant,status) |
 | `Shift` | — | name, start_time, end_time, grace_minutes, is_default, is_active | overnight shifts allowed (end < start) |
 | `ShiftAssignment` | — | employee, shift, effective_from, effective_to(null=ongoing) | `clean()`: effective_to ≥ effective_from; `unique_together=(tenant,employee,effective_from)` |
 | `AttendanceRecord` | `ATT-` | employee, date, check_in, check_out, **hours_worked**(editable=False), shift, status(present/absent/half_day/on_leave/holiday/regularized), source(web/mobile/biometric/manual), **latitude, longitude, geofence→`GeoFence`(SET_NULL)** (3.9 geofencing), notes | `save()` recomputes `hours_worked` (handles overnight); `is_late()` (minutes-of-day vs shift start+grace); **`has_geo()`**, **`geo_status()`** → `verified`/`outside`/`""` (DERIVED, checks the zone's live radius regardless of `is_active`); `clean()`: lat/long are a pair (both or neither), a geofence needs coords; `unique_together` also (tenant,employee,date); index (tenant,geofence) |
@@ -160,6 +162,9 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   are created/managed in `core:orgunit_list`; the HRM pages enrich them (head/owner/budget/code). Delete removes
   only the companion row, never the OrgUnit.
 - Leave workflow extras: `hrm:leaverequest_submit/_approve/_reject/_cancel` (all POST-only).
+- **Holiday Management (3.12):** floating-holiday election workflow `hrm:floatingholidayelection_approve/_reject`
+  (POST-only, `@tenant_admin_required`; reject reads a `note` from POST); `_edit`/`_delete` are locked once the
+  election is decided (status≠pending → redirect to detail). Public holidays + holiday policies are plain CRUD.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -329,7 +334,7 @@ the merge-token reference], each with `list/detail/form.html`; the reusable `off
 standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirrors `relieving_letter.html`];
 `OfferApproval` + `PreboardingItem` render inline on the offer hub, no own templates)**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/ encashment/` + the standalone engine page `leave/policy.html`), `timetracking/` (3.11 — `timesheet/ timesheetentry/ overtimerequest/` + standalone `utilization_report.html`/`project_time_report.html`),
-`holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
+`holiday/` (3.12 — `publicholiday/ holidaypolicy/ floatingholidayelection/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
@@ -399,7 +404,7 @@ label)` helper backs all four upload guards (and `_validate_resume`).
 has `EmployeeProfile` rows). Per tenant: 3 designations, up to 5 employees **reusing existing `core.Party`
 persons** (tops up with unique names if too few), 4 leave types + allocations, 2 leave requests (1 approved/1
 pending), **2 leave encashments** (1 pending / 1 draft on the encashable Annual type, rate = designation
-min_salary/30), 5 holidays, 2 shifts + assignments, 5 attendance rows/employee (present punches tagged to the HQ
+min_salary/30), 6 holidays (2 optional/floating) + **2 holiday policies** (Company Default quota-2 + Full-Time Staff quota-1, each with an optional-holiday pool) + **2 floating-holiday elections** (1 approved w/ actor, 1 pending), 2 shifts + assignments, 5 attendance rows/employee (present punches tagged to the HQ
 geofence — one outside/rest verified), **2 geofences** (HQ + client site) and **2 attendance regularizations**
 (1 pending / 1 draft on the absent punches) per tenant. **Org structure (3.2)** is seeded by a
 separate `_seed_org_structure(tenant)` (guarded by its own `JobGrade.exists()` check): 5 job grades (G1–M2), links
@@ -487,7 +492,8 @@ tenant and sees nothing.
 - 3.11: Timesheet + Project Time Tracking → `hrm:timesheet_list`; Billable Hours → `hrm:timesheet_utilization_report`;
   Overtime Tracking → `hrm:overtimerequest_list`; Timesheet Approval → `hrm:timesheet_list?status=pending`;
   + Project Time Report → `hrm:project_time_report` (extra). All 5 NavERP.md 3.11 bullets are now live.
-- 3.12: Holiday Calendar → `hrm:publicholiday_list`.
+- 3.12: Holiday Calendar → `hrm:publicholiday_list`; Floating Holidays → `hrm:floatingholidayelection_list`;
+  Holiday Policies → `hrm:holidaypolicy_list`. All 3 NavERP.md 3.12 bullets are now live.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -532,6 +538,12 @@ full rate-card matrix (client×project×role — the entry-level `billable_rate`
 profitability/margin reporting; OT payroll payout / comp-leave auto-credit to `LeaveAllocation` (`payout_method`
 captures intent only); multi-jurisdiction OT compliance thresholds; `OvertimeRequestForm.timesheet` dropdown
 dynamic-scoping to the selected employee (the model `clean()` catches a mismatch server-side today).
+**3.12 Holiday Management deferrals:** bulk/country holiday import (CSV / "duplicate previous year"); weekend-observance
+auto-shift; auto-reprocessing of overlapping `LeaveRequest`s when a holiday changes; holiday reminder emails;
+iCal/Outlook/Google calendar sync + subscribable feeds; public/private visibility toggle + "Who's Out" widget;
+SAP-style temporary/travel calendar override (the most-specific-match `HolidayPolicy.for_employee` resolution already
+covers location differences without a per-trip object); controlled reason/occasion-code taxonomy for elections
+(free-text `note` this pass); hard election-deadline/cutoff scheduler.
 **3.1 employee-records deferrals:** lifecycle event → `core.Employment`/`EmployeeProfile` auto-sync (v1 records the
 timeline only), document expiry email/push reminders (needs Celery/SMTP), normalized `EmployeeAddress` table (v1 is
 free-text), OCR/AI document extraction + e-signature on personnel docs, `work_location` FK→`core.OrgUnit(branch)`.
@@ -580,7 +592,7 @@ Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT dupl
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
 upgrade, evergreen auto-reopen), performance/goals (3.18/3.19), timesheets (3.11, coordinate with `accounting.Project`),
-statutory/tax (3.13–3.17), optional-holiday selection, employee self-service portal, and a per-employee↔user link
+statutory/tax (3.13–3.17), employee self-service portal, and a per-employee↔user link
 for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
 **3.10 Leave Policy deferrals:** the accrual/carry-forward run engine is O(employees × leave-types) `get_or_create`
 + per-row `save()` (fine at demo scale, atomic + idempotent) — move to a prefetch-dict + `bulk_create`/`bulk_update`
