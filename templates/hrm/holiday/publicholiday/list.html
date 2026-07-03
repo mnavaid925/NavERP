@@ -18,6 +18,14 @@
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search holidays…">
         </div>
         <div class="form-group">
+          <select name="category" class="form-select">
+            <option value="">All categories</option>
+            {% for value, label in category_choices %}
+              <option value="{{ value }}" {% if request.GET.category == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="is_optional" class="form-select">
             <option value="">All types</option>
             <option value="True" {% if request.GET.is_optional == 'True' %}selected{% endif %}>Optional</option>
@@ -39,13 +47,19 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Date</th><th>Day</th><th>Name</th><th>Type</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Date</th><th>Day</th><th>Name</th><th>Category</th><th>Type</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
               <td>{{ obj.date }}</td>
               <td>{{ obj.date|date:"l" }}</td>
               <td><a href="{% url 'hrm:publicholiday_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>
+                {% if obj.category == 'national' %}<span class="badge badge-info">{{ obj.get_category_display }}</span>
+                {% elif obj.category == 'regional' %}<span class="badge badge-warning">{{ obj.get_category_display }}</span>
+                {% elif obj.category == 'company' %}<span class="badge badge-success">{{ obj.get_category_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_category_display }}</span>{% endif %}
+              </td>
               <td>{% if obj.is_optional %}<span class="badge badge-info">Optional</span>{% else %}<span class="badge badge-muted">Public</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
@@ -59,7 +73,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="5"><div class="empty-state"><i data-lucide="calendar"></i><h3>No holidays found</h3><p>Add your first public holiday to get started.</p></div></td></tr>
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="calendar"></i><h3>No holidays found</h3><p>Add your first public holiday to get started.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
