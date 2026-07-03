@@ -352,6 +352,15 @@ LIVE_LINKS = {
         "Leave Calendar": "hrm:leaverequest_list",       # bullet (request list as calendar source)
         "Leave Encashment": "hrm:leaveencashment_list",  # extra (encash unused balance → payout workflow)
     },
+    # 3.11 Time Tracking
+    "3.11": {
+        "Timesheet": "hrm:timesheet_list",                          # bullet
+        "Project Time Tracking": "hrm:timesheet_list",              # bullet (entries logged on the timesheet hub)
+        "Billable Hours": "hrm:timesheet_utilization_report",       # bullet (billable/utilization report)
+        "Overtime Tracking": "hrm:overtimerequest_list",            # bullet
+        "Timesheet Approval": "hrm:timesheet_list?status=pending",  # bullet (pending-approval queue)
+        "Project Time Report": "hrm:project_time_report",           # extra (logged hours vs project budget)
+    },
     # 3.4 Employee Offboarding — resignation→clearance→F&F→letters. Experience Letter opens the
     # dedicated letters landing page (eligible cases + relieving/experience letter actions).
     "3.4": {
