@@ -305,6 +305,91 @@ def holiday_a(db, tenant_a):
     )
 
 
+# ------------------------------------------------------------------ 3.12 Holiday Management fixtures
+@pytest.fixture
+def optional_holiday_a(db, tenant_a):
+    """An optional (floating) public holiday for tenant_a, same year as holiday_a."""
+    from apps.hrm.models import PublicHoliday
+    return PublicHoliday.objects.create(
+        tenant=tenant_a,
+        date=datetime.date(2026, 10, 20),
+        name="Diwali",
+        is_optional=True,
+    )
+
+
+@pytest.fixture
+def optional_holiday_a2(db, tenant_a):
+    """A second optional (floating) public holiday for tenant_a, same year."""
+    from apps.hrm.models import PublicHoliday
+    return PublicHoliday.objects.create(
+        tenant=tenant_a,
+        date=datetime.date(2026, 12, 24),
+        name="Christmas Eve",
+        is_optional=True,
+    )
+
+
+@pytest.fixture
+def optional_holiday_b(db, tenant_b):
+    """An optional public holiday belonging to tenant_b (IDOR / isolation tests)."""
+    from apps.hrm.models import PublicHoliday
+    return PublicHoliday.objects.create(
+        tenant=tenant_b,
+        date=datetime.date(2026, 10, 20),
+        name="Diwali B",
+        is_optional=True,
+    )
+
+
+@pytest.fixture
+def default_holiday_policy_a(db, tenant_a):
+    """The tenant-wide default HolidayPolicy for tenant_a — quota=1."""
+    from apps.hrm.models import HolidayPolicy
+    return HolidayPolicy.objects.create(
+        tenant=tenant_a,
+        name="Company Default",
+        is_default=True,
+        floating_holiday_quota=1,
+    )
+
+
+@pytest.fixture
+def holiday_policy_b(db, tenant_b):
+    """A HolidayPolicy belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import HolidayPolicy
+    return HolidayPolicy.objects.create(
+        tenant=tenant_b,
+        name="Globex Default",
+        is_default=True,
+        floating_holiday_quota=2,
+    )
+
+
+@pytest.fixture
+def pending_election_a(db, tenant_a, employee_a, optional_holiday_a, default_holiday_policy_a):
+    """A pending FloatingHolidayElection for employee_a/tenant_a."""
+    from apps.hrm.models import FloatingHolidayElection
+    return FloatingHolidayElection.objects.create(
+        tenant=tenant_a,
+        employee=employee_a,
+        holiday=optional_holiday_a,
+        status="pending",
+    )
+
+
+@pytest.fixture
+def election_b(db, tenant_b, employee_b, optional_holiday_b, holiday_policy_b):
+    """A pending FloatingHolidayElection belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import FloatingHolidayElection
+    return FloatingHolidayElection.objects.create(
+        tenant=tenant_b,
+        employee=employee_b,
+        holiday=optional_holiday_b,
+        status="pending",
+    )
+
+
 # ------------------------------------------------------------------ 3.11 Time Tracking fixtures
 @pytest.fixture
 def project_a(db, tenant_a):
