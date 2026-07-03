@@ -1183,13 +1183,6 @@ def leave_carryforward_run(request):
 
 
 # ============================================================ Timesheets (3.11)
-def _flash_form_errors(request, form):
-    for field, errs in form.errors.items():
-        for e in errs:
-            label = "Form" if field == "__all__" else field
-            messages.error(request, f"{label}: {e}")
-
-
 @login_required
 def timesheet_list(request):
     qs = (Timesheet.objects.filter(tenant=request.tenant)
@@ -1324,9 +1317,14 @@ def timesheetentry_add(request, ts_pk):
         ts.refresh_totals()
         write_audit_log(request.user, ts, "update", {"action": "entry_add"})
         messages.success(request, "Entry added.")
-    else:
-        _flash_form_errors(request, form)
-    return redirect("hrm:timesheet_detail", pk=ts.pk)
+        return redirect("hrm:timesheet_detail", pk=ts.pk)
+    # Re-render the hub with the bound, errored add-form so field errors + typed input are preserved.
+    return render(request, "hrm/timetracking/timesheet/detail.html", {
+        "obj": ts,
+        "entries": ts.entries.select_related("project").order_by("date"),
+        "entry_form": form,
+        "can_edit_entries": True,
+    })
 
 
 @login_required
