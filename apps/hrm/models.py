@@ -618,6 +618,12 @@ class Timesheet(TenantNumbered):
         super().clean()
         if self.period_start and self.period_end and self.period_end < self.period_start:
             raise ValidationError({"period_end": "Period end cannot be before period start."})
+        # On edit, the (possibly narrowed) period must still cover every existing entry's date —
+        # otherwise a header edit could strand entries outside the period the entry clean() enforces.
+        if self.pk and self.period_start and self.period_end:
+            if self.entries.exclude(date__gte=self.period_start, date__lte=self.period_end).exists():
+                raise ValidationError({"period_start": "This period no longer covers existing time "
+                                       "entries — adjust or remove those entries first."})
 
     def refresh_totals(self, save=True):
         """Recompute total/billable hours from the child entries in a single aggregate pass.
@@ -727,6 +733,9 @@ class OvertimeRequest(TenantNumbered):
         super().clean()
         if (self.hours_claimed or ZERO) <= ZERO:
             raise ValidationError({"hours_claimed": "Overtime hours must be greater than zero."})
+        # A linked timesheet must belong to the same employee (both are tenant-scoped independently).
+        if self.timesheet_id and self.employee_id and self.timesheet.employee_id != self.employee_id:
+            raise ValidationError({"timesheet": "The linked timesheet belongs to a different employee."})
 
     @property
     def overtime_pay_equivalent_hours(self):
