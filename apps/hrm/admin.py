@@ -14,7 +14,9 @@ from .models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    FloatingHolidayElection,
     GeoFence,
+    HolidayPolicy,
     JobDescriptionTemplate,
     JobGrade,
     JobRequisition,
@@ -197,11 +199,31 @@ class OvertimeRequestAdmin(admin.ModelAdmin):
 
 @admin.register(PublicHoliday)
 class PublicHolidayAdmin(admin.ModelAdmin):
-    list_display = ("date", "name", "is_optional", "tenant")
-    list_filter = ("is_optional", "tenant")
+    list_display = ("date", "name", "category", "is_optional", "tenant")
+    list_filter = ("category", "is_optional", "tenant")
     search_fields = ("name",)
     ordering = ("date",)
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(HolidayPolicy)
+class HolidayPolicyAdmin(admin.ModelAdmin):
+    list_display = ("name", "tenant", "location", "org_unit", "employee_type", "designation",
+                    "is_default", "floating_holiday_quota", "is_active")
+    list_filter = ("tenant", "is_default", "is_active", "employee_type")
+    search_fields = ("name", "location")
+    raw_id_fields = ("org_unit", "designation")
+    filter_horizontal = ("holidays",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(FloatingHolidayElection)
+class FloatingHolidayElectionAdmin(admin.ModelAdmin):
+    list_display = ("employee", "holiday", "policy", "status", "requested_on", "approved_by", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("employee__party__name", "holiday__name")
+    raw_id_fields = ("employee", "holiday", "policy", "approved_by")
+    readonly_fields = ("approved_at", "created_at", "updated_at")
 
 
 @admin.register(Shift)
