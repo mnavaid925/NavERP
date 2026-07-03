@@ -49,7 +49,7 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays — 12 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **4,582 passing tests**.
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **4,661 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -349,10 +349,13 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   recomputed from entries, draft→pending→approved workflow, entries locked on approval), `TimesheetEntry` (inline
   time lines against an optional `accounting.Project` + billable flag/rate), and `OvertimeRequest` (`OT-`,
   hours × multiplier, pay-or-comp-leave); plus billable/utilization + project-time-vs-budget report pages.
-- **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
+- **3.12 Holiday Management** — `PublicHoliday` calendar (national/regional/company/observance **category** +
+  optional/floating flag), `HolidayPolicy` (location/department/employee-type/designation **eligibility** +
+  floating-holiday **quota** + a `for_employee` most-specific-match resolver), and `FloatingHolidayElection`
+  (employees elect optional holidays, quota-enforced in `clean()`, with a tenant-admin approve/reject workflow).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,935-test** HRM suite
-(**4,582 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **2,014-test** HRM suite
+(**4,661 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -586,9 +589,9 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **4,582 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **4,661 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
-  **Accounting 212**, **HRM 1,935**.
+  **Accounting 212**, **HRM 2,014**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
   (member → 403), forgot-password non-enumeration, invite token/expiry, encryption-key secrecy, branding hex
