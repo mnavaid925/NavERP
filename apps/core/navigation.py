@@ -370,9 +370,12 @@ LIVE_LINKS = {
         "F&F Settlement": "hrm:finalsettlement_list",          # bullet
         "Experience Letter": "hrm:offboarding_letters",        # bullet (relieving + experience letters)
     },
-    # 3.12 Holiday Management
+    # 3.12 Holiday Management — all 3 NavERP.md bullets now live: the calendar, per-employee
+    # floating-holiday elections (optional holidays + quota), and location/eligibility policies.
     "3.12": {
-        "Holiday Calendar": "hrm:publicholiday_list",    # bullet
+        "Holiday Calendar": "hrm:publicholiday_list",              # bullet
+        "Floating Holidays": "hrm:floatingholidayelection_list",   # bullet
+        "Holiday Policies": "hrm:holidaypolicy_list",              # bullet
     },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
