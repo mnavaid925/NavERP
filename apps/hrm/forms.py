@@ -45,7 +45,9 @@ from .models import (
     EmployeeProfile,
     ExitInterview,
     FinalSettlement,
+    FloatingHolidayElection,
     GeoFence,
+    HolidayPolicy,
     JobDescriptionTemplate,
     JobGrade,
     JobRequisition,
@@ -323,7 +325,54 @@ class OvertimeRequestForm(TenantModelForm):
 class PublicHolidayForm(TenantModelForm):
     class Meta:
         model = PublicHoliday
-        fields = ["date", "name", "is_optional"]
+        fields = ["date", "name", "is_optional", "category"]
+
+
+class HolidayPolicyForm(TenantModelForm):
+    class Meta:
+        model = HolidayPolicy
+        fields = ["name", "location", "org_unit", "employee_type", "designation",
+                  "is_default", "floating_holiday_quota", "holidays", "is_active", "description"]
+        widgets = {
+            "holidays": forms.CheckboxSelectMultiple,
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A policy only governs OPTIONAL (floating) holidays — narrow its pool to those (the base
+        # form already tenant-scopes every FK/M2M queryset).
+        if self.tenant is not None and "holidays" in self.fields:
+            self.fields["holidays"].queryset = (
+                PublicHoliday.objects.filter(tenant=self.tenant, is_optional=True).order_by("date"))
+        if self.tenant is not None and "designation" in self.fields:
+            self.fields["designation"].queryset = (
+                Designation.objects.filter(tenant=self.tenant).order_by("name"))
+
+
+class FloatingHolidayElectionForm(TenantModelForm):
+    # SECURITY: `status`, `approved_by`, `approved_at` are deliberately NOT form fields — a new
+    # election starts "pending" and all three are set only by the privileged approve/reject workflow
+    # actions (mirrors LeaveRequestForm). Exposing them would let a user self-approve via a crafted POST.
+    class Meta:
+        model = FloatingHolidayElection
+        fields = ["employee", "holiday", "policy", "note"]
+        widgets = {
+            "note": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only optional (floating) holidays are electable; policy auto-resolves in the model's save()
+        # if left blank, so it's optional on the form.
+        if self.tenant is not None and "holiday" in self.fields:
+            self.fields["holiday"].queryset = (
+                PublicHoliday.objects.filter(tenant=self.tenant, is_optional=True).order_by("date"))
+        if self.tenant is not None and "policy" in self.fields:
+            self.fields["policy"].queryset = (
+                HolidayPolicy.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+        if "policy" in self.fields:
+            self.fields["policy"].required = False
 
 
 class ShiftForm(TenantModelForm):
