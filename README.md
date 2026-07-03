@@ -261,9 +261,9 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12
 
-HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + holidays**, reusing the
+HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
 anchor; departments reuse `core.OrgUnit`. Payroll GL posting stays with `accounting.PayrollRun` (not duplicated
 here). Request-free domain logic (task generation, clearance-checklist generation, leave-encashment computation)
@@ -345,10 +345,14 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   non-optional holidays); a **Leave Policy engine** (idempotent admin accrual + year-end carry-forward runs over
   allocations); and `LeaveEncashment` (`ENC-`) to encash unused leave into a payout (draft→pending→approved→paid,
   approval consumes balance via `encashed_days` so a later accrual re-run can't restore cashed-out days).
+- **3.11 Time Tracking** — `Timesheet` (`TS-`, weekly header with **derived** `total_hours`/`billable_hours`
+  recomputed from entries, draft→pending→approved workflow, entries locked on approval), `TimesheetEntry` (inline
+  time lines against an optional `accounting.Project` + billable flag/rate), and `OvertimeRequest` (`OT-`,
+  hours × multiplier, pay-or-comp-leave); plus billable/utilization + project-time-vs-budget report pages.
 - **3.12 Holiday Management** — `PublicHoliday` calendar (optional/floating flag).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,775-test** HRM suite
-(**4,422 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **1,935-test** HRM suite
+(**4,582 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
