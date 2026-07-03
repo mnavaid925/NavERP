@@ -55,7 +55,7 @@
               <td><a href="{% url 'hrm:floatingholidayelection_detail' obj.pk %}" class="fw-600">{{ obj.employee.party.name }}</a></td>
               <td>{{ obj.holiday.name }} <span class="text-muted">({{ obj.holiday.date }})</span></td>
               <td>{% if obj.policy %}{{ obj.policy.name }}{% else %}—{% endif %}</td>
-              <td><span class="badge badge-{% if obj.status == 'approved' %}success{% elif obj.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% else %}amber{% endif %}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.requested_on }}</td>
               <td>
                 <div class="table-actions">
