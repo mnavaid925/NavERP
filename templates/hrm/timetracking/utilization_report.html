@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Utilization Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Billable Hours &amp; Utilization</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:timesheet_list' %}">Timesheets</a><span class="sep">›</span><span>Utilization</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:project_time_report' %}" class="btn btn-outline"><i data-lucide="folder-kanban"></i> Project Time</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Per-employee utilization (approved timesheets)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Total Hours</th><th>Billable Hours</th><th>Utilization</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td class="fw-600">{{ r.employee }}</td>
+              <td>{{ r.total }}</td>
+              <td>{{ r.billable }}</td>
+              <td>
+                <span class="badge badge-{% if r.utilization >= 70 %}green{% elif r.utilization >= 40 %}amber{% else %}red{% endif %}">{{ r.utilization }}%</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="pie-chart"></i><h3>No approved time yet</h3><p>Utilization is computed from approved timesheets' billable vs total hours.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:timesheet_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to timesheets</a>
+{% endblock %}
