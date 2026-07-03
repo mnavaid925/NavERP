@@ -294,4 +294,38 @@ masters; every FK points at `hrm.EmployeeProfile`, `hrm.Designation`, `core.OrgU
 
 ## Review
 
-(filled in at the end)
+**Delivered (2026-07-04):** HRM 3.12 Holiday Management **completed** — the two open NavERP.md bullets are now live
+alongside the pre-existing Holiday Calendar. Scope as planned: 1 enriched model + 2 new models.
+- **`PublicHoliday`** gained `category` (national/regional/company/observance) + a list filter/badge column.
+- **`HolidayPolicy`** (new) — location/org-unit/employee-type/designation **eligibility** + `floating_holiday_quota`
+  + `holidays` M2M pool + a `for_employee()` most-specific-match resolver (is_default tie-break). Full CRUD.
+- **`FloatingHolidayElection`** (new) — employees elect optional holidays; `clean()` enforces "only optional" +
+  the per-policy/year quota (tenant derived from the employee, since the instance tenant is unset during ModelForm
+  create-validation); `save()` auto-resolves the policy; tenant-admin **approve/reject** workflow; edit/delete
+  locked once decided. Full CRUD.
+- Migration `0023`; `seed_hrm` extended (6 holidays incl. 2 optional, 2 policies, 2 elections, idempotent + flush
+  order); `LIVE_LINKS["3.12"]` → all 3 bullets Live; hrm skill + README updated.
+
+**Verification:** own smoke test 0 failures (URLs 200, no leaks, IDOR→404, approve workflow, quota block).
+
+**Module Creation Sequence — all 7 review agents run, one at a time, findings applied + committed:**
+- **code-reviewer** — 0 Critical. Fixed: (1) missing status-guard on `floatingholidayelection_edit`/`_delete` (a
+  direct POST could rewrite/delete a decided election — now mirrors `leaverequest`); (2) dropped a redundant
+  `designation` queryset re-filter (base form already tenant-scopes + Meta orders it).
+- **explorer** — all 7 wiring seams OK; fixed the one finding: the pre-existing `test_edit_post_updates` broke on the
+  new required `category` field (parallel to the create-test patch).
+- **frontend-reviewer** — 1 Critical: badges used non-existent `badge-success/danger/warning`; remapped 8 occurrences
+  across 6 templates to real `badge-green/red/amber` (→ lesson **L33**). Fixed the `holidays` M2M widget
+  (CheckboxSelectMultiple → themed SelectMultiple).
+- **performance-reviewer** — no N+1 in list/detail. Fixed: (1) `clean()` now stores the resolved policy so `save()`
+  doesn't re-scan HolidayPolicy (2 scans → 1); (2) `holidaypolicy_detail` uses `obj.holidays.all()` to hit the
+  prefetch cache instead of `.order_by()`.
+- **qa-smoke-tester** — 69/69 assertions green (routes, content, leaks, badges, IDOR, filters, sidebar Live); no code
+  changes needed.
+- **security-reviewer** — no vulnerabilities (IDOR blocked, cross-tenant FK injection stopped at the form layer, no
+  self-approval, CSRF present, no XSS/injection, explicit field allowlists).
+- **test-writer** — **+79 tests** (30 model + 33 view + 16 security): `for_employee` resolution, quota `clean()`,
+  approve/reject workflow, decided-lock guard, non-admin 403, cross-tenant IDOR. Full HRM suite **2,014 passed, 0
+  failed** (was 1,935); project-wide **4,661**.
+
+**Next:** 3.13 Salary Structure.
