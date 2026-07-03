@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.12), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -9,7 +9,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
 3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
 3.7 Interview Process, 3.8 Offer Management, 3.9 Attendance Management, 3.10 Leave Management,
-3.12 Holiday Management.** Reuses the
+3.11 Time Tracking, 3.12 Holiday Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -18,7 +18,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 46 tables (15 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
+## Models (`apps/hrm/models.py`) — 49 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -35,6 +35,9 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 | `LeaveAllocation` | `LA-` | employee, leave_type, year, allocated_days, **carried_forward**(editable=False, engine-set), **encashed_days**(editable=False, workflow-set), note, status(draft/active/expired) | `used_days` derived (sum of approved requests); **`balance` = allocated_days − used_days − encashed_days**; `carried_forward` = days rolled in by the carry-forward run (kept separate for idempotency); `encashed_days` = APPROVED encashment payouts (kept separate so accrual can't restore cashed-out days); `unique_together` also (tenant,employee,leave_type,year). `LeaveAllocationForm.save()` zeroes carried_forward on a manual allocated_days edit |
 | `LeaveRequest` | `LR-` | employee, leave_type, start_date, end_date, **days**(editable=False), reason, status(draft/pending/approved/rejected/cancelled), approver, approved_at, rejected_reason, cancelled_reason | `save()` recomputes `days` from range minus non-optional holidays; `clean()`: end ≥ start. `OPEN_STATUSES=(draft,pending)` |
 | `LeaveEncashment` (3.10) | `ENC-` | employee, leave_type(encashable), year, days, rate_per_day, **amount**(editable=False), status(draft/pending/approved/paid/rejected/cancelled), approver, approved_at, paid_on, payment_reference, decision_note | Encash unused leave → payout. `save()` sets `amount = days × rate_per_day`; `clean()`: days>0 + leave_type.encashable + days ≤ balance (tenant-less query — employee is already tenant-bound, tenant unset pre-validation on create). `OPEN_STATUSES=(draft,pending)`. **On approve** (view, `@tenant_admin_required`, atomic, re-checks balance) increments the linked allocation's `encashed_days` (NOT allocated_days). Indexes (tenant,employee,status)/(tenant,status)/(tenant,leave_type,year) |
+| `Timesheet` (3.11) | `TS-` | employee, period_start, period_end, **total_hours**/**billable_hours**(editable=False), status(draft/pending/approved/rejected/cancelled), approver, approved_at, decision_note, rejected_reason | Weekly header. `total_hours`/`billable_hours` **derived** — recomputed by `refresh_totals()` (one `entries.aggregate(Sum, Sum filter=is_billable)`) after every entry add/edit/delete + on approve; never hand-typed. `clean()`: end≥start + (on edit) the period must still cover every existing entry. `OPEN_STATUSES=(draft,pending)`; unique (tenant,employee,period_start); indexes (tenant,employee,status)/(tenant,status)/(tenant,period_start) |
+| `TimesheetEntry` (3.11) | — | timesheet→`Timesheet`(CASCADE, related_name=entries), date, **project→`accounting.Project`**(SET_NULL, optional), task_description(free text), hours, is_billable, billable_rate, notes | Inline child line managed on the timesheet hub (POST `timesheetentry_add/_edit/_delete`), **locked once the timesheet is approved** (view guard). `clean()`: hours>0 + date within parent period. Derived `billable_value` (hours×rate when billable). Reuses the 2.9 job-costing `accounting.Project` (task FK deferred to Module 7). Indexes (tenant,timesheet)/(tenant,project)/(tenant,date) |
+| `OvertimeRequest` (3.11) | `OT-` | employee, timesheet→`Timesheet`(SET_NULL, optional), date, hours_claimed, multiplier(default 1.50), payout_method(pay/comp_leave), reason, status(draft/pending/approved/rejected/cancelled), approver, approved_at, decision_note | OT claim; derived `overtime_pay_equivalent_hours` (hours×multiplier) — no stored currency amount (no pay-rate source until 3.13). `clean()`: hours_claimed>0 + linked timesheet must be the same employee. `OPEN_STATUSES=(draft,pending)`; indexes (tenant,employee,status)/(tenant,status)/(tenant,date) |
 | `PublicHoliday` | — | date, name, is_optional | non-optional holidays excluded from leave `days`; `unique_together=(tenant,date,name)` |
 | `Shift` | — | name, start_time, end_time, grace_minutes, is_default, is_active | overnight shifts allowed (end < start) |
 | `ShiftAssignment` | — | employee, shift, effective_from, effective_to(null=ongoing) | `clean()`: effective_to ≥ effective_from; `unique_together=(tenant,employee,effective_from)` |
@@ -140,7 +143,7 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
-  `leaveallocation`, `leaverequest`, **`leaveencashment`** (3.10), `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
+  `leaveallocation`, `leaverequest`, **`leaveencashment`** (3.10), **`timesheet`, `overtimerequest`** (3.11), `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
   **`geofence`, `attendanceregularization`** (3.9),
   **`onboardingtemplate`, `onboardingtemplatetask`, `onboardingprogram`, `onboardingtask`, `onboardingdocument`,
   `assetallocation`, `orientationsession`**, **`separationcase`, `exitinterview`, `clearanceitem`,
@@ -157,6 +160,12 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   are created/managed in `core:orgunit_list`; the HRM pages enrich them (head/owner/budget/code). Delete removes
   only the companion row, never the OrgUnit.
 - Leave workflow extras: `hrm:leaverequest_submit/_approve/_reject/_cancel` (all POST-only).
+- **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
+  recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
+  `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
+  timesheet is approved; `hrm:overtimerequest_submit/_approve/_reject/_cancel` (POST); report pages
+  `hrm:timesheet_utilization_report` (`/hrm/reports/utilization/`) + `hrm:project_time_report`
+  (`/hrm/reports/project-time/`), both GET with optional `?date_from`/`?date_to`.
 - **Leave encashment workflow (3.10, all POST-only):** `hrm:leaveencashment_submit` (owner), `_approve`/`_reject`/
   `_mark_paid` (`@tenant_admin_required`; approve increments the allocation's `encashed_days`), `_cancel` (owner).
 - **Leave Policy engine (3.10, no model):** `hrm:leave_policy` (`/hrm/leave-policy/`, GET — leave-type config +
@@ -319,7 +328,7 @@ update-status/complete lifecycle], `offerlettertemplate/` [list/detail/form; the
 the merge-token reference], each with `list/detail/form.html`; the reusable `offer/_status_badge.html` partial; the
 standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirrors `relieving_letter.html`];
 `OfferApproval` + `PreboardingItem` render inline on the offer hub, no own templates)**,
-`attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/ encashment/` + the standalone engine page `leave/policy.html`),
+`attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/ encashment/` + the standalone engine page `leave/policy.html`), `timetracking/` (3.11 — `timesheet/ timesheetentry/ overtimerequest/` + standalone `utilization_report.html`/`project_time_report.html`),
 `holiday/` (3.12 — `publicholiday/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
@@ -428,6 +437,11 @@ existing `JobApplication`s — one **accepted** end-to-end (2-step chain both ap
 with a mix of verified/submitted/pending items; drives its application → hired), and one **pending_approval** (first
 step approved, second pending). Reuses the seeded applications/Users; skipped (with a notice) if the tenant has no
 applications yet.
+**Time Tracking (3.11)** is seeded by `_seed_timetracking(tenant)` (guarded by its own `Timesheet.exists()` check;
+`--flush` cascades from `Timesheet`): per up-to-3 employees, 2 timesheets (last week **approved**, this week
+**pending**) × 4 `TimesheetEntry` lines against a seeded `accounting.Project` where one exists (billable rows carry
+the project + a 75.00 rate; non-billable rows have no project), totals via `refresh_totals()`; plus 1 **pending**
+`OvertimeRequest` linked to an approved sheet. Skipped (with a notice) if the tenant has no employees.
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -470,6 +484,9 @@ tenant and sees nothing.
 - 3.10: Leave Types → `hrm:leavetype_list`; Leave Policy → `hrm:leave_policy` (accrual/carry-forward engine);
   Leave Balance → `hrm:leaveallocation_list`; Leave Application + Leave Calendar → `hrm:leaverequest_list`;
   + Leave Encashment → `hrm:leaveencashment_list` (extra). All 5 NavERP.md 3.10 bullets are now live.
+- 3.11: Timesheet + Project Time Tracking → `hrm:timesheet_list`; Billable Hours → `hrm:timesheet_utilization_report`;
+  Overtime Tracking → `hrm:overtimerequest_list`; Timesheet Approval → `hrm:timesheet_list?status=pending`;
+  + Project Time Report → `hrm:project_time_report` (extra). All 5 NavERP.md 3.11 bullets are now live.
 - 3.12: Holiday Calendar → `hrm:publicholiday_list`.
 
 ## Conventions & gotchas
@@ -508,6 +525,13 @@ tenant and sees nothing.
   natural key; keep it idempotent and reuse core Parties.
 
 ## Deferred (later HRM passes — see `.claude/tasks/todo.md`)
+**3.11 Time Tracking deferrals:** live/running start-stop timer; a real `Task`/WBS FK replacing free-text
+`task_description` (blocked on Module 7 Project Management); auto-invoicing billable time (Accounting AR); feeding
+approved hours into `accounting.JobCostEntry` as labor cost (needs a stable pay-rate from 3.13 Salary Structure);
+full rate-card matrix (client×project×role — the entry-level `billable_rate` snapshot is the buildable-now slice);
+profitability/margin reporting; OT payroll payout / comp-leave auto-credit to `LeaveAllocation` (`payout_method`
+captures intent only); multi-jurisdiction OT compliance thresholds; `OvertimeRequestForm.timesheet` dropdown
+dynamic-scoping to the selected employee (the model `clean()` catches a mismatch server-side today).
 **3.1 employee-records deferrals:** lifecycle event → `core.Employment`/`EmployeeProfile` auto-sync (v1 records the
 timeline only), document expiry email/push reminders (needs Celery/SMTP), normalized `EmployeeAddress` table (v1 is
 free-text), OCR/AI document extraction + e-signature on personnel docs, `work_location` FK→`core.OrgUnit(branch)`.
