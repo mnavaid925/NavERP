@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:overtimerequest_list' %}">Overtime</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:overtimerequest_submit' obj.pk %}" onsubmit="return confirm('Submit this overtime request for approval?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'pending' %}
+        <a href="{% url 'hrm:overtimerequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:overtimerequest_delete' obj.pk %}" onsubmit="return confirm('Delete this overtime request?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.date }}</dd></div>
+      <div class="detail-item"><dt>Timesheet</dt><dd>{% if obj.timesheet %}<a href="{% url 'hrm:timesheet_detail' obj.timesheet.pk %}">{{ obj.timesheet.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Hours Claimed</dt><dd>{{ obj.hours_claimed }}</dd></div>
+      <div class="detail-item"><dt>Multiplier</dt><dd>{{ obj.multiplier }}×</dd></div>
+      <div class="detail-item"><dt>Pay-Equivalent Hours</dt><dd><strong>{{ obj.overtime_pay_equivalent_hours }}</strong></dd></div>
+      <div class="detail-item"><dt>Payout Method</dt><dd>{{ obj.get_payout_method_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'pending' %}amber{% elif obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Approver</dt><dd>{% if obj.approver %}{{ obj.approver.get_full_name|default:obj.approver.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved At</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Reason</dt><dd>{{ obj.reason|default:"—" }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Decision Note</dt><dd>{{ obj.decision_note|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  {% if obj.status == 'pending' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Approval</h2></div>
+      <div class="card-body">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:overtimerequest_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this overtime request?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_note_a">Decision note</label>
+              <textarea id="id_decision_note_a" name="decision_note" class="form-textarea" placeholder="Note (optional)"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'hrm:overtimerequest_reject' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_decision_note_r">Reject reason</label>
+              <textarea id="id_decision_note_r" name="decision_note" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to approve or reject this request.</span>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'draft' or obj.status == 'pending' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'hrm:overtimerequest_cancel' obj.pk %}" onsubmit="return confirm('Cancel this overtime request?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel Request</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:overtimerequest_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
