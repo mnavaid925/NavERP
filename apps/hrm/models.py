@@ -24,7 +24,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import IntegrityError, models, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from apps.core.utils import next_number
 
@@ -572,6 +572,170 @@ class LeaveEncashment(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.employee} · {self.leave_type} · {self.year}"
+
+
+# ---------------------------------------------------------------------------
+# 3.11 Time Tracking — Timesheet (+ TimesheetEntry lines) + OvertimeRequest
+# ---------------------------------------------------------------------------
+class Timesheet(TenantNumbered):
+    """A weekly timesheet header per employee (3.11). ``total_hours``/``billable_hours`` are
+    **derived** — recomputed by ``refresh_totals()`` from the child ``TimesheetEntry`` rows, never
+    hand-typed (mirrors ``LeaveRequest.days``). Workflow ``draft → pending → approved/rejected``
+    (+ ``cancelled``), mirroring ``LeaveRequest``; entries lock once the sheet is approved."""
+
+    NUMBER_PREFIX = "TS"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    ]
+    OPEN_STATUSES = ("draft", "pending")
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="timesheets")
+    period_start = models.DateField()
+    period_end = models.DateField()
+    total_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0, editable=False)
+    billable_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_timesheet_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    rejected_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-period_start"]
+        unique_together = [("tenant", "number"), ("tenant", "employee", "period_start")]
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_ts_tenant_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ts_tenant_status_idx"),
+            models.Index(fields=["tenant", "period_start"], name="hrm_ts_tenant_period_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.period_start and self.period_end and self.period_end < self.period_start:
+            raise ValidationError({"period_end": "Period end cannot be before period start."})
+
+    def refresh_totals(self, save=True):
+        """Recompute total/billable hours from the child entries in a single aggregate pass.
+        Called after any entry add/edit/delete and on approval. No-op if the row isn't saved yet
+        (a brand-new header has no pk and therefore no entries)."""
+        if not self.pk:
+            return
+        agg = self.entries.aggregate(
+            total=Sum("hours"),
+            billable=Sum("hours", filter=Q(is_billable=True)))
+        self.total_hours = agg["total"] or ZERO
+        self.billable_hours = agg["billable"] or ZERO
+        if save:
+            super().save(update_fields=["total_hours", "billable_hours", "updated_at"])
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.period_start}…{self.period_end}"
+
+
+class TimesheetEntry(TenantOwned):
+    """A single time-log line on a ``Timesheet`` (3.11) — a day's hours against an optional
+    ``accounting.Project`` (2.9 job-costing spine) + a free-text task. Billable value
+    (``hours × billable_rate``) and utilization are **derived report aggregates**, never stored.
+    ``task_description`` is free text until Project Management (Module 7) ships a Task/WBS model."""
+
+    timesheet = models.ForeignKey("hrm.Timesheet", on_delete=models.CASCADE, related_name="entries")
+    date = models.DateField()
+    # Optional so admin / non-project time is loggable; SET_NULL keeps the line if the project is purged.
+    project = models.ForeignKey("accounting.Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_timesheet_entries")
+    task_description = models.CharField(max_length=255, blank=True)
+    hours = models.DecimalField(max_digits=5, decimal_places=2)
+    is_billable = models.BooleanField(default=True)
+    billable_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["date"]
+        indexes = [
+            models.Index(fields=["tenant", "timesheet"], name="hrm_tse_tenant_ts_idx"),
+            models.Index(fields=["tenant", "project"], name="hrm_tse_tenant_proj_idx"),
+            models.Index(fields=["tenant", "date"], name="hrm_tse_tenant_date_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (self.hours or ZERO) <= ZERO:
+            raise ValidationError({"hours": "Hours must be greater than zero."})
+        if self.timesheet_id and self.timesheet and self.date:
+            ts = self.timesheet
+            if ts.period_start and ts.period_end and not (ts.period_start <= self.date <= ts.period_end):
+                raise ValidationError({"date": "Date must fall within the timesheet's period."})
+
+    @property
+    def billable_value(self):
+        """Derived line value — only counts when the line is flagged billable."""
+        return (self.hours or ZERO) * (self.billable_rate or ZERO) if self.is_billable else ZERO
+
+    def __str__(self):
+        return f"{self.timesheet.number if self.timesheet_id else '—'} · {self.date} · {self.hours}h"
+
+
+class OvertimeRequest(TenantNumbered):
+    """An overtime claim (3.11) — daily OT hours at a configurable multiplier, paid out or converted
+    to comp-leave. Approval workflow ``draft → pending → approved/rejected`` (+ ``cancelled``),
+    mirroring ``LeaveEncashment``. No stored currency ``amount`` — there is no stable employee
+    pay-rate source yet (3.13 Salary Structure); ``overtime_pay_equivalent_hours`` is derived."""
+
+    NUMBER_PREFIX = "OT"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    ]
+    OPEN_STATUSES = ("draft", "pending")
+
+    PAYOUT_CHOICES = [
+        ("pay", "Pay"),
+        ("comp_leave", "Compensatory Leave"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="overtime_requests")
+    timesheet = models.ForeignKey("hrm.Timesheet", on_delete=models.SET_NULL, null=True, blank=True, related_name="overtime_requests")
+    date = models.DateField()
+    hours_claimed = models.DecimalField(max_digits=5, decimal_places=2)
+    multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=Decimal("1.50"),
+                                     validators=[MinValueValidator(Decimal("1"))])
+    payout_method = models.CharField(max_length=20, choices=PAYOUT_CHOICES, default="pay")
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="hrm_overtime_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-date"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_ot_tenant_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ot_tenant_status_idx"),
+            models.Index(fields=["tenant", "date"], name="hrm_ot_tenant_date_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (self.hours_claimed or ZERO) <= ZERO:
+            raise ValidationError({"hours_claimed": "Overtime hours must be greater than zero."})
+
+    @property
+    def overtime_pay_equivalent_hours(self):
+        """Derived: the multiplier-weighted OT hours (e.g. 4h at 1.5× = 6.0 pay-equivalent hours).
+        The currency payout is deferred until a stable pay-rate source (3.13) exists."""
+        return (self.hours_claimed or ZERO) * (self.multiplier or ZERO)
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.date} · {self.hours_claimed}h"
 
 
 # ---------------------------------------------------------------------------
