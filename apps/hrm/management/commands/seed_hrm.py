@@ -43,6 +43,8 @@ from apps.hrm.models import (
     OrientationSession,
     OvertimeRequest,
     PublicHoliday,
+    HolidayPolicy,
+    FloatingHolidayElection,
     RequisitionApproval,
     Timesheet,
     TimesheetEntry,
@@ -110,13 +112,14 @@ LEAVE_TYPES = [
     ("Casual Leave", "CL", True, "annual", Decimal("12"), Decimal("12"), Decimal("0"), False),
     ("Unpaid Leave", "UPL", False, "none", Decimal("0"), Decimal("0"), Decimal("0"), False),
 ]
-# month, day, name, is_optional
+# month, day, name, is_optional, category
 HOLIDAYS = [
-    (1, 1, "New Year's Day", False),
-    (5, 1, "Labour Day", False),
-    (7, 4, "Founders' Day", False),
-    (12, 24, "Festival Eve", True),
-    (12, 25, "Festival Day", False),
+    (1, 1, "New Year's Day", False, "national"),
+    (5, 1, "Labour Day", False, "national"),
+    (7, 4, "Founders' Day", False, "company"),
+    (10, 2, "Cultural Observance Day", True, "observance"),
+    (12, 24, "Festival Eve", True, "observance"),
+    (12, 25, "Festival Day", False, "national"),
 ]
 SHIFTS = [
     # name, start, end, grace, is_default
@@ -192,7 +195,9 @@ class Command(BaseCommand):
     def _seed_tenant(self, tenant, *, flush):
         if flush:
             # Children first (onboarding/offboarding rows FK EmployeeProfile/Designation), then masters.
-            for model in (FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
+            # 3.12: elections FK holiday/policy/employee; policies FK/M2M holiday/designation — wipe first.
+            for model in (FloatingHolidayElection, HolidayPolicy,
+                          FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
                           OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
                           OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
                           CostCenterProfile, DepartmentProfile,
@@ -302,11 +307,44 @@ class Command(BaseCommand):
                     days=Decimal("3"), rate_per_day=rate,
                     status="pending" if idx == 0 else "draft")
 
-        # --- Public holidays ---
-        for month, day, name, optional in HOLIDAYS:
-            PublicHoliday.objects.get_or_create(
+        # --- Public holidays (3.12) ---
+        optional_holidays = []
+        for month, day, name, optional, category in HOLIDAYS:
+            h, _ = PublicHoliday.objects.get_or_create(
                 tenant=tenant, date=datetime.date(year, month, day), name=name,
-                defaults={"is_optional": optional})
+                defaults={"is_optional": optional, "category": category})
+            if h.is_optional:
+                optional_holidays.append(h)
+
+        # --- Holiday policies (3.12): a company-wide default + a full-time-staff scoped policy ---
+        default_policy, _ = HolidayPolicy.objects.get_or_create(
+            tenant=tenant, name="Company Default",
+            defaults={"is_default": True, "floating_holiday_quota": 2, "is_active": True,
+                      "description": "Applies to all employees when no more specific policy matches."})
+        # Scoped by employee_type only (not org_unit) so it governs every full-time employee in the
+        # demo — the seeded staff span several departments, so a single-org_unit scope would match
+        # only some of them and obscure the policy-resolution demo.
+        scoped_policy, _ = HolidayPolicy.objects.get_or_create(
+            tenant=tenant, name="Full-Time Staff Policy",
+            defaults={"employee_type": "full_time", "floating_holiday_quota": 1, "is_active": True,
+                      "description": "Full-time employees — one floating holiday per year."})
+        if optional_holidays:
+            default_policy.holidays.set(optional_holidays)
+            scoped_policy.holidays.set(optional_holidays[:1])
+
+        # --- Floating holiday elections (3.12): employees elect an optional holiday (quota-capped) ---
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        if employees and optional_holidays:
+            chosen = optional_holidays[0]
+            for idx, emp in enumerate(employees[:2]):
+                election, created = FloatingHolidayElection.objects.get_or_create(
+                    tenant=tenant, employee=emp, holiday=chosen,
+                    defaults={"status": "approved" if idx == 0 else "pending",
+                              "note": "Elected via the demo seeder."})
+                if created and idx == 0 and actor is not None:
+                    election.approved_by = actor
+                    election.approved_at = timezone.now()
+                    election.save(update_fields=["approved_by", "approved_at", "updated_at"])
 
         # --- Shifts + assignments ---
         shifts = []
