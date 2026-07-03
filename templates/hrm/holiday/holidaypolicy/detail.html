@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:holidaypolicy_list' %}">Holiday Policies</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:holidaypolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:holidaypolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Location</dt><dd>{{ obj.location|default:"— (any)" }}</dd></div>
+      <div class="detail-item"><dt>Department</dt><dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}— (any){% endif %}</dd></div>
+      <div class="detail-item"><dt>Employee Type</dt><dd>{% if obj.employee_type %}{{ obj.get_employee_type_display }}{% else %}— (any){% endif %}</dd></div>
+      <div class="detail-item"><dt>Designation</dt><dd>{% if obj.designation %}{{ obj.designation.name }}{% else %}— (any){% endif %}</dd></div>
+      <div class="detail-item"><dt>Floating Holiday Quota</dt><dd>{{ obj.floating_holiday_quota }} per year</dd></div>
+      <div class="detail-item"><dt>Default Policy</dt><dd>{% if obj.is_default %}<span class="badge badge-info">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Eligible Optional Holidays</h2></div>
+    <div class="card-body">
+      {% if policy_holidays %}
+        <div style="display:flex; flex-wrap:wrap; gap:.5rem;">
+          {% for h in policy_holidays %}
+            <span class="badge badge-info">{{ h.date }} · {{ h.name }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted">No specific holidays attached — all tenant optional holidays are eligible under this policy.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Elections</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Holiday</th><th>Status</th><th>Requested</th></tr></thead>
+        <tbody>
+          {% for e in recent_elections %}
+            <tr>
+              <td><a href="{% url 'hrm:floatingholidayelection_detail' e.pk %}">{{ e.employee.party.name }}</a></td>
+              <td>{{ e.holiday.name }}</td>
+              <td><span class="badge badge-{% if e.status == 'approved' %}success{% elif e.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ e.get_status_display }}</span></td>
+              <td>{{ e.requested_on }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="calendar-check"></i><p>No elections against this policy yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:holidaypolicy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
