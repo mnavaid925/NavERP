@@ -24,7 +24,7 @@
       <div class="detail-item"><dt>Designation</dt><dd>{% if obj.designation %}{{ obj.designation.name }}{% else %}— (any){% endif %}</dd></div>
       <div class="detail-item"><dt>Floating Holiday Quota</dt><dd>{{ obj.floating_holiday_quota }} per year</dd></div>
       <div class="detail-item"><dt>Default Policy</dt><dd>{% if obj.is_default %}<span class="badge badge-info">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
-      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
   </div></div>
@@ -54,7 +54,7 @@
             <tr>
               <td><a href="{% url 'hrm:floatingholidayelection_detail' e.pk %}">{{ e.employee.party.name }}</a></td>
               <td>{{ e.holiday.name }}</td>
-              <td><span class="badge badge-{% if e.status == 'approved' %}success{% elif e.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ e.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if e.status == 'approved' %}green{% elif e.status == 'rejected' %}red{% else %}amber{% endif %}">{{ e.get_status_display }}</span></td>
               <td>{{ e.requested_on }}</td>
             </tr>
           {% empty %}
