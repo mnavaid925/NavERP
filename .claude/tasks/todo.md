@@ -289,6 +289,37 @@ approve/reject views, and edit/delete lock via `OPEN_STATUSES` proven by `LeaveR
 - [ ] update root `README.md` (HRM test count, module count) if the project keeps that convention (check prior
   module commits, e.g. `c31b32b`)
 
+## Review — delivered 2026-07-03
+
+**Scope built.** New HRM sub-module 3.11 Time Tracking (extension of `apps/hrm`). 3 models mirroring the sibling
+LeaveRequest workflow: `Timesheet` (`TS-`, weekly header, **derived** `total_hours`/`billable_hours` via
+`refresh_totals()`, draft→pending→approved/rejected/cancelled), `TimesheetEntry` (inline child on the timesheet hub,
+optional `accounting.Project` FK, date-in-period `clean()`, **locked once approved**), `OvertimeRequest` (`OT-`,
+hours×multiplier, pay/comp_leave, derived pay-equiv hours). Two derived report pages (utilization %, project-time
+vs budget). Wired into `LIVE_LINKS["3.11"]` (all 5 bullets live + Project Time Report extra), admin (Timesheet w/
+TimesheetEntry inline), seeder (`_seed_timetracking`: 6 timesheets + 24 entries + 1 OT/tenant), migration 0022.
+
+**Full Module Creation Sequence run (research → todo → build → 7 review agents → skill):**
+- research → `research-hrm-time-tracking.md` (10 products → 3-model scope). todo → the build plan above.
+- Build: the smoke test caught a real bug — `project_time_report` aliased `Sum('hours')` as `hours`, shadowing the
+  field into a `FieldError`; fixed (aliased `logged`/`billable`) before committing.
+- code-reviewer → Critical: the admin `TimesheetEntryInline` could drift `total_hours`/`billable_hours` (no refresh)
+  — fixed via `TimesheetAdmin.save_formset()`; + `Timesheet.clean()` period-covers-entries guard, `OvertimeRequest.
+  clean()` timesheet-employee-match guard, entry-add error re-render (preserve input), dead-helper cleanup.
+- explorer → clean + 2 follow-ups (overview pending-timesheet/overtime KPIs, date-range filters on both reports).
+- frontend-reviewer → clean (conditional-colspan entries table done right; no comment leaks).
+- performance-reviewer → clean (no N+1s, reports are single-query aggregates, index coverage exact).
+- qa-smoke-tester → clean (40 HTTP checks: derived totals, lock-on-approval, period guard, 403, IDOR all held).
+- security-reviewer → no vulnerabilities (tenant isolation incl. inline-entry path, mass-assignment, IDOR clean).
+- test-writer → **160 tests** in `test_time_tracking.py` (+ conftest fixtures); HRM suite **1,935** green, project-wide
+  **4,582**.
+
+**Skill/README** updated (table 46→49, 3 model rows, routes/workflow/report extras, `timetracking/` folders,
+LIVE_LINKS 3.11, seeder note, Deferred; test counts refreshed).
+
+**Next unbuilt sub-module:** 3.13 (the lowest `N.M` without a LIVE_LINKS entry — likely a Payroll/Compensation
+sub-module; auto-detect at run time).
+
 ## Later passes / deferred (carried over from research)
 
 - Live/running timer (start-stop UI, active-timer state) — needs session/websocket state beyond a CRUD pass.
