@@ -910,11 +910,16 @@ class FloatingHolidayElection(TenantOwned):
         if self.holiday_id and not self.holiday.is_optional:
             raise ValidationError({"holiday": "Only optional (floating) holidays can be elected."})
         if self.employee_id and self.holiday_id:
+            # ``tenant`` isn't set on the instance during ModelForm validation on create
+            # (the view assigns it after ``is_valid()``), so derive it from the employee — an
+            # election always shares its employee's tenant. Without this the quota count below
+            # would filter on ``tenant_id=None`` and silently pass.
+            tenant_id = self.tenant_id or self.employee.tenant_id
             policy = self.policy or HolidayPolicy.for_employee(self.employee)
             if policy is not None and policy.floating_holiday_quota:
                 year = self.holiday.date.year
                 taken = (FloatingHolidayElection.objects
-                         .filter(tenant_id=self.tenant_id, employee_id=self.employee_id,
+                         .filter(tenant_id=tenant_id, employee_id=self.employee_id,
                                  status__in=("pending", "approved"), holiday__date__year=year)
                          .exclude(pk=self.pk).count())
                 if taken + 1 > policy.floating_holiday_quota:
