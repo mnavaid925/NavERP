@@ -178,6 +178,13 @@ class TimesheetAdmin(admin.ModelAdmin):
     raw_id_fields = ("employee", "approver")
     inlines = [TimesheetEntryInline]
 
+    def save_formset(self, request, form, formset, change):
+        # The app's own views call refresh_totals() after every entry change; the admin inline must
+        # too, or total_hours/billable_hours silently drift from the true sum of the entries.
+        super().save_formset(request, form, formset, change)
+        if formset.model is TimesheetEntry and form.instance.pk:
+            form.instance.refresh_totals()
+
 
 @admin.register(OvertimeRequest)
 class OvertimeRequestAdmin(admin.ModelAdmin):
