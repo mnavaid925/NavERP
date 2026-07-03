@@ -333,8 +333,10 @@ class HolidayPolicyForm(TenantModelForm):
         model = HolidayPolicy
         fields = ["name", "location", "org_unit", "employee_type", "designation",
                   "is_default", "floating_holiday_quota", "holidays", "is_active", "description"]
+        # `holidays` keeps the default SelectMultiple widget so TenantModelForm styles it as a
+        # themed `.form-select` (CheckboxSelectMultiple has no matching theme class and renders
+        # as an unstyled <ul>).
         widgets = {
-            "holidays": forms.CheckboxSelectMultiple,
             "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         }
 
