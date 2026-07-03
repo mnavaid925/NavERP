@@ -826,6 +826,7 @@ class TestPublicHolidayDetailAndEdit:
             "date": "2026-07-04",
             "name": "Independence Day",
             "is_optional": "",
+            "category": "national",
         })
         assert resp.status_code == 302
         holiday_a.refresh_from_db()
