@@ -113,6 +113,66 @@ class TestShiftIDOR:
         assert resp.status_code == 404
 
 
+class TestHolidayPolicyIDOR:
+    def test_detail_cross_tenant_404(self, client_a, holiday_policy_b):
+        resp = client_a.get(reverse("hrm:holidaypolicy_detail", args=[holiday_policy_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, holiday_policy_b):
+        resp = client_a.get(reverse("hrm:holidaypolicy_edit", args=[holiday_policy_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, holiday_policy_b):
+        resp = client_a.post(reverse("hrm:holidaypolicy_edit", args=[holiday_policy_b.pk]), {
+            "name": "Hijacked", "floating_holiday_quota": "9",
+        })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, holiday_policy_b):
+        resp = client_a.post(reverse("hrm:holidaypolicy_delete", args=[holiday_policy_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_policies(self, client_a, default_holiday_policy_a, holiday_policy_b):
+        resp = client_a.get(reverse("hrm:holidaypolicy_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert default_holiday_policy_a.pk in pks
+        assert holiday_policy_b.pk not in pks
+
+
+class TestFloatingHolidayElectionIDOR:
+    def test_detail_cross_tenant_404(self, client_a, election_b):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_detail", args=[election_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, election_b):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_edit", args=[election_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, election_b):
+        resp = client_a.post(reverse("hrm:floatingholidayelection_edit", args=[election_b.pk]), {
+            "employee": election_b.employee_id, "holiday": election_b.holiday_id, "note": "Hijacked",
+        })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, election_b):
+        resp = client_a.post(reverse("hrm:floatingholidayelection_delete", args=[election_b.pk]))
+        assert resp.status_code == 404
+
+    def test_approve_cross_tenant_404(self, client_a, election_b):
+        resp = client_a.post(reverse("hrm:floatingholidayelection_approve", args=[election_b.pk]))
+        assert resp.status_code == 404
+
+    def test_reject_cross_tenant_404(self, client_a, election_b):
+        resp = client_a.post(reverse("hrm:floatingholidayelection_reject", args=[election_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_elections(self, client_a, pending_election_a, election_b):
+        resp = client_a.get(reverse("hrm:floatingholidayelection_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert pending_election_a.pk in pks
+        assert election_b.pk not in pks
+
+
 # ================================================================ Anonymous user → redirect
 class TestAnonymousBlocked:
     @pytest.mark.parametrize("url_name,args", [
@@ -126,6 +186,8 @@ class TestAnonymousBlocked:
         ("hrm:shift_list", []),
         ("hrm:shiftassignment_list", []),
         ("hrm:attendancerecord_list", []),
+        ("hrm:holidaypolicy_list", []),
+        ("hrm:floatingholidayelection_list", []),
     ])
     def test_anon_redirected_to_login(self, client, url_name, args):
         resp = client.get(reverse(url_name, args=args))
@@ -206,6 +268,18 @@ class TestCSRFEnforcement:
         c = Client(enforce_csrf_checks=True)
         c.force_login(admin_user)
         resp = c.post(reverse("hrm:designation_delete", args=[designation_a.pk]))
+        assert resp.status_code == 403
+
+    def test_holidaypolicy_delete_enforces_csrf(self, admin_user, default_holiday_policy_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("hrm:holidaypolicy_delete", args=[default_holiday_policy_a.pk]))
+        assert resp.status_code == 403
+
+    def test_floatingholidayelection_approve_enforces_csrf(self, admin_user, pending_election_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("hrm:floatingholidayelection_approve", args=[pending_election_a.pk]))
         assert resp.status_code == 403
 
 
