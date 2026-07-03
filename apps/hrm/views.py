@@ -1612,7 +1612,9 @@ def holidaypolicy_detail(request, pk):
         pk=pk, tenant=request.tenant)
     return render(request, "hrm/holiday/holidaypolicy/detail.html", {
         "obj": obj,
-        "policy_holidays": obj.holidays.order_by("date"),
+        # .all() (not .order_by) serves from the prefetch_related cache above; PublicHoliday.Meta
+        # already orders by date, so this stays date-sorted with zero extra queries.
+        "policy_holidays": obj.holidays.all(),
         "recent_elections": (obj.elections.select_related("employee__party", "holiday")
                              .all()[:10]),
     })
