@@ -303,3 +303,109 @@ def holiday_a(db, tenant_a):
         name="Founders Day",
         is_optional=False,
     )
+
+
+# ------------------------------------------------------------------ 3.11 Time Tracking fixtures
+@pytest.fixture
+def project_a(db, tenant_a):
+    """An accounting.Project for tenant_a (2.9 job-costing spine, optional FK on TimesheetEntry)."""
+    from apps.accounting.models_advanced import Project
+    return Project.objects.create(
+        tenant=tenant_a, name="Website Revamp", budget_amount=Decimal("50000"),
+    )
+
+
+@pytest.fixture
+def project_b(db, tenant_b):
+    """An accounting.Project for tenant_b (IDOR tests)."""
+    from apps.accounting.models_advanced import Project
+    return Project.objects.create(
+        tenant=tenant_b, name="Globex Migration", budget_amount=Decimal("20000"),
+    )
+
+
+@pytest.fixture
+def draft_timesheet_a(db, tenant_a, employee_a):
+    """A draft Timesheet for employee_a, tenant_a — period 2026-06-01..2026-06-07."""
+    from apps.hrm.models import Timesheet
+    return Timesheet.objects.create(
+        tenant=tenant_a,
+        employee=employee_a,
+        period_start=datetime.date(2026, 6, 1),
+        period_end=datetime.date(2026, 6, 7),
+        status="draft",
+    )
+
+
+@pytest.fixture
+def pending_timesheet_a(db, draft_timesheet_a):
+    """A pending Timesheet for employee_a (submitted)."""
+    draft_timesheet_a.status = "pending"
+    draft_timesheet_a.save(update_fields=["status", "updated_at"])
+    return draft_timesheet_a
+
+
+@pytest.fixture
+def timesheet_entry_a(db, tenant_a, draft_timesheet_a, project_a):
+    """A billable TimesheetEntry on draft_timesheet_a: 2026-06-02, 8h @ 50/h, billable."""
+    from apps.hrm.models import TimesheetEntry
+    entry = TimesheetEntry.objects.create(
+        tenant=tenant_a, timesheet=draft_timesheet_a, date=datetime.date(2026, 6, 2),
+        project=project_a, task_description="Design review", hours=Decimal("8"),
+        is_billable=True, billable_rate=Decimal("50"),
+    )
+    draft_timesheet_a.refresh_totals()
+    return entry
+
+
+@pytest.fixture
+def timesheet_b(db, tenant_b, employee_b):
+    """A draft Timesheet belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import Timesheet
+    return Timesheet.objects.create(
+        tenant=tenant_b, employee=employee_b,
+        period_start=datetime.date(2026, 6, 1), period_end=datetime.date(2026, 6, 7),
+        status="pending",
+    )
+
+
+@pytest.fixture
+def timesheet_entry_b(db, tenant_b, timesheet_b):
+    """A TimesheetEntry belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TimesheetEntry
+    entry = TimesheetEntry.objects.create(
+        tenant=tenant_b, timesheet=timesheet_b, date=datetime.date(2026, 6, 2),
+        hours=Decimal("4"), is_billable=True, billable_rate=Decimal("40"),
+    )
+    timesheet_b.refresh_totals()
+    return entry
+
+
+@pytest.fixture
+def draft_overtime_a(db, tenant_a, employee_a):
+    """A draft OvertimeRequest for employee_a, tenant_a: 3h @ 1.5x on 2026-06-02."""
+    from apps.hrm.models import OvertimeRequest
+    return OvertimeRequest.objects.create(
+        tenant=tenant_a, employee=employee_a, date=datetime.date(2026, 6, 2),
+        hours_claimed=Decimal("3"), multiplier=Decimal("1.50"),
+        payout_method="pay", reason="Production release support", status="draft",
+    )
+
+
+@pytest.fixture
+def pending_overtime_a(db, draft_overtime_a):
+    """A pending OvertimeRequest for employee_a (submitted)."""
+    draft_overtime_a.status = "pending"
+    draft_overtime_a.save(update_fields=["status", "updated_at"])
+    return draft_overtime_a
+
+
+@pytest.fixture
+def overtime_b(db, tenant_b, employee_b):
+    """A pending OvertimeRequest belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import OvertimeRequest
+    return OvertimeRequest.objects.create(
+        tenant=tenant_b, employee=employee_b, date=datetime.date(2026, 6, 2),
+        hours_claimed=Decimal("2"), multiplier=Decimal("1.50"),
+        payout_method="pay", reason="Support B", status="pending",
+    )
