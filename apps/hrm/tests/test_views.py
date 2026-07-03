@@ -793,6 +793,7 @@ class TestPublicHolidayCreateView:
             "date": "2026-12-25",
             "name": "Christmas Day",
             "is_optional": "",
+            "category": "national",
         })
         assert resp.status_code == 302
         assert PublicHoliday.objects.filter(tenant=tenant_a, name="Christmas Day").exists()
