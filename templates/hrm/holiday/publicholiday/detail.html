@@ -20,6 +20,12 @@
       <div class="detail-item"><dt>Date</dt><dd>{{ obj.date }}</dd></div>
       <div class="detail-item"><dt>Day</dt><dd>{{ obj.date|date:"l" }}</dd></div>
       <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>
+        {% if obj.category == 'national' %}<span class="badge badge-info">{{ obj.get_category_display }}</span>
+        {% elif obj.category == 'regional' %}<span class="badge badge-warning">{{ obj.get_category_display }}</span>
+        {% elif obj.category == 'company' %}<span class="badge badge-success">{{ obj.get_category_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_category_display }}</span>{% endif %}
+      </dd></div>
       <div class="detail-item"><dt>Type</dt><dd>{% if obj.is_optional %}<span class="badge badge-info">Optional</span>{% else %}<span class="badge badge-muted">Public</span>{% endif %}</dd></div>
     </dl>
   </div></div>
