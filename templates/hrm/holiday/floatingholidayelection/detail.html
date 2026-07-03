@@ -22,7 +22,7 @@
       <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
       <div class="detail-item"><dt>Holiday</dt><dd>{{ obj.holiday.name }} ({{ obj.holiday.date }})</dd></div>
       <div class="detail-item"><dt>Policy</dt><dd>{% if obj.policy %}<a href="{% url 'hrm:holidaypolicy_detail' obj.policy.pk %}">{{ obj.policy.name }}</a>{% else %}—{% endif %}</dd></div>
-      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'approved' %}success{% elif obj.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% else %}amber{% endif %}">{{ obj.get_status_display }}</span></dd></div>
       <div class="detail-item"><dt>Requested On</dt><dd>{{ obj.requested_on }}</dd></div>
       <div class="detail-item"><dt>Decided By</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Approved At</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
