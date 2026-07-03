@@ -28,8 +28,11 @@ from .models import (
     OnboardingTemplate,
     OnboardingTemplateTask,
     OrientationSession,
+    OvertimeRequest,
     PublicHoliday,
     RequisitionApproval,
+    Timesheet,
+    TimesheetEntry,
     SeparationCase,
     Shift,
     ShiftAssignment,
@@ -158,6 +161,31 @@ class LeaveEncashmentAdmin(admin.ModelAdmin):
     search_fields = ("number", "employee__party__name", "payment_reference")
     readonly_fields = ("number", "amount", "approved_at", "created_at", "updated_at")
     raw_id_fields = ("employee", "leave_type", "approver")
+
+
+class TimesheetEntryInline(admin.TabularInline):
+    model = TimesheetEntry
+    extra = 0
+    raw_id_fields = ("project",)
+
+
+@admin.register(Timesheet)
+class TimesheetAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "period_start", "period_end", "total_hours", "billable_hours", "status", "approver", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "employee__party__name")
+    readonly_fields = ("number", "total_hours", "billable_hours", "approved_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "approver")
+    inlines = [TimesheetEntryInline]
+
+
+@admin.register(OvertimeRequest)
+class OvertimeRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "date", "hours_claimed", "multiplier", "payout_method", "status", "approver", "tenant")
+    list_filter = ("status", "payout_method", "tenant")
+    search_fields = ("number", "employee__party__name", "reason")
+    readonly_fields = ("number", "approved_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "timesheet", "approver")
 
 
 @admin.register(PublicHoliday)
