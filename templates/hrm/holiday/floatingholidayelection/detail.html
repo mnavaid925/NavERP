@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Floating Holiday — {{ obj.employee.party.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Floating Holiday Election</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:floatingholidayelection_list' %}">Floating Holidays</a><span class="sep">›</span><span>{{ obj.employee.party.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'pending' %}
+        <a href="{% url 'hrm:floatingholidayelection_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:floatingholidayelection_delete' obj.pk %}" onsubmit="return confirm('Delete this election?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Holiday</dt><dd>{{ obj.holiday.name }} ({{ obj.holiday.date }})</dd></div>
+      <div class="detail-item"><dt>Policy</dt><dd>{% if obj.policy %}<a href="{% url 'hrm:holidaypolicy_detail' obj.policy.pk %}">{{ obj.policy.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'approved' %}success{% elif obj.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item"><dt>Requested On</dt><dd>{{ obj.requested_on }}</dd></div>
+      <div class="detail-item"><dt>Decided By</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved At</dt><dd>{{ obj.approved_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Note</dt><dd>{{ obj.note|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  {% if obj.status == 'pending' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Approval</h2></div>
+      <div class="card-body">
+        <div class="form-actions" style="margin-bottom:1rem;">
+          <form method="post" action="{% url 'hrm:floatingholidayelection_approve' obj.pk %}" onsubmit="return confirm('Approve this election?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+        </div>
+        <form method="post" action="{% url 'hrm:floatingholidayelection_reject' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_note">Reject reason</label>
+            <textarea id="id_note" name="note" class="form-textarea" placeholder="Reason (optional)"></textarea>
+          </div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:floatingholidayelection_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
