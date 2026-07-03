@@ -347,3 +347,18 @@ customer/partner entry. The sidebar bullet (and any staff-prominent link) MUST t
 gated portal entry, if linked at all, is a clearly-labelled secondary link that staff are expected to be redirected
 from. Add this to the L30 human sidebar pass: for each portal-style bullet, click it as a *plain tenant admin* and
 confirm it lands on a 200 staff page, not a redirect.
+
+## L33 — Badge colour classes are COLOUR-named in theme.css (`badge-green/red/amber`), NOT semantic (`badge-success/danger/warning`)
+Building HRM 3.12 I used `badge-success`/`badge-danger`/`badge-warning` for status/category badges, trusting the class
+list quoted in the `next-module` skill + CLAUDE.md ("`.badge-success/.warning/.danger/.info/.muted`"). Those semantic
+names **do not exist** in `static/css/theme.css` — it defines `.badge-green` / `.badge-red` / `.badge-amber` /
+`.badge-info` / `.badge-muted` / `.badge-slate` (theme.css:284-289). A badge with a non-existent class renders as an
+unstyled pill (no background/colour) — passes every GET-200/smoke/IDOR check (it's cosmetic), so only the
+frontend-reviewer caught it (8 occurrences across 6 templates). The sibling reference
+`templates/hrm/leave/request/detail.html:37` already shows the correct mapping:
+`pending→amber, approved→green, rejected→red, cancelled/other→muted, draft→info`. **Rule:** for any status/category
+badge, use the colour-named classes and mirror an existing sibling template's exact ternary — do NOT trust the
+skill/CLAUDE.md's semantic-name list (it's stale). Quick check before shipping badges:
+`grep -n '\.badge-' static/css/theme.css` to confirm the real class names. (The skill/CLAUDE.md class list should be
+corrected to the colour names in a docs pass.) Related: L13 (agents invent utility classes that don't exist) — same
+root cause, verify the class exists in theme.css before using it.
