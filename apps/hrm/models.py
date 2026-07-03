@@ -25,6 +25,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import IntegrityError, models, transaction
 from django.db.models import Q, Sum
+from django.utils import timezone
 
 from apps.core.utils import next_number
 
@@ -748,15 +749,25 @@ class OvertimeRequest(TenantNumbered):
 
 
 # ---------------------------------------------------------------------------
-# 3.12 Holiday Management — PublicHoliday
+# 3.12 Holiday Management — PublicHoliday + HolidayPolicy + FloatingHolidayElection
 # ---------------------------------------------------------------------------
 class PublicHoliday(TenantOwned):
-    """Tenant-scoped holiday calendar (3.12). Non-optional holidays are excluded from
-    ``LeaveRequest.days``; optional (floating) holidays are not."""
+    """Tenant-scoped holiday calendar (3.12 — "Holiday Calendar" bullet). Non-optional holidays
+    are excluded from ``LeaveRequest.days``; optional (floating) holidays are not — an employee
+    instead elects them via ``FloatingHolidayElection``. ``category`` classifies the entry
+    (national / regional / company / observance) for filtering."""
+
+    CATEGORY_CHOICES = [
+        ("national", "National"),
+        ("regional", "Regional"),
+        ("company", "Company"),
+        ("observance", "Observance"),
+    ]
 
     date = models.DateField()
     name = models.CharField(max_length=255)
     is_optional = models.BooleanField(default=False)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="national")
 
     class Meta:
         ordering = ["date"]
@@ -767,6 +778,158 @@ class PublicHoliday(TenantOwned):
 
     def __str__(self):
         return f"{self.date} — {self.name}"
+
+
+class HolidayPolicy(TenantOwned):
+    """A location/eligibility-scoped holiday policy (3.12 — "Holiday Policies" bullet).
+
+    A policy narrows *which* optional holidays an employee may draw from (``holidays``; empty =
+    the whole tenant's optional-holiday pool) and *how many* they may elect per year
+    (``floating_holiday_quota``), scoped to a location / department / employee-type / designation.
+    ``for_employee()`` resolves the single governing policy for an employee — the most specific
+    active match, falling back to the ``is_default`` company-wide policy — so eligibility logic
+    lives in one place (mirrors the "most-specific match wins" idea from the sidebar resolver)."""
+
+    name = models.CharField(max_length=150)
+    location = models.CharField(
+        max_length=255, blank=True,
+        help_text="Matched (case-insensitive contains) against an employee's work location. Blank = any.")
+    org_unit = models.ForeignKey(
+        "core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="holiday_policies", help_text="Department/branch scope. Blank = any.")
+    employee_type = models.CharField(
+        max_length=20, blank=True, choices=EmployeeProfile.EMPLOYEE_TYPE_CHOICES,
+        help_text="Employment-type eligibility. Blank = any.")
+    designation = models.ForeignKey(
+        "hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="holiday_policies", help_text="Designation/grade eligibility. Blank = any.")
+    is_default = models.BooleanField(
+        default=False, help_text="The fallback policy applied when no more specific policy matches.")
+    floating_holiday_quota = models.PositiveSmallIntegerField(
+        default=0, help_text="Maximum optional (floating) holidays an eligible employee may elect per year.")
+    holidays = models.ManyToManyField(
+        "hrm.PublicHoliday", blank=True, related_name="policies",
+        help_text="Optional — restrict the electable optional-holiday pool. Empty = all optional holidays.")
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-is_default", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_default"], name="hrm_hpol_tenant_default_idx"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def for_employee(cls, employee):
+        """Return the governing ``HolidayPolicy`` for ``employee`` (an ``EmployeeProfile``), or
+        ``None``. Every *set* scope field on a policy must match the employee (a blank field is a
+        wildcard that matches anyone); among matching policies the one with the most matched scope
+        fields wins, and a tie breaks toward the ``is_default`` policy."""
+        if employee is None or not getattr(employee, "tenant_id", None):
+            return None
+        emp_location = (getattr(employee, "work_location", "") or "").strip().lower()
+        emp_org_unit_id = employee.employment.org_unit_id if employee.employment_id else None
+        emp_type = employee.employee_type or ""
+        emp_desig_id = employee.designation_id
+
+        best, best_rank = None, (-1, -1)
+        for p in cls.objects.filter(tenant_id=employee.tenant_id, is_active=True):
+            score, ok = 0, True
+            if p.location:
+                if emp_location and p.location.strip().lower() in emp_location:
+                    score += 1
+                else:
+                    ok = False
+            if ok and p.org_unit_id is not None:
+                if p.org_unit_id == emp_org_unit_id:
+                    score += 1
+                else:
+                    ok = False
+            if ok and p.employee_type:
+                if p.employee_type == emp_type:
+                    score += 1
+                else:
+                    ok = False
+            if ok and p.designation_id is not None:
+                if p.designation_id == emp_desig_id:
+                    score += 1
+                else:
+                    ok = False
+            if not ok:
+                continue
+            # Most specific wins; a default policy breaks ties (so an explicit default outranks a
+            # non-default all-wildcard policy of the same score).
+            rank = (score, 1 if p.is_default else 0)
+            if rank > best_rank:
+                best, best_rank = p, rank
+        return best
+
+
+class FloatingHolidayElection(TenantOwned):
+    """An employee's election of one optional (floating) holiday (3.12 — "Floating Holidays"
+    bullet). Only ``is_optional=True`` holidays are electable; the governing ``HolidayPolicy``'s
+    ``floating_holiday_quota`` caps how many an employee may take per year (the "restriction
+    rules"). Approvals mirror the ``LeaveRequest`` workflow: pending → approved/rejected via the
+    privileged view actions (``status``/``approved_by``/``approved_at`` are never form fields)."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    employee = models.ForeignKey(
+        "hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="floating_holiday_elections")
+    holiday = models.ForeignKey(
+        "hrm.PublicHoliday", on_delete=models.CASCADE, related_name="floating_elections")
+    policy = models.ForeignKey(
+        "hrm.HolidayPolicy", on_delete=models.SET_NULL, null=True, blank=True, related_name="elections",
+        help_text="The governing policy (auto-resolved from the employee if left blank).")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    requested_on = models.DateField(default=timezone.localdate)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hrm_floating_holiday_approvals", editable=False)
+    approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-requested_on"]
+        unique_together = ("tenant", "employee", "holiday")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_fhe_tenant_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_fhe_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.holiday_id and not self.holiday.is_optional:
+            raise ValidationError({"holiday": "Only optional (floating) holidays can be elected."})
+        if self.employee_id and self.holiday_id:
+            policy = self.policy or HolidayPolicy.for_employee(self.employee)
+            if policy is not None and policy.floating_holiday_quota:
+                year = self.holiday.date.year
+                taken = (FloatingHolidayElection.objects
+                         .filter(tenant_id=self.tenant_id, employee_id=self.employee_id,
+                                 status__in=("pending", "approved"), holiday__date__year=year)
+                         .exclude(pk=self.pk).count())
+                if taken + 1 > policy.floating_holiday_quota:
+                    raise ValidationError({"holiday":
+                        f"Quota exceeded — {policy.name} allows {policy.floating_holiday_quota} "
+                        f"floating holiday(s) in {year}."})
+
+    def save(self, *args, **kwargs):
+        # Auto-resolve the governing policy from the employee when not explicitly chosen.
+        if self.policy_id is None and self.employee_id:
+            self.policy = HolidayPolicy.for_employee(self.employee)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} · {self.holiday} · {self.get_status_display()}"
 
 
 # ---------------------------------------------------------------------------
