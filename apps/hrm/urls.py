@@ -144,6 +144,22 @@ urlpatterns = [
     path("holidays/<int:pk>/edit/", views.publicholiday_edit, name="publicholiday_edit"),
     path("holidays/<int:pk>/delete/", views.publicholiday_delete, name="publicholiday_delete"),
 
+    # Holiday Policies (3.12)
+    path("holiday-policies/", views.holidaypolicy_list, name="holidaypolicy_list"),
+    path("holiday-policies/add/", views.holidaypolicy_create, name="holidaypolicy_create"),
+    path("holiday-policies/<int:pk>/", views.holidaypolicy_detail, name="holidaypolicy_detail"),
+    path("holiday-policies/<int:pk>/edit/", views.holidaypolicy_edit, name="holidaypolicy_edit"),
+    path("holiday-policies/<int:pk>/delete/", views.holidaypolicy_delete, name="holidaypolicy_delete"),
+
+    # Floating Holiday Elections (3.12)
+    path("floating-holidays/", views.floatingholidayelection_list, name="floatingholidayelection_list"),
+    path("floating-holidays/add/", views.floatingholidayelection_create, name="floatingholidayelection_create"),
+    path("floating-holidays/<int:pk>/", views.floatingholidayelection_detail, name="floatingholidayelection_detail"),
+    path("floating-holidays/<int:pk>/edit/", views.floatingholidayelection_edit, name="floatingholidayelection_edit"),
+    path("floating-holidays/<int:pk>/delete/", views.floatingholidayelection_delete, name="floatingholidayelection_delete"),
+    path("floating-holidays/<int:pk>/approve/", views.floatingholidayelection_approve, name="floatingholidayelection_approve"),
+    path("floating-holidays/<int:pk>/reject/", views.floatingholidayelection_reject, name="floatingholidayelection_reject"),
+
     # Shifts (3.9)
     path("shifts/", views.shift_list, name="shift_list"),
     path("shifts/add/", views.shift_create, name="shift_create"),
