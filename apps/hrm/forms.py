@@ -342,12 +342,11 @@ class HolidayPolicyForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         # A policy only governs OPTIONAL (floating) holidays — narrow its pool to those (the base
         # form already tenant-scopes every FK/M2M queryset).
+        # Only the holidays M2M needs narrowing (to optional holidays) — the base TenantModelForm
+        # already tenant-scopes the org_unit/designation FKs, and Designation.Meta already orders by name.
         if self.tenant is not None and "holidays" in self.fields:
             self.fields["holidays"].queryset = (
                 PublicHoliday.objects.filter(tenant=self.tenant, is_optional=True).order_by("date"))
-        if self.tenant is not None and "designation" in self.fields:
-            self.fields["designation"].queryset = (
-                Designation.objects.filter(tenant=self.tenant).order_by("name"))
 
 
 class FloatingHolidayElectionForm(TenantModelForm):
