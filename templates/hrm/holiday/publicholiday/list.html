@@ -56,8 +56,8 @@
               <td><a href="{% url 'hrm:publicholiday_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
               <td>
                 {% if obj.category == 'national' %}<span class="badge badge-info">{{ obj.get_category_display }}</span>
-                {% elif obj.category == 'regional' %}<span class="badge badge-warning">{{ obj.get_category_display }}</span>
-                {% elif obj.category == 'company' %}<span class="badge badge-success">{{ obj.get_category_display }}</span>
+                {% elif obj.category == 'regional' %}<span class="badge badge-amber">{{ obj.get_category_display }}</span>
+                {% elif obj.category == 'company' %}<span class="badge badge-green">{{ obj.get_category_display }}</span>
                 {% else %}<span class="badge badge-muted">{{ obj.get_category_display }}</span>{% endif %}
               </td>
               <td>{% if obj.is_optional %}<span class="badge badge-info">Optional</span>{% else %}<span class="badge badge-muted">Public</span>{% endif %}</td>
