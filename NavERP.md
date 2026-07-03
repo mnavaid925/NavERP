@@ -49,9 +49,9 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 | # | Module | Django app(s) | Status |
 |---|--------|---------------|--------|
 | 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built; sub-module **0.1 complete** |
-| 1 | Customer Relationship Management (CRM) | `crm` | ⬜ Roadmap |
-| 2 | Accounting & Finance | `accounting` | ⬜ Roadmap |
-| 3 | Human Resource Management (HRM) | `hrm` | ⬜ Roadmap |
+| 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built |
+| 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built |
+| 3 | Human Resource Management (HRM) | `hrm` | 🟦 In progress — **3.1–3.12 built** (12 of 41 sub-modules) |
 | 4 | Supply Chain Management (SCM) | `scm` | ⬜ Roadmap |
 | 5 | Inventory Management System (IMS) | `inventory` | ⬜ Roadmap |
 | 6 | Procurement Management System | `procurement` | ⬜ Roadmap |
