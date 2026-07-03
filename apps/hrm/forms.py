@@ -59,8 +59,11 @@ from .models import (
     OnboardingTemplate,
     OnboardingTemplateTask,
     OrientationSession,
+    OvertimeRequest,
     PublicHoliday,
     RequisitionApproval,
+    Timesheet,
+    TimesheetEntry,
     SeparationCase,
     Shift,
     ShiftAssignment,
@@ -287,6 +290,34 @@ class LeaveEncashmentForm(TenantModelForm):
         # Only encashable leave types can be encashed — narrow the dropdown to match the model clean().
         if "leave_type" in self.fields:
             self.fields["leave_type"].queryset = self.fields["leave_type"].queryset.filter(encashable=True)
+
+
+# ----------------------------------------------------------------------- 3.11 Time Tracking
+class TimesheetForm(TenantModelForm):
+    # status/approver/approved_at/decision_note/rejected_reason + derived total/billable hours are
+    # workflow-set in the view, never on the form (no self-approve via crafted POST).
+    class Meta:
+        model = Timesheet
+        fields = ["employee", "period_start", "period_end"]
+
+
+class TimesheetEntryForm(TenantModelForm):
+    # `timesheet` is set from the view/URL context (inline child on the timesheet hub), not the form.
+    class Meta:
+        model = TimesheetEntry
+        fields = ["date", "project", "task_description", "hours", "is_billable", "billable_rate", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+
+class OvertimeRequestForm(TenantModelForm):
+    class Meta:
+        model = OvertimeRequest
+        fields = ["employee", "timesheet", "date", "hours_claimed", "multiplier", "payout_method", "reason"]
+        widgets = {
+            "reason": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
 
 
 class PublicHolidayForm(TenantModelForm):
