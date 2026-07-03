@@ -218,7 +218,7 @@ def hrm_overview(request):
     tenant = request.tenant
     stats = {"employees": 0, "new_this_month": 0, "on_leave_today": 0,
              "present_today": 0, "absent_today": 0, "pending_regularizations": 0,
-             "pending_encashments": 0,
+             "pending_encashments": 0, "pending_timesheets": 0, "pending_overtime": 0,
              "open_requisitions": 0, "active_applications": 0, "new_candidates": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
@@ -236,6 +236,8 @@ def hrm_overview(request):
             tenant=tenant, status="pending").count()
         stats["pending_encashments"] = LeaveEncashment.objects.filter(
             tenant=tenant, status="pending").count()
+        stats["pending_timesheets"] = Timesheet.objects.filter(tenant=tenant, status="pending").count()
+        stats["pending_overtime"] = OvertimeRequest.objects.filter(tenant=tenant, status="pending").count()
         # 3.6 recruiting pipeline at a glance.
         stats["open_requisitions"] = JobRequisition.objects.filter(tenant=tenant, status="posted").count()
         stats["active_applications"] = (JobApplication.objects.filter(tenant=tenant)
@@ -1480,13 +1482,19 @@ def overtimerequest_cancel(request, pk):
 # ============================================================ Time Tracking reports (3.11)
 @login_required
 def timesheet_utilization_report(request):
-    """Per-employee billable-hours ÷ total-hours over APPROVED timesheets (derived, no model)."""
+    """Per-employee billable-hours ÷ total-hours over APPROVED timesheets (derived, no model).
+    Optional ``?date_from``/``?date_to`` bound by the timesheet period start."""
     tenant = request.tenant
     rows = []
+    date_from = _parse_iso_date(request.GET.get("date_from", "").strip())
+    date_to = _parse_iso_date(request.GET.get("date_to", "").strip())
     if tenant is not None:
-        for d in (TimesheetEntry.objects
-                  .filter(tenant=tenant, timesheet__status="approved")
-                  .values("timesheet__employee_id", "timesheet__employee__party__name")
+        qs = TimesheetEntry.objects.filter(tenant=tenant, timesheet__status="approved")
+        if date_from:
+            qs = qs.filter(timesheet__period_start__gte=date_from)
+        if date_to:
+            qs = qs.filter(timesheet__period_start__lte=date_to)
+        for d in (qs.values("timesheet__employee_id", "timesheet__employee__party__name")
                   .annotate(total=Sum("hours"), billable=Sum("hours", filter=Q(is_billable=True)))
                   .order_by("timesheet__employee__party__name")):
             total = d["total"] or Decimal("0")
@@ -1499,15 +1507,21 @@ def timesheet_utilization_report(request):
 
 @login_required
 def project_time_report(request):
-    """Per-``accounting.Project`` logged hours vs budget (derived, no model)."""
+    """Per-``accounting.Project`` logged hours vs budget (derived, no model).
+    Optional ``?date_from``/``?date_to`` bound by the entry date."""
     tenant = request.tenant
     rows = []
+    date_from = _parse_iso_date(request.GET.get("date_from", "").strip())
+    date_to = _parse_iso_date(request.GET.get("date_to", "").strip())
     if tenant is not None:
+        qs = TimesheetEntry.objects.filter(tenant=tenant, project__isnull=False)
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
         # Alias the aggregates away from the `hours` field name — an annotation named `hours` would
         # shadow the field and make the second Sum("hours", ...) raise "hours is an aggregate".
-        for d in (TimesheetEntry.objects
-                  .filter(tenant=tenant, project__isnull=False)
-                  .values("project__number", "project__name", "project__budget_amount")
+        for d in (qs.values("project__number", "project__name", "project__budget_amount")
                   .annotate(logged=Sum("hours"), billable=Sum("hours", filter=Q(is_billable=True)))
                   .order_by("project__name")):
             rows.append({"number": d["project__number"], "name": d["project__name"],
