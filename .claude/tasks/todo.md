@@ -1,347 +1,297 @@
 ---
-# HRM 3.10 Leave Management — completion pass (Leave Policy engine + Encashment)  (2026-07-03)
+# HRM 3.12 Holiday Management — COMPLETION pass (Floating Holidays + Holiday Policies)  (2026-07-04)
 
-**Context.** 3.10 was previously built (LeaveType / LeaveAllocation / LeaveRequest / PublicHoliday, full CRUD +
-approve workflow, `LIVE_LINKS["3.10"]`). Of NavERP.md's 5 bullets, **"Leave Policy" (accrual / carry-forward /
-encashment) is the only one not built as a distinct feature** — the rules exist as config on `LeaveType`, but there
-is no engine that runs accrual/carry-forward and no standalone encashment workflow (`compute_leave_encashment` is
-offboarding-only). This pass completes 3.10 with a policy **engine** + an **encashment** workflow. Extending
-`apps/hrm` — NOT a new app.
+**Context.** `PublicHoliday` (Holiday Calendar bullet) already exists with full CRUD, seeded, wired into
+`LIVE_LINKS["3.12"]["Holiday Calendar"]`. Plan from `.claude/tasks/research-holiday.md`. This pass closes the two
+remaining NavERP.md 3.12 bullets — **Floating Holidays** and **Holiday Policies** — by enriching `PublicHoliday`
+with one field and adding two new `TenantOwned` models. Extending `apps/hrm` — NOT a new app. No new spine
+masters; every FK points at `hrm.EmployeeProfile`, `hrm.Designation`, `core.OrgUnit`, or `accounts` User.
 
-## New model (1) + 1 field
+## A. Models + migration
 
-### `LeaveEncashment` (ENC-…) — the encashment request workflow
-- `number` ENC-#### (TenantNumbered), `employee` → EmployeeProfile, `leave_type` → LeaveType (must be encashable)
-- `year`, `days`, `rate_per_day`, `amount` (editable=False, = days × rate_per_day in save())
-- status `draft → pending → approved → paid` (+ `rejected`, `cancelled`); `OPEN_STATUSES=(draft,pending)`
-- `approver`(User SET_NULL), `approved_at`, `paid_on`, `payment_reference`, `decision_note`
-- `clean()`: days > 0; leave_type must be `encashable`; days ≤ available balance for (employee, leave_type, year)
-- workflow views: submit (owner) / approve+reject+mark_paid (`@tenant_admin_required`) / cancel (owner)
-- **on approve** (atomic): reduce the matching `LeaveAllocation.allocated_days` by `days` (encashment consumes leave)
+- [ ] `PublicHoliday` — enrich (existing model, `apps/hrm/models.py` ~L753):
+  - [ ] add `category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="national")` with
+        `CATEGORY_CHOICES = [("national","National"),("regional","Regional"),("company","Company"),
+        ("observance","Observance")]` — driver: Zoho People national/optional/special classification +
+        Workday's regional-holiday distinction (research L60-63). Keep `is_optional` as-is (the floating switch —
+        do not rename).
+  - [ ] no other field changes; `date`/`name`/`is_optional`/`unique_together`/ordering/indexes stay as-is.
 
-### `LeaveAllocation.carried_forward` (Decimal, editable=False, default 0)
-- records days rolled in from the prior year (part of allocated_days) → makes carry-forward idempotent + auditable
+- [ ] `HolidayPolicy(TenantOwned)` [`apps/hrm/models.py`, new class near `PublicHoliday`] — no number prefix
+      (`TenantOwned`, mirrors `PublicHoliday`/`Shift`), justified by Personio calendar-per-office, greytHR
+      Location/Designation filters, Darwinbox/factoHR max-cap, SAP SuccessFactors default+most-specific-match
+      (research L145-163):
+  - [ ] `name` — CharField(max_length=150) — e.g. "Head Office — Full Time"
+  - [ ] `location` — CharField(max_length=255, blank=True) — matched against `EmployeeProfile.work_location`
+        (free-text contains-match, driver: greytHR Location column / Personio calendar-per-office)
+  - [ ] `org_unit` — FK `core.OrgUnit`, `on_delete=models.SET_NULL`, `null=True, blank=True`,
+        `related_name="holiday_policies"` — driver: greytHR/Workday department-level scoping
+  - [ ] `employee_type` — CharField(max_length=20, blank=True, choices=`EmployeeProfile.EMPLOYEE_TYPE_CHOICES`)
+        — driver: Keka/factoHR holiday-plan-per-employee-group (constrained to the existing enum, no new master)
+  - [ ] `designation` — FK `hrm.Designation`, `on_delete=models.SET_NULL`, `null=True, blank=True`,
+        `related_name="holiday_policies"` — driver: greytHR Designation column
+  - [ ] `is_default` — BooleanField(default=False) — the fallback when nothing more specific matches (driver:
+        Personio company-level default, SAP SuccessFactors)
+  - [ ] `floating_holiday_quota` — PositiveSmallIntegerField(default=0) — "choose up to N" cap (driver:
+        Darwinbox max-selection cap, factoHR "maximum of 2", HiBob "typical starting point is two")
+  - [ ] `holidays` — ManyToManyField(`hrm.PublicHoliday`, blank=True, related_name="policies") — optional
+        narrowing of which tenant holidays this policy's optional-holiday pool draws from; empty = all tenant
+        `is_optional=True` holidays eligible (driver: greytHR per-holiday Location cell / Zoho single-list
+        classification — join table, not a duplicated calendar)
+  - [ ] `is_active` — BooleanField(default=True)
+  - [ ] `description` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-is_default", "name"]`; `unique_together = ("tenant", "name")`; add an index
+        `models.Index(fields=["tenant", "is_default"], name="hrm_hpol_tenant_default_idx")`
+  - [ ] `for_employee(cls, profile)` classmethod resolver — queries `HolidayPolicy.objects.filter(tenant_id=
+        profile.tenant_id, is_active=True)`, scores each candidate (org_unit match, designation match,
+        employee_type match, location match — each contributes to specificity; a field left blank on the policy
+        is a wildcard/skip, not a mismatch), returns the highest-scoring non-default match, else the row with
+        `is_default=True`, else `None`. Reuses `EmployeeProfile.department` (org_unit) already on the profile.
+  - [ ] `__str__` → `self.name`
 
-## Policy engine (no model — standalone page + admin run actions)
-- `leave_policy` (GET): lists LeaveTypes + their accrual/carry-forward/encashment config + a year selector and the
-  two run actions; shows a current-year allocation summary.
-- `leave_accrual_run` (POST, `@tenant_admin_required`): per active employee × accruing LeaveType, set
-  `allocated_days = accrued(year) + carried_forward` (annual→accrual_days; monthly→accrual_days×months_elapsed),
-  capped at `max_balance`. Idempotent per run.
-- `leave_carryforward_run` (POST, `@tenant_admin_required`): source year → year+1, `carry = min(max(balance,0),
-  max_carry_forward)`; set `dst.allocated_days = (dst.allocated_days − dst.carried_forward) + carry`,
-  `dst.carried_forward = carry`. Idempotent.
+- [ ] `FloatingHolidayElection(TenantOwned)` [new class] — no number prefix (`TenantOwned`), justified by Keka
+      floater-leave application + approval, Darwinbox/factoHR cap enforcement, general approval-workflow pattern
+      (research L165-181):
+  - [ ] `employee` — FK `hrm.EmployeeProfile`, `on_delete=models.CASCADE`, `related_name="floating_holiday_elections"`
+  - [ ] `holiday` — FK `hrm.PublicHoliday`, `on_delete=models.CASCADE`, `related_name="floating_elections"` —
+        must have `is_optional=True` (enforced in form `__init__` queryset + model `clean()`)
+  - [ ] `policy` — FK `HolidayPolicy`, `on_delete=models.SET_NULL`, `null=True, blank=True`,
+        `related_name="elections"` — auto-resolved via `HolidayPolicy.for_employee(self.employee)` in `save()`
+        when not already set
+  - [ ] `status` — CharField(max_length=20, choices=`STATUS_CHOICES`, default="pending") with
+        `STATUS_CHOICES = [("pending","Pending"),("approved","Approved"),("rejected","Rejected")]`
+        (mirrors `LeaveRequest`/`Timesheet` shape, minus draft/cancelled — an election is submitted at creation)
+  - [ ] `requested_on` — DateField(default=`django.utils.timezone.localdate`) (NOT `auto_now_add`, so the
+        seeder/tests can backdate if ever needed — same idiom as other HRM date-default fields; if
+        `auto_now_add=True` is simpler and matches `LeaveEncashment`'s `year` style, either is acceptable — pick
+        `default=timezone.localdate` so the field stays editable pre-save via `clean()`re-checks)
+  - [ ] `approved_by` — FK `settings.AUTH_USER_MODEL`, `on_delete=models.SET_NULL`, `null=True, blank=True`,
+        `related_name="hrm_floating_holiday_approvals"` — system-set only (workflow view), never a form field
+  - [ ] `approved_at` — DateTimeField(null=True, blank=True) — system-set only
+  - [ ] `note` — TextField(blank=True) — light-touch reason/occasion field (research L91-93: free text is
+        sufficient, no controlled taxonomy this pass)
+  - [ ] `class Meta`: `ordering = ["-requested_on"]`; `unique_together = ("tenant", "employee", "holiday")` — an
+        employee can't double-elect the same holiday; indexes:
+        `models.Index(fields=["tenant","employee","status"], name="hrm_fhe_tenant_emp_status_idx")`,
+        `models.Index(fields=["tenant","status"], name="hrm_fhe_tenant_status_idx")`
+  - [ ] `clean()`:
+    - [ ] reject if `self.holiday_id` and `self.holiday` is not `is_optional=True` →
+          `ValidationError({"holiday": "Only optional (floating) holidays can be elected."})`
+    - [ ] resolve `policy = self.policy or HolidayPolicy.for_employee(self.employee)` (don't mutate `self.policy`
+          in `clean()` — only for the quota check) when `self.employee_id` and `self.holiday_id`
+    - [ ] quota check: if a policy resolves and `policy.floating_holiday_quota` is set, count this employee's
+          existing `pending`/`approved` elections (excluding `self.pk`) whose `holiday.date.year ==
+          self.holiday.date.year` and whose resolved policy == this policy; if `count + 1 >
+          floating_holiday_quota` → `ValidationError({"holiday": f"Quota exceeded — this policy allows
+          {quota} floating holiday(s) per year."})`
+  - [ ] `save()`: if `self.policy_id` is None and `self.employee_id`, set
+        `self.policy = HolidayPolicy.for_employee(self.employee)` before calling `super().save()` (auto-resolve,
+        per research L169-170)
+  - [ ] `__str__` → `f"{self.employee} · {self.holiday} · {self.status}"`
 
-## Build checklist
-- [ ] models: `LeaveEncashment` + `LeaveAllocation.carried_forward`
-- [ ] forms: `LeaveEncashmentForm` (workflow fields excluded)
-- [ ] views: encashment CRUD + submit/approve/reject/mark_paid/cancel; `leave_policy` + accrual/carry-forward runs
-- [ ] urls: `leave-encashments/…` (+ workflow) ; `leave-policy/` + `…/accrual-run/` + `…/carry-forward-run/`
-- [ ] admin: register `LeaveEncashment`
-- [ ] navigation: `LIVE_LINKS["3.10"]` += Leave Policy (`leave_policy`) + Leave Encashment (extra)
-- [ ] templates: `leave/encashment/{list,detail,form}.html`, `leave/policy.html` (standalone); show carried_forward on allocation detail
-- [ ] seeder: seed 1–2 encashment requests; carried_forward defaults 0
-- [ ] migrate + seed (x2 idempotent) + `manage.py check`
-- [ ] verify: smoke script — new urls 200/302, accrual/carry-forward runs mutate allocations idempotently, encashment approve reduces allocated_days, cross-tenant 404
-- [ ] review agents: code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer
-- [ ] update `.claude/skills/hrm/SKILL.md` 3.10 section
+- [ ] one incremental migration `apps/hrm/migrations/0023_publicholiday_category_holidaypolicy_and_more.py`
+      (NOT `0001_initial`) — `makemigrations hrm`, review the generated file, adjust index/constraint names to
+      match the ones specified above if Django's auto-names differ.
 
-## Review — delivered 2026-07-03
+## B. Forms (`apps/hrm/forms.py`)
 
-**Scope built.** Completed HRM 3.10 by adding the missing "Leave Policy" bullet as a working engine + an encashment
-workflow. New `LeaveEncashment` (`ENC-`, draft→pending→approved→paid/rejected/cancelled; approve consumes balance)
-+ `LeaveAllocation.carried_forward`/`encashed_days` fields. **Leave Policy engine** (`leave_policy` page, no model):
-admin `leave_accrual_run` (annual grant / monthly rate×elapsed-months, capped at max_balance) and
-`leave_carryforward_run` (min(balance, max_carry_forward) → next year), both idempotent + atomic + audit-logged.
-Wired into `LIVE_LINKS["3.10"]` (all 5 bullets live + Encashment extra), admin, seeder (2 encashments/tenant),
-2 migrations (0020 model+carried_forward, 0021 encashed_days).
+- [ ] `PublicHolidayForm(TenantModelForm)` — add `"category"` to `Meta.fields`: `["date", "name", "is_optional",
+      "category"]` (was `["date", "name", "is_optional"]`).
+- [ ] `HolidayPolicyForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["name", "location", "org_unit", "employee_type", "designation", "is_default",
+        "floating_holiday_quota", "holidays", "is_active", "description"]`
+  - [ ] `__init__`: narrow `holidays` queryset to `PublicHoliday.objects.filter(tenant=self.tenant,
+        is_optional=True)` (only optional holidays are electable, so only they belong in a policy's pool) —
+        mirror the `LeaveEncashmentForm.__init__` narrowing idiom (guard with `if "holidays" in self.fields`)
+  - [ ] widget: `holidays` as a checkbox multi-select or size-limited `SelectMultiple` (`forms.CheckboxSelectMultiple`
+        is friendliest for a typically-short optional-holiday list)
+- [ ] `FloatingHolidayElectionForm(TenantModelForm)` — **SECURITY comment mirroring `LeaveRequestForm`**:
+      `status`/`approved_by`/`approved_at` are deliberately NOT form fields — a new election starts "pending" and
+      both are set only by the approve/reject workflow views:
+  - [ ] `Meta.fields = ["employee", "holiday", "policy", "note"]`
+  - [ ] `__init__`: narrow `holiday` queryset to `PublicHoliday.objects.filter(tenant=self.tenant,
+        is_optional=True)`; narrow `policy` queryset to `HolidayPolicy.objects.filter(tenant=self.tenant,
+        is_active=True)`; make `policy` not required (`self.fields["policy"].required = False`) since it
+        auto-resolves in `save()` if left blank
 
-**Key correctness insight (encashed_days).** Encashment approve records days in a **separate `encashed_days`** field,
-not by shrinking `allocated_days` — because the accrual engine recomputes `allocated_days`, and reducing it directly
-would let a routine accrual re-run silently restore cashed-out days (double-spend). `balance = allocated − used −
-encashed`; carry-forward and offboarding both net out encashed days.
+## C. Views (`apps/hrm/views.py`)
 
-**Review-agent sequence (all applied + committed):**
-- code-reviewer → 4: AuditLog.action truncation (10-char field → verb moved to `changes`); carry-forward dest-year
-  `max_balance` cap; `LeaveAllocationForm` resets `carried_forward` on manual edit; `_accrual_target` 0 months for a
-  future year.
-- explorer → **double-spend bug** (accrual re-run restored encashed days) fixed via the `encashed_days` field; carry-
-  forward + `compute_leave_encashment` net encashed days; allocation↔encashment cross-link; pending-encashments KPI.
-- frontend-reviewer → 1 (always-render the allocation-detail Encashments card with an empty-state); else clean.
-- performance-reviewer → clean (no N+1s; engine `get_or_create`-in-loop is O(employees×types), demo-acceptable —
-  deferred the bulk_create/bulk_update rewrite as a scaling note).
-- qa-smoke-tester → clean (independent migrate+seed+engine/workflow sweep, double-spend regression confirmed).
-- security-reviewer → 1 applied (bound `_policy_year` to 2000–2100 vs oversized-year DB 500); 1 **rejected** (adding
-  `tenant=` to `LeaveEncashment.clean()` would filter tenant=None pre-validation on create and break it — not
-  exploitable, employee_id is already tenant-bound).
-- test-writer → **102 tests** in `test_leave_encashment_and_policy.py`; HRM suite **1,775** green, project-wide **4,422**.
+- [ ] `publicholiday_list` — no logic change needed beyond passing `category_choices` if a category filter is
+      added (see below); import `PublicHoliday.CATEGORY_CHOICES`.
+  - [ ] add a `category` filter to the existing `crud_list(...)` call: `filters=[("is_optional", "is_optional",
+        False), ("category", "category", False)]`; add `"category_choices": PublicHoliday.CATEGORY_CHOICES` to
+        `extra_context`.
+- [ ] `holidaypolicy_list` (`@login_required`) — `crud_list(request,
+      HolidayPolicy.objects.filter(tenant=request.tenant).select_related("org_unit", "designation"),
+      "hrm/holiday/holidaypolicy/list.html", search_fields=["name", "location"], filters=[("is_active",
+      "is_active", False), ("employee_type", "employee_type", False), ("org_unit", "org_unit_id", True),
+      ("designation", "designation_id", True)], extra_context={"employee_type_choices":
+      EmployeeProfile.EMPLOYEE_TYPE_CHOICES, "org_units": OrgUnit.objects.filter(tenant=request.tenant),
+      "designations": Designation.objects.filter(tenant=request.tenant)})`
+- [ ] `holidaypolicy_create` / `holidaypolicy_edit` / `holidaypolicy_delete` — standard `crud_create`/`crud_edit`/
+      `crud_delete` wrappers (mirror `publicholiday_*`), template paths under `hrm/holiday/holidaypolicy/`.
+- [ ] `holidaypolicy_detail` (`@login_required`) — `crud_detail(request, model=HolidayPolicy, pk=pk, template=
+      "hrm/holiday/holidaypolicy/detail.html", select_related=("org_unit", "designation"))`; template shows the
+      linked `holidays.all` and a reverse list of `obj.elections.all()[:10]` (recent elections against this
+      policy) if useful.
+- [ ] `floatingholidayelection_list` (`@login_required`) — `crud_list(request,
+      FloatingHolidayElection.objects.filter(tenant=request.tenant).select_related("employee", "holiday",
+      "policy"), "hrm/holiday/floatingholidayelection/list.html", search_fields=["employee__party__name",
+      "holiday__name"] (verify the actual name-lookup path used elsewhere for `EmployeeProfile`, e.g. how
+      `leaverequest_list` searches employee — mirror that exact lookup string), filters=[("status", "status",
+      False), ("employee", "employee_id", True), ("holiday", "holiday_id", True)], extra_context={"status_choices":
+      FloatingHolidayElection.STATUS_CHOICES, "employees": EmployeeProfile.objects.filter(tenant=request.tenant),
+      "holidays": PublicHoliday.objects.filter(tenant=request.tenant, is_optional=True)})`
+- [ ] `floatingholidayelection_create` (`@login_required`) — `crud_create(...)`; on success the `save()`
+      auto-resolves `policy` if left blank (handled in the model, not the view).
+- [ ] `floatingholidayelection_detail` / `_edit` / `_delete` — standard wrappers mirroring `publicholiday_*`,
+      template paths under `hrm/holiday/floatingholidayelection/`.
+- [ ] `floatingholidayelection_approve` (`@tenant_admin_required`, `@require_POST`) — mirror
+      `leaverequest_approve`: `get_object_or_404(FloatingHolidayElection, pk=pk, tenant=request.tenant)`; if
+      `status == "pending"`: set `status="approved"`, `approved_by=request.user`, `approved_at=timezone.now()`,
+      `obj.save(update_fields=["status","approved_by","approved_at","updated_at"])`;
+      `write_audit_log(request.user, obj, "update", {"action": "approve"})`; success message; redirect to
+      `hrm:floatingholidayelection_detail`.
+- [ ] `floatingholidayelection_reject` (`@tenant_admin_required`, `@require_POST`) — mirror
+      `leaverequest_reject`: set `status="rejected"`, `approved_by=request.user`, store `request.POST.get("note",
+      "").strip()[:2000]` appended/overwriting `note` (or a dedicated rejection reason — reuse `note` field since
+      no separate `rejected_reason` was scoped); `write_audit_log(..., {"action": "reject"})`; redirect to detail.
+- [ ] all new views import `HolidayPolicy`, `FloatingHolidayElection`, `HolidayPolicyForm`,
+      `FloatingHolidayElectionForm` at the top of `views.py` alongside the existing HRM imports.
 
-**Skill/README** updated (table 45→46, LeaveEncashment + LeaveAllocation fields, routes/engine actions, template
-folders, LIVE_LINKS 3.10, seeder, Deferred pruned + scaling/offboarding notes; test counts refreshed).
+## D. URLs (`apps/hrm/urls.py`, `app_name = "hrm"` already set)
 
-**Deferred (future 3.10 passes):** engine bulk-write rewrite (prefetch-dict + bulk_create/bulk_update, pre-assigning
-LA- numbers) or background task before ~hundreds of employees; auto-cancel/net open (draft/pending) encashments on
-separation so final settlement can't double-pay (spawned as a background task); per-employee↔user ownership scoping
-on request/encashment creation (app-wide convention).
+- [ ] no new path needed for `publicholiday_*` (existing 5 routes unchanged; only the form/list gain `category`).
+- [ ] `path("holiday-policies/", views.holidaypolicy_list, name="holidaypolicy_list")`
+- [ ] `path("holiday-policies/add/", views.holidaypolicy_create, name="holidaypolicy_create")`
+- [ ] `path("holiday-policies/<int:pk>/", views.holidaypolicy_detail, name="holidaypolicy_detail")`
+- [ ] `path("holiday-policies/<int:pk>/edit/", views.holidaypolicy_edit, name="holidaypolicy_edit")`
+- [ ] `path("holiday-policies/<int:pk>/delete/", views.holidaypolicy_delete, name="holidaypolicy_delete")`
+- [ ] `path("floating-holidays/", views.floatingholidayelection_list, name="floatingholidayelection_list")`
+- [ ] `path("floating-holidays/add/", views.floatingholidayelection_create, name="floatingholidayelection_create")`
+- [ ] `path("floating-holidays/<int:pk>/", views.floatingholidayelection_detail, name="floatingholidayelection_detail")`
+- [ ] `path("floating-holidays/<int:pk>/edit/", views.floatingholidayelection_edit, name="floatingholidayelection_edit")`
+- [ ] `path("floating-holidays/<int:pk>/delete/", views.floatingholidayelection_delete, name="floatingholidayelection_delete")`
+- [ ] `path("floating-holidays/<int:pk>/approve/", views.floatingholidayelection_approve, name="floatingholidayelection_approve")`
+- [ ] `path("floating-holidays/<int:pk>/reject/", views.floatingholidayelection_reject, name="floatingholidayelection_reject")`
 
-**Next unbuilt sub-module:** 3.11 Time Tracking.
+## E. Admin (`apps/hrm/admin.py`)
 
----
-# HRM 3.11 Time Tracking — build plan from research-hrm-time-tracking.md (2026-07-03)
+- [ ] register `HolidayPolicy` — `list_display = ("name", "tenant", "location", "org_unit", "employee_type",
+      "designation", "is_default", "floating_holiday_quota", "is_active")`, `list_filter = ("tenant",
+      "is_default", "is_active", "employee_type")`, `search_fields = ("name", "location")`
+- [ ] register `FloatingHolidayElection` — `list_display = ("employee", "holiday", "policy", "status",
+      "requested_on", "approved_by")`, `list_filter = ("tenant", "status")`, `search_fields = ("employee__party__name",
+      "holiday__name")` (match the real employee-name lookup path confirmed in Section C)
+- [ ] update `PublicHolidayAdmin.list_display`/`list_filter` to include `category`
 
-**Context.** Extends the existing `apps/hrm` app — **NOT a new app.** Skip `apps.py`/`INSTALLED_APPS`/
-`config/urls.py` wire-up entirely (hrm is already installed and included). The only wire-up is one
-`LIVE_LINKS["3.11"]` entry in `apps/core/navigation.py`. Mirrors the `LeaveRequest`/`LeaveEncashment`/
-`AttendanceRegularization` status-machine + `TenantNumbered`/`TenantOwned` conventions exactly (see
-`apps/hrm/models.py`). Source: `.claude/tasks/research-hrm-time-tracking.md`.
+## F. Templates (`templates/hrm/holiday/<entity>/<page>.html`)
 
-NavERP.md 3.11 bullets (exact text for `LIVE_LINKS`): **Timesheet** — Daily/weekly timesheet submission.
-**Project Time Tracking** — Time logged against projects/tasks. **Billable Hours** — Client billing,
-utilization reports. **Overtime Tracking** — OT calculation, approval, payment. **Timesheet Approval** —
-Manager approval workflow.
+- [ ] `holiday/publicholiday/list.html` — add the `category` filter select (reflecting `request.GET.category`,
+      options from `category_choices`) alongside the existing `is_optional`/`year` filters; add a category badge
+      column.
+- [ ] `holiday/publicholiday/detail.html` — show `category` (display value via `get_category_display`).
+- [ ] `holiday/publicholiday/form.html` — add the `category` field to the form (no structural change otherwise).
+- [ ] `holiday/holidaypolicy/list.html` — filter bar: search `q`, `is_active` select, `employee_type` select
+      (from `employee_type_choices`), `org_unit` select (from `org_units`, `|stringformat:"d"` pk compare),
+      `designation` select (from `designations`); columns: name, location, org_unit, employee_type, designation,
+      floating_holiday_quota, is_default badge, is_active badge, Actions (view/edit/delete); pagination include;
+      empty-state.
+- [ ] `holiday/holidaypolicy/detail.html` — show all fields incl. `holidays.all` as a chip/badge list and
+      `is_default`/`is_active` badges; Actions sidebar (Edit/Delete + Back to List).
+- [ ] `holiday/holidaypolicy/form.html` — standard form template (checkbox-multiselect for `holidays`).
+- [ ] `holiday/floatingholidayelection/list.html` — filter bar: search `q`, `status` select (from
+      `status_choices`), `employee` select (from `employees`, pk-compare), `holiday` select (from `holidays`,
+      pk-compare); columns: employee, holiday (+ date), policy, status badge, requested_on, Actions
+      (view/edit/delete — Edit/Delete conditional on `status == "pending"` per CRUD rule 2); pagination include;
+      empty-state.
+- [ ] `holiday/floatingholidayelection/detail.html` — show employee/holiday/policy/status
+      badge/requested_on/approved_by/approved_at/note; Actions sidebar: Approve button (POST form, confirm,
+      csrf, `{% if obj.status == "pending" %}`), Reject button (POST form, confirm, csrf, same guard), Edit/Delete
+      (guard on `status == "pending"`), Back to List.
+- [ ] `holiday/floatingholidayelection/form.html` — standard form template (employee/holiday/policy/note).
 
-## Models (from research — 3 models)
+## G. Seeder (`apps/hrm/management/commands/seed_hrm.py`)
 
-- [ ] **`Timesheet`** [`TS-`] (`TenantNumbered`, mirrors `LeaveRequest`) — weekly header.
-  - `employee` FK `hrm.EmployeeProfile` (CASCADE, anchor — never `core.Party` directly)
-  - `period_start`, `period_end` (`DateField`) — the week the sheet covers (drivers: "Daily/weekly timesheet
-    submission" — Clockify/Zoho Projects/Harvest/Deel; daily-vs-weekly granularity P1 — Deel/Replicon/Clockify)
-  - `status` (`draft/pending/approved/rejected/cancelled`), `OPEN_STATUSES = ("draft", "pending")` (driver:
-    "Draft → submit → approved/rejected workflow" P0 — Harvest/Clockify/TimeCamp/BambooHR)
-  - `approver` FK `settings.AUTH_USER_MODEL` (SET_NULL, null/blank), `approved_at` (DateTimeField, null/blank)
-  - `decision_note` (TextField, blank), `rejected_reason` (TextField, blank) — rejection-with-comment +
-    resubmission (driver: Zoho Projects/Clockify/TimeCamp)
-  - `total_hours`, `billable_hours` (`DecimalField(max_digits=6, decimal_places=2, default=0, editable=False)`)
-    — **derived/never hand-typed**, recomputed in a `refresh_totals()` helper called from `save()`/the entry
-    add-remove views, summed from child `TimesheetEntry.hours` (driver: weekly aggregation, all 10 products;
-    mirrors `LeaveRequest.days`/`AttendanceRecord.hours_worked`)
-  - `Meta`: `unique_together = [("tenant", "number"), ("tenant", "employee", "period_start")]` — one timesheet
-    per employee per week; indexes `(tenant, employee, status)`, `(tenant, status)`, `(tenant, period_start)`
-  - `clean()`: `period_end >= period_start`
-  - Reuses `hrm.EmployeeProfile` (anchor); no core-spine table added.
+- [ ] extend the existing "Public holidays" block (~L305-309): add `category` per row (national for the fixed
+      seeded holidays, mark 1-2 as `regional`/`company` if the existing `HOLIDAYS` tuple has enough entries, else
+      just set all to `"national"` via `defaults` update) — must stay idempotent (`get_or_create`, update
+      `category` on the `defaults` dict only, no unconditional `.save()`).
+- [ ] add a new idempotent block after Shifts/attendance (or right after the public-holidays block): create 1-2
+      `HolidayPolicy` rows per tenant via `get_or_create(tenant=tenant, name=...)`:
+  - [ ] a default policy: `name="Company Default"`, `is_default=True`, `floating_holiday_quota=2`,
+        `is_active=True`
+  - [ ] a scoped policy: `name="<some work_location or designation> Policy"`, `location=` (pull an existing
+        seeded `EmployeeProfile.work_location` value if present, else leave blank and scope by `employee_type`
+        or `designation` instead), `floating_holiday_quota=1`, `is_active=True`
+  - [ ] attach 1-2 of the seeded optional `PublicHoliday` rows to each via `.holidays.set([...])`
+- [ ] add a new idempotent block creating 2-3 `FloatingHolidayElection` rows against existing seeded
+      `EmployeeProfile` + an optional `PublicHoliday`, using `get_or_create(tenant=tenant, employee=emp,
+      holiday=holiday, defaults={"note": "...", "status": "pending" or "approved"})` — guard with `.exists()`
+      check per (employee, holiday) pair (the `unique_together` already prevents dupes, but `get_or_create` is
+      the idempotent-safe path per the Seed Command Rules). For an `"approved"` seeded row, also set
+      `approved_by`/`approved_at` in `defaults` (pick the tenant's admin/first superuser-scoped user if available,
+      else leave null).
+- [ ] verify the seeder still prints the tenant-admin login reminder + "Data already exists" warning path
+      unchanged (no new top-level `if Model.objects.filter(tenant=tenant).exists()` guard needed since this
+      reuses the existing per-tenant loop — just make each new block itself idempotent).
 
-- [ ] **`TimesheetEntry`** (plain `TenantOwned`, child line — no own numbering, mirrors `LeaveAllocation`/
-  `ClearanceItem` pattern of an un-numbered child row).
-  - `timesheet` FK `hrm.Timesheet` (CASCADE, `related_name="entries"`)
-  - `date` (`DateField`) — `clean()` must fall within the parent's `period_start`/`period_end`
-  - `project` FK `accounting.Project` (**SET_NULL, null=True, blank=True**) — optional so admin/non-project
-    time is loggable (driver: "Time entry tagged to a project" P0 — Harvest/Toggl/Zoho Projects/Replicon/
-    TimeCamp; reuses the existing 2.9 job-costing spine instead of a new project table)
-  - `task_description` (`CharField(max_length=255, blank=True)`) — free text; **Module 7 migration note**:
-    becomes an optional FK once Project Management ships a `Task`/WBS model (driver: "Time entry tagged to a
-    task" P1 — Toggl/Zoho Projects/Replicon)
-  - `hours` (`DecimalField(max_digits=5, decimal_places=2)`) — manually entered (driver: "Manual time entry"
-    P0; live timer P2 deferred — Toggl/Harvest/Zoho Projects)
-  - `is_billable` (`BooleanField(default=True)`) — (driver: "Billable vs. non-billable flag per entry" P0 —
-    Harvest/Toggl/Clockify/TimeCamp/Zoho Projects)
-  - `billable_rate` (`DecimalField(max_digits=10, decimal_places=2, default=0)`) — snapshot rate captured at
-    entry time (driver: "Billable rate per employee/project/task" P1 — Toggl/TimeCamp/Zoho Books; entry-level
-    snapshot, not a rate-card table)
-  - `notes` (`TextField(blank=True)`)
-  - `Meta`: indexes `(tenant, timesheet)`, `(tenant, project)`, `(tenant, date)`
-  - `clean()`: `hours > 0`; `date` within parent timesheet's period; if `timesheet.status == "approved"` block
-    add/edit (lock-on-approval, driver: Toggl/TimeCamp/QuickBooks Time — enforced in the view guard, mirroring
-    `OPEN_STATUSES` edit-lock on `LeaveRequest`)
-  - Reuses `accounting.Project` (2.9) — no new project table. Billable value (`hours * billable_rate`) and
-    utilization/budget-vs-actual are **derived report aggregates**, never stored fields.
+## H. Navigation (`apps/core/navigation.py`)
 
-- [ ] **`OvertimeRequest`** [`OT-`] (`TenantNumbered`, mirrors `LeaveEncashment`) — overtime claim.
-  - `employee` FK `hrm.EmployeeProfile` (CASCADE)
-  - `timesheet` FK `hrm.Timesheet` (SET_NULL, null=True, blank=True) — the week the OT was worked in, optional
-    (driver: a claim can be raised before the timesheet is fully approved)
-  - `date` (`DateField`) — the day OT occurred (finer than the week; daily-threshold based)
-  - `hours_claimed` (`DecimalField(max_digits=5, decimal_places=2)`) — driver: "Automatic OT calculation from
-    hours over threshold" P0 (QuickBooks Time/BambooHR/Deel) — for this pass captured as a claim, with a
-    `suggested_hours()` helper that computes `SUM(TimesheetEntry.hours for date) - daily/weekly threshold` as a
-    **display hint** (not force-written) so the field stays user-correctable while still being
-    threshold-informed
-  - `multiplier` (`DecimalField(max_digits=4, decimal_places=2, default=Decimal("1.50"))`) — driver:
-    "Configurable OT threshold + multiplier" P0 (Hubstaff/Deel/QuickBooks Time) — simple tenant-constant default,
-    editable per request
-  - `payout_method` (`CharField(max_length=20, choices=[("pay", "Pay"), ("comp_leave", "Compensatory Leave")],
-    default="pay")` — driver: "OT converted to pay or comp-leave" P1 (Deel); captures intent only, actual
-    payroll/comp-leave crediting deferred (no 3.13 Salary Structure yet)
-  - `reason` (`TextField()`)
-  - `status` (`draft/pending/approved/rejected/cancelled`), `OPEN_STATUSES = ("draft", "pending")` — driver:
-    "OT approval workflow (separate from timesheet approval)" P0 (Rippling/Hubstaff/Deel)
-  - `approver` FK `settings.AUTH_USER_MODEL` (SET_NULL, null/blank), `approved_at` (DateTimeField, null/blank),
-    `decision_note` (TextField, blank)
-  - `overtime_pay_equivalent_hours` property (`hours_claimed * multiplier`, **derived, not stored** — no
-    currency `amount` field since no stable employee pay-rate source exists yet; note this explicitly in the
-    docstring per research)
-  - `Meta`: `unique_together = ("tenant", "number")`; indexes `(tenant, employee, status)`, `(tenant, status)`,
-    `(tenant, date)`
-  - `clean()`: `hours_claimed > 0`
-  - Reuses `hrm.EmployeeProfile`, optionally `hrm.Timesheet`; no new core-spine table.
+- [ ] update `LIVE_LINKS["3.12"]` (currently only `"Holiday Calendar": "hrm:publicholiday_list"`) to:
+      ```python
+      "3.12": {
+          "Holiday Calendar": "hrm:publicholiday_list",          # bullet
+          "Floating Holidays": "hrm:floatingholidayelection_list",  # bullet
+          "Holiday Policies": "hrm:holidaypolicy_list",          # bullet
+      },
+      ```
+      — all 3 NavERP.md 3.12 bullets go Live.
 
-**Numbering/status pattern:** both `Timesheet` and `OvertimeRequest` subclass `TenantNumbered` (`TS-`, `OT-`)
-and reuse the exact `draft → pending → approved/rejected(+cancelled)` machine, `@tenant_admin_required`
-approve/reject views, and edit/delete lock via `OPEN_STATUSES` proven by `LeaveRequest`/`AttendanceRegularization`/
-`LeaveEncashment` — no new workflow pattern to invent.
+## I. Migrate / seed / verify (run from the venv)
 
-## Backend (apps/hrm/ — extension, not a new app)
-
-- [ ] `models.py` — add `Timesheet`, `TimesheetEntry`, `OvertimeRequest` in a new `# 3.11 Time Tracking` section
-  (after the 3.10 Leave Management block, before 3.12 Holiday or wherever fits chronologically); `Timesheet.
-  refresh_totals()` helper (sums `entries.aggregate(Sum("hours"), Sum("hours", filter=Q(is_billable=True)))`,
-  called after entry add/edit/delete and in `save()` when entries already exist)
-- [ ] `forms.py` — `TimesheetForm` (fields: `employee, period_start, period_end`; excludes `status/approver/
-  approved_at/decision_note/rejected_reason/total_hours/billable_hours` — workflow/derived, never on the form,
-  mirrors `LeaveRequestForm`'s comment style), `TimesheetEntryForm` (fields: `date, project, task_description,
-  hours, is_billable, billable_rate, notes`; excludes `timesheet` — set from URL/view context like
-  `ClearanceItem`-style child forms; `project` queryset scoped to `request.tenant` via `__init__`),
-  `OvertimeRequestForm` (fields: `employee, timesheet, date, hours_claimed, multiplier, payout_method, reason`;
-  excludes `status/approver/approved_at/decision_note`)
-- [ ] `views.py` — full CRUD for `Timesheet` (`crud_list/_create/_detail/_edit/_delete` via `apps.core.crud`) +
-  workflow (`timesheet_submit` draft→pending owner/`@login_required`; `timesheet_approve`/`_reject`
-  `@tenant_admin_required`, approve sets approver/approved_at + calls `refresh_totals()` one final time and
-  locks entries; `_cancel` owner). `TimesheetEntry` managed **inline on the `timesheet_detail` hub** (POST
-  `timesheetentry_add`/`_edit`/`_delete` scoped to `?timesheet=<pk>`, no standalone list/detail templates —
-  mirrors `ClearanceItem`/`RequisitionApproval` inline-child pattern); every entry mutation blocked when
-  `timesheet.status == "approved"` (lock-on-approval) and calls `timesheet.refresh_totals()` + `save()`
-  afterward. Full CRUD for `OvertimeRequest` (`crud_list/_create/_detail/_edit/_delete`) + workflow
-  (`overtimerequest_submit` owner; `_approve`/`_reject` `@tenant_admin_required`; `_cancel` owner). Report views
-  (read-only, `@login_required`, no new model): `timesheet_utilization_report` (per-employee/period
-  billable-hours ÷ total-approved-hours, aggregated from `TimesheetEntry` joined through approved `Timesheet`
-  rows), `project_time_report` (per `accounting.Project`: `SUM(TimesheetEntry.hours)` vs
-  `Project.budget_amount`, flags overrun). Every list view: search (`q` over employee name/number) + filters
-  (`status`, `employee`, date-range) parsed from `request.GET` BEFORE pagination, passing `status_choices`/
-  `employee` queryset to the template context (Filter Implementation Rules). Every delete view: tenant-scoped
-  `get_object_or_404`, POST-only, blocks delete once `status` not in `OPEN_STATUSES`. `write_audit_log` called
-  on create/edit/delete/workflow transitions, mirroring `leaverequest_*`.
-- [ ] `urls.py` — `timesheet_list/_create/_detail/_edit/_delete` (`/hrm/timesheets/`); POST-only
-  `timesheet_submit/_approve/_reject/_cancel`; inline POST `timesheetentry_add` (`/hrm/timesheets/<ts_pk>/
-  entries/add/`), `timesheetentry_edit`/`_delete` (`/hrm/timesheet-entries/<pk>/edit|delete/`);
-  `overtimerequest_list/_create/_detail/_edit/_delete` (`/hrm/overtime-requests/`); POST-only
-  `overtimerequest_submit/_approve/_reject/_cancel`; GET report pages `timesheet_utilization_report`
-  (`/hrm/reports/utilization/`) and `project_time_report` (`/hrm/reports/project-time/`)
-- [ ] `admin.py` — register `Timesheet` (inline `TimesheetEntry` via `TabularInline`), `OvertimeRequest`;
-  list_display includes `number, employee, status`; list_filter `status`
-- [ ] migrations — one migration adding the 3 models (run `makemigrations hrm` after models.py lands)
-- [ ] `management/commands/seed_hrm.py` — extend the existing idempotent seeder: `_seed_timesheets(tenant,
-  employees)` creates 2–3 `Timesheet` rows per seeded employee (mixed draft/pending/approved) with 3–5
-  `TimesheetEntry` rows each; reuse a seeded `accounting.Project` if `Project.objects.filter(tenant=tenant)
-  .exists()` else leave `project=None` + populate `task_description` free text; seed 1–2 `OvertimeRequest` rows
-  per tenant (mixed statuses) linked to a seeded timesheet where applicable. Check
-  `Timesheet.objects.filter(tenant=tenant).exists()` before creating (skip-if-exists pattern); no bare
-  `.create()` for the numbered models — use the existing `next_number`-safe `TenantNumbered.save()` path.
-  `management/__init__.py` and `management/commands/__init__.py` already exist (hrm app) — no new ones needed.
-
-## Wire-up
-
-- [ ] `apps/core/navigation.py` — add **one** `LIVE_LINKS["3.11"]` entry mapping all 5 NavERP.md bullets:
-  ```python
-  # 3.11 Time Tracking
-  "3.11": {
-      "Timesheet": "hrm:timesheet_list",                              # bullet
-      "Project Time Tracking": "hrm:timesheet_list",                  # bullet (entries logged on the timesheet hub)
-      "Billable Hours": "hrm:timesheet_utilization_report",           # bullet (utilization/billable report)
-      "Overtime Tracking": "hrm:overtimerequest_list",                # bullet
-      "Timesheet Approval": "hrm:timesheet_list?status=pending",      # bullet (pending-approval queue)
-  },
-  ```
-  (Confirm exact bullet text against `NavERP.md` 3.11 before committing — copy verbatim.)
-- [ ] No `apps.py`/`INSTALLED_APPS`/`config/urls.py` changes — `apps.hrm` is already installed and included.
-
-## Templates (templates/hrm/timetracking/<entity>/…)
-
-- [ ] `templates/hrm/timetracking/timesheet/list.html` — filter bar (`status`, `employee`, date-range) reflecting
-  `request.GET`; Actions column (view/edit/delete-POST+confirm+csrf, edit/delete conditional on
-  `obj.status in OPEN_STATUSES`); pagination; empty-state
-- [ ] `templates/hrm/timetracking/timesheet/detail.html` — the hub: header fields + `total_hours`/`billable_hours`
-  cards, inline entries table with add/edit/delete forms (conditional on open status), Submit/Approve/Reject/
-  Cancel action buttons (role/status-gated), Actions sidebar (Edit/Delete/Back to List)
-- [ ] `templates/hrm/timetracking/timesheet/form.html` — create/edit (employee, period_start, period_end)
-- [ ] `templates/hrm/timetracking/overtimerequest/list.html` — filter bar (`status`, `employee`, date-range),
-  Actions column
-- [ ] `templates/hrm/timetracking/overtimerequest/detail.html` — full fields + workflow actions + Actions sidebar
-- [ ] `templates/hrm/timetracking/overtimerequest/form.html` — create/edit
-- [ ] `templates/hrm/timetracking/utilization_report.html` — standalone report page (per-employee/period
-  billable % table) at the sub-module root (not an entity folder — no CRUD)
-- [ ] `templates/hrm/timetracking/project_time_report.html` — standalone report page (per-project logged-vs-
-  budget table) at the sub-module root
-
-## Verify
-
-- [ ] `makemigrations hrm` + `migrate`
-- [ ] `python manage.py seed_hrm` run twice — idempotent (no duplicate timesheets/OT requests on the 2nd run)
+- [ ] `python manage.py makemigrations hrm` → review `0023_...py` (field/M2M/index names match plan)
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` (1st run — creates data)
+- [ ] `python manage.py seed_hrm` (2nd run — must be idempotent, no duplicates, no errors)
 - [ ] `python manage.py check`
-- [ ] `temp/` smoke sweep: every `hrm:timesheet_*` / `hrm:overtimerequest_*` / `hrm:timesheet_utilization_report`
-  / `hrm:project_time_report` url returns 200/302 for a logged-in tenant user; no `{#`/`{% comment` leaks in
-  rendered timetracking templates; cross-tenant IDOR — a tenant-B user requesting a tenant-A `Timesheet`/
-  `OvertimeRequest` pk gets 404; entry-add on an approved timesheet is blocked (403/redirect+message, not a
-  silent no-op); `total_hours`/`billable_hours` recompute correctly after an entry add/edit/delete
-- [ ] sidebar shows **Timesheet, Project Time Tracking, Billable Hours, Overtime Tracking, Timesheet Approval**
-  as Live under 3.11
+- [ ] `temp/` smoke sweep: every new `hrm:holidaypolicy_*` and `hrm:floatingholidayelection_*` URL returns
+      200/302 when logged in as a tenant admin; `publicholiday_list` still 200 with the new `category` filter
+      param; no `{#`/`{% comment` leaks in the new templates; cross-tenant IDOR check — a `HolidayPolicy`/
+      `FloatingHolidayElection` pk belonging to tenant A returns 404 when fetched as tenant B; approve/reject
+      POST from a non-admin tenant user is blocked (`@tenant_admin_required`); quota-exceeding election attempt
+      raises the `clean()` ValidationError (form re-renders with the error, no row created).
+- [ ] sidebar: confirm 3.12 shows all three bullets as **Live** (not "Coming soon") for a tenant with data.
 
-## Close-out
+## J. Close-out
 
-- [ ] `code-reviewer` agent → apply findings → commit
-- [ ] `explorer` agent → apply findings → commit
-- [ ] `frontend-reviewer` agent → apply findings → commit
-- [ ] `performance-reviewer` agent → apply findings → commit (watch for N+1 on `entries` aggregation in list
-  views — use annotations, not per-row `refresh_totals()` calls)
-- [ ] `qa-smoke-tester` agent → apply findings → commit
-- [ ] `security-reviewer` agent → apply findings → commit
-- [ ] `test-writer` agent → apply output → commit
-- [ ] update `.claude/skills/hrm/SKILL.md` — add the 3.11 Time Tracking section (models table row, routes,
-  template folders, `LIVE_LINKS["3.11"]`, seeder rows) following the existing 3.9/3.10 write-up style
-- [ ] update root `README.md` (HRM test count, module count) if the project keeps that convention (check prior
-  module commits, e.g. `c31b32b`)
+- [ ] update `README.md` module-status / HRM section (3.12 bullets: Holiday Calendar / Floating Holidays /
+      Holiday Policies all live; bump the HRM + project-wide test-count lines once test-writer runs)
+- [ ] run the review-agent sequence in order, each ending in its own commit(s): `code-reviewer` →
+      `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer` →
+      `test-writer`
+- [ ] update `.claude/skills/hrm/SKILL.md` — 3.12 section: document `HolidayPolicy`/`FloatingHolidayElection`
+      models, the `for_employee` resolver, the approve/reject workflow, the new LIVE_LINKS entries, the extended
+      seeder block, and mark all 3 bullets of 3.12 as built (bump the module's sub-module-count table if present)
 
-## Review — delivered 2026-07-03
+## Later passes / deferred (carried over from research-holiday.md — do not build this pass)
 
-**Scope built.** New HRM sub-module 3.11 Time Tracking (extension of `apps/hrm`). 3 models mirroring the sibling
-LeaveRequest workflow: `Timesheet` (`TS-`, weekly header, **derived** `total_hours`/`billable_hours` via
-`refresh_totals()`, draft→pending→approved/rejected/cancelled), `TimesheetEntry` (inline child on the timesheet hub,
-optional `accounting.Project` FK, date-in-period `clean()`, **locked once approved**), `OvertimeRequest` (`OT-`,
-hours×multiplier, pay/comp_leave, derived pay-equiv hours). Two derived report pages (utilization %, project-time
-vs budget). Wired into `LIVE_LINKS["3.11"]` (all 5 bullets live + Project Time Report extra), admin (Timesheet w/
-TimesheetEntry inline), seeder (`_seed_timetracking`: 6 timesheets + 24 entries + 1 OT/tenant), migration 0022.
+- Bulk/country-based holiday import (CSV or "duplicate previous year") — UX add-on to `PublicHoliday`'s create
+  flow, not a data-model gap.
+- Weekend-observance auto-shift (holiday on Sat/Sun rolls to nearest weekday) — edge case, not a NavERP.md bullet.
+- Auto-reprocessing of overlapping `LeaveRequest`s when a holiday is added/edited (Zoho People pattern) — needs a
+  background-job mechanism; `_recompute_days()` only fires on the `LeaveRequest`'s own save today.
+- Reminder emails before a holiday — email-delivery integration, later.
+- iCal/Outlook/Google calendar sync, per-employee subscribable feeds — integration, explicitly out of scope.
+- Public/private holiday visibility toggle + "Who's Out" dashboard widget (BambooHR) — UI/dashboard layer on the
+  existing `publicholiday_list`, not a model change.
+- Temporary/travel holiday-calendar override (SAP SuccessFactors) — the most-specific-match `HolidayPolicy`
+  resolution already covers location differences without a per-trip override object.
+- Controlled reason/occasion-code taxonomy for floating-holiday requests (vs. free-text `note`) — defer until a
+  concrete compliance need arises.
+- Hard scheduler/cutoff enforcement for election deadlines — at most a future informational field on
+  `HolidayPolicy`; no blocking date-window validator this pass.
 
-**Full Module Creation Sequence run (research → todo → build → 7 review agents → skill):**
-- research → `research-hrm-time-tracking.md` (10 products → 3-model scope). todo → the build plan above.
-- Build: the smoke test caught a real bug — `project_time_report` aliased `Sum('hours')` as `hours`, shadowing the
-  field into a `FieldError`; fixed (aliased `logged`/`billable`) before committing.
-- code-reviewer → Critical: the admin `TimesheetEntryInline` could drift `total_hours`/`billable_hours` (no refresh)
-  — fixed via `TimesheetAdmin.save_formset()`; + `Timesheet.clean()` period-covers-entries guard, `OvertimeRequest.
-  clean()` timesheet-employee-match guard, entry-add error re-render (preserve input), dead-helper cleanup.
-- explorer → clean + 2 follow-ups (overview pending-timesheet/overtime KPIs, date-range filters on both reports).
-- frontend-reviewer → clean (conditional-colspan entries table done right; no comment leaks).
-- performance-reviewer → clean (no N+1s, reports are single-query aggregates, index coverage exact).
-- qa-smoke-tester → clean (40 HTTP checks: derived totals, lock-on-approval, period guard, 403, IDOR all held).
-- security-reviewer → no vulnerabilities (tenant isolation incl. inline-entry path, mass-assignment, IDOR clean).
-- test-writer → **160 tests** in `test_time_tracking.py` (+ conftest fixtures); HRM suite **1,935** green, project-wide
-  **4,582**.
+## Review
 
-**Skill/README** updated (table 46→49, 3 model rows, routes/workflow/report extras, `timetracking/` folders,
-LIVE_LINKS 3.11, seeder note, Deferred; test counts refreshed).
-
-**Next unbuilt sub-module:** 3.13 (the lowest `N.M` without a LIVE_LINKS entry — likely a Payroll/Compensation
-sub-module; auto-detect at run time).
-
-## Later passes / deferred (carried over from research)
-
-- Live/running timer (start-stop UI, active-timer state) — needs session/websocket state beyond a CRUD pass.
-- Task-level FK replacing free-text `task_description` — blocked on Module 7 (Project Management) shipping a
-  `Task`/WBS model.
-- Automatic invoice generation from billable time — belongs to Accounting's AR/Receivables as a cross-module
-  integration.
-- Feeding approved hours into `accounting.JobCostEntry` as a labor cost — needs a stable employee cost/pay-rate
-  figure (3.13 Salary Structure) first; flagged as the clear next integration once both sides are stable.
-- Full rate-card matrix (client × project × role) — the entry-level `billable_rate` snapshot is the
-  buildable-now equivalent.
-- Profitability/margin reporting (billed value vs. employee cost) — needs a stable payroll cost rate; revisit
-  after 3.13 Salary Structure.
-- OT payout to payroll / comp-leave auto-credit to `LeaveAllocation` — `payout_method` captures intent now;
-  actual money movement needs the payroll module.
-- Multi-jurisdiction OT compliance rules (state/country-specific thresholds) — single tenant-level
-  threshold/multiplier constant is the realistic buildable-now slice.
-- Timesheet templates for recurring rows, submission reminders/nudges, bulk-approve, second-tier manager+finance
-  approval, approval-progress visibility for submitters — UX/workflow-engine layers for once the base 3 models
-  are stable.
-- GPS/geofencing on time entries — already exists on `AttendanceRecord` (3.9); not duplicated here.
-- Audit trail of timesheet entry edits — defer to Module 0's cross-cutting audit mechanism if/when available.
-
-## Review notes
 (filled in at the end)
