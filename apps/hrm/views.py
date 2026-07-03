@@ -1669,6 +1669,12 @@ def floatingholidayelection_detail(request, pk):
 
 @login_required
 def floatingholidayelection_edit(request, pk):
+    obj = get_object_or_404(FloatingHolidayElection, pk=pk, tenant=request.tenant)
+    # Only a pending election is editable — a decided (approved/rejected) one is locked so a direct
+    # POST can't silently rewrite the employee/holiday/note of a record that's already been decided.
+    if obj.status != "pending":
+        messages.error(request, "Only a pending floating-holiday election can be edited.")
+        return redirect("hrm:floatingholidayelection_detail", pk=obj.pk)
     return crud_edit(request, model=FloatingHolidayElection, pk=pk, form_class=FloatingHolidayElectionForm,
                      template="hrm/holiday/floatingholidayelection/form.html",
                      success_url="hrm:floatingholidayelection_list")
@@ -1677,6 +1683,11 @@ def floatingholidayelection_edit(request, pk):
 @login_required
 @require_POST
 def floatingholidayelection_delete(request, pk):
+    obj = get_object_or_404(FloatingHolidayElection, pk=pk, tenant=request.tenant)
+    # A decided election is locked — its approval history must not be silently deleted via a direct POST.
+    if obj.status != "pending":
+        messages.error(request, "A decided floating-holiday election cannot be deleted.")
+        return redirect("hrm:floatingholidayelection_detail", pk=obj.pk)
     return crud_delete(request, model=FloatingHolidayElection, pk=pk,
                        success_url="hrm:floatingholidayelection_list")
 
