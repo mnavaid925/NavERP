@@ -915,7 +915,12 @@ class FloatingHolidayElection(TenantOwned):
             # election always shares its employee's tenant. Without this the quota count below
             # would filter on ``tenant_id=None`` and silently pass.
             tenant_id = self.tenant_id or self.employee.tenant_id
-            policy = self.policy or HolidayPolicy.for_employee(self.employee)
+            # Resolve + STORE the governing policy here so save() doesn't re-scan for it — the normal
+            # ModelForm flow runs clean() before save(), so save()'s auto-resolve becomes a no-op.
+            # (A direct .save() that bypasses clean(), e.g. the seeder, still auto-resolves in save().)
+            if self.policy_id is None:
+                self.policy = HolidayPolicy.for_employee(self.employee)
+            policy = self.policy
             if policy is not None and policy.floating_holiday_quota:
                 year = self.holiday.date.year
                 taken = (FloatingHolidayElection.objects
