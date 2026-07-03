@@ -66,7 +66,7 @@
               <td>{% if obj.designation %}{{ obj.designation.name }}{% else %}—{% endif %}</td>
               <td>{{ obj.floating_holiday_quota }}</td>
               <td>{% if obj.is_default %}<span class="badge badge-info">Default</span>{% else %}<span class="badge badge-muted">—</span>{% endif %}</td>
-              <td>{% if obj.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'hrm:holidaypolicy_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
