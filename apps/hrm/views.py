@@ -72,6 +72,8 @@ from .forms import (
     OnboardingTemplateTaskForm,
     OrientationSessionForm,
     PublicHolidayForm,
+    HolidayPolicyForm,
+    FloatingHolidayElectionForm,
     RequisitionApprovalForm,
     SeparationCaseForm,
     ShiftAssignmentForm,
@@ -152,6 +154,8 @@ from .models import (
     OnboardingTemplateTask,
     OrientationSession,
     PublicHoliday,
+    HolidayPolicy,
+    FloatingHolidayElection,
     RequisitionApproval,
     SeparationCase,
     Shift,
@@ -1548,8 +1552,8 @@ def publicholiday_list(request):
     return crud_list(
         request, qs, "hrm/holiday/publicholiday/list.html",
         search_fields=["name"],
-        filters=[("is_optional", "is_optional", False)],
-        extra_context={"year_choices": years},
+        filters=[("is_optional", "is_optional", False), ("category", "category", False)],
+        extra_context={"year_choices": years, "category_choices": PublicHoliday.CATEGORY_CHOICES},
     )
 
 
@@ -1575,6 +1579,136 @@ def publicholiday_edit(request, pk):
 @require_POST
 def publicholiday_delete(request, pk):
     return crud_delete(request, model=PublicHoliday, pk=pk, success_url="hrm:publicholiday_list")
+
+
+# ============================================================ Holiday Policies (3.12)
+@login_required
+def holidaypolicy_list(request):
+    return crud_list(
+        request,
+        HolidayPolicy.objects.filter(tenant=request.tenant).select_related("org_unit", "designation"),
+        "hrm/holiday/holidaypolicy/list.html",
+        search_fields=["name", "location"],
+        filters=[("is_active", "is_active", False), ("employee_type", "employee_type", False),
+                 ("org_unit", "org_unit_id", True), ("designation", "designation_id", True)],
+        extra_context={
+            "employee_type_choices": EmployeeProfile.EMPLOYEE_TYPE_CHOICES,
+            "org_units": OrgUnit.objects.filter(tenant=request.tenant).order_by("name"),
+            "designations": Designation.objects.filter(tenant=request.tenant).order_by("name"),
+        },
+    )
+
+
+@login_required
+def holidaypolicy_create(request):
+    return crud_create(request, form_class=HolidayPolicyForm,
+                       template="hrm/holiday/holidaypolicy/form.html", success_url="hrm:holidaypolicy_list")
+
+
+@login_required
+def holidaypolicy_detail(request, pk):
+    obj = get_object_or_404(
+        HolidayPolicy.objects.select_related("org_unit", "designation").prefetch_related("holidays"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/holiday/holidaypolicy/detail.html", {
+        "obj": obj,
+        "policy_holidays": obj.holidays.order_by("date"),
+        "recent_elections": (obj.elections.select_related("employee__party", "holiday")
+                             .all()[:10]),
+    })
+
+
+@login_required
+def holidaypolicy_edit(request, pk):
+    return crud_edit(request, model=HolidayPolicy, pk=pk, form_class=HolidayPolicyForm,
+                     template="hrm/holiday/holidaypolicy/form.html", success_url="hrm:holidaypolicy_list")
+
+
+@login_required
+@require_POST
+def holidaypolicy_delete(request, pk):
+    return crud_delete(request, model=HolidayPolicy, pk=pk, success_url="hrm:holidaypolicy_list")
+
+
+# ============================================================ Floating Holiday Elections (3.12)
+@login_required
+def floatingholidayelection_list(request):
+    return crud_list(
+        request,
+        FloatingHolidayElection.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "holiday", "policy"),
+        "hrm/holiday/floatingholidayelection/list.html",
+        search_fields=["employee__party__name", "holiday__name"],
+        filters=[("status", "status", False), ("employee", "employee_id", True),
+                 ("holiday", "holiday_id", True)],
+        extra_context={
+            "status_choices": FloatingHolidayElection.STATUS_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "holidays": (PublicHoliday.objects.filter(tenant=request.tenant, is_optional=True)
+                         .order_by("date")),
+        },
+    )
+
+
+@login_required
+def floatingholidayelection_create(request):
+    return crud_create(request, form_class=FloatingHolidayElectionForm,
+                       template="hrm/holiday/floatingholidayelection/form.html",
+                       success_url="hrm:floatingholidayelection_list")
+
+
+@login_required
+def floatingholidayelection_detail(request, pk):
+    obj = get_object_or_404(
+        FloatingHolidayElection.objects.select_related(
+            "employee__party", "holiday", "policy", "approved_by"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/holiday/floatingholidayelection/detail.html", {"obj": obj})
+
+
+@login_required
+def floatingholidayelection_edit(request, pk):
+    return crud_edit(request, model=FloatingHolidayElection, pk=pk, form_class=FloatingHolidayElectionForm,
+                     template="hrm/holiday/floatingholidayelection/form.html",
+                     success_url="hrm:floatingholidayelection_list")
+
+
+@login_required
+@require_POST
+def floatingholidayelection_delete(request, pk):
+    return crud_delete(request, model=FloatingHolidayElection, pk=pk,
+                       success_url="hrm:floatingholidayelection_list")
+
+
+@tenant_admin_required  # approving a floating-holiday election is a privileged manager/admin action
+@require_POST
+def floatingholidayelection_approve(request, pk):
+    obj = get_object_or_404(FloatingHolidayElection, pk=pk, tenant=request.tenant)
+    if obj.status == "pending":
+        obj.status = "approved"
+        obj.approved_by = request.user
+        obj.approved_at = timezone.now()
+        obj.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "approve"})
+        messages.success(request, "Floating-holiday election approved.")
+    return redirect("hrm:floatingholidayelection_detail", pk=obj.pk)
+
+
+@tenant_admin_required  # rejecting a floating-holiday election is a privileged manager/admin action
+@require_POST
+def floatingholidayelection_reject(request, pk):
+    obj = get_object_or_404(FloatingHolidayElection, pk=pk, tenant=request.tenant)
+    if obj.status == "pending":
+        obj.status = "rejected"
+        obj.approved_by = request.user
+        reason = request.POST.get("note", "").strip()[:2000]
+        if reason:
+            obj.note = reason
+        obj.save(update_fields=["status", "approved_by", "note", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject"})
+        messages.success(request, "Floating-holiday election rejected.")
+    return redirect("hrm:floatingholidayelection_detail", pk=obj.pk)
 
 
 # ============================================================ Shifts (3.9)
