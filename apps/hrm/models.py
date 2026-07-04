@@ -4336,6 +4336,14 @@ class TaxComputation(TenantNumbered):
             models.Index(fields=["tenant", "employee"], name="hrm_txc_tenant_emp_idx"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Per-instance memo for the engine's DB primitives — the derived @property methods access them
+        # many times per render (a detail page reads ~9 properties), so without this the same
+        # structure/regime-config/declaration-lines/slab-bands lookups fire dozens of times. Only the
+        # QUERY boundaries are cached (not the pure-Python tax properties), so recompute() stays correct.
+        self._engine_cache = {}
+
     def save(self, *args, **kwargs):
         # financial_year is a denormalized copy of the declaration's — derive it here so it is always
         # populated regardless of the entry path (the form excludes it). A blank FY would make
@@ -4344,25 +4352,47 @@ class TaxComputation(TenantNumbered):
             self.financial_year = self.declaration.financial_year
         return super().save(*args, **kwargs)
 
-    # ----- resolved inputs (query the employee's active salary structure / regime config) -----
+    # ----- resolved inputs (query the employee's active salary structure / regime config), memoized -----
     def _active_structure(self):
-        return (self.employee.salary_structures.filter(status="active")
+        if "structure" not in self._engine_cache:
+            self._engine_cache["structure"] = (
+                self.employee.salary_structures.filter(status="active")
                 .select_related("template").order_by("-effective_from").first())
+        return self._engine_cache["structure"]
+
+    def _structure_lines(self):
+        """The active structure's template lines (fetched once with the pay component preloaded)."""
+        if "structure_lines" not in self._engine_cache:
+            struct = self._active_structure()
+            self._engine_cache["structure_lines"] = (
+                list(struct.template.lines.select_related("pay_component"))
+                if struct and struct.template_id else [])
+        return self._engine_cache["structure_lines"]
+
+    def _declaration_lines(self):
+        """The declaration's section lines (fetched once — read by hra/chapter-via/capped-sections)."""
+        if "declaration_lines" not in self._engine_cache:
+            self._engine_cache["declaration_lines"] = list(self.declaration.lines.all())
+        return self._engine_cache["declaration_lines"]
 
     def _component_annual(self, code, name_substr):
         """Resolve a pay component's annual amount from the employee's active structure (basic/HRA)."""
         struct = self._active_structure()
         if not struct or not struct.template_id:
             return ZERO
-        for line in struct.template.lines.select_related("pay_component"):
+        for line in self._structure_lines():
             pc = line.pay_component
             if (pc.code or "").upper() == code or name_substr in pc.name.lower():
                 return line.resolved_amount(struct.annual_ctc_amount)
         return ZERO
 
     def _regime_config(self, regime):
-        return TaxRegimeConfig.objects.filter(
-            tenant_id=self.tenant_id, financial_year=self.financial_year, regime=regime).first()
+        key = ("regime_config", regime)
+        if key not in self._engine_cache:
+            self._engine_cache[key] = TaxRegimeConfig.objects.filter(
+                tenant_id=self.tenant_id, financial_year=self.financial_year, regime=regime
+            ).prefetch_related("slab_bands").first()
+        return self._engine_cache[key]
 
     def _fy_date_range(self):
         """Parse ``"YYYY-YY"`` → (Apr 1 start, Mar 31 next-year end) of the Indian FY."""
@@ -4383,7 +4413,7 @@ class TaxComputation(TenantNumbered):
         """Standard 3-way HRA exemption minimum (annual). Zero under the new regime or with no HRA line."""
         if regime == "new":
             return ZERO
-        hra_line = next((ln for ln in self.declaration.lines.all() if ln.section_code == "hra"), None)
+        hra_line = next((ln for ln in self._declaration_lines() if ln.section_code == "hra"), None)
         if hra_line is None or not hra_line.monthly_rent_amount:
             return ZERO
         basic = self._component_annual("BASIC", "basic")
@@ -4402,7 +4432,7 @@ class TaxComputation(TenantNumbered):
         """Sum the effective (verified-else-declared) Chapter VI-A deductions valid for ``regime``,
         capped per ``SECTION_CAPS``, excluding HRA (handled separately)."""
         total = ZERO
-        for line in self.declaration.lines.all():
+        for line in self._declaration_lines():
             if line.section_code == "hra":
                 continue
             if regime == "new" and line.section_code not in NEW_REGIME_ALLOWED_SECTIONS:
@@ -4419,7 +4449,7 @@ class TaxComputation(TenantNumbered):
         """(label, claimed, cap) tuples for sections whose claim exceeded its statutory cap — surfaced
         as a warning, never silently dropped."""
         out = []
-        for line in self.declaration.lines.all():
+        for line in self._declaration_lines():
             cap = SECTION_CAPS.get(line.section_code)
             if cap is not None and line.effective_amount > cap:
                 out.append((line.get_section_code_display(), line.effective_amount, cap))
@@ -4436,8 +4466,10 @@ class TaxComputation(TenantNumbered):
         if config is None:
             return ZERO
         taxable = self._taxable_income(regime)
+        # Sort the prefetched slab bands in Python (config is loaded via _regime_config's
+        # prefetch_related("slab_bands"), so .order_by() would defeat the prefetch with a fresh query).
         bands = [(b.income_from, b.income_to, b.rate_percent)
-                 for b in config.slab_bands.order_by("sequence", "income_from")]
+                 for b in sorted(config.slab_bands.all(), key=lambda b: (b.sequence, b.income_from))]
         tax = _progressive_tax(taxable, bands)
         # Section 87A rebate — zero out (capped) when taxable income is at/below the threshold.
         if config.rebate_income_threshold is not None and taxable <= config.rebate_income_threshold:
