@@ -53,7 +53,8 @@
                 {% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'approved' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
-                {% else %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% endif %}
+                {% elif obj.status == 'locked' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
               </td>
               <td>
                 <div class="table-actions">
