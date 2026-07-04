@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays (calendar + floating-holiday elections + location/eligibility policies), 3.13 salary structure (pay-component catalog [earnings/statutory/reimbursement/variable], grade-wise CTC structure templates with an inline breakdown, effective-dated employee salary assignments — definition layer only; payroll run/posting stays in accounting.PayrollRun), 3.14 payroll processing (operational payroll run: computes per-employee payslips from the 3.13 salary structures, a draft->pending->approved/rejected->locked approval workflow, salary holds, arrears/bonus, and on lock hands the rolled-up totals to accounting.PayrollRun for GL posting — HRM builds no JournalEntry)). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays (calendar + floating-holiday elections + location/eligibility policies), 3.13 salary structure (pay-component catalog [earnings/statutory/reimbursement/variable], grade-wise CTC structure templates with an inline breakdown, effective-dated employee salary assignments — definition layer only; payroll run/posting stays in accounting.PayrollRun), 3.14 payroll processing (operational payroll run: computes per-employee payslips from the 3.13 salary structures, a draft->pending->approved/rejected->locked approval workflow, salary holds, arrears/bonus, and on lock hands the rolled-up totals to accounting.PayrollRun for GL posting — HRM builds no JournalEntry), 3.15 statutory compliance (Indian PF/ESI/PT/TDS/LWF compliance layer over payroll: a StatutoryConfig tenant settings singleton [employer codes/wage ceilings/rates/TAN/PAN], state-wise StatutoryStateRule PT slabs + LWF rules, per-employee EmployeeStatutoryIdentifier [UAN/PF/ESI, masked in the UI], and a StatutoryReturn [SCR-] per-scheme/period register aggregated from PayslipLine with a pending->filed->paid/late filing workflow + compliance calendar — touches no GL)). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -9,7 +9,8 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
 3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
 3.7 Interview Process, 3.8 Offer Management, 3.9 Attendance Management, 3.10 Leave Management,
-3.11 Time Tracking, 3.12 Holiday Management, 3.13 Salary Structure, 3.14 Payroll Processing.** Reuses the
+3.11 Time Tracking, 3.12 Holiday Management, 3.13 Salary Structure, 3.14 Payroll Processing,
+3.15 Statutory Compliance.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -18,7 +19,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 49 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management)
+## Models (`apps/hrm/models.py`) — 53 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management + 4 statutory-compliance)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -149,6 +150,17 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
 
 **Offer flow:** create an `Offer` against an application (status=draft; `offer_create` honors `?application=`, stamps `created_by`, defaults `currency` from the requisition, lands on the detail hub) → optionally add/remove **approval steps** (draft + admin only) → **Submit** (builds the default chain via `generate_offer_approval_chain` if none, resets the whole chain to pending so a reject→resubmit re-approves from the top) → **Approve Step** ×N (last step clears → status=approved) or **Reject Step** (reopens to draft) → **Extend** (gated on all steps approved; stamps extended_by/at, sends the offer email via `_send_candidate_email` template_type="offer", sets signature_status=sent) → **Accept** (status=accepted, drives `JobApplication.stage`→hired + hired_on, raises the pre-boarding checklist via `generate_preboarding_checklist`) / **Decline** (requires a valid decline_reason) / **Rescind** (admin) / **Expire** (only when extended + overdue). **Background checks** are ordered from the hub (`?offer=`): consent → **Initiate** (admin; blocked without consent) → **Update Status** (admin) → **Complete** with a result (admin). **Pre-boarding**: auto-raised on accept; per-item **Mark Submitted** (candidate/HR; clears stale verify stamps), **Send Invite** (reuses `_send_candidate_email`, stamps reminder_sent_at, do_not_contact suppresses), **Verify/Reject/Delete** (admin). **Workflow fields are excluded from every form** — status + all `*_at`/`*_by` stamps, BGV `result` — set only by the audited POST actions. **Privileged actions are `@tenant_admin_required`** (submit/approve/reject/extend/rescind/expire/delete, approval add/delete, preboarding verify/reject/delete, BGV initiate/mark-status/complete, letter-template delete); accept/decline/send-email + preboarding add/submit/send-invite are `@login_required`. File uploads (signed_document/report_file/uploaded_file) are extension+size validated via `_validate_upload`. The printable offer letter is a standalone page (`offer_letter.html`, not a base.html child; mirrors `relieving_letter.html`). **Deferred:** live e-sign / background-check vendor APIs, adverse-action dispute flow, parallel/rule-engine approval routing, acceptance-rate analytics, scheduled pre-boarding dispatch.
 
+### 3.15 Statutory Compliance (4 tables) — Indian PF/ESI/PT/TDS/LWF config + state rules + per-employee IDs + returns register over the 3.14 payroll spine
+
+| Model | Prefix | Key fields | Notes |
+|---|---|---|---|
+| `StatutoryConfig` (3.15) | — | **tenant `OneToOneField` (overrides the abstract FK — one row per tenant)**, PF (pf_establishment_code, pf_wage_ceiling=15000, pf_employee_rate/pf_employer_rate=12/12), ESI (esi_employer_code, esi_wage_ceiling=21000, esi_employee_rate/esi_employer_rate=0.75/3.25), PT (pt_default_state), TDS (tan_number, tds_circle_address, pan_of_deductor), LWF (is_lwf_applicable) | Tenant settings **singleton** (like Zoho's Statutory Components screen). `StatutoryConfig.for_tenant(tenant)` get-or-creates the one row. Rates/ceilings are documented here; actual per-payslip computation stays in `PayComponent`/`Payslip.recompute()`. **No list/create/delete — detail + edit only**; edit is `@tenant_admin_required`. |
+| `StatutoryStateRule` (3.15) | — | state(`INDIAN_STATE_CHOICES`), scheme(pt/lwf), PT: income_from/income_to/pt_monthly_amount/pt_deduction_month, LWF: lwf_employee_contribution/lwf_employer_contribution/lwf_periodicity(monthly/half_yearly/annual)/lwf_due_month_1/lwf_due_month_2, registration_number, is_active, effective_from | State-wise PT slabs + LWF rules (one shared table). `clean()` enforces scheme-required fields + one **active** LWF row per (tenant,state) (supersede-not-edit). `unique_together(tenant,state,scheme,income_from)` — LWF income_from=None. The active-LWF-per-state guard also fires on **CREATE** via `StatutoryStateRuleForm.clean()` (model.clean can't see tenant pre-save). Indexes (tenant,scheme)/(tenant,state). |
+| `EmployeeStatutoryIdentifier` (3.15) | — | **employee `OneToOneField`→`EmployeeProfile`**, uan_number, pf_number, esi_number, pt_state(`INDIAN_STATE_CHOICES`), is_pf_applicable, is_esi_applicable | 1:1 companion for government IDs that don't fit `EmployeeProfile.national_id` (PAN). `masked_uan_number()/masked_pf_number()/masked_esi_number()` (last-4, mirror `EmployeeProfile._mask_last4`) — **masked in list+detail; raw only in the edit form input**. uan/pf/esi added to `_SENSITIVE_AUDIT_FIELDS`. Create form narrows to employees without an identifier. Index (tenant,employee). |
+| `StatutoryReturn` (3.15) | `SCR-` | scheme(pf/esi/pt/tds_24q/tds_form16/lwf), period_type(monthly/quarterly/half_yearly/annual), period_start/period_end, cycle→`PayrollCycle`(SET_NULL, monthly single-cycle), employee→`EmployeeProfile`(SET_NULL, only for tds_form16), **employee_contribution_total/employer_contribution_total/headcount (editable=False, derived)**, due_date, status(pending/filed/paid/late), filed_on/paid_on(editable=False), payment_reference, registration_number_used(editable=False, snapshot), notes | Per-scheme/period challan/return register. `recompute()` aggregates `PayslipLine` (statutory_deduction, scheme keyword-matched via `SCHEME_KEYWORDS` on component_name — **v1, no per-line scheme tag**) by contribution_side: employer=`contribution_side="employer"`, employee=everything else (mirrors 3.14 `payrollcycle_lock`, no double-count of "both"). `is_locked`=status≠pending; `is_overdue`=pending+past due. `unique_together(tenant,scheme,period_start,employee)` + `StatutoryReturnForm.clean()` closes the org-level (employee=None) NULL-distinct duplicate hole. Indexes (tenant,status)/(tenant,due_date)/(tenant,scheme). |
+
+**Statutory flow:** configure once via `StatutoryConfig` (tenant-admin) → optionally add `StatutoryStateRule` PT slabs / LWF rows per state → set each employee's `EmployeeStatutoryIdentifier` (UAN/PF/ESI) → create a `StatutoryReturn` (scheme + period, optional cycle) → **Generate** (`@tenant_admin_required`; `recompute()` rolls up the period's `PayslipLine` totals — the seeded PF return shows employer ≈ Σ employer-PF lines) → **Mark Filed** (pending→filed) → **Mark Paid** (filed/pending→paid; **paying after due_date auto-flags `late`**). The **compliance calendar** (`statutory_compliance_calendar`) is a read-only cross-scheme view grouping returns into Overdue/Pending/Filed/Settled. Edit/delete/generate are **pending-only** (`is_locked` guard). Reuses `EmployeeProfile`/`PayrollCycle`/`PayslipLine`/`PayComponent`; **touches no `accounting.PayrollRun`/`JournalEntry`** (no GL path). **Deferred:** ECR/ESIC file-format + portal upload, TRACES/challan matching, Form 16/24Q PDF rendering, AI pre-filing error detection, rate-change alerting, and a per-`PayslipLine` scheme tag (to replace the v1 component_name-substring match).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -187,6 +199,13 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   `hrm:payslip_hold`/`_release` (`@tenant_admin_required`, pre-lock only). `payslip_edit` (draft-only) recomputes.
   **The privileged buttons (approve/reject/lock/hold/release) are gated in the template behind
   `is_superuser or is_tenant_admin`** (app-wide convention — non-admins see an awaiting-admin notice).
+- **Statutory Compliance (3.15):** `StatutoryConfig` is a singleton — `hrm:statutoryconfig_detail` + `_edit`
+  only (no list/create/delete; `_edit` is `@tenant_admin_required`). `hrm:statutorystaterule_*` and
+  `hrm:employeestatutoryidentifier_*` are standard `@login_required` CRUD. `hrm:statutoryreturn_*` CRUD +
+  workflow: `_generate`/`_mark_filed`/`_mark_paid` (POST, `@tenant_admin_required`) — generate re-aggregates the
+  period's `PayslipLine` totals via `StatutoryReturn.recompute()`, mark_paid after due_date auto-sets `late`;
+  edit/delete/generate are pending-only (`is_locked`). `hrm:statutory_compliance_calendar` is a read-only grouped
+  overview. Return list scheme deep-links: `?scheme=pf|esi|pt|tds_24q|lwf`.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -358,7 +377,8 @@ standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirro
 `attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/ encashment/` + the standalone engine page `leave/policy.html`), `timetracking/` (3.11 — `timesheet/ timesheetentry/ overtimerequest/` + standalone `utilization_report.html`/`project_time_report.html`),
 `holiday/` (3.12 — `publicholiday/ holidaypolicy/ floatingholidayelection/`),
 `salary/` (3.13 — `paycomponent/ salarystructuretemplate/ [+ inline line managed on its detail + a standalone line_form.html] employeesalarystructure/`),
-`payroll/` (3.14 — `payrollcycle/ payslip/`; the cycle detail is the workflow hub, the payslip detail shows the breakdown + hold/release). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
+`payroll/` (3.14 — `payrollcycle/ payslip/`; the cycle detail is the workflow hub, the payslip detail shows the breakdown + hold/release),
+`statutory/` (3.15 — `statutoryconfig/ statutorystaterule/ employeestatutoryidentifier/ statutoryreturn/` + the standalone `compliance_calendar.html` at the `statutory/` root; the return detail is the generate/file/pay workflow hub; the identifier list+detail render **masked** UAN/PF/ESI). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
@@ -485,6 +505,12 @@ flush PayslipLine→Payslip→PayrollCycle — AND these three are ALSO in the c
 `EmployeeSalaryStructure`, creates **1 regular** `PayrollCycle` for the current month (draft), **generates + recomputes
 their payslips** (gross 9,291.67 each — employer PF excluded from net), and puts **1 payslip on hold**. Runs after
 `_seed_salary` (needs the 3.13 structures).
+**Statutory Compliance (3.15)** is seeded by `_seed_statutory(tenant)` (own `StatutoryConfig.exists()` guard;
+children-first flush StatutoryReturn→EmployeeStatutoryIdentifier→StatutoryStateRule→StatutoryConfig — also in the
+central `_seed_tenant` flush before `EmployeeProfile`): creates **1 `StatutoryConfig`**, **3 Maharashtra
+`StatutoryStateRule`s** (2 PT slabs + 1 half-yearly LWF), an `EmployeeStatutoryIdentifier` **per employee**, and
+**generates 1 PF `StatutoryReturn`** (`SCR-00001`) over the 3.14 cycle (employer ≈ 1,800 across 3 heads). Runs
+**after** `_seed_payroll` (needs its PayslipLine rows).
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -539,6 +565,11 @@ tenant and sees nothing.
 - 3.14: Payroll Run → `hrm:payrollcycle_list`; Payroll Approval → `hrm:payrollcycle_list?status=pending_approval`;
   Salary Holds → `hrm:payslip_list?on_hold=True`; Arrears Calculation → `hrm:payslip_list` (arrears entered per
   payslip); Bonus Processing → `hrm:payrollcycle_list?cycle_type=bonus`. All 5 NavERP.md 3.14 bullets are now live.
+- 3.15: PF/ESI/TDS Management → `hrm:statutoryreturn_list?scheme=pf|esi|tds_24q` (the challan/return register);
+  PT/LWF Management → `hrm:statutorystaterule_list?scheme=pt|lwf` (the state-wise rule table IS their config
+  surface); + Statutory Configuration → `hrm:statutoryconfig_detail`, Statutory Identifiers →
+  `hrm:employeestatutoryidentifier_list`, Compliance Calendar → `hrm:statutory_compliance_calendar` (extras). All
+  5 NavERP.md 3.15 bullets are now live.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -599,15 +630,24 @@ subtotal exists yet — a true multi-base resolver is deferred); compensation-re
 multi-currency (`currency` is a plain CharField — no `accounting.Currency` FK this pass); pay-group / `core.OrgUnit`-
 scoped structures; and gating sensitive comp writes behind `@tenant_admin_required` (an app-wide authorization-policy
 pass, not forked into 3.13 — see the security-reviewer note).
-**3.14 Payroll Processing deferrals:** the full **statutory engine** (PF/ESI/PT/TDS slabs, challans, returns, Form
-16) — that's **3.15 Statutory Compliance**, a separate sub-module; 3.14 only computes generic
-`statutory_deduction`/employer-contribution lines from the components. Also: bank-file/NEFT disbursement generation;
+**3.14 Payroll Processing deferrals:** the **statutory compliance layer** (PF/ESI/PT/TDS/LWF config, state rules,
+challans/returns) is now **built as 3.15 Statutory Compliance** (a separate sub-module — see its section above); 3.14
+only computes generic `statutory_deduction`/employer-contribution lines from the components, which 3.15 aggregates.
+Also: bank-file/NEFT disbursement generation;
 payslip PDF/email + employee self-service download; a tax-slab TDS engine; off-cycle multi-country/multi-currency
 payroll; YTD tax-projection reports; a configurable N-level approval-criteria engine (v1 is a fixed
 submit→approve/reject two-step); automatic arrears diffing from salary-structure history (v1 takes a manual
 `arrears_amount`); per-employee rollback inside a locked cycle (v1 = a new off_cycle cycle for corrections);
 attendance/leave-linked LOP auto-wiring to 3.10; deduction-proration on attendance (v1 deductions resolve off the
 component, not double-pro-rated); and an accounting-side "post directly from HRM" helper (posting stays in accounting).
+**3.15 Statutory Compliance deferrals:** ECR (EPFO) / ESIC challan file-format generation + government-portal upload
+(v1 stores the aggregated totals a later exporter needs); TRACES integration / unconsumed-challan matching; Form 16 /
+Form 24Q PDF/XML rendering + email delivery; AI/rules pre-filing error detection (PAN/late-deduction flags); automatic
+rate-change alerting (v1 supports supersede-not-edit via `is_active`/`effective_from` but has no notify engine); a
+richer calendar-grid UI; multi-country/non-India schemes; Gratuity/Bonus Act compliance; and — the key one — a
+**per-`PayslipLine` scheme tag** to replace the v1 `SCHEME_KEYWORDS` `component_name`-substring match in
+`StatutoryReturn.recompute()` (a proper scheme FK/choice on `PayslipLine` would require a 3.14 model change, deferred
+to avoid touching an already-shipped/tested model).
 **3.1 employee-records deferrals:** lifecycle event → `core.Employment`/`EmployeeProfile` auto-sync (v1 records the
 timeline only), document expiry email/push reminders (needs Celery/SMTP), normalized `EmployeeAddress` table (v1 is
 free-text), OCR/AI document extraction + e-signature on personnel docs, `work_location` FK→`core.OrgUnit(branch)`.
