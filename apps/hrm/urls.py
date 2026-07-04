@@ -528,4 +528,46 @@ urlpatterns = [
 
     # Compliance calendar (cross-scheme due-date overview)
     path("statutory-compliance-calendar/", views.statutory_compliance_calendar, name="statutory_compliance_calendar"),
+
+    # ===================== 3.16 Tax & Investment =====================
+    # Tax regime config (+ inline slab bands) + regime comparison
+    path("tax-regimes/", views.taxregimeconfig_list, name="taxregimeconfig_list"),
+    path("tax-regimes/add/", views.taxregimeconfig_create, name="taxregimeconfig_create"),
+    path("tax-regimes/<int:pk>/", views.taxregimeconfig_detail, name="taxregimeconfig_detail"),
+    path("tax-regimes/<int:pk>/edit/", views.taxregimeconfig_edit, name="taxregimeconfig_edit"),
+    path("tax-regimes/<int:pk>/delete/", views.taxregimeconfig_delete, name="taxregimeconfig_delete"),
+    path("tax-regimes/<int:config_pk>/slab-bands/add/", views.taxslabband_create, name="taxslabband_create"),
+    path("tax-regimes/<int:config_pk>/slab-bands/<int:pk>/edit/", views.taxslabband_edit, name="taxslabband_edit"),
+    path("tax-regimes/<int:config_pk>/slab-bands/<int:pk>/delete/", views.taxslabband_delete, name="taxslabband_delete"),
+    path("tax-regime-comparison/", views.tax_regime_comparison, name="tax_regime_comparison"),
+
+    # Investment declarations (+ inline section lines) + submit/lock workflow
+    path("investment-declarations/", views.investmentdeclaration_list, name="investmentdeclaration_list"),
+    path("investment-declarations/add/", views.investmentdeclaration_create, name="investmentdeclaration_create"),
+    path("investment-declarations/<int:pk>/", views.investmentdeclaration_detail, name="investmentdeclaration_detail"),
+    path("investment-declarations/<int:pk>/edit/", views.investmentdeclaration_edit, name="investmentdeclaration_edit"),
+    path("investment-declarations/<int:pk>/delete/", views.investmentdeclaration_delete, name="investmentdeclaration_delete"),
+    path("investment-declarations/<int:pk>/submit/", views.investmentdeclaration_submit, name="investmentdeclaration_submit"),
+    path("investment-declarations/<int:pk>/lock/", views.investmentdeclaration_lock, name="investmentdeclaration_lock"),
+    path("investment-declarations/<int:declaration_pk>/lines/add/", views.investmentdeclarationline_create, name="investmentdeclarationline_create"),
+    path("investment-declarations/<int:declaration_pk>/lines/<int:pk>/edit/", views.investmentdeclarationline_edit, name="investmentdeclarationline_edit"),
+    path("investment-declarations/<int:declaration_pk>/lines/<int:pk>/delete/", views.investmentdeclarationline_delete, name="investmentdeclarationline_delete"),
+
+    # Investment proofs — upload (per line) + verify/reject/on-hold workflow
+    path("investment-proofs/", views.investmentproof_list, name="investmentproof_list"),
+    path("investment-proofs/<int:pk>/", views.investmentproof_detail, name="investmentproof_detail"),
+    path("investment-declaration-lines/<int:line_pk>/proofs/upload/", views.investmentproof_upload, name="investmentproof_upload"),
+    path("investment-proofs/<int:pk>/verify/", views.investmentproof_verify, name="investmentproof_verify"),
+    path("investment-proofs/<int:pk>/reject/", views.investmentproof_reject, name="investmentproof_reject"),
+    path("investment-proofs/<int:pk>/on-hold/", views.investmentproof_on_hold, name="investmentproof_on_hold"),
+
+    # Tax computations — CRUD + recompute engine + Form 16 tie-in + Part B report
+    path("tax-computations/", views.taxcomputation_list, name="taxcomputation_list"),
+    path("tax-computations/add/", views.taxcomputation_create, name="taxcomputation_create"),
+    path("tax-computations/<int:pk>/", views.taxcomputation_detail, name="taxcomputation_detail"),
+    path("tax-computations/<int:pk>/edit/", views.taxcomputation_edit, name="taxcomputation_edit"),
+    path("tax-computations/<int:pk>/delete/", views.taxcomputation_delete, name="taxcomputation_delete"),
+    path("tax-computations/<int:pk>/generate/", views.taxcomputation_generate, name="taxcomputation_generate"),
+    path("tax-computations/<int:pk>/link-form16/", views.taxcomputation_link_form16, name="taxcomputation_link_form16"),
+    path("tax-computations/<int:pk>/form16-partb/", views.form16_partb, name="form16_partb"),
 ]
