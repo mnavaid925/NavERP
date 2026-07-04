@@ -3228,3 +3228,203 @@ class PreboardingItem(TenantOwned):
 
     def __str__(self):
         return f"{self.get_document_type_display()} ({self.get_status_display()})"
+
+
+# ---------------------------------------------------------------------------
+# 3.13 Salary Structure — PayComponent / SalaryStructureTemplate /
+# SalaryStructureLine / EmployeeSalaryStructure
+#
+# The compensation DEFINITION layer (pay components + grade-wise CTC templates +
+# per-employee assignments). It does NOT run payroll or post to the GL — that is owned by
+# ``accounting.PayrollRun`` (3.14 / Accounting, per lesson L29); 3.13 only DEFINES the
+# structures a payroll run later consumes.
+# ---------------------------------------------------------------------------
+class PayComponent(TenantOwned):
+    """A reusable pay / deduction / statutory / reimbursement / variable component (3.13). This one
+    catalog table covers four of the five NavERP.md 3.13 bullets (Pay Components, Tax Components,
+    Reimbursements, Variable Pay) via ``component_type``; a ``SalaryStructureLine`` references a
+    component and may override its default amount/percentage per template."""
+
+    COMPONENT_TYPE_CHOICES = [
+        ("earning", "Earning"),
+        ("statutory_deduction", "Statutory Deduction"),
+        ("voluntary_deduction", "Voluntary Deduction"),
+        ("reimbursement", "Reimbursement"),
+        ("variable", "Variable"),
+    ]
+    CALCULATION_TYPE_CHOICES = [
+        ("fixed_amount", "Fixed Amount"),
+        ("pct_of_basic", "% of Basic"),
+        ("pct_of_ctc", "% of CTC"),
+        ("pct_of_gross", "% of Gross"),
+    ]
+    FREQUENCY_CHOICES = [
+        ("monthly", "Monthly"),
+        ("annual", "Annual"),
+        ("one_time", "One-Time"),
+    ]
+    CONTRIBUTION_SIDE_CHOICES = [
+        ("employee", "Employee"),
+        ("employer", "Employer"),
+        ("both", "Both"),
+    ]
+
+    name = models.CharField(max_length=150)
+    code = models.CharField(max_length=20, blank=True, help_text="Optional short code, e.g. HRA, PF-EE.")
+    component_type = models.CharField(max_length=20, choices=COMPONENT_TYPE_CHOICES, default="earning")
+    variable_subtype = models.CharField(max_length=30, blank=True,
+        help_text="Only for variable components — e.g. bonus, incentive, commission.")
+    calculation_type = models.CharField(max_length=20, choices=CALCULATION_TYPE_CHOICES, default="fixed_amount")
+    default_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Org-wide default when the calculation is a fixed amount (a structure line can override).")
+    default_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Org-wide default when the calculation is a percentage (a structure line can override).")
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default="monthly")
+    is_taxable = models.BooleanField(default=True)
+    include_in_ctc = models.BooleanField(default=True)
+    contribution_side = models.CharField(max_length=10, choices=CONTRIBUTION_SIDE_CHOICES, default="employee",
+        help_text="Which side pays this — mainly for statutory components (PF/ESI).")
+    annual_cap_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Annual cap, e.g. for a reimbursement like LTA/medical.")
+    requires_bill = models.BooleanField(default=False,
+        help_text="Reimbursement requires a submitted bill/receipt before payout.")
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "component_type"], name="hrm_paycomp_tenant_type_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        # Soft consistency: a default may be left blank (a line overrides it), but if one IS provided
+        # it must match the calculation type.
+        if self.calculation_type == "fixed_amount" and self.default_percentage is not None:
+            raise ValidationError({"default_percentage": "Fixed-amount components should not set a default percentage."})
+        if self.calculation_type.startswith("pct_") and self.default_amount is not None:
+            raise ValidationError({"default_amount": "Percentage-based components should not set a default amount."})
+
+    def __str__(self):
+        return self.name
+
+
+class SalaryStructureTemplate(TenantNumbered):
+    """A grade-wise CTC structure template (3.13) — ``SST-#####``. Its total CTC is DERIVED from the
+    resolved breakdown lines (``computed_ctc_total``), never stored editable."""
+
+    NUMBER_PREFIX = "SST"
+
+    name = models.CharField(max_length=150)
+    job_grade = models.ForeignKey("hrm.JobGrade", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="salary_structure_templates")
+    annual_ctc_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="Target annual CTC — the base for %-of-CTC lines.")
+    currency = models.CharField(max_length=10, default="USD")
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "job_grade"], name="hrm_sst_tenant_grade_idx"),
+        ]
+
+    @property
+    def computed_ctc_total(self):
+        """Derived total CTC — the sum of every line's resolved amount. Never a stored field."""
+        return sum((line.resolved_amount() for line in self.lines.select_related("pay_component").all()),
+                   Decimal("0"))
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class SalaryStructureLine(TenantOwned):
+    """One component row in a ``SalaryStructureTemplate``'s CTC breakdown (3.13). May override the
+    component's default amount / percentage / calc-type for this template.
+
+    NOTE (v1 simplification): all percentage calc types (``pct_of_basic``/``pct_of_ctc``/
+    ``pct_of_gross``) resolve against the template's ``annual_ctc_amount`` because no separate stored
+    basic/gross subtotal exists yet — a true multi-base resolver is deferred to a later pass."""
+
+    template = models.ForeignKey("hrm.SalaryStructureTemplate", on_delete=models.CASCADE, related_name="lines")
+    pay_component = models.ForeignKey("hrm.PayComponent", on_delete=models.PROTECT)
+    calculation_type = models.CharField(max_length=20, choices=PayComponent.CALCULATION_TYPE_CHOICES, blank=True,
+        help_text="Overrides the component's calculation type on this template; blank = use the component's.")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    sequence = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sequence", "id"]
+        unique_together = ("tenant", "template", "pay_component")
+        indexes = [
+            models.Index(fields=["tenant", "template"], name="hrm_ssl_tenant_template_idx"),
+        ]
+
+    def resolved_amount(self):
+        """The annual amount this line contributes to the template's CTC total."""
+        effective_calc = self.calculation_type or self.pay_component.calculation_type
+        if effective_calc == "fixed_amount":
+            amount = self.amount if self.amount is not None else self.pay_component.default_amount
+            return amount if amount is not None else Decimal("0")
+        pct = self.percentage if self.percentage is not None else self.pay_component.default_percentage
+        pct = pct if pct is not None else Decimal("0")
+        base = self.template.annual_ctc_amount or Decimal("0")  # v1: all pct types resolve off CTC
+        return (base * pct / Decimal("100")).quantize(Decimal("0.01"))
+
+    def __str__(self):
+        return f"{self.template} · {self.pay_component}"
+
+
+class EmployeeSalaryStructure(TenantNumbered):
+    """An effective-dated assignment of a salary structure / CTC to an employee (3.13) — ``ESS-#####``.
+    At most one ``active`` assignment per employee (enforced in ``clean()``)."""
+
+    NUMBER_PREFIX = "ESS"
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("superseded", "Superseded"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="salary_structures")
+    template = models.ForeignKey("hrm.SalaryStructureTemplate", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="employee_assignments")
+    annual_ctc_amount = models.DecimalField(max_digits=14, decimal_places=2,
+        help_text="The employee's actual assigned annual CTC (may differ from the template default).")
+    effective_from = models.DateField(default=timezone.localdate)
+    effective_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-effective_from"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "effective_from"], name="hrm_ess_tenant_emp_efrom_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ess_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.effective_to and self.effective_from and self.effective_to < self.effective_from:
+            raise ValidationError({"effective_to": "Effective-to date cannot be before the effective-from date."})
+        # At most one active assignment per employee. Derive the tenant from the employee — the
+        # instance's own tenant is unset during ModelForm validation on create (mirrors
+        # FloatingHolidayElection.clean() from 3.12).
+        if self.status == "active" and self.employee_id:
+            clash = (EmployeeSalaryStructure.objects
+                     .filter(tenant_id=self.employee.tenant_id, employee_id=self.employee_id, status="active")
+                     .exclude(pk=self.pk))
+            if clash.exists():
+                raise ValidationError({"status": "This employee already has an active salary structure — "
+                                       "mark the existing one superseded first."})
+
+    def __str__(self):
+        return f"{self.number} · {self.employee}"
