@@ -173,6 +173,109 @@ class TestFloatingHolidayElectionIDOR:
         assert election_b.pk not in pks
 
 
+class TestPayComponentIDOR:
+    def test_detail_cross_tenant_404(self, client_a, pay_component_b):
+        resp = client_a.get(reverse("hrm:paycomponent_detail", args=[pay_component_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, pay_component_b):
+        resp = client_a.get(reverse("hrm:paycomponent_edit", args=[pay_component_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, pay_component_b):
+        resp = client_a.post(reverse("hrm:paycomponent_edit", args=[pay_component_b.pk]), {
+            "name": "Hijacked", "component_type": "earning", "calculation_type": "fixed_amount",
+        })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, pay_component_b):
+        resp = client_a.post(reverse("hrm:paycomponent_delete", args=[pay_component_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_components(self, client_a, pay_component_a, pay_component_b):
+        resp = client_a.get(reverse("hrm:paycomponent_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert pay_component_a.pk in pks
+        assert pay_component_b.pk not in pks
+
+
+class TestSalaryStructureTemplateIDOR:
+    def test_detail_cross_tenant_404(self, client_a, salary_template_b):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_detail", args=[salary_template_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, salary_template_b):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_edit", args=[salary_template_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, salary_template_b):
+        resp = client_a.post(reverse("hrm:salarystructuretemplate_edit", args=[salary_template_b.pk]), {
+            "name": "Hijacked", "annual_ctc_amount": "1", "currency": "USD",
+        })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, salary_template_b):
+        resp = client_a.post(reverse("hrm:salarystructuretemplate_delete", args=[salary_template_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_templates(self, client_a, salary_template_a, salary_template_b):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert salary_template_a.pk in pks
+        assert salary_template_b.pk not in pks
+
+
+class TestSalaryStructureLineIDOR:
+    def test_add_post_cross_tenant_template_404(self, client_a, salary_template_b, pay_component_b):
+        resp = client_a.post(
+            reverse("hrm:salarystructureline_add", args=[salary_template_b.pk]), {
+                "pay_component": pay_component_b.pk, "amount": "1000", "sequence": "1",
+            })
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, salary_line_b):
+        resp = client_a.get(reverse("hrm:salarystructureline_edit", args=[salary_line_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, salary_line_b, pay_component_b):
+        resp = client_a.post(reverse("hrm:salarystructureline_edit", args=[salary_line_b.pk]), {
+            "pay_component": pay_component_b.pk, "amount": "9999", "sequence": "1",
+        })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, salary_line_b):
+        resp = client_a.post(reverse("hrm:salarystructureline_delete", args=[salary_line_b.pk]))
+        assert resp.status_code == 404
+
+
+class TestEmployeeSalaryStructureIDOR:
+    def test_detail_cross_tenant_404(self, client_a, employee_salary_structure_b):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_detail", args=[employee_salary_structure_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, employee_salary_structure_b):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_edit", args=[employee_salary_structure_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, employee_salary_structure_b):
+        resp = client_a.post(
+            reverse("hrm:employeesalarystructure_edit", args=[employee_salary_structure_b.pk]), {
+                "employee": employee_salary_structure_b.employee_id,
+                "annual_ctc_amount": "1", "effective_from": "2026-07-01", "status": "active",
+            })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, employee_salary_structure_b):
+        resp = client_a.post(reverse("hrm:employeesalarystructure_delete", args=[employee_salary_structure_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_assignments(self, client_a, active_salary_structure_a, employee_salary_structure_b):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert active_salary_structure_a.pk in pks
+        assert employee_salary_structure_b.pk not in pks
+
+
 # ================================================================ Anonymous user → redirect
 class TestAnonymousBlocked:
     @pytest.mark.parametrize("url_name,args", [
@@ -188,6 +291,9 @@ class TestAnonymousBlocked:
         ("hrm:attendancerecord_list", []),
         ("hrm:holidaypolicy_list", []),
         ("hrm:floatingholidayelection_list", []),
+        ("hrm:paycomponent_list", []),
+        ("hrm:salarystructuretemplate_list", []),
+        ("hrm:employeesalarystructure_list", []),
     ])
     def test_anon_redirected_to_login(self, client, url_name, args):
         resp = client.get(reverse(url_name, args=args))
