@@ -1900,6 +1900,39 @@ Form-16 register row 3.16 links to via a new FK; **do NOT add a new Form-16 head
       the new `LIVE_LINKS["3.16"]` entries (incl. the Form-16-routes-to-computation-list rationale),
       the extended seeder block, and mark all 5 bullets of 3.16 as built
 
+## Review — 3.16 Tax & Investment (built 2026-07-05)
+
+**Shipped (6 tables, all wired Live, migration `0027`).** `TaxRegimeConfig` (+ `TaxSlabBand` slab table, per FY/regime
+std-deduction/cess/87A), `InvestmentDeclaration` (`ITD-`, draft→submitted→locked) + `InvestmentDeclarationLine`
+(section 80C/80D/HRA/24b/NPS, declared-vs-verified) + `InvestmentProof` (FileField + 4-state verify), `TaxComputation`
+(`TXC-` engine — `recompute()`: progressive slabs → 87A rebate → 4% cess; HRA 3-way exemption; regime-filtered
+Chapter-VI-A + `SECTION_CAPS`; TDS-YTD from `PayslipLine`; monthly spread). **Form 16 reuses the existing
+`StatutoryReturn(tds_form16)`** via `TaxComputation.statutory_return` + `link_form16()` — **no new Form 16 table**.
+Reuses `EmployeeProfile`/`EmployeeSalaryStructure`/`PayslipLine`/`StatutoryConfig`/`StatutoryReturn`; **no GL path**
+(`accounting.PayrollRun`/`JournalEntry` untouched). `LIVE_LINKS["3.16"]` — all 5 bullets Live. `_seed_tax` after
+`_seed_statutory` (2 regime configs / 11 slab bands, an old-regime declaration + 80C/HRA lines + a verified proof, a
+generated + Form-16-linked computation: **52520 old / 0 new** via 87A — hand-verified).
+
+**Verification.** `manage.py check` clean; no pending migrations; seeder idempotent; smoke sweep 200/302/405 on all
+routes, no leaks, cross-tenant IDOR→404, idempotent recompute.
+
+**Review agents (all run in order; findings applied + committed):**
+- code-reviewer — **1 Critical fixed**: `TaxComputation.financial_year` was excluded from the form + never set →
+  every UI-created computation silently computed 0 tax (+ 500 on the 2nd). Fixed in `save()` (derive from declaration)
+  + `TaxComputationForm.clean()` (employee-match + form-level dup guard). + proof terminal-state guard, docstring.
+- explorer — no wiring bugs; confirmed the Form-16-reuse design + zero accounting refs.
+- frontend-reviewer — proofs-table empty-state (flat `proofs` list), `.table-wrap` on the comparison table, aria-labels.
+- performance-reviewer — memoized the engine's DB primitives (`_engine_cache`) → computation detail **~60 → ~9
+  queries**; dropped a dead `select_related`.
+- qa-smoke-tester — all green, no bugs.
+- security-reviewer — all PASS; masked the PAN in `form16_partb` (last-4, matching the app convention).
+- test-writer — **245 tests** (68 model / 104 view / 73 security), all pass; HRM suite 2,395→**2,640**, project-wide
+  5,042→**5,287**. Surfaced a real transaction-poisoning bug (duplicate-section IntegrityError → 400) — **fixed** by
+  wrapping the save in a `transaction.atomic()` savepoint + inverted the test. Flagged the same pre-existing bug in
+  3.5 `approval_add` / 3.8 `offerapproval_add` as a **separate task** (out of 3.16 scope).
+
+**Next:** 3.17 Payout & Reports.
+
 ## Later passes / deferred (carried over from research-tax-investment.md — do not build this pass)
 
 - **Form 16/16A/Part-A+B PDF rendering, merge, and email delivery** — presentation/document-
