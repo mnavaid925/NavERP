@@ -3367,15 +3367,18 @@ class SalaryStructureLine(TenantOwned):
             models.Index(fields=["tenant", "template"], name="hrm_ssl_tenant_template_idx"),
         ]
 
-    def resolved_amount(self):
-        """The annual amount this line contributes to the template's CTC total."""
+    def resolved_amount(self, ctc=None):
+        """The annual amount this line contributes to the CTC total. ``ctc`` overrides the base for
+        percentage lines (e.g. an employee's actual assigned CTC at payroll time so two employees on
+        the same template but different CTCs get different pay); defaults to the template's
+        ``annual_ctc_amount``. (v1: all pct types resolve off this single base.)"""
         effective_calc = self.calculation_type or self.pay_component.calculation_type
         if effective_calc == "fixed_amount":
             amount = self.amount if self.amount is not None else self.pay_component.default_amount
             return amount if amount is not None else Decimal("0")
         pct = self.percentage if self.percentage is not None else self.pay_component.default_percentage
         pct = pct if pct is not None else Decimal("0")
-        base = self.template.annual_ctc_amount or Decimal("0")  # v1: all pct types resolve off CTC
+        base = ctc if ctc is not None else (self.template.annual_ctc_amount or Decimal("0"))
         return (base * pct / Decimal("100")).quantize(Decimal("0.01"))
 
     def __str__(self):
@@ -3564,6 +3567,17 @@ class Payslip(TenantNumbered):
     def is_locked(self):
         return self.cycle.is_locked
 
+    def clean(self):
+        super().clean()
+        if self.days_in_period and self.days_worked is not None and self.days_worked > self.days_in_period:
+            raise ValidationError({"days_worked": "Days worked cannot exceed the days in the period."})
+        if self.days_in_period and self.lop_days is not None and self.lop_days > self.days_in_period:
+            raise ValidationError({"lop_days": "LOP days cannot exceed the days in the period."})
+        for field in ("arrears_amount", "bonus_amount", "lop_days"):
+            value = getattr(self, field)
+            if value is not None and value < 0:
+                raise ValidationError({field: "This value cannot be negative."})
+
     def recompute(self):
         """Derive gross/deductions/net + LOP and rebuild the ``PayslipLine`` snapshot rows from the
         resolved salary structure. A locked cycle's payslips are immutable."""
@@ -3572,9 +3586,10 @@ class Payslip(TenantNumbered):
         # Resolve the structure's lines → monthly amounts (annual / 12), split earning vs deduction.
         resolved = []
         if self.salary_structure_id and self.salary_structure and self.salary_structure.template_id:
+            ctc = self.salary_structure.annual_ctc_amount  # employee's assigned CTC scales the pct lines
             for line in (self.salary_structure.template.lines
                          .select_related("pay_component").order_by("sequence", "id")):
-                monthly = (line.resolved_amount() / Decimal("12")).quantize(Decimal("0.01"))
+                monthly = (line.resolved_amount(ctc) / Decimal("12")).quantize(Decimal("0.01"))
                 resolved.append((line.pay_component, monthly))
         ratio = (Decimal(self.days_worked) / Decimal(self.days_in_period)
                  if self.days_in_period else Decimal("1"))
