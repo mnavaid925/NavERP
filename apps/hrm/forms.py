@@ -101,6 +101,12 @@ from .models import (  # noqa: E402  — 3.14 Payroll Processing
     Payslip,
     PayrollCycle,
 )
+from .models import (  # noqa: E402  — 3.15 Statutory Compliance
+    EmployeeStatutoryIdentifier,
+    StatutoryConfig,
+    StatutoryReturn,
+    StatutoryStateRule,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1153,3 +1159,67 @@ class PayslipForm(TenantModelForm):
     class Meta:
         model = Payslip
         fields = ["days_worked", "lop_days", "arrears_amount", "bonus_amount"]
+
+
+# ----------------------------------------------------------------------- 3.15 Statutory Compliance
+class StatutoryConfigForm(TenantModelForm):
+    # tenant is set via StatutoryConfig.for_tenant() (one row per tenant) — never a form field.
+    class Meta:
+        model = StatutoryConfig
+        fields = ["pf_establishment_code", "pf_wage_ceiling", "pf_employee_rate", "pf_employer_rate",
+                  "esi_employer_code", "esi_wage_ceiling", "esi_employee_rate", "esi_employer_rate",
+                  "pt_default_state", "tan_number", "tds_circle_address", "pan_of_deductor",
+                  "is_lwf_applicable"]
+        widgets = {
+            "tds_circle_address": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+
+class StatutoryStateRuleForm(TenantModelForm):
+    # PT-only and LWF-only fields are all shown; model.clean() enforces which are required by scheme.
+    class Meta:
+        model = StatutoryStateRule
+        fields = ["state", "scheme", "income_from", "income_to", "pt_monthly_amount",
+                  "pt_deduction_month", "lwf_employee_contribution", "lwf_employer_contribution",
+                  "lwf_periodicity", "lwf_due_month_1", "lwf_due_month_2", "registration_number",
+                  "is_active", "effective_from"]
+
+
+class EmployeeStatutoryIdentifierForm(TenantModelForm):
+    class Meta:
+        model = EmployeeStatutoryIdentifier
+        fields = ["employee", "uan_number", "pf_number", "esi_number", "pt_state",
+                  "is_pf_applicable", "is_esi_applicable"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "employee" in self.fields:
+            qs = EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
+            # On create (no instance pk) narrow to employees without an identifier row so the
+            # OneToOne can't collide; on edit keep the current employee selectable.
+            if self.instance.pk is None:
+                qs = qs.exclude(statutory_identifiers__isnull=False)
+            self.fields["employee"].queryset = qs.order_by("party__name")
+
+
+class StatutoryReturnForm(TenantModelForm):
+    # number + all derived totals + the filing/payment workflow fields are set by the model /
+    # generate / mark_* actions — this form only carries the return's metadata.
+    class Meta:
+        model = StatutoryReturn
+        fields = ["scheme", "period_type", "period_start", "period_end", "cycle", "employee",
+                  "due_date", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "cycle" in self.fields:
+                self.fields["cycle"].queryset = (
+                    PayrollCycle.objects.filter(tenant=self.tenant).order_by("-pay_date"))
+            if "employee" in self.fields:
+                self.fields["employee"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
