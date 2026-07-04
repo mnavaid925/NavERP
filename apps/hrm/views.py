@@ -6727,6 +6727,11 @@ def investmentproof_detail(request, pk):
 def _set_proof_status(request, pk, status, *, reason=""):
     obj = get_object_or_404(
         InvestmentProof.objects.select_related("declaration_line"), pk=pk, tenant=request.tenant)
+    # Only a pending/on-hold proof can be (re)decided — a verified/rejected proof is terminal and is not
+    # re-transitioned via a stray POST (matches the template, which only exposes the buttons then).
+    if obj.verification_status not in ("pending", "on_hold"):
+        messages.error(request, "This proof has already been decided.")
+        return obj, False
     obj.verification_status = status
     obj.verified_by = request.user
     obj.verified_at = timezone.now()
@@ -6736,32 +6741,35 @@ def _set_proof_status(request, pk, status, *, reason=""):
     # Roll the parent line's verified_amount up from its verified proofs.
     obj.declaration_line.recompute_verified()
     write_audit_log(request.user, obj, "update", {"action": f"proof_{status}"})
-    return obj
+    return obj, True
 
 
 @tenant_admin_required
 @require_POST
 def investmentproof_verify(request, pk):
-    obj = _set_proof_status(request, pk, "verified")
-    messages.success(request, "Proof verified.")
+    obj, changed = _set_proof_status(request, pk, "verified")
+    if changed:
+        messages.success(request, "Proof verified.")
     return redirect("hrm:investmentproof_detail", pk=obj.pk)
 
 
 @tenant_admin_required
 @require_POST
 def investmentproof_reject(request, pk):
-    obj = _set_proof_status(request, pk, "rejected",
-                            reason=request.POST.get("rejection_reason", "").strip()[:2000])
-    messages.success(request, "Proof rejected.")
+    obj, changed = _set_proof_status(request, pk, "rejected",
+                                     reason=request.POST.get("rejection_reason", "").strip()[:2000])
+    if changed:
+        messages.success(request, "Proof rejected.")
     return redirect("hrm:investmentproof_detail", pk=obj.pk)
 
 
 @tenant_admin_required
 @require_POST
 def investmentproof_on_hold(request, pk):
-    obj = _set_proof_status(request, pk, "on_hold",
-                            reason=request.POST.get("rejection_reason", "").strip()[:2000])
-    messages.success(request, "Proof put on hold.")
+    obj, changed = _set_proof_status(request, pk, "on_hold",
+                                     reason=request.POST.get("rejection_reason", "").strip()[:2000])
+    if changed:
+        messages.success(request, "Proof put on hold.")
     return redirect("hrm:investmentproof_detail", pk=obj.pk)
 
 
