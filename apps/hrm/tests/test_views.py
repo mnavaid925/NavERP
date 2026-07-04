@@ -1290,3 +1290,401 @@ class TestFloatingHolidayElectionQueryCount:
     def test_list_bounded_queries(self, client_a, pending_election_a, django_assert_max_num_queries):
         with django_assert_max_num_queries(15):
             client_a.get(reverse("hrm:floatingholidayelection_list"))
+
+
+# ================================================================ Pay Components (3.13)
+class TestPayComponentListView:
+    def test_list_200(self, client_a, pay_component_a):
+        resp = client_a.get(reverse("hrm:paycomponent_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, pay_component_a):
+        resp = client_a.get(reverse("hrm:paycomponent_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert pay_component_a.pk in pks
+
+
+class TestPayComponentCreateView:
+    def test_get_200(self, client_a):
+        resp = client_a.get(reverse("hrm:paycomponent_create"))
+        assert resp.status_code == 200
+
+    def test_post_creates(self, client_a, tenant_a):
+        from apps.hrm.models import PayComponent
+        resp = client_a.post(reverse("hrm:paycomponent_create"), {
+            "name": "House Rent Allowance",
+            "code": "HRA",
+            "component_type": "earning",
+            "variable_subtype": "",
+            "calculation_type": "pct_of_basic",
+            "default_amount": "",
+            "default_percentage": "40",
+            "frequency": "monthly",
+            "is_taxable": "on",
+            "include_in_ctc": "on",
+            "contribution_side": "employee",
+            "annual_cap_amount": "",
+            "requires_bill": "",
+            "is_active": "on",
+            "display_order": "0",
+            "description": "",
+        })
+        assert resp.status_code == 302
+        pc = PayComponent.objects.filter(tenant=tenant_a, name="House Rent Allowance").first()
+        assert pc is not None
+        assert pc.calculation_type == "pct_of_basic"
+
+
+class TestPayComponentDetailAndEdit:
+    def test_detail_200(self, client_a, pay_component_a):
+        resp = client_a.get(reverse("hrm:paycomponent_detail", args=[pay_component_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_get_200(self, client_a, pay_component_a):
+        resp = client_a.get(reverse("hrm:paycomponent_edit", args=[pay_component_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_updates(self, client_a, pay_component_a):
+        resp = client_a.post(
+            reverse("hrm:paycomponent_edit", args=[pay_component_a.pk]), {
+                "name": "Basic Pay Updated",
+                "code": "",
+                "component_type": "earning",
+                "variable_subtype": "",
+                "calculation_type": "fixed_amount",
+                "default_amount": "60000",
+                "default_percentage": "",
+                "frequency": "monthly",
+                "is_taxable": "on",
+                "include_in_ctc": "on",
+                "contribution_side": "employee",
+                "annual_cap_amount": "",
+                "requires_bill": "",
+                "is_active": "on",
+                "display_order": "0",
+                "description": "",
+            })
+        assert resp.status_code == 302
+        pay_component_a.refresh_from_db()
+        assert pay_component_a.name == "Basic Pay Updated"
+        assert pay_component_a.default_amount == Decimal("60000")
+
+
+class TestPayComponentDeleteView:
+    def test_post_deletes(self, client_a, pay_component_a):
+        from apps.hrm.models import PayComponent
+        pk = pay_component_a.pk
+        resp = client_a.post(reverse("hrm:paycomponent_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not PayComponent.objects.filter(pk=pk).exists()
+
+    def test_get_not_allowed(self, client_a, pay_component_a):
+        resp = client_a.get(reverse("hrm:paycomponent_delete", args=[pay_component_a.pk]))
+        assert resp.status_code == 405
+
+    def test_inuse_component_cannot_be_deleted(self, client_a, pay_component_a, salary_line_a):
+        """A PayComponent referenced by a SalaryStructureLine (PROTECT FK) must not be deletable —
+        the friendly-message guard, not a raw ProtectedError 500."""
+        from apps.hrm.models import PayComponent
+        pk = pay_component_a.pk
+        resp = client_a.post(reverse("hrm:paycomponent_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert PayComponent.objects.filter(pk=pk).exists()
+
+
+# ================================================================ Salary Structure Templates (3.13)
+class TestSalaryStructureTemplateListView:
+    def test_list_200(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert salary_template_a.pk in pks
+
+
+class TestSalaryStructureTemplateCreateView:
+    def test_get_200(self, client_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_create"))
+        assert resp.status_code == 200
+
+    def test_post_creates(self, client_a, tenant_a):
+        from apps.hrm.models import SalaryStructureTemplate
+        resp = client_a.post(reverse("hrm:salarystructuretemplate_create"), {
+            "name": "Sales L1",
+            "job_grade": "",
+            "annual_ctc_amount": "75000",
+            "currency": "USD",
+            "is_active": "on",
+            "description": "",
+        })
+        assert resp.status_code == 302
+        tmpl = SalaryStructureTemplate.objects.filter(tenant=tenant_a, name="Sales L1").first()
+        assert tmpl is not None
+        assert tmpl.number.startswith("SST-")
+
+
+class TestSalaryStructureTemplateDetailAndEdit:
+    def test_detail_200(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_detail", args=[salary_template_a.pk]))
+        assert resp.status_code == 200
+
+    def test_detail_context_keys(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_detail", args=[salary_template_a.pk]))
+        assert "obj" in resp.context
+        assert "lines" in resp.context
+        assert "ctc_total" in resp.context
+        assert "line_form" in resp.context
+
+    def test_detail_renders_derived_ctc_total(self, client_a, salary_template_a, salary_line_a):
+        """salary_line_a is a fixed 55000 amount line -> ctc_total must equal that resolved sum."""
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_detail", args=[salary_template_a.pk]))
+        assert resp.context["ctc_total"] == Decimal("55000")
+
+    def test_edit_get_200(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_edit", args=[salary_template_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_updates(self, client_a, salary_template_a):
+        resp = client_a.post(
+            reverse("hrm:salarystructuretemplate_edit", args=[salary_template_a.pk]), {
+                "name": "Engineering L2 Updated",
+                "job_grade": "",
+                "annual_ctc_amount": "130000",
+                "currency": "USD",
+                "is_active": "on",
+                "description": "",
+            })
+        assert resp.status_code == 302
+        salary_template_a.refresh_from_db()
+        assert salary_template_a.name == "Engineering L2 Updated"
+        assert salary_template_a.annual_ctc_amount == Decimal("130000")
+
+
+class TestSalaryStructureTemplateDeleteView:
+    def test_post_deletes(self, client_a, salary_template_a):
+        from apps.hrm.models import SalaryStructureTemplate
+        pk = salary_template_a.pk
+        resp = client_a.post(reverse("hrm:salarystructuretemplate_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not SalaryStructureTemplate.objects.filter(pk=pk).exists()
+
+    def test_get_not_allowed(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructuretemplate_delete", args=[salary_template_a.pk]))
+        assert resp.status_code == 405
+
+
+# ------------------------------------------------------ Inline Salary Structure Lines (3.13)
+class TestSalaryStructureLineAddView:
+    def test_valid_post_creates_line(self, client_a, tenant_a, salary_template_a, pay_component_a):
+        from apps.hrm.models import SalaryStructureLine
+        resp = client_a.post(
+            reverse("hrm:salarystructureline_add", args=[salary_template_a.pk]), {
+                "pay_component": pay_component_a.pk,
+                "calculation_type": "",
+                "amount": "60000",
+                "percentage": "",
+                "sequence": "1",
+            })
+        assert resp.status_code == 302
+        line = SalaryStructureLine.objects.filter(
+            tenant=tenant_a, template=salary_template_a, pay_component=pay_component_a).first()
+        assert line is not None
+        assert line.amount == Decimal("60000")
+
+    def test_duplicate_pay_component_rerenders_with_form_error_no_new_row(
+        self, client_a, tenant_a, salary_template_a, pay_component_a, salary_line_a
+    ):
+        """salary_line_a already references pay_component_a on this template — a 2nd POST with the
+        same component must re-render 200 with a pay_component form error, no new row, no
+        IntegrityError 500 (the duplicate-line bug fix, locked in)."""
+        from apps.hrm.models import SalaryStructureLine
+        resp = client_a.post(
+            reverse("hrm:salarystructureline_add", args=[salary_template_a.pk]), {
+                "pay_component": pay_component_a.pk,
+                "calculation_type": "",
+                "amount": "99999",
+                "percentage": "",
+                "sequence": "2",
+            })
+        assert resp.status_code == 200
+        form = resp.context.get("line_form")
+        assert form is not None and not form.is_valid()
+        assert "pay_component" in form.errors
+        assert SalaryStructureLine.objects.filter(
+            tenant=tenant_a, template=salary_template_a, pay_component=pay_component_a).count() == 1
+
+    def test_get_not_allowed(self, client_a, salary_template_a):
+        resp = client_a.get(reverse("hrm:salarystructureline_add", args=[salary_template_a.pk]))
+        assert resp.status_code == 405
+
+
+class TestSalaryStructureLineEditView:
+    def test_get_200(self, client_a, salary_line_a):
+        resp = client_a.get(reverse("hrm:salarystructureline_edit", args=[salary_line_a.pk]))
+        assert resp.status_code == 200
+
+    def test_post_updates(self, client_a, salary_line_a, pay_component_a):
+        resp = client_a.post(
+            reverse("hrm:salarystructureline_edit", args=[salary_line_a.pk]), {
+                "pay_component": pay_component_a.pk,
+                "calculation_type": "",
+                "amount": "70000",
+                "percentage": "",
+                "sequence": "3",
+            })
+        assert resp.status_code == 302
+        salary_line_a.refresh_from_db()
+        assert salary_line_a.amount == Decimal("70000")
+        assert salary_line_a.sequence == 3
+
+
+class TestSalaryStructureLineDeleteView:
+    def test_post_deletes_and_updates_ctc_total(self, client_a, salary_template_a, salary_line_a):
+        from apps.hrm.models import SalaryStructureLine
+        pk = salary_line_a.pk
+        resp = client_a.post(reverse("hrm:salarystructureline_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not SalaryStructureLine.objects.filter(pk=pk).exists()
+        salary_template_a.refresh_from_db()
+        assert salary_template_a.computed_ctc_total == Decimal("0")
+
+    def test_get_not_allowed(self, client_a, salary_line_a):
+        resp = client_a.get(reverse("hrm:salarystructureline_delete", args=[salary_line_a.pk]))
+        assert resp.status_code == 405
+
+
+# ================================================================ Employee Salary Structures (3.13)
+class TestEmployeeSalaryStructureListView:
+    def test_list_200(self, client_a, active_salary_structure_a):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, active_salary_structure_a):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert active_salary_structure_a.pk in pks
+
+
+class TestEmployeeSalaryStructureCreateView:
+    def test_get_200(self, client_a):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_create"))
+        assert resp.status_code == 200
+
+    def test_post_creates(self, client_a, tenant_a, employee_a, salary_template_a):
+        from apps.hrm.models import EmployeeSalaryStructure
+        resp = client_a.post(reverse("hrm:employeesalarystructure_create"), {
+            "employee": employee_a.pk,
+            "template": salary_template_a.pk,
+            "annual_ctc_amount": "125000",
+            "effective_from": "2026-07-01",
+            "effective_to": "",
+            "status": "active",
+            "notes": "",
+        })
+        assert resp.status_code == 302
+        ess = EmployeeSalaryStructure.objects.filter(tenant=tenant_a, employee=employee_a).first()
+        assert ess is not None
+        assert ess.number.startswith("ESS-")
+
+    def test_post_second_active_rerenders_with_clean_error_no_row(
+        self, client_a, tenant_a, employee_a, active_salary_structure_a
+    ):
+        from apps.hrm.models import EmployeeSalaryStructure
+        resp = client_a.post(reverse("hrm:employeesalarystructure_create"), {
+            "employee": employee_a.pk,
+            "template": "",
+            "annual_ctc_amount": "99000",
+            "effective_from": "2026-07-01",
+            "effective_to": "",
+            "status": "active",
+            "notes": "",
+        })
+        assert resp.status_code == 200
+        form = resp.context.get("form")
+        assert form is not None and not form.is_valid()
+        assert EmployeeSalaryStructure.objects.filter(
+            tenant=tenant_a, employee=employee_a, annual_ctc_amount=Decimal("99000")).count() == 0
+
+
+class TestEmployeeSalaryStructureDetailAndEdit:
+    def test_detail_200(self, client_a, active_salary_structure_a):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_detail", args=[active_salary_structure_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_get_200(self, client_a, active_salary_structure_a):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_edit", args=[active_salary_structure_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_updates(self, client_a, active_salary_structure_a, employee_a):
+        resp = client_a.post(
+            reverse("hrm:employeesalarystructure_edit", args=[active_salary_structure_a.pk]), {
+                "employee": employee_a.pk,
+                "template": "",
+                "annual_ctc_amount": "150000",
+                "effective_from": "2026-07-01",
+                "effective_to": "",
+                "status": "active",
+                "notes": "Raise",
+            })
+        assert resp.status_code == 302
+        active_salary_structure_a.refresh_from_db()
+        assert active_salary_structure_a.annual_ctc_amount == Decimal("150000")
+        assert active_salary_structure_a.notes == "Raise"
+
+    def test_edit_blocked_when_superseded(self, client_a, superseded_salary_structure_a, employee_a):
+        """A superseded assignment is read-only history — GET and POST both redirect to detail,
+        row unchanged."""
+        resp_get = client_a.get(
+            reverse("hrm:employeesalarystructure_edit", args=[superseded_salary_structure_a.pk]))
+        assert resp_get.status_code == 302
+        assert resp_get.url == reverse(
+            "hrm:employeesalarystructure_detail", args=[superseded_salary_structure_a.pk])
+
+        resp_post = client_a.post(
+            reverse("hrm:employeesalarystructure_edit", args=[superseded_salary_structure_a.pk]), {
+                "employee": employee_a.pk,
+                "template": "",
+                "annual_ctc_amount": "999999",
+                "effective_from": "2026-07-01",
+                "effective_to": "",
+                "status": "active",
+                "notes": "Sneaky edit",
+            })
+        assert resp_post.status_code == 302
+        assert resp_post.url == reverse(
+            "hrm:employeesalarystructure_detail", args=[superseded_salary_structure_a.pk])
+        superseded_salary_structure_a.refresh_from_db()
+        assert superseded_salary_structure_a.annual_ctc_amount == Decimal("100000")
+        assert superseded_salary_structure_a.notes != "Sneaky edit"
+
+
+class TestEmployeeSalaryStructureDeleteView:
+    def test_post_deletes(self, client_a, active_salary_structure_a):
+        from apps.hrm.models import EmployeeSalaryStructure
+        pk = active_salary_structure_a.pk
+        resp = client_a.post(reverse("hrm:employeesalarystructure_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not EmployeeSalaryStructure.objects.filter(pk=pk).exists()
+
+    def test_get_not_allowed(self, client_a, active_salary_structure_a):
+        resp = client_a.get(reverse("hrm:employeesalarystructure_delete", args=[active_salary_structure_a.pk]))
+        assert resp.status_code == 405
+
+    def test_delete_blocked_when_superseded(self, client_a, superseded_salary_structure_a):
+        from apps.hrm.models import EmployeeSalaryStructure
+        pk = superseded_salary_structure_a.pk
+        resp = client_a.post(reverse("hrm:employeesalarystructure_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert resp.url == reverse("hrm:employeesalarystructure_detail", args=[pk])
+        assert EmployeeSalaryStructure.objects.filter(pk=pk).exists()
+
+
+class TestSalaryStructureTemplateQueryCount:
+    def test_detail_bounded_queries(self, client_a, salary_template_a, salary_line_a, django_assert_max_num_queries):
+        # Session/tenant-middleware overhead adds a few queries on top of the view's own handful
+        # (template fetch, lines fetch, line_form's tenant-scoped pay_component queryset, etc.) — this
+        # ceiling still catches an N+1 regression (e.g. a per-line query) while tolerating that overhead.
+        with django_assert_max_num_queries(12):
+            client_a.get(reverse("hrm:salarystructuretemplate_detail", args=[salary_template_a.pk]))
