@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Regime Comparison{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tax Regime Comparison</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:taxregimeconfig_list' %}">Tax Regimes</a><span class="sep">›</span><span>Comparison</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:240px;">
+        <select name="computation" class="form-select" onchange="this.form.submit()">
+          <option value="">Select a tax computation…</option>
+          {% for c in computations %}
+            <option value="{{ c.pk }}" {% if comp and comp.pk == c.pk %}selected{% endif %}>{{ c.number }} · {{ c.employee.party.name }} · {{ c.financial_year }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="scale"></i> Compare</button>
+    </form>
+  </div></div>
+
+  {% if comp %}
+    <div class="card"><div class="card-body">
+      <div style="display:flex; gap:2rem; flex-wrap:wrap; align-items:baseline;">
+        <div><div class="text-muted">Employee</div><div class="fw-600">{{ comp.employee.party.name }}</div></div>
+        <div><div class="text-muted">Financial Year</div><div class="fw-600">{{ comp.financial_year }}</div></div>
+        <div><div class="text-muted">Elected Regime</div><div class="fw-600">{{ comp.get_computation_type_display }} · {{ comp.declaration.get_regime_elected_display }}</div></div>
+        <div><div class="text-muted">Gross Income</div><div class="fw-600">{{ breakdown.gross }}</div></div>
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body">
+      <table class="table">
+        <thead><tr><th>Line item</th><th style="text-align:right;">Old Regime</th><th style="text-align:right;">New Regime</th></tr></thead>
+        <tbody>
+          <tr><td>Taxable income</td><td style="text-align:right;">{{ breakdown.taxable_old }}</td><td style="text-align:right;">{{ breakdown.taxable_new }}</td></tr>
+          <tr><td class="fw-600">Total tax (incl. cess, after 87A)</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_old }}</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_new }}</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:1rem; padding:1rem; border-radius:8px;" class="card-body">
+        {% if breakdown.cheaper == 'old' %}
+          <span class="badge badge-green">Old regime is cheaper</span>
+          <span class="text-muted" style="margin-left:.5rem;">Choosing the <strong>old</strong> regime saves <strong>{{ breakdown.savings }}</strong> in tax.</span>
+        {% else %}
+          <span class="badge badge-green">New regime is cheaper</span>
+          <span class="text-muted" style="margin-left:.5rem;">Choosing the <strong>new</strong> regime saves <strong>{{ breakdown.savings }}</strong> in tax.</span>
+        {% endif %}
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;"><a href="{% url 'hrm:taxcomputation_detail' comp.pk %}">Open the full computation {{ comp.number }} →</a></p>
+    </div></div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="scale"></i><h3>No computation selected</h3><p>Pick a tax computation above to compare its old vs new regime tax. Create one from <a href="{% url 'hrm:taxcomputation_list' %}">Tax Computations</a>.</p></div></div></div>
+  {% endif %}
+{% endblock %}
