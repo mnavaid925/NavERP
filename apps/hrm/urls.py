@@ -184,6 +184,25 @@ urlpatterns = [
     path("employee-salary/<int:pk>/edit/", views.employeesalarystructure_edit, name="employeesalarystructure_edit"),
     path("employee-salary/<int:pk>/delete/", views.employeesalarystructure_delete, name="employeesalarystructure_delete"),
 
+    # Payroll Cycles (3.14 Payroll Processing)
+    path("payroll-cycles/", views.payrollcycle_list, name="payrollcycle_list"),
+    path("payroll-cycles/add/", views.payrollcycle_create, name="payrollcycle_create"),
+    path("payroll-cycles/<int:pk>/", views.payrollcycle_detail, name="payrollcycle_detail"),
+    path("payroll-cycles/<int:pk>/edit/", views.payrollcycle_edit, name="payrollcycle_edit"),
+    path("payroll-cycles/<int:pk>/delete/", views.payrollcycle_delete, name="payrollcycle_delete"),
+    path("payroll-cycles/<int:pk>/generate/", views.payrollcycle_generate, name="payrollcycle_generate"),
+    path("payroll-cycles/<int:pk>/submit/", views.payrollcycle_submit, name="payrollcycle_submit"),
+    path("payroll-cycles/<int:pk>/approve/", views.payrollcycle_approve, name="payrollcycle_approve"),
+    path("payroll-cycles/<int:pk>/reject/", views.payrollcycle_reject, name="payrollcycle_reject"),
+    path("payroll-cycles/<int:pk>/lock/", views.payrollcycle_lock, name="payrollcycle_lock"),
+
+    # Payslips (3.14)
+    path("payslips/", views.payslip_list, name="payslip_list"),
+    path("payslips/<int:pk>/", views.payslip_detail, name="payslip_detail"),
+    path("payslips/<int:pk>/edit/", views.payslip_edit, name="payslip_edit"),
+    path("payslips/<int:pk>/hold/", views.payslip_hold, name="payslip_hold"),
+    path("payslips/<int:pk>/release/", views.payslip_release, name="payslip_release"),
+
     # Shifts (3.9)
     path("shifts/", views.shift_list, name="shift_list"),
     path("shifts/add/", views.shift_create, name="shift_create"),
