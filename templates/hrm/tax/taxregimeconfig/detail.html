@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.financial_year }} · {{ obj.get_regime_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.financial_year }} · {{ obj.get_regime_display }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:taxregimeconfig_list' %}">Tax Regimes</a><span class="sep">›</span><span>{{ obj.financial_year }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:taxregimeconfig_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:taxregimeconfig_delete' obj.pk %}" onsubmit="return confirm('Delete this regime config?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Financial Year</dt><dd>{{ obj.financial_year }}</dd></div>
+      <div class="detail-item"><dt>Regime</dt><dd>{% if obj.regime == 'new' %}<span class="badge badge-info">{{ obj.get_regime_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_regime_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Standard Deduction</dt><dd>{{ obj.standard_deduction }}</dd></div>
+      <div class="detail-item"><dt>Cess Rate</dt><dd>{{ obj.cess_rate }}%</dd></div>
+      <div class="detail-item"><dt>87A Rebate Threshold</dt><dd>{{ obj.rebate_income_threshold|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>87A Max Rebate</dt><dd>{{ obj.rebate_max_tax|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Default Regime</dt><dd>{% if obj.is_default_regime %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.tax_law_reference %}<p class="text-muted" style="margin-top:1rem;"><i data-lucide="info"></i> {{ obj.tax_law_reference }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Slab Bands</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Income From</th><th>Income To</th><th>Rate</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for band in slab_bands %}
+            <tr>
+              <td>{{ band.sequence }}</td>
+              <td>{{ band.income_from }}</td>
+              <td>{% if band.income_to is not None %}{{ band.income_to }}{% else %}<span class="text-muted">and above</span>{% endif %}</td>
+              <td class="fw-600">{{ band.rate_percent }}%</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:taxslabband_edit' obj.pk band.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:taxslabband_delete' obj.pk band.pk %}" onsubmit="return confirm('Remove this band?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="list"></i><p>No slab bands yet — add the income brackets below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Add a slab band</h3>
+      <form method="post" action="{% url 'hrm:taxslabband_create' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in band_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Band</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:taxregimeconfig_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
