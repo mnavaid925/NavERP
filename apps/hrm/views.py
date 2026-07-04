@@ -6125,7 +6125,7 @@ def statutoryconfig_detail(request):
     return render(request, "hrm/statutory/statutoryconfig/detail.html", {"obj": config})
 
 
-@login_required
+@tenant_admin_required  # editing PF/ESI codes, TAN, PAN and rates is privileged org-wide config
 def statutoryconfig_edit(request):
     # Dedicated get-or-create-then-edit view: crud_edit takes a pk, but this model is a per-tenant
     # settings singleton reached without one — so the row is resolved via for_tenant() here.
