@@ -411,6 +411,18 @@ LIVE_LINKS = {
         "Statutory Identifiers": "hrm:employeestatutoryidentifier_list",     # extra (UAN/PF/ESI per employee)
         "Compliance Calendar": "hrm:statutory_compliance_calendar",          # extra (cross-scheme due-date view)
     },
+    # 3.16 Tax & Investment — TaxRegimeConfig serves Tax Regime; InvestmentDeclaration serves Investment
+    # Declaration; InvestmentProof (pending filter) serves Investment Proof; TaxComputation serves Tax
+    # Computation; Form 16 Generation routes through the computation list (its detail links to the
+    # form16_partb report — no standalone Form-16 model, per the reuse of StatutoryReturn(tds_form16)).
+    "3.16": {
+        "Tax Regime": "hrm:taxregimeconfig_list",                                   # bullet (old/new slabs + comparison)
+        "Investment Declaration": "hrm:investmentdeclaration_list",                 # bullet (80C/80D/HRA/…)
+        "Investment Proof": "hrm:investmentproof_list?verification_status=pending",  # bullet (upload + verify)
+        "Tax Computation": "hrm:taxcomputation_list",                               # bullet (annual projection engine)
+        "Form 16 Generation": "hrm:taxcomputation_list",                            # bullet (detail → Form 16 Part B)
+        "Regime Comparison": "hrm:tax_regime_comparison",                           # extra (old-vs-new side-by-side)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
