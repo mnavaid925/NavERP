@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:investmentproof_list' %}">Investment Proofs</a><span class="sep">›</span><span>{{ obj.title }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.declaration_line.declaration.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Declaration</dt><dd><a href="{% url 'hrm:investmentdeclaration_detail' obj.declaration_line.declaration.pk %}">{{ obj.declaration_line.declaration.number }}</a></dd></div>
+      <div class="detail-item"><dt>Section</dt><dd>{{ obj.declaration_line.get_section_code_display }}</dd></div>
+      <div class="detail-item"><dt>Amount</dt><dd>{{ obj.amount|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.verification_status == 'verified' %}<span class="badge badge-green">{{ obj.get_verification_status_display }}</span>
+        {% elif obj.verification_status == 'rejected' %}<span class="badge badge-red">{{ obj.get_verification_status_display }}</span>
+        {% elif obj.verification_status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_verification_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_verification_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Verified By</dt><dd>{% if obj.verified_by %}{{ obj.verified_by.get_full_name|default:obj.verified_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Verified At</dt><dd>{{ obj.verified_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>File</dt><dd>{% if obj.file %}<a href="{{ obj.file.url }}">Download</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.rejection_reason %}<p class="text-muted" style="margin-top:.5rem;"><strong>Reason:</strong> {{ obj.rejection_reason }}</p>{% endif %}
+    {% if obj.notes %}<p style="margin-top:.5rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Verification</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.verification_status == 'pending' or obj.verification_status == 'on_hold' %}
+          <form method="post" action="{% url 'hrm:investmentproof_verify' obj.pk %}" style="display:inline;" onsubmit="return confirm('Verify this proof?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Verify</button>
+          </form>
+          <form method="post" action="{% url 'hrm:investmentproof_reject' obj.pk %}" style="margin-top:1rem;">
+            {% csrf_token %}
+            <div class="form-group" style="max-width:420px;">
+              <label class="form-label" for="id_rejection_reason">Reason (reject / hold)</label>
+              <textarea id="id_rejection_reason" name="rejection_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+            <button class="btn btn-outline" type="submit" formaction="{% url 'hrm:investmentproof_on_hold' obj.pk %}"><i data-lucide="pause"></i> On Hold</button>
+          </form>
+        {% else %}
+          <p class="text-muted">This proof is {{ obj.get_verification_status_display }}.</p>
+        {% endif %}
+      {% else %}
+        <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to verify or reject this proof.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:investmentproof_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
