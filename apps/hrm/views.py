@@ -5724,12 +5724,14 @@ def salarystructuretemplate_delete(request, pk):
 @require_POST
 def salarystructureline_add(request, template_pk):
     template = get_object_or_404(SalaryStructureTemplate, pk=template_pk, tenant=request.tenant)
-    form = SalaryStructureLineForm(request.POST, tenant=request.tenant)
+    # Preset tenant+template on the instance so the form's clean() duplicate check sees the template
+    # during validation and form.save() persists the right FK (mirrors timesheetentry_add).
+    form = SalaryStructureLineForm(
+        request.POST,
+        instance=SalaryStructureLine(tenant=request.tenant, template=template),
+        tenant=request.tenant)
     if form.is_valid():
-        line = form.save(commit=False)
-        line.tenant = request.tenant
-        line.template = template
-        line.save()
+        form.save()
         write_audit_log(request.user, template, "update", {"action": "line_add"})
         messages.success(request, "Component line added.")
         return redirect("hrm:salarystructuretemplate_detail", pk=template.pk)
