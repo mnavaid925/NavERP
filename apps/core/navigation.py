@@ -388,6 +388,15 @@ LIVE_LINKS = {
         "Reimbursements": "hrm:paycomponent_list?component_type=reimbursement",      # bullet
         "Employee Salary Structures": "hrm:employeesalarystructure_list",            # extra
     },
+    # 3.14 Payroll Processing — the PayrollCycle (run/approval) + Payslip (holds/arrears) surfaces serve
+    # all 5 bullets; ?query deep-links keep Payroll Approval / Salary Holds / Bonus distinct on their slices.
+    "3.14": {
+        "Payroll Run": "hrm:payrollcycle_list",                              # bullet (calc engine / cycles)
+        "Payroll Approval": "hrm:payrollcycle_list?status=pending_approval",  # bullet (approval queue)
+        "Salary Holds": "hrm:payslip_list?on_hold=True",                     # bullet (held payslips)
+        "Arrears Calculation": "hrm:payslip_list",                          # bullet (arrears entered per payslip)
+        "Bonus Processing": "hrm:payrollcycle_list?cycle_type=bonus",        # bullet (bonus/off-cycle runs)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
