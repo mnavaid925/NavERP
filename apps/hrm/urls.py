@@ -496,4 +496,36 @@ urlpatterns = [
     path("background-checks/<int:pk>/initiate/", views.backgroundverification_initiate, name="backgroundverification_initiate"),
     path("background-checks/<int:pk>/mark-status/", views.backgroundverification_mark_status, name="backgroundverification_mark_status"),
     path("background-checks/<int:pk>/complete/", views.backgroundverification_complete, name="backgroundverification_complete"),
+
+    # ===================== 3.15 Statutory Compliance =====================
+    # Config singleton (detail + edit only — one row per tenant)
+    path("statutory-config/", views.statutoryconfig_detail, name="statutoryconfig_detail"),
+    path("statutory-config/edit/", views.statutoryconfig_edit, name="statutoryconfig_edit"),
+
+    # State-wise PT + LWF slab/rate rules — CRUD
+    path("statutory-state-rules/", views.statutorystaterule_list, name="statutorystaterule_list"),
+    path("statutory-state-rules/add/", views.statutorystaterule_create, name="statutorystaterule_create"),
+    path("statutory-state-rules/<int:pk>/", views.statutorystaterule_detail, name="statutorystaterule_detail"),
+    path("statutory-state-rules/<int:pk>/edit/", views.statutorystaterule_edit, name="statutorystaterule_edit"),
+    path("statutory-state-rules/<int:pk>/delete/", views.statutorystaterule_delete, name="statutorystaterule_delete"),
+
+    # Per-employee statutory identifiers (UAN / PF / ESI) — CRUD
+    path("statutory-identifiers/", views.employeestatutoryidentifier_list, name="employeestatutoryidentifier_list"),
+    path("statutory-identifiers/add/", views.employeestatutoryidentifier_create, name="employeestatutoryidentifier_create"),
+    path("statutory-identifiers/<int:pk>/", views.employeestatutoryidentifier_detail, name="employeestatutoryidentifier_detail"),
+    path("statutory-identifiers/<int:pk>/edit/", views.employeestatutoryidentifier_edit, name="employeestatutoryidentifier_edit"),
+    path("statutory-identifiers/<int:pk>/delete/", views.employeestatutoryidentifier_delete, name="employeestatutoryidentifier_delete"),
+
+    # Statutory returns / challans (PF/ESI/PT/TDS/LWF) — CRUD + aggregation + filing workflow
+    path("statutory-returns/", views.statutoryreturn_list, name="statutoryreturn_list"),
+    path("statutory-returns/add/", views.statutoryreturn_create, name="statutoryreturn_create"),
+    path("statutory-returns/<int:pk>/", views.statutoryreturn_detail, name="statutoryreturn_detail"),
+    path("statutory-returns/<int:pk>/edit/", views.statutoryreturn_edit, name="statutoryreturn_edit"),
+    path("statutory-returns/<int:pk>/delete/", views.statutoryreturn_delete, name="statutoryreturn_delete"),
+    path("statutory-returns/<int:pk>/generate/", views.statutoryreturn_generate, name="statutoryreturn_generate"),
+    path("statutory-returns/<int:pk>/mark-filed/", views.statutoryreturn_mark_filed, name="statutoryreturn_mark_filed"),
+    path("statutory-returns/<int:pk>/mark-paid/", views.statutoryreturn_mark_paid, name="statutoryreturn_mark_paid"),
+
+    # Compliance calendar (cross-scheme due-date overview)
+    path("statutory-compliance-calendar/", views.statutory_compliance_calendar, name="statutory_compliance_calendar"),
 ]
