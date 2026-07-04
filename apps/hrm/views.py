@@ -5909,15 +5909,25 @@ def payrollcycle_generate(request, pk):
     days_in = ((cycle.period_end - cycle.period_start).days + 1
                if cycle.period_end and cycle.period_start else 30)
     with transaction.atomic():
+        # Preserve HR manual inputs (arrears/bonus/hold/days/lop) across a re-generate, keyed by employee.
+        preserved = {p.employee_id: p for p in cycle.payslips.all()}
         cycle.payslips.all().delete()  # safe re-run while draft (cascades the lines)
         structures = (EmployeeSalaryStructure.objects
-                      .filter(tenant=request.tenant, status="active")
+                      .filter(tenant=request.tenant, status="active", effective_from__lte=cycle.period_end)
+                      .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=cycle.period_start))
                       .select_related("employee__party", "template"))
         count = 0
         for structure in structures:
+            prev = preserved.get(structure.employee_id)
             payslip = Payslip.objects.create(
                 tenant=request.tenant, cycle=cycle, employee=structure.employee,
-                salary_structure=structure, days_in_period=days_in, days_worked=days_in)
+                salary_structure=structure, days_in_period=days_in,
+                days_worked=min(prev.days_worked, days_in) if prev else days_in,
+                lop_days=prev.lop_days if prev else Decimal("0"),
+                arrears_amount=prev.arrears_amount if prev else Decimal("0"),
+                bonus_amount=prev.bonus_amount if prev else Decimal("0"),
+                on_hold=prev.on_hold if prev else False,
+                hold_reason=prev.hold_reason if prev else "")
             payslip.recompute()
             count += 1
     write_audit_log(request.user, cycle, "update", {"action": "generate", "headcount": count})
@@ -5990,9 +6000,12 @@ def payrollcycle_lock(request, pk):
         return qs.aggregate(s=Sum("amount"))["s"] or Decimal("0")
 
     gross = cycle.payslips.aggregate(s=Sum("gross_pay"))["s"] or Decimal("0")
-    employee_tax = _sum(lines.filter(component_type="statutory_deduction", contribution_side="employee"))
-    employer_tax = _sum(lines.filter(component_type="statutory_deduction", contribution_side="employer"))
-    deductions = _sum(lines.filter(component_type="voluntary_deduction"))
+    statutory = lines.filter(component_type="statutory_deduction")
+    # Mirror recompute()'s bucketing exactly — only employer-side is excluded from net; employee/both/
+    # blank all reduce net — so the accounting run's derived net_pay reconciles with Σ payslip.net_pay.
+    employee_tax = _sum(statutory.exclude(contribution_side="employer"))
+    employer_tax = _sum(statutory.filter(contribution_side="employer"))
+    deductions = _sum(lines.filter(component_type="voluntary_deduction").exclude(contribution_side="employer"))
     with transaction.atomic():
         run = AccountingPayrollRun.objects.create(
             tenant=request.tenant, period_start=cycle.period_start, period_end=cycle.period_end,
