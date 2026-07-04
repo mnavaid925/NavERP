@@ -6047,7 +6047,9 @@ def payslip_detail(request, pk):
 
 @login_required
 def payslip_edit(request, pk):
-    obj = get_object_or_404(Payslip.objects.select_related("cycle"), pk=pk, tenant=request.tenant)
+    # select_related the structure+template too so the recompute() after save() doesn't re-fetch them.
+    obj = get_object_or_404(
+        Payslip.objects.select_related("cycle", "salary_structure__template"), pk=pk, tenant=request.tenant)
     # Payslip inputs are editable only while the cycle is a draft; recompute after every change.
     if obj.cycle.status != "draft":
         messages.error(request, "A payslip can only be edited while its cycle is a draft.")
