@@ -209,7 +209,9 @@ class Command(BaseCommand):
         if flush:
             # Children first (onboarding/offboarding rows FK EmployeeProfile/Designation), then masters.
             # 3.12: elections FK holiday/policy/employee; policies FK/M2M holiday/designation — wipe first.
-            for model in (FloatingHolidayElection, HolidayPolicy,
+            # 3.14: Payslip.employee is PROTECT, so payslips must be wiped before EmployeeProfile below.
+            for model in (PayslipLine, Payslip, PayrollCycle,
+                          FloatingHolidayElection, HolidayPolicy,
                           FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
                           OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
                           OnboardingProgram, OnboardingTemplateTask, OnboardingTemplate,
