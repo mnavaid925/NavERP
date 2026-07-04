@@ -60,6 +60,12 @@ from .models import (  # 3.8 Offer Management
     OfferLetterTemplate,
     PreboardingItem,
 )
+from .models import (  # 3.13 Salary Structure
+    EmployeeSalaryStructure,
+    PayComponent,
+    SalaryStructureLine,
+    SalaryStructureTemplate,
+)
 
 
 @admin.register(JobGrade)
@@ -621,3 +627,41 @@ class PreboardingItemAdmin(admin.ModelAdmin):
     readonly_fields = ("status", "submitted_at", "verified_by", "verified_at", "reminder_sent_at",
                        "created_at", "updated_at")
     raw_id_fields = ("offer", "verified_by")
+
+
+# ----------------------------------------------------------------------- 3.13 Salary Structure
+class SalaryStructureLineInline(admin.TabularInline):
+    model = SalaryStructureLine
+    extra = 0
+    raw_id_fields = ("pay_component",)
+    fields = ("pay_component", "calculation_type", "amount", "percentage", "sequence")
+
+
+@admin.register(PayComponent)
+class PayComponentAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "component_type", "calculation_type", "frequency",
+                    "is_taxable", "is_active", "tenant")
+    list_filter = ("tenant", "component_type", "calculation_type", "frequency", "is_active", "contribution_side")
+    search_fields = ("name", "code")
+    ordering = ("display_order", "name")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(SalaryStructureTemplate)
+class SalaryStructureTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "job_grade", "annual_ctc_amount", "currency", "is_active", "tenant")
+    list_filter = ("tenant", "is_active", "job_grade")
+    search_fields = ("number", "name")
+    raw_id_fields = ("job_grade",)
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [SalaryStructureLineInline]
+
+
+@admin.register(EmployeeSalaryStructure)
+class EmployeeSalaryStructureAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "template", "annual_ctc_amount", "effective_from",
+                    "effective_to", "status", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "employee__party__name")
+    raw_id_fields = ("employee", "template")
+    readonly_fields = ("number", "created_at", "updated_at")
