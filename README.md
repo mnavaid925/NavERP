@@ -49,7 +49,7 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays — 12 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **4,661 passing tests**.
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **4,759 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -261,7 +261,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -353,9 +353,15 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   optional/floating flag), `HolidayPolicy` (location/department/employee-type/designation **eligibility** +
   floating-holiday **quota** + a `for_employee` most-specific-match resolver), and `FloatingHolidayElection`
   (employees elect optional holidays, quota-enforced in `clean()`, with a tenant-admin approve/reject workflow).
+- **3.13 Salary Structure** — `PayComponent` (unified catalog: earnings / statutory / voluntary deductions /
+  reimbursements / variable pay, with calc-type / frequency / taxable / contribution-side / cap flags — covers 4 of
+  the 5 bullets), `SalaryStructureTemplate` (`SST-`, grade-wise CTC container with a **derived** `computed_ctc_total`)
+  + inline `SalaryStructureLine` breakdown (PROTECT to its component), and `EmployeeSalaryStructure` (`ESS-`,
+  effective-dated per-employee CTC assignment, one-active-per-employee, superseded records read-only). The
+  compensation **definition** layer — the payroll run/posting stays in `accounting.PayrollRun` (3.14).
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **2,014-test** HRM suite
-(**4,661 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **2,112-test** HRM suite
+(**4,759 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -589,9 +595,9 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **4,661 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **4,759 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
-  **Accounting 212**, **HRM 2,014**.
+  **Accounting 212**, **HRM 2,112**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
   (member → 403), forgot-password non-enumeration, invite token/expiry, encryption-key secrecy, branding hex
