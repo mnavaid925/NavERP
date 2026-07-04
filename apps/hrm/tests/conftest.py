@@ -494,3 +494,92 @@ def overtime_b(db, tenant_b, employee_b):
         hours_claimed=Decimal("2"), multiplier=Decimal("1.50"),
         payout_method="pay", reason="Support B", status="pending",
     )
+
+
+# ------------------------------------------------------------------ 3.13 Salary Structure fixtures
+@pytest.fixture
+def pay_component_a(db, tenant_a):
+    """A fixed-amount 'Basic Pay' PayComponent for tenant_a."""
+    from apps.hrm.models import PayComponent
+    return PayComponent.objects.create(
+        tenant=tenant_a, name="Basic Pay", component_type="earning",
+        calculation_type="fixed_amount", default_amount=Decimal("50000"),
+    )
+
+
+@pytest.fixture
+def pay_component_b(db, tenant_b):
+    """A PayComponent belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PayComponent
+    return PayComponent.objects.create(
+        tenant=tenant_b, name="Basic Pay B", component_type="earning",
+        calculation_type="fixed_amount", default_amount=Decimal("40000"),
+    )
+
+
+@pytest.fixture
+def salary_template_a(db, tenant_a):
+    """A SalaryStructureTemplate for tenant_a — no lines yet."""
+    from apps.hrm.models import SalaryStructureTemplate
+    return SalaryStructureTemplate.objects.create(
+        tenant=tenant_a, name="Engineering L2", annual_ctc_amount=Decimal("120000"),
+    )
+
+
+@pytest.fixture
+def salary_template_b(db, tenant_b):
+    """A SalaryStructureTemplate belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import SalaryStructureTemplate
+    return SalaryStructureTemplate.objects.create(
+        tenant=tenant_b, name="Analyst L1 B", annual_ctc_amount=Decimal("60000"),
+    )
+
+
+@pytest.fixture
+def salary_line_a(db, tenant_a, salary_template_a, pay_component_a):
+    """A SalaryStructureLine on salary_template_a referencing pay_component_a."""
+    from apps.hrm.models import SalaryStructureLine
+    return SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=pay_component_a,
+        amount=Decimal("55000"),
+    )
+
+
+@pytest.fixture
+def salary_line_b(db, tenant_b, salary_template_b, pay_component_b):
+    """A SalaryStructureLine belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import SalaryStructureLine
+    return SalaryStructureLine.objects.create(
+        tenant=tenant_b, template=salary_template_b, pay_component=pay_component_b,
+        amount=Decimal("40000"),
+    )
+
+
+@pytest.fixture
+def active_salary_structure_a(db, tenant_a, employee_a, salary_template_a):
+    """An active EmployeeSalaryStructure assignment for employee_a/tenant_a."""
+    from apps.hrm.models import EmployeeSalaryStructure
+    return EmployeeSalaryStructure.objects.create(
+        tenant=tenant_a, employee=employee_a, template=salary_template_a,
+        annual_ctc_amount=Decimal("120000"), status="active",
+    )
+
+
+@pytest.fixture
+def superseded_salary_structure_a(db, tenant_a, employee_a):
+    """A superseded (read-only history) EmployeeSalaryStructure for employee_a/tenant_a."""
+    from apps.hrm.models import EmployeeSalaryStructure
+    return EmployeeSalaryStructure.objects.create(
+        tenant=tenant_a, employee=employee_a,
+        annual_ctc_amount=Decimal("100000"), status="superseded",
+    )
+
+
+@pytest.fixture
+def employee_salary_structure_b(db, tenant_b, employee_b):
+    """An active EmployeeSalaryStructure belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import EmployeeSalaryStructure
+    return EmployeeSalaryStructure.objects.create(
+        tenant=tenant_b, employee=employee_b,
+        annual_ctc_amount=Decimal("90000"), status="active",
+    )
