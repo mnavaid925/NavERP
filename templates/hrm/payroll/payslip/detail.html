@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.employee.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payslip_list' %}">Payslips</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.cycle.status == 'draft' %}
+        <a href="{% url 'hrm:payslip_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Cycle</dt><dd><a href="{% url 'hrm:payrollcycle_detail' obj.cycle.pk %}">{{ obj.cycle.number }}</a> ({{ obj.cycle.period_start }} – {{ obj.cycle.period_end }})</dd></div>
+      <div class="detail-item"><dt>Days Worked</dt><dd>{{ obj.days_worked }} / {{ obj.days_in_period }}</dd></div>
+      <div class="detail-item"><dt>LOP Days</dt><dd>{{ obj.lop_days }}</dd></div>
+      <div class="detail-item"><dt>Arrears</dt><dd>{{ obj.arrears_amount }}</dd></div>
+      <div class="detail-item"><dt>Bonus</dt><dd>{{ obj.bonus_amount }}</dd></div>
+      <div class="detail-item"><dt>Hold</dt><dd>{% if obj.on_hold %}<span class="badge badge-amber">On Hold</span>{% else %}<span class="badge badge-green">Payable</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.on_hold and obj.hold_reason %}<p class="text-muted" style="margin-top:.5rem;"><strong>Hold reason:</strong> {{ obj.hold_reason }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Breakdown</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Component</th><th>Type</th><th>Side</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.component_name }}</td>
+              <td>{{ line.get_component_type_display }}</td>
+              <td>{% if line.contribution_side %}{{ line.get_contribution_side_display }}{% else %}—{% endif %}</td>
+              <td>{{ line.amount }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="list"></i><p>No lines.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><th colspan="3" style="text-align:right;">Gross Pay</th><th>{{ obj.gross_pay }}</th></tr>
+          <tr><th colspan="3" style="text-align:right;">Deductions</th><th>{{ obj.total_deductions }}</th></tr>
+          <tr><th colspan="3" style="text-align:right;">Net Pay</th><th>{{ obj.net_pay }}</th></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  {% if not obj.cycle.is_locked %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Salary Hold</h2></div>
+      <div class="card-body">
+        {% if obj.on_hold %}
+          <form method="post" action="{% url 'hrm:payslip_release' obj.pk %}" onsubmit="return confirm('Release this hold?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Release Hold</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'hrm:payslip_hold' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_hold_reason">Hold reason</label>
+              <textarea id="id_hold_reason" name="hold_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="pause"></i> Hold Salary</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:payslip_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
