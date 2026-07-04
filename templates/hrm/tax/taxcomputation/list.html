@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Tax Computations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tax Computations</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Tax Computations</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:tax_regime_comparison' %}" class="btn btn-outline"><i data-lucide="scale"></i> Regime Comparison</a>
+      <a href="{% url 'hrm:taxcomputation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Computation</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:180px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or employee…">
+        </div>
+        <div class="form-group">
+          <input type="text" name="financial_year" value="{{ request.GET.financial_year }}" class="form-input" placeholder="FY e.g. 2025-26" style="max-width:130px;">
+        </div>
+        <div class="form-group">
+          <select name="computation_type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in computation_type_choices %}
+              <option value="{{ val }}" {% if request.GET.computation_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select">
+            <option value="">All employees</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:taxcomputation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>FY</th><th>Type</th><th>Tax Payable</th><th>Paid YTD</th><th>Monthly TDS</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:taxcomputation_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.financial_year }}</td>
+              <td>{% if obj.computation_type == 'final' %}<span class="badge badge-green">{{ obj.get_computation_type_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_computation_type_display }}</span>{% endif %}</td>
+              <td class="fw-600">{{ obj.tax_payable }}</td>
+              <td>{{ obj.tax_paid_ytd }}</td>
+              <td>{{ obj.monthly_tds_amount }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:taxcomputation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:taxcomputation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:taxcomputation_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this computation?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="calculator"></i><h3>No tax computations</h3><p>Create a computation for an employee's declaration, then Generate to project the annual tax + monthly TDS.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
