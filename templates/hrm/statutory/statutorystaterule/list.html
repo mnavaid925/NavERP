@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Statutory State Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">State Rules (PT &amp; LWF)</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Statutory State Rules</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:statutorystaterule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search state or registration…">
+        </div>
+        <div class="form-group">
+          <select name="scheme" class="form-select">
+            <option value="">All schemes</option>
+            {% for val, label in scheme_choices %}
+              <option value="{{ val }}" {% if request.GET.scheme == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="state" class="form-select">
+            <option value="">All states</option>
+            {% for val, label in state_choices %}
+              <option value="{{ val }}" {% if request.GET.state == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select">
+            <option value="">Any status</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:statutorystaterule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>State</th><th>Scheme</th><th>Bracket / Periodicity</th><th>Amount</th><th>Registration</th><th>Active</th><th>Effective</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:statutorystaterule_detail' obj.pk %}" class="fw-600">{{ obj.state }}</a></td>
+              <td>{% if obj.scheme == 'pt' %}<span class="badge badge-info">{{ obj.get_scheme_display }}</span>{% elif obj.scheme == 'lwf' %}<span class="badge badge-amber">{{ obj.get_scheme_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_scheme_display }}</span>{% endif %}</td>
+              <td>{% if obj.scheme == 'pt' %}{{ obj.income_from }} – {{ obj.income_to }}{% else %}{{ obj.get_lwf_periodicity_display|default:"—" }}{% endif %}</td>
+              <td>{% if obj.scheme == 'pt' %}{{ obj.pt_monthly_amount }}{% else %}EE {{ obj.lwf_employee_contribution|default:"0" }} / ER {{ obj.lwf_employer_contribution|default:"0" }}{% endif %}</td>
+              <td>{{ obj.registration_number|default:"—" }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>{{ obj.effective_from }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:statutorystaterule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:statutorystaterule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:statutorystaterule_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this rule?');">
+                    {% csrf_token %}
+                    <button class="btn-icon" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="map-pin"></i><h3>No state rules found</h3><p>Add a Professional Tax slab or Labour Welfare Fund rule per state.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
