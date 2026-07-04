@@ -397,6 +397,20 @@ LIVE_LINKS = {
         "Arrears Calculation": "hrm:payslip_list",                          # bullet (arrears entered per payslip)
         "Bonus Processing": "hrm:payrollcycle_list?cycle_type=bonus",        # bullet (bonus/off-cycle runs)
     },
+    # 3.15 Statutory Compliance — StatutoryReturn (scheme-filtered) is the challan/return register
+    # for the schemes computed IN payroll (PF/ESI/TDS), so those bullets deep-link to it; PT/LWF are
+    # STATE-scoped config, so their bullets point at StatutoryStateRule (the state-wise slab/rule
+    # table IS the PT/LWF surface the bullet describes). Mirrors 3.14's deep-linked ?query pattern.
+    "3.15": {
+        "PF Management": "hrm:statutoryreturn_list?scheme=pf",               # bullet (PF challan/return)
+        "ESI Management": "hrm:statutoryreturn_list?scheme=esi",             # bullet (ESI contributions)
+        "PT Management": "hrm:statutorystaterule_list?scheme=pt",            # bullet (state-wise PT slabs)
+        "TDS Management": "hrm:statutoryreturn_list?scheme=tds_24q",         # bullet (Form 24Q / Form 16)
+        "LWF Management": "hrm:statutorystaterule_list?scheme=lwf",          # bullet (state-wise LWF rules)
+        "Statutory Configuration": "hrm:statutoryconfig_detail",             # extra (employer registrations/rates)
+        "Statutory Identifiers": "hrm:employeestatutoryidentifier_list",     # extra (UAN/PF/ESI per employee)
+        "Compliance Calendar": "hrm:statutory_compliance_calendar",          # extra (cross-scheme due-date view)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
