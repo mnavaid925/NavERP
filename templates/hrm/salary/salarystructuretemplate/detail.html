@@ -21,7 +21,7 @@
       <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
       <div class="detail-item"><dt>Job Grade</dt><dd>{% if obj.job_grade %}{{ obj.job_grade }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Target CTC</dt><dd>{% if obj.annual_ctc_amount is not None %}{{ obj.currency }} {{ obj.annual_ctc_amount }}{% else %}—{% endif %}</dd></div>
-      <div class="detail-item"><dt>Computed CTC (from lines)</dt><dd class="fw-600">{{ obj.currency }} {{ obj.computed_ctc_total }}</dd></div>
+      <div class="detail-item"><dt>Computed CTC (from lines)</dt><dd class="fw-600">{{ obj.currency }} {{ ctc_total }}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
@@ -56,7 +56,7 @@
           {% endfor %}
         </tbody>
         {% if lines %}
-          <tfoot><tr><th colspan="5" style="text-align:right;">Total CTC</th><th>{{ obj.computed_ctc_total }}</th><th></th></tr></tfoot>
+          <tfoot><tr><th colspan="5" style="text-align:right;">Total CTC</th><th>{{ ctc_total }}</th><th></th></tr></tfoot>
         {% endif %}
       </table>
     </div>
