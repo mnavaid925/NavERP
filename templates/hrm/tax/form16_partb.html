@@ -19,7 +19,8 @@
         <div class="detail-item"><dt>Employer TAN</dt><dd>{% if config %}{{ config.tan_number|default:"—" }}{% else %}—{% endif %}</dd></div>
         <div class="detail-item"><dt>PAN of Deductor</dt><dd>{% if config %}{{ config.pan_of_deductor|default:"—" }}{% else %}—{% endif %}</dd></div>
         <div class="detail-item"><dt>TDS Circle</dt><dd>{% if config %}{{ config.tds_circle_address|default:"—" }}{% else %}—{% endif %}</dd></div>
-        <div class="detail-item"><dt>Employee PAN</dt><dd>{{ obj.employee.national_id|default:"—" }}</dd></div>
+        {# PAN masked (last-4) like everywhere else — this data view is tenant-wide-readable; a real Form 16 PDF/print artifact would need the full PAN behind an admin/self-service-gated download. #}
+        <div class="detail-item"><dt>Employee PAN</dt><dd>{{ obj.employee.masked_national_id|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Form 16 Register</dt><dd>{% if obj.statutory_return %}<a href="{% url 'hrm:statutoryreturn_detail' obj.statutory_return.pk %}">{{ obj.statutory_return.number }}</a> ({{ obj.statutory_return.get_status_display }}){% else %}— (not linked — use "Link Form 16"){% endif %}</dd></div>
         <div class="detail-item"><dt>TDS Deposited (register)</dt><dd>{% if obj.statutory_return %}{{ obj.statutory_return.employee_contribution_total }}{% else %}—{% endif %}</dd></div>
       </dl>
