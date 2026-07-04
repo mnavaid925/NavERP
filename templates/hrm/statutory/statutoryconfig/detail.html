@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Statutory Configuration{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Statutory Configuration</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Statutory Configuration</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:statutoryconfig_edit' %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-bottom:1rem;">Tenant-wide employer registrations, wage ceilings and default statutory rates. These document the compliance setup — the actual per-payslip statutory amounts are computed by payroll (3.13/3.14).</p>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Provident Fund (PF)</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Establishment Code</dt><dd>{{ obj.pf_establishment_code|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Wage Ceiling</dt><dd>{{ obj.pf_wage_ceiling }}</dd></div>
+        <div class="detail-item"><dt>Employee Rate</dt><dd>{{ obj.pf_employee_rate }}%</dd></div>
+        <div class="detail-item"><dt>Employer Rate</dt><dd>{{ obj.pf_employer_rate }}%</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Employee State Insurance (ESI)</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Employer Code</dt><dd>{{ obj.esi_employer_code|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Wage Ceiling</dt><dd>{{ obj.esi_wage_ceiling }}</dd></div>
+        <div class="detail-item"><dt>Employee Rate</dt><dd>{{ obj.esi_employee_rate }}%</dd></div>
+        <div class="detail-item"><dt>Employer Rate</dt><dd>{{ obj.esi_employer_rate }}%</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Professional Tax (PT)</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Default State</dt><dd>{{ obj.pt_default_state|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>State-wise Slabs</dt><dd><a href="{% url 'hrm:statutorystaterule_list' %}?scheme=pt">Manage PT rules →</a></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tax Deducted at Source (TDS)</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>TAN</dt><dd>{{ obj.tan_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>PAN of Deductor</dt><dd>{{ obj.pan_of_deductor|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>TDS Circle Address</dt><dd>{{ obj.tds_circle_address|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Labour Welfare Fund (LWF)</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Applicable</dt><dd>{% if obj.is_lwf_applicable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>State-wise Rules</dt><dd><a href="{% url 'hrm:statutorystaterule_list' %}?scheme=lwf">Manage LWF rules →</a></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:hrm_overview' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to HRM</a>
+{% endblock %}
