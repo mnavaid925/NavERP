@@ -452,4 +452,43 @@ NavERP.md 3.13 bullets (exact text, all 5 go Live this pass):
 
 ## Review
 
-(filled in at the end)
+**Delivered (2026-07-04):** HRM 3.13 Salary Structure — the compensation **definition** layer. All 5 NavERP.md
+bullets Live. Scope as planned: 4 new models reusing `JobGrade`/`EmployeeProfile`; NO GL posting (stays in
+`accounting.PayrollRun`, L29).
+- **`PayComponent`** — unified catalog (earning / statutory_deduction / voluntary_deduction / reimbursement /
+  variable) covering the Pay Components + Tax Components + Reimbursements + Variable Pay bullets in one table
+  (calc-type, frequency, taxable, contribution-side, cap, requires_bill; `clean()` consistency check).
+- **`SalaryStructureTemplate`** (`SST-`) — grade-wise CTC container; derived `computed_ctc_total`.
+- **`SalaryStructureLine`** — CTC breakdown, PROTECT→component, managed **inline** on the template detail
+  (`resolved_amount()` resolver; v1 all pct types resolve off CTC).
+- **`EmployeeSalaryStructure`** (`ESS-`) — effective-dated per-employee assignment; one-active-per-employee;
+  superseded records read-only.
+- Migration `0024`; `_seed_salary` (8 components + a 5-line SST template [CTC 118,700] + 1 active assignment,
+  idempotent + child-first flush); `LIVE_LINKS["3.13"]` → all 5 bullets via `?component_type=` deep-links.
+
+**Verification:** own smoke test 0 failures (17 URLs 200, no leaks/bad-badges, inline line add/edit/delete, PROTECT
+delete guard, IDOR→404, one-active clean(), filters, sidebar Live).
+
+**Module Creation Sequence — all 7 review agents, one at a time, findings applied + committed:**
+- **code-reviewer** — 0 Critical. Fixed: superseded `EmployeeSalaryStructure` edit/delete lock (a direct POST could
+  rewrite/destroy compensation history) + template button-gating.
+- **explorer** — all 7 wiring seams clean; no fixes (one harmless unused `is_edit` context key noted).
+- **frontend-reviewer** — no Critical/Important; all 10 templates clean (badges correct per L33 from the start,
+  colspans exact, CRUD complete). No fixes.
+- **performance-reviewer** — no N+1 (the `line.template` access is cache-served). Fixed: `salarystructuretemplate_detail`
+  computes `ctc_total` once from the fetched lines (3 line-queries → 1) instead of the property re-scanning.
+- **qa-smoke-tester** — 70/71; found + I fixed a real bug: adding a **duplicate** `pay_component` line 500'd
+  (IntegrityError — the form excludes `template`, so `validate_unique` skipped it); added a form `clean()` duplicate
+  check + preset the instance (mirrors timesheetentry_add) → friendly 200 error.
+- **security-reviewer** — no vulnerabilities (IDOR, CSRF, mass-assignment, XSS, superseded-lock all correct). One
+  app-wide authorization-policy observation (gate sensitive comp writes behind tenant-admin) → spun off as a task
+  (not forked into 3.13, L28).
+- **test-writer** — **+105 tests** (35 model + 51 view + 19 security): resolver/CTC math, clean() rules, inline-line
+  duplicate rejection, PROTECT guard, superseded lock, cross-tenant IDOR. Full HRM suite **2,112 passed / 0 failed**
+  (was 2,014); project-wide **4,759**.
+
+**Follow-up tasks spawned (app-wide, not forked into 3.13):** filter-select aria-labels; tenant-admin gate on
+sensitive HRM writes.
+
+**Next:** 3.14 Payroll Processing (will consume `EmployeeSalaryStructure` + `PayComponent`; posts via
+`accounting.PayrollRun`).
