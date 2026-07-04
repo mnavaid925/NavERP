@@ -3675,3 +3675,362 @@ class PayslipLine(TenantOwned):
 
     def __str__(self):
         return f"{self.payslip} · {self.component_name}"
+
+
+# ---------------------------------------------------------------------------
+# 3.15 Statutory Compliance — the Indian statutory-payroll COMPLIANCE layer on
+# top of 3.13 (PayComponent/SalaryStructure) + 3.14 (PayrollCycle/Payslip/
+# PayslipLine). This is NOT a second payroll engine: the per-employee statutory
+# amounts are already computed and snapshotted on ``PayslipLine`` by
+# ``Payslip.recompute()``. 3.15 adds only (a) tenant-wide employer
+# registration/config (``StatutoryConfig``), (b) state-wise PT+LWF slab/rate
+# rules (``StatutoryStateRule``), (c) per-employee government identifiers
+# UAN/PF/ESI (``EmployeeStatutoryIdentifier``), and (d) a per-scheme/per-period
+# return/challan register (``StatutoryReturn``) whose contribution totals are
+# AGGREGATED from existing ``PayslipLine`` rows — never hand-typed. Money still
+# posts only through ``accounting.PayrollRun``/``JournalEntry`` (L29); this
+# sub-module builds no GL path and adds no new employee master.
+# ---------------------------------------------------------------------------
+
+# India's states + union territories — the choice list shared by
+# ``StatutoryConfig.pt_default_state``, ``StatutoryStateRule.state``, and
+# ``EmployeeStatutoryIdentifier.pt_state`` (PT/LWF are state-scoped schemes).
+INDIAN_STATE_CHOICES = [
+    ("Andhra Pradesh", "Andhra Pradesh"), ("Arunachal Pradesh", "Arunachal Pradesh"),
+    ("Assam", "Assam"), ("Bihar", "Bihar"), ("Chhattisgarh", "Chhattisgarh"),
+    ("Goa", "Goa"), ("Gujarat", "Gujarat"), ("Haryana", "Haryana"),
+    ("Himachal Pradesh", "Himachal Pradesh"), ("Jharkhand", "Jharkhand"),
+    ("Karnataka", "Karnataka"), ("Kerala", "Kerala"), ("Madhya Pradesh", "Madhya Pradesh"),
+    ("Maharashtra", "Maharashtra"), ("Manipur", "Manipur"), ("Meghalaya", "Meghalaya"),
+    ("Mizoram", "Mizoram"), ("Nagaland", "Nagaland"), ("Odisha", "Odisha"),
+    ("Punjab", "Punjab"), ("Rajasthan", "Rajasthan"), ("Sikkim", "Sikkim"),
+    ("Tamil Nadu", "Tamil Nadu"), ("Telangana", "Telangana"), ("Tripura", "Tripura"),
+    ("Uttar Pradesh", "Uttar Pradesh"), ("Uttarakhand", "Uttarakhand"),
+    ("West Bengal", "West Bengal"),
+    # Union territories
+    ("Andaman and Nicobar Islands", "Andaman and Nicobar Islands"),
+    ("Chandigarh", "Chandigarh"),
+    ("Dadra and Nagar Haveli and Daman and Diu", "Dadra and Nagar Haveli and Daman and Diu"),
+    ("Delhi", "Delhi"), ("Jammu and Kashmir", "Jammu and Kashmir"), ("Ladakh", "Ladakh"),
+    ("Lakshadweep", "Lakshadweep"), ("Puducherry", "Puducherry"),
+]
+
+
+class StatutoryConfig(TenantOwned):
+    """Tenant-wide statutory registration + default-rate master (3.15) — a settings
+    singleton (one row per tenant), mirroring Zoho Payroll's single Statutory Components
+    screen. Overrides ``TenantOwned``'s FK with a ``OneToOneField`` so there is exactly
+    one config per tenant. Rates/ceilings are stored for documentation + the register
+    aggregation; the actual per-payslip statutory computation stays in
+    ``PayComponent``/``Payslip.recompute()`` (this model never re-derives contributions)."""
+
+    tenant = models.OneToOneField(
+        "core.Tenant", on_delete=models.CASCADE, related_name="hrm_statutory_config")
+
+    # PF (Provident Fund) — Zoho: PF establishment code + ₹15,000 Basic+DA ceiling, 12%/12%.
+    pf_establishment_code = models.CharField(max_length=50, blank=True)
+    pf_wage_ceiling = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("15000.00"),
+        help_text="Monthly Basic+DA ceiling for PF (documentation; enforcement stays in payroll).")
+    pf_employee_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("12.00"))
+    pf_employer_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("12.00"))
+    # ESI (Employee State Insurance) — Zoho: ESI number + ₹21,000 gross ceiling, 0.75%/3.25%.
+    esi_employer_code = models.CharField(max_length=50, blank=True)
+    esi_wage_ceiling = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("21000.00"),
+        help_text="Monthly gross ceiling below which an employee is ESI-eligible.")
+    esi_employee_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.75"))
+    esi_employer_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("3.25"))
+    # PT (Professional Tax) — state-scoped; the fallback state when an employee's own can't resolve.
+    pt_default_state = models.CharField(max_length=50, choices=INDIAN_STATE_CHOICES, blank=True)
+    # TDS (Tax Deducted at Source) — employer TAN + Form 16 config (greytHR/ClearTax).
+    tan_number = models.CharField(max_length=20, blank=True,
+        help_text="Employer Tax Deduction Account Number — mandatory on Form 24Q/16 (distinct from PAN).")
+    tds_circle_address = models.TextField(blank=True, help_text="TDS circle/ward address printed on Form 16.")
+    pan_of_deductor = models.CharField(max_length=10, blank=True,
+        help_text="The employer's own PAN (distinct from an employee's PAN in EmployeeProfile.national_id).")
+    # LWF (Labour Welfare Fund) — org-wide master switch; per-state detail on StatutoryStateRule.
+    is_lwf_applicable = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Statutory Configuration"
+        verbose_name_plural = "Statutory Configuration"
+
+    @classmethod
+    def for_tenant(cls, tenant):
+        """Get-or-create the single config row for ``tenant`` (consistent call-site helper)."""
+        obj, _ = cls.objects.get_or_create(tenant=tenant)
+        return obj
+
+    def __str__(self):
+        return f"Statutory Config · {self.tenant.name if self.tenant_id else ''}"
+
+
+class StatutoryStateRule(TenantOwned):
+    """State-wise PT + LWF slab/rate table (3.15) — one shared table for both state-scoped
+    schemes (mirrors greytHR's editable PT slab grid + the LWF state-applicability/periodicity/
+    amount pattern). Rate changes are a NEW row (supersede via ``is_active=False``), never an
+    in-place edit, so prior-period returns stay historically correct (the greytHR "Odisha PT
+    discontinued from April 2026" pattern).
+
+    NULL note: for LWF, ``income_from`` stays ``None`` — and DB unique constraints treat NULLs as
+    distinct, so ``clean()`` additionally enforces one active LWF row per ``(tenant, state)``."""
+
+    SCHEME_CHOICES = [
+        ("pt", "Professional Tax"),
+        ("lwf", "Labour Welfare Fund"),
+    ]
+    LWF_PERIODICITY_CHOICES = [
+        ("monthly", "Monthly"),
+        ("half_yearly", "Half-Yearly"),
+        ("annual", "Annual"),
+    ]
+
+    state = models.CharField(max_length=50, choices=INDIAN_STATE_CHOICES)
+    scheme = models.CharField(max_length=10, choices=SCHEME_CHOICES, default="pt")
+    # PT-only (blank/null when scheme="lwf") — the income bracket → monthly tax amount.
+    income_from = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    income_to = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    pt_monthly_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    pt_deduction_month = models.CharField(max_length=20, blank=True,
+        help_text="Optional — some states deduct PT only in specific months (e.g. an annual lump sum).")
+    # LWF-only (blank/null when scheme="pt").
+    lwf_employee_contribution = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    lwf_employer_contribution = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    lwf_periodicity = models.CharField(max_length=20, choices=LWF_PERIODICITY_CHOICES, blank=True)
+    lwf_due_month_1 = models.CharField(max_length=20, blank=True, help_text="e.g. July.")
+    lwf_due_month_2 = models.CharField(max_length=20, blank=True, help_text="e.g. January (half-yearly states).")
+    registration_number = models.CharField(max_length=50, blank=True,
+        help_text="State-specific PT/LWF employer registration number, where applicable.")
+    is_active = models.BooleanField(default=True)
+    effective_from = models.DateField(default=timezone.localdate)
+
+    class Meta:
+        ordering = ["state", "scheme", "income_from"]
+        unique_together = ("tenant", "state", "scheme", "income_from")
+        indexes = [
+            models.Index(fields=["tenant", "scheme"], name="hrm_ssr_tenant_scheme_idx"),
+            models.Index(fields=["tenant", "state"], name="hrm_ssr_tenant_state_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.scheme == "pt":
+            missing = [f for f in ("income_from", "income_to", "pt_monthly_amount")
+                       if getattr(self, f) is None]
+            if missing:
+                raise ValidationError({m: "Required for a Professional Tax slab." for m in missing})
+            if (self.income_from is not None and self.income_to is not None
+                    and self.income_to < self.income_from):
+                raise ValidationError({"income_to": "Income-to cannot be below income-from."})
+        elif self.scheme == "lwf":
+            if self.lwf_employee_contribution is None or self.lwf_employer_contribution is None:
+                raise ValidationError({
+                    "lwf_employee_contribution": "Employee + employer LWF contributions are required.",
+                })
+            if not self.lwf_periodicity:
+                raise ValidationError({"lwf_periodicity": "LWF periodicity is required."})
+            # App-level guard on top of the (NULL-distinct) DB constraint: at most one active LWF
+            # row per (tenant, state) — a rate change supersedes the old row (is_active=False).
+            if self.is_active and self.tenant_id:
+                clash = StatutoryStateRule.objects.filter(
+                    tenant_id=self.tenant_id, state=self.state, scheme="lwf", is_active=True)
+                if self.pk:
+                    clash = clash.exclude(pk=self.pk)
+                if clash.exists():
+                    raise ValidationError(
+                        "An active LWF rule already exists for this state — deactivate it first.")
+
+    def __str__(self):
+        label = f"{self.get_state_display()} · {self.get_scheme_display()}"
+        if self.scheme == "pt" and self.income_from is not None:
+            label += f" ({self.income_from}–{self.income_to})"
+        return label
+
+
+class EmployeeStatutoryIdentifier(TenantOwned):
+    """Per-employee government-issued statutory identifiers (3.15) — a 1:1 companion to
+    ``EmployeeProfile`` for the UAN/PF/ESI numbers that don't fit the generic
+    ``EmployeeProfile.national_id`` (PAN) field. Created lazily (get-or-create) — not every
+    employee needs every identifier filled at once.
+
+    WARNING: ``uan_number``/``pf_number``/``esi_number`` are sensitive government IDs — they are
+    added to ``apps.core.crud._SENSITIVE_AUDIT_FIELDS`` so they are redacted from AuditLog.changes
+    (mirroring national_id/passport_number). Encrypt at rest in production."""
+
+    employee = models.OneToOneField(
+        "hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="statutory_identifiers")
+    uan_number = models.CharField(max_length=20, blank=True,
+        help_text="PF Universal Account Number (lifelong, distinct from the establishment PF number).")
+    pf_number = models.CharField(max_length=30, blank=True,
+        help_text="Establishment-specific PF account/member ID.")
+    esi_number = models.CharField(max_length=20, blank=True,
+        help_text="ESI Insurance Number (blank if the employee is above the ESI ceiling / exempt).")
+    pt_state = models.CharField(max_length=50, choices=INDIAN_STATE_CHOICES, blank=True,
+        help_text="Resolves which PT/LWF StatutoryStateRule applies; falls back to the config default.")
+    is_pf_applicable = models.BooleanField(default=True)
+    is_esi_applicable = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["employee__party__name"]
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_empstat_tenant_emp_idx"),
+        ]
+
+    def __str__(self):
+        return f"Statutory IDs · {self.employee}"
+
+
+class StatutoryReturn(TenantNumbered):
+    """A per-scheme, per-period statutory return / challan / register record (3.15) —
+    ``SCR-#####``. One shared table covers all five schemes (PF/ESI/PT/TDS/LWF). The
+    contribution totals are DERIVED by ``recompute()`` — an aggregate over the already-computed
+    ``PayslipLine`` rows for the period, mirroring 3.14's ``payrollcycle_lock`` roll-up — never
+    hand-typed. ``registration_number_used`` is snapshotted at generation time so a later config/
+    rule edit never rewrites a historical return (the ``PayslipLine`` snapshot convention).
+
+    v1 scheme matching: ``PayslipLine`` has no per-line scheme tag yet (PF/ESI/PT/LWF are all
+    ``component_type='statutory_deduction'``), so ``recompute()`` matches lines by a
+    ``component_name`` substring per ``SCHEME_KEYWORDS``. A proper per-line scheme tag is a
+    deferred fast-follow (would require a 3.14 model change)."""
+
+    NUMBER_PREFIX = "SCR"
+
+    SCHEME_CHOICES = [
+        ("pf", "Provident Fund"),
+        ("esi", "ESI"),
+        ("pt", "Professional Tax"),
+        ("tds_24q", "TDS — Form 24Q"),
+        ("tds_form16", "TDS — Form 16"),
+        ("lwf", "Labour Welfare Fund"),
+    ]
+    PERIOD_TYPE_CHOICES = [
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("half_yearly", "Half-Yearly"),
+        ("annual", "Annual"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("filed", "Filed"),
+        ("paid", "Paid"),
+        ("late", "Late"),
+    ]
+    # v1 name-substring heuristic mapping a scheme to the PayComponent.name fragments that
+    # identify its PayslipLine rows. NOTE: "pf" is NOT a substring of "Provident Fund" — the
+    # working keyword for PF is "provident". tds/esi/lwf have no seeded component (aggregate 0).
+    SCHEME_KEYWORDS = {
+        "pf": ["provident", "epf"],
+        "esi": ["esi", "state insurance"],
+        "pt": ["professional tax", "profession tax"],
+        "tds_24q": ["tds", "income tax", "tax deducted"],
+        "tds_form16": ["tds", "income tax", "tax deducted"],
+        "lwf": ["lwf", "labour welfare", "labor welfare"],
+    }
+
+    scheme = models.CharField(max_length=15, choices=SCHEME_CHOICES)
+    period_type = models.CharField(max_length=15, choices=PERIOD_TYPE_CHOICES, default="monthly")
+    period_start = models.DateField()
+    period_end = models.DateField()
+    cycle = models.ForeignKey(
+        "hrm.PayrollCycle", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="statutory_returns",
+        help_text="Set for the single-cycle monthly case; null for multi-cycle rollups (e.g. quarterly 24Q).")
+    employee = models.ForeignKey(
+        "hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="statutory_returns", help_text="Set only for per-employee Form 16; null for org-level returns.")
+    employee_contribution_total = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
+    employer_contribution_total = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
+    headcount = models.PositiveIntegerField(default=0, editable=False)
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    filed_on = models.DateField(null=True, blank=True, editable=False)
+    paid_on = models.DateField(null=True, blank=True, editable=False)
+    payment_reference = models.CharField(max_length=100, blank=True)
+    registration_number_used = models.CharField(max_length=50, blank=True, editable=False,
+        help_text="Snapshot of the config/rule registration number at generation time.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-period_start", "scheme"]
+        unique_together = ("tenant", "scheme", "period_start", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_scr_tenant_status_idx"),
+            models.Index(fields=["tenant", "due_date"], name="hrm_scr_tenant_duedate_idx"),
+            models.Index(fields=["tenant", "scheme"], name="hrm_scr_tenant_scheme_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.period_end and self.period_start and self.period_end < self.period_start:
+            raise ValidationError({"period_end": "Period-end cannot be before period-start."})
+
+    @property
+    def is_locked(self):
+        """Filed/paid/late returns are immutable — only a pending return can be re-aggregated/edited."""
+        return self.status != "pending"
+
+    @property
+    def is_overdue(self):
+        """Still pending past its due date — drives a "late" visual flag before status is flipped."""
+        return self.status == "pending" and self.due_date is not None and self.due_date < timezone.localdate()
+
+    def _scheme_lines(self):
+        """The ``PayslipLine`` queryset backing this return: statutory-deduction lines for the
+        period (by cycle when set, else by cycle.pay_date range), narrowed by the v1 scheme
+        keyword match and — for Form 16 — the single employee."""
+        lines = PayslipLine.objects.filter(
+            tenant_id=self.tenant_id, component_type="statutory_deduction")
+        if self.cycle_id:
+            lines = lines.filter(payslip__cycle_id=self.cycle_id)
+        else:
+            lines = lines.filter(
+                payslip__cycle__pay_date__gte=self.period_start,
+                payslip__cycle__pay_date__lte=self.period_end)
+        keywords = self.SCHEME_KEYWORDS.get(self.scheme, [])
+        if keywords:
+            cond = Q()
+            for kw in keywords:
+                cond |= Q(component_name__icontains=kw)
+            lines = lines.filter(cond)
+        if self.employee_id:
+            lines = lines.filter(payslip__employee_id=self.employee_id)
+        return lines
+
+    def _resolve_registration_number(self):
+        """Best-effort registration number for the scheme, snapshotted at generation time."""
+        config = StatutoryConfig.objects.filter(tenant_id=self.tenant_id).first()
+        if self.scheme == "pf":
+            return config.pf_establishment_code if config else ""
+        if self.scheme == "esi":
+            return config.esi_employer_code if config else ""
+        if self.scheme in ("tds_24q", "tds_form16"):
+            return config.tan_number if config else ""
+        if self.scheme in ("pt", "lwf"):
+            state = config.pt_default_state if config else ""
+            base = StatutoryStateRule.objects.filter(
+                tenant_id=self.tenant_id, scheme=self.scheme, is_active=True,
+                registration_number__gt="")
+            # Prefer the org's default-state rule; fall back to any state with a registration number.
+            rule = (base.filter(state=state).first() if state else None) or base.order_by("state").first()
+            return rule.registration_number if rule else ""
+        return ""
+
+    def recompute(self):
+        """Derive the contribution totals + headcount from the backing ``PayslipLine`` rows and
+        snapshot the registration number. Mirrors 3.14's ``payrollcycle_lock`` bucketing exactly:
+        ``employer`` = ``contribution_side="employer"``; ``employee`` = everything else
+        (employee/both/blank) — so a "both" line is never double-counted. Immutable once filed."""
+        if self.is_locked:
+            raise ValidationError("Only a pending return can be re-aggregated.")
+        lines = self._scheme_lines()
+        self.employer_contribution_total = (
+            lines.filter(contribution_side="employer").aggregate(s=Sum("amount"))["s"] or ZERO)
+        self.employee_contribution_total = (
+            lines.exclude(contribution_side="employer").aggregate(s=Sum("amount"))["s"] or ZERO)
+        self.headcount = lines.values("payslip__employee_id").distinct().count()
+        self.registration_number_used = self._resolve_registration_number()
+        self.save(update_fields=[
+            "employee_contribution_total", "employer_contribution_total", "headcount",
+            "registration_number_used", "updated_at"])
+
+    def __str__(self):
+        return f"{self.number} · {self.get_scheme_display()} · {self.period_start}–{self.period_end}"
