@@ -110,6 +110,12 @@ from .forms import (  # 3.14 Payroll Processing
     PayrollCycleForm,
     PayslipForm,
 )
+from .forms import (  # 3.15 Statutory Compliance
+    EmployeeStatutoryIdentifierForm,
+    StatutoryConfigForm,
+    StatutoryReturnForm,
+    StatutoryStateRuleForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -211,6 +217,13 @@ from .models import (  # 3.14 Payroll Processing
     Payslip,
     PayslipLine,
     PayrollCycle,
+)
+from .models import (  # 3.15 Statutory Compliance
+    INDIAN_STATE_CHOICES,
+    EmployeeStatutoryIdentifier,
+    StatutoryConfig,
+    StatutoryReturn,
+    StatutoryStateRule,
 )
 
 
@@ -6095,3 +6108,271 @@ def payslip_release(request, pk):
     write_audit_log(request.user, obj, "update", {"action": "release"})
     messages.success(request, "Payslip hold released.")
     return redirect("hrm:payslip_detail", pk=obj.pk)
+
+
+# ======================= 3.15 Statutory Compliance =======================
+# Config singleton (detail + edit only) · state-wise PT/LWF rules · per-employee
+# identifiers · the shared StatutoryReturn register with its aggregation engine
+# (statutoryreturn_generate) + filing/payment workflow + compliance calendar.
+
+# ---------------------------------------------- StatutoryConfig (tenant singleton)
+@login_required
+def statutoryconfig_detail(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace to view statutory configuration.")
+        return redirect("dashboard:home")
+    config = StatutoryConfig.for_tenant(request.tenant)
+    return render(request, "hrm/statutory/statutoryconfig/detail.html", {"obj": config})
+
+
+@login_required
+def statutoryconfig_edit(request):
+    # Dedicated get-or-create-then-edit view: crud_edit takes a pk, but this model is a per-tenant
+    # settings singleton reached without one — so the row is resolved via for_tenant() here.
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace to edit statutory configuration.")
+        return redirect("dashboard:home")
+    config = StatutoryConfig.for_tenant(request.tenant)
+    if request.method == "POST":
+        form = StatutoryConfigForm(request.POST, instance=config, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, config, "update", {"action": "edit_config"})
+            messages.success(request, "Statutory configuration updated.")
+            return redirect("hrm:statutoryconfig_detail")
+    else:
+        form = StatutoryConfigForm(instance=config, tenant=request.tenant)
+    return render(request, "hrm/statutory/statutoryconfig/form.html",
+                  {"form": form, "obj": config, "is_edit": True})
+
+
+# ---------------------------------------------- StatutoryStateRule (PT + LWF slabs)
+@login_required
+def statutorystaterule_list(request):
+    return crud_list(
+        request,
+        StatutoryStateRule.objects.filter(tenant=request.tenant),
+        "hrm/statutory/statutorystaterule/list.html",
+        search_fields=["state", "registration_number"],
+        filters=[("scheme", "scheme", False), ("state", "state", False),
+                 ("is_active", "is_active", False)],
+        extra_context={
+            "scheme_choices": StatutoryStateRule.SCHEME_CHOICES,
+            "state_choices": INDIAN_STATE_CHOICES,
+        },
+    )
+
+
+@login_required
+def statutorystaterule_create(request):
+    return crud_create(request, form_class=StatutoryStateRuleForm,
+                       template="hrm/statutory/statutorystaterule/form.html",
+                       success_url="hrm:statutorystaterule_list")
+
+
+@login_required
+def statutorystaterule_detail(request, pk):
+    return crud_detail(request, model=StatutoryStateRule, pk=pk,
+                       template="hrm/statutory/statutorystaterule/detail.html")
+
+
+@login_required
+def statutorystaterule_edit(request, pk):
+    return crud_edit(request, model=StatutoryStateRule, pk=pk, form_class=StatutoryStateRuleForm,
+                     template="hrm/statutory/statutorystaterule/form.html",
+                     success_url="hrm:statutorystaterule_list")
+
+
+@login_required
+@require_POST
+def statutorystaterule_delete(request, pk):
+    return crud_delete(request, model=StatutoryStateRule, pk=pk,
+                       success_url="hrm:statutorystaterule_list")
+
+
+# ---------------------------------------- EmployeeStatutoryIdentifier (UAN/PF/ESI)
+@login_required
+def employeestatutoryidentifier_list(request):
+    return crud_list(
+        request,
+        EmployeeStatutoryIdentifier.objects.filter(tenant=request.tenant).select_related("employee__party"),
+        "hrm/statutory/employeestatutoryidentifier/list.html",
+        search_fields=["employee__party__name", "uan_number", "pf_number", "esi_number"],
+        filters=[("pt_state", "pt_state", False), ("is_pf_applicable", "is_pf_applicable", False),
+                 ("is_esi_applicable", "is_esi_applicable", False)],
+        extra_context={"state_choices": INDIAN_STATE_CHOICES},
+    )
+
+
+@login_required
+def employeestatutoryidentifier_create(request):
+    return crud_create(request, form_class=EmployeeStatutoryIdentifierForm,
+                       template="hrm/statutory/employeestatutoryidentifier/form.html",
+                       success_url="hrm:employeestatutoryidentifier_list")
+
+
+@login_required
+def employeestatutoryidentifier_detail(request, pk):
+    return crud_detail(request, model=EmployeeStatutoryIdentifier, pk=pk,
+                       template="hrm/statutory/employeestatutoryidentifier/detail.html",
+                       select_related=("employee__party",))
+
+
+@login_required
+def employeestatutoryidentifier_edit(request, pk):
+    return crud_edit(request, model=EmployeeStatutoryIdentifier, pk=pk,
+                     form_class=EmployeeStatutoryIdentifierForm,
+                     template="hrm/statutory/employeestatutoryidentifier/form.html",
+                     success_url="hrm:employeestatutoryidentifier_list")
+
+
+@login_required
+@require_POST
+def employeestatutoryidentifier_delete(request, pk):
+    return crud_delete(request, model=EmployeeStatutoryIdentifier, pk=pk,
+                       success_url="hrm:employeestatutoryidentifier_list")
+
+
+# ------------------------------------------------- StatutoryReturn (register/challan)
+@login_required
+def statutoryreturn_list(request):
+    qs = (StatutoryReturn.objects.filter(tenant=request.tenant)
+          .select_related("cycle", "employee__party"))
+    return crud_list(
+        request, qs, "hrm/statutory/statutoryreturn/list.html",
+        search_fields=["number", "registration_number_used", "notes"],
+        filters=[("scheme", "scheme", False), ("status", "status", False),
+                 ("period_type", "period_type", False)],
+        extra_context={
+            "scheme_choices": StatutoryReturn.SCHEME_CHOICES,
+            "status_choices": StatutoryReturn.STATUS_CHOICES,
+            "period_type_choices": StatutoryReturn.PERIOD_TYPE_CHOICES,
+        },
+    )
+
+
+@login_required
+def statutoryreturn_create(request):
+    return crud_create(request, form_class=StatutoryReturnForm,
+                       template="hrm/statutory/statutoryreturn/form.html",
+                       success_url="hrm:statutoryreturn_list")
+
+
+@login_required
+def statutoryreturn_detail(request, pk):
+    return crud_detail(request, model=StatutoryReturn, pk=pk,
+                       template="hrm/statutory/statutoryreturn/detail.html",
+                       select_related=("cycle", "employee__party"))
+
+
+@login_required
+def statutoryreturn_edit(request, pk):
+    obj = get_object_or_404(StatutoryReturn, pk=pk, tenant=request.tenant)
+    if obj.is_locked:
+        messages.error(request, "Only a pending return can be edited.")
+        return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+    return crud_edit(request, model=StatutoryReturn, pk=pk, form_class=StatutoryReturnForm,
+                     template="hrm/statutory/statutoryreturn/form.html",
+                     success_url="hrm:statutoryreturn_list")
+
+
+@login_required
+@require_POST
+def statutoryreturn_delete(request, pk):
+    obj = get_object_or_404(StatutoryReturn, pk=pk, tenant=request.tenant)
+    if obj.is_locked:
+        messages.error(request, "Only a pending return can be deleted.")
+        return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+    return crud_delete(request, model=StatutoryReturn, pk=pk, success_url="hrm:statutoryreturn_list")
+
+
+@tenant_admin_required  # aggregating/filing statutory returns is a privileged finance action
+@require_POST
+def statutoryreturn_generate(request, pk):
+    """(Re)aggregate the return's contribution totals from the period's PayslipLine rows — the key
+    domain action (mirrors payrollcycle_generate: create the metadata, then generate from payroll).
+    Only a pending return can be re-aggregated; the model's recompute() does the roll-up."""
+    obj = get_object_or_404(StatutoryReturn, pk=pk, tenant=request.tenant)
+    if obj.is_locked:
+        messages.error(request, "Only a pending return can be (re)aggregated.")
+        return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+    obj.recompute()
+    write_audit_log(request.user, obj, "update", {
+        "action": "generate", "headcount": obj.headcount,
+        "employee_total": str(obj.employee_contribution_total),
+        "employer_total": str(obj.employer_contribution_total)})
+    messages.success(request,
+        f"Aggregated {obj.get_scheme_display()} return {obj.number}: employee "
+        f"{obj.employee_contribution_total}, employer {obj.employer_contribution_total}, "
+        f"headcount {obj.headcount}.")
+    return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def statutoryreturn_mark_filed(request, pk):
+    obj = get_object_or_404(StatutoryReturn, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending return can be marked filed.")
+        return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+    obj.status = "filed"
+    obj.filed_on = timezone.localdate()
+    obj.save(update_fields=["status", "filed_on", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "mark_filed"})
+    messages.success(request, f"Return {obj.number} marked filed.")
+    return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def statutoryreturn_mark_paid(request, pk):
+    obj = get_object_or_404(StatutoryReturn, pk=pk, tenant=request.tenant)
+    if obj.status not in ("pending", "filed"):
+        messages.error(request, "Only a pending or filed return can be marked paid.")
+        return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+    obj.paid_on = timezone.localdate()
+    obj.payment_reference = request.POST.get("payment_reference", "").strip()[:100]
+    # Paid after the due date → recorded as Late, not Paid (RazorpayX/saral PayPack convention).
+    obj.status = "late" if (obj.due_date and obj.paid_on > obj.due_date) else "paid"
+    obj.save(update_fields=["status", "paid_on", "payment_reference", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "mark_paid", "status": obj.status})
+    messages.success(request, f"Return {obj.number} marked {obj.get_status_display()}.")
+    return redirect("hrm:statutoryreturn_detail", pk=obj.pk)
+
+
+# --------------------------------------------------- Compliance calendar (cross-cutting)
+@login_required
+def statutory_compliance_calendar(request):
+    """Read-only cross-scheme due-date calendar over StatutoryReturn (no new model). Groups returns
+    into Overdue / Pending / Filed / Settled buckets; supports the same scheme/status GET filters as
+    the return list. Grouped (not paginated) since it's a calendar overview."""
+    qs = (StatutoryReturn.objects.filter(tenant=request.tenant)
+          .select_related("cycle", "employee__party").order_by("due_date", "scheme"))
+    scheme = request.GET.get("scheme", "").strip()
+    if scheme:
+        qs = qs.filter(scheme=scheme)
+    status = request.GET.get("status", "").strip()
+    if status:
+        qs = qs.filter(status=status)
+    buckets = {"overdue": [], "pending": [], "filed": [], "settled": []}
+    for r in qs:
+        if r.is_overdue:
+            buckets["overdue"].append(r)
+        elif r.status == "pending":
+            buckets["pending"].append(r)
+        elif r.status == "filed":
+            buckets["filed"].append(r)
+        else:  # paid / late — settled (a "late" row is paid-but-late, flagged in the template)
+            buckets["settled"].append(r)
+    # An ordered list of buckets so the template iterates directly (no custom dict-lookup filter).
+    bucket_list = [
+        {"label": "Overdue", "icon": "alarm-clock", "tone": "red", "rows": buckets["overdue"]},
+        {"label": "Pending", "icon": "hourglass", "tone": "amber", "rows": buckets["pending"]},
+        {"label": "Filed", "icon": "file-check", "tone": "info", "rows": buckets["filed"]},
+        {"label": "Settled", "icon": "check-circle", "tone": "green", "rows": buckets["settled"]},
+    ]
+    return render(request, "hrm/statutory/compliance_calendar.html", {
+        "bucket_list": bucket_list,
+        "scheme_choices": StatutoryReturn.SCHEME_CHOICES,
+        "status_choices": StatutoryReturn.STATUS_CHOICES,
+    })
