@@ -77,6 +77,14 @@ from .models import (  # 3.15 Statutory Compliance
     StatutoryReturn,
     StatutoryStateRule,
 )
+from .models import (  # 3.16 Tax & Investment
+    InvestmentDeclaration,
+    InvestmentDeclarationLine,
+    InvestmentProof,
+    TaxComputation,
+    TaxRegimeConfig,
+    TaxSlabBand,
+)
 
 
 @admin.register(JobGrade)
@@ -756,3 +764,58 @@ class StatutoryReturnAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "employee_contribution_total", "employer_contribution_total",
                        "headcount", "filed_on", "paid_on", "registration_number_used",
                        "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------- 3.16 Tax & Investment
+class TaxSlabBandInline(admin.TabularInline):
+    model = TaxSlabBand
+    extra = 1
+    fields = ("income_from", "income_to", "rate_percent", "sequence")
+
+
+@admin.register(TaxRegimeConfig)
+class TaxRegimeConfigAdmin(admin.ModelAdmin):
+    list_display = ("financial_year", "regime", "standard_deduction", "cess_rate",
+                    "is_default_regime", "tenant")
+    list_filter = ("tenant", "financial_year", "regime")
+    search_fields = ("financial_year", "tax_law_reference")
+    readonly_fields = ("created_at", "updated_at")
+    inlines = [TaxSlabBandInline]
+
+
+class InvestmentDeclarationLineInline(admin.TabularInline):
+    model = InvestmentDeclarationLine
+    extra = 0
+    fields = ("section_code", "declared_amount", "verified_amount")
+    readonly_fields = ("verified_amount",)
+
+
+@admin.register(InvestmentDeclaration)
+class InvestmentDeclarationAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "financial_year", "regime_elected", "status", "tenant")
+    list_filter = ("tenant", "financial_year", "regime_elected", "status")
+    search_fields = ("number", "employee__party__name")
+    raw_id_fields = ("employee",)
+    readonly_fields = ("number", "submitted_at", "created_at", "updated_at")
+    inlines = [InvestmentDeclarationLineInline]
+
+
+@admin.register(InvestmentProof)
+class InvestmentProofAdmin(admin.ModelAdmin):
+    list_display = ("declaration_line", "title", "amount", "verification_status", "verified_by",
+                    "verified_at", "tenant")
+    list_filter = ("tenant", "verification_status")
+    search_fields = ("title",)
+    raw_id_fields = ("declaration_line", "verified_by")
+    readonly_fields = ("verification_status", "verified_by", "verified_at", "created_at", "updated_at")
+
+
+@admin.register(TaxComputation)
+class TaxComputationAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "financial_year", "computation_type", "tax_payable",
+                    "tax_paid_ytd", "monthly_tds_amount", "tenant")
+    list_filter = ("tenant", "financial_year", "computation_type")
+    search_fields = ("number", "employee__party__name")
+    raw_id_fields = ("employee", "declaration", "statutory_return")
+    readonly_fields = ("number", "tax_payable", "tax_paid_ytd", "monthly_tds_amount",
+                       "statutory_return", "computed_at", "created_at", "updated_at")
