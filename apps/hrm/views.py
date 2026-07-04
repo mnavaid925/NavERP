@@ -6547,12 +6547,17 @@ def investmentdeclaration_create(request):
 def investmentdeclaration_detail(request, pk):
     obj = get_object_or_404(
         InvestmentDeclaration.objects.select_related("employee__party"), pk=pk, tenant=request.tenant)
-    lines = (obj.lines.prefetch_related("proofs").order_by("section_code"))
+    lines = obj.lines.order_by("section_code")
+    # Flat proofs list (across all lines) so the proofs table can use a single {% empty %} — a nested
+    # loop can't tell "no lines" from "lines but no proofs".
+    proofs = (InvestmentProof.objects.filter(declaration_line__declaration=obj)
+              .select_related("declaration_line")
+              .order_by("declaration_line__section_code", "-created_at"))
     return render(request, "hrm/tax/investmentdeclaration/detail.html", {
         "obj": obj,
         "lines": lines,
+        "proofs": proofs,
         "line_form": InvestmentDeclarationLineForm(tenant=request.tenant),
-        "proof_form": InvestmentProofForm(tenant=request.tenant),
     })
 
 
