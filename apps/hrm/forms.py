@@ -97,6 +97,10 @@ from .models import (  # noqa: E402  — 3.13 Salary Structure
     SalaryStructureLine,
     SalaryStructureTemplate,
 )
+from .models import (  # noqa: E402  — 3.14 Payroll Processing
+    Payslip,
+    PayrollCycle,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1129,3 +1133,23 @@ class EmployeeSalaryStructureForm(TenantModelForm):
         if self.tenant is not None and "template" in self.fields:
             self.fields["template"].queryset = (
                 SalaryStructureTemplate.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+
+
+# ----------------------------------------------------------------------- 3.14 Payroll Processing
+class PayrollCycleForm(TenantModelForm):
+    # status / submitted_by / approved_by / accounting_payroll_run are workflow-owned (set by the
+    # generate/submit/approve/reject/lock actions), never form fields.
+    class Meta:
+        model = PayrollCycle
+        fields = ["period_start", "period_end", "pay_date", "cycle_type", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class PayslipForm(TenantModelForm):
+    # Only the manual inputs — gross/deductions/net/lop_amount are derived by recompute() (called by the
+    # view after save); on_hold/hold_reason go through the dedicated hold/release actions.
+    class Meta:
+        model = Payslip
+        fields = ["days_worked", "lop_days", "arrears_amount", "bonus_amount"]
