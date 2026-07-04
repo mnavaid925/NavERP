@@ -5694,9 +5694,13 @@ def salarystructuretemplate_create(request):
 def salarystructuretemplate_detail(request, pk):
     obj = get_object_or_404(
         SalaryStructureTemplate.objects.select_related("job_grade"), pk=pk, tenant=request.tenant)
+    lines = list(obj.lines.select_related("pay_component").order_by("sequence", "id"))
     return render(request, "hrm/salary/salarystructuretemplate/detail.html", {
         "obj": obj,
-        "lines": obj.lines.select_related("pay_component").order_by("sequence", "id"),
+        "lines": lines,
+        # Compute the CTC total once from the already-fetched lines (avoids the computed_ctc_total
+        # property re-issuing its own lines query for each of the two places the template shows it).
+        "ctc_total": sum((ln.resolved_amount() for ln in lines), Decimal("0")),
         "line_form": SalaryStructureLineForm(tenant=request.tenant),
     })
 
@@ -5730,9 +5734,11 @@ def salarystructureline_add(request, template_pk):
         messages.success(request, "Component line added.")
         return redirect("hrm:salarystructuretemplate_detail", pk=template.pk)
     # Re-render the detail hub with the bound, errored add-form (field errors + typed input preserved).
+    lines = list(template.lines.select_related("pay_component").order_by("sequence", "id"))
     return render(request, "hrm/salary/salarystructuretemplate/detail.html", {
         "obj": template,
-        "lines": template.lines.select_related("pay_component").order_by("sequence", "id"),
+        "lines": lines,
+        "ctc_total": sum((ln.resolved_amount() for ln in lines), Decimal("0")),
         "line_form": form,
     })
 
