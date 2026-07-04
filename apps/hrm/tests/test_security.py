@@ -276,6 +276,87 @@ class TestEmployeeSalaryStructureIDOR:
         assert employee_salary_structure_b.pk not in pks
 
 
+# ================================================================ Payroll Processing IDOR (3.14)
+class TestPayrollCycleIDOR:
+    def test_detail_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.get(reverse("hrm:payrollcycle_detail", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.get(reverse("hrm:payrollcycle_edit", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_edit", args=[cycle_b.pk]), {
+            "period_start": "2026-06-01",
+            "period_end": "2026-06-30",
+            "pay_date": "2026-07-01",
+            "cycle_type": "regular",
+            "notes": "",
+        })
+        assert resp.status_code == 404
+
+    def test_delete_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_delete", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_generate_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_generate", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_submit_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_submit", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_approve_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_approve", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_reject_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_reject", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_lock_cross_tenant_404(self, client_a, cycle_b):
+        resp = client_a.post(reverse("hrm:payrollcycle_lock", args=[cycle_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_cycles(self, client_a, draft_cycle_a, cycle_b):
+        resp = client_a.get(reverse("hrm:payrollcycle_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert draft_cycle_a.pk in pks
+        assert cycle_b.pk not in pks
+
+
+class TestPayslipIDOR:
+    def test_detail_cross_tenant_404(self, client_a, payslip_b):
+        resp = client_a.get(reverse("hrm:payslip_detail", args=[payslip_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_get_cross_tenant_404(self, client_a, payslip_b):
+        resp = client_a.get(reverse("hrm:payslip_edit", args=[payslip_b.pk]))
+        assert resp.status_code == 404
+
+    def test_edit_post_cross_tenant_404(self, client_a, payslip_b):
+        resp = client_a.post(reverse("hrm:payslip_edit", args=[payslip_b.pk]), {
+            "days_worked": "30", "lop_days": "0", "arrears_amount": "0", "bonus_amount": "0",
+        })
+        assert resp.status_code == 404
+
+    def test_hold_cross_tenant_404(self, client_a, payslip_b):
+        resp = client_a.post(reverse("hrm:payslip_hold", args=[payslip_b.pk]), {"hold_reason": "x"})
+        assert resp.status_code == 404
+
+    def test_release_cross_tenant_404(self, client_a, payslip_b):
+        resp = client_a.post(reverse("hrm:payslip_release", args=[payslip_b.pk]))
+        assert resp.status_code == 404
+
+    def test_list_excludes_b_payslips(self, client_a, payslip_a, payslip_b):
+        resp = client_a.get(reverse("hrm:payslip_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert payslip_a.pk in pks
+        assert payslip_b.pk not in pks
+
+
 # ================================================================ Anonymous user → redirect
 class TestAnonymousBlocked:
     @pytest.mark.parametrize("url_name,args", [
@@ -294,6 +375,8 @@ class TestAnonymousBlocked:
         ("hrm:paycomponent_list", []),
         ("hrm:salarystructuretemplate_list", []),
         ("hrm:employeesalarystructure_list", []),
+        ("hrm:payrollcycle_list", []),
+        ("hrm:payslip_list", []),
     ])
     def test_anon_redirected_to_login(self, client, url_name, args):
         resp = client.get(reverse(url_name, args=args))
@@ -387,6 +470,22 @@ class TestCSRFEnforcement:
         c.force_login(admin_user)
         resp = c.post(reverse("hrm:floatingholidayelection_approve", args=[pending_election_a.pk]))
         assert resp.status_code == 403
+
+    def test_payrollcycle_delete_enforces_csrf(self, admin_user, draft_cycle_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("hrm:payrollcycle_delete", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 403
+
+    def test_payrollcycle_lock_enforces_csrf(self, admin_user, draft_cycle_a):
+        draft_cycle_a.status = "approved"
+        draft_cycle_a.save(update_fields=["status"])
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("hrm:payrollcycle_lock", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 403
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "approved"
 
 
 # ================================================================ Photo upload validation
