@@ -69,8 +69,10 @@
               <label class="form-label" for="id_payment_reference">Payment reference</label>
               <input type="text" id="id_payment_reference" name="payment_reference" class="form-input" placeholder="Challan / UTR number (optional)">
             </div>
-            <button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Paid</button>
-            <span class="text-muted" style="margin-left:.5rem;">Paying after the due date is recorded as <strong>Late</strong>.</span>
+            <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+              <button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Paid</button>
+              <span class="text-muted">Paying after the due date is recorded as <strong>Late</strong>.</span>
+            </div>
           </form>
         {% else %}
           <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to generate, file or pay this return.</span>
@@ -83,8 +85,10 @@
               <label class="form-label" for="id_payment_reference">Payment reference</label>
               <input type="text" id="id_payment_reference" name="payment_reference" class="form-input" placeholder="Challan / UTR number (optional)">
             </div>
-            <button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Paid</button>
-            <span class="text-muted" style="margin-left:.5rem;">Paying after the due date is recorded as <strong>Late</strong>.</span>
+            <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+              <button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Paid</button>
+              <span class="text-muted">Paying after the due date is recorded as <strong>Late</strong>.</span>
+            </div>
           </form>
         {% else %}
           <span class="text-muted"><i data-lucide="shield"></i> Filed — awaiting a tenant admin to record payment.</span>
