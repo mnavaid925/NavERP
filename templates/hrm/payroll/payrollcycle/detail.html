@@ -28,7 +28,8 @@
         {% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
         {% elif obj.status == 'approved' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
         {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
-        {% else %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% endif %}
+        {% elif obj.status == 'locked' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
       </dd></div>
       <div class="detail-item"><dt>Submitted By</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Approved By</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
