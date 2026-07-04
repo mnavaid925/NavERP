@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Payslips{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Payslips</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Payslips</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search employee or number…">
+        </div>
+        <div class="form-group">
+          <select name="cycle" class="form-select">
+            <option value="">All cycles</option>
+            {% for cy in cycles %}
+              <option value="{{ cy.pk }}" {% if request.GET.cycle == cy.pk|stringformat:"d" %}selected{% endif %}>{{ cy.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="on_hold" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.on_hold == 'True' %}selected{% endif %}>On Hold</option>
+            <option value="False" {% if request.GET.on_hold == 'False' %}selected{% endif %}>Payable</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:payslip_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Cycle</th><th>Gross</th><th>Net</th><th>Hold</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:payslip_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td><a href="{% url 'hrm:payrollcycle_detail' obj.cycle.pk %}">{{ obj.cycle.number }}</a></td>
+              <td>{{ obj.gross_pay }}</td>
+              <td class="fw-600">{{ obj.net_pay }}</td>
+              <td>{% if obj.on_hold %}<span class="badge badge-amber">On Hold</span>{% else %}<span class="badge badge-green">Payable</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:payslip_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.cycle.status == 'draft' %}
+                    <a href="{% url 'hrm:payslip_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="receipt"></i><h3>No payslips found</h3><p>Payslips are generated from a payroll cycle.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
