@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:taxcomputation_list' %}">Tax Computations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:taxcomputation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:taxcomputation_delete' obj.pk %}" onsubmit="return confirm('Delete this computation?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Declaration</dt><dd><a href="{% url 'hrm:investmentdeclaration_detail' obj.declaration.pk %}">{{ obj.declaration.number }}</a> ({{ obj.declaration.get_regime_elected_display }})</dd></div>
+      <div class="detail-item"><dt>Financial Year</dt><dd>{{ obj.financial_year }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{% if obj.computation_type == 'final' %}<span class="badge badge-green">{{ obj.get_computation_type_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_computation_type_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Remaining Pay Periods</dt><dd>{{ obj.remaining_pay_periods }}</dd></div>
+      <div class="detail-item"><dt>Computed At</dt><dd>{{ obj.computed_at|default:"— (not yet generated)" }}</dd></div>
+      <div class="detail-item"><dt>Form 16 Register</dt><dd>{% if obj.statutory_return %}<a href="{% url 'hrm:statutoryreturn_detail' obj.statutory_return.pk %}">{{ obj.statutory_return.number }}</a>{% else %}— (not linked){% endif %}</dd></div>
+      {% if obj.manual_override_amount is not None %}<div class="detail-item"><dt>Manual Monthly Override</dt><dd>{{ obj.manual_override_amount }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.override_reason %}<p class="text-muted" style="margin-top:.5rem;"><strong>Override reason:</strong> {{ obj.override_reason }}</p>{% endif %}
+  </div></div>
+
+  {% if breakdown.capped_sections %}
+    <div class="card"><div class="card-body">
+      <p class="fw-600"><i data-lucide="alert-triangle"></i> Sections capped at the statutory limit (excess ignored in the computation):</p>
+      <ul style="margin:.5rem 0 0 1.25rem;">
+        {% for label, claimed, cap in breakdown.capped_sections %}
+          <li>{{ label }} — claimed {{ claimed }}, capped to {{ cap }}</li>
+        {% endfor %}
+      </ul>
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tax Breakdown (Old vs New)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Line item</th><th style="text-align:right;">Old Regime</th><th style="text-align:right;">New Regime</th></tr></thead>
+        <tbody>
+          <tr><td>Gross annual income</td><td style="text-align:right;">{{ breakdown.gross }}</td><td style="text-align:right;">{{ breakdown.gross }}</td></tr>
+          <tr><td>HRA exemption</td><td style="text-align:right;">{{ breakdown.hra_exemption }}</td><td style="text-align:right;">0.00</td></tr>
+          <tr><td>Chapter VI-A deductions</td><td style="text-align:right;">{{ breakdown.chapter_via }}</td><td style="text-align:right;"><span class="text-muted">regime-filtered</span></td></tr>
+          <tr><td class="fw-600">Taxable income</td><td style="text-align:right;" class="fw-600">{{ breakdown.taxable_old }}</td><td style="text-align:right;" class="fw-600">{{ breakdown.taxable_new }}</td></tr>
+          <tr><td class="fw-600">Total tax (incl. cess, after 87A)</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_old }}</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_new }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% if breakdown.cheaper == 'old' %}<span class="badge badge-green">Old regime cheaper (saves {{ breakdown.savings }})</span>
+      {% else %}<span class="badge badge-green">New regime cheaper (saves {{ breakdown.savings }})</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div style="display:flex; gap:2.5rem; flex-wrap:wrap;">
+      <div><div class="text-muted">Tax Payable (elected)</div><div class="fw-600">{{ obj.tax_payable }}</div></div>
+      <div><div class="text-muted">Tax Paid YTD</div><div class="fw-600">{{ obj.tax_paid_ytd }}</div></div>
+      <div><div class="text-muted">Monthly TDS (remaining)</div><div class="fw-600">{{ obj.monthly_tds_amount }}</div></div>
+    </div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:taxcomputation_generate' obj.pk %}" style="display:inline;" onsubmit="return confirm('Recompute the tax projection from the declaration + payroll?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="calculator"></i> Generate / Recompute</button>
+        </form>
+        <form method="post" action="{% url 'hrm:taxcomputation_link_form16' obj.pk %}" style="display:inline;" onsubmit="return confirm('Create/link the Form 16 (tds_form16) register row for this employee/FY?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="link"></i> Link Form 16</button>
+        </form>
+      {% else %}
+        <span class="text-muted"><i data-lucide="shield"></i> A tenant admin can Generate the computation and Link Form 16.</span>
+      {% endif %}
+      <a href="{% url 'hrm:form16_partb' obj.pk %}" class="btn btn-outline"><i data-lucide="file-text"></i> View Form 16 Part B</a>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:taxcomputation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
