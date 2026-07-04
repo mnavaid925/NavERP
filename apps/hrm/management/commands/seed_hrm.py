@@ -79,6 +79,11 @@ from apps.hrm.models import (  # 3.13 Salary Structure
     SalaryStructureLine,
     SalaryStructureTemplate,
 )
+from apps.hrm.models import (  # 3.14 Payroll Processing
+    Payslip,
+    PayslipLine,
+    PayrollCycle,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -194,6 +199,7 @@ class Command(BaseCommand):
             self._seed_offers(tenant, flush=options["flush"])
             self._seed_timetracking(tenant, flush=options["flush"])
             self._seed_salary(tenant, flush=options["flush"])
+            self._seed_payroll(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -1390,3 +1396,60 @@ class Command(BaseCommand):
             f"{SalaryStructureTemplate.objects.filter(tenant=tenant).count()} template(s), "
             f"{SalaryStructureLine.objects.filter(tenant=tenant).count()} lines, "
             f"{EmployeeSalaryStructure.objects.filter(tenant=tenant).count()} assignment(s)."))
+
+    def _seed_payroll(self, tenant, *, flush):
+        """3.14 Payroll Processing — a regular monthly cycle with payslips computed (via `recompute()`)
+        from the 3.13 salary structures, one payslip on hold. Ensures a few employees have an active
+        `EmployeeSalaryStructure` first (reusing the 3.13 template). Runs after `_seed_salary`."""
+        if flush:
+            # Children first: lines → payslips → cycle.
+            PayslipLine.objects.filter(tenant=tenant).delete()
+            Payslip.objects.filter(tenant=tenant).delete()
+            PayrollCycle.objects.filter(tenant=tenant).delete()
+        if PayrollCycle.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Payroll data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        template = SalaryStructureTemplate.objects.filter(tenant=tenant).order_by("id").first()
+        if template is None:
+            self.stdout.write(self.style.NOTICE(
+                f"No salary structure template for '{tenant.name}' — skipping payroll seed."))
+            return
+
+        # Give the first few employees an active salary structure (idempotent, one-active guard).
+        for emp in (EmployeeProfile.objects.filter(tenant=tenant).select_related("party")
+                    .order_by("party__name")[:3]):
+            if not EmployeeSalaryStructure.objects.filter(
+                    tenant=tenant, employee=emp, status="active").exists():
+                EmployeeSalaryStructure.objects.create(
+                    tenant=tenant, employee=emp, template=template,
+                    annual_ctc_amount=template.annual_ctc_amount or Decimal("120000"),
+                    effective_from=timezone.localdate().replace(day=1), status="active",
+                    notes="Payroll demo assignment.")
+
+        # A regular cycle for the current month.
+        today = timezone.localdate()
+        period_start = today.replace(day=1)
+        period_end = (period_start + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
+        cycle = PayrollCycle.objects.create(
+            tenant=tenant, period_start=period_start, period_end=period_end, pay_date=period_end,
+            cycle_type="regular", status="draft", notes="Demo monthly payroll cycle.")
+        days_in = (period_end - period_start).days + 1
+        for structure in (EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+                          .select_related("employee")):
+            ps = Payslip.objects.create(
+                tenant=tenant, cycle=cycle, employee=structure.employee, salary_structure=structure,
+                days_in_period=days_in, days_worked=days_in)
+            ps.recompute()
+        # Put one payslip on hold for demo variety.
+        if cycle.payslips.count() > 1:
+            held = cycle.payslips.order_by("-id").first()
+            held.on_hold = True
+            held.hold_reason = "Pending exit clearance (demo)."
+            held.save(update_fields=["on_hold", "hold_reason"])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Payroll seeded for '{tenant.name}': {PayrollCycle.objects.filter(tenant=tenant).count()} cycle, "
+            f"{cycle.payslips.count()} payslips, "
+            f"{PayslipLine.objects.filter(tenant=tenant).count()} lines."))
