@@ -6783,7 +6783,9 @@ def investmentproof_on_hold(request, pk):
 def taxcomputation_list(request):
     return crud_list(
         request,
-        TaxComputation.objects.filter(tenant=request.tenant).select_related("employee__party", "declaration"),
+        # No declaration join — the list template renders only scalar fields + employee.party.name;
+        # declaration is loaded on the detail/form16_partb views where it's actually shown.
+        TaxComputation.objects.filter(tenant=request.tenant).select_related("employee__party"),
         "hrm/tax/taxcomputation/list.html",
         search_fields=["number", "employee__party__name"],
         filters=[("financial_year", "financial_year", False),
