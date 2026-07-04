@@ -91,6 +91,12 @@ from .models import (  # noqa: E402  — 3.8 Offer Management
     OfferLetterTemplate,
     PreboardingItem,
 )
+from .models import (  # noqa: E402  — 3.13 Salary Structure
+    EmployeeSalaryStructure,
+    PayComponent,
+    SalaryStructureLine,
+    SalaryStructureTemplate,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1044,3 +1050,66 @@ class PreboardingItemForm(TenantModelForm):
         return _validate_upload(self.cleaned_data.get("uploaded_file"),
                                 allowed_ext=ALLOWED_PREBOARDING_DOC_EXTENSIONS, max_bytes=MAX_OFFER_DOC_BYTES,
                                 label="Document")
+
+
+# ----------------------------------------------------------------------- 3.13 Salary Structure
+class PayComponentForm(TenantModelForm):
+    class Meta:
+        model = PayComponent
+        fields = ["name", "code", "component_type", "variable_subtype", "calculation_type",
+                  "default_amount", "default_percentage", "frequency", "is_taxable", "include_in_ctc",
+                  "contribution_side", "annual_cap_amount", "requires_bill", "is_active",
+                  "display_order", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class SalaryStructureTemplateForm(TenantModelForm):
+    class Meta:
+        model = SalaryStructureTemplate
+        fields = ["name", "job_grade", "annual_ctc_amount", "currency", "is_active", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Offer only active grades (the base form already tenant-scopes the FK).
+        if self.tenant is not None and "job_grade" in self.fields:
+            self.fields["job_grade"].queryset = (
+                JobGrade.objects.filter(tenant=self.tenant, is_active=True).order_by("level_order", "name"))
+
+
+class SalaryStructureLineForm(TenantModelForm):
+    # `template` is set by the view from the URL, never a form field (no cross-template injection).
+    class Meta:
+        model = SalaryStructureLine
+        fields = ["pay_component", "calculation_type", "amount", "percentage", "sequence"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "pay_component" in self.fields:
+            self.fields["pay_component"].queryset = (
+                PayComponent.objects.filter(tenant=self.tenant, is_active=True)
+                .order_by("display_order", "name"))
+        # Blank calc-type defers to the component's own calculation_type.
+        if "calculation_type" in self.fields:
+            self.fields["calculation_type"].required = False
+
+
+class EmployeeSalaryStructureForm(TenantModelForm):
+    class Meta:
+        model = EmployeeSalaryStructure
+        fields = ["employee", "template", "annual_ctc_amount", "effective_from", "effective_to",
+                  "status", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # employee is tenant-scoped + name-ordered by the base form / EmployeeProfile.Meta.
+        if self.tenant is not None and "template" in self.fields:
+            self.fields["template"].queryset = (
+                SalaryStructureTemplate.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
