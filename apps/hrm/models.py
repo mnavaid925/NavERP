@@ -3875,6 +3875,22 @@ class EmployeeStatutoryIdentifier(TenantOwned):
             models.Index(fields=["tenant", "employee"], name="hrm_empstat_tenant_emp_idx"),
         ]
 
+    @staticmethod
+    def _mask_last4(value):
+        """Last-4 masked view of a sensitive ID (mirrors EmployeeProfile._mask_last4)."""
+        v = value or ""
+        return f"••••{v[-4:]}" if len(v) >= 4 else ("••••" if v else "")
+
+    def masked_uan_number(self):
+        """Last-4 view of the UAN (lifelong government ID — never render the full value in the UI)."""
+        return self._mask_last4(self.uan_number)
+
+    def masked_pf_number(self):
+        return self._mask_last4(self.pf_number)
+
+    def masked_esi_number(self):
+        return self._mask_last4(self.esi_number)
+
     def __str__(self):
         return f"Statutory IDs · {self.employee}"
 
