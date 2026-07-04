@@ -687,3 +687,140 @@ def payslip_b(db, tenant_b, cycle_b, employee_b, employee_salary_structure_b):
     )
     payslip.recompute()
     return payslip
+
+
+# ------------------------------------------------------------------ 3.15 Statutory Compliance fixtures
+@pytest.fixture
+def statutory_config_a(db, tenant_a):
+    """The StatutoryConfig singleton for tenant_a (get-or-create via for_tenant())."""
+    from apps.hrm.models import StatutoryConfig
+    return StatutoryConfig.for_tenant(tenant_a)
+
+
+@pytest.fixture
+def statutory_config_b(db, tenant_b):
+    """The StatutoryConfig singleton for tenant_b (IDOR / isolation tests)."""
+    from apps.hrm.models import StatutoryConfig
+    return StatutoryConfig.for_tenant(tenant_b)
+
+
+@pytest.fixture
+def pt_rule_a(db, tenant_a):
+    """A valid Professional Tax StatutoryStateRule for tenant_a — Karnataka, 15000-20000 slab."""
+    from apps.hrm.models import StatutoryStateRule
+    return StatutoryStateRule.objects.create(
+        tenant=tenant_a, state="Karnataka", scheme="pt",
+        income_from=Decimal("15000"), income_to=Decimal("20000"),
+        pt_monthly_amount=Decimal("200"),
+    )
+
+
+@pytest.fixture
+def lwf_rule_a(db, tenant_a):
+    """A valid, active Labour Welfare Fund StatutoryStateRule for tenant_a — Maharashtra."""
+    from apps.hrm.models import StatutoryStateRule
+    return StatutoryStateRule.objects.create(
+        tenant=tenant_a, state="Maharashtra", scheme="lwf",
+        lwf_employee_contribution=Decimal("12"), lwf_employer_contribution=Decimal("36"),
+        lwf_periodicity="half_yearly", is_active=True,
+    )
+
+
+@pytest.fixture
+def state_rule_b(db, tenant_b):
+    """A valid PT StatutoryStateRule belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import StatutoryStateRule
+    return StatutoryStateRule.objects.create(
+        tenant=tenant_b, state="Karnataka", scheme="pt",
+        income_from=Decimal("15000"), income_to=Decimal("20000"),
+        pt_monthly_amount=Decimal("200"),
+    )
+
+
+@pytest.fixture
+def statutory_identifier_a(db, tenant_a, employee_a):
+    """An EmployeeStatutoryIdentifier for employee_a/tenant_a with a full UAN/PF/ESI set."""
+    from apps.hrm.models import EmployeeStatutoryIdentifier
+    return EmployeeStatutoryIdentifier.objects.create(
+        tenant=tenant_a, employee=employee_a,
+        uan_number="123456789012", pf_number="KN/BLR/001234",
+        esi_number="3111234567", pt_state="Karnataka",
+    )
+
+
+@pytest.fixture
+def statutory_identifier_b(db, tenant_b, employee_b):
+    """An EmployeeStatutoryIdentifier belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import EmployeeStatutoryIdentifier
+    return EmployeeStatutoryIdentifier.objects.create(
+        tenant=tenant_b, employee=employee_b,
+        uan_number="987654321098", pf_number="MH/PUN/005678",
+        esi_number="3119876543", pt_state="Maharashtra",
+    )
+
+
+@pytest.fixture
+def pf_component_lines_a(db, tenant_a, salary_template_a):
+    """Populates salary_template_a with Basic Pay (60000/yr earning) + employee-side PF (1200/yr,
+    'Provident Fund - Employee') + employer-side PF (1200/yr, 'Provident Fund - Employer') so a
+    recomputed Payslip has real statutory_deduction PayslipLine rows for StatutoryReturn.recompute()
+    to aggregate (scheme keyword 'provident' matches both PF lines)."""
+    from apps.hrm.models import PayComponent, SalaryStructureLine
+    basic = PayComponent.objects.create(
+        tenant=tenant_a, name="Basic Pay", component_type="earning",
+        calculation_type="fixed_amount", default_amount=Decimal("60000"),
+    )
+    pf_ee = PayComponent.objects.create(
+        tenant=tenant_a, name="Provident Fund - Employee", component_type="statutory_deduction",
+        calculation_type="fixed_amount", default_amount=Decimal("1200"),
+        contribution_side="employee",
+    )
+    pf_er = PayComponent.objects.create(
+        tenant=tenant_a, name="Provident Fund - Employer", component_type="statutory_deduction",
+        calculation_type="fixed_amount", default_amount=Decimal("1200"),
+        contribution_side="employer",
+    )
+    SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=basic, amount=Decimal("60000"))
+    SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=pf_ee, amount=Decimal("1200"))
+    SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=pf_er, amount=Decimal("1200"))
+    return basic, pf_ee, pf_er
+
+
+@pytest.fixture
+def payslip_with_pf_a(db, tenant_a, draft_cycle_a, employee_a, active_structure_in_window_a,
+                       pf_component_lines_a):
+    """A recomputed Payslip for employee_a within draft_cycle_a whose salary structure produces
+    Basic Pay + employee-side PF + employer-side PF lines (for StatutoryReturn aggregation tests)."""
+    from apps.hrm.models import Payslip
+    payslip = Payslip.objects.create(
+        tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a,
+        salary_structure=active_structure_in_window_a, days_in_period=30, days_worked=30,
+    )
+    payslip.recompute()
+    return payslip
+
+
+@pytest.fixture
+def pending_statutory_return_a(db, tenant_a, draft_cycle_a):
+    """A pending, unaggregated PF StatutoryReturn for tenant_a scoped to draft_cycle_a."""
+    from apps.hrm.models import StatutoryReturn
+    return StatutoryReturn.objects.create(
+        tenant=tenant_a, scheme="pf", period_type="monthly",
+        period_start=draft_cycle_a.period_start, period_end=draft_cycle_a.period_end,
+        cycle=draft_cycle_a, due_date=datetime.date(2026, 7, 15),
+    )
+
+
+@pytest.fixture
+def statutory_return_b(db, tenant_b, cycle_b):
+    """A pending PF StatutoryReturn belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import StatutoryReturn
+    return StatutoryReturn.objects.create(
+        tenant=tenant_b, scheme="pf", period_type="monthly",
+        period_start=cycle_b.period_start, period_end=cycle_b.period_end,
+        cycle=cycle_b, due_date=datetime.date(2026, 7, 15),
+    )
+
