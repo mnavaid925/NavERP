@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.state }} · {{ obj.get_scheme_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.state }} · {{ obj.get_scheme_display }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:statutorystaterule_list' %}">State Rules</a><span class="sep">›</span><span>{{ obj.state }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:statutorystaterule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:statutorystaterule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>State</dt><dd>{{ obj.state }}</dd></div>
+      <div class="detail-item"><dt>Scheme</dt><dd>{% if obj.scheme == 'pt' %}<span class="badge badge-info">{{ obj.get_scheme_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_scheme_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Effective From</dt><dd>{{ obj.effective_from }}</dd></div>
+      <div class="detail-item"><dt>Registration Number</dt><dd>{{ obj.registration_number|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  {% if obj.scheme == 'pt' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Professional Tax Slab</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Income From</dt><dd>{{ obj.income_from }}</dd></div>
+          <div class="detail-item"><dt>Income To</dt><dd>{{ obj.income_to }}</dd></div>
+          <div class="detail-item"><dt>Monthly Tax Amount</dt><dd>{{ obj.pt_monthly_amount }}</dd></div>
+          <div class="detail-item"><dt>Deduction Month</dt><dd>{{ obj.pt_deduction_month|default:"Every month" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  {% elif obj.scheme == 'lwf' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Labour Welfare Fund</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Employee Contribution</dt><dd>{{ obj.lwf_employee_contribution }}</dd></div>
+          <div class="detail-item"><dt>Employer Contribution</dt><dd>{{ obj.lwf_employer_contribution }}</dd></div>
+          <div class="detail-item"><dt>Periodicity</dt><dd>{{ obj.get_lwf_periodicity_display|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Due Month 1</dt><dd>{{ obj.lwf_due_month_1|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Due Month 2</dt><dd>{{ obj.lwf_due_month_2|default:"—" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:statutorystaterule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
