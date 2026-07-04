@@ -548,4 +548,43 @@ Reuses (no duplication): `hrm.EmployeeProfile`, `hrm.EmployeeSalaryStructure` (+
 
 ## Review
 
-(filled in at the end)
+**Delivered (2026-07-04):** HRM 3.14 Payroll Processing — the operational payroll run. All 5 NavERP.md bullets Live.
+3 new models; the L29 boundary respected (HRM computes; `accounting.PayrollRun` posts the GL).
+- **`PayrollCycle`** (`PRC-`) — run header + `draft→pending_approval→approved/rejected→locked` workflow;
+  cycle_type regular/off_cycle/bonus (non-regular skip approval); derived totals (single aggregate); on lock creates
+  a draft `accounting.PayrollRun` with rolled-up totals + links it.
+- **`Payslip`** (`PSL-`) — per (cycle,employee); `recompute()` calc engine (monthly-from-CTC, day pro-ration, LOP,
+  arrears/bonus; employer-side statutory excluded from net; pct lines scaled by the employee's assigned CTC); holds.
+- **`PayslipLine`** — immutable component snapshot (name/type/amount/contribution_side) so a later structure edit
+  never rewrites history.
+- Migration `0025`; `_seed_payroll` (1 regular cycle, 3 generated payslips, 1 on hold; central flush wipes payslips
+  before EmployeeProfile for the PROTECT FK); `LIVE_LINKS["3.14"]` → all 5 bullets.
+
+**Verification:** own smoke test 0 failures — full lifecycle generate→submit→approve→lock created accounting run
+PRUN-#### with penny-perfect totals (gross/employer_tax/net reconcile), immutable-after-lock, holds, arrears
+recompute, IDOR→404, filters, sidebar Live.
+
+**Module Creation Sequence — all 7 review agents, one at a time, findings applied + committed:**
+- **code-reviewer** — 0 Critical. Fixed 6 Important: lock roll-up buckets employee_tax/deductions as "not
+  employer-side" (so accounting net reconciles with Σ payslip net, incl. `both`); `resolved_amount(ctc=)` scales pct
+  lines by the employee's CTC (different-CTC employees now differ); `Payslip.clean()` (days/negative guards);
+  generate adds an effective-date window + preserves manual arrears/bonus/hold across a re-generate; + Minor badge.
+  (Also fixed a seeder --flush ProtectedError the on_stop hook caught — payslips wiped before EmployeeProfile.)
+- **explorer** — all 7 wiring seams clean; zero `JournalEntry` construction in HRM (L29 confirmed). No fixes.
+- **frontend-reviewer** — 1 Critical: privileged buttons (approve/reject/lock/hold/release) rendered for everyone →
+  gated behind `is_superuser or is_tenant_admin` with an awaiting-admin notice (matches the app-wide convention incl.
+  accounting's own payroll template; the 2 stragglers spun off as a task).
+- **performance-reviewer** — the generate loop is O(N), no hidden multiplier (FK cache warm). Fixed 1 Minor:
+  `payslip_edit` select_related's the structure+template so the post-save recompute() doesn't re-fetch.
+- **qa-smoke-tester** — **79/79** green; verified the accounting reconciliation (net == Σ payslip net, run stays
+  draft, no JE) and the admin-gating (template + 403). No code changes.
+- **security-reviewer** — no vulnerabilities (IDOR, authz, CSRF, mass-assignment, XSS, injection, hand-off integrity
+  all correct). One app-wide authz-policy observation (already covered by a spawned task).
+- **test-writer** — **+109 tests** (35 model/calc + 54 view + 20 security): recompute arithmetic + employer-exclusion
+  + CTC-scaling, the lock penny-reconciliation, workflow guards, non-admin 403, immutability, IDOR. Full HRM suite
+  **2,221 passed / 0 failed** (was 2,112); project-wide **4,868**.
+
+**Follow-up tasks spawned (app-wide, not forked into 3.14):** gate the 2 straggler approve/reject templates
+(leaverequest, floatingholidayelection); tenant-admin gate on sensitive HRM writes (carried from 3.13).
+
+**Next:** 3.15 Statutory Compliance (PF/ESI/PT/TDS challans & returns over the payroll runs).
