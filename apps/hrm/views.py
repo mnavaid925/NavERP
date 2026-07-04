@@ -6236,8 +6236,9 @@ def employeestatutoryidentifier_delete(request, pk):
 # ------------------------------------------------- StatutoryReturn (register/challan)
 @login_required
 def statutoryreturn_list(request):
-    qs = (StatutoryReturn.objects.filter(tenant=request.tenant)
-          .select_related("cycle", "employee__party"))
+    # No select_related — the list template renders only scalar fields (scheme/period/totals/status/
+    # due_date), never obj.cycle or obj.employee, so joining them would be dead over-fetch.
+    qs = StatutoryReturn.objects.filter(tenant=request.tenant)
     return crud_list(
         request, qs, "hrm/statutory/statutoryreturn/list.html",
         search_fields=["number", "registration_number_used", "notes"],
@@ -6346,8 +6347,8 @@ def statutory_compliance_calendar(request):
     """Read-only cross-scheme due-date calendar over StatutoryReturn (no new model). Groups returns
     into Overdue / Pending / Filed / Settled buckets; supports the same scheme/status GET filters as
     the return list. Grouped (not paginated) since it's a calendar overview."""
-    qs = (StatutoryReturn.objects.filter(tenant=request.tenant)
-          .select_related("cycle", "employee__party").order_by("due_date", "scheme"))
+    # No select_related — the calendar rows render only scalar fields, never cycle/employee.
+    qs = StatutoryReturn.objects.filter(tenant=request.tenant).order_by("due_date", "scheme")
     scheme = request.GET.get("scheme", "").strip()
     if scheme:
         qs = qs.filter(scheme=scheme)
