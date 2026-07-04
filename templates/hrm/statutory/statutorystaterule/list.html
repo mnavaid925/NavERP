@@ -64,7 +64,7 @@
                   <a href="{% url 'hrm:statutorystaterule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                   <form method="post" action="{% url 'hrm:statutorystaterule_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this rule?');">
                     {% csrf_token %}
-                    <button class="btn-icon" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
                 </div>
               </td>
