@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payrollcycle_list' %}">Payroll Cycles</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <a href="{% url 'hrm:payrollcycle_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:payrollcycle_delete' obj.pk %}" onsubmit="return confirm('Delete this cycle?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_cycle_type_display }}</dd></div>
+      <div class="detail-item"><dt>Period</dt><dd>{{ obj.period_start }} – {{ obj.period_end }}</dd></div>
+      <div class="detail-item"><dt>Pay Date</dt><dd>{{ obj.pay_date }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'approved' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Submitted By</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved By</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Accounting Run</dt><dd>{% if obj.accounting_payroll_run %}{{ obj.accounting_payroll_run.number }} ({{ obj.accounting_payroll_run.get_status_display }}){% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.rejection_reason %}<p class="text-muted" style="margin-top:.5rem;"><strong>Rejection reason:</strong> {{ obj.rejection_reason }}</p>{% endif %}
+    {% if obj.notes %}<p style="margin-top:.5rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <div style="display:flex; gap:2.5rem; flex-wrap:wrap;">
+      <div><div class="text-muted">Headcount</div><div class="fw-600">{{ payslips|length }}</div></div>
+      <div><div class="text-muted">Gross</div><div class="fw-600">{{ totals.g|default:"0.00" }}</div></div>
+      <div><div class="text-muted">Deductions</div><div class="fw-600">{{ totals.d|default:"0.00" }}</div></div>
+      <div><div class="text-muted">Net</div><div class="fw-600">{{ totals.n|default:"0.00" }}</div></div>
+    </div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:payrollcycle_generate' obj.pk %}" style="display:inline;" onsubmit="return confirm('(Re)generate payslips from active salary structures?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Generate Payslips</button>
+        </form>
+        {% if payslips %}
+          <form method="post" action="{% url 'hrm:payrollcycle_submit' obj.pk %}" style="display:inline;" onsubmit="return confirm('Submit this cycle for approval?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+          </form>
+        {% endif %}
+      {% elif obj.status == 'pending_approval' %}
+        <form method="post" action="{% url 'hrm:payrollcycle_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this cycle?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+        </form>
+        <form method="post" action="{% url 'hrm:payrollcycle_reject' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_rejection_reason">Reject reason</label>
+            <textarea id="id_rejection_reason" name="rejection_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+          </div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+        </form>
+      {% elif obj.status == 'approved' %}
+        <form method="post" action="{% url 'hrm:payrollcycle_lock' obj.pk %}" onsubmit="return confirm('Lock this cycle and create the accounting payroll run?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Lock &amp; Hand off to Accounting</button>
+        </form>
+      {% elif obj.status == 'locked' %}
+        <p class="text-muted">Locked. Accounting run {% if obj.accounting_payroll_run %}<strong>{{ obj.accounting_payroll_run.number }}</strong>{% endif %} created — post it from Accounting → Payroll to generate the GL entry.</p>
+      {% elif obj.status == 'rejected' %}
+        <p class="text-muted">This cycle was rejected. Create a new cycle to reprocess.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Payslips</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Payslip</th><th>Employee</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Hold</th></tr></thead>
+        <tbody>
+          {% for p in payslips %}
+            <tr>
+              <td><a href="{% url 'hrm:payslip_detail' p.pk %}" class="fw-600">{{ p.number }}</a></td>
+              <td>{{ p.employee.party.name }}</td>
+              <td>{{ p.gross_pay }}</td>
+              <td>{{ p.total_deductions }}</td>
+              <td class="fw-600">{{ p.net_pay }}</td>
+              <td>{% if p.on_hold %}<span class="badge badge-amber">On Hold</span>{% else %}<span class="badge badge-green">Payable</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="receipt"></i><p>No payslips yet — use "Generate Payslips" above.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:payrollcycle_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
