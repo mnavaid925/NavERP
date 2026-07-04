@@ -73,6 +73,12 @@ from apps.hrm.models import (  # 3.8 Offer Management
     OfferLetterTemplate,
     PreboardingItem,
 )
+from apps.hrm.models import (  # 3.13 Salary Structure
+    EmployeeSalaryStructure,
+    PayComponent,
+    SalaryStructureLine,
+    SalaryStructureTemplate,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -187,6 +193,7 @@ class Command(BaseCommand):
             self._seed_interviews(tenant, flush=options["flush"])
             self._seed_offers(tenant, flush=options["flush"])
             self._seed_timetracking(tenant, flush=options["flush"])
+            self._seed_salary(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -1307,3 +1314,79 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Time-tracking seeded for '{tenant.name}': {ts_count} timesheets, {entry_count} entries, "
             f"{OvertimeRequest.objects.filter(tenant=tenant).count()} overtime requests."))
+
+    def _seed_salary(self, tenant, *, flush):
+        """3.13 Salary Structure — a pay-component catalog (earnings/statutory/reimbursement/variable),
+        a grade-wise CTC structure template with a fixed-amount breakdown, and one active employee
+        assignment. Reuses seeded JobGrade + EmployeeProfile; does NOT run payroll (that's 3.14)."""
+        if flush:
+            # Children first: assignments + lines before their templates + components (line→component
+            # is PROTECT, so a component can't be deleted while a line references it).
+            EmployeeSalaryStructure.objects.filter(tenant=tenant).delete()
+            SalaryStructureLine.objects.filter(tenant=tenant).delete()
+            SalaryStructureTemplate.objects.filter(tenant=tenant).delete()
+            PayComponent.objects.filter(tenant=tenant).delete()
+        if PayComponent.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Salary structure data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        # --- Pay components: (name, code, type, calc, default_amount, default_pct, freq, taxable, side, cap, requires_bill, order) ---
+        COMPONENTS = [
+            ("Basic", "BASIC", "earning", "pct_of_ctc", None, Decimal("40"), "monthly", True, "employee", None, False, 1),
+            ("House Rent Allowance", "HRA", "earning", "pct_of_basic", None, Decimal("50"), "monthly", True, "employee", None, False, 2),
+            ("Special Allowance", "SPL", "earning", "fixed_amount", Decimal("20000"), None, "monthly", True, "employee", None, False, 3),
+            ("Provident Fund (Employee)", "PF-EE", "statutory_deduction", "pct_of_basic", None, Decimal("12"), "monthly", False, "employee", None, False, 10),
+            ("Provident Fund (Employer)", "PF-ER", "statutory_deduction", "pct_of_basic", None, Decimal("12"), "monthly", False, "employer", None, False, 11),
+            ("Professional Tax", "PT", "statutory_deduction", "fixed_amount", Decimal("200"), None, "monthly", False, "employee", None, False, 12),
+            ("LTA Reimbursement", "LTA", "reimbursement", "fixed_amount", Decimal("1500"), None, "annual", False, "employee", Decimal("18000"), True, 20),
+            ("Performance Bonus", "BONUS", "variable", "fixed_amount", Decimal("5000"), None, "one_time", True, "employee", None, False, 30),
+        ]
+        comps = {}
+        for name, code, ctype, calc, amt, pct, freq, taxable, side, cap, bill, order in COMPONENTS:
+            c, _ = PayComponent.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"code": code, "component_type": ctype, "calculation_type": calc,
+                          "default_amount": amt, "default_percentage": pct, "frequency": freq,
+                          "is_taxable": taxable, "contribution_side": side, "annual_cap_amount": cap,
+                          "requires_bill": bill, "display_order": order,
+                          "variable_subtype": "bonus" if ctype == "variable" else ""})
+            comps[code] = c
+
+        # --- A grade-wise CTC template + fixed-amount breakdown (earnings + employer PF + LTA) ---
+        grade = JobGrade.objects.filter(tenant=tenant).order_by("level_order").first()
+        template, _ = SalaryStructureTemplate.objects.get_or_create(
+            tenant=tenant, name="Standard Staff — CTC",
+            defaults={"job_grade": grade, "annual_ctc_amount": Decimal("120000"),
+                      "currency": "USD", "description": "Default grade-wise CTC structure."})
+        # (component code, fixed amount, sequence) — fixed so the derived CTC total is sensible.
+        LINES = [
+            ("BASIC", Decimal("60000"), 1),
+            ("HRA", Decimal("30000"), 2),
+            ("SPL", Decimal("20000"), 3),
+            ("PF-ER", Decimal("7200"), 4),
+            ("LTA", Decimal("1500"), 5),
+        ]
+        for code, amt, seq in LINES:
+            if code in comps:
+                SalaryStructureLine.objects.get_or_create(
+                    tenant=tenant, template=template, pay_component=comps[code],
+                    defaults={"calculation_type": "fixed_amount", "amount": amt, "sequence": seq})
+
+        # --- One active assignment for the first employee ---
+        emp = (EmployeeProfile.objects.filter(tenant=tenant)
+               .select_related("party").order_by("party__name").first())
+        if emp and not EmployeeSalaryStructure.objects.filter(
+                tenant=tenant, employee=emp, status="active").exists():
+            EmployeeSalaryStructure.objects.create(
+                tenant=tenant, employee=emp, template=template,
+                annual_ctc_amount=template.annual_ctc_amount or Decimal("120000"),
+                effective_from=timezone.localdate(), status="active",
+                notes="Initial assignment (demo seeder).")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Salary structure seeded for '{tenant.name}': "
+            f"{PayComponent.objects.filter(tenant=tenant).count()} components, "
+            f"{SalaryStructureTemplate.objects.filter(tenant=tenant).count()} template(s), "
+            f"{SalaryStructureLine.objects.filter(tenant=tenant).count()} lines, "
+            f"{EmployeeSalaryStructure.objects.filter(tenant=tenant).count()} assignment(s)."))
