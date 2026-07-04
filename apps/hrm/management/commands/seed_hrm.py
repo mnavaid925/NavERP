@@ -84,6 +84,12 @@ from apps.hrm.models import (  # 3.14 Payroll Processing
     PayslipLine,
     PayrollCycle,
 )
+from apps.hrm.models import (  # 3.15 Statutory Compliance
+    EmployeeStatutoryIdentifier,
+    StatutoryConfig,
+    StatutoryReturn,
+    StatutoryStateRule,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -200,6 +206,7 @@ class Command(BaseCommand):
             self._seed_timetracking(tenant, flush=options["flush"])
             self._seed_salary(tenant, flush=options["flush"])
             self._seed_payroll(tenant, flush=options["flush"])
+            self._seed_statutory(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -210,7 +217,10 @@ class Command(BaseCommand):
             # Children first (onboarding/offboarding rows FK EmployeeProfile/Designation), then masters.
             # 3.12: elections FK holiday/policy/employee; policies FK/M2M holiday/designation — wipe first.
             # 3.14: Payslip.employee is PROTECT, so payslips must be wiped before EmployeeProfile below.
-            for model in (PayslipLine, Payslip, PayrollCycle,
+            # 3.15: statutory returns/identifiers FK PayrollCycle/EmployeeProfile — wipe them first.
+            for model in (StatutoryReturn, EmployeeStatutoryIdentifier, StatutoryStateRule,
+                          StatutoryConfig,
+                          PayslipLine, Payslip, PayrollCycle,
                           FloatingHolidayElection, HolidayPolicy,
                           FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
                           OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
@@ -1455,3 +1465,73 @@ class Command(BaseCommand):
             f"Payroll seeded for '{tenant.name}': {PayrollCycle.objects.filter(tenant=tenant).count()} cycle, "
             f"{cycle.payslips.count()} payslips, "
             f"{PayslipLine.objects.filter(tenant=tenant).count()} lines."))
+
+    def _seed_statutory(self, tenant, *, flush):
+        """3.15 Statutory Compliance — a StatutoryConfig singleton, three Maharashtra
+        StatutoryStateRule rows (2 PT slabs + 1 half-yearly LWF), an EmployeeStatutoryIdentifier
+        per seeded employee, and one generated PF StatutoryReturn over the 3.14 payroll cycle.
+        Runs AFTER _seed_payroll (it aggregates the cycle's PayslipLine rows)."""
+        if flush:
+            # Children first: returns → identifiers → state rules → config.
+            StatutoryReturn.objects.filter(tenant=tenant).delete()
+            EmployeeStatutoryIdentifier.objects.filter(tenant=tenant).delete()
+            StatutoryStateRule.objects.filter(tenant=tenant).delete()
+            StatutoryConfig.objects.filter(tenant=tenant).delete()
+        if StatutoryConfig.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Statutory compliance data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        config = StatutoryConfig.objects.create(
+            tenant=tenant,
+            pf_establishment_code="MH/BAN/1234567/000",
+            esi_employer_code="11-22-334455-000-1111",
+            pt_default_state="Maharashtra",
+            tan_number="MUMB12345C",
+            tds_circle_address="ITO (TDS), Room 101, Mumbai",
+            pan_of_deductor="AABCN1234A",
+            is_lwf_applicable=True)
+
+        eff = datetime.date(2024, 4, 1)
+        # Two Maharashtra PT slabs (0–7500 → nil; 7501–10000 → ₹175/mo) + a half-yearly LWF row.
+        StatutoryStateRule.objects.create(
+            tenant=tenant, state="Maharashtra", scheme="pt",
+            income_from=Decimal("0.00"), income_to=Decimal("7500.00"),
+            pt_monthly_amount=Decimal("0.00"), is_active=True, effective_from=eff)
+        StatutoryStateRule.objects.create(
+            tenant=tenant, state="Maharashtra", scheme="pt",
+            income_from=Decimal("7501.00"), income_to=Decimal("10000.00"),
+            pt_monthly_amount=Decimal("175.00"), is_active=True, effective_from=eff)
+        StatutoryStateRule.objects.create(
+            tenant=tenant, state="Maharashtra", scheme="lwf",
+            lwf_employee_contribution=Decimal("6.00"), lwf_employer_contribution=Decimal("18.00"),
+            lwf_periodicity="half_yearly", lwf_due_month_1="July", lwf_due_month_2="January",
+            registration_number="LWF/MH/998877", is_active=True, effective_from=eff)
+
+        # A statutory identifier per seeded employee (deterministic demo IDs; idempotent).
+        for emp in EmployeeProfile.objects.filter(tenant=tenant).select_related("party"):
+            EmployeeStatutoryIdentifier.objects.get_or_create(
+                tenant=tenant, employee=emp,
+                defaults={"uan_number": f"UAN{emp.pk:010d}",
+                          "pf_number": f"MH/BAN/1234567/000/{emp.pk:04d}",
+                          "esi_number": f"3411{emp.pk:06d}",
+                          "pt_state": "Maharashtra"})
+
+        # Generate one PF return over the existing 3.14 payroll cycle (rolls up PF PayslipLines).
+        cycle = PayrollCycle.objects.filter(tenant=tenant).order_by("pay_date").first()
+        ret_number = "—"
+        if cycle is not None:
+            # PF for wage-month M is due by the 15th of the following month.
+            due = (cycle.period_end.replace(day=1) + datetime.timedelta(days=32)).replace(day=15)
+            ret = StatutoryReturn.objects.create(
+                tenant=tenant, scheme="pf", period_type="monthly",
+                period_start=cycle.period_start, period_end=cycle.period_end, cycle=cycle,
+                due_date=due, notes="Demo monthly PF challan/return.")
+            ret.recompute()
+            ret_number = ret.number
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Statutory compliance seeded for '{tenant.name}': 1 config, "
+            f"{StatutoryStateRule.objects.filter(tenant=tenant).count()} state rules, "
+            f"{EmployeeStatutoryIdentifier.objects.filter(tenant=tenant).count()} identifier(s), "
+            f"{StatutoryReturn.objects.filter(tenant=tenant).count()} return ({ret_number})."))
