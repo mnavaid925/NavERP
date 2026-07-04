@@ -125,6 +125,28 @@ def employee_a(db, tenant_a, person_a, employment_a, designation_a):
 
 
 @pytest.fixture
+def employee_a2(db, tenant_a, person_a2, dept_a, designation_a):
+    """A second EmployeeProfile for tenant_a (used for 3.14 payroll multi-employee cycle/CTC tests)."""
+    from apps.core.models import Employment
+    from apps.hrm.models import EmployeeProfile
+    employment = Employment.objects.create(
+        tenant=tenant_a,
+        party=person_a2,
+        org_unit=dept_a,
+        job_title="Senior Software Engineer",
+        hired_on=datetime.date(2023, 1, 1),
+        status="active",
+    )
+    return EmployeeProfile.objects.create(
+        tenant=tenant_a,
+        party=person_a2,
+        employment=employment,
+        designation=designation_a,
+        employee_type="full_time",
+    )
+
+
+@pytest.fixture
 def employee_b(db, tenant_b, person_b, employment_b, designation_b):
     """An EmployeeProfile for tenant_b (used in IDOR tests)."""
     from apps.hrm.models import EmployeeProfile
@@ -583,3 +605,85 @@ def employee_salary_structure_b(db, tenant_b, employee_b):
         tenant=tenant_b, employee=employee_b,
         annual_ctc_amount=Decimal("90000"), status="active",
     )
+
+
+# ------------------------------------------------------------------ 3.14 Payroll Processing fixtures
+@pytest.fixture
+def active_structure_in_window_a(db, tenant_a, employee_a, salary_template_a):
+    """An active EmployeeSalaryStructure for employee_a whose effective_from (2026-05-01) is safely
+    BEFORE draft_cycle_a's period_start (2026-06-01) — unlike ``active_salary_structure_a`` (which
+    defaults effective_from to "today"), this is guaranteed to fall inside the payrollcycle_generate
+    effective-date window regardless of the environment's current date."""
+    from apps.hrm.models import EmployeeSalaryStructure
+    return EmployeeSalaryStructure.objects.create(
+        tenant=tenant_a, employee=employee_a, template=salary_template_a,
+        annual_ctc_amount=Decimal("120000"), status="active",
+        effective_from=datetime.date(2026, 5, 1),
+    )
+
+
+@pytest.fixture
+def payroll_component_lines_a(db, tenant_a, salary_template_a):
+    """Populates salary_template_a with a Basic Pay (fixed 60000/yr) earning line so payslip
+    generation/recompute has a non-zero, deterministic basis."""
+    from apps.hrm.models import PayComponent, SalaryStructureLine
+    basic = PayComponent.objects.create(
+        tenant=tenant_a, name="Basic Pay", component_type="earning",
+        calculation_type="fixed_amount", default_amount=Decimal("60000"),
+    )
+    SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=basic, amount=Decimal("60000"),
+    )
+    return basic
+
+
+@pytest.fixture
+def draft_cycle_a(db, tenant_a):
+    """A draft PayrollCycle for tenant_a — period 2026-06-01..2026-06-30, pay_date 2026-07-01."""
+    from apps.hrm.models import PayrollCycle
+    return PayrollCycle.objects.create(
+        tenant=tenant_a,
+        period_start=datetime.date(2026, 6, 1),
+        period_end=datetime.date(2026, 6, 30),
+        pay_date=datetime.date(2026, 7, 1),
+        cycle_type="regular",
+        status="draft",
+    )
+
+
+@pytest.fixture
+def cycle_b(db, tenant_b):
+    """A draft PayrollCycle belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PayrollCycle
+    return PayrollCycle.objects.create(
+        tenant=tenant_b,
+        period_start=datetime.date(2026, 6, 1),
+        period_end=datetime.date(2026, 6, 30),
+        pay_date=datetime.date(2026, 7, 1),
+        cycle_type="regular",
+        status="draft",
+    )
+
+
+@pytest.fixture
+def payslip_a(db, tenant_a, draft_cycle_a, employee_a, active_structure_in_window_a, payroll_component_lines_a):
+    """A recomputed Payslip for employee_a within draft_cycle_a."""
+    from apps.hrm.models import Payslip
+    payslip = Payslip.objects.create(
+        tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a,
+        salary_structure=active_structure_in_window_a, days_in_period=30, days_worked=30,
+    )
+    payslip.recompute()
+    return payslip
+
+
+@pytest.fixture
+def payslip_b(db, tenant_b, cycle_b, employee_b, employee_salary_structure_b):
+    """A Payslip belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import Payslip
+    payslip = Payslip.objects.create(
+        tenant=tenant_b, cycle=cycle_b, employee=employee_b,
+        salary_structure=employee_salary_structure_b, days_in_period=30, days_worked=30,
+    )
+    payslip.recompute()
+    return payslip
