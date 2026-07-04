@@ -100,6 +100,12 @@ from .forms import (  # 3.8 Offer Management
     OfferLetterTemplateForm,
     PreboardingItemForm,
 )
+from .forms import (  # 3.13 Salary Structure
+    EmployeeSalaryStructureForm,
+    PayComponentForm,
+    SalaryStructureLineForm,
+    SalaryStructureTemplateForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -190,6 +196,12 @@ from .models import (  # 3.8 Offer Management
     OfferApproval,
     OfferLetterTemplate,
     PreboardingItem,
+)
+from .models import (  # 3.13 Salary Structure
+    EmployeeSalaryStructure,
+    PayComponent,
+    SalaryStructureLine,
+    SalaryStructureTemplate,
 )
 
 
@@ -5603,3 +5615,200 @@ def preboardingitem_send_invite(request, pk):
                         {"to": candidate.email, "kind": "preboarding_invite"})
         messages.success(request, "Pre-boarding invite sent to the candidate.")
     return redirect("hrm:offer_detail", pk=item.offer_id)
+
+
+# ============================================================ Pay Components (3.13)
+@login_required
+def paycomponent_list(request):
+    return crud_list(
+        request,
+        PayComponent.objects.filter(tenant=request.tenant),
+        "hrm/salary/paycomponent/list.html",
+        search_fields=["name", "code", "description"],
+        filters=[("component_type", "component_type", False), ("calculation_type", "calculation_type", False),
+                 ("frequency", "frequency", False), ("is_active", "is_active", False)],
+        extra_context={
+            "component_type_choices": PayComponent.COMPONENT_TYPE_CHOICES,
+            "calculation_type_choices": PayComponent.CALCULATION_TYPE_CHOICES,
+            "frequency_choices": PayComponent.FREQUENCY_CHOICES,
+        },
+    )
+
+
+@login_required
+def paycomponent_create(request):
+    return crud_create(request, form_class=PayComponentForm,
+                       template="hrm/salary/paycomponent/form.html", success_url="hrm:paycomponent_list")
+
+
+@login_required
+def paycomponent_detail(request, pk):
+    obj = get_object_or_404(PayComponent, pk=pk, tenant=request.tenant)
+    return render(request, "hrm/salary/paycomponent/detail.html", {
+        "obj": obj,
+        # Templates whose breakdown references this component (PROTECT FK → default reverse accessor).
+        "usage_lines": (obj.salarystructureline_set.select_related("template")
+                        .order_by("template__name")[:10]),
+    })
+
+
+@login_required
+def paycomponent_edit(request, pk):
+    return crud_edit(request, model=PayComponent, pk=pk, form_class=PayComponentForm,
+                     template="hrm/salary/paycomponent/form.html", success_url="hrm:paycomponent_list")
+
+
+@login_required
+@require_POST
+def paycomponent_delete(request, pk):
+    # SalaryStructureLine.pay_component is PROTECT — guard so an in-use component gives a friendly
+    # message instead of a raw ProtectedError 500.
+    obj = get_object_or_404(PayComponent, pk=pk, tenant=request.tenant)
+    if obj.salarystructureline_set.exists():
+        messages.error(request, "This component is used by one or more salary structures — remove those lines first.")
+        return redirect("hrm:paycomponent_detail", pk=obj.pk)
+    return crud_delete(request, model=PayComponent, pk=pk, success_url="hrm:paycomponent_list")
+
+
+# ============================================================ Salary Structure Templates (3.13)
+@login_required
+def salarystructuretemplate_list(request):
+    return crud_list(
+        request,
+        SalaryStructureTemplate.objects.filter(tenant=request.tenant).select_related("job_grade"),
+        "hrm/salary/salarystructuretemplate/list.html",
+        search_fields=["name", "number"],
+        filters=[("job_grade", "job_grade_id", True), ("is_active", "is_active", False)],
+        extra_context={"job_grades": JobGrade.objects.filter(tenant=request.tenant).order_by("level_order", "name")},
+    )
+
+
+@login_required
+def salarystructuretemplate_create(request):
+    return crud_create(request, form_class=SalaryStructureTemplateForm,
+                       template="hrm/salary/salarystructuretemplate/form.html",
+                       success_url="hrm:salarystructuretemplate_list")
+
+
+@login_required
+def salarystructuretemplate_detail(request, pk):
+    obj = get_object_or_404(
+        SalaryStructureTemplate.objects.select_related("job_grade"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/salary/salarystructuretemplate/detail.html", {
+        "obj": obj,
+        "lines": obj.lines.select_related("pay_component").order_by("sequence", "id"),
+        "line_form": SalaryStructureLineForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def salarystructuretemplate_edit(request, pk):
+    return crud_edit(request, model=SalaryStructureTemplate, pk=pk, form_class=SalaryStructureTemplateForm,
+                     template="hrm/salary/salarystructuretemplate/form.html",
+                     success_url="hrm:salarystructuretemplate_list")
+
+
+@login_required
+@require_POST
+def salarystructuretemplate_delete(request, pk):
+    return crud_delete(request, model=SalaryStructureTemplate, pk=pk,
+                       success_url="hrm:salarystructuretemplate_list")
+
+
+# ------------------------------------------------------ Salary Structure Lines (inline on the template)
+@login_required
+@require_POST
+def salarystructureline_add(request, template_pk):
+    template = get_object_or_404(SalaryStructureTemplate, pk=template_pk, tenant=request.tenant)
+    form = SalaryStructureLineForm(request.POST, tenant=request.tenant)
+    if form.is_valid():
+        line = form.save(commit=False)
+        line.tenant = request.tenant
+        line.template = template
+        line.save()
+        write_audit_log(request.user, template, "update", {"action": "line_add"})
+        messages.success(request, "Component line added.")
+        return redirect("hrm:salarystructuretemplate_detail", pk=template.pk)
+    # Re-render the detail hub with the bound, errored add-form (field errors + typed input preserved).
+    return render(request, "hrm/salary/salarystructuretemplate/detail.html", {
+        "obj": template,
+        "lines": template.lines.select_related("pay_component").order_by("sequence", "id"),
+        "line_form": form,
+    })
+
+
+@login_required
+def salarystructureline_edit(request, pk):
+    line = get_object_or_404(SalaryStructureLine.objects.select_related("template"), pk=pk, tenant=request.tenant)
+    template = line.template
+    if request.method == "POST":
+        form = SalaryStructureLineForm(request.POST, instance=line, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, template, "update", {"action": "line_edit"})
+            messages.success(request, "Component line updated.")
+            return redirect("hrm:salarystructuretemplate_detail", pk=template.pk)
+    else:
+        form = SalaryStructureLineForm(instance=line, tenant=request.tenant)
+    return render(request, "hrm/salary/salarystructuretemplate/line_form.html",
+                  {"form": form, "obj": line, "template": template, "is_edit": True})
+
+
+@login_required
+@require_POST
+def salarystructureline_delete(request, pk):
+    line = get_object_or_404(SalaryStructureLine.objects.select_related("template"), pk=pk, tenant=request.tenant)
+    template_pk = line.template_id
+    write_audit_log(request.user, line.template, "update", {"action": "line_delete"})
+    line.delete()
+    messages.success(request, "Component line removed.")
+    return redirect("hrm:salarystructuretemplate_detail", pk=template_pk)
+
+
+# ============================================================ Employee Salary Structures (3.13)
+@login_required
+def employeesalarystructure_list(request):
+    return crud_list(
+        request,
+        EmployeeSalaryStructure.objects.filter(tenant=request.tenant)
+        .select_related("employee__party", "template"),
+        "hrm/salary/employeesalarystructure/list.html",
+        search_fields=["employee__party__name", "number"],
+        filters=[("status", "status", False), ("employee", "employee_id", True),
+                 ("template", "template_id", True)],
+        extra_context={
+            "status_choices": EmployeeSalaryStructure.STATUS_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "templates": SalaryStructureTemplate.objects.filter(tenant=request.tenant).order_by("name"),
+        },
+    )
+
+
+@login_required
+def employeesalarystructure_create(request):
+    return crud_create(request, form_class=EmployeeSalaryStructureForm,
+                       template="hrm/salary/employeesalarystructure/form.html",
+                       success_url="hrm:employeesalarystructure_list")
+
+
+@login_required
+def employeesalarystructure_detail(request, pk):
+    obj = get_object_or_404(
+        EmployeeSalaryStructure.objects.select_related("employee__party", "template"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/salary/employeesalarystructure/detail.html", {"obj": obj})
+
+
+@login_required
+def employeesalarystructure_edit(request, pk):
+    return crud_edit(request, model=EmployeeSalaryStructure, pk=pk, form_class=EmployeeSalaryStructureForm,
+                     template="hrm/salary/employeesalarystructure/form.html",
+                     success_url="hrm:employeesalarystructure_list")
+
+
+@login_required
+@require_POST
+def employeesalarystructure_delete(request, pk):
+    return crud_delete(request, model=EmployeeSalaryStructure, pk=pk,
+                       success_url="hrm:employeesalarystructure_list")
