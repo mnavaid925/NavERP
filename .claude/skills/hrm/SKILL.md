@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays (calendar + floating-holiday elections + location/eligibility policies), 3.13 salary structure (pay-component catalog [earnings/statutory/reimbursement/variable], grade-wise CTC structure templates with an inline breakdown, effective-dated employee salary assignments — definition layer only; payroll run/posting stays in accounting.PayrollRun)). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays (calendar + floating-holiday elections + location/eligibility policies), 3.13 salary structure (pay-component catalog [earnings/statutory/reimbursement/variable], grade-wise CTC structure templates with an inline breakdown, effective-dated employee salary assignments — definition layer only; payroll run/posting stays in accounting.PayrollRun), 3.14 payroll processing (operational payroll run: computes per-employee payslips from the 3.13 salary structures, a draft->pending->approved/rejected->locked approval workflow, salary holds, arrears/bonus, and on lock hands the rolled-up totals to accounting.PayrollRun for GL posting — HRM builds no JournalEntry)). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -9,7 +9,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 (`app_name = "hrm"`). Built sub-modules: **3.1 Employee Management, 3.2 Organizational Structure,
 3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
 3.7 Interview Process, 3.8 Offer Management, 3.9 Attendance Management, 3.10 Leave Management,
-3.11 Time Tracking, 3.12 Holiday Management, 3.13 Salary Structure.** Reuses the
+3.11 Time Tracking, 3.12 Holiday Management, 3.13 Salary Structure, 3.14 Payroll Processing.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -45,6 +45,9 @@ All inherit local abstract bases (mirror crm/accounting; peer apps don't import 
 | `SalaryStructureTemplate` (3.13) | `SST-` | name, job_grade→`JobGrade`, annual_ctc_amount, currency(CharField, no `accounting.Currency` FK this pass), is_active, description | Grade-wise CTC container. **`computed_ctc_total`** = derived property (sum of line `resolved_amount()`; NOT stored — `salarystructuretemplate_detail` computes `ctc_total` once from the fetched lines to avoid the property re-querying). `unique_together=(tenant,number)`; index (tenant,job_grade) |
 | `SalaryStructureLine` (3.13) | — | template→`SalaryStructureTemplate`(CASCADE, related_name=lines), pay_component→`PayComponent`(**PROTECT**), calculation_type(override; blank=defer to component), amount, percentage, sequence | The CTC breakdown row, managed **inline** on the template detail (add/edit/delete mirror 3.11 `TimesheetEntry`; the add view presets `instance(tenant,template)` before validation). **`resolved_amount()`**: fixed→line amount else component default else 0; pct→(line % else component %) × `template.annual_ctc_amount` (v1: all pct types resolve off CTC — true multi-base deferred). Form `clean()` rejects a duplicate component (form excludes `template`, so `validate_unique` skips it → manual check, else IntegrityError 500). `unique_together=(tenant,template,pay_component)`; index (tenant,template) |
 | `EmployeeSalaryStructure` (3.13) | `ESS-` | employee→`EmployeeProfile`(related_name=salary_structures), template→`SalaryStructureTemplate`, annual_ctc_amount, effective_from, effective_to, status(active/superseded), notes | Effective-dated assignment of a CTC to an employee (may override the template's). `clean()`: effective_to≥from + **at most one `active` per employee** (tenant derived from the employee, unset pre-validation on create). A **superseded** assignment is read-only — `edit`/`delete` reject it server-side (redirect to detail, buttons hidden); supersede = edit the active row to superseded + create a new active one. `unique_together=(tenant,number)`; indexes (tenant,employee,effective_from)/(tenant,status) |
+| `PayrollCycle` (3.14) | `PRC-` | period_start/end, pay_date, cycle_type(regular/off_cycle/bonus), status(draft/pending_approval/approved/rejected/locked), submitted_by/at, approved_by/at, rejection_reason, notes, **accounting_payroll_run→`accounting.PayrollRun`**(set on lock) | Operational payroll run header. Derived `headcount`/`total_gross`/`total_deductions`/`total_net` (single cached aggregate); `is_locked`. Workflow: generate→submit→approve/reject→lock. **On lock** it rolls up payslip totals and creates a draft `accounting.PayrollRun` (L29 — HRM never builds a JournalEntry; accounting's `payroll_run_post` posts the GL). off_cycle/bonus submit→approved directly. `unique_together=(tenant,number)`; index (tenant,status) |
+| `Payslip` (3.14) | `PSL-` | cycle→`PayrollCycle`(CASCADE), employee→`EmployeeProfile`(**PROTECT**), salary_structure→`EmployeeSalaryStructure`(SET_NULL), days_in_period, days_worked, lop_days, lop_amount, gross_pay, total_deductions, net_pay (all editable=False/derived), arrears_amount, bonus_amount, on_hold, hold_reason, released_at | One per (tenant,cycle,employee). **`recompute()`** = the calc engine: monthly = structure line `resolved_amount(employee CTC)`/12; earnings pro-rated by days_worked/days_in_period; LOP; + arrears/bonus; **employer-side statutory EXCLUDED from net** (company cost, snapshotted); rebuilds the PayslipLines; guarded against a locked cycle. `clean()`: days_worked≤days_in_period, non-negative arrears/bonus/lop. "locked" derives from `cycle.is_locked`. `unique_together=(tenant,cycle,employee)` |
+| `PayslipLine` (3.14) | — | payslip→`Payslip`(CASCADE, related_name=lines), component_name(snapshot string), component_type(`PayComponent`'s + arrears/bonus/lop), amount(positive magnitude), contribution_side(snapshot — drives the lock employee/employer-tax roll-up), sequence | Per-component SNAPSHOT copied at generation so a later PayComponent/structure edit never rewrites historical payslips (immutable-results convention). index (tenant,payslip) |
 | `Shift` | — | name, start_time, end_time, grace_minutes, is_default, is_active | overnight shifts allowed (end < start) |
 | `ShiftAssignment` | — | employee, shift, effective_from, effective_to(null=ongoing) | `clean()`: effective_to ≥ effective_from; `unique_together=(tenant,employee,effective_from)` |
 | `AttendanceRecord` | `ATT-` | employee, date, check_in, check_out, **hours_worked**(editable=False), shift, status(present/absent/half_day/on_leave/holiday/regularized), source(web/mobile/biometric/manual), **latitude, longitude, geofence→`GeoFence`(SET_NULL)** (3.9 geofencing), notes | `save()` recomputes `hours_worked` (handles overnight); `is_late()` (minutes-of-day vs shift start+grace); **`has_geo()`**, **`geo_status()`** → `verified`/`outside`/`""` (DERIVED, checks the zone's live radius regardless of `is_active`); `clean()`: lat/long are a pair (both or neither), a geofence needs coords; `unique_together` also (tenant,employee,date); index (tenant,geofence) |
@@ -175,6 +178,15 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   mirrors the 3.11 timesheet-entry hub. `hrm:paycomponent_delete` is guarded against in-use lines (PROTECT → friendly
   message, not a 500). `EmployeeSalaryStructure` `_edit`/`_delete` reject a `superseded` record (read-only history →
   redirect to detail). Pay components + salary templates + employee assignments are otherwise plain CRUD.
+- **Payroll Processing (3.14):** the `PayrollCycle` workflow is `hrm:payrollcycle_generate` (POST, draft-only —
+  builds a `Payslip` per active `EmployeeSalaryStructure` + `recompute()`; **preserves** manual arrears/bonus/hold
+  across a re-generate; effective-date-windowed) → `_submit` (`@login_required`; off_cycle/bonus go straight to
+  approved) → `_approve`/`_reject` (`@tenant_admin_required`) → `_lock` (`@tenant_admin_required`; rolls up totals,
+  creates a draft `accounting.PayrollRun`, links it — **HRM builds no JournalEntry**, accounting's `payroll_run_post`
+  posts the GL). A locked cycle is immutable (edit/delete/generate/payslip-edit/hold all rejected). Salary holds:
+  `hrm:payslip_hold`/`_release` (`@tenant_admin_required`, pre-lock only). `payslip_edit` (draft-only) recomputes.
+  **The privileged buttons (approve/reject/lock/hold/release) are gated in the template behind
+  `is_superuser or is_tenant_admin`** (app-wide convention — non-admins see an awaiting-admin notice).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -345,7 +357,8 @@ standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirro
 `OfferApproval` + `PreboardingItem` render inline on the offer hub, no own templates)**,
 `attendance/` (3.9 — `shift/ shiftassignment/ record/ geofence/ regularization/`), `leave/` (3.10 — `type/ allocation/ request/ encashment/` + the standalone engine page `leave/policy.html`), `timetracking/` (3.11 — `timesheet/ timesheetentry/ overtimerequest/` + standalone `utilization_report.html`/`project_time_report.html`),
 `holiday/` (3.12 — `publicholiday/ holidaypolicy/ floatingholidayelection/`),
-`salary/` (3.13 — `paycomponent/ salarystructuretemplate/ [+ inline line managed on its detail + a standalone line_form.html] employeesalarystructure/`). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
+`salary/` (3.13 — `paycomponent/ salarystructuretemplate/ [+ inline line managed on its detail + a standalone line_form.html] employeesalarystructure/`),
+`payroll/` (3.14 — `payrollcycle/ payslip/`; the cycle detail is the workflow hub, the payslip detail shows the breakdown + hold/release). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
@@ -466,6 +479,12 @@ statutory, LTA reimbursement w/ cap+requires_bill, Performance Bonus variable), 
 `computed_ctc_total` = 118,700 vs. a 120,000 target), and **1 active** `EmployeeSalaryStructure` for the first
 employee. Reuses seeded JobGrade + EmployeeProfile; runs after `_seed_org_structure` (grades) + `_seed_tenant`
 (employees) in `handle()`.
+**Payroll Processing (3.14)** is seeded by `_seed_payroll(tenant)` (own `PayrollCycle.exists()` guard; children-first
+flush PayslipLine→Payslip→PayrollCycle — AND these three are ALSO in the central `_seed_tenant` flush list before
+`EmployeeProfile` because `Payslip.employee` is PROTECT): ensures the first **3 employees** have an active
+`EmployeeSalaryStructure`, creates **1 regular** `PayrollCycle` for the current month (draft), **generates + recomputes
+their payslips** (gross 9,291.67 each — employer PF excluded from net), and puts **1 payslip on hold**. Runs after
+`_seed_salary` (needs the 3.13 structures).
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -517,6 +536,9 @@ tenant and sees nothing.
   Variable Pay / Tax Components / Reimbursements → `hrm:paycomponent_list?component_type=variable|statutory_deduction|reimbursement`
   (one `PayComponent` catalog, `?query` deep-links so each bullet highlights on its filtered slice); + Employee Salary
   Structures → `hrm:employeesalarystructure_list` (extra). All 5 NavERP.md 3.13 bullets are now live.
+- 3.14: Payroll Run → `hrm:payrollcycle_list`; Payroll Approval → `hrm:payrollcycle_list?status=pending_approval`;
+  Salary Holds → `hrm:payslip_list?on_hold=True`; Arrears Calculation → `hrm:payslip_list` (arrears entered per
+  payslip); Bonus Processing → `hrm:payrollcycle_list?cycle_type=bonus`. All 5 NavERP.md 3.14 bullets are now live.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -577,6 +599,15 @@ subtotal exists yet — a true multi-base resolver is deferred); compensation-re
 multi-currency (`currency` is a plain CharField — no `accounting.Currency` FK this pass); pay-group / `core.OrgUnit`-
 scoped structures; and gating sensitive comp writes behind `@tenant_admin_required` (an app-wide authorization-policy
 pass, not forked into 3.13 — see the security-reviewer note).
+**3.14 Payroll Processing deferrals:** the full **statutory engine** (PF/ESI/PT/TDS slabs, challans, returns, Form
+16) — that's **3.15 Statutory Compliance**, a separate sub-module; 3.14 only computes generic
+`statutory_deduction`/employer-contribution lines from the components. Also: bank-file/NEFT disbursement generation;
+payslip PDF/email + employee self-service download; a tax-slab TDS engine; off-cycle multi-country/multi-currency
+payroll; YTD tax-projection reports; a configurable N-level approval-criteria engine (v1 is a fixed
+submit→approve/reject two-step); automatic arrears diffing from salary-structure history (v1 takes a manual
+`arrears_amount`); per-employee rollback inside a locked cycle (v1 = a new off_cycle cycle for corrections);
+attendance/leave-linked LOP auto-wiring to 3.10; deduction-proration on attendance (v1 deductions resolve off the
+component, not double-pro-rated); and an accounting-side "post directly from HRM" helper (posting stays in accounting).
 **3.1 employee-records deferrals:** lifecycle event → `core.Employment`/`EmployeeProfile` auto-sync (v1 records the
 timeline only), document expiry email/push reminders (needs Celery/SMTP), normalized `EmployeeAddress` table (v1 is
 free-text), OCR/AI document extraction + e-signature on personnel docs, `work_location` FK→`core.OrgUnit(branch)`.
