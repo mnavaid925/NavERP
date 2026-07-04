@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Form 16 · {{ obj.employee.party.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Form 16 — {{ obj.employee.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:taxcomputation_list' %}">Tax Computations</a><span class="sep">›</span><a href="{% url 'hrm:taxcomputation_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Form 16 Part B</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> Data view only — PDF rendering + TRACES Part-A merge are a later pass. FY <strong>{{ obj.financial_year }}</strong>. Opting for the concessional new-regime tax (Sec. 115BAC): <strong>{% if obj.declaration.regime_elected == 'new' %}Yes{% else %}No{% endif %}</strong>.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Part A — Deductor &amp; TDS Summary</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Employer TAN</dt><dd>{% if config %}{{ config.tan_number|default:"—" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>PAN of Deductor</dt><dd>{% if config %}{{ config.pan_of_deductor|default:"—" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>TDS Circle</dt><dd>{% if config %}{{ config.tds_circle_address|default:"—" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Employee PAN</dt><dd>{{ obj.employee.national_id|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Form 16 Register</dt><dd>{% if obj.statutory_return %}<a href="{% url 'hrm:statutoryreturn_detail' obj.statutory_return.pk %}">{{ obj.statutory_return.number }}</a> ({{ obj.statutory_return.get_status_display }}){% else %}— (not linked — use "Link Form 16"){% endif %}</dd></div>
+        <div class="detail-item"><dt>TDS Deposited (register)</dt><dd>{% if obj.statutory_return %}{{ obj.statutory_return.employee_contribution_total }}{% else %}—{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Part B — Salary, Deductions &amp; Tax</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <tbody>
+          <tr><td>Gross annual salary</td><td style="text-align:right;" class="fw-600">{{ breakdown.gross }}</td></tr>
+          <tr><td>Less: HRA exemption</td><td style="text-align:right;">{{ breakdown.hra_exemption }}</td></tr>
+          <tr><td>Less: Standard deduction &amp; Chapter VI-A deductions</td><td style="text-align:right;">{{ breakdown.chapter_via }}</td></tr>
+          <tr><td class="fw-600">Taxable income ({{ obj.declaration.get_regime_elected_display }})</td><td style="text-align:right;" class="fw-600">{% if obj.declaration.regime_elected == 'old' %}{{ breakdown.taxable_old }}{% else %}{{ breakdown.taxable_new }}{% endif %}</td></tr>
+          <tr><td class="fw-600">Tax payable (incl. 87A rebate + cess)</td><td style="text-align:right;" class="fw-600">{{ obj.tax_payable }}</td></tr>
+          <tr><td>Less: TDS paid to date</td><td style="text-align:right;">{{ obj.tax_paid_ytd }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-header"><h3 class="card-title">Chapter VI-A / Exemptions declared</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Section</th><th>Declared</th><th>Verified</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr><td>{{ line.get_section_code_display }}</td><td>{{ line.declared_amount }}</td><td>{% if line.verified_amount is not None %}{{ line.verified_amount }}{% else %}—{% endif %}</td></tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="list"></i><p>No deductions declared.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:taxcomputation_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to computation</a>
+{% endblock %}
