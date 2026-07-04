@@ -63,23 +63,31 @@
           </form>
         {% endif %}
       {% elif obj.status == 'pending_approval' %}
-        <form method="post" action="{% url 'hrm:payrollcycle_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this cycle?');">
-          {% csrf_token %}
-          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
-        </form>
-        <form method="post" action="{% url 'hrm:payrollcycle_reject' obj.pk %}">
-          {% csrf_token %}
-          <div class="form-group">
-            <label class="form-label" for="id_rejection_reason">Reject reason</label>
-            <textarea id="id_rejection_reason" name="rejection_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
-          </div>
-          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
-        </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:payrollcycle_approve' obj.pk %}" style="margin-bottom:1rem;" onsubmit="return confirm('Approve this cycle?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'hrm:payrollcycle_reject' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_rejection_reason">Reject reason</label>
+              <textarea id="id_rejection_reason" name="rejection_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to approve or reject this cycle.</span>
+        {% endif %}
       {% elif obj.status == 'approved' %}
-        <form method="post" action="{% url 'hrm:payrollcycle_lock' obj.pk %}" onsubmit="return confirm('Lock this cycle and create the accounting payroll run?');">
-          {% csrf_token %}
-          <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Lock &amp; Hand off to Accounting</button>
-        </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:payrollcycle_lock' obj.pk %}" onsubmit="return confirm('Lock this cycle and create the accounting payroll run?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Lock &amp; Hand off to Accounting</button>
+          </form>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Awaiting a tenant admin to lock this cycle and hand it off to accounting.</span>
+        {% endif %}
       {% elif obj.status == 'locked' %}
         <p class="text-muted">Locked. Accounting run {% if obj.accounting_payroll_run %}<strong>{{ obj.accounting_payroll_run.number }}</strong>{% endif %} created — post it from Accounting → Payroll to generate the GL entry.</p>
       {% elif obj.status == 'rejected' %}
