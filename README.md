@@ -49,7 +49,7 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays — 12 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **5,042 passing tests**.
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **5,287 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -261,7 +261,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -372,9 +372,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   per-scheme/period register whose contribution totals are **aggregated from `PayslipLine`** (a `recompute()`
   mirroring the 3.14 lock roll-up, never hand-typed) with a pending→filed→paid/late filing workflow (paying after
   the due date auto-flags **Late**) and a cross-scheme compliance calendar. Reuses the payroll spine; touches no GL.
+- **3.16 Tax & Investment** — the Indian income-tax declaration + computation layer over 3.13/3.14/3.15: per-FY/regime
+  `TaxRegimeConfig` (+ `TaxSlabBand` slab table, standard deduction, 4% cess, Section 87A rebate), a per-employee
+  `InvestmentDeclaration` (`ITD-`, draft→submitted→locked, 80C/80D/HRA/24b/NPS section lines with declared-vs-verified
+  amounts) with `InvestmentProof` uploads (4-state verification), and a `TaxComputation` (`TXC-`) **engine** —
+  `recompute()` walks the slabs (progressive tax → 87A rebate → cess), does the HRA 3-way exemption, regime-filters
+  Chapter VI-A deductions (new regime keeps only NPS + standard deduction), caps per section, aggregates TDS-paid-YTD
+  from `PayslipLine`, and spreads the balance across remaining pay periods — plus an old-vs-new regime comparison and a
+  **Form 16 Part B** report that reuses the existing `StatutoryReturn(tds_form16)` (no new Form 16 table). Posts no GL.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **2,395-test** HRM suite
-(**5,042 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **2,640-test** HRM suite
+(**5,287 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -608,9 +616,9 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **5,042 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **5,287 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
-  **Accounting 212**, **HRM 2,395**.
+  **Accounting 212**, **HRM 2,640**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
   (member → 403), forgot-password non-enumeration, invite token/expiry, encryption-key secrecy, branding hex
