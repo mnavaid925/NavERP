@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Statutory Identifiers{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Statutory Identifiers</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Statutory Identifiers</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:employeestatutoryidentifier_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Identifier</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search employee, UAN, PF or ESI…">
+        </div>
+        <div class="form-group">
+          <select name="pt_state" class="form-select">
+            <option value="">All states</option>
+            {% for val, label in state_choices %}
+              <option value="{{ val }}" {% if request.GET.pt_state == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_pf_applicable" class="form-select">
+            <option value="">PF: any</option>
+            <option value="True" {% if request.GET.is_pf_applicable == 'True' %}selected{% endif %}>PF applicable</option>
+            <option value="False" {% if request.GET.is_pf_applicable == 'False' %}selected{% endif %}>PF exempt</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_esi_applicable" class="form-select">
+            <option value="">ESI: any</option>
+            <option value="True" {% if request.GET.is_esi_applicable == 'True' %}selected{% endif %}>ESI applicable</option>
+            <option value="False" {% if request.GET.is_esi_applicable == 'False' %}selected{% endif %}>ESI exempt</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:employeestatutoryidentifier_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>UAN</th><th>PF Number</th><th>ESI Number</th><th>PT State</th><th>PF</th><th>ESI</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:employeestatutoryidentifier_detail' obj.pk %}" class="fw-600">{{ obj.employee.party.name }}</a></td>
+              <td>{{ obj.uan_number|default:"—" }}</td>
+              <td>{{ obj.pf_number|default:"—" }}</td>
+              <td>{{ obj.esi_number|default:"—" }}</td>
+              <td>{{ obj.pt_state|default:"—" }}</td>
+              <td>{% if obj.is_pf_applicable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td>{% if obj.is_esi_applicable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:employeestatutoryidentifier_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:employeestatutoryidentifier_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:employeestatutoryidentifier_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this identifier record?');">
+                    {% csrf_token %}
+                    <button class="btn-icon" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="id-card"></i><h3>No statutory identifiers</h3><p>Add an employee's UAN / PF / ESI numbers to file their statutory returns.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
