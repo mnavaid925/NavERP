@@ -19,8 +19,8 @@
     <div class="card-header"><h2 class="card-title">Provident Fund</h2></div>
     <div class="card-body">
       <dl class="detail-grid">
-        <div class="detail-item"><dt>UAN</dt><dd>{{ obj.uan_number|default:"—" }}</dd></div>
-        <div class="detail-item"><dt>PF Number</dt><dd>{{ obj.pf_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>UAN</dt><dd>{{ obj.masked_uan_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>PF Number</dt><dd>{{ obj.masked_pf_number|default:"—" }}</dd></div>
         <div class="detail-item"><dt>PF Applicable</dt><dd>{% if obj.is_pf_applicable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
       </dl>
     </div>
@@ -30,7 +30,7 @@
     <div class="card-header"><h2 class="card-title">Employee State Insurance</h2></div>
     <div class="card-body">
       <dl class="detail-grid">
-        <div class="detail-item"><dt>ESI Number</dt><dd>{{ obj.esi_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>ESI Number</dt><dd>{{ obj.masked_esi_number|default:"—" }}</dd></div>
         <div class="detail-item"><dt>ESI Applicable</dt><dd>{% if obj.is_esi_applicable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
       </dl>
     </div>
