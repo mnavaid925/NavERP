@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:salarystructuretemplate_list' %}">Salary Structures</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:salarystructuretemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:salarystructuretemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this structure?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Job Grade</dt><dd>{% if obj.job_grade %}{{ obj.job_grade }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Target CTC</dt><dd>{% if obj.annual_ctc_amount is not None %}{{ obj.currency }} {{ obj.annual_ctc_amount }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Computed CTC (from lines)</dt><dd class="fw-600">{{ obj.currency }} {{ obj.computed_ctc_total }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">CTC Breakdown</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Component</th><th>Calculation</th><th>Amount</th><th>%</th><th>Resolved</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.sequence }}</td>
+              <td>{{ line.pay_component.name }}</td>
+              <td>{% if line.calculation_type %}{{ line.get_calculation_type_display }}{% else %}<span class="text-muted">{{ line.pay_component.get_calculation_type_display }}</span>{% endif %}</td>
+              <td>{% if line.amount is not None %}{{ line.amount }}{% else %}—{% endif %}</td>
+              <td>{% if line.percentage is not None %}{{ line.percentage }}%{% else %}—{% endif %}</td>
+              <td class="fw-600">{{ line.resolved_amount }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:salarystructureline_edit' line.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:salarystructureline_delete' line.pk %}" onsubmit="return confirm('Remove this line?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list"></i><p>No components in this structure yet — add one below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if lines %}
+          <tfoot><tr><th colspan="5" style="text-align:right;">Total CTC</th><th>{{ obj.computed_ctc_total }}</th><th></th></tr></tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Add a component line</h3>
+      <form method="post" action="{% url 'hrm:salarystructureline_add' obj.pk %}">
+        {% csrf_token %}
+        {% for e in line_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in line_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Line</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:salarystructuretemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
