@@ -6625,7 +6625,10 @@ def investmentdeclarationline_create(request, declaration_pk):
         tenant=request.tenant)
     if form.is_valid():
         try:
-            form.save()
+            # Savepoint so a duplicate-section IntegrityError rolls back only this insert instead of
+            # poisoning the whole request transaction (which would 500/400 the end-of-request commit).
+            with transaction.atomic():
+                form.save()
             write_audit_log(request.user, declaration, "update", {"action": "line_add"})
             messages.success(request, "Declaration line added.")
         except IntegrityError:
