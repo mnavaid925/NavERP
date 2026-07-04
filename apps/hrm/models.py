@@ -3579,21 +3579,28 @@ class Payslip(TenantNumbered):
         ratio = (Decimal(self.days_worked) / Decimal(self.days_in_period)
                  if self.days_in_period else Decimal("1"))
         period_gross = ZERO
-        earning_lines, deduction_lines = [], []
+        earning_lines, employee_ded_lines, employer_lines = [], [], []
         for pc, monthly in resolved:
             if pc.component_type in self.EARNING_TYPES:
                 amt = (monthly * ratio).quantize(Decimal("0.01"))
                 period_gross += amt
                 earning_lines.append((pc, amt))
             elif pc.component_type in self.DEDUCTION_TYPES:
-                deduction_lines.append((pc, monthly))
+                # Employer-side statutory contributions (e.g. employer PF/ESI) are a company cost — they
+                # are snapshotted for the GL roll-up but do NOT reduce the employee's net pay. Only
+                # employee/both/unspecified-side deductions reduce net.
+                if pc.contribution_side == "employer":
+                    employer_lines.append((pc, monthly))
+                else:
+                    employee_ded_lines.append((pc, monthly))
         self.lop_amount = (((period_gross / Decimal(self.days_in_period)) * self.lop_days).quantize(Decimal("0.01"))
                            if self.days_in_period else ZERO)
         self.gross_pay = (period_gross - self.lop_amount + self.arrears_amount
                           + self.bonus_amount).quantize(Decimal("0.01"))
-        self.total_deductions = sum((m for _, m in deduction_lines), ZERO).quantize(Decimal("0.01"))
+        self.total_deductions = sum((m for _, m in employee_ded_lines), ZERO).quantize(Decimal("0.01"))
         self.net_pay = (self.gross_pay - self.total_deductions).quantize(Decimal("0.01"))
-        # Rebuild the snapshot lines (earnings, then arrears/bonus, then LOP, then deductions).
+        # Rebuild the snapshot lines (earnings, then arrears/bonus, then LOP, then employee deductions,
+        # then employer contributions).
         self.lines.all().delete()
         out = []
         for pc, amt in earning_lines:
@@ -3609,10 +3616,14 @@ class Payslip(TenantNumbered):
         if self.lop_amount:
             out.append(PayslipLine(tenant_id=self.tenant_id, payslip=self, component_name="Loss of Pay",
                 component_type="lop", amount=self.lop_amount, sequence=95))
-        for pc, m in deduction_lines:
+        for pc, m in employee_ded_lines:
             out.append(PayslipLine(tenant_id=self.tenant_id, payslip=self, component_name=pc.name,
                 component_type=pc.component_type, amount=m,
                 contribution_side=pc.contribution_side, sequence=100 + (pc.display_order or 0)))
+        for pc, m in employer_lines:
+            out.append(PayslipLine(tenant_id=self.tenant_id, payslip=self, component_name=pc.name,
+                component_type=pc.component_type, amount=m,
+                contribution_side=pc.contribution_side, sequence=200 + (pc.display_order or 0)))
         PayslipLine.objects.bulk_create(out)
         self.save(update_fields=["lop_amount", "gross_pay", "total_deductions", "net_pay", "updated_at"])
 
