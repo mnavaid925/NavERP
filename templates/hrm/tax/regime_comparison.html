@@ -33,13 +33,15 @@
     </div></div>
 
     <div class="card"><div class="card-body">
-      <table class="table">
-        <thead><tr><th>Line item</th><th style="text-align:right;">Old Regime</th><th style="text-align:right;">New Regime</th></tr></thead>
-        <tbody>
-          <tr><td>Taxable income</td><td style="text-align:right;">{{ breakdown.taxable_old }}</td><td style="text-align:right;">{{ breakdown.taxable_new }}</td></tr>
-          <tr><td class="fw-600">Total tax (incl. cess, after 87A)</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_old }}</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_new }}</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Line item</th><th style="text-align:right;">Old Regime</th><th style="text-align:right;">New Regime</th></tr></thead>
+          <tbody>
+            <tr><td>Taxable income</td><td style="text-align:right;">{{ breakdown.taxable_old }}</td><td style="text-align:right;">{{ breakdown.taxable_new }}</td></tr>
+            <tr><td class="fw-600">Total tax (incl. cess, after 87A)</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_old }}</td><td style="text-align:right;" class="fw-600">{{ breakdown.tax_new }}</td></tr>
+          </tbody>
+        </table>
+      </div>
       <div style="margin-top:1rem; padding:1rem; border-radius:8px;" class="card-body">
         {% if breakdown.cheaper == 'old' %}
           <span class="badge badge-green">Old regime is cheaper</span>
