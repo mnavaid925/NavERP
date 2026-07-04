@@ -9,6 +9,7 @@ import datetime
 from decimal import Decimal
 
 import pytest
+from django.utils import timezone
 
 
 # ------------------------------------------------------------------ Core spine helpers
@@ -822,5 +823,246 @@ def statutory_return_b(db, tenant_b, cycle_b):
         tenant=tenant_b, scheme="pf", period_type="monthly",
         period_start=cycle_b.period_start, period_end=cycle_b.period_end,
         cycle=cycle_b, due_date=datetime.date(2026, 7, 15),
+    )
+
+
+# ------------------------------------------------------------------ 3.16 Tax & Investment fixtures
+@pytest.fixture
+def new_regime_config_a(db, tenant_a):
+    """FY 2025-26 NEW-regime TaxRegimeConfig for tenant_a — mirrors the seeded demo (std ded 75000,
+    cess 4%, 87A rebate <=1200000 up to 60000) with its 7-band slab table."""
+    from apps.hrm.models import TaxRegimeConfig, TaxSlabBand
+    cfg = TaxRegimeConfig.objects.create(
+        tenant=tenant_a, financial_year="2025-26", regime="new",
+        standard_deduction=Decimal("75000.00"), cess_rate=Decimal("4.00"),
+        rebate_income_threshold=Decimal("1200000.00"), rebate_max_tax=Decimal("60000.00"),
+        is_default_regime=True,
+    )
+    bands = [(0, 400000, 0), (400000, 800000, 5), (800000, 1200000, 10),
+             (1200000, 1600000, 15), (1600000, 2000000, 20), (2000000, 2400000, 25),
+             (2400000, None, 30)]
+    for i, (lo, hi, rate) in enumerate(bands, start=1):
+        TaxSlabBand.objects.create(
+            tenant=tenant_a, config=cfg, income_from=Decimal(lo),
+            income_to=(Decimal(hi) if hi is not None else None), rate_percent=Decimal(rate), sequence=i)
+    return cfg
+
+
+@pytest.fixture
+def old_regime_config_a(db, tenant_a):
+    """FY 2025-26 OLD-regime TaxRegimeConfig for tenant_a — mirrors the seeded demo (std ded 50000,
+    cess 4%, 87A rebate <=500000 up to 12500) with its 4-band slab table."""
+    from apps.hrm.models import TaxRegimeConfig, TaxSlabBand
+    cfg = TaxRegimeConfig.objects.create(
+        tenant=tenant_a, financial_year="2025-26", regime="old",
+        standard_deduction=Decimal("50000.00"), cess_rate=Decimal("4.00"),
+        rebate_income_threshold=Decimal("500000.00"), rebate_max_tax=Decimal("12500.00"),
+        is_default_regime=False,
+    )
+    bands = [(0, 250000, 0), (250000, 500000, 5), (500000, 1000000, 20), (1000000, None, 30)]
+    for i, (lo, hi, rate) in enumerate(bands, start=1):
+        TaxSlabBand.objects.create(
+            tenant=tenant_a, config=cfg, income_from=Decimal(lo),
+            income_to=(Decimal(hi) if hi is not None else None), rate_percent=Decimal(rate), sequence=i)
+    return cfg
+
+
+@pytest.fixture
+def regime_config_b(db, tenant_b):
+    """A NEW-regime TaxRegimeConfig belonging to tenant_b (IDOR tests), with one slab band."""
+    from apps.hrm.models import TaxRegimeConfig, TaxSlabBand
+    cfg = TaxRegimeConfig.objects.create(
+        tenant=tenant_b, financial_year="2025-26", regime="new",
+        standard_deduction=Decimal("75000.00"), cess_rate=Decimal("4.00"),
+        rebate_income_threshold=Decimal("1200000.00"), rebate_max_tax=Decimal("60000.00"),
+        is_default_regime=True,
+    )
+    TaxSlabBand.objects.create(
+        tenant=tenant_b, config=cfg, income_from=Decimal("0"), income_to=Decimal("400000"),
+        rate_percent=Decimal("0"), sequence=1)
+    return cfg
+
+
+@pytest.fixture
+def slab_band_b(db, regime_config_b):
+    """The single TaxSlabBand belonging to tenant_b's regime_config_b (IDOR tests)."""
+    return regime_config_b.slab_bands.first()
+
+
+@pytest.fixture
+def tax_salary_lines_a(db, tenant_a, salary_template_a):
+    """Populates salary_template_a with BASIC (60000/yr fixed) + HRA (30000/yr fixed) earning lines —
+    matches the seeded demo structure so the HRA-exemption 3-way min + gross income are hand-verifiable
+    (BASIC 60000, HRA 30000, annual_ctc_amount 120000)."""
+    from apps.hrm.models import PayComponent, SalaryStructureLine
+    basic = PayComponent.objects.create(
+        tenant=tenant_a, name="Basic", code="BASIC", component_type="earning",
+        calculation_type="fixed_amount", default_amount=None, default_percentage=Decimal("40"),
+    )
+    # calculation_type overridden to fixed_amount at the LINE level below (mirrors the seeder).
+    basic.calculation_type = "pct_of_ctc"
+    basic.save(update_fields=["calculation_type"])
+    hra = PayComponent.objects.create(
+        tenant=tenant_a, name="House Rent Allowance", code="HRA", component_type="earning",
+        calculation_type="pct_of_basic", default_amount=None, default_percentage=Decimal("50"),
+    )
+    SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=basic,
+        calculation_type="fixed_amount", amount=Decimal("60000"), sequence=1)
+    SalaryStructureLine.objects.create(
+        tenant=tenant_a, template=salary_template_a, pay_component=hra,
+        calculation_type="fixed_amount", amount=Decimal("30000"), sequence=2)
+    return basic, hra
+
+
+@pytest.fixture
+def tax_structure_a(db, tenant_a, employee_a, salary_template_a, tax_salary_lines_a):
+    """An active EmployeeSalaryStructure for employee_a on salary_template_a (annual_ctc_amount
+    120000) with the BASIC+HRA lines from tax_salary_lines_a — the engine's gross-income basis."""
+    from apps.hrm.models import EmployeeSalaryStructure
+    return EmployeeSalaryStructure.objects.create(
+        tenant=tenant_a, employee=employee_a, template=salary_template_a,
+        annual_ctc_amount=Decimal("120000"), status="active",
+        effective_from=datetime.date(2025, 4, 1),
+    )
+
+
+@pytest.fixture
+def tax_declaration_a(db, tenant_a, employee_a):
+    """A submitted old-regime InvestmentDeclaration for employee_a/tenant_a FY 2025-26 — mirrors the
+    seeded demo (mid-year joiner, previous_employer_income=800000) so gross = 120000 (CTC) + 800000 =
+    920000. Proof window open-ended (opens Dec 2025, no close date) so it is ALWAYS "currently open"
+    regardless of the test environment's real-world date — used for both upload-window-open tests and
+    (via an explicit proof_window_close override in the recompute-gate tests) the final-computation
+    gate tests."""
+    from apps.hrm.models import InvestmentDeclaration
+    return InvestmentDeclaration.objects.create(
+        tenant=tenant_a, employee=employee_a, financial_year="2025-26", regime_elected="old",
+        status="submitted",
+        declaration_window_open=datetime.date(2025, 4, 1),
+        declaration_window_close=datetime.date(2025, 6, 30),
+        proof_window_open=datetime.date(2025, 12, 1),
+        proof_window_close=None,
+        previous_employer_income=Decimal("800000.00"), previous_employer_tds=Decimal("0.00"),
+    )
+
+
+@pytest.fixture
+def draft_declaration_a(db, tenant_a, employee_a):
+    """A draft InvestmentDeclaration for employee_a/tenant_a (editable, no lines) — used for
+    submit/edit/delete/line-CRUD tests that need the draft (is_editable) state. A DIFFERENT financial
+    year from tax_declaration_a's "2025-26" (same employee) so the two fixtures can coexist under the
+    (tenant, employee, financial_year) unique_together without colliding."""
+    from apps.hrm.models import InvestmentDeclaration
+    return InvestmentDeclaration.objects.create(
+        tenant=tenant_a, employee=employee_a, financial_year="2024-25", regime_elected="old",
+        status="draft",
+    )
+
+
+@pytest.fixture
+def declaration_b(db, tenant_b, employee_b):
+    """A draft InvestmentDeclaration belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import InvestmentDeclaration
+    return InvestmentDeclaration.objects.create(
+        tenant=tenant_b, employee=employee_b, financial_year="2025-26", regime_elected="old",
+        status="draft",
+    )
+
+
+@pytest.fixture
+def line_80c_a(db, tenant_a, tax_declaration_a):
+    """The 80C InvestmentDeclarationLine on tax_declaration_a — declared 150000 (over the 150000 cap
+    boundary; bump in individual tests to exercise capped_sections)."""
+    from apps.hrm.models import InvestmentDeclarationLine
+    return InvestmentDeclarationLine.objects.create(
+        tenant=tenant_a, declaration=tax_declaration_a, section_code="80c",
+        declared_amount=Decimal("150000.00"),
+    )
+
+
+@pytest.fixture
+def line_hra_a(db, tenant_a, tax_declaration_a):
+    """The HRA InvestmentDeclarationLine on tax_declaration_a — monthly rent 15000, metro city (mirrors
+    the seeded demo)."""
+    from apps.hrm.models import InvestmentDeclarationLine
+    return InvestmentDeclarationLine.objects.create(
+        tenant=tenant_a, declaration=tax_declaration_a, section_code="hra",
+        declared_amount=Decimal("0.00"), monthly_rent_amount=Decimal("15000.00"), is_metro_city=True,
+    )
+
+
+@pytest.fixture
+def line_b(db, tenant_b, declaration_b):
+    """An InvestmentDeclarationLine belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import InvestmentDeclarationLine
+    return InvestmentDeclarationLine.objects.create(
+        tenant=tenant_b, declaration=declaration_b, section_code="80c", declared_amount=Decimal("50000.00"),
+    )
+
+
+@pytest.fixture
+def verified_proof_80c_a(db, tenant_a, line_80c_a, admin_user):
+    """A verified InvestmentProof on line_80c_a — amount 150000, rolled into verified_amount."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.hrm.models import InvestmentProof
+    proof = InvestmentProof.objects.create(
+        tenant=tenant_a, declaration_line=line_80c_a,
+        file=SimpleUploadedFile("lic_receipt.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+        title="LIC Premium Receipt", amount=Decimal("150000.00"),
+        verification_status="verified", verified_by=admin_user, verified_at=timezone.now(),
+    )
+    line_80c_a.verified_amount = Decimal("150000.00")
+    line_80c_a.save(update_fields=["verified_amount"])
+    return proof
+
+
+@pytest.fixture
+def pending_proof_80c_a(db, tenant_a, line_80c_a):
+    """A pending (undecided) InvestmentProof on line_80c_a."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.hrm.models import InvestmentProof
+    return InvestmentProof.objects.create(
+        tenant=tenant_a, declaration_line=line_80c_a,
+        file=SimpleUploadedFile("receipt.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+        title="Receipt", amount=Decimal("150000.00"),
+    )
+
+
+@pytest.fixture
+def proof_b(db, tenant_b, line_b):
+    """An InvestmentProof belonging to tenant_b (IDOR tests)."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.hrm.models import InvestmentProof
+    return InvestmentProof.objects.create(
+        tenant=tenant_b, declaration_line=line_b,
+        file=SimpleUploadedFile("receipt_b.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+        title="Receipt B", amount=Decimal("50000.00"),
+    )
+
+
+@pytest.fixture
+def tax_computation_a(db, tenant_a, employee_a, tax_declaration_a, tax_structure_a,
+                       line_80c_a, line_hra_a, old_regime_config_a, new_regime_config_a):
+    """A 'final' TaxComputation for employee_a/tax_declaration_a, recomputed — the hand-verifiable
+    demo case (gross 920000, old regime -> 52520.00, new regime -> 0.00). tax_declaration_a's proof
+    window has no close date (open-ended), so the final-computation gate passes unconditionally."""
+    from apps.hrm.models import TaxComputation
+    comp = TaxComputation.objects.create(
+        tenant=tenant_a, employee=employee_a, declaration=tax_declaration_a,
+        computation_type="final", remaining_pay_periods=6,
+    )
+    comp.recompute()
+    return comp
+
+
+@pytest.fixture
+def computation_b(db, tenant_b, employee_b, declaration_b, employee_salary_structure_b):
+    """A provisional TaxComputation belonging to tenant_b (IDOR tests). Not recomputed (no regime
+    config seeded for tenant_b), so tax_payable stays 0 — fine, only used for IDOR pk probes."""
+    from apps.hrm.models import TaxComputation
+    return TaxComputation.objects.create(
+        tenant=tenant_b, employee=employee_b, declaration=declaration_b,
+        financial_year=declaration_b.financial_year, computation_type="provisional",
     )
 
