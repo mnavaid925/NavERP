@@ -377,6 +377,17 @@ LIVE_LINKS = {
         "Floating Holidays": "hrm:floatingholidayelection_list",   # bullet
         "Holiday Policies": "hrm:holidaypolicy_list",              # bullet
     },
+    # 3.13 Salary Structure — one PayComponent catalog serves 4 bullets; ?component_type= deep-links
+    # let Variable Pay / Tax Components / Reimbursements each highlight on their filtered slice
+    # (most-specific-match nav). Employee assignments are an extra live leaf.
+    "3.13": {
+        "Pay Components": "hrm:paycomponent_list",                                   # bullet
+        "Salary Structure Templates": "hrm:salarystructuretemplate_list",            # bullet
+        "Variable Pay": "hrm:paycomponent_list?component_type=variable",             # bullet
+        "Tax Components": "hrm:paycomponent_list?component_type=statutory_deduction",  # bullet
+        "Reimbursements": "hrm:paycomponent_list?component_type=reimbursement",      # bullet
+        "Employee Salary Structures": "hrm:employeesalarystructure_list",            # extra
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
