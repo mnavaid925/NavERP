@@ -4050,3 +4050,471 @@ class StatutoryReturn(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.get_scheme_display()} · {self.period_start}–{self.period_end}"
+
+
+# ---------------------------------------------------------------------------
+# 3.16 Tax & Investment — the India income-tax declaration + computation layer
+# on top of 3.13 (EmployeeSalaryStructure = gross basis), 3.14 (PayslipLine =
+# TDS already deducted), and 3.15 (StatutoryConfig TAN/PAN + StatutoryReturn
+# tds_form16 = the Form-16 register). It DECLARES, VERIFIES, COMPUTES and REPORTS
+# tax numbers — it posts NOTHING to the GL (accounting.PayrollRun/JournalEntry
+# untouched, L29). Section codes are keyed to the FAMILIAR names (80C/80D/HRA/…);
+# the Income Tax Act 2025 (eff. 1 Apr 2026) renumbering was unsettled at build
+# time, so a free-text TaxRegimeConfig.tax_law_reference carries the caveat and
+# the UI label can change without a schema change.
+# ---------------------------------------------------------------------------
+
+# Sections that still reduce taxable income under the NEW regime (a static map, not a DB flag):
+# only the additional-NPS 80CCD(1B) + the standard deduction survive; 80C/80D/HRA/24b/LTA/80E and
+# other Chapter VI-A deductions do NOT apply under the new regime.
+NEW_REGIME_ALLOWED_SECTIONS = frozenset({"80ccd_1b_nps"})
+
+# Statutory per-section deduction caps (FY 2025-26). Applied (capped + surfaced via capped_sections),
+# never silently truncated on the declaration line itself, so the employee's raw claim is preserved.
+SECTION_CAPS = {
+    "80c": Decimal("150000.00"),
+    "80ccd_1b_nps": Decimal("50000.00"),
+    "24b_home_loan_interest": Decimal("200000.00"),
+}
+
+
+def _progressive_tax(taxable, bands):
+    """Sum bracket-by-bracket tax over ``bands`` = ordered iterable of
+    ``(income_from, income_to_or_None, rate_percent)`` Decimals (a top band has ``income_to=None``)."""
+    tax = ZERO
+    for lo, hi, rate in bands:
+        if taxable <= lo:
+            break
+        upper = taxable if hi is None else min(taxable, hi)
+        tax += (upper - lo) * rate / Decimal("100")
+    return tax.quantize(Decimal("0.01"))
+
+
+class TaxRegimeConfig(TenantOwned):
+    """Per-(tenant, financial_year, regime) rate master (3.16) — standard deduction, cess, Section 87A
+    rebate, and (via child ``TaxSlabBand`` rows) the slab table the computation engine walks. A small
+    settings table, not auto-numbered."""
+
+    REGIME_CHOICES = [
+        ("old", "Old Regime"),
+        ("new", "New Regime"),
+    ]
+
+    financial_year = models.CharField(max_length=10, help_text='Indian FY, e.g. "2025-26".')
+    regime = models.CharField(max_length=10, choices=REGIME_CHOICES, default="new")
+    standard_deduction = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("75000.00"),
+        help_text="Flat salary deduction (new-regime default ₹75,000; old-regime ₹50,000).")
+    cess_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("4.00"),
+        help_text="Health & Education Cess applied on the computed tax (both regimes).")
+    rebate_income_threshold = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Section 87A: taxable-income ceiling at/below which the rebate applies.")
+    rebate_max_tax = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Section 87A: the maximum tax the rebate can zero out.")
+    is_default_regime = models.BooleanField(default=False,
+        help_text="The statutory default regime (new, since FY 2023-24) — drives a declaration's default election.")
+    tax_law_reference = models.CharField(max_length=255, blank=True,
+        help_text="Free-text note (e.g. Finance Act / Income Tax Act 2025 renumbering caveat).")
+
+    class Meta:
+        ordering = ["-financial_year", "regime"]
+        unique_together = ("tenant", "financial_year", "regime")
+        indexes = [
+            models.Index(fields=["tenant", "financial_year"], name="hrm_trc_tenant_fy_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.financial_year} · {self.get_regime_display()}"
+
+
+class TaxSlabBand(TenantOwned):
+    """One income bracket of a ``TaxRegimeConfig``'s slab table (3.16) — walked bracket-by-bracket by
+    ``TaxComputation``. Managed inline on the config detail (like ``SalaryStructureLine``)."""
+
+    config = models.ForeignKey("hrm.TaxRegimeConfig", on_delete=models.CASCADE, related_name="slab_bands")
+    income_from = models.DecimalField(max_digits=12, decimal_places=2)
+    income_to = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Leave blank for the top (unbounded) band.")
+    rate_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    sequence = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["config", "sequence", "income_from"]
+        indexes = [
+            models.Index(fields=["tenant", "config"], name="hrm_tsb_tenant_config_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.income_to is not None and self.income_from is not None and self.income_to < self.income_from:
+            raise ValidationError({"income_to": "Income-to cannot be below income-from."})
+
+    def __str__(self):
+        return f"{self.config} · {self.income_from}–{self.income_to or '∞'} @ {self.rate_percent}%"
+
+
+class InvestmentDeclaration(TenantNumbered):
+    """A per-employee-per-FY income-tax declaration header (3.16) — ``ITD-#####``. Regime election +
+    declaration/proof windows + the previous-employer figures; its ``lines`` carry the section-wise
+    declared amounts. ``draft→submitted→locked`` gates editability (``is_editable``)."""
+
+    NUMBER_PREFIX = "ITD"
+
+    REGIME_CHOICES = TaxRegimeConfig.REGIME_CHOICES
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("submitted", "Submitted"),
+        ("locked", "Locked"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="tax_declarations")
+    financial_year = models.CharField(max_length=10, help_text='Indian FY, e.g. "2025-26".')
+    regime_elected = models.CharField(max_length=10, choices=REGIME_CHOICES, default="new")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    declaration_window_open = models.DateField(null=True, blank=True)
+    declaration_window_close = models.DateField(null=True, blank=True)
+    proof_window_open = models.DateField(null=True, blank=True)
+    proof_window_close = models.DateField(null=True, blank=True)
+    previous_employer_income = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        help_text="Salary earned with a previous employer this FY (mid-year joiner projection input).")
+    previous_employer_tds = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    submitted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-financial_year", "employee__party__name"]
+        unique_together = ("tenant", "employee", "financial_year")
+        indexes = [
+            models.Index(fields=["tenant", "financial_year"], name="hrm_itd_tenant_fy_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_itd_tenant_status_idx"),
+        ]
+
+    @property
+    def is_editable(self):
+        """A draft declaration's regime + lines are editable; submitted/locked are read-only."""
+        return self.status == "draft"
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.financial_year}"
+
+
+class InvestmentDeclarationLine(TenantOwned):
+    """One section row of an ``InvestmentDeclaration`` (3.16). ``declared_amount`` is the employee's
+    claim; ``verified_amount`` is set from approved ``InvestmentProof``s (or hand-set by HR) and is what
+    the FINAL computation uses. Statutory per-section caps are applied in ``TaxComputation`` (surfaced,
+    not truncated), never here."""
+
+    SECTION_CODE_CHOICES = [
+        ("80c", "Section 80C"),
+        ("80d", "Section 80D — Self & Family"),
+        ("80d_parents", "Section 80D — Parents"),
+        ("hra", "HRA Exemption"),
+        ("24b_home_loan_interest", "Section 24(b) — Home Loan Interest"),
+        ("80ccd_1b_nps", "Section 80CCD(1B) — NPS"),
+        ("lta", "Leave Travel Allowance"),
+        ("80e_education_loan", "Section 80E — Education Loan Interest"),
+        ("other_chapter_via", "Other Chapter VI-A"),
+    ]
+
+    declaration = models.ForeignKey("hrm.InvestmentDeclaration", on_delete=models.CASCADE, related_name="lines")
+    section_code = models.CharField(max_length=25, choices=SECTION_CODE_CHOICES)
+    declared_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    verified_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, editable=False,
+        help_text="Final amount used once proofs are checked — set by proof verification, never form-typed.")
+    # HRA-only sub-fields (blank unless section_code="hra").
+    monthly_rent_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    is_metro_city = models.BooleanField(default=False,
+        help_text="HRA: metro cities exempt up to 50% of basic, non-metro 40%.")
+    landlord_pan = models.CharField(max_length=10, blank=True,
+        help_text="HRA: landlord PAN (mandatory when annual rent exceeds ₹1,00,000).")
+    # 24(b)-only sub-field.
+    lender_name = models.CharField(max_length=255, blank=True, help_text="Home-loan lender (Section 24b).")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["declaration", "section_code"]
+        unique_together = ("tenant", "declaration", "section_code")
+        indexes = [
+            models.Index(fields=["tenant", "declaration"], name="hrm_idl_tenant_decl_idx"),
+        ]
+
+    @property
+    def effective_amount(self):
+        """The amount the computation uses — verified when set, else the declared claim."""
+        return self.verified_amount if self.verified_amount is not None else self.declared_amount
+
+    def recompute_verified(self):
+        """Roll ``verified_amount`` up from this line's ``verified`` proofs' amounts (None if there are
+        no verified proofs carrying an amount — HR can then hand-set it on the line while editable)."""
+        total = self.proofs.filter(verification_status="verified").aggregate(s=Sum("amount"))["s"]
+        self.verified_amount = total
+        self.save(update_fields=["verified_amount", "updated_at"])
+
+    def __str__(self):
+        return f"{self.declaration} · {self.get_section_code_display()}"
+
+
+class InvestmentProof(TenantOwned):
+    """An uploaded proof document for an ``InvestmentDeclarationLine`` (3.16) + its verification
+    workflow. Mirrors ``EmployeeDocument``'s verified_by/verified_at/editable=False convention, one
+    state richer (adds ``on_hold``). A line can have several proofs."""
+
+    VERIFICATION_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("verified", "Verified"),
+        ("rejected", "Rejected"),
+        ("on_hold", "On Hold"),
+    ]
+
+    declaration_line = models.ForeignKey(
+        "hrm.InvestmentDeclarationLine", on_delete=models.CASCADE, related_name="proofs")
+    # WARNING: extension allowlist + size cap enforced in InvestmentProofForm.clean_file (shared
+    # _validate_upload). Keep MEDIA_ROOT outside the web root and serve with Content-Disposition:
+    # attachment + X-Content-Type-Options: nosniff in production (mirrors EmployeeDocument).
+    file = models.FileField(upload_to="hrm/investment_proofs/%Y/%m/")
+    title = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="The amount this proof substantiates (a line's verified_amount sums its verified proofs).")
+    verification_status = models.CharField(max_length=15, choices=VERIFICATION_STATUS_CHOICES,
+        default="pending", editable=False)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hrm_verified_investment_proofs", editable=False)
+    verified_at = models.DateTimeField(null=True, blank=True, editable=False)
+    rejection_reason = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "declaration_line"], name="hrm_ivp_tenant_line_idx"),
+            models.Index(fields=["tenant", "verification_status"], name="hrm_ivp_tenant_vstat_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.declaration_line} · {self.title}"
+
+
+class TaxComputation(TenantNumbered):
+    """The per-employee-per-FY annual tax projection engine (3.16) — ``TXC-#####``. ``recompute()``
+    derives ``tax_payable``/``tax_paid_ytd``/``monthly_tds_amount`` (mirroring ``Payslip.recompute()``/
+    ``StatutoryReturn.recompute()``); the regime-comparison and taxable-income build-up are DERIVED
+    @property methods (never stored). Links to the existing ``StatutoryReturn(scheme="tds_form16")`` row
+    via ``link_form16()`` — no new Form-16 table. Recomputed in place, one row per employee per FY."""
+
+    NUMBER_PREFIX = "TXC"
+
+    COMPUTATION_TYPE_CHOICES = [
+        ("provisional", "Provisional"),
+        ("final", "Final"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="tax_computations")
+    declaration = models.ForeignKey("hrm.InvestmentDeclaration", on_delete=models.PROTECT, related_name="tax_computations")
+    financial_year = models.CharField(max_length=10, help_text="Denormalized from the declaration for filtering.")
+    computation_type = models.CharField(max_length=15, choices=COMPUTATION_TYPE_CHOICES, default="provisional")
+    manual_override_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Overrides the derived monthly TDS when set (edge cases the formula can't cover).")
+    override_reason = models.TextField(blank=True)
+    remaining_pay_periods = models.PositiveSmallIntegerField(default=12,
+        help_text="Pay periods left in the FY the projected tax is spread across.")
+    tax_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
+    tax_paid_ytd = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
+    monthly_tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
+    statutory_return = models.ForeignKey(
+        "hrm.StatutoryReturn", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="tax_computations", editable=False,
+        help_text="The tds_form16 StatutoryReturn row this Part-B detail belongs to (set by link_form16).")
+    computed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-financial_year", "employee__party__name"]
+        unique_together = ("tenant", "employee", "financial_year")
+        indexes = [
+            models.Index(fields=["tenant", "financial_year"], name="hrm_txc_tenant_fy_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_txc_tenant_emp_idx"),
+        ]
+
+    # ----- resolved inputs (query the employee's active salary structure / regime config) -----
+    def _active_structure(self):
+        return (self.employee.salary_structures.filter(status="active")
+                .select_related("template").order_by("-effective_from").first())
+
+    def _component_annual(self, code, name_substr):
+        """Resolve a pay component's annual amount from the employee's active structure (basic/HRA)."""
+        struct = self._active_structure()
+        if not struct or not struct.template_id:
+            return ZERO
+        for line in struct.template.lines.select_related("pay_component"):
+            pc = line.pay_component
+            if (pc.code or "").upper() == code or name_substr in pc.name.lower():
+                return line.resolved_amount(struct.annual_ctc_amount)
+        return ZERO
+
+    def _regime_config(self, regime):
+        return TaxRegimeConfig.objects.filter(
+            tenant_id=self.tenant_id, financial_year=self.financial_year, regime=regime).first()
+
+    def _fy_date_range(self):
+        """Parse ``"YYYY-YY"`` → (Apr 1 start, Mar 31 next-year end) of the Indian FY."""
+        try:
+            start_year = int(str(self.financial_year).split("-")[0])
+        except (ValueError, IndexError, AttributeError):
+            return date(1900, 1, 1), date(2999, 12, 31)
+        return date(start_year, 4, 1), date(start_year + 1, 3, 31)
+
+    @property
+    def gross_annual_income(self):
+        struct = self._active_structure()
+        base = struct.annual_ctc_amount if struct else ZERO
+        return (base + self.declaration.previous_employer_income).quantize(Decimal("0.01"))
+
+    # ----- per-regime deduction helpers (regime-parameterized so both regimes can be compared) -----
+    def _hra_exemption(self, regime):
+        """Standard 3-way HRA exemption minimum (annual). Zero under the new regime or with no HRA line."""
+        if regime == "new":
+            return ZERO
+        hra_line = next((ln for ln in self.declaration.lines.all() if ln.section_code == "hra"), None)
+        if hra_line is None or not hra_line.monthly_rent_amount:
+            return ZERO
+        basic = self._component_annual("BASIC", "basic")
+        annual_rent = hra_line.monthly_rent_amount * Decimal("12")
+        pct = Decimal("50") if hra_line.is_metro_city else Decimal("40")
+        candidates = [
+            max(annual_rent - basic * Decimal("10") / Decimal("100"), ZERO),  # rent − 10% of basic
+            basic * pct / Decimal("100"),                                      # 50%/40% of basic
+        ]
+        actual_hra = self._component_annual("HRA", "house rent")              # actual HRA received
+        if actual_hra > 0:
+            candidates.append(actual_hra)
+        return max(min(candidates), ZERO).quantize(Decimal("0.01"))
+
+    def _chapter_via(self, regime):
+        """Sum the effective (verified-else-declared) Chapter VI-A deductions valid for ``regime``,
+        capped per ``SECTION_CAPS``, excluding HRA (handled separately)."""
+        total = ZERO
+        for line in self.declaration.lines.all():
+            if line.section_code == "hra":
+                continue
+            if regime == "new" and line.section_code not in NEW_REGIME_ALLOWED_SECTIONS:
+                continue
+            amt = line.effective_amount
+            cap = SECTION_CAPS.get(line.section_code)
+            if cap is not None:
+                amt = min(amt, cap)
+            total += amt
+        return total.quantize(Decimal("0.01"))
+
+    @property
+    def capped_sections(self):
+        """(label, claimed, cap) tuples for sections whose claim exceeded its statutory cap — surfaced
+        as a warning, never silently dropped."""
+        out = []
+        for line in self.declaration.lines.all():
+            cap = SECTION_CAPS.get(line.section_code)
+            if cap is not None and line.effective_amount > cap:
+                out.append((line.get_section_code_display(), line.effective_amount, cap))
+        return out
+
+    def _taxable_income(self, regime):
+        config = self._regime_config(regime)
+        std = config.standard_deduction if config else ZERO
+        taxable = (self.gross_annual_income - std - self._hra_exemption(regime) - self._chapter_via(regime))
+        return max(taxable, ZERO).quantize(Decimal("0.01"))
+
+    def _regime_tax(self, regime):
+        config = self._regime_config(regime)
+        if config is None:
+            return ZERO
+        taxable = self._taxable_income(regime)
+        bands = [(b.income_from, b.income_to, b.rate_percent)
+                 for b in config.slab_bands.order_by("sequence", "income_from")]
+        tax = _progressive_tax(taxable, bands)
+        # Section 87A rebate — zero out (capped) when taxable income is at/below the threshold.
+        if config.rebate_income_threshold is not None and taxable <= config.rebate_income_threshold:
+            rebate = min(tax, config.rebate_max_tax if config.rebate_max_tax is not None else tax)
+            tax = max(tax - rebate, ZERO)
+        # Health & Education cess on the post-rebate tax.
+        tax = (tax * (Decimal("1") + config.cess_rate / Decimal("100"))).quantize(Decimal("0.01"))
+        return tax
+
+    @property
+    def hra_exemption(self):
+        return self._hra_exemption(self.declaration.regime_elected)
+
+    @property
+    def total_chapter_via_deductions(self):
+        return self._chapter_via(self.declaration.regime_elected)
+
+    @property
+    def taxable_income_old(self):
+        return self._taxable_income("old")
+
+    @property
+    def taxable_income_new(self):
+        return self._taxable_income("new")
+
+    @property
+    def tax_old_regime(self):
+        return self._regime_tax("old")
+
+    @property
+    def tax_new_regime(self):
+        return self._regime_tax("new")
+
+    @property
+    def cheaper_regime(self):
+        """Which regime costs less (for the comparison nudge); ties resolve to 'new'."""
+        return "old" if self.tax_old_regime < self.tax_new_regime else "new"
+
+    def _tds_paid_ytd(self):
+        """Sum this employee's TDS ``PayslipLine``s across the FY's cycles — reuses 3.15's TDS keyword
+        list and the employee-bucket rule (everything not employer-side), scoped to this employee."""
+        start, end = self._fy_date_range()
+        lines = PayslipLine.objects.filter(
+            tenant_id=self.tenant_id, component_type="statutory_deduction",
+            payslip__employee_id=self.employee_id,
+            payslip__cycle__pay_date__gte=start, payslip__cycle__pay_date__lte=end,
+        ).exclude(contribution_side="employer")
+        cond = Q()
+        for kw in StatutoryReturn.SCHEME_KEYWORDS["tds_24q"]:
+            cond |= Q(component_name__icontains=kw)
+        return lines.filter(cond).aggregate(s=Sum("amount"))["s"] or ZERO
+
+    def recompute(self):
+        """Derive tax_payable (under the elected regime) + tax_paid_ytd + monthly_tds_amount. A ``final``
+        computation requires the declaration's proof window to have closed (the provisional/final gate)."""
+        if (self.computation_type == "final" and self.declaration.proof_window_close
+                and self.declaration.proof_window_close > timezone.localdate()):
+            raise ValidationError("A final computation requires the proof window to have closed.")
+        self.tax_paid_ytd = self._tds_paid_ytd()
+        self.tax_payable = (self.tax_old_regime if self.declaration.regime_elected == "old"
+                            else self.tax_new_regime)
+        if self.manual_override_amount is not None:
+            self.monthly_tds_amount = self.manual_override_amount
+        elif self.remaining_pay_periods:
+            self.monthly_tds_amount = max(
+                (self.tax_payable - self.tax_paid_ytd) / Decimal(self.remaining_pay_periods), ZERO
+            ).quantize(Decimal("0.01"))
+        else:
+            self.monthly_tds_amount = ZERO
+        self.computed_at = timezone.now()
+        self.save(update_fields=["tax_payable", "tax_paid_ytd", "monthly_tds_amount",
+                                 "computed_at", "updated_at"])
+
+    def link_form16(self, user=None):
+        """Get-or-create the ``StatutoryReturn(scheme="tds_form16")`` row for this employee/FY (Part A
+        source) and link it. Recomputes that row's Part-A aggregates only while it is still pending."""
+        start, end = self._fy_date_range()
+        ret, _ = StatutoryReturn.objects.update_or_create(
+            tenant_id=self.tenant_id, scheme="tds_form16", period_start=start, employee=self.employee,
+            defaults={"period_type": "annual", "period_end": end,
+                      "notes": f"Form 16 for {self.employee} · FY {self.financial_year}."})
+        if ret.status == "pending":
+            ret.recompute()
+        self.statutory_return = ret
+        self.save(update_fields=["statutory_return", "updated_at"])
+        return ret
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.financial_year}"
