@@ -1188,5 +1188,35 @@ GL-posting path (L29).
   scheme tag would require a 3.14 model change and is deferred to avoid touching an already-shipped,
   reviewed, tested model this pass.
 
-## Review
-(filled in at the end)
+## Review — 3.15 Statutory Compliance (built 2026-07-04/05)
+
+**Shipped (4 models, all wired Live).** `StatutoryConfig` (tenant settings singleton, OneToOne tenant override,
+`for_tenant()`, detail+edit only), `StatutoryStateRule` (state-wise PT slabs + LWF rules, scheme-aware `clean()`,
+supersede-not-edit), `EmployeeStatutoryIdentifier` (1:1 UAN/PF/ESI, **masked** in list+detail), `StatutoryReturn`
+(`SCR-`, `recompute()` aggregates `PayslipLine` by contribution_side mirroring 3.14 `payrollcycle_lock` —
+employer=`contribution_side="employer"`, employee=everything else, no double-count of "both"; v1 `SCHEME_KEYWORDS`
+`component_name`-substring match; pending→filed→paid/late workflow with paid-after-due→`late`; compliance calendar).
+Migration `0026`. `LIVE_LINKS["3.15"]` — all 5 NavERP.md bullets Live (PF/ESI/TDS→returns, PT/LWF→state-rules).
+`_seed_statutory` after `_seed_payroll` (1 config, 3 MH rules, an identifier per employee, 1 generated PF return
+SCR-00001 showing employer ≈1,800/3 heads). Reuses `EmployeeProfile`/`PayrollCycle`/`PayslipLine`/`PayComponent`;
+**no new employee master, no GL path** (`accounting.PayrollRun`/`JournalEntry` untouched).
+
+**Verification.** `manage.py check` clean; seeder idempotent (2nd run guards); smoke sweep 200/302 on all routes, no
+template leaks, cross-tenant IDOR→404, mark_paid-after-due→late.
+
+**Review agents (all run in order; findings applied + committed):**
+- code-reviewer — 2 Important fixed: `StatutoryReturnForm.clean()` closes the org-level (employee=None) duplicate
+  hole (MariaDB NULL-distinct); `statutoryconfig_edit` gated `@tenant_admin_required` (+ template Edit button).
+- explorer — no wiring bugs (urls/templates/context/reuse all consistent).
+- frontend-reviewer — 2 fixes: `.btn-icon danger` on 3 list delete buttons; flex/gap instead of inline margin.
+- performance-reviewer — dropped dead `select_related` on `statutoryreturn_list` + `statutory_compliance_calendar`.
+- qa-smoke-tester — all green, no bugs.
+- security-reviewer — 1 Medium fixed: mask UAN/PF/ESI (list+detail) via `masked_*` accessors (kept edit-view
+  gating as `@login_required`, consistent with `PayComponent`/`EmployeeProfile` precedent).
+- test-writer — **174 tests** (58 model / 75 view / 41 security), all pass; HRM suite 2,221→**2,395**, project-wide
+  4,868→**5,042**. Surfaced a real create-time bug (active-LWF-per-state guard skipped on create) — **fixed** at the
+  form level (`StatutoryStateRuleForm.clean()`) and inverted the bug-locking test.
+
+**Deferred (later passes):** ECR/ESIC file-format + portal upload, TRACES/challan matching, Form 16/24Q PDF, AI
+pre-filing error detection, rate-change alerting, richer calendar-grid UI, multi-country schemes, Gratuity/Bonus Act,
+and a per-`PayslipLine` scheme tag (to replace the v1 substring match). **Next:** 3.16 Tax & Investment.
