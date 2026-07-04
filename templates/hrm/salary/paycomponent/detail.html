@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:paycomponent_list' %}">Pay Components</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:paycomponent_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:paycomponent_delete' obj.pk %}" onsubmit="return confirm('Delete this component?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_component_type_display }}{% if obj.component_type == 'variable' and obj.variable_subtype %} · {{ obj.variable_subtype }}{% endif %}</dd></div>
+      <div class="detail-item"><dt>Calculation</dt><dd>{{ obj.get_calculation_type_display }}</dd></div>
+      <div class="detail-item"><dt>Default Amount</dt><dd>{% if obj.default_amount is not None %}{{ obj.default_amount }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Default %</dt><dd>{% if obj.default_percentage is not None %}{{ obj.default_percentage }}%{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Frequency</dt><dd>{{ obj.get_frequency_display }}</dd></div>
+      <div class="detail-item"><dt>Taxable</dt><dd>{% if obj.is_taxable %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Include in CTC</dt><dd>{% if obj.include_in_ctc %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Contribution</dt><dd>{{ obj.get_contribution_side_display }}</dd></div>
+      <div class="detail-item"><dt>Annual Cap</dt><dd>{% if obj.annual_cap_amount is not None %}{{ obj.annual_cap_amount }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Requires Bill</dt><dd>{% if obj.requires_bill %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Used in Salary Structures</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Template</th><th>Amount</th><th>Percentage</th></tr></thead>
+        <tbody>
+          {% for line in usage_lines %}
+            <tr>
+              <td><a href="{% url 'hrm:salarystructuretemplate_detail' line.template.pk %}">{{ line.template.name }}</a></td>
+              <td>{% if line.amount is not None %}{{ line.amount }}{% else %}—{% endif %}</td>
+              <td>{% if line.percentage is not None %}{{ line.percentage }}%{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="layers"></i><p>Not used in any salary structure yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:paycomponent_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
