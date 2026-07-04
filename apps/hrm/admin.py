@@ -66,6 +66,11 @@ from .models import (  # 3.13 Salary Structure
     SalaryStructureLine,
     SalaryStructureTemplate,
 )
+from .models import (  # 3.14 Payroll Processing
+    Payslip,
+    PayslipLine,
+    PayrollCycle,
+)
 
 
 @admin.register(JobGrade)
@@ -665,3 +670,42 @@ class EmployeeSalaryStructureAdmin(admin.ModelAdmin):
     search_fields = ("number", "employee__party__name")
     raw_id_fields = ("employee", "template")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------------- 3.14 Payroll Processing
+@admin.register(PayrollCycle)
+class PayrollCycleAdmin(admin.ModelAdmin):
+    list_display = ("number", "cycle_type", "period_start", "period_end", "pay_date", "status",
+                    "accounting_payroll_run", "tenant")
+    list_filter = ("tenant", "status", "cycle_type")
+    search_fields = ("number",)
+    raw_id_fields = ("submitted_by", "approved_by", "accounting_payroll_run")
+    readonly_fields = ("number", "submitted_by", "submitted_at", "approved_by", "approved_at",
+                       "accounting_payroll_run", "created_at", "updated_at")
+
+
+class PayslipLineInline(admin.TabularInline):
+    model = PayslipLine
+    extra = 0
+    fields = ("component_name", "component_type", "contribution_side", "amount", "sequence")
+    readonly_fields = fields
+
+
+@admin.register(Payslip)
+class PayslipAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "cycle", "gross_pay", "total_deductions", "net_pay",
+                    "on_hold", "tenant")
+    list_filter = ("tenant", "on_hold", "cycle__status")
+    search_fields = ("number", "employee__party__name")
+    raw_id_fields = ("cycle", "employee", "salary_structure")
+    readonly_fields = ("number", "lop_amount", "gross_pay", "total_deductions", "net_pay",
+                       "released_at", "created_at", "updated_at")
+    inlines = [PayslipLineInline]
+
+
+@admin.register(PayslipLine)
+class PayslipLineAdmin(admin.ModelAdmin):
+    list_display = ("payslip", "component_name", "component_type", "contribution_side", "amount", "tenant")
+    list_filter = ("tenant", "component_type", "contribution_side")
+    search_fields = ("component_name", "payslip__number")
+    raw_id_fields = ("payslip",)
