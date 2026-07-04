@@ -1220,3 +1220,722 @@ template leaks, cross-tenant IDOR→404, mark_paid-after-due→late.
 **Deferred (later passes):** ECR/ESIC file-format + portal upload, TRACES/challan matching, Form 16/24Q PDF, AI
 pre-filing error detection, rate-change alerting, richer calendar-grid UI, multi-country schemes, Gratuity/Bonus Act,
 and a per-`PayslipLine` scheme tag (to replace the v1 substring match). **Next:** 3.16 Tax & Investment.
+
+---
+# Module 3 — HRM — Sub-module 3.16 Tax & Investment (tax-investment) — plan from research-tax-investment.md (2026-07-05)
+
+**Context.** Extends the existing `apps/hrm` app — NOT a new app. Builds the India income-tax
+declaration + computation layer strictly ON TOP of 3.13 (`EmployeeSalaryStructure.annual_ctc_amount`),
+3.14 (`PayrollCycle`/`Payslip`/`PayslipLine` — TDS already deducted, tagged
+`component_type="statutory_deduction"`), and 3.15 (`StatutoryConfig` — TAN/PAN-of-deductor/circle
+address already there; `StatutoryReturn(scheme="tds_form16")` — the existing Form-16 register row).
+6 new tables (4 "models" + 2 detail children), all appended to `apps/hrm/models.py`. Money still posts
+only through `accounting.PayrollRun`/`JournalEntry` (lesson **L29**) — **3.16 posts nothing to the
+GL**; it only computes/declares/verifies/reports numbers.
+
+**Regulatory caveat (documented in the model docstrings, not hard-coded as gospel):** the Income Tax
+Act, 2025 (effective 1 Apr 2026) renumbers familiar sections and the exact new numbering is unsettled
+across sources ("Form 122" vs "Form 124", disputed renumbering of 115BAC/Section 192/80C). Model
+`section_code` as a descriptive CharField/choice keyed to the FAMILIAR names (80C, 80D, HRA, 24b,
+80CCD(1B), …) plus a free-text `tax_law_reference` note on `TaxRegimeConfig`, so the UI label can be
+corrected later without a schema change.
+
+NavERP.md 3.16 bullets (exact text, all 5 go Live this pass):
+- Tax Regime — Old vs New regime comparison.
+- Investment Declaration — 80C, 80D, HRA, other deductions.
+- Investment Proof — Document upload, verification.
+- Tax Computation — Annual tax projection.
+- Form 16 Generation — Auto-generate Form 16/16A.
+
+Reuses (no duplication): `hrm.EmployeeProfile` (`national_id` = employee PAN — no new employee
+master), `hrm.EmployeeSalaryStructure.annual_ctc_amount` (the gross-income basis), `hrm.PayrollCycle`/
+`Payslip`/`PayslipLine` (TDS-paid-to-date aggregation, reusing the exact `_scheme_lines()`/
+`recompute()` pattern from 3.15), `hrm.StatutoryConfig` (TAN/PAN-of-deductor/circle-address for Form
+16 Part A — `StatutoryConfig.for_tenant(tenant)`), `hrm.StatutoryReturn` (`scheme="tds_form16"` — the
+Form-16 register row 3.16 links to via a new FK; **do NOT add a new Form-16 header table**),
+`settings.AUTH_USER_MODEL` (verify actor + `write_audit_log`). Never touches
+`accounting.PayrollRun`/`JournalEntry` — no GL-posting path (L29).
+
+## A. Models + migration (`apps/hrm/models.py`)
+
+- [ ] `TaxRegimeConfig(TenantOwned)` — per-tenant-per-FY-per-regime rate master, no numeric prefix
+      (drivers: every product's regime-comparison feature needing a rate table; greytHR's admin "View
+      Income Tax slabs" screen):
+  - [ ] `financial_year` — CharField(max_length=10) — e.g. `"2025-26"`, matches
+        `StatutoryReturn`'s annual period convention
+  - [ ] `regime` — CharField(max_length=10, choices=`[("old","Old Regime"),("new","New Regime")]`)
+  - [ ] `standard_deduction` — DecimalField(max_digits=12, decimal_places=2,
+        default=Decimal("75000.00")) — FY 2025-26 new-regime default; old-regime rows set
+        `Decimal("50000.00")` explicitly at creation (Tax Regime — regime-specific standard
+        deduction)
+  - [ ] `cess_rate` — DecimalField(max_digits=5, decimal_places=2, default=Decimal("4.00")) — Health &
+        Education Cess applied on computed tax, both regimes (Tax Computation)
+  - [ ] `rebate_income_threshold` — DecimalField(max_digits=12, decimal_places=2, null=True,
+        blank=True) — Section 87A taxable-income ceiling below which the rebate applies (new-regime
+        FY 2025-26: `Decimal("1200000.00")`) — Tax Regime / Section 87A rebate
+  - [ ] `rebate_max_tax` — DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — the
+        maximum tax the 87A rebate can zero out (new-regime FY 2025-26: `Decimal("60000.00")`) — Tax
+        Regime / Section 87A rebate
+  - [ ] `is_default_regime` — BooleanField(default=False) — statutory default is `new` since FY
+        2023-24; drives `InvestmentDeclaration.regime_elected`'s default (Tax Regime — new regime is
+        the statutory default)
+  - [ ] `tax_law_reference` — CharField(max_length=255, blank=True) — free-text note for the unsettled
+        Income Tax Act 2025 section renumbering (regulatory caveat above)
+  - [ ] `class Meta`: `ordering = ["-financial_year", "regime"]`; `unique_together = ("tenant",
+        "financial_year", "regime")`; index `models.Index(fields=["tenant", "financial_year"],
+        name="hrm_trc_tenant_fy_idx")`
+  - [ ] `__str__` → `f"{self.financial_year} · {self.get_regime_display()}"`
+
+- [ ] `TaxSlabBand(TenantOwned)` — child of `TaxRegimeConfig`, the actual bracket table walked by the
+      computation engine (kept a genuine child table, not JSON, for clean bracket-walking — mirrors
+      `PayslipLine` being a detail of `Payslip` without inflating the model count; managed **inline**
+      on the `TaxRegimeConfig` detail page, like `SalaryStructureLine` on its template):
+  - [ ] `config` — `models.ForeignKey("hrm.TaxRegimeConfig", on_delete=models.CASCADE,
+        related_name="slab_bands")`
+  - [ ] `income_from` — DecimalField(max_digits=12, decimal_places=2)
+  - [ ] `income_to` — DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — null =
+        top/unbounded band
+  - [ ] `rate_percent` — DecimalField(max_digits=5, decimal_places=2)
+  - [ ] `sequence` — PositiveSmallIntegerField(default=0)
+  - [ ] `class Meta`: `ordering = ["config", "sequence", "income_from"]`; index
+        `models.Index(fields=["tenant", "config"], name="hrm_tsb_tenant_config_idx")`
+  - [ ] `clean()` — `income_to` (when set) must be `>= income_from`
+  - [ ] `__str__` → `f"{self.config} · {self.income_from}-{self.income_to or '∞'} @ {self.rate_percent}%"`
+
+- [ ] `InvestmentDeclaration(TenantNumbered, NUMBER_PREFIX="ITD")` — the per-employee-per-FY
+      declaration header + regime election + both windows (drivers: Zimyo's admin-configurable
+      declaration window, Keka's "last date for submission" + regime-change flow, RazorpayX's
+      regime-lock-after-election rule):
+  - [ ] `employee` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+        related_name="tax_declarations")` — PROTECT (not CASCADE) so a declaration can't vanish out
+        from under a linked `TaxComputation`/Form-16 history, matching `Payslip.employee`'s PROTECT
+        convention from 3.14
+  - [ ] `financial_year` — CharField(max_length=10) — matches `TaxRegimeConfig.financial_year`
+  - [ ] `regime_elected` — CharField(max_length=10, choices=`[("old","Old Regime"),
+        ("new","New Regime")]`, default="new") — Tax Regime (statutory new-regime default)
+  - [ ] `status` — CharField(max_length=15, choices=`[("draft","Draft"),("submitted","Submitted"),
+        ("locked","Locked")]`, default="draft") — gates whether `regime_elected` and the declared-
+        amount lines stay editable (collapses Zoho/RazorpayX's "lock after first payroll run" rule to
+        a simple status field, mirroring `PayrollCycle`'s draft→…→locked convention)
+  - [ ] `declaration_window_open` / `declaration_window_close` — DateField(null=True, blank=True) —
+        Investment Declaration (tenant-set window)
+  - [ ] `proof_window_open` / `proof_window_close` — DateField(null=True, blank=True) — Investment
+        Proof (typically later/shorter than the declaration window — Dec-Jan/Jan-Mar per greytHR/
+        RazorpayX/Keka)
+  - [ ] `previous_employer_income` — DecimalField(max_digits=14, decimal_places=2, default=0) — Tax
+        Computation input for a mid-year joiner (greytHR/Zoho Payroll)
+  - [ ] `previous_employer_tds` — DecimalField(max_digits=14, decimal_places=2, default=0) — same
+  - [ ] `submitted_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-financial_year", "employee__party__name"]`; `unique_together =
+        ("tenant", "employee", "financial_year")`; indexes `models.Index(fields=["tenant",
+        "financial_year"], name="hrm_itd_tenant_fy_idx")`, `models.Index(fields=["tenant", "status"],
+        name="hrm_itd_tenant_status_idx")`
+  - [ ] `is_editable` **property** → `self.status == "draft"` (used by both the declaration and its
+        child lines' edit/delete gating)
+  - [ ] `__str__` → `f"{self.number} · {self.employee} · {self.financial_year}"`
+
+- [ ] `InvestmentDeclarationLine(TenantOwned)` — child of `InvestmentDeclaration`, one row per section
+      (drivers: Zoho Payroll's/greytHR's section-by-section structure, Keka's declared-vs-approved
+      convention; managed **inline** on the declaration detail):
+  - [ ] `declaration` — `models.ForeignKey("hrm.InvestmentDeclaration", on_delete=models.CASCADE,
+        related_name="lines")`
+  - [ ] `section_code` — CharField(max_length=25, choices=`SECTION_CODE_CHOICES`) —
+        `[("80c","Section 80C"),("80d","Section 80D — Self & Family"),
+        ("80d_parents","Section 80D — Parents"),("hra","HRA Exemption"),
+        ("24b_home_loan_interest","Section 24(b) — Home Loan Interest"),
+        ("80ccd_1b_nps","Section 80CCD(1B) — NPS"),("lta","Leave Travel Allowance"),
+        ("80e_education_loan","Section 80E — Education Loan Interest"),
+        ("other_chapter_via","Other Chapter VI-A")]` — Investment Declaration (section taxonomy
+        cross-referenced from Zoho Payroll + greytHR + the Form 122/124 unified-form structure)
+  - [ ] `declared_amount` — DecimalField(max_digits=12, decimal_places=2, default=0) — the employee's
+        initial claim
+  - [ ] `verified_amount` — DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        editable=False) — the FINAL amount used once proofs are checked, set only by the proof
+        verification rollup, never form-editable (Keka/greytHR's declared-vs-approved distinction)
+  - [ ] `monthly_rent_amount` — DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) —
+        HRA-only (blank unless `section_code="hra"`)
+  - [ ] `is_metro_city` — BooleanField(default=False) — HRA-only (changes the exemption formula —
+        metro = 50% of basic, non-metro = 40%)
+  - [ ] `landlord_pan` — CharField(max_length=10, blank=True) — HRA-only, UI-mandatory when
+        annualized rent > ₹1,00,000 (Zoho Payroll)
+  - [ ] `lender_name` — CharField(max_length=255, blank=True) — 24b-only (blank unless
+        `section_code="24b_home_loan_interest"`)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["declaration", "section_code"]`; `unique_together = ("tenant",
+        "declaration", "section_code")` — one row per section per declaration (multiple 80C
+        instruments summed into the one line, matching every surveyed product's "one number per
+        section" convention); index `models.Index(fields=["tenant", "declaration"],
+        name="hrm_idl_tenant_decl_idx")`
+  - [ ] `clean()` — HRA sub-fields required only when `section_code="hra"`; `lender_name` only
+        meaningful when `section_code="24b_home_loan_interest"` (don't hard-block, just document —
+        statutory per-section CAPS are enforced in the `TaxComputation` engine, not here, so a
+        declaration can be saved above the cap and be flagged/capped at computation time, not
+        silently truncated at entry time)
+  - [ ] `__str__` → `f"{self.declaration} · {self.get_section_code_display()}"`
+
+- [ ] `InvestmentProof(TenantOwned)` — child of `InvestmentDeclarationLine`, uploaded evidence +
+      verification workflow (drivers: greytHR's Pending/Verified/Rejected/On-Hold POI states with
+      employer-employee messaging, Zoho Payroll's per-line "Attach" flow; mirrors
+      `EmployeeDocument`'s verified_by/verified_at/editable=False + upload-validation pattern exactly,
+      one state richer — 4 states not 3):
+  - [ ] `declaration_line` — `models.ForeignKey("hrm.InvestmentDeclarationLine",
+        on_delete=models.CASCADE, related_name="proofs")` — a section can have >1 proof (e.g. 80C's
+        PPF passbook + LIC receipt)
+  - [ ] `file` — `models.FileField(upload_to="hrm/investment_proofs/%Y/%m/")` — add the SAME
+        extension/size validation `EmployeeDocument.file` uses (check its `validators=`/clean-time
+        guard in the current `apps/hrm/models.py` / `forms.py` before writing this field — reuse the
+        identical validator function, don't hand-roll a second one)
+  - [ ] `title` — CharField(max_length=255) — e.g. "LIC Premium Receipt", "Rent Agreement"
+  - [ ] `amount` — DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — the specific
+        amount this proof substantiates (so a line's `verified_amount` can derive as the sum of its
+        individually-verified proofs' amounts)
+  - [ ] `verification_status` — CharField(max_length=15, choices=`[("pending","Pending"),
+        ("verified","Verified"),("rejected","Rejected"),("on_hold","On Hold")]`, default="pending",
+        editable=False) — Investment Proof (greytHR's 4-state POI workflow — distinct from
+        `EmployeeDocument.VERIFICATION_STATUS_CHOICES`'s 3-state list, don't reuse it directly)
+  - [ ] `verified_by` — `models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="hrm_verified_investment_proofs", editable=False)`
+  - [ ] `verified_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `rejection_reason` — TextField(blank=True)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-created_at"]`; index `models.Index(fields=["tenant",
+        "declaration_line"], name="hrm_ivp_tenant_line_idx")`, index `models.Index(fields=["tenant",
+        "verification_status"], name="hrm_ivp_tenant_vstat_idx")`
+  - [ ] `__str__` → `f"{self.declaration_line} · {self.title}"`
+
+- [ ] `TaxComputation(TenantNumbered, NUMBER_PREFIX="TXC")` — the per-employee-per-FY engine
+      (drivers: greytHR's IT Statement Annual Tax/Tax Paid Till Date/Balance Payable, Keka's
+      provisional-vs-approved + manual-override pattern, Zoho/RazorpayX/saral PayPack's side-by-side
+      regime comparison, the Form 16 Part-B data it must supply):
+  - [ ] `employee` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+        related_name="tax_computations")`
+  - [ ] `declaration` — `models.ForeignKey("hrm.InvestmentDeclaration", on_delete=models.PROTECT,
+        related_name="tax_computations")` — the deduction source, one-to-one per FY in practice
+        (enforced via the same `(tenant, employee, financial_year)` unique_together on this model,
+        not a DB-level OneToOne, since a declaration could in principle outlive its computation)
+  - [ ] `financial_year` — CharField(max_length=10) — denormalized copy of
+        `declaration.financial_year` for easy filtering/reporting
+  - [ ] `computation_type` — CharField(max_length=15, choices=`[("provisional","Provisional"),
+        ("final","Final")]`, default="provisional") — Tax Computation (`provisional` runs on
+        `declared_amount`s from day one of the FY; `final` re-runs on `verified_amount`s once the
+        proof window closes)
+  - [ ] `manual_override_amount` — DecimalField(max_digits=12, decimal_places=2, null=True,
+        blank=True) — Keka's monthly-TDS-override pattern
+  - [ ] `override_reason` — TextField(blank=True)
+  - [ ] `remaining_pay_periods` — PositiveSmallIntegerField(default=12) — months left in the FY from
+        the computation date; user-adjustable (mid-year computations set this lower)
+  - [ ] `tax_payable` — DecimalField(max_digits=12, decimal_places=2, default=0, editable=False) —
+        derived/cached by `recompute()`: the tax under whichever regime is `declaration.regime_elected`
+  - [ ] `tax_paid_ytd` — DecimalField(max_digits=12, decimal_places=2, default=0, editable=False) —
+        derived/cached by `recompute()`, aggregated from this employee's TDS-tagged `PayslipLine`
+        rows across the FY's `PayrollCycle`s
+  - [ ] `monthly_tds_amount` — DecimalField(max_digits=12, decimal_places=2, default=0,
+        editable=False) — derived by `recompute()` as `(tax_payable − tax_paid_ytd) /
+        remaining_pay_periods`, or `manual_override_amount` when set
+  - [ ] `statutory_return` — `models.ForeignKey("hrm.StatutoryReturn", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="tax_computations", editable=False)` — links this Part-B
+        detail to the existing `StatutoryReturn(scheme="tds_form16")` row for the same employee/FY
+        (Form 16 Generation — **no new Form-16 header table**)
+  - [ ] `computed_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-financial_year", "employee__party__name"]`; `unique_together =
+        ("tenant", "employee", "financial_year")` — one computation per employee per FY, recomputed
+        in place (mirrors `Payslip.recompute()`/`StatutoryReturn.recompute()`, never a growing history
+        table); indexes `models.Index(fields=["tenant", "financial_year"],
+        name="hrm_txc_tenant_fy_idx")`, `models.Index(fields=["tenant", "employee"],
+        name="hrm_txc_tenant_emp_idx")`
+  - [ ] **static section-applicability-per-regime map** (module-level constant, NOT a DB flag):
+        `NEW_REGIME_ALLOWED_SECTIONS = {"80ccd_1b_nps"}` (employer NPS contribution + standard
+        deduction survive the new regime; 80C/80D/HRA/24b/LTA/80E/other Chapter VI-A do not) — used
+        by `total_chapter_via_deductions`/`hra_exemption` to filter `InvestmentDeclarationLine`s when
+        `declaration.regime_elected == "new"`
+  - [ ] **statutory per-section caps** (module-level constant): `SECTION_CAPS = {"80c":
+        Decimal("150000.00"), "80ccd_1b_nps": Decimal("50000.00"), "24b_home_loan_interest":
+        Decimal("200000.00")}` — applied (capped, warned via a `capped_sections` computed list) in
+        `total_chapter_via_deductions`, not silently truncated on the declaration line itself
+  - [ ] derived **@property** methods (never stored columns, mirroring
+        `SalaryStructureTemplate.computed_ctc_total`'s convention):
+    - [ ] `gross_annual_income` → `(self.declaration.employee.salary_structures.filter(
+          status="active").first().annual_ctc_amount if … else 0) +
+          self.declaration.previous_employer_income` (resolve the employee's active
+          `EmployeeSalaryStructure`; guard for none)
+    - [ ] `hra_exemption` → looks up the `hra` `InvestmentDeclarationLine` (if any and if the
+          regime allows it), computes the standard 3-way HRA exemption minimum (rent paid − 10% of
+          basic; 50%/40% of basic for metro/non-metro; actual HRA received) using
+          `monthly_rent_amount`/`is_metro_city` × 12 — returns `Decimal("0")` under the new regime or
+          with no HRA line
+    - [ ] `total_chapter_via_deductions` → sums the FINAL amount (verified_amount if not null else
+          declared_amount) of every `InvestmentDeclarationLine` whose `section_code` is allowed under
+          `declaration.regime_elected` (via `NEW_REGIME_ALLOWED_SECTIONS` when new), capped per
+          `SECTION_CAPS`, excluding the `hra` line (handled separately by `hra_exemption`)
+    - [ ] `capped_sections` → list of `(section_code, declared_total, cap)` tuples where the capped
+          section's total exceeded its statutory cap (surfaced on the detail template as a warning,
+          never silently dropped)
+    - [ ] `taxable_income_old` / `taxable_income_new` → `gross_annual_income − hra_exemption
+          (old only) − standard_deduction (per-regime TaxRegimeConfig) − total_chapter_via_deductions
+          (regime-filtered)`, floored at 0
+    - [ ] `tax_old_regime` / `tax_new_regime` → walk that regime's `TaxRegimeConfig`/`TaxSlabBand`
+          rows for `self.financial_year` (bracket-by-bracket), apply the Section 87A rebate (zero out
+          if `taxable_income <= rebate_income_threshold`, capped at `rebate_max_tax`), then add
+          `cess_rate`% cess on the post-rebate tax — Tax Regime comparison (side-by-side, before the
+          employee/HR commits)
+  - [ ] `recompute()` **method** — mirrors `StatutoryReturn.recompute()`'s guard/derive/save shape:
+    - [ ] guard: if `self.declaration.status != "locked"` is NOT required (computation can run on a
+          draft/submitted declaration for the provisional case) — but DO guard: raise
+          `ValidationError` if `self.computation_type == "final"` and the declaration's
+          `proof_window_close` hasn't passed yet (final requires proofs settled) — document this
+          explicitly, it's the provisional-vs-final gate
+    - [ ] `tax_paid_ytd` — aggregate this employee's `PayslipLine` rows tagged TDS
+          (`component_name__icontains` a TDS keyword — reuse `StatutoryReturn.SCHEME_KEYWORDS["tds_24q"]`
+          list directly, don't redefine a second keyword list) across `PayrollCycle`s whose
+          `pay_date` falls in `self.financial_year`'s date range (derive FY start/end from the
+          `"YYYY-YY"` string — a small `_fy_date_range()` helper), filtered
+          `contribution_side__in=["employee", "both"]` (mirrors 3.15's employee-bucket rule)
+    - [ ] `self.tax_payable` = `self.tax_old_regime` if `declaration.regime_elected == "old"` else
+          `self.tax_new_regime`
+    - [ ] `self.monthly_tds_amount` = `self.manual_override_amount` if set, else
+          `((self.tax_payable − self.tax_paid_ytd) / Decimal(self.remaining_pay_periods)).quantize(
+          Decimal("0.01"))` if `self.remaining_pay_periods` else `Decimal("0")`
+    - [ ] `self.computed_at = timezone.now()`; `self.save(update_fields=["tax_payable",
+          "tax_paid_ytd", "monthly_tds_amount", "computed_at", "updated_at"])`
+    - [ ] use `Decimal` throughout, `.quantize(Decimal("0.01"))` at every derived-amount step (project
+          convention from 3.14/3.15)
+  - [ ] `link_form16(user)` **method** (or a thin view-level helper) — `get_or_create`s the
+        `StatutoryReturn(tenant=…, scheme="tds_form16", period_start=<FY start>, employee=self.employee)`
+        row (via `StatutoryReturn.objects.update_or_create(...)` + its own `.recompute()` for Part-A
+        aggregates), sets `self.statutory_return = that_row`, saves — the Form 16 Generation tie-in
+        action
+  - [ ] `__str__` → `f"{self.number} · {self.employee} · {self.financial_year}"`
+
+- [ ] one incremental migration `apps/hrm/migrations/0027_taxregimeconfig_taxslabband_and_more.py`
+      (NOT `0001_initial`; last is `0026_statutoryconfig_statutorystaterule_and_more.py`) —
+      `makemigrations hrm`, review the generated file, adjust index/constraint names to match the ones
+      specified above if Django's auto-names differ
+
+## B. Workflow + engine actions (views)
+
+- [ ] `investmentdeclaration_submit` (`@login_required`, `@require_POST`) — only from
+      `status="draft"`; set `status="submitted"`, `submitted_at=timezone.now()`; `write_audit_log(...,
+      {"action": "submit"})`
+- [ ] `investmentdeclaration_lock` (`@tenant_admin_required`, `@require_POST`) — only from
+      `status="submitted"`; set `status="locked"`; `write_audit_log(..., {"action": "lock"})` — once
+      locked, `regime_elected` and every child `InvestmentDeclarationLine` become immutable (gate via
+      `declaration.is_editable` in both the line-edit view and `InvestmentDeclarationLineForm`'s
+      call-site)
+- [ ] `investmentproof_upload` (`@login_required`) — POST-only create on a specific
+      `InvestmentDeclarationLine` (`declaration_line_id` from the URL); only while
+      `declaration.is_editable` or within the `proof_window_open`/`proof_window_close` window (proofs
+      can be uploaded even after the declaration itself is locked, since the proof window is
+      typically LATER — do NOT gate proof upload on `declaration.is_editable`, gate it on the proof
+      window dates instead, document this explicitly as the deliberate distinction from the
+      declaration-line edit gate)
+- [ ] `investmentproof_verify` / `_reject` / `_on_hold` (`@tenant_admin_required`, `@require_POST`) —
+      only from `verification_status="pending"` (or `"on_hold"` re-triage back to verified/rejected);
+      set `verification_status`, `verified_by=request.user`, `verified_at=timezone.now()`,
+      `rejection_reason` (reject only); after any status change, recompute the parent
+      `InvestmentDeclarationLine.verified_amount` as the sum of that line's `verified` proofs'
+      `amount` (fallback: if no per-proof amounts recorded, leave `verified_amount` as HR can also
+      hand-set it directly via the line's own edit form when `declaration.is_editable`);
+      `write_audit_log(..., {"action": "verify"/"reject"/"on_hold"})`
+- [ ] `taxcomputation_generate` (`@tenant_admin_required`, `@require_POST`) — `get_or_create`s the
+      `TaxComputation` row for `(tenant, employee, declaration.financial_year)` then calls
+      `.recompute()`; mirrors `statutoryreturn_generate`'s idempotent re-aggregate-while-not-locked
+      pattern (recompute always allowed — `TaxComputation` has no lock state of its own, only its
+      `computation_type` provisional/final distinction gates the proof-settled check inside
+      `recompute()`)
+- [ ] `taxcomputation_link_form16` (`@tenant_admin_required`, `@require_POST`) — calls
+      `computation.link_form16(request.user)`; `messages.success` linking to the created/updated
+      `StatutoryReturn` detail page
+- [ ] `tax_regime_comparison` (`@login_required`) — **read view**, no new model: given an `employee`
+      + `financial_year` (GET params or from an existing `TaxComputation`), render `tax_old_regime`
+      vs `tax_new_regime` + the delta ("you'd save ₹X under regime Y") side-by-side — Tax Regime
+      comparison (Zoho "Save and Compare" / saral PayPack "Tax Regime Summary" pattern); render
+      `hrm/tax/regime_comparison.html`
+- [ ] `form16_partb` (`@login_required`) — **read/report view**, no new model: given a
+      `TaxComputation` pk, render Part B (gross salary, HRA exemption, standard deduction, Chapter
+      VI-A deductions section-by-section from `declaration.lines`, taxable income, tax computed,
+      rebate, cess, net tax payable, TDS deducted) + the linked `StatutoryReturn`'s Part-A fields
+      (TAN/employer/PAN/period) + the "opting for concessional new-regime tax? Yes/No" line read
+      straight off `computation.declaration.regime_elected` — Form 16 Generation (data/report layer;
+      PDF rendering deferred); render `hrm/tax/form16_partb.html`
+
+## C. Forms (`apps/hrm/forms.py`)
+
+- [ ] `TaxRegimeConfigForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["financial_year", "regime", "standard_deduction", "cess_rate",
+        "rebate_income_threshold", "rebate_max_tax", "is_default_regime", "tax_law_reference"]`
+        (exclude `tenant`)
+- [ ] `TaxSlabBandForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["income_from", "income_to", "rate_percent", "sequence"]` (exclude
+        `tenant`/`config` — `config` set from the URL/parent in the inline-management view, never a
+        free-choice dropdown)
+- [ ] `InvestmentDeclarationForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["employee", "financial_year", "regime_elected",
+        "declaration_window_open", "declaration_window_close", "proof_window_open",
+        "proof_window_close", "previous_employer_income", "previous_employer_tds", "notes"]`
+        (exclude `tenant`/auto-number `number`/`status`/`submitted_at` — workflow/derived)
+  - [ ] custom `__init__` narrows `employee` to `EmployeeProfile.objects.filter(tenant=tenant)`
+- [ ] `InvestmentDeclarationLineForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["section_code", "declared_amount", "monthly_rent_amount", "is_metro_city",
+        "landlord_pan", "lender_name", "notes"]` (exclude `tenant`/`declaration` [set from parent]/
+        `verified_amount` [workflow-derived])
+  - [ ] view-level guard (not the form itself): reject save if `not declaration.is_editable`
+- [ ] `InvestmentProofForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["file", "title", "amount", "notes"]` (exclude `tenant`/`declaration_line` [set
+        from parent]/`verification_status`/`verified_by`/`verified_at`/`rejection_reason` — all
+        workflow-owned)
+- [ ] `TaxComputationForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["employee", "declaration", "computation_type", "manual_override_amount",
+        "override_reason", "remaining_pay_periods", "notes"]` (exclude `tenant`/auto-number
+        `number`/`tax_payable`/`tax_paid_ytd`/`monthly_tds_amount`/`statutory_return`/`computed_at` —
+        all derived by `recompute()`/`link_form16()`)
+  - [ ] custom `__init__` narrows `employee` to `EmployeeProfile.objects.filter(tenant=tenant)` and
+        `declaration` to `InvestmentDeclaration.objects.filter(tenant=tenant)`
+
+## D. Views (`apps/hrm/views.py`) — full CRUD + filters via `crud_*`
+
+- [ ] `taxregimeconfig_list` — `crud_list(request, TaxRegimeConfig.objects.filter(
+      tenant=request.tenant), "hrm/tax/taxregimeconfig/list.html", search_fields=["financial_year",
+      "tax_law_reference"], filters=[("financial_year", "financial_year", False), ("regime", "regime",
+      False)], extra_context={"regime_choices": TaxRegimeConfig._meta.get_field("regime").choices})`
+- [ ] `taxregimeconfig_create` / `_edit` / `_delete` — standard `crud_create`/`crud_edit`/
+      `crud_delete` wrappers
+- [ ] `taxregimeconfig_detail` — `crud_detail(...)`; extra_context adds `"slab_bands":
+      obj.slab_bands.order_by("sequence")` (the inline-managed child list) — also the entry point for
+      the `taxslabband_create`/`_edit`/`_delete` inline actions (URL-scoped under this config's pk)
+- [ ] `taxslabband_create` / `_edit` / `_delete` — inline CRUD scoped to a `config_pk` in the URL
+      (mirror how `SalaryStructureLine` is managed inline on its template in 3.13 — confirm and match
+      that exact view/URL shape); redirect back to `taxregimeconfig_detail`
+- [ ] `investmentdeclaration_list` — `crud_list(request,
+      InvestmentDeclaration.objects.filter(tenant=request.tenant).select_related("employee__party"),
+      "hrm/tax/investmentdeclaration/list.html", search_fields=["number", "employee__party__name"],
+      filters=[("financial_year", "financial_year", False), ("regime_elected", "regime_elected",
+      False), ("status", "status", False), ("employee", "employee_id", True)],
+      extra_context={"status_choices": InvestmentDeclaration._meta.get_field("status").choices,
+      "regime_choices": TaxRegimeConfig._meta.get_field("regime").choices, "employees":
+      EmployeeProfile.objects.filter(tenant=request.tenant)})`
+- [ ] `investmentdeclaration_create` / `_edit` / `_delete` — standard wrappers; `_edit`/`_delete` only
+      while `status == "draft"` (mirror `payrollcycle_edit`/`_delete`'s draft-only guard); `_delete`
+      also blocked if the declaration has a linked `TaxComputation` (PROTECT will raise — catch and
+      surface a friendly `messages.error` instead of a 500)
+- [ ] `investmentdeclaration_detail` — `crud_detail(...)`; extra_context adds `"lines":
+      obj.lines.order_by("section_code")` (inline-managed) + action buttons for submit/lock — also the
+      entry point for `investmentdeclarationline_create`/`_edit`/`_delete` inline actions (URL-scoped
+      under this declaration's pk) and `investmentproof_upload` (scoped under a `line_pk`)
+- [ ] `investmentdeclarationline_create` / `_edit` / `_delete` — inline CRUD scoped to a `declaration_pk`
+      in the URL, gated by `declaration.is_editable`; redirect back to `investmentdeclaration_detail`
+- [ ] `investmentdeclaration_submit` / `_lock` — per Section B spec
+- [ ] `investmentproof_upload` / `_verify` / `_reject` / `_on_hold` — per Section B spec; `_upload`'s
+      list/detail rendered inline on `investmentdeclaration_detail` (each line shows its `proofs`) —
+      no standalone `investmentproof_list` required for v1, but ADD one anyway for a
+      cross-declaration filterable view: `investmentproof_list` — `crud_list(request,
+      InvestmentProof.objects.filter(tenant=request.tenant).select_related(
+      "declaration_line__declaration__employee__party"), "hrm/tax/investmentproof/list.html",
+      search_fields=["title"], filters=[("verification_status", "verification_status", False)],
+      extra_context={"verification_status_choices": InvestmentProof._meta.get_field(
+      "verification_status").choices})` (read/verify entry point; no create/edit/delete views beyond
+      `_upload` and the verify/reject/on_hold actions — matches `EmployeeDocument`'s pattern of no
+      generic edit on a verified artifact)
+- [ ] `investmentproof_detail` — `crud_detail(...)` (verify/reject/on_hold action buttons live here)
+- [ ] `taxcomputation_list` — `crud_list(request, TaxComputation.objects.filter(
+      tenant=request.tenant).select_related("employee__party", "declaration"),
+      "hrm/tax/taxcomputation/list.html", search_fields=["number", "employee__party__name"],
+      filters=[("financial_year", "financial_year", False), ("computation_type", "computation_type",
+      False), ("employee", "employee_id", True)], extra_context={"computation_type_choices":
+      TaxComputation._meta.get_field("computation_type").choices, "employees":
+      EmployeeProfile.objects.filter(tenant=request.tenant)})`
+- [ ] `taxcomputation_create` / `_edit` / `_delete` — standard wrappers (`_delete` blocked if a
+      `statutory_return` is linked — PROTECT-style friendly error, though the FK is SET_NULL so this
+      is actually safe; still confirm no orphaned `StatutoryReturn.tax_computations` dangling
+      reference issue)
+- [ ] `taxcomputation_detail` — `crud_detail(...)`; extra_context adds the full derived-property
+      breakdown (`gross_annual_income`, `hra_exemption`, `total_chapter_via_deductions`,
+      `capped_sections`, `taxable_income_old`/`_new`, `tax_old_regime`/`_new`) rendered as a
+      regime-comparison panel + action buttons (`Recompute`, `Link Form 16`, `View Form 16 Part B`)
+- [ ] `taxcomputation_generate` / `_link_form16` — per Section B spec
+- [ ] `tax_regime_comparison` / `form16_partb` — per Section B spec
+- [ ] all new views import the 6 new models + their forms at the top of `views.py`; `Sum`/`Q` from
+      `django.db.models`, `transaction` from `django.db`, `Decimal` from `decimal` (already imported
+      for 3.14/3.15 — confirm, don't re-import)
+
+## E. URLs (`apps/hrm/urls.py`, `app_name = "hrm"` already set)
+
+- [ ] `path("tax-regimes/", views.taxregimeconfig_list, name="taxregimeconfig_list")`
+- [ ] `path("tax-regimes/add/", views.taxregimeconfig_create, name="taxregimeconfig_create")`
+- [ ] `path("tax-regimes/<int:pk>/", views.taxregimeconfig_detail, name="taxregimeconfig_detail")`
+- [ ] `path("tax-regimes/<int:pk>/edit/", views.taxregimeconfig_edit, name="taxregimeconfig_edit")`
+- [ ] `path("tax-regimes/<int:pk>/delete/", views.taxregimeconfig_delete, name="taxregimeconfig_delete")`
+- [ ] `path("tax-regimes/<int:config_pk>/slab-bands/add/", views.taxslabband_create, name="taxslabband_create")`
+- [ ] `path("tax-regimes/<int:config_pk>/slab-bands/<int:pk>/edit/", views.taxslabband_edit, name="taxslabband_edit")`
+- [ ] `path("tax-regimes/<int:config_pk>/slab-bands/<int:pk>/delete/", views.taxslabband_delete, name="taxslabband_delete")`
+- [ ] `path("tax-regime-comparison/", views.tax_regime_comparison, name="tax_regime_comparison")`
+- [ ] `path("investment-declarations/", views.investmentdeclaration_list, name="investmentdeclaration_list")`
+- [ ] `path("investment-declarations/add/", views.investmentdeclaration_create, name="investmentdeclaration_create")`
+- [ ] `path("investment-declarations/<int:pk>/", views.investmentdeclaration_detail, name="investmentdeclaration_detail")`
+- [ ] `path("investment-declarations/<int:pk>/edit/", views.investmentdeclaration_edit, name="investmentdeclaration_edit")`
+- [ ] `path("investment-declarations/<int:pk>/delete/", views.investmentdeclaration_delete, name="investmentdeclaration_delete")`
+- [ ] `path("investment-declarations/<int:pk>/submit/", views.investmentdeclaration_submit, name="investmentdeclaration_submit")`
+- [ ] `path("investment-declarations/<int:pk>/lock/", views.investmentdeclaration_lock, name="investmentdeclaration_lock")`
+- [ ] `path("investment-declarations/<int:declaration_pk>/lines/add/", views.investmentdeclarationline_create, name="investmentdeclarationline_create")`
+- [ ] `path("investment-declarations/<int:declaration_pk>/lines/<int:pk>/edit/", views.investmentdeclarationline_edit, name="investmentdeclarationline_edit")`
+- [ ] `path("investment-declarations/<int:declaration_pk>/lines/<int:pk>/delete/", views.investmentdeclarationline_delete, name="investmentdeclarationline_delete")`
+- [ ] `path("investment-proofs/", views.investmentproof_list, name="investmentproof_list")`
+- [ ] `path("investment-proofs/<int:pk>/", views.investmentproof_detail, name="investmentproof_detail")`
+- [ ] `path("investment-declaration-lines/<int:line_pk>/proofs/upload/", views.investmentproof_upload, name="investmentproof_upload")`
+- [ ] `path("investment-proofs/<int:pk>/verify/", views.investmentproof_verify, name="investmentproof_verify")`
+- [ ] `path("investment-proofs/<int:pk>/reject/", views.investmentproof_reject, name="investmentproof_reject")`
+- [ ] `path("investment-proofs/<int:pk>/on-hold/", views.investmentproof_on_hold, name="investmentproof_on_hold")`
+- [ ] `path("tax-computations/", views.taxcomputation_list, name="taxcomputation_list")`
+- [ ] `path("tax-computations/add/", views.taxcomputation_create, name="taxcomputation_create")`
+- [ ] `path("tax-computations/<int:pk>/", views.taxcomputation_detail, name="taxcomputation_detail")`
+- [ ] `path("tax-computations/<int:pk>/edit/", views.taxcomputation_edit, name="taxcomputation_edit")`
+- [ ] `path("tax-computations/<int:pk>/delete/", views.taxcomputation_delete, name="taxcomputation_delete")`
+- [ ] `path("tax-computations/<int:pk>/generate/", views.taxcomputation_generate, name="taxcomputation_generate")`
+- [ ] `path("tax-computations/<int:pk>/link-form16/", views.taxcomputation_link_form16, name="taxcomputation_link_form16")`
+- [ ] `path("tax-computations/<int:pk>/form16-partb/", views.form16_partb, name="form16_partb")`
+
+## F. Admin (`apps/hrm/admin.py`)
+
+- [ ] register `TaxRegimeConfig` — `list_display = ("financial_year", "regime",
+      "standard_deduction", "cess_rate", "is_default_regime")`, `list_filter = ("tenant",
+      "financial_year", "regime")`, `search_fields = ("financial_year", "tax_law_reference")`
+- [ ] register `TaxSlabBand` as a `TabularInline` on `TaxRegimeConfigAdmin` (`model = TaxSlabBand`,
+      `extra = 1`, `fields = ("income_from", "income_to", "rate_percent", "sequence")`)
+- [ ] register `InvestmentDeclaration` — `list_display = ("number", "employee", "financial_year",
+      "regime_elected", "status")`, `list_filter = ("tenant", "financial_year", "regime_elected",
+      "status")`, `search_fields = ("number", "employee__party__name")`
+- [ ] register `InvestmentDeclarationLine` as a `TabularInline` on `InvestmentDeclarationAdmin`
+      (`model = InvestmentDeclarationLine`, `extra = 0`, `fields = ("section_code",
+      "declared_amount", "verified_amount")`, `readonly_fields = ("verified_amount",)`)
+- [ ] register `InvestmentProof` — `list_display = ("declaration_line", "title", "amount",
+      "verification_status", "verified_by", "verified_at")`, `list_filter = ("tenant",
+      "verification_status")`, `search_fields = ("title",)`
+- [ ] register `TaxComputation` — `list_display = ("number", "employee", "financial_year",
+      "computation_type", "tax_payable", "tax_paid_ytd", "monthly_tds_amount")`, `list_filter =
+      ("tenant", "financial_year", "computation_type")`, `search_fields = ("number",
+      "employee__party__name")`
+
+## G. Templates (`templates/hrm/tax/<entity>/<page>.html`)
+
+- [ ] `tax/taxregimeconfig/list.html` — filter bar: search `q`, `financial_year` free-text/select,
+      `regime` select (from `regime_choices`); columns: financial_year, regime badge (`old`→
+      `badge-slate`, `new`→`badge-info`), standard_deduction, cess_rate, is_default_regime badge,
+      Actions (view/edit/delete); pagination; empty-state
+- [ ] `tax/taxregimeconfig/detail.html` — header (financial_year, regime badge, standard_deduction,
+      cess_rate, rebate_income_threshold/rebate_max_tax, is_default_regime badge,
+      tax_law_reference); **slab bands table** (income_from–income_to, rate_percent, sequence) with
+      inline add/edit/delete rows (mirror `salarystructuretemplate/detail.html`'s line-management
+      UI); Actions sidebar (Edit/Delete/Back to List)
+- [ ] `tax/taxregimeconfig/form.html` — standard form
+- [ ] `tax/regime_comparison.html` — **standalone page** at the sub-module root (Template Folder
+      Structure rule 6): employee + financial_year picker, side-by-side old-vs-new panel
+      (taxable_income, tax before rebate, rebate applied, cess, net tax payable), a highlighted
+      "you'd save ₹X under the {regime} regime" banner; empty-state if no `TaxComputation` exists yet
+      for the pair (link to `taxcomputation_create`/`_generate`)
+- [ ] `tax/investmentdeclaration/list.html` — filter bar: search `q`, `financial_year`, `regime_elected`
+      select, `status` select (from `status_choices`), `employee` select (from `employees`,
+      `|stringformat:"d"` pk-compare); columns: number, employee, financial_year, regime_elected
+      badge, status badge (`draft`→`badge-muted`, `submitted`→`badge-amber`, `locked`→`badge-green`),
+      Actions (view/edit-if-draft/delete-if-draft); pagination; empty-state; always
+      `{% else %}{{ obj.get_status_display }}` fallback
+- [ ] `tax/investmentdeclaration/detail.html` — header (employee, financial_year, regime_elected
+      badge, status badge, both windows, previous_employer_income/tds); workflow buttons
+      (`Submit` — draft only, POST+confirm+csrf; `Lock` — submitted only, tenant-admin,
+      POST+confirm+csrf); **section lines table** (section_code, declared_amount, verified_amount,
+      HRA/24b sub-fields where applicable) with inline add/edit/delete gated by `obj.is_editable`,
+      each line showing its `proofs` (title, amount, verification_status badge — `pending`→
+      `badge-muted`, `verified`→`badge-green`, `rejected`→`badge-red`, `on_hold`→`badge-amber`) +
+      an upload-proof form/link + verify/reject/on_hold buttons (tenant-admin only) per proof; Actions
+      sidebar (Edit-if-draft/Delete-if-draft, Back to List)
+- [ ] `tax/investmentdeclaration/form.html` — standard form
+- [ ] `tax/investmentproof/list.html` — filter bar: search `q`, `verification_status` select (from
+      `verification_status_choices`); columns: declaration_line (→ employee/section), title, amount,
+      verification_status badge, verified_by, verified_at, Actions (view); pagination; empty-state
+- [ ] `tax/investmentproof/detail.html` — header (declaration_line link, file download link, title,
+      amount, verification_status badge, verified_by/at, rejection_reason); Actions sidebar
+      (`Verify`/`Reject` [with a rejection_reason textarea]/`On Hold` — all tenant-admin,
+      POST+confirm+csrf, only while `pending`/`on_hold`; Back to List)
+- [ ] `tax/taxcomputation/list.html` — filter bar: search `q`, `financial_year`, `computation_type`
+      select (from `computation_type_choices`), `employee` select (from `employees`, pk-compare);
+      columns: number, employee, financial_year, computation_type badge (`provisional`→`badge-amber`,
+      `final`→`badge-green`), tax_payable, tax_paid_ytd, monthly_tds_amount, Actions
+      (view/edit/delete); pagination; empty-state
+- [ ] `tax/taxcomputation/detail.html` — header (employee, declaration link, financial_year,
+      computation_type badge, manual_override_amount/override_reason if set, remaining_pay_periods,
+      computed_at); **derived breakdown panel** (gross_annual_income, hra_exemption,
+      total_chapter_via_deductions [+ `capped_sections` warning list if non-empty],
+      taxable_income_old/_new, tax_old_regime/_new side-by-side, tax_payable, tax_paid_ytd,
+      monthly_tds_amount); statutory_return link if set; action buttons (`Recompute`,
+      POST+confirm+csrf; `Link Form 16` — tenant-admin, POST+confirm+csrf; `View Form 16 Part B` link
+      to `form16_partb`); Actions sidebar (Edit/Delete, Back to List)
+- [ ] `tax/taxcomputation/form.html` — standard form
+- [ ] `tax/form16_partb.html` — **standalone report page** at the sub-module root: Part A block (TAN,
+      employer name/PAN-of-deductor/circle-address from `StatutoryConfig`, employee PAN from
+      `EmployeeProfile.national_id`, FY, linked `StatutoryReturn.employee_contribution_total`/
+      `status`/`filed_on`), Part B block (gross salary, HRA exemption, standard deduction, section-
+      wise Chapter VI-A deductions table from `declaration.lines`, taxable income, tax computed,
+      87A rebate, cess, net tax payable, TDS deducted), the "opting for concessional new-regime tax?
+      Yes/No" line from `regime_elected`; a visible "PDF rendering not yet available — data view only"
+      note (per the deferred PDF-rendering scope)
+
+## H. Seeder (`apps/hrm/management/commands/seed_hrm.py`)
+
+- [ ] add `_seed_tax(self, tenant, *, flush)` method, called from `handle()` **AFTER**
+      `self._seed_statutory(tenant, flush=options["flush"])` (Form-16 linkage needs 3.15's
+      `StatutoryReturn`/`StatutoryConfig` rows to exist first; the TDS-YTD aggregation needs 3.14's
+      `PayslipLine` rows)
+- [ ] `if flush:` child-first wipe: `TaxComputation.objects.filter(tenant=tenant).delete()` →
+      `InvestmentProof.objects.filter(tenant=tenant).delete()` →
+      `InvestmentDeclarationLine.objects.filter(tenant=tenant).delete()` →
+      `InvestmentDeclaration.objects.filter(tenant=tenant).delete()` →
+      `TaxSlabBand.objects.filter(tenant=tenant).delete()` →
+      `TaxRegimeConfig.objects.filter(tenant=tenant).delete()`
+- [ ] `if TaxRegimeConfig.objects.filter(tenant=tenant).exists(): self.stdout.write(self.style.NOTICE(
+      f"Tax & Investment data already exists for '{tenant.name}'. Use --flush to re-seed.")); return`
+- [ ] create 2 `TaxRegimeConfig` rows for `financial_year="2025-26"`:
+  - [ ] `regime="new"`: `standard_deduction=Decimal("75000.00")`, `cess_rate=Decimal("4.00")`,
+        `rebate_income_threshold=Decimal("1200000.00")`, `rebate_max_tax=Decimal("60000.00")`,
+        `is_default_regime=True`, `tax_law_reference="FY 2025-26 rates per Finance Act; Income Tax
+        Act 2025 section renumbering pending as of this seed."` — with 7 `TaxSlabBand` rows: `0-4L
+        @0%`, `4-8L @5%`, `8-12L @10%`, `12-16L @15%`, `16-20L @20%`, `20-24L @25%`, `24L+ @30%`
+        (`income_to=None` on the last)
+  - [ ] `regime="old"`: `standard_deduction=Decimal("50000.00")`, `cess_rate=Decimal("4.00")`,
+        `rebate_income_threshold=Decimal("500000.00")`, `rebate_max_tax=Decimal("12500.00")`,
+        `is_default_regime=False` — with 4 `TaxSlabBand` rows: `0-2.5L @0%`, `2.5-5L @5%`, `5-10L
+        @20%`, `10L+ @30%`
+- [ ] for one seeded `EmployeeProfile` with an active `EmployeeSalaryStructure` (reuse 3.13/3.14's
+      seeded employee): create 1 `InvestmentDeclaration` (`financial_year="2025-26"`,
+      `regime_elected="old"` — deliberately old so the declaration lines actually reduce tax in the
+      demo, `status="submitted"`, `declaration_window_open/close` and `proof_window_open/close` set to
+      a plausible past/current date range, `previous_employer_income=0`, `previous_employer_tds=0`)
+  - [ ] 2 `InvestmentDeclarationLine` rows: `section_code="80c"` (`declared_amount=Decimal(
+        "150000.00")`), `section_code="hra"` (`declared_amount=Decimal("0.00")` — HRA is exemption-
+        derived, not a flat amount — set `monthly_rent_amount=Decimal("15000.00")`,
+        `is_metro_city=True`)
+  - [ ] 1 `InvestmentProof` on the 80C line: `title="LIC Premium Receipt"`,
+        `amount=Decimal("150000.00")`, `verification_status="verified"`,
+        `verified_by=` a seeded tenant-admin user, `verified_at=timezone.now()` — then set that
+        line's `verified_amount=Decimal("150000.00")` directly (demonstrating the declared==verified
+        settled case)
+- [ ] generate 1 `TaxComputation` for that employee/FY: `computation_type="final"`,
+      `remaining_pay_periods=` months remaining from the seeded `PayrollCycle`'s period, call
+      `.recompute()`, then call `.link_form16(admin_user)` to demonstrate the `StatutoryReturn(
+      scheme="tds_form16")` tie-in (reuses/creates the row for this employee/FY)
+- [ ] print a summary line: `f"Tax & Investment seeded for '{tenant.name}': 2 regime configs (11 slab
+      bands), 1 declaration ({declaration.number}), 1 proof, 1 computation ({computation.number}
+      → {computation.tax_payable} payable)."`
+- [ ] add the 6 tables to the `--flush` wipe order in dependency sequence (children first, already
+      specified above — restate here for the flush-order checklist): `TaxComputation` →
+      `InvestmentProof` → `InvestmentDeclarationLine` → `InvestmentDeclaration` → `TaxSlabBand` →
+      `TaxRegimeConfig`; confirm this sits BEFORE `EmployeeProfile`'s own central wipe (both
+      `InvestmentDeclaration.employee` and `TaxComputation.employee` are PROTECT)
+- [ ] verify the seeder still prints the tenant-admin login reminder + "Data already exists" warning
+      path unchanged — the new block is itself idempotent, no new top-level guard needed
+
+## I. Navigation (`apps/core/navigation.py`)
+
+- [ ] add `LIVE_LINKS["3.16"]` (verify the exact query-string/routing convention against 3.14/3.15's
+      existing entries before finalizing):
+      ```python
+      # 3.16 Tax & Investment — TaxRegimeConfig/comparison serves Tax Regime; InvestmentDeclaration
+      # serves Investment Declaration; InvestmentProof (pending filter) serves Investment Proof;
+      # TaxComputation serves Tax Computation; Form16 Part B report serves Form 16 Generation.
+      "3.16": {
+          "Tax Regime": "hrm:taxregimeconfig_list",                                  # bullet
+          "Investment Declaration": "hrm:investmentdeclaration_list",                # bullet
+          "Investment Proof": "hrm:investmentproof_list?verification_status=pending", # bullet
+          "Tax Computation": "hrm:taxcomputation_list",                              # bullet
+          "Form 16 Generation": "hrm:taxcomputation_list",                           # bullet (detail links to form16_partb)
+      },
+      ```
+      — all 5 NavERP.md 3.16 bullets go Live; adjust the literal query strings if the real filter
+      param names implemented in Section D differ; "Form 16 Generation" deliberately routes through
+      the computation list (no standalone Form-16 list model per the reuse decision) — document this
+      routing rationale in the navigation.py comment, mirroring 3.15's PT/LWF-vs-PF/ESI/TDS routing
+      split precedent
+
+## J. Migrate / seed / verify (run from the venv)
+
+- [ ] `python manage.py makemigrations hrm` → review `0027_...py` (field/index/unique_together names
+      match the plan; confirm the `StatutoryReturn`/`EmployeeProfile`/`InvestmentDeclaration` FK
+      chains don't trigger a spurious cross-dependency issue — they shouldn't, all plain FK-by-string)
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` (1st run — creates data; confirm 3.15's `_seed_statutory` still runs
+      first and the new `_seed_tax` block generates its configs/declaration/proof/computation against
+      it)
+- [ ] `python manage.py seed_hrm` (2nd run — must be idempotent, no duplicates, no errors)
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every new `hrm:taxregimeconfig_*`, `hrm:taxslabband_*`,
+      `hrm:tax_regime_comparison`, `hrm:investmentdeclaration_*`, `hrm:investmentdeclarationline_*`,
+      `hrm:investmentproof_*`, `hrm:taxcomputation_*`, and `hrm:form16_partb` URL returns 200/302 when
+      logged in as a tenant admin; no `{#`/`{% comment` leaks in the new templates; cross-tenant IDOR
+      check — a `TaxRegimeConfig`/`InvestmentDeclaration`/`InvestmentProof`/`TaxComputation` pk
+      belonging to tenant A returns 404 when fetched as tenant B; `taxcomputation_generate` run twice
+      produces the same `tax_payable`/`tax_paid_ytd`/`monthly_tds_amount` (idempotent recompute, no
+      duplication); spot-check the seeded computation's `tax_old_regime` arithmetic by hand against
+      the 4-slab old-regime table + 87A rebate + 4% cess; `investmentdeclaration_lock` blocks further
+      line edits (guarded by `is_editable`); `investmentproof_verify`/`_reject`/`_on_hold` blocked for
+      non-tenant-admin (403); the 87A rebate zeroes tax correctly when taxable income is at/below the
+      threshold; `SECTION_CAPS` caps (not silently truncates) an over-declared 80C amount and surfaces
+      it in `capped_sections`; `link_form16` creates/reuses exactly one `StatutoryReturn(
+      scheme="tds_form16")` row per (employee, FY) — no duplicates on a second call; the `?
+      verification_status=pending` deep-link renders the filtered subset correctly
+- [ ] sidebar: confirm 3.16 shows all five bullets as **Live** (not "Coming soon") for a tenant with
+      data
+
+## K. Close-out
+
+- [ ] update `README.md` module-status / HRM section (3.16 bullets: Tax Regime / Investment
+      Declaration / Investment Proof / Tax Computation / Form 16 Generation all live; bump the HRM +
+      project-wide test-count lines once test-writer runs)
+- [ ] run the review-agent sequence in order, each ending in its own commit(s): `code-reviewer` →
+      `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` →
+      `security-reviewer` → `test-writer`
+- [ ] update `.claude/skills/hrm/SKILL.md` — 3.16 section: document `TaxRegimeConfig`/`TaxSlabBand`/
+      `InvestmentDeclaration`/`InvestmentDeclarationLine`/`InvestmentProof`/`TaxComputation` models,
+      the `recompute()` calc-engine contract (regime comparison, 87A rebate, cess, section caps, TDS-
+      YTD aggregation reusing 3.15's `SCHEME_KEYWORDS["tds_24q"]`), the submit/lock + proof-
+      verification workflows, the `link_form16()` tie-in to `StatutoryReturn(scheme="tds_form16")`,
+      the new `LIVE_LINKS["3.16"]` entries (incl. the Form-16-routes-to-computation-list rationale),
+      the extended seeder block, and mark all 5 bullets of 3.16 as built
+
+## Later passes / deferred (carried over from research-tax-investment.md — do not build this pass)
+
+- **Form 16/16A/Part-A+B PDF rendering, merge, and email delivery** — presentation/document-
+  generation layer, consistent with the payslip-PDF and Form-16-PDF deferrals already noted in the
+  3.14/3.15 research; `form16_partb.html` is a data/report view only this pass.
+- **TRACES portal integration** (downloading the government-issued Part A file/zip and importing it)
+  — external government-portal API/file integration, not buildable in a single Django pass.
+- **Form 16A (non-salary/vendor TDS certificate)** — belongs conceptually to Accounts Payable/vendor
+  withholding, not the employee-tax scope of 3.16; not modeled here.
+- **Bulk Excel import of employee declarations** (saral PayPack, Zoho Payroll "submit on behalf of")
+  — v1 supports manual per-employee entry (including HR entering on an employee's behalf via the same
+  form); a bulk import/export pipeline is a fast-follow.
+- **AI-assisted anomaly detection on tax declarations** and **TRACES-notice early-warning system** —
+  both are rules/ML layers on top of the core computation, deferred as fast-follows.
+- **Automatic regime-change lock enforcement tied to "first payroll run of the FY"** — v1 gates
+  editability via `InvestmentDeclaration.status` (draft/submitted/locked) rather than an automatic
+  date/event-driven lock keyed to `PayrollCycle` creation; a tighter automatic trigger is a
+  fast-follow.
+- **Full instrument-level 80C sub-ledger** (tracking each individual PPF/ELSS/insurance policy
+  separately rather than one summed `declared_amount` per section) — every surveyed product collapses
+  to one number per section for computation purposes; deferred unless a future audit requirement
+  demands it.
+- **Non-India / multi-country tax-regime support** — this catalog is India-specific per 3.15's
+  existing India-only statutory scope; extending regime/slab modeling to other jurisdictions is a
+  future-pass consideration.
+- **Exact Income Tax Act 2025 section-renumbering adoption** (the "Form 122" vs "Form 124" naming
+  inconsistency and renumbered section codes) — modeled defensively via descriptive `section_code`
+  choices + `TaxRegimeConfig.tax_law_reference`; revisit once the renumbering is finalized in official
+  guidance.
+- **Availability gating on Q4 24Q filing completion before Form 16 issuance** — v1's `link_form16()`
+  creates/links the `StatutoryReturn(scheme="tds_form16")` row unconditionally; a view-level guard
+  checking the related `tds_24q` `StatutoryReturn` rows' `status="filed"` first is a fast-follow, not
+  blocking v1.
+- **Per-`PayslipLine` scheme tagging** (replacing the `SCHEME_KEYWORDS` substring heuristic reused
+  from 3.15) — same deferral as noted in the 3.15 review; a real per-line scheme tag would require a
+  3.14 model change.
+
+## Review notes
+(filled in at the end)
