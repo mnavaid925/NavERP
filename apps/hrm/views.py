@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
@@ -115,6 +115,14 @@ from .forms import (  # 3.15 Statutory Compliance
     StatutoryConfigForm,
     StatutoryReturnForm,
     StatutoryStateRuleForm,
+)
+from .forms import (  # 3.16 Tax & Investment
+    InvestmentDeclarationForm,
+    InvestmentDeclarationLineForm,
+    InvestmentProofForm,
+    TaxComputationForm,
+    TaxRegimeConfigForm,
+    TaxSlabBandForm,
 )
 from .models import (
     APPLICATION_STAGE_CHOICES,
@@ -224,6 +232,14 @@ from .models import (  # 3.15 Statutory Compliance
     StatutoryConfig,
     StatutoryReturn,
     StatutoryStateRule,
+)
+from .models import (  # 3.16 Tax & Investment
+    InvestmentDeclaration,
+    InvestmentDeclarationLine,
+    InvestmentProof,
+    TaxComputation,
+    TaxRegimeConfig,
+    TaxSlabBand,
 )
 
 
@@ -6376,4 +6392,465 @@ def statutory_compliance_calendar(request):
         "bucket_list": bucket_list,
         "scheme_choices": StatutoryReturn.SCHEME_CHOICES,
         "status_choices": StatutoryReturn.STATUS_CHOICES,
+    })
+
+
+# ========================= 3.16 Tax & Investment =========================
+# TaxRegimeConfig (+ inline TaxSlabBand) · regime comparison · InvestmentDeclaration
+# (+ inline lines) · InvestmentProof upload/verify · TaxComputation (recompute engine
+# + Form 16 tie-in) · form16_partb report.
+
+# --------------------------------------------------- TaxRegimeConfig (+ inline slab bands)
+@login_required
+def taxregimeconfig_list(request):
+    return crud_list(
+        request, TaxRegimeConfig.objects.filter(tenant=request.tenant),
+        "hrm/tax/taxregimeconfig/list.html",
+        search_fields=["financial_year", "tax_law_reference"],
+        filters=[("financial_year", "financial_year", False), ("regime", "regime", False)],
+        extra_context={"regime_choices": TaxRegimeConfig.REGIME_CHOICES},
+    )
+
+
+@login_required
+def taxregimeconfig_create(request):
+    return crud_create(request, form_class=TaxRegimeConfigForm,
+                       template="hrm/tax/taxregimeconfig/form.html", success_url="hrm:taxregimeconfig_list")
+
+
+@login_required
+def taxregimeconfig_detail(request, pk):
+    obj = get_object_or_404(TaxRegimeConfig, pk=pk, tenant=request.tenant)
+    return render(request, "hrm/tax/taxregimeconfig/detail.html", {
+        "obj": obj,
+        "slab_bands": obj.slab_bands.order_by("sequence", "income_from"),
+        "band_form": TaxSlabBandForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def taxregimeconfig_edit(request, pk):
+    return crud_edit(request, model=TaxRegimeConfig, pk=pk, form_class=TaxRegimeConfigForm,
+                     template="hrm/tax/taxregimeconfig/form.html", success_url="hrm:taxregimeconfig_list")
+
+
+@login_required
+@require_POST
+def taxregimeconfig_delete(request, pk):
+    return crud_delete(request, model=TaxRegimeConfig, pk=pk, success_url="hrm:taxregimeconfig_list")
+
+
+@login_required
+@require_POST
+def taxslabband_create(request, config_pk):
+    config = get_object_or_404(TaxRegimeConfig, pk=config_pk, tenant=request.tenant)
+    form = TaxSlabBandForm(request.POST,
+                           instance=TaxSlabBand(tenant=request.tenant, config=config),
+                           tenant=request.tenant)
+    if form.is_valid():
+        form.save()
+        write_audit_log(request.user, config, "update", {"action": "slab_add"})
+        messages.success(request, "Slab band added.")
+    else:
+        messages.error(request, "; ".join(f"{k}: {v[0]}" for k, v in form.errors.items()))
+    return redirect("hrm:taxregimeconfig_detail", pk=config.pk)
+
+
+@login_required
+def taxslabband_edit(request, config_pk, pk):
+    config = get_object_or_404(TaxRegimeConfig, pk=config_pk, tenant=request.tenant)
+    band = get_object_or_404(TaxSlabBand, pk=pk, tenant=request.tenant, config=config)
+    if request.method == "POST":
+        form = TaxSlabBandForm(request.POST, instance=band, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, config, "update", {"action": "slab_edit"})
+            messages.success(request, "Slab band updated.")
+            return redirect("hrm:taxregimeconfig_detail", pk=config.pk)
+    else:
+        form = TaxSlabBandForm(instance=band, tenant=request.tenant)
+    return render(request, "hrm/tax/taxregimeconfig/band_form.html",
+                  {"form": form, "obj": band, "config": config, "is_edit": True})
+
+
+@login_required
+@require_POST
+def taxslabband_delete(request, config_pk, pk):
+    config = get_object_or_404(TaxRegimeConfig, pk=config_pk, tenant=request.tenant)
+    band = get_object_or_404(TaxSlabBand, pk=pk, tenant=request.tenant, config=config)
+    band.delete()
+    write_audit_log(request.user, config, "update", {"action": "slab_delete"})
+    messages.success(request, "Slab band removed.")
+    return redirect("hrm:taxregimeconfig_detail", pk=config.pk)
+
+
+def _computation_breakdown(obj):
+    """The derived tax breakdown for a TaxComputation, computed once (each property fires queries)."""
+    return {
+        "gross": obj.gross_annual_income,
+        "hra_exemption": obj.hra_exemption,
+        "chapter_via": obj.total_chapter_via_deductions,
+        "capped_sections": obj.capped_sections,
+        "taxable_old": obj.taxable_income_old,
+        "taxable_new": obj.taxable_income_new,
+        "tax_old": obj.tax_old_regime,
+        "tax_new": obj.tax_new_regime,
+        "cheaper": obj.cheaper_regime,
+        "savings": abs(obj.tax_old_regime - obj.tax_new_regime),
+    }
+
+
+@login_required
+def tax_regime_comparison(request):
+    """Read-only old-vs-new comparison for a chosen TaxComputation (no new model)."""
+    comp = None
+    comp_id = request.GET.get("computation", "").strip()
+    if comp_id.isdigit():
+        comp = (TaxComputation.objects.filter(tenant=request.tenant, pk=comp_id)
+                .select_related("employee__party", "declaration").first())
+    ctx = {
+        "comp": comp,
+        "computations": (TaxComputation.objects.filter(tenant=request.tenant)
+                         .select_related("employee__party").order_by("-financial_year")),
+    }
+    if comp is not None:
+        ctx["breakdown"] = _computation_breakdown(comp)
+    return render(request, "hrm/tax/regime_comparison.html", ctx)
+
+
+# --------------------------------------------- InvestmentDeclaration (+ inline lines)
+@login_required
+def investmentdeclaration_list(request):
+    return crud_list(
+        request,
+        InvestmentDeclaration.objects.filter(tenant=request.tenant).select_related("employee__party"),
+        "hrm/tax/investmentdeclaration/list.html",
+        search_fields=["number", "employee__party__name"],
+        filters=[("financial_year", "financial_year", False), ("regime_elected", "regime_elected", False),
+                 ("status", "status", False), ("employee", "employee_id", True)],
+        extra_context={
+            "status_choices": InvestmentDeclaration.STATUS_CHOICES,
+            "regime_choices": InvestmentDeclaration.REGIME_CHOICES,
+            "employees": EmployeeProfile.objects.filter(tenant=request.tenant).select_related("party"),
+        },
+    )
+
+
+@login_required
+def investmentdeclaration_create(request):
+    return crud_create(request, form_class=InvestmentDeclarationForm,
+                       template="hrm/tax/investmentdeclaration/form.html",
+                       success_url="hrm:investmentdeclaration_list")
+
+
+@login_required
+def investmentdeclaration_detail(request, pk):
+    obj = get_object_or_404(
+        InvestmentDeclaration.objects.select_related("employee__party"), pk=pk, tenant=request.tenant)
+    lines = (obj.lines.prefetch_related("proofs").order_by("section_code"))
+    return render(request, "hrm/tax/investmentdeclaration/detail.html", {
+        "obj": obj,
+        "lines": lines,
+        "line_form": InvestmentDeclarationLineForm(tenant=request.tenant),
+        "proof_form": InvestmentProofForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def investmentdeclaration_edit(request, pk):
+    obj = get_object_or_404(InvestmentDeclaration, pk=pk, tenant=request.tenant)
+    if not obj.is_editable:
+        messages.error(request, "Only a draft declaration can be edited.")
+        return redirect("hrm:investmentdeclaration_detail", pk=obj.pk)
+    return crud_edit(request, model=InvestmentDeclaration, pk=pk, form_class=InvestmentDeclarationForm,
+                     template="hrm/tax/investmentdeclaration/form.html",
+                     success_url="hrm:investmentdeclaration_list")
+
+
+@login_required
+@require_POST
+def investmentdeclaration_delete(request, pk):
+    obj = get_object_or_404(InvestmentDeclaration, pk=pk, tenant=request.tenant)
+    if not obj.is_editable:
+        messages.error(request, "Only a draft declaration can be deleted.")
+        return redirect("hrm:investmentdeclaration_detail", pk=obj.pk)
+    # TaxComputation.declaration is PROTECT — pre-check for a friendly message (mirrors paycomponent_delete).
+    if obj.tax_computations.exists():
+        messages.error(request, "This declaration has a linked tax computation and cannot be deleted.")
+        return redirect("hrm:investmentdeclaration_detail", pk=obj.pk)
+    return crud_delete(request, model=InvestmentDeclaration, pk=pk,
+                       success_url="hrm:investmentdeclaration_list")
+
+
+@login_required
+@require_POST
+def investmentdeclaration_submit(request, pk):
+    obj = get_object_or_404(InvestmentDeclaration, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "submitted"
+        obj.submitted_at = timezone.now()
+        obj.save(update_fields=["status", "submitted_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Declaration {obj.number} submitted.")
+    return redirect("hrm:investmentdeclaration_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def investmentdeclaration_lock(request, pk):
+    obj = get_object_or_404(InvestmentDeclaration, pk=pk, tenant=request.tenant)
+    if obj.status == "submitted":
+        obj.status = "locked"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "lock"})
+        messages.success(request, f"Declaration {obj.number} locked.")
+    return redirect("hrm:investmentdeclaration_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def investmentdeclarationline_create(request, declaration_pk):
+    declaration = get_object_or_404(InvestmentDeclaration, pk=declaration_pk, tenant=request.tenant)
+    if not declaration.is_editable:
+        messages.error(request, "Lines can only be added while the declaration is a draft.")
+        return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+    form = InvestmentDeclarationLineForm(
+        request.POST,
+        instance=InvestmentDeclarationLine(tenant=request.tenant, declaration=declaration),
+        tenant=request.tenant)
+    if form.is_valid():
+        try:
+            form.save()
+            write_audit_log(request.user, declaration, "update", {"action": "line_add"})
+            messages.success(request, "Declaration line added.")
+        except IntegrityError:
+            messages.error(request, "A line for that section already exists on this declaration.")
+    else:
+        messages.error(request, "; ".join(f"{k}: {v[0]}" for k, v in form.errors.items()))
+    return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+
+
+@login_required
+def investmentdeclarationline_edit(request, declaration_pk, pk):
+    declaration = get_object_or_404(InvestmentDeclaration, pk=declaration_pk, tenant=request.tenant)
+    line = get_object_or_404(InvestmentDeclarationLine, pk=pk, tenant=request.tenant, declaration=declaration)
+    if not declaration.is_editable:
+        messages.error(request, "Lines can only be edited while the declaration is a draft.")
+        return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+    if request.method == "POST":
+        form = InvestmentDeclarationLineForm(request.POST, instance=line, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, declaration, "update", {"action": "line_edit"})
+            messages.success(request, "Declaration line updated.")
+            return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+    else:
+        form = InvestmentDeclarationLineForm(instance=line, tenant=request.tenant)
+    return render(request, "hrm/tax/investmentdeclaration/line_form.html",
+                  {"form": form, "obj": line, "declaration": declaration, "is_edit": True})
+
+
+@login_required
+@require_POST
+def investmentdeclarationline_delete(request, declaration_pk, pk):
+    declaration = get_object_or_404(InvestmentDeclaration, pk=declaration_pk, tenant=request.tenant)
+    line = get_object_or_404(InvestmentDeclarationLine, pk=pk, tenant=request.tenant, declaration=declaration)
+    if not declaration.is_editable:
+        messages.error(request, "Lines can only be removed while the declaration is a draft.")
+        return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+    line.delete()
+    write_audit_log(request.user, declaration, "update", {"action": "line_delete"})
+    messages.success(request, "Declaration line removed.")
+    return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+
+
+# ------------------------------------------------------ InvestmentProof (upload + verify)
+def _proof_window_open(declaration):
+    """True when the declaration's proof window is currently open (proofs upload even after the
+    declaration itself is locked — the proof window is deliberately later than the declaration one)."""
+    today = timezone.localdate()
+    if declaration.proof_window_open and today < declaration.proof_window_open:
+        return False
+    if declaration.proof_window_close and today > declaration.proof_window_close:
+        return False
+    return True
+
+
+@login_required
+def investmentproof_upload(request, line_pk):
+    line = get_object_or_404(
+        InvestmentDeclarationLine.objects.select_related("declaration"), pk=line_pk, tenant=request.tenant)
+    declaration = line.declaration
+    # Gate on the PROOF window (not is_editable) — proofs are typically uploaded after the declaration
+    # is locked. If no window is configured, allow (draft/open by default).
+    if not _proof_window_open(declaration):
+        messages.error(request, "The proof-submission window for this declaration is not open.")
+        return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+    if request.method == "POST":
+        form = InvestmentProofForm(
+            request.POST, request.FILES,
+            instance=InvestmentProof(tenant=request.tenant, declaration_line=line),
+            tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, declaration, "update", {"action": "proof_upload"})
+            messages.success(request, "Proof uploaded.")
+            return redirect("hrm:investmentdeclaration_detail", pk=declaration.pk)
+    else:
+        form = InvestmentProofForm(tenant=request.tenant)
+    return render(request, "hrm/tax/investmentproof/form.html",
+                  {"form": form, "line": line, "declaration": declaration})
+
+
+@login_required
+def investmentproof_list(request):
+    return crud_list(
+        request,
+        InvestmentProof.objects.filter(tenant=request.tenant)
+        .select_related("declaration_line__declaration__employee__party"),
+        "hrm/tax/investmentproof/list.html",
+        search_fields=["title"],
+        filters=[("verification_status", "verification_status", False)],
+        extra_context={"verification_status_choices": InvestmentProof.VERIFICATION_STATUS_CHOICES},
+    )
+
+
+@login_required
+def investmentproof_detail(request, pk):
+    obj = get_object_or_404(
+        InvestmentProof.objects.select_related(
+            "declaration_line__declaration__employee__party", "verified_by"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/tax/investmentproof/detail.html", {"obj": obj})
+
+
+def _set_proof_status(request, pk, status, *, reason=""):
+    obj = get_object_or_404(
+        InvestmentProof.objects.select_related("declaration_line"), pk=pk, tenant=request.tenant)
+    obj.verification_status = status
+    obj.verified_by = request.user
+    obj.verified_at = timezone.now()
+    obj.rejection_reason = reason
+    obj.save(update_fields=["verification_status", "verified_by", "verified_at",
+                            "rejection_reason", "updated_at"])
+    # Roll the parent line's verified_amount up from its verified proofs.
+    obj.declaration_line.recompute_verified()
+    write_audit_log(request.user, obj, "update", {"action": f"proof_{status}"})
+    return obj
+
+
+@tenant_admin_required
+@require_POST
+def investmentproof_verify(request, pk):
+    obj = _set_proof_status(request, pk, "verified")
+    messages.success(request, "Proof verified.")
+    return redirect("hrm:investmentproof_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def investmentproof_reject(request, pk):
+    obj = _set_proof_status(request, pk, "rejected",
+                            reason=request.POST.get("rejection_reason", "").strip()[:2000])
+    messages.success(request, "Proof rejected.")
+    return redirect("hrm:investmentproof_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def investmentproof_on_hold(request, pk):
+    obj = _set_proof_status(request, pk, "on_hold",
+                            reason=request.POST.get("rejection_reason", "").strip()[:2000])
+    messages.success(request, "Proof put on hold.")
+    return redirect("hrm:investmentproof_detail", pk=obj.pk)
+
+
+# ---------------------------------------------- TaxComputation (engine + Form 16 tie-in)
+@login_required
+def taxcomputation_list(request):
+    return crud_list(
+        request,
+        TaxComputation.objects.filter(tenant=request.tenant).select_related("employee__party", "declaration"),
+        "hrm/tax/taxcomputation/list.html",
+        search_fields=["number", "employee__party__name"],
+        filters=[("financial_year", "financial_year", False),
+                 ("computation_type", "computation_type", False), ("employee", "employee_id", True)],
+        extra_context={
+            "computation_type_choices": TaxComputation.COMPUTATION_TYPE_CHOICES,
+            "employees": EmployeeProfile.objects.filter(tenant=request.tenant).select_related("party"),
+        },
+    )
+
+
+@login_required
+def taxcomputation_create(request):
+    return crud_create(request, form_class=TaxComputationForm,
+                       template="hrm/tax/taxcomputation/form.html", success_url="hrm:taxcomputation_list")
+
+
+@login_required
+def taxcomputation_detail(request, pk):
+    obj = get_object_or_404(
+        TaxComputation.objects.select_related("employee__party", "declaration", "statutory_return"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/tax/taxcomputation/detail.html", {
+        "obj": obj,
+        "breakdown": _computation_breakdown(obj),
+        "lines": obj.declaration.lines.all(),
+    })
+
+
+@login_required
+def taxcomputation_edit(request, pk):
+    return crud_edit(request, model=TaxComputation, pk=pk, form_class=TaxComputationForm,
+                     template="hrm/tax/taxcomputation/form.html", success_url="hrm:taxcomputation_list")
+
+
+@login_required
+@require_POST
+def taxcomputation_delete(request, pk):
+    return crud_delete(request, model=TaxComputation, pk=pk, success_url="hrm:taxcomputation_list")
+
+
+@tenant_admin_required
+@require_POST
+def taxcomputation_generate(request, pk):
+    """(Re)run the tax engine — mirrors statutoryreturn_generate's idempotent re-aggregate pattern."""
+    obj = get_object_or_404(TaxComputation, pk=pk, tenant=request.tenant)
+    try:
+        obj.recompute()
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("hrm:taxcomputation_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "update",
+                    {"action": "generate", "tax_payable": str(obj.tax_payable)})
+    messages.success(request,
+        f"Computed {obj.number}: tax payable {obj.tax_payable}, paid YTD {obj.tax_paid_ytd}, "
+        f"monthly TDS {obj.monthly_tds_amount}.")
+    return redirect("hrm:taxcomputation_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def taxcomputation_link_form16(request, pk):
+    obj = get_object_or_404(TaxComputation, pk=pk, tenant=request.tenant)
+    ret = obj.link_form16(request.user)
+    write_audit_log(request.user, obj, "update", {"action": "link_form16", "return": ret.number})
+    messages.success(request,
+        f"Linked Form 16 register row {ret.number} (Part A). Open Form 16 Part B for the full certificate.")
+    return redirect("hrm:taxcomputation_detail", pk=obj.pk)
+
+
+@login_required
+def form16_partb(request, pk):
+    """Form 16 Part B data/report view (PDF rendering deferred). Part A fields come from the linked
+    StatutoryReturn + StatutoryConfig; Part B from this computation + its declaration lines."""
+    obj = get_object_or_404(
+        TaxComputation.objects.select_related("employee__party", "declaration", "statutory_return"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/tax/form16_partb.html", {
+        "obj": obj,
+        "config": StatutoryConfig.objects.filter(tenant=request.tenant).first(),
+        "breakdown": _computation_breakdown(obj),
+        "lines": obj.declaration.lines.all(),
     })
