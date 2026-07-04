@@ -90,6 +90,14 @@ from apps.hrm.models import (  # 3.15 Statutory Compliance
     StatutoryReturn,
     StatutoryStateRule,
 )
+from apps.hrm.models import (  # 3.16 Tax & Investment
+    InvestmentDeclaration,
+    InvestmentDeclarationLine,
+    InvestmentProof,
+    TaxComputation,
+    TaxRegimeConfig,
+    TaxSlabBand,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -207,6 +215,7 @@ class Command(BaseCommand):
             self._seed_salary(tenant, flush=options["flush"])
             self._seed_payroll(tenant, flush=options["flush"])
             self._seed_statutory(tenant, flush=options["flush"])
+            self._seed_tax(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -218,7 +227,11 @@ class Command(BaseCommand):
             # 3.12: elections FK holiday/policy/employee; policies FK/M2M holiday/designation — wipe first.
             # 3.14: Payslip.employee is PROTECT, so payslips must be wiped before EmployeeProfile below.
             # 3.15: statutory returns/identifiers FK PayrollCycle/EmployeeProfile — wipe them first.
-            for model in (StatutoryReturn, EmployeeStatutoryIdentifier, StatutoryStateRule,
+            # 3.16: tax computations/declarations FK EmployeeProfile (PROTECT) + StatutoryReturn — wipe
+            # BEFORE the statutory + employee rows below.
+            for model in (TaxComputation, InvestmentProof, InvestmentDeclarationLine,
+                          InvestmentDeclaration, TaxSlabBand, TaxRegimeConfig,
+                          StatutoryReturn, EmployeeStatutoryIdentifier, StatutoryStateRule,
                           StatutoryConfig,
                           PayslipLine, Payslip, PayrollCycle,
                           FloatingHolidayElection, HolidayPolicy,
@@ -1535,3 +1548,94 @@ class Command(BaseCommand):
             f"{StatutoryStateRule.objects.filter(tenant=tenant).count()} state rules, "
             f"{EmployeeStatutoryIdentifier.objects.filter(tenant=tenant).count()} identifier(s), "
             f"{StatutoryReturn.objects.filter(tenant=tenant).count()} return ({ret_number})."))
+
+    def _seed_tax(self, tenant, *, flush):
+        """3.16 Tax & Investment — 2 FY-2025-26 TaxRegimeConfigs (new + old) with their slab bands, an
+        InvestmentDeclaration (old regime, to demonstrate deductions) + 80C/HRA lines + a verified proof,
+        and a generated + Form-16-linked TaxComputation. Runs AFTER _seed_statutory (Form-16 linkage
+        needs the StatutoryReturn/StatutoryConfig rows; the TDS-YTD aggregation needs PayslipLine rows)."""
+        if flush:
+            # Children first: computations → proofs → lines → declarations → slab bands → configs.
+            TaxComputation.objects.filter(tenant=tenant).delete()
+            InvestmentProof.objects.filter(tenant=tenant).delete()
+            InvestmentDeclarationLine.objects.filter(tenant=tenant).delete()
+            InvestmentDeclaration.objects.filter(tenant=tenant).delete()
+            TaxSlabBand.objects.filter(tenant=tenant).delete()
+            TaxRegimeConfig.objects.filter(tenant=tenant).delete()
+        if TaxRegimeConfig.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Tax & Investment data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        fy = "2025-26"
+        new_cfg = TaxRegimeConfig.objects.create(
+            tenant=tenant, financial_year=fy, regime="new",
+            standard_deduction=Decimal("75000.00"), cess_rate=Decimal("4.00"),
+            rebate_income_threshold=Decimal("1200000.00"), rebate_max_tax=Decimal("60000.00"),
+            is_default_regime=True,
+            tax_law_reference="FY 2025-26 Finance Act rates; Income Tax Act 2025 section renumbering pending.")
+        new_bands = [(0, 400000, 0), (400000, 800000, 5), (800000, 1200000, 10),
+                     (1200000, 1600000, 15), (1600000, 2000000, 20), (2000000, 2400000, 25),
+                     (2400000, None, 30)]
+        for i, (lo, hi, rate) in enumerate(new_bands, start=1):
+            TaxSlabBand.objects.create(
+                tenant=tenant, config=new_cfg, income_from=Decimal(lo),
+                income_to=(Decimal(hi) if hi is not None else None), rate_percent=Decimal(rate), sequence=i)
+
+        old_cfg = TaxRegimeConfig.objects.create(
+            tenant=tenant, financial_year=fy, regime="old",
+            standard_deduction=Decimal("50000.00"), cess_rate=Decimal("4.00"),
+            rebate_income_threshold=Decimal("500000.00"), rebate_max_tax=Decimal("12500.00"),
+            is_default_regime=False)
+        old_bands = [(0, 250000, 0), (250000, 500000, 5), (500000, 1000000, 20), (1000000, None, 30)]
+        for i, (lo, hi, rate) in enumerate(old_bands, start=1):
+            TaxSlabBand.objects.create(
+                tenant=tenant, config=old_cfg, income_from=Decimal(lo),
+                income_to=(Decimal(hi) if hi is not None else None), rate_percent=Decimal(rate), sequence=i)
+
+        # An employee with an active salary structure (from _seed_salary/_seed_payroll).
+        struct = (EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+                  .select_related("employee__party").order_by("id").first())
+        comp_number = "—"
+        if struct is not None:
+            emp = struct.employee
+            today = timezone.localdate()
+            # A mid-year-joiner demo (previous_employer_income) so the computation produces a real,
+            # hand-verifiable tax figure rather than 0 on the low demo CTC.
+            decl = InvestmentDeclaration.objects.create(
+                tenant=tenant, employee=emp, financial_year=fy, regime_elected="old",
+                status="submitted",
+                declaration_window_open=datetime.date(2025, 4, 1),
+                declaration_window_close=datetime.date(2025, 6, 30),
+                proof_window_open=datetime.date(2025, 12, 1),
+                proof_window_close=datetime.date(2026, 2, 28),
+                previous_employer_income=Decimal("800000.00"), previous_employer_tds=Decimal("0.00"),
+                notes="Demo declaration (mid-year joiner).")
+            line_80c = InvestmentDeclarationLine.objects.create(
+                tenant=tenant, declaration=decl, section_code="80c", declared_amount=Decimal("150000.00"))
+            InvestmentDeclarationLine.objects.create(
+                tenant=tenant, declaration=decl, section_code="hra", declared_amount=Decimal("0.00"),
+                monthly_rent_amount=Decimal("15000.00"), is_metro_city=True)
+            # A verified 80C proof (file left blank — demo placeholder; the workflow is what's shown).
+            admin_user = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+            InvestmentProof.objects.create(
+                tenant=tenant, declaration_line=line_80c, file="", title="LIC Premium Receipt",
+                amount=Decimal("150000.00"), verification_status="verified",
+                verified_by=admin_user, verified_at=timezone.now())
+            line_80c.verified_amount = Decimal("150000.00")
+            line_80c.save(update_fields=["verified_amount"])
+
+            comp = TaxComputation.objects.create(
+                tenant=tenant, employee=emp, declaration=decl, financial_year=fy,
+                computation_type="final", remaining_pay_periods=6)
+            comp.recompute()
+            comp.link_form16()
+            comp_number = f"{comp.number} -> {comp.tax_payable} payable"
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Tax & Investment seeded for '{tenant.name}': "
+            f"{TaxRegimeConfig.objects.filter(tenant=tenant).count()} regime configs "
+            f"({TaxSlabBand.objects.filter(tenant=tenant).count()} slab bands), "
+            f"{InvestmentDeclaration.objects.filter(tenant=tenant).count()} declaration, "
+            f"{InvestmentProof.objects.filter(tenant=tenant).count()} proof, "
+            f"{TaxComputation.objects.filter(tenant=tenant).count()} computation ({comp_number})."))
