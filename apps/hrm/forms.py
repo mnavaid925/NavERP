@@ -107,6 +107,14 @@ from .models import (  # noqa: E402  — 3.15 Statutory Compliance
     StatutoryReturn,
     StatutoryStateRule,
 )
+from .models import (  # noqa: E402  — 3.16 Tax & Investment
+    InvestmentDeclaration,
+    InvestmentDeclarationLine,
+    InvestmentProof,
+    TaxComputation,
+    TaxRegimeConfig,
+    TaxSlabBand,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1259,3 +1267,90 @@ class StatutoryReturnForm(TenantModelForm):
                 raise forms.ValidationError(
                     "A statutory return for this scheme, period start and employee already exists.")
         return cleaned
+
+
+# ----------------------------------------------------------------------- 3.16 Tax & Investment
+class TaxRegimeConfigForm(TenantModelForm):
+    class Meta:
+        model = TaxRegimeConfig
+        fields = ["financial_year", "regime", "standard_deduction", "cess_rate",
+                  "rebate_income_threshold", "rebate_max_tax", "is_default_regime", "tax_law_reference"]
+
+
+class TaxSlabBandForm(TenantModelForm):
+    # config is set from the parent config in the inline-management view, never a free-choice dropdown.
+    class Meta:
+        model = TaxSlabBand
+        fields = ["income_from", "income_to", "rate_percent", "sequence"]
+
+
+class InvestmentDeclarationForm(TenantModelForm):
+    # number / status / submitted_at are workflow-owned (submit/lock actions), never form fields.
+    class Meta:
+        model = InvestmentDeclaration
+        fields = ["employee", "financial_year", "regime_elected", "declaration_window_open",
+                  "declaration_window_close", "proof_window_open", "proof_window_close",
+                  "previous_employer_income", "previous_employer_tds", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "employee" in self.fields:
+            self.fields["employee"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant)
+                .select_related("party").order_by("party__name"))
+
+
+class InvestmentDeclarationLineForm(TenantModelForm):
+    # declaration is set from the parent in the inline view; verified_amount is proof-derived.
+    class Meta:
+        model = InvestmentDeclarationLine
+        fields = ["section_code", "declared_amount", "monthly_rent_amount", "is_metro_city",
+                  "landlord_pan", "lender_name", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+
+class InvestmentProofForm(TenantModelForm):
+    # verification_status / verified_by / verified_at / rejection_reason are workflow-owned — set only
+    # by the verify/reject/on_hold POST actions, never on this upload form.
+    class Meta:
+        model = InvestmentProof
+        fields = ["file", "title", "amount", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+    def clean_file(self):
+        # Reuse the shared extension+size guard (docs/images, 10 MB), mirroring EmployeeDocumentForm.
+        return _validate_upload(self.cleaned_data.get("file"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Proof")
+
+
+class TaxComputationForm(TenantModelForm):
+    # number + all derived (tax_payable/tax_paid_ytd/monthly_tds_amount) + statutory_return/computed_at
+    # are set by recompute()/link_form16(), never form-typed.
+    class Meta:
+        model = TaxComputation
+        fields = ["employee", "declaration", "computation_type", "manual_override_amount",
+                  "override_reason", "remaining_pay_periods", "notes"]
+        widgets = {
+            "override_reason": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "employee" in self.fields:
+                self.fields["employee"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "declaration" in self.fields:
+                self.fields["declaration"].queryset = (
+                    InvestmentDeclaration.objects.filter(tenant=self.tenant)
+                    .select_related("employee__party").order_by("-financial_year"))
