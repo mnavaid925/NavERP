@@ -5802,6 +5802,12 @@ def employeesalarystructure_detail(request, pk):
 
 @login_required
 def employeesalarystructure_edit(request, pk):
+    obj = get_object_or_404(EmployeeSalaryStructure, pk=pk, tenant=request.tenant)
+    # A superseded (historical) assignment is read-only — compensation history must not be silently
+    # rewritten via a direct POST (a payroll run may depend on it). Only the active one is editable.
+    if obj.status == "superseded":
+        messages.error(request, "A superseded salary assignment is read-only history and cannot be edited.")
+        return redirect("hrm:employeesalarystructure_detail", pk=obj.pk)
     return crud_edit(request, model=EmployeeSalaryStructure, pk=pk, form_class=EmployeeSalaryStructureForm,
                      template="hrm/salary/employeesalarystructure/form.html",
                      success_url="hrm:employeesalarystructure_list")
@@ -5810,5 +5816,9 @@ def employeesalarystructure_edit(request, pk):
 @login_required
 @require_POST
 def employeesalarystructure_delete(request, pk):
+    obj = get_object_or_404(EmployeeSalaryStructure, pk=pk, tenant=request.tenant)
+    if obj.status == "superseded":
+        messages.error(request, "A superseded salary assignment is read-only history and cannot be deleted.")
+        return redirect("hrm:employeesalarystructure_detail", pk=obj.pk)
     return crud_delete(request, model=EmployeeSalaryStructure, pk=pk,
                        success_url="hrm:employeesalarystructure_list")
