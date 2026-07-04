@@ -1,6 +1,6 @@
 ---
 name: hrm
-description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays (calendar + floating-holiday elections + location/eligibility policies), 3.13 salary structure (pay-component catalog [earnings/statutory/reimbursement/variable], grade-wise CTC structure templates with an inline breakdown, effective-dated employee salary assignments — definition layer only; payroll run/posting stays in accounting.PayrollRun), 3.14 payroll processing (operational payroll run: computes per-employee payslips from the 3.13 salary structures, a draft->pending->approved/rejected->locked approval workflow, salary holds, arrears/bonus, and on lock hands the rolled-up totals to accounting.PayrollRun for GL posting — HRM builds no JournalEntry), 3.15 statutory compliance (Indian PF/ESI/PT/TDS/LWF compliance layer over payroll: a StatutoryConfig tenant settings singleton [employer codes/wage ceilings/rates/TAN/PAN], state-wise StatutoryStateRule PT slabs + LWF rules, per-employee EmployeeStatutoryIdentifier [UAN/PF/ESI, masked in the UI], and a StatutoryReturn [SCR-] per-scheme/period register aggregated from PayslipLine with a pending->filed->paid/late filing workflow + compliance calendar — touches no GL)). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15), or invokes /hrm.
+description: Work on the HRM module (Module 3 — 3.1 employees, 3.2 designations/org structure, 3.3 employee onboarding, 3.4 employee offboarding, 3.5 job requisition, 3.6 candidate management (ATS: candidates/applications/talent-pool tags/recruiting email templates + a public career portal), 3.7 interview process (interview scheduling/panel/RSVP + structured feedback scorecards + candidate invites/reminders), 3.8 offer management (offer letter generation + multi-step approval + tracking + background verification + pre-boarding over the JobApplication spine), 3.9 attendance/shifts (check-in/out, shifts + assignments, geofencing GPS zones, attendance regularization approval workflow), 3.10 leave management (types + policy engine [accrual/carry-forward runs], balance/allocations, applications, encashment payout workflow), 3.11 time tracking (weekly timesheets with inline entries + derived hours, project time against accounting.Project, billable/utilization + project-time reports, overtime requests, approval workflow), 3.12 holidays (calendar + floating-holiday elections + location/eligibility policies), 3.13 salary structure (pay-component catalog [earnings/statutory/reimbursement/variable], grade-wise CTC structure templates with an inline breakdown, effective-dated employee salary assignments — definition layer only; payroll run/posting stays in accounting.PayrollRun), 3.14 payroll processing (operational payroll run: computes per-employee payslips from the 3.13 salary structures, a draft->pending->approved/rejected->locked approval workflow, salary holds, arrears/bonus, and on lock hands the rolled-up totals to accounting.PayrollRun for GL posting — HRM builds no JournalEntry), 3.15 statutory compliance (Indian PF/ESI/PT/TDS/LWF compliance layer over payroll: a StatutoryConfig tenant settings singleton [employer codes/wage ceilings/rates/TAN/PAN], state-wise StatutoryStateRule PT slabs + LWF rules, per-employee EmployeeStatutoryIdentifier [UAN/PF/ESI, masked in the UI], and a StatutoryReturn [SCR-] per-scheme/period register aggregated from PayslipLine with a pending->filed->paid/late filing workflow + compliance calendar — touches no GL), 3.16 tax & investment (India income-tax declaration + computation engine: TaxRegimeConfig+TaxSlabBand old/new slabs, InvestmentDeclaration [ITD-] with 80C/80D/HRA section lines + InvestmentProof uploads/verification, and a TaxComputation [TXC-] recompute() engine [progressive slabs + 87A rebate + cess + HRA exemption + section caps + TDS-YTD from PayslipLine + monthly spread] with old-vs-new regime comparison and a Form 16 Part B report reusing StatutoryReturn(tds_form16) — posts no GL)). Use when the user asks to add/change/debug anything under apps/hrm or templates/hrm, extend the seed_hrm seeder, touch HRM sidebar wiring (LIVE_LINKS 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16), or invokes /hrm.
 ---
 
 # HRM — Human Resource Management (Module 3)
@@ -10,7 +10,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.3 Employee Onboarding, 3.4 Employee Offboarding, 3.5 Job Requisition, 3.6 Candidate Management,
 3.7 Interview Process, 3.8 Offer Management, 3.9 Attendance Management, 3.10 Leave Management,
 3.11 Time Tracking, 3.12 Holiday Management, 3.13 Salary Structure, 3.14 Payroll Processing,
-3.15 Statutory Compliance.** Reuses the
+3.15 Statutory Compliance, 3.16 Tax & Investment.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -19,7 +19,7 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 53 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management + 4 statutory-compliance)
+## Models (`apps/hrm/models.py`) — 59 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management + 4 statutory-compliance + 6 tax-investment)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -161,6 +161,19 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
 
 **Statutory flow:** configure once via `StatutoryConfig` (tenant-admin) → optionally add `StatutoryStateRule` PT slabs / LWF rows per state → set each employee's `EmployeeStatutoryIdentifier` (UAN/PF/ESI) → create a `StatutoryReturn` (scheme + period, optional cycle) → **Generate** (`@tenant_admin_required`; `recompute()` rolls up the period's `PayslipLine` totals — the seeded PF return shows employer ≈ Σ employer-PF lines) → **Mark Filed** (pending→filed) → **Mark Paid** (filed/pending→paid; **paying after due_date auto-flags `late`**). The **compliance calendar** (`statutory_compliance_calendar`) is a read-only cross-scheme view grouping returns into Overdue/Pending/Filed/Settled. Edit/delete/generate are **pending-only** (`is_locked` guard). Reuses `EmployeeProfile`/`PayrollCycle`/`PayslipLine`/`PayComponent`; **touches no `accounting.PayrollRun`/`JournalEntry`** (no GL path). **Deferred:** ECR/ESIC file-format + portal upload, TRACES/challan matching, Form 16/24Q PDF rendering, AI pre-filing error detection, rate-change alerting, and a per-`PayslipLine` scheme tag (to replace the v1 component_name-substring match).
 
+### 3.16 Tax & Investment (6 tables) — India income-tax declaration + computation engine over 3.13/3.14/3.15; Form 16 reuses `StatutoryReturn(tds_form16)` (no new Form 16 table)
+
+| Model | Prefix | Key fields | Notes |
+|---|---|---|---|
+| `TaxRegimeConfig` (3.16) | — | financial_year, regime(old/new), standard_deduction(75k new/50k old), cess_rate(4), rebate_income_threshold + rebate_max_tax (Section 87A), is_default_regime, tax_law_reference | Per-(tenant, FY, regime) rate master. `unique_together(tenant, financial_year, regime)`. Its `slab_bands` are the bracket table the engine walks. |
+| `TaxSlabBand` (3.16) | — | config FK, income_from, income_to(null=top band), rate_percent, sequence | Child of `TaxRegimeConfig` — the progressive slab table. `clean()` income_to≥income_from. Managed **inline** on the config detail (like `SalaryStructureLine`). |
+| `InvestmentDeclaration` (3.16) | `ITD-` | employee FK(PROTECT), financial_year, regime_elected(old/new, default new), status(draft/submitted/locked), declaration_window_open/close, proof_window_open/close, previous_employer_income/tds, submitted_at(editable=False) | Per-employee-per-FY declaration header. `is_editable`=status draft. `unique_together(tenant, employee, financial_year)`. Submit(→submitted)/Lock(→locked, tenant-admin) freezes the lines. |
+| `InvestmentDeclarationLine` (3.16) | — | declaration FK, section_code(80c/80d/80d_parents/hra/24b_home_loan_interest/80ccd_1b_nps/lta/80e_education_loan/other_chapter_via), declared_amount, verified_amount(editable=False), HRA sub-fields(monthly_rent_amount/is_metro_city/landlord_pan), lender_name(24b) | Section-wise declared vs verified breakdown. `effective_amount`=verified-else-declared. `recompute_verified()` sums the line's `verified` proofs. `unique_together(tenant, declaration, section_code)`. Managed **inline** on the declaration detail (draft-only). |
+| `InvestmentProof` (3.16) | — | declaration_line FK, file(FileField, `_validate_upload` guard), title, amount, verification_status(pending/verified/rejected/on_hold, editable=False), verified_by/verified_at(editable=False), rejection_reason | Uploaded proof + 4-state verify workflow (mirrors `EmployeeDocument`). Verify/reject/on_hold `@tenant_admin_required`, only from pending/on_hold (terminal-state guard); rolls up the line's `verified_amount`. |
+| `TaxComputation` (3.16) | `TXC-` | employee FK(PROTECT), declaration FK(PROTECT), financial_year, computation_type(provisional/final), manual_override_amount/override_reason, remaining_pay_periods, **tax_payable/tax_paid_ytd/monthly_tds_amount (editable=False, derived)**, statutory_return FK→`StatutoryReturn`(SET_NULL, editable=False), computed_at | The **engine**. `save()` derives financial_year from the declaration (form excludes it). `recompute()`: `_progressive_tax` slab-walk → 87A rebate → 4% cess; HRA 3-way min; `_chapter_via` regime-filtered (new keeps only `NEW_REGIME_ALLOWED_SECTIONS`={80ccd_1b_nps}) + `SECTION_CAPS`(80c 1.5L/NPS 50k/24b 2L, surfaced via `capped_sections`); `tax_paid_ytd` aggregates TDS `PayslipLine`s over the FY (reuses 3.15 `SCHEME_KEYWORDS["tds_24q"]`); `monthly_tds_amount`=(payable−paid)/periods or override. Derived props (`gross_annual_income`/`hra_exemption`/`taxable_income_old/_new`/`tax_old_regime/_new`/`cheaper_regime`) are memoized via a per-instance `_engine_cache` (~9 queries/detail, not 60). `final` requires proof_window_close passed. `link_form16()` update_or_creates the `StatutoryReturn(tds_form16)` row per (tenant,employee,FY-start). `unique_together(tenant, employee, financial_year)`, recomputed in place. |
+
+**Tax flow:** set up `TaxRegimeConfig` (old + new) with `TaxSlabBand`s per FY → create an `InvestmentDeclaration` for an employee/FY, add 80C/80D/HRA/… `InvestmentDeclarationLine`s (draft) → **Submit** → **Lock** (tenant-admin; lines immutable) → employees upload `InvestmentProof`s (gated on the **proof window**, not is_editable) → tenant-admin **Verify/Reject/On-Hold** (rolls up `verified_amount`) → create a `TaxComputation` (employee+declaration; FY auto-derived), **Generate** (`recompute()`; the seeded demo shows **52520 old vs 0 new** via 87A) → **Link Form 16** (`link_form16()` → the `tds_form16` `StatutoryReturn`) → view **Form 16 Part B** (`form16_partb` report) + the **regime comparison** (`tax_regime_comparison`, old-vs-new + savings). `TaxComputationForm.clean()` guards employee/declaration mismatch + the (tenant,employee,FY) duplicate; `investmentdeclarationline_create` wraps save in a `transaction.atomic()` savepoint (friendly duplicate-section redirect). Reuses `EmployeeProfile`/`EmployeeSalaryStructure`/`PayslipLine`/`StatutoryConfig`/`StatutoryReturn`; **posts no GL**. **Deferred:** Form 16/16A PDF+merge+email, TRACES, bulk declaration import, AI anomaly detection, auto regime-lock, instrument-level 80C sub-ledger, a per-`PayslipLine` scheme tag, and a slab-band gap/overlap validation.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -206,6 +219,15 @@ Interviews hang off the **already-built 3.6 `JobApplication`** (candidate + requ
   period's `PayslipLine` totals via `StatutoryReturn.recompute()`, mark_paid after due_date auto-sets `late`;
   edit/delete/generate are pending-only (`is_locked`). `hrm:statutory_compliance_calendar` is a read-only grouped
   overview. Return list scheme deep-links: `?scheme=pf|esi|pt|tds_24q|lwf`.
+- **Tax & Investment (3.16):** `hrm:taxregimeconfig_*` CRUD + inline slab bands (`taxslabband_create/edit/delete`,
+  config-scoped, like 3.13's `salarystructureline_*`) + `tax_regime_comparison` (read). `hrm:investmentdeclaration_*`
+  CRUD + `_submit` (draft→submitted) / `_lock` (`@tenant_admin_required`, →locked) + inline
+  `investmentdeclarationline_*` (declaration-scoped, gated by `is_editable`; `_create` wraps save in an atomic
+  savepoint for the friendly duplicate-section redirect). `hrm:investmentproof_upload` (line-scoped, gated on the
+  **proof window** not is_editable) + `_verify`/`_reject`/`_on_hold` (POST, `@tenant_admin_required`, pending/on_hold
+  only, roll up the line's `verified_amount`). `hrm:taxcomputation_*` CRUD + `_generate` (recompute) / `_link_form16`
+  (both `@tenant_admin_required`) + `form16_partb` (read report). All privileged buttons are `is_superuser or
+  is_tenant_admin`-gated in the templates.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -378,7 +400,8 @@ standalone printable `offer/offer_letter.html` [does NOT extend base.html; mirro
 `holiday/` (3.12 — `publicholiday/ holidaypolicy/ floatingholidayelection/`),
 `salary/` (3.13 — `paycomponent/ salarystructuretemplate/ [+ inline line managed on its detail + a standalone line_form.html] employeesalarystructure/`),
 `payroll/` (3.14 — `payrollcycle/ payslip/`; the cycle detail is the workflow hub, the payslip detail shows the breakdown + hold/release),
-`statutory/` (3.15 — `statutoryconfig/ statutorystaterule/ employeestatutoryidentifier/ statutoryreturn/` + the standalone `compliance_calendar.html` at the `statutory/` root; the return detail is the generate/file/pay workflow hub; the identifier list+detail render **masked** UAN/PF/ESI). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
+`statutory/` (3.15 — `statutoryconfig/ statutorystaterule/ employeestatutoryidentifier/ statutoryreturn/` + the standalone `compliance_calendar.html` at the `statutory/` root; the return detail is the generate/file/pay workflow hub; the identifier list+detail render **masked** UAN/PF/ESI),
+`tax/` (3.16 — `taxregimeconfig/` [+ inline slab bands, `band_form.html`], `investmentdeclaration/` [+ inline lines, `line_form.html`; detail = submit/lock hub + section-lines + proofs tables], `investmentproof/` [detail = verify/reject/on_hold hub; `form.html` = multipart upload], `taxcomputation/` [detail = old-vs-new breakdown + generate/link-form16 actions] + the standalone `regime_comparison.html` and `form16_partb.html` at the `tax/` root; form16_partb renders the PAN **masked**). The landing `hrm_overview.html` stays at the `templates/hrm/` root. A view
 renders e.g. `"hrm/onboarding/document/list.html"`, `"hrm/leave/request/list.html"`,
 `"hrm/attendance/record/list.html"`. Extend `base.html`, use the design-system classes
 (`page-header/card/table/badge/form-*/empty-state`), `partials/pagination.html`. Conventions: search `q` + filter
@@ -511,6 +534,13 @@ central `_seed_tenant` flush before `EmployeeProfile`): creates **1 `StatutoryCo
 `StatutoryStateRule`s** (2 PT slabs + 1 half-yearly LWF), an `EmployeeStatutoryIdentifier` **per employee**, and
 **generates 1 PF `StatutoryReturn`** (`SCR-00001`) over the 3.14 cycle (employer ≈ 1,800 across 3 heads). Runs
 **after** `_seed_payroll` (needs its PayslipLine rows).
+**Tax & Investment (3.16)** is seeded by `_seed_tax(tenant)` (own `TaxRegimeConfig.exists()` guard; children-first
+flush TaxComputation→InvestmentProof→InvestmentDeclarationLine→InvestmentDeclaration→TaxSlabBand→TaxRegimeConfig —
+also in the central `_seed_tenant` flush before `EmployeeProfile`): creates **2 FY-2025-26 `TaxRegimeConfig`s**
+(new + old, **11 `TaxSlabBand`s**), an old-regime **`InvestmentDeclaration`** (mid-year joiner, previous_employer_income
+800k) + **80C/HRA lines** + a **verified `InvestmentProof`**, and a generated + Form-16-linked **`TaxComputation`**
+(`TXC-00001`, hand-verified **52520 old / 0 new** via 87A). Runs **after** `_seed_statutory` (Form 16 links its
+`StatutoryReturn(tds_form16)`; TDS-YTD needs PayslipLine rows).
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -570,6 +600,10 @@ tenant and sees nothing.
   surface); + Statutory Configuration → `hrm:statutoryconfig_detail`, Statutory Identifiers →
   `hrm:employeestatutoryidentifier_list`, Compliance Calendar → `hrm:statutory_compliance_calendar` (extras). All
   5 NavERP.md 3.15 bullets are now live.
+- 3.16: Tax Regime → `hrm:taxregimeconfig_list`; Investment Declaration → `hrm:investmentdeclaration_list`;
+  Investment Proof → `hrm:investmentproof_list?verification_status=pending`; Tax Computation + Form 16 Generation →
+  `hrm:taxcomputation_list` (Form 16 has no standalone model — the computation detail links to the `form16_partb`
+  report); + Regime Comparison → `hrm:tax_regime_comparison` (extra). All 5 NavERP.md 3.16 bullets are now live.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -648,6 +682,15 @@ richer calendar-grid UI; multi-country/non-India schemes; Gratuity/Bonus Act com
 **per-`PayslipLine` scheme tag** to replace the v1 `SCHEME_KEYWORDS` `component_name`-substring match in
 `StatutoryReturn.recompute()` (a proper scheme FK/choice on `PayslipLine` would require a 3.14 model change, deferred
 to avoid touching an already-shipped/tested model).
+**3.16 Tax & Investment deferrals:** Form 16 / 16A / Part-A+B PDF rendering + merge + email (v1 `form16_partb.html`
+is a data/report view only); TRACES portal integration (the government-issued Part A file/zip); Form 16A
+(non-salary/vendor TDS — belongs to AP, not HRM); bulk Excel import of declarations (v1 is manual per-employee, incl.
+HR-on-behalf); AI anomaly detection on declarations; automatic regime-lock tied to the first payroll run (v1 gates via
+`InvestmentDeclaration.status`); a full instrument-level 80C sub-ledger (v1 collapses to one number per section);
+non-India / multi-country tax regimes; exact Income Tax Act 2025 section-renumbering adoption (modeled defensively via
+descriptive `section_code` + `TaxRegimeConfig.tax_law_reference`); a **`TaxSlabBand` gap/overlap validation** (v1
+`clean()` only checks a single band's income_to≥income_from, not table contiguity — awkward with incremental inline
+adds); and the shared `PayslipLine` scheme tag noted above (reused by `TaxComputation._tds_paid_ytd`'s TDS keyword match).
 **3.1 employee-records deferrals:** lifecycle event → `core.Employment`/`EmployeeProfile` auto-sync (v1 records the
 timeline only), document expiry email/push reminders (needs Celery/SMTP), normalized `EmployeeAddress` table (v1 is
 free-text), OCR/AI document extraction + e-signature on personnel docs, `work_location` FK→`core.OrgUnit(branch)`.
