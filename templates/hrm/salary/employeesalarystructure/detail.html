@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Salary Assignment · {{ obj.employee.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employeesalarystructure_list' %}">Employee Salary</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:employeesalarystructure_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:employeesalarystructure_delete' obj.pk %}" onsubmit="return confirm('Delete this assignment?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Structure</dt><dd>{% if obj.template %}<a href="{% url 'hrm:salarystructuretemplate_detail' obj.template.pk %}">{{ obj.template.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Annual CTC</dt><dd class="fw-600">{{ obj.annual_ctc_amount }}</dd></div>
+      <div class="detail-item"><dt>Effective From</dt><dd>{{ obj.effective_from }}</dd></div>
+      <div class="detail-item"><dt>Effective To</dt><dd>{{ obj.effective_to|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <a href="{% url 'hrm:employeesalarystructure_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
