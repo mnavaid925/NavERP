@@ -588,3 +588,605 @@ recompute, IDOR→404, filters, sidebar Live.
 (leaverequest, floatingholidayelection); tenant-admin gate on sensitive HRM writes (carried from 3.13).
 
 **Next:** 3.15 Statutory Compliance (PF/ESI/PT/TDS challans & returns over the payroll runs).
+
+---
+# Module 3 — HRM — Sub-module 3.15 Statutory Compliance (statutory-compliance) — plan from research-statutory-compliance.md (2026-07-04)
+
+**Context.** Extends the existing `apps/hrm` app — NOT a new app. Builds the **compliance/reporting/
+configuration** layer on top of 3.13 (`PayComponent`/`SalaryStructureTemplate`) and 3.14
+(`PayrollCycle`/`Payslip`/`PayslipLine`). This is explicitly NOT a second payroll engine — it does not
+recompute or re-store per-employee statutory amounts (those already live on `PayslipLine`); it adds
+tenant-wide registration/config, state-wise PT+LWF slab rules, per-employee government identifiers
+(UAN/PF/ESI numbers), and a shared per-scheme/per-period return/challan-tracking record that
+**aggregates already-computed `PayslipLine` totals** — mirroring `PayrollCycle._totals()`'s
+aggregate-and-cache convention and `payrollcycle_lock`'s employee-tax/employer-tax roll-up query. 4 new
+models, all in `apps/hrm/models.py`. Money still posts only through `accounting.PayrollRun`/
+`JournalEntry` (L29) — this sub-module never touches either.
+
+NavERP.md 3.15 bullets (exact text, all 5 go Live this pass):
+- PF Management — PF calculation, challan, returns.
+- ESI Management — ESI calculation, contributions.
+- PT Management — Professional tax, state-wise rules.
+- TDS Management — Tax calculation, Form 16, quarterly returns.
+- LWF Management — Labour welfare fund.
+
+Reuses (no duplication): `hrm.EmployeeProfile` (incl. `national_id`/`national_id_type` for PAN,
+`employee_type`), `hrm.PayrollCycle`, `hrm.Payslip`/`PayslipLine` (`component_type`,
+`contribution_side`, `amount`), `hrm.PayComponent`, `settings.AUTH_USER_MODEL` (audit only via
+`write_audit_log`). Never touches `accounting.PayrollRun`/`JournalEntry` — this sub-module builds no
+GL-posting path (L29).
+
+## A. Models + migration (`apps/hrm/models.py`)
+
+- [ ] `StatutoryConfig(TenantOwned)` — tenant-wide settings singleton, no numeric prefix (drivers: Zoho
+      Payroll's single Statutory Components screen; RazorpayX registration management; greytHR/ClearTax
+      Form 16 TAN config):
+  - [ ] `pf_establishment_code` — CharField(max_length=50, blank=True) — PF Management (Zoho: PF
+        establishment code)
+  - [ ] `pf_wage_ceiling` — DecimalField(max_digits=12, decimal_places=2, default=Decimal("15000.00"))
+        — PF Management (Zoho: ₹15,000 Basic+DA ceiling)
+  - [ ] `pf_employee_rate` — DecimalField(max_digits=5, decimal_places=2, default=Decimal("12.00")) —
+        PF Management
+  - [ ] `pf_employer_rate` — DecimalField(max_digits=5, decimal_places=2, default=Decimal("12.00")) —
+        PF Management
+  - [ ] `esi_employer_code` — CharField(max_length=50, blank=True) — ESI Management (Zoho: ESI number)
+  - [ ] `esi_wage_ceiling` — DecimalField(max_digits=12, decimal_places=2, default=Decimal("21000.00"))
+        — ESI Management (Zoho: ₹21,000 gross ceiling)
+  - [ ] `esi_employee_rate` — DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.75")) —
+        ESI Management
+  - [ ] `esi_employer_rate` — DecimalField(max_digits=5, decimal_places=2, default=Decimal("3.25")) —
+        ESI Management
+  - [ ] `pt_default_state` — CharField(max_length=50, choices=`INDIAN_STATE_CHOICES`, blank=True) — PT
+        Management fallback when an employee's own `pt_state` can't be resolved
+  - [ ] `tan_number` — CharField(max_length=20, blank=True) — TDS Management (employer TAN, mandatory
+        on Form 24Q/16, distinct from PAN)
+  - [ ] `tds_circle_address` — TextField(blank=True) — TDS Management (greytHR Form 16 config: TDS
+        circle address)
+  - [ ] `pan_of_deductor` — CharField(max_length=10, blank=True) — TDS Management (the employer's own
+        PAN, distinct from `EmployeeProfile.national_id` which is the *employee's* PAN)
+  - [ ] `is_lwf_applicable` — BooleanField(default=False) — LWF Management, org-wide master switch
+        (per-state detail lives on `StatutoryStateRule`)
+  - [ ] `tenant` — override the inherited FK to add `unique=True` (one row per tenant, settings-object
+        pattern — `tenant = models.OneToOneField("core.Tenant", on_delete=models.CASCADE,
+        related_name="hrm_statutory_config")` instead of `TenantOwned`'s plain FK; keep
+        `created_at`/`updated_at` via the same mixin)
+  - [ ] `class Meta`: no numeric prefix, no `unique_together` beyond the OneToOne
+  - [ ] `__str__` → `f"Statutory Config · {self.tenant.name}"`
+  - [ ] get-or-create helper: a small `StatutoryConfig.for_tenant(tenant)` classmethod wrapping
+        `StatutoryConfig.objects.get_or_create(tenant=tenant)` so every view/seeder call-site is
+        consistent (avoid repeating the get_or_create kwargs inline everywhere)
+
+- [ ] `StatutoryStateRule(TenantOwned)` — state-wise PT + LWF slab/rate table, one shared table for
+      both state-scoped schemes (drivers: greytHR's editable state-wise PT slab grid; Zimyo/ClearTax/
+      saral PayPack LWF state-applicability + periodicity + amount pattern):
+  - [ ] `state` — CharField(max_length=50, choices=`INDIAN_STATE_CHOICES`) — a plain choices list of
+        India's states/UTs (define `INDIAN_STATE_CHOICES` once near the top of the statutory model
+        block, reused by `StatutoryConfig.pt_default_state` and `EmployeeStatutoryIdentifier.pt_state`)
+  - [ ] `scheme` — CharField(max_length=10, choices=`[("pt","Professional Tax"),("lwf","Labour Welfare
+        Fund")]`)
+  - [ ] `income_from` — DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — PT-only
+        (blank/null when `scheme="lwf"`); part of the `unique_together`
+  - [ ] `income_to` — DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — PT-only
+  - [ ] `pt_monthly_amount` — DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) —
+        PT-only, the tax amount for this income bracket
+  - [ ] `pt_deduction_month` — CharField(max_length=20, blank=True) — PT-only, optional (some states
+        deduct only in specific months, e.g. an annual lump sum in February)
+  - [ ] `lwf_employee_contribution` — DecimalField(max_digits=10, decimal_places=2, null=True,
+        blank=True) — LWF-only
+  - [ ] `lwf_employer_contribution` — DecimalField(max_digits=10, decimal_places=2, null=True,
+        blank=True) — LWF-only
+  - [ ] `lwf_periodicity` — CharField(max_length=20, choices=`[("monthly","Monthly"),
+        ("half_yearly","Half-Yearly"),("annual","Annual")]`, blank=True) — LWF-only
+  - [ ] `lwf_due_month_1` — CharField(max_length=20, blank=True) — LWF-only (e.g. "July")
+  - [ ] `lwf_due_month_2` — CharField(max_length=20, blank=True) — LWF-only, nullable-equivalent via
+        blank (e.g. "January", for half-yearly states)
+  - [ ] `registration_number` — CharField(max_length=50, blank=True) — the state-specific PT/LWF
+        employer registration number, where applicable
+  - [ ] `is_active` — BooleanField(default=True) — supports the greytHR "Odisha PT discontinued from
+        April 2026" pattern: deactivate/supersede, never delete, so prior-period reports stay correct
+  - [ ] `effective_from` — DateField(default=timezone.localdate... actually use
+        `django.utils.timezone.now().date` via a callable default, or simply
+        `models.DateField()` non-null required at creation — pick required, no silent default) —
+        supports rate-change history as a new row, not an edit
+  - [ ] `class Meta`: `ordering = ["state", "scheme", "income_from"]`; `unique_together = ("tenant",
+        "state", "scheme", "income_from")` — for LWF, `income_from` stays `None` so uniqueness is
+        effectively `(tenant, state, scheme)` (one active LWF row per state per tenant; supersede via
+        `is_active=False` + a new row if a rate changes, don't edit in place; note this constraint
+        nuance in the model docstring since `None` participates in `unique_together` per-Django's
+        NULL-is-distinct semantics — confirm this is the desired behavior, i.e. **you technically CAN
+        have two `income_from=None` LWF rows** for the same `(tenant, state, scheme)` since Postgres
+        treats NULLs as distinct in unique constraints; document that `clean()` should additionally
+        enforce "at most one `is_active=True` LWF row per `(tenant, state, scheme)`" as an application
+        -level guard on top of the DB constraint)
+  - [ ] `clean()` — validate PT fields present when `scheme="pt"` (income_from/income_to/
+        pt_monthly_amount required), LWF fields present when `scheme="lwf"`
+        (lwf_employee_contribution/lwf_employer_contribution/lwf_periodicity required); raise
+        `ValidationError` otherwise
+  - [ ] `__str__` → `f"{self.get_state_display()} · {self.get_scheme_display()}"` (+ bracket suffix for
+        PT: `f" ({self.income_from}-{self.income_to})"` if `scheme == "pt"`)
+
+- [ ] `EmployeeStatutoryIdentifier(TenantOwned)` — 1:1 per-employee government-issued identifiers,
+      created lazily (drivers: UAN/ESI-number-per-employee called out across every India payroll
+      product surveyed):
+  - [ ] `employee` — `models.OneToOneField("hrm.EmployeeProfile", on_delete=models.CASCADE,
+        related_name="statutory_identifiers")`
+  - [ ] `uan_number` — CharField(max_length=20, blank=True) — PF Universal Account Number (lifelong,
+        distinct from the establishment-specific PF number)
+  - [ ] `pf_number` — CharField(max_length=30, blank=True) — the establishment-specific PF account/
+        member ID
+  - [ ] `esi_number` — CharField(max_length=20, blank=True) — ESI Insurance Number, blank if the
+        employee's gross exceeds the ESI ceiling and they're exempt
+  - [ ] `pt_state` — CharField(max_length=50, choices=`INDIAN_STATE_CHOICES`, blank=True) — resolves
+        which `StatutoryStateRule` applies to this employee; falls back to
+        `StatutoryConfig.pt_default_state` if blank (kept explicit here rather than overloading
+        `EmployeeProfile.work_location`, which is free text)
+  - [ ] `is_pf_applicable` — BooleanField(default=True)
+  - [ ] `is_esi_applicable` — BooleanField(default=True) — an employee above the ESI wage ceiling, or
+        exempted/international worker, can be flagged out without deleting the identifier record
+  - [ ] WARNING: `uan_number`/`pf_number`/`esi_number` are government ID numbers — add these three
+        field names to `apps.core.crud._SENSITIVE_AUDIT_FIELDS` (redacted in `AuditLog.changes`),
+        mirroring the existing `national_id`/`passport_number` entries
+  - [ ] `class Meta`: `ordering = ["employee__party__name"]`; index `models.Index(fields=["tenant",
+        "employee"], name="hrm_esi_tenant_emp_idx")` (verify auto-index name doesn't collide with the
+        model short-name abbreviation already used elsewhere)
+  - [ ] `__str__` → `f"Statutory IDs · {self.employee}"`
+  - [ ] get-or-create pattern: view-layer helper
+        `EmployeeStatutoryIdentifier.objects.get_or_create(tenant=tenant, employee=employee)` called
+        lazily from the detail/edit view (not every employee needs every identifier filled immediately)
+
+- [ ] `StatutoryReturn(TenantNumbered, NUMBER_PREFIX="SCR")` — shared per-scheme, per-period compliance
+      register/challan/return-tracking record (drivers: Keka's monthly PF ECR report, saral PayPack's
+      PF/ESI return generation + compliance-calendar, ClearTax's quarterly Form 24Q + annual Form 16,
+      Zimyo's LWF Report, RazorpayX's due-date/payment-status tracking):
+  - [ ] `scheme` — CharField(max_length=15, choices=`[("pf","Provident Fund"),("esi","ESI"),
+        ("pt","Professional Tax"),("tds_24q","TDS — Form 24Q"),("tds_form16","TDS — Form 16"),
+        ("lwf","Labour Welfare Fund")]`)
+  - [ ] `period_type` — CharField(max_length=15, choices=`[("monthly","Monthly"),
+        ("quarterly","Quarterly"),("half_yearly","Half-Yearly"),("annual","Annual")]`)
+  - [ ] `period_start` — DateField()
+  - [ ] `period_end` — DateField()
+  - [ ] `cycle` — `models.ForeignKey("hrm.PayrollCycle", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="statutory_returns")` — set for the common one-cycle-to-one-return
+        case (monthly PF/ESI/LWF); left null for multi-cycle rollups (quarterly Form 24Q spans 3
+        cycles, aggregates from `Payslip`/`PayslipLine` by date range instead)
+  - [ ] `employee` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="statutory_returns")` — set only for `scheme="tds_form16"`; null for
+        org-level returns (pf/esi/pt/lwf/tds_24q)
+  - [ ] `employee_contribution_total` — DecimalField(max_digits=14, decimal_places=2, default=0,
+        editable=False) — **derived/cached, never hand-typed**, rolled up from `PayslipLine.amount`
+        where `contribution_side="employee"` matching the scheme, across the period (mirrors
+        `PayrollCycle._totals()`'s aggregate-and-cache convention)
+  - [ ] `employer_contribution_total` — DecimalField(max_digits=14, decimal_places=2, default=0,
+        editable=False) — same pattern, `contribution_side="employer"` (+ `"both"` split rule — decide
+        and document: include `contribution_side="both"` lines in BOTH totals, matching 3.14's
+        `payrollcycle_lock` roll-up convention for `component_type="statutory_deduction"` with `both`)
+  - [ ] `headcount` — PositiveIntegerField(default=0, editable=False) — distinct employee count
+        contributing to this return's period for this scheme
+  - [ ] `due_date` — DateField(null=True, blank=True) — drives the Compliance Calendar cross-cutting
+        feature (PF/ESI by 15th, TDS by 7th via Challan 281, PT by 15th/20th depending on state, LWF
+        half-yearly by 15 July/15 January)
+  - [ ] `status` — CharField(max_length=15, choices=`[("pending","Pending"),("filed","Filed"),
+        ("paid","Paid"),("late","Late")]`, default="pending")
+  - [ ] `filed_on` — DateField(null=True, blank=True, editable=False)
+  - [ ] `paid_on` — DateField(null=True, blank=True, editable=False)
+  - [ ] `payment_reference` — CharField(max_length=100, blank=True)
+  - [ ] `registration_number_used` — CharField(max_length=50, blank=True) — snapshot copy of the
+        relevant `StatutoryConfig`/`StatutoryStateRule` registration number at generation time (mirrors
+        `PayslipLine`'s immutable-snapshot convention from 3.14 — a later registration-number edit must
+        never rewrite a historical return)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-period_start", "scheme"]`; `unique_together = ("tenant", "scheme",
+        "period_start", "employee")` — one return per scheme per period (per employee for
+        `tds_form16`, org-wide otherwise — `employee=None` participates in the constraint the same way
+        as any other FK value); index `models.Index(fields=["tenant", "status"],
+        name="hrm_scr_tenant_status_idx")`, index `models.Index(fields=["tenant", "due_date"],
+        name="hrm_scr_tenant_duedate_idx")` (powers the compliance calendar query)
+  - [ ] `is_overdue` **property** → `self.status == "pending" and self.due_date and
+        self.due_date < timezone.localdate()` (drives a "late" visual flag before the status is
+        manually flipped to `"late"`)
+  - [ ] `__str__` → `f"{self.number} · {self.get_scheme_display()} · {self.period_start}–{self.period_end}"`
+
+- [ ] one incremental migration `apps/hrm/migrations/0026_statutoryconfig_statutorystaterule_and_more.py`
+      (NOT `0001_initial`; last is `0025_payrollcycle_payslip_payslipline_and_more.py`) —
+      `makemigrations hrm`, review the generated file, adjust index/constraint names to match the ones
+      specified above if Django's auto-names differ; confirm `StatutoryConfig.tenant`
+      `OneToOneField` doesn't collide with `TenantOwned`'s abstract FK (override cleanly, don't
+      multiple-inherit both)
+
+## `statutoryreturn_generate` — the aggregation engine (the key domain action)
+
+- [ ] `@login_required`, `@require_POST` (or a `@tenant_admin_required` gate — pick tenant-admin to
+      match 3.14's workflow-action convention) view, form/inputs: `scheme`, `period_type`,
+      `period_start`, `period_end`, optional `cycle` (for the monthly single-cycle case), optional
+      `employee` (for `tds_form16`)
+- [ ] guard: `get_or_create`-style idempotent behavior — if a `StatutoryReturn` already exists for
+      `(tenant, scheme, period_start, employee)`, either re-aggregate in place (if `status="pending"`)
+      or block with `messages.error` if already `filed`/`paid` (mirror 3.14's draft-only-regenerate
+      rule: only `pending` returns can be re-aggregated)
+- [ ] inside `transaction.atomic()`:
+  - [ ] resolve the `PayslipLine` queryset for this scheme+period: `PayslipLine.objects.filter(
+        payslip__tenant=tenant, payslip__cycle__pay_date__gte=period_start,
+        payslip__cycle__pay_date__lte=period_end, component_type="statutory_deduction")` — **note:**
+        `PayslipLine` has no direct "scheme" tag (pf vs esi vs pt vs lwf are all
+        `component_type="statutory_deduction"` today); document the v1 simplification explicitly: this
+        pass aggregates ALL `statutory_deduction` lines for the period as a single pool per scheme
+        selection (cannot yet distinguish a PF line from an ESI line within `PayslipLine` without a
+        `PayComponent`-name-based heuristic) — **decide and document one of:** (a) filter additionally
+        by `component_name__icontains=<scheme keyword>` (e.g. "PF"/"Provident", "ESI", "Professional
+        Tax", "Labour Welfare") as a pragmatic v1 match against the seeded `PayComponent.name` strings,
+        or (b) aggregate the full `statutory_deduction` pool once and let the user pick `scheme` purely
+        as a label — **pick (a)**, the name-substring match, and note it as a v1 heuristic (a proper
+        per-line scheme tag is a fast-follow noted under Later passes)
+  - [ ] `employee_total = qs.filter(contribution_side__in=["employee", "both"]).aggregate(
+        Sum("amount"))["amount__sum"] or Decimal("0")`
+  - [ ] `employer_total = qs.filter(contribution_side__in=["employer", "both"]).aggregate(
+        Sum("amount"))["amount__sum"] or Decimal("0")`
+  - [ ] `headcount = qs.values("payslip__employee_id").distinct().count()`
+  - [ ] snapshot `registration_number_used` from the relevant `StatutoryConfig`/`StatutoryStateRule`
+        field for the chosen scheme (e.g. `pf_establishment_code` for `scheme="pf"`,
+        `esi_employer_code` for `"esi"`, `tan_number` for `"tds_24q"`/`"tds_form16"`, the matching
+        `StatutoryStateRule.registration_number` for `"pt"`/`"lwf"`)
+  - [ ] `StatutoryReturn.objects.update_or_create(tenant=tenant, scheme=scheme,
+        period_start=period_start, employee=employee, defaults={...period_end, cycle,
+        employee_contribution_total: employee_total, employer_contribution_total: employer_total,
+        headcount, registration_number_used, ...})`
+  - [ ] `write_audit_log(request.user, obj, "update", {"action": "generate", "headcount": headcount})`
+- [ ] redirect to `statutoryreturn_detail`; `messages.success` with the aggregated totals
+
+## Filing/payment status-workflow actions
+
+- [ ] `statutoryreturn_mark_filed` (`@tenant_admin_required`, `@require_POST`) — only from
+      `status="pending"`; set `status="filed"`, `filed_on=timezone.localdate()`; `write_audit_log(...,
+      {"action": "mark_filed"})`
+- [ ] `statutoryreturn_mark_paid` (`@tenant_admin_required`, `@require_POST`) — only from
+      `status in {"pending", "filed"}`; set `status="paid"`, `paid_on=timezone.localdate()`,
+      `payment_reference=request.POST.get("payment_reference", "").strip()[:100]`; if `paid_on >
+      due_date` (when `due_date` set) also flip `status="late"` instead of `"paid"` — document this
+      override rule explicitly (mirrors RazorpayX/saral PayPack's paid-vs-late comparison); write_audit_log
+- [ ] both redirect to `statutoryreturn_detail`
+
+## B. Forms (`apps/hrm/forms.py`)
+
+- [ ] `StatutoryConfigForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["pf_establishment_code", "pf_wage_ceiling", "pf_employee_rate",
+        "pf_employer_rate", "esi_employer_code", "esi_wage_ceiling", "esi_employee_rate",
+        "esi_employer_rate", "pt_default_state", "tan_number", "tds_circle_address",
+        "pan_of_deductor", "is_lwf_applicable"]` (exclude `tenant` — set via `get_or_create`, never a
+        form field since there's exactly one row per tenant)
+  - [ ] no custom `__init__` needed (no FK dropdowns)
+- [ ] `StatutoryStateRuleForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["state", "scheme", "income_from", "income_to", "pt_monthly_amount",
+        "pt_deduction_month", "lwf_employee_contribution", "lwf_employer_contribution",
+        "lwf_periodicity", "lwf_due_month_1", "lwf_due_month_2", "registration_number", "is_active",
+        "effective_from"]` (exclude `tenant`/auto-number — no number field on this model, all fields
+        form-editable except `tenant`)
+  - [ ] template-side JS/UX note (not blocking backend): consider toggling PT-only vs LWF-only field
+        visibility based on the `scheme` select, but not required for v1 — plain form with all fields
+        shown is acceptable
+- [ ] `EmployeeStatutoryIdentifierForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["employee", "uan_number", "pf_number", "esi_number", "pt_state",
+        "is_pf_applicable", "is_esi_applicable"]` (exclude `tenant`)
+  - [ ] custom `__init__` narrows `employee` queryset to `EmployeeProfile.objects.filter(tenant=tenant)`
+        (standard tenant-scoped FK-narrowing pattern used across every prior HRM form)
+- [ ] `StatutoryReturnForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["scheme", "period_type", "period_start", "period_end", "cycle", "employee",
+        "due_date", "notes"]` (exclude `tenant`/auto-number `number`/derived
+        `employee_contribution_total`/`employer_contribution_total`/`headcount`/`status`/`filed_on`/
+        `paid_on`/`payment_reference`/`registration_number_used` — all workflow/derived, never
+        generic-form-editable; totals are only ever set via `statutoryreturn_generate`)
+  - [ ] custom `__init__` narrows `cycle` to `PayrollCycle.objects.filter(tenant=tenant)` and
+        `employee` to `EmployeeProfile.objects.filter(tenant=tenant)`
+  - [ ] this form covers manual create (a return with due_date/notes but zero aggregates, to be
+        generated later) and metadata edit; the aggregate totals are never form-editable
+
+## C. Views (`apps/hrm/views.py`)
+
+- [ ] `statutoryconfig_detail` (`@login_required`) — the settings-singleton page: `config, _ =
+      StatutoryConfig.objects.get_or_create(tenant=request.tenant)`; render
+      `hrm/statutory/statutoryconfig/detail.html` with `{"obj": config}` — no `_list`/`_create`/
+      `_delete` views (singleton, nothing to list or delete)
+- [ ] `statutoryconfig_edit` (`@login_required`) — `get_or_create` then standard `crud_edit`-style
+      handling (or a thin custom view since `crud_edit` expects a `pk` — either add a `pk`-taking
+      wrapper that resolves `pk=config.pk` via redirect, or write a small dedicated
+      get-or-create-then-edit view; **pick the dedicated view**, document why `crud_edit` isn't reused
+      directly for this one singleton model)
+- [ ] `statutorystaterule_list` (`@login_required`) — `crud_list(request,
+      StatutoryStateRule.objects.filter(tenant=request.tenant), "hrm/statutory/statutorystaterule/list.html",
+      search_fields=["state", "registration_number"], filters=[("scheme", "scheme", False),
+      ("state", "state", False), ("is_active", "is_active", False)], extra_context={"scheme_choices":
+      StatutoryStateRule._meta.get_field("scheme").choices, "state_choices": INDIAN_STATE_CHOICES})`
+- [ ] `statutorystaterule_create` / `_edit` / `_detail` / `_delete` — standard `crud_create`/
+      `crud_edit`/`crud_detail`/`crud_delete` wrappers, template base
+      `hrm/statutory/statutorystaterule/{form,detail}.html`
+- [ ] `employeestatutoryidentifier_list` (`@login_required`) — `crud_list(request,
+      EmployeeStatutoryIdentifier.objects.filter(tenant=request.tenant).select_related(
+      "employee__party"), "hrm/statutory/employeestatutoryidentifier/list.html",
+      search_fields=["employee__party__name", "uan_number", "pf_number", "esi_number"],
+      filters=[("pt_state", "pt_state", False), ("is_pf_applicable", "is_pf_applicable", False),
+      ("is_esi_applicable", "is_esi_applicable", False)], extra_context={"state_choices":
+      INDIAN_STATE_CHOICES})`
+- [ ] `employeestatutoryidentifier_create` / `_edit` / `_detail` / `_delete` — standard wrappers;
+      `_create`'s form narrows the `employee` dropdown to employees who don't already have an
+      identifier row (`EmployeeProfile.objects.filter(tenant=tenant).exclude(
+      statutory_identifiers__isnull=False)`) so the OneToOne can't collide — document this narrowing in
+      the form's `__init__`
+- [ ] `statutoryreturn_list` (`@login_required`) — `crud_list(request,
+      StatutoryReturn.objects.filter(tenant=request.tenant).select_related("cycle",
+      "employee__party"), "hrm/statutory/statutoryreturn/list.html", search_fields=["number",
+      "registration_number_used", "notes"], filters=[("scheme", "scheme", False), ("status", "status",
+      False), ("period_type", "period_type", False)], extra_context={"scheme_choices":
+      StatutoryReturn._meta.get_field("scheme").choices, "status_choices":
+      StatutoryReturn._meta.get_field("status").choices, "period_type_choices":
+      StatutoryReturn._meta.get_field("period_type").choices})`
+- [ ] `statutoryreturn_create` — standard `crud_create` wrapper (manual metadata-only create; totals
+      stay 0 until `generate` is run)
+- [ ] `statutoryreturn_edit` — standard `crud_edit` wrapper, only while `status == "pending"` (else
+      `messages.error` + redirect to detail, mirror the `floatingholidayelection_edit`/
+      `payrollcycle_edit` pending-only guard pattern)
+- [ ] `statutoryreturn_delete` (`@login_required`, `@require_POST`) — only while `status == "pending"`
+      (mirror `payrollcycle_delete`'s draft-only guard) — else `messages.error` + redirect
+- [ ] `statutoryreturn_detail` (`@login_required`) — `crud_detail(request, model=StatutoryReturn,
+      pk=pk, template="hrm/statutory/statutoryreturn/detail.html", select_related=("cycle",
+      "employee__party"))`
+- [ ] `statutoryreturn_generate` — per the Aggregation Engine spec above
+- [ ] `statutoryreturn_mark_filed` / `_mark_paid` — per the Filing/Payment Status Workflow spec above
+- [ ] `statutory_compliance_calendar` (`@login_required`) — the cross-cutting **compliance calendar**
+      read-only view, no new model: `returns = StatutoryReturn.objects.filter(
+      tenant=request.tenant).select_related("cycle", "employee__party").order_by("due_date",
+      "scheme")`; group into buckets by `status` (overdue via `is_overdue` property / pending / filed /
+      paid) for the template to render as calendar/list columns; support the same `scheme`/`status`
+      GET-param filters as `statutoryreturn_list` (reuse `apply_search`/manual filtering, not
+      necessarily full `crud_list` since this is a grouped, not paginated-flat, view — document that
+      choice); render `hrm/statutory/compliance_calendar.html`
+- [ ] all new views import `StatutoryConfig`, `StatutoryStateRule`, `EmployeeStatutoryIdentifier`,
+      `StatutoryReturn`, `StatutoryConfigForm`, `StatutoryStateRuleForm`,
+      `EmployeeStatutoryIdentifierForm`, `StatutoryReturnForm` at the top of `views.py`; `Sum` from
+      `django.db.models` and `transaction` from `django.db` (already imported for 3.14 — confirm, don't
+      re-import)
+
+## D. URLs (`apps/hrm/urls.py`, `app_name = "hrm"` already set)
+
+- [ ] `path("statutory-config/", views.statutoryconfig_detail, name="statutoryconfig_detail")`
+- [ ] `path("statutory-config/edit/", views.statutoryconfig_edit, name="statutoryconfig_edit")`
+- [ ] `path("statutory-state-rules/", views.statutorystaterule_list, name="statutorystaterule_list")`
+- [ ] `path("statutory-state-rules/add/", views.statutorystaterule_create, name="statutorystaterule_create")`
+- [ ] `path("statutory-state-rules/<int:pk>/", views.statutorystaterule_detail, name="statutorystaterule_detail")`
+- [ ] `path("statutory-state-rules/<int:pk>/edit/", views.statutorystaterule_edit, name="statutorystaterule_edit")`
+- [ ] `path("statutory-state-rules/<int:pk>/delete/", views.statutorystaterule_delete, name="statutorystaterule_delete")`
+- [ ] `path("statutory-identifiers/", views.employeestatutoryidentifier_list, name="employeestatutoryidentifier_list")`
+- [ ] `path("statutory-identifiers/add/", views.employeestatutoryidentifier_create, name="employeestatutoryidentifier_create")`
+- [ ] `path("statutory-identifiers/<int:pk>/", views.employeestatutoryidentifier_detail, name="employeestatutoryidentifier_detail")`
+- [ ] `path("statutory-identifiers/<int:pk>/edit/", views.employeestatutoryidentifier_edit, name="employeestatutoryidentifier_edit")`
+- [ ] `path("statutory-identifiers/<int:pk>/delete/", views.employeestatutoryidentifier_delete, name="employeestatutoryidentifier_delete")`
+- [ ] `path("statutory-returns/", views.statutoryreturn_list, name="statutoryreturn_list")`
+- [ ] `path("statutory-returns/add/", views.statutoryreturn_create, name="statutoryreturn_create")`
+- [ ] `path("statutory-returns/<int:pk>/", views.statutoryreturn_detail, name="statutoryreturn_detail")`
+- [ ] `path("statutory-returns/<int:pk>/edit/", views.statutoryreturn_edit, name="statutoryreturn_edit")`
+- [ ] `path("statutory-returns/<int:pk>/delete/", views.statutoryreturn_delete, name="statutoryreturn_delete")`
+- [ ] `path("statutory-returns/<int:pk>/generate/", views.statutoryreturn_generate, name="statutoryreturn_generate")`
+- [ ] `path("statutory-returns/<int:pk>/mark-filed/", views.statutoryreturn_mark_filed, name="statutoryreturn_mark_filed")`
+- [ ] `path("statutory-returns/<int:pk>/mark-paid/", views.statutoryreturn_mark_paid, name="statutoryreturn_mark_paid")`
+- [ ] `path("statutory-compliance-calendar/", views.statutory_compliance_calendar, name="statutory_compliance_calendar")`
+
+## E. Admin (`apps/hrm/admin.py`)
+
+- [ ] register `StatutoryConfig` — `list_display = ("tenant", "pf_establishment_code",
+      "esi_employer_code", "tan_number", "is_lwf_applicable")`, `list_filter = ("is_lwf_applicable",)`,
+      `search_fields = ("tenant__name", "pf_establishment_code", "esi_employer_code", "tan_number")`
+- [ ] register `StatutoryStateRule` — `list_display = ("state", "scheme", "income_from", "income_to",
+      "is_active", "effective_from")`, `list_filter = ("tenant", "scheme", "state", "is_active")`,
+      `search_fields = ("state", "registration_number")`
+- [ ] register `EmployeeStatutoryIdentifier` — `list_display = ("employee", "uan_number", "pf_number",
+      "esi_number", "is_pf_applicable", "is_esi_applicable")`, `list_filter = ("tenant",
+      "is_pf_applicable", "is_esi_applicable")`, `search_fields = ("employee__party__name",
+      "uan_number", "pf_number", "esi_number")`
+- [ ] register `StatutoryReturn` — `list_display = ("number", "scheme", "period_start", "period_end",
+      "status", "employee_contribution_total", "employer_contribution_total", "due_date")`,
+      `list_filter = ("tenant", "scheme", "status", "period_type")`, `search_fields = ("number",
+      "registration_number_used", "notes")`
+
+## F. Templates (`templates/hrm/statutory/<entity>/<page>.html`)
+
+- [ ] `statutory/statutoryconfig/detail.html` — single-entity sub-module-doubles-as-entity-folder
+      pattern (per Template Folder Structure rule 3): header sections PF (establishment_code,
+      wage_ceiling, employee/employer rates), ESI (employer_code, wage_ceiling, employee/employer
+      rates), PT (pt_default_state), TDS (tan_number, tds_circle_address, pan_of_deductor), LWF
+      (is_lwf_applicable badge); single Edit action (links to `statutoryconfig_edit`, no delete —
+      singleton); no list page for this model
+- [ ] `statutory/statutoryconfig/form.html` — standard form, all `StatutoryConfigForm` fields grouped
+      into the same PF/ESI/PT/TDS/LWF sections as the detail page
+- [ ] `statutory/statutorystaterule/list.html` — filter bar: search `q`, `scheme` select (from
+      `scheme_choices`), `state` select (from `state_choices`), `is_active` select (True/False);
+      columns: state, scheme badge (`pt`→`badge-info`, `lwf`→`badge-amber`), income bracket (PT) or
+      periodicity (LWF), amount, registration_number, is_active badge, effective_from, Actions
+      (view/edit/delete); pagination include; empty-state
+- [ ] `statutory/statutorystaterule/detail.html` — header (state, scheme badge, is_active badge,
+      effective_from), PT section (income_from–income_to, pt_monthly_amount, pt_deduction_month) shown
+      only if `scheme == "pt"`, LWF section (lwf_employee_contribution, lwf_employer_contribution,
+      lwf_periodicity, lwf_due_month_1, lwf_due_month_2) shown only if `scheme == "lwf"`,
+      registration_number; Actions sidebar (Edit/Delete/Back to List)
+- [ ] `statutory/statutorystaterule/form.html` — standard form (all fields; PT/LWF fields shown
+      together, no JS toggle required for v1 per Forms section note)
+- [ ] `statutory/employeestatutoryidentifier/list.html` — filter bar: search `q`, `pt_state` select
+      (from `state_choices`), `is_pf_applicable`/`is_esi_applicable` selects (True/False); columns:
+      employee, uan_number, pf_number, esi_number, pt_state, is_pf_applicable badge, is_esi_applicable
+      badge, Actions (view/edit/delete); pagination include; empty-state
+- [ ] `statutory/employeestatutoryidentifier/detail.html` — header (employee link), PF section
+      (uan_number, pf_number, is_pf_applicable badge), ESI section (esi_number, is_esi_applicable
+      badge), PT section (pt_state); Actions sidebar (Edit/Delete/Back to List)
+- [ ] `statutory/employeestatutoryidentifier/form.html` — standard form (employee dropdown +
+      uan_number/pf_number/esi_number/pt_state/is_pf_applicable/is_esi_applicable)
+- [ ] `statutory/statutoryreturn/list.html` — filter bar: search `q`, `scheme` select (from
+      `scheme_choices`), `status` select (from `status_choices`), `period_type` select (from
+      `period_type_choices`); columns: number, scheme badge, period_start–period_end, status badge
+      (`pending`→`badge-muted`, `filed`→`badge-info`, `paid`→`badge-green`, `late`→`badge-red`),
+      employee_contribution_total, employer_contribution_total, headcount, due_date (highlight red if
+      `obj.is_overdue`), Actions (view/edit-if-pending/delete-if-pending/generate); pagination include;
+      empty-state; always `{% else %}{{ obj.get_scheme_display }}`/`{{ obj.get_status_display }}`
+      fallback per Badge Values rule
+- [ ] `statutory/statutoryreturn/detail.html` — header fields (scheme badge, period_type,
+      period_start–period_end, cycle link if set, employee link if `tds_form16`), derived-totals panel
+      (employee_contribution_total/employer_contribution_total/headcount), status badge + due_date
+      (with overdue flag), filed_on/paid_on/payment_reference, registration_number_used, notes; action
+      buttons gated by status (`Generate/Re-aggregate` — pending only, POST+confirm+csrf; `Mark Filed`
+      — pending only, tenant-admin, POST+confirm+csrf; `Mark Paid` — pending/filed only, tenant-admin,
+      POST+confirm+csrf with a `payment_reference` input); Actions sidebar (Edit-if-pending/
+      Delete-if-pending, Back to List)
+- [ ] `statutory/statutoryreturn/form.html` — standard form (scheme, period_type, period_start,
+      period_end, cycle, employee, due_date, notes)
+- [ ] `statutory/compliance_calendar.html` — the cross-cutting calendar page: grouped sections
+      (Overdue / Pending / Filed / Paid, or grouped by upcoming `due_date`), each row links to
+      `statutoryreturn_detail`; filter bar mirrors `statutoryreturn_list`'s scheme/status selects;
+      empty-state; this is a **standalone page** at the sub-module root (`statutory/`), not inside an
+      entity folder, per Template Folder Structure rule 6
+- [ ] a landing link: add a `statutory/overview.html`-style link OR simply ensure
+      `statutoryreturn_list`/`statutory_compliance_calendar` are reachable from the sidebar — confirm
+      against the existing HRM sub-module landing convention (3.13/3.14 didn't add a dedicated overview
+      page; match whichever pattern those actually used) before adding a new one unnecessarily
+
+## G. Seeder (`apps/hrm/management/commands/seed_hrm.py`)
+
+- [ ] add `_seed_statutory(self, tenant, *, flush)` method, called from `handle()` **AFTER**
+      `self._seed_payroll(tenant, flush=options["flush"])` (return generation needs 3.14's
+      `PayrollCycle`/`Payslip`/`PayslipLine` rows to exist first)
+- [ ] `if flush:` child-first wipe: `StatutoryReturn.objects.filter(tenant=tenant).delete()` →
+      `EmployeeStatutoryIdentifier.objects.filter(tenant=tenant).delete()` →
+      `StatutoryStateRule.objects.filter(tenant=tenant).delete()` →
+      `StatutoryConfig.objects.filter(tenant=tenant).delete()`
+- [ ] `if StatutoryConfig.objects.filter(tenant=tenant).exists(): self.stdout.write(self.style.NOTICE(
+      f"Statutory compliance data already exists for '{tenant.name}'. Use --flush to re-seed.")); return`
+- [ ] create 1 `StatutoryConfig` row: `pf_establishment_code="MH/BAN/1234567/000"`,
+      `esi_employer_code="11-22-334455-000-1111"`, `pt_default_state="Maharashtra"`,
+      `tan_number="MUMB12345C"`, `tds_circle_address="ITO (TDS), Room 101, Mumbai"`,
+      `pan_of_deductor="AABCN1234A"`, `is_lwf_applicable=True` (defaults cover pf/esi rates/ceilings —
+      don't override unless demonstrating a non-default rate)
+- [ ] create 2 `StatutoryStateRule` rows:
+  - [ ] a Maharashtra PT slab: `state="Maharashtra"`, `scheme="pt"`, `income_from=Decimal("0.00")`,
+        `income_to=Decimal("7500.00")`, `pt_monthly_amount=Decimal("0.00")`, `is_active=True`,
+        `effective_from=` a fixed past date (e.g. `2024-04-01`) — plus a second bracket row (e.g.
+        `income_from=7501, income_to=10000, pt_monthly_amount=175`) to demonstrate the slab-table shape
+        (2 PT rows minimum, satisfying "a couple of StatutoryStateRule rows")
+  - [ ] a Maharashtra half-yearly LWF row: `state="Maharashtra"`, `scheme="lwf"`,
+        `lwf_employee_contribution=Decimal("6.00")`, `lwf_employer_contribution=Decimal("18.00")`,
+        `lwf_periodicity="half_yearly"`, `lwf_due_month_1="July"`, `lwf_due_month_2="January"`,
+        `registration_number="LWF/MH/998877"`, `is_active=True`, `effective_from=` same fixed past date
+- [ ] for each seeded `EmployeeProfile` in `tenant` (reuse the 3.13/3.14-seeded employees): `get_or_create`
+      an `EmployeeStatutoryIdentifier` with deterministic demo values (`uan_number=f"UAN{employee.pk:010d}"`,
+      `pf_number=f"MH/BAN/1234567/000/{employee.pk:04d}"`, `esi_number=f"3411{employee.pk:06d}"`,
+      `pt_state="Maharashtra"`, `is_pf_applicable=True`, `is_esi_applicable=True`)
+- [ ] generate 1 `StatutoryReturn` (scheme=`"pf"`) for the existing seeded `PayrollCycle` from
+      `_seed_payroll`: reuse or directly call the same aggregation logic as `statutoryreturn_generate`
+      (a shared helper is preferable — if the view logic is short enough, factor a
+      `build_statutory_return(tenant, scheme, period_start, period_end, cycle=None, employee=None)`
+      module-level function in `models.py` or a `services.py` that both the view and the seeder call,
+      avoiding duplicating the aggregation query) — `period_type="monthly"`,
+      `period_start=cycle.period_start`, `period_end=cycle.period_end`, `cycle=cycle`,
+      `due_date=cycle.period_end.replace(day=15)` (approximate 15th-of-month PF due date, clamped if
+      the month has fewer days — use a safe date-arithmetic helper), `registration_number_used=
+      config.pf_establishment_code`
+- [ ] print a summary line: `f"Statutory compliance seeded for '{tenant.name}': 1 config, 2 state
+      rules, {EmployeeStatutoryIdentifier.objects.filter(tenant=tenant).count()} employee
+      identifier(s), 1 statutory return ({return_obj.number})."`
+- [ ] add the 4 models to the `--flush` wipe order in dependency sequence (children first):
+      `StatutoryReturn` → `EmployeeStatutoryIdentifier` → `StatutoryStateRule` → `StatutoryConfig`
+      (already specified above — restate here for the flush-order checklist); confirm this sits BEFORE
+      `EmployeeProfile`'s own wipe in the central flush order (since `EmployeeStatutoryIdentifier` FKs
+      to it) — mirror the 3.14 lesson about wiping children before the PROTECT-adjacent parent
+- [ ] verify the seeder still prints the tenant-admin login reminder + "Data already exists" warning
+      path unchanged — the new block is itself idempotent, no new top-level guard needed
+
+## H. Navigation (`apps/core/navigation.py`)
+
+- [ ] add `LIVE_LINKS["3.15"]` (verify the exact query-string highlighting convention against 3.13/
+      3.14's existing entries before finalizing):
+      ```python
+      # 3.15 Statutory Compliance — StatutoryReturn (scheme-filtered) serves PF/ESI/PT/TDS/LWF;
+      # StatutoryStateRule serves PT's state-wise rules; mirrors 3.14's deep-linked query-param pattern.
+      "3.15": {
+          "PF Management": "hrm:statutoryreturn_list?scheme=pf",                    # bullet
+          "ESI Management": "hrm:statutoryreturn_list?scheme=esi",                  # bullet
+          "PT Management": "hrm:statutorystaterule_list?scheme=pt",                 # bullet
+          "TDS Management": "hrm:statutoryreturn_list?scheme=tds_24q",              # bullet
+          "LWF Management": "hrm:statutorystaterule_list?scheme=lwf",               # bullet
+      },
+      ```
+      — all 5 NavERP.md 3.15 bullets go Live; adjust the literal query strings if the real filter
+      param names implemented in Section C differ; PT/LWF deliberately point at
+      `statutorystaterule_list` (the state-wise rule table) rather than `statutoryreturn_list` since
+      the rule table IS the PT/LWF-specific configuration surface the bullet describes, while PF/ESI/
+      TDS point at the shared `statutoryreturn_list` (challan/return tracking) — document this split
+      rationale in the navigation.py comment
+
+## I. Migrate / seed / verify (run from the venv)
+
+- [ ] `python manage.py makemigrations hrm` → review `0026_...py` (field/index/unique_together names
+      match the plan; confirm `StatutoryConfig`'s `OneToOneField` override of the abstract `tenant` FK
+      generates cleanly with no spurious `TenantOwned.tenant` leftover column)
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` (1st run — creates data; confirm 3.14's `_seed_payroll` still runs
+      first and the new `_seed_statutory` block generates its config/rules/identifiers/return against
+      it)
+- [ ] `python manage.py seed_hrm` (2nd run — must be idempotent, no duplicates, no errors)
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every new `hrm:statutoryconfig_*`, `hrm:statutorystaterule_*`,
+      `hrm:employeestatutoryidentifier_*`, `hrm:statutoryreturn_*`, and
+      `hrm:statutory_compliance_calendar` URL returns 200/302 when logged in as a tenant admin; no
+      `{#`/`{% comment` leaks in the new templates; cross-tenant IDOR check — a `StatutoryStateRule`/
+      `EmployeeStatutoryIdentifier`/`StatutoryReturn` pk belonging to tenant A returns 404 when fetched
+      as tenant B; `statutoryreturn_generate` run twice on a `pending` return produces the same
+      totals (re-aggregation replaces, doesn't duplicate/double-count); spot-check
+      `employee_contribution_total`/`employer_contribution_total`/`headcount` arithmetic against the
+      seeded `PayslipLine` rows by hand; `statutoryreturn_mark_paid` after `due_date` correctly flips
+      to `"late"` not `"paid"`; `statutoryreturn_edit`/`_delete` blocked once not `pending`; non-admin
+      user gets 403 on mark_filed/mark_paid; the `?scheme=pf`/`?scheme=pt` deep-links each render the
+      filtered subset correctly; the compliance calendar groups returns by status/due_date correctly
+- [ ] sidebar: confirm 3.15 shows all five bullets as **Live** (not "Coming soon") for a tenant with
+      data
+
+## J. Close-out
+
+- [ ] update `README.md` module-status / HRM section (3.15 bullets: PF Management / ESI Management /
+      PT Management / TDS Management / LWF Management all live; bump the HRM + project-wide test-count
+      lines once test-writer runs)
+- [ ] run the review-agent sequence in order, each ending in its own commit(s): `code-reviewer` →
+      `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` →
+      `security-reviewer` → `test-writer`
+- [ ] update `.claude/skills/hrm/SKILL.md` — 3.15 section: document `StatutoryConfig`/
+      `StatutoryStateRule`/`EmployeeStatutoryIdentifier`/`StatutoryReturn` models, the
+      `statutoryreturn_generate` aggregation-engine contract (incl. the v1 `component_name`-substring
+      scheme-matching heuristic against `PayslipLine`), the mark_filed/mark_paid workflow + the
+      due-date/late-status rule, the compliance calendar view, the new `LIVE_LINKS["3.15"]` entries
+      (incl. the PT/LWF-vs-PF/ESI/TDS routing split), the extended seeder block, and mark all 5 bullets
+      of 3.15 as built
+
+## Later passes / deferred (carried over from research-statutory-compliance.md — do not build this pass)
+
+- **ECR file / ESIC challan / EPFO-portal file-format generation** — the exact pipe/CSV government file
+  layouts and direct portal upload; this pass stores the aggregated numbers
+  (`StatutoryReturn.employee_contribution_total` etc.) needed to generate them later.
+- **TRACES integration / unconsumed-challan matching** — external government-portal API integration.
+- **AI/rules-based error detection before filing** (late-deduction/PAN-validation flagging) — a
+  validation-rules engine layered on top of `StatutoryReturn`; fast-follow, not blocking v1.
+- **Form 16 / Form 24Q PDF/XML rendering and email delivery** — presentation/document-generation
+  layer, consistent with the payslip-PDF deferral noted in 3.14; this pass tracks the
+  `StatutoryReturn` row's status/aggregates, not the rendered document.
+- **Automatic rate-change alerting** (e.g. the Odisha PT discontinuation pattern) — structurally
+  supported via `StatutoryStateRule.is_active`/`effective_from` (supersede, don't edit), but no
+  notification/alert engine built this pass.
+- **Compliance-calendar dashboard UI as a distinct product surface beyond the read-only grouped list**
+  — `statutory_compliance_calendar` ships as a straightforward grouped list this pass; a richer
+  calendar-grid UI is a later frontend polish pass, not a data-model change.
+- **Multi-country / non-India statutory schemes** — `StatutoryReturn.scheme` choices stay India-only
+  this pass; extending for other jurisdictions is a future-pass consideration.
+- **Gratuity and Bonus Act statutory compliance** — out of the five NavERP.md 3.15 bullets (PF/ESI/PT/
+  TDS/LWF only); would be a separate future bullet if NavERP.md is extended.
+- **PT/LWF per-employee-type differentiation beyond `EmployeeProfile.employee_type` reuse** — supported
+  at the query/filter level using the existing field; no new per-type override table added.
+- **Per-`PayslipLine` scheme tagging** (a proper `scheme` FK/choice on `PayslipLine` distinguishing PF
+  vs ESI vs PT vs LWF lines cleanly, replacing the v1 `component_name`-substring heuristic used by
+  `statutoryreturn_generate`) — noted above as the pragmatic v1 aggregation approach; a real per-line
+  scheme tag would require a 3.14 model change and is deferred to avoid touching an already-shipped,
+  reviewed, tested model this pass.
+
+## Review
+(filled in at the end)
