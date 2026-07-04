@@ -57,20 +57,24 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Salary Hold</h2></div>
       <div class="card-body">
-        {% if obj.on_hold %}
-          <form method="post" action="{% url 'hrm:payslip_release' obj.pk %}" onsubmit="return confirm('Release this hold?');">
-            {% csrf_token %}
-            <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Release Hold</button>
-          </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.on_hold %}
+            <form method="post" action="{% url 'hrm:payslip_release' obj.pk %}" onsubmit="return confirm('Release this hold?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Release Hold</button>
+            </form>
+          {% else %}
+            <form method="post" action="{% url 'hrm:payslip_hold' obj.pk %}">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="id_hold_reason">Hold reason</label>
+                <textarea id="id_hold_reason" name="hold_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
+              </div>
+              <button class="btn btn-outline" type="submit"><i data-lucide="pause"></i> Hold Salary</button>
+            </form>
+          {% endif %}
         {% else %}
-          <form method="post" action="{% url 'hrm:payslip_hold' obj.pk %}">
-            {% csrf_token %}
-            <div class="form-group">
-              <label class="form-label" for="id_hold_reason">Hold reason</label>
-              <textarea id="id_hold_reason" name="hold_reason" class="form-textarea" placeholder="Reason (optional)"></textarea>
-            </div>
-            <button class="btn btn-outline" type="submit"><i data-lucide="pause"></i> Hold Salary</button>
-          </form>
+          <span class="text-muted"><i data-lucide="shield"></i> Only a tenant admin can hold or release salary.</span>
         {% endif %}
       </div>
     </div>
