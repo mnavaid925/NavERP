@@ -4243,8 +4243,9 @@ class InvestmentDeclarationLine(TenantOwned):
         return self.verified_amount if self.verified_amount is not None else self.declared_amount
 
     def recompute_verified(self):
-        """Roll ``verified_amount`` up from this line's ``verified`` proofs' amounts (None if there are
-        no verified proofs carrying an amount — HR can then hand-set it on the line while editable)."""
+        """Roll ``verified_amount`` up from this line's ``verified`` proofs' amounts — the sum of their
+        ``amount``s (``None`` when no verified proof carries an amount, so the computation falls back to
+        the declared amount via ``effective_amount``)."""
         total = self.proofs.filter(verification_status="verified").aggregate(s=Sum("amount"))["s"]
         self.verified_amount = total
         self.save(update_fields=["verified_amount", "updated_at"])
@@ -4334,6 +4335,14 @@ class TaxComputation(TenantNumbered):
             models.Index(fields=["tenant", "financial_year"], name="hrm_txc_tenant_fy_idx"),
             models.Index(fields=["tenant", "employee"], name="hrm_txc_tenant_emp_idx"),
         ]
+
+    def save(self, *args, **kwargs):
+        # financial_year is a denormalized copy of the declaration's — derive it here so it is always
+        # populated regardless of the entry path (the form excludes it). A blank FY would make
+        # _regime_config() find no TaxRegimeConfig and silently compute zero tax.
+        if not self.financial_year and self.declaration_id:
+            self.financial_year = self.declaration.financial_year
+        return super().save(*args, **kwargs)
 
     # ----- resolved inputs (query the employee's active salary structure / regime config) -----
     def _active_structure(self):
