@@ -1688,3 +1688,561 @@ class TestSalaryStructureTemplateQueryCount:
         # ceiling still catches an N+1 regression (e.g. a per-line query) while tolerating that overhead.
         with django_assert_max_num_queries(12):
             client_a.get(reverse("hrm:salarystructuretemplate_detail", args=[salary_template_a.pk]))
+
+
+# ================================================================ Payroll Cycles (3.14)
+class TestPayrollCycleListView:
+    def test_list_200(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert draft_cycle_a.pk in pks
+
+    def test_list_filter_by_status(self, client_a, draft_cycle_a):
+        from apps.hrm.models import PayrollCycle
+        approved = PayrollCycle.objects.create(
+            tenant=draft_cycle_a.tenant, period_start=datetime.date(2026, 5, 1),
+            period_end=datetime.date(2026, 5, 31), pay_date=datetime.date(2026, 6, 1),
+            status="approved",
+        )
+        resp = client_a.get(reverse("hrm:payrollcycle_list"), {"status": "approved"})
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert approved.pk in pks
+        assert draft_cycle_a.pk not in pks
+
+    def test_list_filter_by_cycle_type(self, client_a, draft_cycle_a):
+        from apps.hrm.models import PayrollCycle
+        bonus = PayrollCycle.objects.create(
+            tenant=draft_cycle_a.tenant, period_start=datetime.date(2026, 5, 1),
+            period_end=datetime.date(2026, 5, 31), pay_date=datetime.date(2026, 6, 1),
+            cycle_type="bonus",
+        )
+        resp = client_a.get(reverse("hrm:payrollcycle_list"), {"cycle_type": "bonus"})
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert bonus.pk in pks
+        assert draft_cycle_a.pk not in pks
+
+    def test_list_has_status_and_cycle_type_choices(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_list"))
+        assert "status_choices" in resp.context
+        assert "cycle_type_choices" in resp.context
+
+
+class TestPayrollCycleCreateView:
+    def test_get_200(self, client_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_create"))
+        assert resp.status_code == 200
+
+    def test_post_creates(self, client_a, tenant_a):
+        from apps.hrm.models import PayrollCycle
+        resp = client_a.post(reverse("hrm:payrollcycle_create"), {
+            "period_start": "2026-06-01",
+            "period_end": "2026-06-30",
+            "pay_date": "2026-07-01",
+            "cycle_type": "regular",
+            "notes": "",
+        })
+        assert resp.status_code == 302
+        cycle = PayrollCycle.objects.filter(tenant=tenant_a).first()
+        assert cycle is not None
+        assert cycle.number.startswith("PRC-")
+        assert cycle.tenant_id == tenant_a.pk
+
+
+class TestPayrollCycleDetailAndEdit:
+    def test_detail_200(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 200
+
+    def test_detail_context_keys(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk]))
+        assert "obj" in resp.context
+        assert "payslips" in resp.context
+        assert "totals" in resp.context
+
+    def test_edit_get_200_when_draft(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_edit", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_updates_when_draft(self, client_a, draft_cycle_a):
+        resp = client_a.post(reverse("hrm:payrollcycle_edit", args=[draft_cycle_a.pk]), {
+            "period_start": "2026-06-01",
+            "period_end": "2026-06-30",
+            "pay_date": "2026-07-05",
+            "cycle_type": "regular",
+            "notes": "Updated notes",
+        })
+        assert resp.status_code == 302
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.pay_date == datetime.date(2026, 7, 5)
+        assert draft_cycle_a.notes == "Updated notes"
+
+    def test_edit_blocked_when_not_draft(self, client_a, draft_cycle_a):
+        draft_cycle_a.status = "approved"
+        draft_cycle_a.save(update_fields=["status"])
+        resp_get = client_a.get(reverse("hrm:payrollcycle_edit", args=[draft_cycle_a.pk]))
+        assert resp_get.status_code == 302
+        assert resp_get.url == reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk])
+
+        resp_post = client_a.post(reverse("hrm:payrollcycle_edit", args=[draft_cycle_a.pk]), {
+            "period_start": "2026-06-01",
+            "period_end": "2026-06-30",
+            "pay_date": "2026-09-09",
+            "cycle_type": "regular",
+            "notes": "Sneaky",
+        })
+        assert resp_post.status_code == 302
+        assert resp_post.url == reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk])
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.pay_date != datetime.date(2026, 9, 9)
+        assert draft_cycle_a.notes != "Sneaky"
+
+
+class TestPayrollCycleDeleteView:
+    def test_post_deletes_when_draft(self, client_a, draft_cycle_a):
+        from apps.hrm.models import PayrollCycle
+        pk = draft_cycle_a.pk
+        resp = client_a.post(reverse("hrm:payrollcycle_delete", args=[pk]))
+        assert resp.status_code == 302
+        assert not PayrollCycle.objects.filter(pk=pk).exists()
+
+    def test_get_not_allowed(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_delete", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 405
+
+    def test_delete_blocked_when_locked(self, client_a, draft_cycle_a):
+        from apps.hrm.models import PayrollCycle
+        draft_cycle_a.status = "locked"
+        draft_cycle_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("hrm:payrollcycle_delete", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        assert resp.url == reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk])
+        assert PayrollCycle.objects.filter(pk=draft_cycle_a.pk).exists()
+
+
+class TestPayrollCycleGenerateView:
+    def test_generate_creates_payslip_per_active_structure(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, active_structure_in_window_a,
+        payroll_component_lines_a,
+    ):
+        from apps.hrm.models import Payslip
+        resp = client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        payslip = Payslip.objects.filter(tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a).first()
+        assert payslip is not None
+        assert payslip.salary_structure_id == active_structure_in_window_a.pk
+        assert payslip.lines.exists()
+
+    def test_generate_only_active_structures(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, active_structure_in_window_a,
+        superseded_salary_structure_a, payroll_component_lines_a,
+    ):
+        from apps.hrm.models import Payslip
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        assert Payslip.objects.filter(tenant=tenant_a, cycle=draft_cycle_a).count() == 1
+
+    def test_regenerate_preserves_manual_inputs(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, active_structure_in_window_a,
+        payroll_component_lines_a,
+    ):
+        from apps.hrm.models import Payslip
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        payslip = Payslip.objects.get(tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a)
+        payslip.arrears_amount = Decimal("777")
+        payslip.on_hold = True
+        payslip.days_worked = 20
+        payslip.save(update_fields=["arrears_amount", "on_hold", "days_worked"])
+
+        # Re-generate deletes and rebuilds each Payslip row (new pk) — re-fetch by employee rather
+        # than refresh_from_db() the stale instance; manual inputs must still survive the rebuild.
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        regenerated = Payslip.objects.get(tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a)
+        assert regenerated.arrears_amount == Decimal("777")
+        assert regenerated.on_hold is True
+        assert regenerated.days_worked == 20
+
+    def test_generate_blocked_when_not_draft(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, active_structure_in_window_a,
+        payroll_component_lines_a,
+    ):
+        from apps.hrm.models import Payslip
+        draft_cycle_a.status = "approved"
+        draft_cycle_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        assert not Payslip.objects.filter(tenant=tenant_a, cycle=draft_cycle_a).exists()
+
+    def test_generate_excludes_future_effective_from(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, salary_template_a, payroll_component_lines_a,
+    ):
+        """A structure whose effective_from is AFTER the cycle's period_end must be excluded from the
+        effective-date window."""
+        from apps.hrm.models import EmployeeSalaryStructure, Payslip
+        EmployeeSalaryStructure.objects.create(
+            tenant=tenant_a, employee=employee_a, template=salary_template_a,
+            annual_ctc_amount=Decimal("120000"), status="active",
+            effective_from=datetime.date(2026, 12, 1),
+        )
+        resp = client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        assert not Payslip.objects.filter(tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a).exists()
+
+    def test_get_not_allowed(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 405
+
+
+class TestPayrollCycleWorkflow:
+    def test_submit_regular_goes_to_pending_approval(
+        self, client_a, draft_cycle_a, employee_a, active_structure_in_window_a, payroll_component_lines_a,
+    ):
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        resp = client_a.post(reverse("hrm:payrollcycle_submit", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "pending_approval"
+        assert draft_cycle_a.submitted_by_id is not None
+        assert draft_cycle_a.submitted_at is not None
+
+    def test_submit_bonus_cycle_goes_straight_to_approved(
+        self, client_a, tenant_a, employee_a, active_structure_in_window_a, payroll_component_lines_a,
+    ):
+        from apps.hrm.models import PayrollCycle
+        bonus_cycle = PayrollCycle.objects.create(
+            tenant=tenant_a, period_start=datetime.date(2026, 6, 1),
+            period_end=datetime.date(2026, 6, 30), pay_date=datetime.date(2026, 7, 1),
+            cycle_type="bonus",
+        )
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[bonus_cycle.pk]))
+        resp = client_a.post(reverse("hrm:payrollcycle_submit", args=[bonus_cycle.pk]))
+        assert resp.status_code == 302
+        bonus_cycle.refresh_from_db()
+        assert bonus_cycle.status == "approved"
+
+    def test_submit_blocked_without_payslips(self, client_a, draft_cycle_a):
+        resp = client_a.post(reverse("hrm:payrollcycle_submit", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "draft"
+
+    def test_submit_get_not_allowed(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_submit", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 405
+
+    def test_approve_by_tenant_admin(self, client_a, admin_user, draft_cycle_a, employee_a,
+                                      active_structure_in_window_a, payroll_component_lines_a):
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        client_a.post(reverse("hrm:payrollcycle_submit", args=[draft_cycle_a.pk]))
+        resp = client_a.post(reverse("hrm:payrollcycle_approve", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "approved"
+        assert draft_cycle_a.approved_by_id == admin_user.pk
+        assert draft_cycle_a.approved_at is not None
+
+    def test_reject_by_tenant_admin_stores_reason(
+        self, client_a, admin_user, draft_cycle_a, employee_a, active_structure_in_window_a,
+        payroll_component_lines_a,
+    ):
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        client_a.post(reverse("hrm:payrollcycle_submit", args=[draft_cycle_a.pk]))
+        resp = client_a.post(reverse("hrm:payrollcycle_reject", args=[draft_cycle_a.pk]), {
+            "rejection_reason": "Missing headcount for new hires",
+        })
+        assert resp.status_code == 302
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "rejected"
+        assert draft_cycle_a.rejection_reason == "Missing headcount for new hires"
+
+    def test_approve_get_not_allowed(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_approve", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 405
+
+    def test_reject_get_not_allowed(self, client_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payrollcycle_reject", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 405
+
+    def test_non_admin_cannot_approve(self, member_client, draft_cycle_a):
+        resp = member_client.post(reverse("hrm:payrollcycle_approve", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 403
+
+    def test_non_admin_cannot_lock(self, member_client, draft_cycle_a):
+        draft_cycle_a.status = "approved"
+        draft_cycle_a.save(update_fields=["status"])
+        resp = member_client.post(reverse("hrm:payrollcycle_lock", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 403
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "approved"
+
+
+class TestPayrollCycleLockView:
+    """The accounting hand-off — the most important test in the 3.14 suite: penny reconciliation
+    between the HRM PayrollCycle's payslip totals and the accounting.PayrollRun it creates."""
+
+    def _approved_cycle_with_payslips(self, client_a, tenant_a, draft_cycle_a, employee_a, employee_a2,
+                                       salary_template_a):
+        """Builds a template with an earning + employee-side statutory + employer-side statutory line,
+        generates payslips for two employees on different CTCs, then submits+approves the cycle."""
+        from apps.hrm.models import PayComponent, SalaryStructureLine, EmployeeSalaryStructure
+        basic = PayComponent.objects.create(
+            tenant=tenant_a, name="Basic Pay", component_type="earning",
+            calculation_type="fixed_amount", default_amount=Decimal("60000"),
+        )
+        pf_ee = PayComponent.objects.create(
+            tenant=tenant_a, name="PF Employee", component_type="statutory_deduction",
+            calculation_type="fixed_amount", default_amount=Decimal("1200"),
+            contribution_side="employee",
+        )
+        pf_er = PayComponent.objects.create(
+            tenant=tenant_a, name="PF Employer", component_type="statutory_deduction",
+            calculation_type="fixed_amount", default_amount=Decimal("1200"),
+            contribution_side="employer",
+        )
+        SalaryStructureLine.objects.create(tenant=tenant_a, template=salary_template_a, pay_component=basic, amount=Decimal("60000"))
+        SalaryStructureLine.objects.create(tenant=tenant_a, template=salary_template_a, pay_component=pf_ee, amount=Decimal("1200"))
+        SalaryStructureLine.objects.create(tenant=tenant_a, template=salary_template_a, pay_component=pf_er, amount=Decimal("1200"))
+
+        EmployeeSalaryStructure.objects.create(
+            tenant=tenant_a, employee=employee_a, template=salary_template_a,
+            annual_ctc_amount=Decimal("120000"), status="active",
+            effective_from=datetime.date(2026, 5, 1),
+        )
+        EmployeeSalaryStructure.objects.create(
+            tenant=tenant_a, employee=employee_a2, template=salary_template_a,
+            annual_ctc_amount=Decimal("240000"), status="active",
+            effective_from=datetime.date(2026, 5, 1),
+        )
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        client_a.post(reverse("hrm:payrollcycle_submit", args=[draft_cycle_a.pk]))
+        client_a.post(reverse("hrm:payrollcycle_approve", args=[draft_cycle_a.pk]))
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "approved"
+        return draft_cycle_a
+
+    def test_lock_creates_accounting_run_with_penny_reconciliation(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, employee_a2, salary_template_a,
+    ):
+        from apps.hrm.models import Payslip, PayslipLine
+        from django.db.models import Sum
+        cycle = self._approved_cycle_with_payslips(
+            client_a, tenant_a, draft_cycle_a, employee_a, employee_a2, salary_template_a)
+
+        resp = client_a.post(reverse("hrm:payrollcycle_lock", args=[cycle.pk]))
+        assert resp.status_code == 302
+        cycle.refresh_from_db()
+        assert cycle.status == "locked"
+        assert cycle.accounting_payroll_run is not None
+
+        run = cycle.accounting_payroll_run
+        payslip_totals = Payslip.objects.filter(cycle=cycle).aggregate(
+            g=Sum("gross_pay"), n=Sum("net_pay"))
+        employer_lines_total = PayslipLine.objects.filter(
+            payslip__cycle=cycle, component_type="statutory_deduction", contribution_side="employer",
+        ).aggregate(s=Sum("amount"))["s"]
+
+        assert run.gross_wages == payslip_totals["g"]
+        assert run.employer_tax == employer_lines_total
+        # Penny reconciliation: the accounting run's derived net_pay must equal Σ payslip.net_pay.
+        assert run.net_pay == payslip_totals["n"]
+
+    def test_lock_run_stays_draft_no_journal_entry(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, employee_a2, salary_template_a,
+    ):
+        """HRM posts no GL — the created accounting.PayrollRun stays draft with no JournalEntry."""
+        cycle = self._approved_cycle_with_payslips(
+            client_a, tenant_a, draft_cycle_a, employee_a, employee_a2, salary_template_a)
+        client_a.post(reverse("hrm:payrollcycle_lock", args=[cycle.pk]))
+        cycle.refresh_from_db()
+        run = cycle.accounting_payroll_run
+        assert run.status == "draft"
+        assert run.journal_entry is None
+
+    def test_lock_blocked_when_not_approved(self, client_a, draft_cycle_a):
+        resp = client_a.post(reverse("hrm:payrollcycle_lock", args=[draft_cycle_a.pk]))
+        assert resp.status_code == 302
+        draft_cycle_a.refresh_from_db()
+        assert draft_cycle_a.status == "draft"
+        assert draft_cycle_a.accounting_payroll_run is None
+
+    def test_relock_impossible_no_second_run(
+        self, client_a, tenant_a, draft_cycle_a, employee_a, employee_a2, salary_template_a,
+    ):
+        from apps.accounting.models import PayrollRun as AccountingPayrollRun
+        cycle = self._approved_cycle_with_payslips(
+            client_a, tenant_a, draft_cycle_a, employee_a, employee_a2, salary_template_a)
+        client_a.post(reverse("hrm:payrollcycle_lock", args=[cycle.pk]))
+        cycle.refresh_from_db()
+        first_run_pk = cycle.accounting_payroll_run_id
+        # Second lock attempt — cycle is now 'locked', not 'approved', so it must be a no-op.
+        resp = client_a.post(reverse("hrm:payrollcycle_lock", args=[cycle.pk]))
+        assert resp.status_code == 302
+        cycle.refresh_from_db()
+        assert cycle.accounting_payroll_run_id == first_run_pk
+        assert AccountingPayrollRun.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_locked_cycle_blocks_generate_edit_delete(self, client_a, tenant_a, draft_cycle_a,
+                                                       employee_a, active_structure_in_window_a,
+                                                       payroll_component_lines_a):
+        from apps.hrm.models import Payslip, PayrollCycle
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        payslip_count_before = Payslip.objects.filter(tenant=tenant_a, cycle=draft_cycle_a).count()
+        draft_cycle_a.status = "locked"
+        draft_cycle_a.save(update_fields=["status"])
+
+        resp_generate = client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        assert resp_generate.status_code == 302
+        # Generate is a no-op on a locked cycle — payslip count unchanged.
+        assert Payslip.objects.filter(tenant=tenant_a, cycle=draft_cycle_a).count() == payslip_count_before
+
+        resp_edit = client_a.get(reverse("hrm:payrollcycle_edit", args=[draft_cycle_a.pk]))
+        assert resp_edit.status_code == 302
+        assert resp_edit.url == reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk])
+
+        resp_delete = client_a.post(reverse("hrm:payrollcycle_delete", args=[draft_cycle_a.pk]))
+        assert resp_delete.status_code == 302
+        assert PayrollCycle.objects.filter(pk=draft_cycle_a.pk).exists()
+
+    def test_locked_cycle_blocks_payslip_edit_and_hold(self, client_a, admin_user, tenant_a, draft_cycle_a,
+                                                         employee_a, active_structure_in_window_a,
+                                                         payroll_component_lines_a):
+        from apps.hrm.models import Payslip
+        client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+        payslip = Payslip.objects.get(tenant=tenant_a, cycle=draft_cycle_a, employee=employee_a)
+        draft_cycle_a.status = "locked"
+        draft_cycle_a.save(update_fields=["status"])
+
+        resp_edit = client_a.get(reverse("hrm:payslip_edit", args=[payslip.pk]))
+        assert resp_edit.status_code == 302
+        resp_hold = client_a.post(reverse("hrm:payslip_hold", args=[payslip.pk]), {"hold_reason": "x"})
+        assert resp_hold.status_code == 302
+        payslip.refresh_from_db()
+        assert payslip.on_hold is False
+
+
+# ================================================================ Payslips (3.14)
+class TestPayslipListView:
+    def test_list_200(self, client_a, payslip_a):
+        resp = client_a.get(reverse("hrm:payslip_list"))
+        assert resp.status_code == 200
+
+    def test_list_shows_own(self, client_a, payslip_a):
+        resp = client_a.get(reverse("hrm:payslip_list"))
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert payslip_a.pk in pks
+
+    def test_list_filter_on_hold(self, client_a, payslip_a):
+        payslip_a.on_hold = True
+        payslip_a.save(update_fields=["on_hold"])
+        resp = client_a.get(reverse("hrm:payslip_list"), {"on_hold": "True"})
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert payslip_a.pk in pks
+
+        resp2 = client_a.get(reverse("hrm:payslip_list"), {"on_hold": "False"})
+        pks2 = [obj.pk for obj in resp2.context["object_list"]]
+        assert payslip_a.pk not in pks2
+
+    def test_list_filter_by_cycle(self, client_a, payslip_a, draft_cycle_a):
+        resp = client_a.get(reverse("hrm:payslip_list"), {"cycle": draft_cycle_a.pk})
+        pks = [obj.pk for obj in resp.context["object_list"]]
+        assert payslip_a.pk in pks
+
+    def test_list_has_cycles_context(self, client_a, payslip_a):
+        resp = client_a.get(reverse("hrm:payslip_list"))
+        assert "cycles" in resp.context
+
+
+class TestPayslipDetailView:
+    def test_detail_200(self, client_a, payslip_a):
+        resp = client_a.get(reverse("hrm:payslip_detail", args=[payslip_a.pk]))
+        assert resp.status_code == 200
+
+    def test_detail_context_keys(self, client_a, payslip_a):
+        resp = client_a.get(reverse("hrm:payslip_detail", args=[payslip_a.pk]))
+        assert "obj" in resp.context
+        assert "lines" in resp.context
+        assert len(resp.context["lines"]) > 0
+
+
+class TestPayslipEditView:
+    def test_edit_get_200_when_draft_cycle(self, client_a, payslip_a):
+        resp = client_a.get(reverse("hrm:payslip_edit", args=[payslip_a.pk]))
+        assert resp.status_code == 200
+
+    def test_edit_post_with_arrears_recomputes(self, client_a, payslip_a):
+        original_gross = payslip_a.gross_pay
+        resp = client_a.post(reverse("hrm:payslip_edit", args=[payslip_a.pk]), {
+            "days_worked": "30",
+            "lop_days": "0",
+            "arrears_amount": "150",
+            "bonus_amount": "0",
+        })
+        assert resp.status_code == 302
+        payslip_a.refresh_from_db()
+        assert payslip_a.arrears_amount == Decimal("150")
+        assert payslip_a.gross_pay == original_gross + Decimal("150.00")
+        assert payslip_a.lines.filter(component_type="arrears").exists()
+
+    def test_edit_blocked_when_cycle_not_draft(self, client_a, payslip_a, draft_cycle_a):
+        draft_cycle_a.status = "approved"
+        draft_cycle_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("hrm:payslip_edit", args=[payslip_a.pk]))
+        assert resp.status_code == 302
+        assert resp.url == reverse("hrm:payslip_detail", args=[payslip_a.pk])
+
+
+class TestPayslipHoldRelease:
+    def test_hold_by_tenant_admin(self, client_a, payslip_a):
+        resp = client_a.post(reverse("hrm:payslip_hold", args=[payslip_a.pk]), {"hold_reason": "Pending dispute"})
+        assert resp.status_code == 302
+        payslip_a.refresh_from_db()
+        assert payslip_a.on_hold is True
+        assert payslip_a.hold_reason == "Pending dispute"
+
+    def test_release_by_tenant_admin(self, client_a, payslip_a):
+        client_a.post(reverse("hrm:payslip_hold", args=[payslip_a.pk]), {"hold_reason": "x"})
+        resp = client_a.post(reverse("hrm:payslip_release", args=[payslip_a.pk]))
+        assert resp.status_code == 302
+        payslip_a.refresh_from_db()
+        assert payslip_a.on_hold is False
+        payslip_a.refresh_from_db()
+        assert payslip_a.released_at is not None
+
+    def test_non_admin_cannot_hold(self, member_client, payslip_a):
+        resp = member_client.post(reverse("hrm:payslip_hold", args=[payslip_a.pk]), {"hold_reason": "x"})
+        assert resp.status_code == 403
+        payslip_a.refresh_from_db()
+        assert payslip_a.on_hold is False
+
+    def test_non_admin_cannot_release(self, client_a, member_client, payslip_a):
+        client_a.post(reverse("hrm:payslip_hold", args=[payslip_a.pk]), {"hold_reason": "x"})
+        resp = member_client.post(reverse("hrm:payslip_release", args=[payslip_a.pk]))
+        assert resp.status_code == 403
+        payslip_a.refresh_from_db()
+        assert payslip_a.on_hold is True
+
+    def test_hold_blocked_when_cycle_locked(self, client_a, payslip_a, draft_cycle_a):
+        draft_cycle_a.status = "locked"
+        draft_cycle_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("hrm:payslip_hold", args=[payslip_a.pk]), {"hold_reason": "x"})
+        assert resp.status_code == 302
+        payslip_a.refresh_from_db()
+        assert payslip_a.on_hold is False
+
+
+class TestPayrollCycleQueryCount:
+    def test_generate_bounded_queries(
+        self, client_a, draft_cycle_a, employee_a, active_structure_in_window_a,
+        payroll_component_lines_a, django_assert_max_num_queries,
+    ):
+        # Locks in the O(N) FK-cache-warm behavior of payrollcycle_generate (one query set per
+        # structure, not per structure-times-lines) — this is a single-employee cycle so the ceiling
+        # is generous but still catches a gross N+1 regression.
+        with django_assert_max_num_queries(30):
+            client_a.post(reverse("hrm:payrollcycle_generate", args=[draft_cycle_a.pk]))
+
+    def test_detail_bounded_queries(self, client_a, payslip_a, draft_cycle_a, django_assert_max_num_queries):
+        with django_assert_max_num_queries(15):
+            client_a.get(reverse("hrm:payrollcycle_detail", args=[draft_cycle_a.pk]))
