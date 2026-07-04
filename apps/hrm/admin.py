@@ -71,6 +71,12 @@ from .models import (  # 3.14 Payroll Processing
     PayslipLine,
     PayrollCycle,
 )
+from .models import (  # 3.15 Statutory Compliance
+    EmployeeStatutoryIdentifier,
+    StatutoryConfig,
+    StatutoryReturn,
+    StatutoryStateRule,
+)
 
 
 @admin.register(JobGrade)
@@ -709,3 +715,44 @@ class PayslipLineAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "component_type", "contribution_side")
     search_fields = ("component_name", "payslip__number")
     raw_id_fields = ("payslip",)
+
+
+# ----------------------------------------------------------------- 3.15 Statutory Compliance
+@admin.register(StatutoryConfig)
+class StatutoryConfigAdmin(admin.ModelAdmin):
+    list_display = ("tenant", "pf_establishment_code", "esi_employer_code", "tan_number",
+                    "is_lwf_applicable")
+    list_filter = ("is_lwf_applicable",)
+    search_fields = ("tenant__name", "pf_establishment_code", "esi_employer_code", "tan_number")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(StatutoryStateRule)
+class StatutoryStateRuleAdmin(admin.ModelAdmin):
+    list_display = ("state", "scheme", "income_from", "income_to", "pt_monthly_amount",
+                    "lwf_periodicity", "is_active", "effective_from", "tenant")
+    list_filter = ("tenant", "scheme", "state", "is_active")
+    search_fields = ("state", "registration_number")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(EmployeeStatutoryIdentifier)
+class EmployeeStatutoryIdentifierAdmin(admin.ModelAdmin):
+    list_display = ("employee", "uan_number", "pf_number", "esi_number", "pt_state",
+                    "is_pf_applicable", "is_esi_applicable", "tenant")
+    list_filter = ("tenant", "is_pf_applicable", "is_esi_applicable", "pt_state")
+    search_fields = ("employee__party__name", "uan_number", "pf_number", "esi_number")
+    raw_id_fields = ("employee",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(StatutoryReturn)
+class StatutoryReturnAdmin(admin.ModelAdmin):
+    list_display = ("number", "scheme", "period_type", "period_start", "period_end", "status",
+                    "employee_contribution_total", "employer_contribution_total", "due_date", "tenant")
+    list_filter = ("tenant", "scheme", "status", "period_type")
+    search_fields = ("number", "registration_number_used", "notes")
+    raw_id_fields = ("cycle", "employee")
+    readonly_fields = ("number", "employee_contribution_total", "employer_contribution_total",
+                       "headcount", "filed_on", "paid_on", "registration_number_used",
+                       "created_at", "updated_at")
