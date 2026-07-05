@@ -1,4 +1,654 @@
 ---
+# Module 3 — HRM — Sub-module 3.19 Performance Review (performance-review) — plan from research-hrm-performance-review.md (2026-07-05)
+
+**Context.** Extends the existing `apps/hrm` app — NOT a new app. This is the **second**
+Performance Management sub-module (3.18 Goal Setting -> **3.19 Performance Review** -> 3.20
+Continuous Feedback -> 3.21 Performance Improvement). It builds the formal review-cycle
+mechanics (self/manager/peer/upward review instances, per-competency ratings, calibration
+fields) and **references** 3.18's `GoalPeriod`/`Objective`/`KeyResult` for the goal-review
+section instead of duplicating any OKR field. 4 new models, all appended to
+`apps/hrm/models.py`, migration `0033` (last is
+`0032_objective_hrm_obj_tenant_department_idx.py`). No core-spine table is added — reviews FK
+`hrm.EmployeeProfile` (subject/reviewer, never `core.Party`/`accounts.User` directly) and
+`hrm.GoalPeriod`/`hrm.Objective` (goal-review section, reused exactly as already built).
+Manager-review reviewer resolution uses the **derived** `EmployeeProfile.manager` property
+(`self.employment.manager` -> a `core.Party`) — no new manager FK anywhere in this module.
+
+NavERP.md 3.19 bullets (exact text, all 5 go Live this pass):
+- Review Cycles — Annual, half-yearly, quarterly reviews.
+- Self-Assessment — Employee self-evaluation forms.
+- Manager Review — Manager feedback, ratings.
+- 360° Feedback — Multi-rater feedback, peer review.
+- Calibration — Rating normalization, bell curve.
+
+Reuses (no duplication): `hrm.EmployeeProfile` (review `subject`/`reviewer`/`acknowledged_by` —
+never `core.Party`/`settings.AUTH_USER_MODEL` directly), `EmployeeProfile.manager` (derived
+`@property` off `core.Employment.manager`, a `core.Party` — used to validate/pre-fill the
+manager-review `reviewer`, never a new FK), `hrm.GoalPeriod` (`ReviewCycle.goal_period`,
+nullable FK — aligns a review cycle to the same quarter/year as the OKR period),
+`hrm.Objective`/`hrm.KeyResult` (the review detail's goal-review section reads
+`Objective.objects.filter(owner=subject, goal_period=cycle.goal_period)` live — no goal fields
+copied onto any 3.19 model). **No new core-spine entity, posts no GL.**
+
+**Grounding decisions carried over from research (decide, don't re-litigate at build time):**
+- `ReviewCycle` follows `GoalPeriod`'s `TenantOwned` (not `TenantNumbered`) pattern — same
+  "named catalog, not numbered" shape, same `PERIOD_TYPE_CHOICES`-analog (`cycle_type`) idea.
+- `ReviewTemplate`/`PerformanceReview`/`ReviewRating` all extend `TenantNumbered` with prefixes
+  `RVT-`/`RVW-`/`RVR-` — none of the 42 prefixes already in `apps/hrm/models.py` (the 39 from
+  research + `OBJ`/`KR`/`GCI` added in 3.18) collide (confirmed by grep — no `RVT`/`RVW`/`RVR`
+  hits anywhere in the codebase).
+- Competencies are a denormalized `criterion_label`/`criterion_category` pair directly on
+  `ReviewRating`, not a 5th `ReviewCriterion` catalog model — keeps this pass at 4 models per
+  the research's explicit scope decision; a shared competency library is a natural v2 extract.
+- `overall_rating` is a **derived `@property`** (weighted mean of the review's `ReviewRating`
+  rows by `weight`) — mirrors the 3.18 `Objective.progress_pct` pattern exactly (`_ratings()`
+  cached method + guard empty/zero-weight rows), never a stored, hand-editable field.
+  `manager_rating` (the as-submitted snapshot) and `calibrated_rating` (the post-calibration
+  override) ARE stored fields, distinct from the derived `overall_rating`, per Workday's
+  documented two-field distinction.
+- Calibration stays **field-based on `PerformanceReview`** this pass
+  (`manager_rating`/`calibrated_rating`/`calibration_notes`) — no dedicated
+  `CalibrationSession` grouping table; a calibration **board view** (not a new model) lists a
+  cycle's manager-reviews sorted/grouped for on-screen adjustment.
+- `potential_rating` is a cheap nullable field on `PerformanceReview` for 9-box groundwork —
+  the 9-box grid/visualization itself is explicitly deferred (a later report, not this pass).
+- Self-review is simply a `PerformanceReview` row with `review_type="self"` and
+  `subject_id == reviewer_id` — no special-cased self-review table.
+- Peer/360/upward are also just `PerformanceReview` rows (`review_type` in
+  `peer`/`upward`/`skip_level`) with `reviewer_id != subject_id` — multiple peer rows per
+  subject+cycle is just multiple rows, no separate "participant roster" table.
+
+## A. Models + migration (`apps/hrm/models.py`, appended after `GoalCheckIn`)
+
+- [ ] `ReviewCycle(TenantOwned)` [no `NUMBER_PREFIX` — small per-tenant catalog identified by
+      `name`, same pattern as `GoalPeriod`/`JobGrade`] — the named review-cycle container +
+      phase machine (drivers: 3.19.1 Review Cycles — 15Five's "cycle = participants + review
+      types + timeline", Culture Amp's phased unified cycle, BambooHR/Lattice goal-integration):
+  - [ ] `name` — CharField(max_length=100) — e.g. "H1 2026 Performance Review"
+  - [ ] `cycle_type` — CharField(max_length=15, choices=`CYCLE_TYPE_CHOICES`, default="annual")
+        — `[("annual","Annual"),("half_yearly","Half-Yearly"),("quarterly","Quarterly"),
+        ("custom","Custom")]` — driver: 3.19.1 bullet text verbatim ("Annual, half-yearly,
+        quarterly reviews")
+  - [ ] `status` — CharField(max_length=20, choices=`STATUS_CHOICES`, default="draft") — the
+        **phase machine**: `[("draft","Draft"),("self_assessment","Self-Assessment"),
+        ("manager_review","Manager Review"),("calibration","Calibration"),
+        ("released","Results Released"),("closed","Closed")]` — driver: Culture Amp's phased
+        unified cycle, Workday's staged roll-up; each phase gates which `PerformanceReview`
+        actions are open (e.g. self-review submission only during `self_assessment`+)
+  - [ ] `self_review_start` / `self_review_end` — DateField(null=True, blank=True) — the
+        self-assessment window (3.19.2)
+  - [ ] `manager_review_start` / `manager_review_end` — DateField(null=True, blank=True) — the
+        manager-review window (3.19.3)
+  - [ ] `calibration_date` — DateField(null=True, blank=True) — single target date (simpler
+        than a start/end window — calibration is typically a session, not a multi-week period,
+        per SAP SuccessFactors/Betterworks framing)
+  - [ ] `results_release_date` — DateField(null=True, blank=True) — when `overall_rating`/
+        `calibrated_rating` become visible to the subject (3.19.5 groundwork —
+        acknowledgment can't happen before release)
+  - [ ] `goal_period` — `models.ForeignKey("hrm.GoalPeriod", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="review_cycles")` — driver: 3.19.2 goal/OKR
+        self-reflection section (BambooHR/Lattice/PerformYard goal-integration) — **reuses
+        `hrm.GoalPeriod`**, no duplicate period fields
+  - [ ] `description` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-self_review_start", "name"]`;
+        `unique_together = ("tenant", "name")`; index
+        `models.Index(fields=["tenant", "status"], name="hrm_rc_tenant_status_idx")`
+  - [ ] `clean()` — raise `ValidationError({"self_review_end": "..."})` if
+        `self_review_end <= self_review_start` (when both set); same guard for
+        `manager_review_end <= manager_review_start`; raise
+        `ValidationError({"manager_review_start": "..."})` if
+        `manager_review_start < self_review_end` (manager phase shouldn't start before
+        self-assessment closes, when both windows are set)
+  - [ ] derived **@property** `review_count` → `self.reviews.count()`
+  - [ ] derived **@property** `PHASE_ORDER` class-level tuple
+        `("draft","self_assessment","manager_review","calibration","released","closed")` used
+        by the `reviewcycle_advance_phase` view to compute the next status (no magic-string
+        phase math duplicated in the view)
+  - [ ] `__str__` → `f"{self.name} ({self.get_cycle_type_display()})"`
+
+- [ ] `ReviewTemplate(TenantNumbered, NUMBER_PREFIX="RVT")` — the review-form definition
+      (drivers: 3.19.3 Manager Review per-competency ratings, 3.19.4 360° per-participant-type
+      forms):
+  - [ ] `name` — CharField(max_length=150)
+  - [ ] `review_type` — CharField(max_length=15, choices=`REVIEW_TYPE_CHOICES`, default="self")
+        — `[("self","Self"),("manager","Manager"),("peer","Peer"),("upward","Upward"),
+        ("skip_level","Skip-Level")]` — driver: 3.19.4 (PerformYard's "form differs by review
+        type" — a cycle can attach multiple templates, one per participant type)
+  - [ ] `rating_scale_max` — PositiveSmallIntegerField(default=5,
+        validators=[MinValueValidator(2), MaxValueValidator(10)]) — driver: 3.19.3 "Overall
+        rating on a configurable scale" (5-point is the de-facto standard across all 10
+        surveyed products)
+  - [ ] `include_goals` — BooleanField(default=False) — whether this template's review form
+        pulls the subject's `Objective`/`KeyResult` progress into a goal-review section, driver:
+        3.19.2 goal/OKR self-reflection (BambooHR/Lattice/PerformYard)
+  - [ ] `is_anonymous` — BooleanField(default=False) — per-template default anonymity (peer/360
+        rows commonly default True, self/manager default False) — driver: 3.19.4 (Trakstar's
+        "anonymous or named per relationship"); overridable per-review via
+        `PerformanceReview.is_anonymous`
+  - [ ] `description` — TextField(blank=True) — instructions shown to the reviewer
+  - [ ] `is_active` — BooleanField(default=True)
+  - [ ] `class Meta`: `ordering = ["review_type", "name"]`;
+        `unique_together = ("tenant", "number")`; indexes
+        `models.Index(fields=["tenant", "review_type"], name="hrm_rvt_tenant_type_idx")`,
+        `models.Index(fields=["tenant", "is_active"], name="hrm_rvt_tenant_active_idx")`
+  - [ ] derived **@property** `usage_count` → `self.reviews.count()` (guards delete —
+        expose in the delete-confirmation template so an admin can't silently orphan
+        historical reviews' template reference)
+  - [ ] `__str__` → `f"{self.number} · {self.name} ({self.get_review_type_display()})"`
+
+- [ ] `PerformanceReview(TenantNumbered, NUMBER_PREFIX="RVW")` — the per-instance review row,
+      one per (cycle, subject, reviewer) combination (drivers: 3.19.2 Self-Assessment, 3.19.3
+      Manager Review, 3.19.4 360° Feedback, 3.19.5 Calibration):
+  - [ ] `cycle` — `models.ForeignKey("hrm.ReviewCycle", on_delete=models.PROTECT,
+        related_name="reviews")` — PROTECT so a cycle can't be deleted out from under its
+        historical reviews
+  - [ ] `template` — `models.ForeignKey("hrm.ReviewTemplate", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="reviews")` — SET_NULL (not PROTECT) so a template
+        can be retired/deleted later without blocking, per research's `usage_count` note
+  - [ ] `subject` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+        related_name="reviews_received")` — the employee being reviewed; PROTECT matches
+        `Objective.owner`'s convention
+  - [ ] `reviewer` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+        related_name="reviews_authored")` — who fills it in; **equals `subject` for
+        `review_type="self"`** (enforced in `clean()`, not by a DB constraint, since Django
+        can't express "FK_A == FK_B conditionally" declaratively)
+  - [ ] `review_type` — CharField(max_length=15, choices=`REVIEW_TYPE_CHOICES` — same 5 values
+        as `ReviewTemplate.REVIEW_TYPE_CHOICES` (`self`/`manager`/`peer`/`upward`/
+        `skip_level`), default="self") — copied from `template.review_type` at creation for
+        query convenience (denormalized-for-query, mirrors `Objective.scope` per research)
+  - [ ] `status` — CharField(max_length=15, choices=`STATUS_CHOICES`, default="draft") —
+        `[("draft","Draft"),("submitted","Submitted"),("shared","Shared"),
+        ("acknowledged","Acknowledged")]` — the review workflow gate (3.19.3's "draft ->
+        submitted -> shared-with-employee -> acknowledged")
+  - [ ] `overall_rating` is **NOT a stored field** — it is a derived `@property` (see below);
+        do not add an editable `overall_rating` DB column
+  - [ ] `manager_rating` — DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+        — the as-submitted pre-calibration snapshot, meaningful only when
+        `review_type="manager"`; distinct from the derived `overall_rating` for audit, per
+        Workday's explicit two-field pattern
+  - [ ] `calibrated_rating` — DecimalField(max_digits=4, decimal_places=2, null=True,
+        blank=True) — set during the calibration phase, overrides `manager_rating` downstream
+        (comp/promotion decisions read this field, not `manager_rating`), per Workday/SAP
+        SuccessFactors
+  - [ ] `potential_rating` — DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+        — cheap 9-box groundwork (15Five's Talent Matrix, Workday's flagship calibration axis);
+        visualization deferred
+  - [ ] `strengths` — TextField(blank=True) — near-universal free-text section
+  - [ ] `improvements` — TextField(blank=True) — near-universal free-text section (matches the
+        prompt's field name; maps to the research's `areas_for_improvement`)
+  - [ ] `private_notes` — TextField(blank=True) — manager-only, NEVER rendered on the
+        subject-facing detail view (gate this in the view/template, not the model — mirrors how
+        `EmployeeProfile.bank_account` is gated via `masked_*()` helpers, but here it's a full
+        field visibility gate rather than masking); driver: 15Five's Private Manager Assessment
+  - [ ] `calibration_notes` — TextField(blank=True) — the adjustment rationale, per SAP
+        SuccessFactors' Bin View audit trail
+  - [ ] `is_anonymous` — BooleanField(default=False) — overridable from
+        `template.is_anonymous` at creation; display logic masks `reviewer` on the
+        subject-facing view when True and `review_type` in `peer`/`upward`
+  - [ ] `submitted_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `shared_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `acknowledged_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `acknowledged_by` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="reviews_acknowledged", editable=False)` — normally
+        equals `subject`, set from the view on `performancereview_acknowledge`
+  - [ ] `class Meta`: `ordering = ["-cycle__self_review_start", "subject__party__name"]`;
+        `unique_together = ("tenant", "number")`; indexes
+        `models.Index(fields=["tenant", "cycle"], name="hrm_rvw_tenant_cycle_idx")`,
+        `models.Index(fields=["tenant", "subject"], name="hrm_rvw_tenant_subject_idx")`,
+        `models.Index(fields=["tenant", "reviewer"], name="hrm_rvw_tenant_reviewer_idx")`,
+        `models.Index(fields=["tenant", "review_type"], name="hrm_rvw_tenant_type_idx")`,
+        `models.Index(fields=["tenant", "status"], name="hrm_rvw_tenant_status_idx")`
+  - [ ] `clean()` — raise `ValidationError({"reviewer": "..."})` if `review_type == "self"` and
+        `reviewer_id != subject_id`; raise `ValidationError({"reviewer": "..."})` if
+        `review_type != "self"` and `reviewer_id == subject_id` (a non-self review can't have
+        the subject reviewing themselves); raise
+        `ValidationError({"manager_rating": "..."})` if `manager_rating` is set on a
+        `review_type != "manager"` row (keeps the field meaningfully scoped)
+  - [ ] `_ratings()` **method** — `self.ratings.all()`, cached per instance (mirrors
+        `Objective._krs()` exactly — avoids re-querying across `overall_rating` and any
+        detail-page rendering of the same ratings queryset)
+  - [ ] derived **@property** `overall_rating` → weighted average of
+        `r.rating_value * r.weight` over `self._ratings()`, normalized by
+        `sum(r.weight for r in self._ratings())` (falls back to a simple average if all
+        weights are 0); returns `None` if no ratings exist yet (distinct from `Decimal("0")`
+        — an unrated review shouldn't display as "0/5", it should display "Not yet rated") —
+        mirrors `Objective.progress_pct` but with a `None`-vs-`ZERO` distinction since a rating
+        of 0 is a valid low score, unlike a progress percentage
+  - [ ] derived **@property** `rating_count` → `len(self._ratings())`
+  - [ ] derived **@property** `effective_rating` → `self.calibrated_rating` if not None, else
+        `self.overall_rating` — the single field every downstream consumer (comp, promotion
+        reports) should read, per Workday's documented pattern of calibrated overriding manager
+      - [ ] derived **@property** `goal_period` → `self.cycle.goal_period` (convenience
+        passthrough so the detail view/template doesn't need `obj.cycle.goal_period` chained
+        lookups everywhere)
+  - [ ] `__str__` → `f"{self.number} · {self.subject.party.name} ({self.get_review_type_display()})"`
+
+- [ ] `ReviewRating(TenantNumbered, NUMBER_PREFIX="RVR")` — per-competency/question rating line
+      under a review (drivers: 3.19.3 per-competency ratings with comments, 3.19.4 same-shape
+      reuse across all review_types):
+  - [ ] `review` — `models.ForeignKey("hrm.PerformanceReview", on_delete=models.CASCADE,
+        related_name="ratings")`
+  - [ ] `criterion_label` — CharField(max_length=255) — the competency/question text (kept as
+        a label rather than a 5th `ReviewCriterion` FK model this pass, per research's Deferred
+        note)
+  - [ ] `criterion_category` — CharField(max_length=15, choices=`CATEGORY_CHOICES`,
+        default="competency") — `[("competency","Competency"),("goal","Goal"),
+        ("value","Company Value"),("custom","Custom")]` — folds 15Five's "Competency ratings /
+        Company Values ratings / Objectives ratings" distinction into one field, same pattern
+        as `KeyResult.metric_type`
+  - [ ] `rating_value` — DecimalField(max_digits=4, decimal_places=2) — the per-criterion score,
+        expected within `[0, review.template.rating_scale_max]` (validated in `clean()`, not a
+        hardcoded `MaxValueValidator`, since the ceiling varies per template)
+  - [ ] `weight` — DecimalField(max_digits=5, decimal_places=2, default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]) — directly mirrors the
+        already-built `Objective.weight`/`KeyResult.weight` pattern so
+        `PerformanceReview.overall_rating` derives as a weighted mean instead of a
+        manually-typed duplicate; form should default new rows to an equal split among
+        existing siblings under the same review (mirrors `KeyResult.weight`'s
+        `100 / (existing_sibling_count + 1)` default)
+  - [ ] `comment` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["review", "-weight", "criterion_label"]`;
+        `unique_together = ("tenant", "number")`; index
+        `models.Index(fields=["tenant", "review"], name="hrm_rvr_tenant_review_idx")`
+  - [ ] `clean()` — raise `ValidationError({"rating_value": "..."})` if `rating_value` is
+        negative or (when `self.review_id` and `self.review.template_id`) exceeds
+        `self.review.template.rating_scale_max`; raise `ValidationError({"weight": "..."})` if
+        `weight` is negative (validators already block this at the field level but keep the
+        model-level guard for bulk/fixture writes that skip `full_clean()`, matching
+        `KeyResult.clean()`'s exact rationale)
+  - [ ] `__str__` → `f"{self.number} · {self.criterion_label} ({self.rating_value})"`
+
+- [ ] one incremental migration
+      `apps/hrm/migrations/0033_reviewcycle_reviewtemplate_performancereview_and_more.py`
+      (NOT `0001_initial`; last is `0032_objective_hrm_obj_tenant_department_idx.py`) —
+      `makemigrations hrm`, review the generated file, adjust index/constraint names to match
+      the ones specified above if Django's auto-names differ
+
+## B. Forms (`apps/hrm/forms.py`)
+
+- [ ] `ReviewCycleForm(ModelForm)` — `tenant=` kwarg accepted (consistent signature with every
+      other HRM form); excludes `tenant`/`status` (status is **workflow-only**, changed via the
+      phase-advance action, never directly editable on the form — mirrors the 3.18 lesson where
+      `GoalPeriodForm` originally leaked `status` and let a non-admin bypass the
+      activate/close gate; do NOT repeat that mistake here); scopes `goal_period` to
+      `GoalPeriod.objects.filter(tenant=tenant)`; fields = `name, cycle_type,
+      self_review_start, self_review_end, manager_review_start, manager_review_end,
+      calibration_date, results_release_date, goal_period, description`
+- [ ] `ReviewTemplateForm(ModelForm)` — `tenant=` kwarg; excludes `tenant`/`number`; fields =
+      `name, review_type, rating_scale_max, include_goals, is_anonymous, description,
+      is_active`
+- [ ] `PerformanceReviewForm(ModelForm)` — `tenant=` kwarg; excludes
+      `tenant`/`number`/`status`/`manager_rating`/`calibrated_rating`/`potential_rating`/
+      `calibration_notes`/`submitted_at`/`shared_at`/`acknowledged_at`/`acknowledged_by`
+      (all workflow/calibration-only — set via dedicated actions, never on the create/edit
+      form); scopes `cycle` to `ReviewCycle.objects.filter(tenant=tenant)`, `template` to
+      `ReviewTemplate.objects.filter(tenant=tenant, is_active=True)`, `subject`/`reviewer` to
+      `EmployeeProfile.objects.filter(tenant=tenant).select_related("party")`; fields = `cycle,
+      template, subject, reviewer, review_type, strengths, improvements, private_notes,
+      is_anonymous`
+- [ ] `CalibrationForm(ModelForm)` — a **separate, narrow** form used only by the calibration
+      action — `tenant=` kwarg (unused, kept for signature consistency); Meta `model =
+      PerformanceReview`; fields = `calibrated_rating, calibration_notes` ONLY (this is the
+      privileged-action form the research/prompt calls for — editing `calibrated_rating`
+      must never be reachable via the general edit form)
+- [ ] `ReviewRatingForm(ModelForm)` — `tenant=` kwarg; excludes `tenant`/`number`/`review`
+      (review is set from the URL in the create view, matching `KeyResultForm`'s
+      parent-scoped child-create pattern); fields = `criterion_label, criterion_category,
+      rating_value, weight, comment`
+
+## C. Views (`apps/hrm/views.py`) — full CRUD + custom actions, function-based,
+      `@login_required` (privileged transitions `@tenant_admin_required`), tenant-scoped via
+      `crud_list/crud_create/crud_edit/crud_detail/crud_delete`
+
+- [ ] `reviewcycle_list` — `crud_list`; `search_fields=("name",)`; `filters=[("status",
+      "status", False), ("cycle_type", "cycle_type", False)]`; pass
+      `status_choices=ReviewCycle.STATUS_CHOICES`,
+      `cycle_type_choices=ReviewCycle.CYCLE_TYPE_CHOICES` in `extra_context` (Filter
+      Implementation Rule)
+- [ ] `reviewcycle_create` / `reviewcycle_edit` / `reviewcycle_detail` / `reviewcycle_delete` —
+      standard `crud_create/crud_edit/crud_detail/crud_delete`; `reviewcycle_detail`
+      extra_context includes `review_count`, the cycle's reviews grouped by `review_type`
+      (`select_related("subject__party", "reviewer__party", "template")`), and a per-phase
+      progress summary (counts of draft/submitted/shared/acknowledged reviews) — 3.19.1
+- [ ] `reviewcycle_advance_phase` (`@tenant_admin_required`, POST-only) — advances `status` to
+      the next value in `ReviewCycle.PHASE_ORDER`; guards against skipping (only allow
+      advancing exactly one step) and against advancing past `"closed"`; on transition INTO
+      `"released"`, do NOT auto-share every review (an explicit per-review `share` action stays
+      the single write path) — 3.19.1 cycle phase machine
+- [ ] `reviewcycle_release` (`@tenant_admin_required`, POST-only) — convenience action that
+      sets `status="released"` directly (equivalent to calling `reviewcycle_advance_phase`
+      until released) IF the research/prompt's "release" action is kept distinct from generic
+      phase-advance — decide at build time whether this is a separate view or folds into
+      `reviewcycle_advance_phase`; either way, gate behind `@tenant_admin_required`
+- [ ] `reviewtemplate_list` — `crud_list`; `search_fields=("name", "number")`;
+      `filters=[("review_type", "review_type", False), ("is_active", "is_active", False)]`;
+      pass `review_type_choices=ReviewTemplate.REVIEW_TYPE_CHOICES` in `extra_context`
+- [ ] `reviewtemplate_create` / `reviewtemplate_edit` / `reviewtemplate_detail` /
+      `reviewtemplate_delete` — standard; `reviewtemplate_detail` extra_context includes
+      `usage_count` (guard messaging if non-zero, informational only — SET_NULL means delete
+      still succeeds, but warn the admin)
+- [ ] `performancereview_list` — `crud_list`; `search_fields=("number", "subject__party__name",
+      "reviewer__party__name")`; `filters=[("cycle", "cycle_id", True), ("review_type",
+      "review_type", False), ("status", "status", False), ("subject", "subject_id", True),
+      ("reviewer", "reviewer_id", True)]`; pass `cycle_choices=
+      ReviewCycle.objects.filter(tenant=request.tenant)`,
+      `review_type_choices=PerformanceReview.REVIEW_TYPE_CHOICES`,
+      `status_choices=PerformanceReview.STATUS_CHOICES`,
+      `employees=EmployeeProfile.objects.filter(tenant=request.tenant).select_related("party")`
+      in `extra_context`; `select_related("cycle", "template", "subject__party",
+      "reviewer__party")`; support `?mine=1` (reviews authored by or about the logged-in
+      user's linked `EmployeeProfile`, mirrors `objective_list`'s `_current_employee_profile`
+      helper) — serves 3.19.2 (`?review_type=self`), 3.19.3 (`?review_type=manager`), 3.19.4
+      (unfiltered or `?review_type=peer`/`upward`)
+- [ ] `performancereview_create` / `performancereview_edit` / `performancereview_delete` —
+      standard `crud_create/crud_edit/crud_delete`; on `crud_create`, after `form.save()`,
+      copy `review_type` from `template.review_type` if a template was selected (view-level
+      denormalization, not left to the form)
+- [ ] `performancereview_detail` — `crud_detail`; extra_context includes `ratings=
+      obj.ratings.all()` (for the inline rating table + add-inline form), `overall_rating`/
+      `effective_rating`/`rating_count` (already properties — template reads them off `obj`),
+      the subject's `Objective` set for the goal-review section (only when
+      `obj.template.include_goals` is True) via
+      `Objective.objects.filter(owner=obj.subject, goal_period=obj.goal_period)` (guard
+      `obj.goal_period is None` -> empty queryset, no error) — 3.19.2 goal/OKR self-reflection
+      section; gate `private_notes` rendering to reviewer/admin only (never shown when the
+      requesting user's `EmployeeProfile == obj.subject` and `request.user` is not a tenant
+      admin) — 3.19.3 Private Manager Assessment
+- [ ] `performancereview_submit` (`@login_required`, POST-only, reviewer-or-admin only — guard
+      `request.user`'s linked `EmployeeProfile == obj.reviewer` OR tenant-admin) — sets
+      `status="submitted"`, `submitted_at=timezone.now()`; guard: only from `status="draft"`
+      — 3.19.3 workflow states
+- [ ] `performancereview_share` (`@tenant_admin_required`, POST-only) — sets
+      `status="shared"`, `shared_at=timezone.now()`; guard: only from `status="submitted"`
+      — makes the review visible to the subject (gates `private_notes` still apply)
+- [ ] `performancereview_acknowledge` (`@login_required`, POST-only, subject-only guard —
+      `request.user`'s linked `EmployeeProfile == obj.subject`) — sets
+      `status="acknowledged"`, `acknowledged_at=timezone.now()`,
+      `acknowledged_by=that_profile`; guard: only from `status="shared"` — 3.19.3 employee
+      acknowledgment/e-signature
+- [ ] `performancereview_calibrate` (`@tenant_admin_required`, GET shows `CalibrationForm`
+      pre-filled with `manager_rating`/`overall_rating` as reference, POST saves
+      `calibrated_rating`/`calibration_notes` only) — the ONLY write path to
+      `calibrated_rating` — 3.19.5 Calibration
+- [ ] `calibration_board` (`@tenant_admin_required`) — a **report-style view, not a CRUD
+      view** — given `?cycle=<id>`, lists that cycle's `review_type="manager"` reviews
+      (`select_related("subject__party", "subject__employment__org_unit")`) sorted by
+      `effective_rating`/department for side-by-side calibration adjustment (SAP
+      SuccessFactors Bin View / Stack Ranker, Culture Amp Calibration Views — no new model,
+      pure aggregation over existing fields); each row links to
+      `performancereview_calibrate` for the actual edit — 3.19.5
+- [ ] `reviewrating_create` (nested under a review: `<int:review_pk>/ratings/add/`) — fetches
+      the parent `PerformanceReview` (`tenant=request.tenant` guard), sets `review=review`
+      before save, defaults `weight` to an equal split among existing sibling ratings
+      (`100 / (sibling_count + 1)`) in the form's initial value — 3.19.3/3.19.4
+- [ ] `reviewrating_edit` / `reviewrating_detail` / `reviewrating_delete` — standard;
+      `success_url` redirects back to the parent `performancereview_detail`, not a standalone
+      ratings list page (ratings are always viewed in the context of their review — no
+      navigational `reviewrating_list` needed, though the URL/view exists for completeness)
+- [ ] all list views pass `q` search + pagination automatically via `crud_list`; no manual
+      `Paginator`/`Q()` code duplicated per view (Filter Implementation Rule + CRUD
+      Completeness Rule)
+
+## D. URLs (`apps/hrm/urls.py`, `app_name = "hrm"`, append to the existing `urlpatterns`)
+
+- [ ] `review-cycles/` -> `reviewcycle_list`; `review-cycles/add/` -> `reviewcycle_create`;
+      `review-cycles/<int:pk>/` -> `reviewcycle_detail`; `review-cycles/<int:pk>/edit/` ->
+      `reviewcycle_edit`; `review-cycles/<int:pk>/delete/` -> `reviewcycle_delete`;
+      `review-cycles/<int:pk>/advance/` -> `reviewcycle_advance_phase`;
+      `review-cycles/<int:pk>/release/` -> `reviewcycle_release` (if kept distinct)
+- [ ] `review-templates/` -> `reviewtemplate_list`; `review-templates/add/` ->
+      `reviewtemplate_create`; `review-templates/<int:pk>/` -> `reviewtemplate_detail`;
+      `review-templates/<int:pk>/edit/` -> `reviewtemplate_edit`;
+      `review-templates/<int:pk>/delete/` -> `reviewtemplate_delete`
+- [ ] `reviews/` -> `performancereview_list`; `reviews/add/` -> `performancereview_create`;
+      `reviews/<int:pk>/` -> `performancereview_detail`; `reviews/<int:pk>/edit/` ->
+      `performancereview_edit`; `reviews/<int:pk>/delete/` -> `performancereview_delete`;
+      `reviews/<int:pk>/submit/` -> `performancereview_submit`; `reviews/<int:pk>/share/` ->
+      `performancereview_share`; `reviews/<int:pk>/acknowledge/` ->
+      `performancereview_acknowledge`; `reviews/<int:pk>/calibrate/` ->
+      `performancereview_calibrate`
+- [ ] `reviews/<int:review_pk>/ratings/add/` -> `reviewrating_create`; `ratings/<int:pk>/` ->
+      `reviewrating_detail`; `ratings/<int:pk>/edit/` -> `reviewrating_edit`;
+      `ratings/<int:pk>/delete/` -> `reviewrating_delete`
+- [ ] `calibration/` -> `calibration_board` (accepts `?cycle=<id>` query param)
+- [ ] verify every new `path()` name is unique against the ~185 existing `hrm:` names (`grep
+      name=` in `apps/hrm/urls.py` before adding — no accidental collision, especially with
+      3.18's `objective_*`/`keyresult_*` names)
+
+## E. Admin (`apps/hrm/admin.py`)
+
+- [ ] register `ReviewCycle` — `list_display=("name", "cycle_type", "status",
+      "self_review_start", "manager_review_start", "results_release_date", "tenant")`,
+      `list_filter=("status", "cycle_type", "tenant")`, `search_fields=("name",)`,
+      `autocomplete_fields=("goal_period",)`
+- [ ] register `ReviewTemplate` — `list_display=("number", "name", "review_type",
+      "rating_scale_max", "is_active", "tenant")`, `list_filter=("review_type", "is_active",
+      "tenant")`, `search_fields=("number", "name")`
+- [ ] register `PerformanceReview` — `list_display=("number", "subject", "reviewer",
+      "review_type", "cycle", "status", "tenant")`, `list_filter=("review_type", "status",
+      "tenant")`, `search_fields=("number", "subject__party__name",
+      "reviewer__party__name")`, `autocomplete_fields=("cycle", "template", "subject",
+      "reviewer", "acknowledged_by")`
+- [ ] register `ReviewRating` — `list_display=("number", "review", "criterion_label",
+      "criterion_category", "rating_value", "weight", "tenant")`,
+      `list_filter=("criterion_category", "tenant")`, `search_fields=("number",
+      "criterion_label")`, `autocomplete_fields=("review",)`
+
+## F. Seed (`apps/hrm/management/commands/seed_hrm.py`) — extend the existing per-tenant loop,
+      idempotent (skip-if-exists check per model, same pattern as every prior HRM extension)
+
+- [ ] guard: `if ReviewCycle.objects.filter(tenant=tenant).exists(): skip this block, print
+      notice` (do NOT wrap the whole command's idempotency in this — only this section)
+- [ ] reuse the existing `EmployeeProfile.objects.filter(tenant=tenant).select_related("party")`
+      queryset (no new employee rows) and the **active** `GoalPeriod` already seeded by 3.18
+      (`GoalPeriod.objects.filter(tenant=tenant, status="active").first()`) — do NOT create a
+      second GoalPeriod for this seeder
+- [ ] seed 1 `ReviewCycle` per tenant: `cycle_type="half_yearly"`, `status="manager_review"`
+      (mid-phase, so both self and manager reviews have data), `goal_period=` the active
+      GoalPeriod found above, sensible `self_review_start/end`/`manager_review_start/end`
+      dates bracketing "now", `results_release_date` in the future
+- [ ] seed 2-3 `ReviewTemplate` rows per tenant: at minimum one `review_type="self"`
+      (`rating_scale_max=5`, `include_goals=True`), one `review_type="manager"`
+      (`rating_scale_max=5`, `include_goals=True`), one `review_type="peer"`
+      (`rating_scale_max=5`, `is_anonymous=True`) — demonstrates the per-participant-type
+      template differentiation (3.19.4)
+- [ ] seed a handful of `PerformanceReview` rows across `self`/`manager`/`peer` for 3-5
+      employees (reuse the same manager/direct-report pair 3.18 resolved via `.manager`, if
+      still available, so the manager-review reviewer resolution has real data): at least one
+      `self` review (`subject==reviewer`) with `status="submitted"`, at least one `manager`
+      review with `status="shared"` and `manager_rating` set, at least one `manager` review
+      with `status="acknowledged"` (`acknowledged_at`/`acknowledged_by` populated) AND
+      `calibrated_rating` set (different from `manager_rating`, demonstrating the calibration
+      override), at least one `peer` review with `is_anonymous=True` — varied statuses so the
+      list filters + calibration board have real data to show immediately after seeding
+- [ ] seed 2-4 `ReviewRating` rows per `PerformanceReview` with varied `criterion_category`
+      (at least one `competency`, one `goal` when `template.include_goals`), `rating_value`s
+      that produce a sensible derived `overall_rating` (not all identical — show a spread),
+      weights summing sensibly (e.g. equal-split or 40/40/20) — exercises the weighted-mean
+      `overall_rating` property immediately after seeding; confirm at least one review's
+      `effective_rating` differs from its `overall_rating` (the calibrated-override case)
+- [ ] idempotent re-run check: run `seed_hrm` a 2nd time with no `--flush`, confirm no
+      duplicate `ReviewCycle`/`ReviewTemplate`/`PerformanceReview`/`ReviewRating` rows are
+      created (the per-model `.exists()` guard added above handles this — verify at Verify
+      step, not just by inspection)
+
+## G. Wire-up
+
+- [ ] `config/settings.py` — no change needed (`apps.hrm` already in `INSTALLED_APPS`)
+- [ ] `config/urls.py` — no change needed (`hrm/` include already wired from 3.1)
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.19"]` — new entry mapping all 5 NavERP.md
+      bullets (exact bullet text, confirm no other sub-module already claims these 5 strings
+      under a different key — they're new for 3.19 per NavERP.md):
+  ```python
+  # 3.19 Performance Review — second Performance-Management sub-module (formal review-cycle
+  # mechanics; continuous feedback/kudos/1:1s are 3.20, PIP/coaching is 3.21). ReviewCycle
+  # serves Review Cycles; performancereview_list filtered by review_type serves
+  # Self-Assessment/Manager Review; the unfiltered list (all review_types incl. peer/upward)
+  # serves 360° Feedback; calibration_board serves Calibration.
+  "3.19": {
+      "Review Cycles": "hrm:reviewcycle_list",                              # bullet (cycle catalog + phase machine)
+      "Self-Assessment": "hrm:performancereview_list?review_type=self",     # bullet (self review_type slice)
+      "Manager Review": "hrm:performancereview_list?review_type=manager",   # bullet (manager review_type slice)
+      "360° Feedback": "hrm:performancereview_list",                        # bullet (all types incl. peer/upward)
+      "Calibration": "hrm:calibration_board",                               # bullet (calibration board)
+  },
+  ```
+
+## H. Templates (`templates/hrm/performance/<entity>/{list,detail,form}.html`) — REUSE the
+      existing `performance/` sub-module folder from 3.18 (goalperiod/objective/keyresult/
+      goalcheckin already live there); add reviewcycle/, reviewtemplate/,
+      performancereview/, reviewrating/ alongside them (per Template Folder Structure Rule 2 —
+      one folder per entity within the shared sub-module folder)
+
+- [ ] `performance/reviewcycle/list.html` — filter bar (`status`, `cycle_type` dropdowns
+      reflecting `request.GET`), Actions column (view/edit/delete + Advance-Phase button
+      conditional on `obj.status != "closed"`), empty-state, pagination
+- [ ] `performance/reviewcycle/detail.html` — shows `review_count`, the phase-progress summary
+      (draft/submitted/shared/acknowledged counts), a status/phase badge, the cycle's reviews
+      grouped by `review_type`, Actions sidebar (Edit/Delete conditional on `status ==
+      "draft"`, Advance-Phase/Release workflow buttons, Back to List)
+- [ ] `performance/reviewcycle/form.html` — create/edit, shared template (`is_edit` flag); NO
+      `status` field on the form (workflow-only, per the `ReviewCycleForm` lesson-learned note
+      above)
+- [ ] `performance/reviewtemplate/list.html` — filter bar (`review_type`, `is_active`
+      dropdowns), Actions column, empty-state, pagination
+- [ ] `performance/reviewtemplate/detail.html` — shows `rating_scale_max`, `include_goals`/
+      `is_anonymous` badges, `usage_count`, Actions sidebar (Edit/Delete with a usage-count
+      warning, Back to List)
+- [ ] `performance/reviewtemplate/form.html` — create/edit, shared template
+- [ ] `performance/performancereview/list.html` — filter bar (`cycle`, `review_type`,
+      `status`, `subject`, `reviewer` dropdowns + `?mine=1` toggle), Actions column
+      (view/edit/delete conditional on `status == "draft"`, Submit button conditional on
+      `status == "draft"` + reviewer/admin), empty-state, pagination — **CRITICAL**: pass
+      every dropdown's options from the view context (Filter Implementation Rule 1), use
+      `|stringformat:"d"` for the FK dropdowns' `selected` comparison (Rule 2)
+- [ ] `performance/performancereview/detail.html` — header (subject/reviewer/cycle/
+      review_type/status badge/`overall_rating` + `effective_rating` display, showing "Not
+      yet rated" when `overall_rating is None`), Ratings table (inline, with an "Add Rating"
+      button -> `reviewrating_create`), goal-review section (subject's Objectives for
+      `cycle.goal_period`, rendered ONLY when `obj.template.include_goals`), `private_notes`
+      panel gated to reviewer/admin only (never rendered when the viewer IS the subject and
+      not a tenant admin), Actions sidebar (Submit/Share/Acknowledge/Calibrate workflow
+      buttons each conditional on the review's current `status` + the viewer's role, Edit/
+      Delete conditional on `status == "draft"`, Back to List)
+- [ ] `performance/performancereview/form.html` — create/edit; `cycle`/`template`/`subject`/
+      `reviewer` as searchable `<select>`s
+- [ ] `performance/performancereview/calibrate.html` — the `CalibrationForm` (
+      `calibrated_rating`/`calibration_notes` only), showing `manager_rating`/
+      `overall_rating` as read-only reference values above the form fields
+- [ ] `performance/calibration_board.html` — standalone report page (not a CRUD entity
+      folder — a sub-module-root page per Template Folder Structure Rule 6): `?cycle=`
+      selector dropdown, a sortable table of the selected cycle's manager reviews
+      (subject/department/`manager_rating`/`overall_rating`/`calibrated_rating`/status), each
+      row linking to `performancereview_calibrate`
+- [ ] `performance/reviewrating/form.html` — create (nested under review, via `review_pk` in
+      URL) + edit, shared template
+- [ ] `performance/reviewrating/detail.html` — read-only, Actions sidebar (Edit/Delete, Back
+      to Review)
+- [ ] add a "Performance Review" card/section to the existing HRM overview page (mirrors how
+      3.18 Goal Setting surfaced itself) pointing at `reviewcycle_list`
+
+## I. Verify
+
+- [ ] `python manage.py makemigrations hrm` — confirm exactly one new migration file numbered
+      `0033`, review generated index/constraint names against section A's spec
+- [ ] `python manage.py migrate` — applies cleanly with no errors
+- [ ] `python manage.py seed_hrm` — run once, confirm ReviewCycle/ReviewTemplate/
+      PerformanceReview/ReviewRating rows created per tenant, confirm login instructions
+      print (tenant admin accounts, superuser warning)
+- [ ] `python manage.py seed_hrm` — run a **2nd time**, confirm idempotent (no duplicate
+      rows, "already exists" notice printed for this section)
+- [ ] `python manage.py check` — no system check errors/warnings introduced
+- [ ] `temp/` smoke sweep — every new `hrm:reviewcycle_*`/`hrm:reviewtemplate_*`/
+      `hrm:performancereview_*`/`hrm:reviewrating_*`/`hrm:calibration_board` URL returns 200
+      (GET) or 302 (POST redirect) when logged in as a tenant admin; confirm no
+      `{#`/`{% comment %}` template-leak artifacts render; confirm a cross-tenant review/
+      rating/cycle/template ID (belonging to a DIFFERENT tenant) returns 404 via
+      `crud_detail`'s `tenant=request.tenant` guard (IDOR check)
+- [ ] confirm the sidebar shows 3.19's 5 bullets as **Live** (not "On the roadmap") after the
+      `LIVE_LINKS["3.19"]` wire-up, for a logged-in tenant admin
+- [ ] confirm `PerformanceReview.overall_rating`/`effective_rating` render without raising on:
+      a review with zero `ReviewRating` rows (returns `None`, template shows "Not yet rated"
+      not a crash), a review where every rating has `weight=0` (falls back to simple mean, no
+      divide-by-zero), a `ReviewCycle` with no `goal_period` set (goal-review section shows
+      empty, not an AttributeError) — edge-case guard sweep matching the exact divide-by-zero/
+      empty-queryset traps the 3.18 derived properties already defend against
+- [ ] confirm the workflow gates hold: `performancereview_submit` rejects a non-`draft` review
+      (redirects with an error message, doesn't silently no-op-succeed);
+      `performancereview_calibrate` is unreachable by a non-tenant-admin (403, not a silent
+      redirect); a subject viewing their own shared review never sees `private_notes` in the
+      rendered HTML (view-source check, not just "the template has an `{% if %}`")
+
+## J. Close-out
+
+- [ ] `code-reviewer` agent — apply findings, one file per commit
+- [ ] `explorer` agent — apply findings, one file per commit
+- [ ] `frontend-reviewer` agent — apply findings, one file per commit
+- [ ] `performance-reviewer` agent — apply findings (watch specifically for N+1 on
+      `performancereview_list`'s `subject__party`/`reviewer__party`/`cycle`/`template` and on
+      `performancereview_detail`'s inline `ratings` + goal-review `Objective` queryset — use
+      `select_related`/`prefetch_related` from the start; watch `calibration_board` for an
+      unbounded/unfiltered scan when no `?cycle=` is given, one file per commit
+- [ ] `qa-smoke-tester` agent — apply findings, one file per commit
+- [ ] `security-reviewer` agent — apply findings (watch specifically for: the cross-tenant
+      IDOR check on nested create views — `reviewrating_create` fetches its parent
+      `PerformanceReview` with an explicit `tenant=request.tenant` guard, not just `pk=`; the
+      `private_notes` visibility gate actually excludes the field from the rendered response
+      for a subject-viewer, not just hides it via CSS; `performancereview_calibrate` and
+      `reviewcycle_advance_phase`/`reviewcycle_release` are genuinely gated by
+      `@tenant_admin_required`, not just a template-level "hide the button" check), one file
+      per commit
+- [ ] `test-writer` agent — apply output, one file per commit
+- [ ] create/update `.claude/skills/hrm/SKILL.md` — add the 4-model 3.19 table (ReviewCycle/
+      ReviewTemplate/PerformanceReview/ReviewRating), the phase machine + review workflow +
+      calibration flow, routes/templates/seeder/sidebar (`LIVE_LINKS["3.19"]`) notes, update
+      the module's model count and built-sub-module list
+- [ ] update the HRM README entry for 3.19 Performance Review (mirror the 3.18 README entry's
+      shape and depth) + refresh HRM/project-wide test counts once `test-writer` lands
+
+## Later passes / deferred (carried over from research-hrm-performance-review.md — do NOT
+      build in 3.19)
+
+- **Continuous feedback / kudos / praise / recognition** — belongs to 3.20 Continuous
+  Feedback, not 3.19.
+- **1:1 meeting scheduling/notes/action items** — belongs to 3.20 Continuous Feedback.
+- **PIP / warning letters / coaching logs** — belongs to 3.21 Performance Improvement.
+- **The goal/OKR mechanics themselves** (Objective/KeyResult/GoalCheckIn creation, weighting,
+  cascading) — already built in 3.18; 3.19 only *references* `GoalPeriod`/`Objective`/
+  `KeyResult` for the goal-review section, never duplicates their fields.
+- **Dedicated `ReviewCriterion` / competency-catalog model** — this pass keeps competencies as
+  a `criterion_label`/`criterion_category` pair directly on `ReviewRating` (denormalized per
+  review, no shared catalog). If a tenant wants a reusable, editable company-wide competency
+  library, extract `ReviewCriterion` as a 5th model in a later pass and FK
+  `ReviewRating.criterion` to it instead of a free-text label.
+- **Dedicated `CalibrationSession` grouping table** — this pass keeps calibration as fields
+  (`manager_rating`/`calibrated_rating`/`calibration_notes`) on `PerformanceReview` plus the
+  `calibration_board` report view. A later pass can add `CalibrationSession` (facilitator,
+  group, meeting date, participants, sign-off) if formal session tracking/minutes are needed.
+- **Rating-distribution / bell-curve enforcement, Stack Ranker view, 9-box visualization** —
+  all buildable as reports/aggregations over the fields already captured
+  (`calibrated_rating`, `potential_rating`) once this pass's 4 models exist; no new model
+  required, `calibration_board` is the seed of the Stack Ranker idea but the bell-curve
+  guideline/9-box grid itself is not built this pass.
+- **Multi-level calibration roll-up / top-org sign-off chain** (Workday's mechanic) — a
+  workflow-automation feature layered on top of the `EmployeeProfile.manager` chain;
+  deferred as an integration-later item.
+- **External/non-employee 360 reviewer** (Leapsome's "external reviews") — would require
+  relaxing `reviewer` to accept a `core.Party` outside `EmployeeProfile`; deferred, not
+  needed for internal-360 scope.
+- **AI-drafted reviews, AI bias detection, AI auto-assignment to cycles, sentiment scoring**
+  (Lattice, Betterworks, Engagedly, Synergita) — all require an LLM integration; out of a
+  single Django pass.
+- **Auto-launch / lifecycle-triggered cycles** (e.g. auto-start N days before a work
+  anniversary) — would need a scheduling/cron mechanism; deferred.
+- **Skip-level review as a distinct table** — not deferred as a *feature* (it's cheap — just
+  another `review_type` choice value: `skip_level`), but noted here so the build doesn't
+  over-scope trying to model it specially.
+
+## Review notes
+(filled in at the end)
+
+---
 # Module 3 — HRM — Sub-module 3.18 Goal Setting (goal-setting) — plan from research-hrm-goal-setting.md (2026-07-05)
 
 ## ✅ BUILD REVIEW (3.18 shipped — all 11 Module-Creation-Sequence steps done, 2026-07-05)
