@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.subject.party.name }} · {{ obj.get_review_type_display }} Review</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:performancereview_list' %}">Reviews</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:performancereview_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:performancereview_delete' obj.pk %}" onsubmit="return confirm('Delete this review?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject.party.name }}</dd></div>
+      <div class="detail-item"><dt>Reviewer</dt><dd>{% if show_reviewer %}{{ obj.reviewer.party.name }}{% else %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-muted">{{ obj.get_review_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Cycle</dt><dd><a href="{% url 'hrm:reviewcycle_detail' obj.cycle.pk %}">{{ obj.cycle.name }}</a></dd></div>
+      <div class="detail-item"><dt>Template</dt><dd>{% if obj.template_id %}{{ obj.template.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'shared' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'submitted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Overall Rating</dt><dd>{% if obj.overall_rating is not None %}<span class="fw-600">{{ obj.overall_rating }}</span> / {{ obj.template.rating_scale_max|default:5 }}{% else %}<span class="text-muted">Not yet rated</span>{% endif %}</dd></div>
+      {% if obj.calibrated_rating is not None %}<div class="detail-item"><dt>Calibrated</dt><dd><span class="badge badge-info">{{ obj.calibrated_rating }}</span></dd></div>{% endif %}
+      {% if obj.potential_rating is not None %}<div class="detail-item"><dt>Potential</dt><dd>{{ obj.potential_rating }}</dd></div>{% endif %}
+      {% if obj.acknowledged_at %}<div class="detail-item"><dt>Acknowledged</dt><dd>{{ obj.acknowledged_at|date:"Y-m-d H:i" }} by {{ obj.acknowledged_by.party.name|default:"—" }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.strengths %}<div style="margin-top:.6rem;"><strong>Strengths</strong><p>{{ obj.strengths|linebreaksbr }}</p></div>{% endif %}
+    {% if obj.improvements %}<div style="margin-top:.4rem;"><strong>Areas for Improvement</strong><p>{{ obj.improvements|linebreaksbr }}</p></div>{% endif %}
+    {% if show_private and obj.private_notes %}
+      <div style="margin-top:.4rem; padding:.5rem; background:var(--page-bg); border-radius:8px;">
+        <strong><i data-lucide="lock"></i> Private Manager Notes</strong> <span class="text-muted">(not visible to the employee)</span>
+        <p>{{ obj.private_notes|linebreaksbr }}</p>
+      </div>
+    {% endif %}
+    {% if obj.calibration_notes %}<div style="margin-top:.4rem;"><strong>Calibration Notes</strong><p class="text-muted">{{ obj.calibration_notes|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'draft' %}
+        {% if is_reviewer or request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:performancereview_submit' obj.pk %}" style="display:inline;" onsubmit="return confirm('Submit this review?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+          </form>
+          <span class="text-muted" style="margin-left:.5rem;">Draft — ratings are editable.</span>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Draft — awaiting the reviewer to submit.</span>
+        {% endif %}
+      {% elif obj.status == 'submitted' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:performancereview_share' obj.pk %}" style="display:inline;" onsubmit="return confirm('Share this review with the employee?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="share-2"></i> Share with Employee</button>
+          </form>
+          <span class="text-muted" style="margin-left:.5rem;">Submitted — a tenant admin shares it.</span>
+        {% else %}
+          <span class="text-muted"><i data-lucide="shield"></i> Submitted — awaiting a tenant admin to share.</span>
+        {% endif %}
+      {% elif obj.status == 'shared' %}
+        {% if is_subject %}
+          <form method="post" action="{% url 'hrm:performancereview_acknowledge' obj.pk %}" style="display:inline;" onsubmit="return confirm('Acknowledge this review?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Acknowledge</button>
+          </form>
+          <span class="text-muted" style="margin-left:.5rem;">Shared — acknowledge to sign off.</span>
+        {% else %}
+          <span class="text-muted"><i data-lucide="clock"></i> Shared — awaiting the employee's acknowledgment.</span>
+        {% endif %}
+      {% else %}
+        <span class="text-muted"><i data-lucide="check-circle"></i> Acknowledged — the review is complete.</span>
+      {% endif %}
+      {% if obj.review_type == 'manager' and request.user.is_superuser or obj.review_type == 'manager' and request.user.is_tenant_admin %}
+        <a href="{% url 'hrm:performancereview_calibrate' obj.pk %}" class="btn btn-outline" style="margin-left:.5rem;"><i data-lucide="sliders-horizontal"></i> Calibrate</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Competency Ratings</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Criterion</th><th>Category</th><th>Rating</th><th>Weight</th><th>Comment</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for r in ratings %}
+            <tr>
+              <td><a href="{% url 'hrm:reviewrating_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.criterion_label }}</td>
+              <td><span class="badge badge-muted">{{ r.get_criterion_category_display }}</span></td>
+              <td class="fw-600">{{ r.rating_value }}</td>
+              <td>{{ r.weight }}</td>
+              <td>{{ r.comment|default:"—"|truncatechars:40 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:reviewrating_edit' r.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:reviewrating_delete' r.pk %}" onsubmit="return confirm('Delete this rating?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list-checks"></i><p>No competency ratings yet — add the first below. The overall rating is their weighted mean.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Add a rating</h3>
+      <form method="post" action="{% url 'hrm:reviewrating_create' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in rating_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Rating</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if obj.template.include_goals %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Goal Review</h2><span class="text-muted">Objectives for this cycle's period</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Objective</th><th>Progress</th><th>Health</th></tr></thead>
+          <tbody>
+            {% for o in goal_objectives %}
+              <tr>
+                <td><a href="{% url 'hrm:objective_detail' o.pk %}" class="fw-600">{{ o.title }}</a></td>
+                <td>
+                  <div class="progress" style="width:100px;"><div class="progress-bar" style="width:{{ o.progress_pct|floatformat:0 }}%;"></div></div>
+                  <span class="text-muted">{{ o.progress_pct|floatformat:0 }}%</span>
+                </td>
+                <td>
+                  {% if o.health_status == 'on_track' or o.health_status == 'completed' %}<span class="badge badge-green">{{ o.health_status_display }}</span>
+                  {% elif o.health_status == 'at_risk' %}<span class="badge badge-amber">{{ o.health_status_display }}</span>
+                  {% else %}<span class="badge badge-red">{{ o.health_status_display }}</span>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3"><div class="empty-state"><i data-lucide="target"></i><p>No objectives found for the subject in this cycle's goal period{% if not obj.goal_period %} (no goal period linked to the cycle){% endif %}.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:performancereview_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
