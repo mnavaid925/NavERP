@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Objectives{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Objectives</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Objectives</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:objective_tree' %}" class="btn btn-outline"><i data-lucide="git-fork"></i> Alignment Tree</a>
+      <a href="{% url 'hrm:goalperiod_list' %}" class="btn btn-outline"><i data-lucide="calendar-range"></i> Periods</a>
+      <a href="{% url 'hrm:objective_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Objective</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group" style="margin-bottom:.6rem;">
+        <a href="{% url 'hrm:objective_list' %}" class="btn {% if not mine %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All Objectives</a>
+        <a href="?mine=1" class="btn {% if mine %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="user-check"></i> My &amp; My Team's</a>
+      </div>
+      <form method="get" class="filter-bar">
+        {% if mine %}<input type="hidden" name="mine" value="1">{% endif %}
+        <div class="form-group" style="flex:1; min-width:170px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title / number / owner…">
+        </div>
+        <div class="form-group">
+          <select name="goal_period" class="form-select">
+            <option value="">All periods</option>
+            {% for p in goal_periods %}
+              <option value="{{ p.pk }}" {% if request.GET.goal_period == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" class="form-select">
+            <option value="">All owners</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.owner == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="department" class="form-select">
+            <option value="">All departments</option>
+            {% for d in departments %}
+              <option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="scope" class="form-select">
+            <option value="">All scopes</option>
+            {% for val, label in scope_choices %}
+              <option value="{{ val }}" {% if request.GET.scope == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="target_type" class="form-select">
+            <option value="">All target types</option>
+            {% for val, label in target_type_choices %}
+              <option value="{{ val }}" {% if request.GET.target_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:objective_list' %}{% if mine %}?mine=1{% endif %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Owner</th><th>Period</th><th>Scope</th><th>Progress</th><th>Health</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:objective_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}{% if obj.parent_objective_id %}<br><span class="text-muted" style="font-size:.8em;"><i data-lucide="corner-down-right"></i> {{ obj.parent_objective.title }}</span>{% endif %}</td>
+              <td>{{ obj.owner.party.name }}</td>
+              <td>{{ obj.goal_period.name }}</td>
+              <td><span class="badge badge-muted">{{ obj.get_scope_display }}</span></td>
+              <td>
+                <div class="progress" style="width:90px;"><div class="progress-bar" style="width:{{ obj.progress_pct|floatformat:0 }}%;"></div></div>
+                <span class="text-muted">{{ obj.progress_pct|floatformat:0 }}%</span>
+              </td>
+              <td>
+                {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status }}</span>
+                {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status }}</span>
+                {% else %}<span class="badge badge-red">{{ obj.health_status }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'active' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'at_risk' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:objective_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:objective_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:objective_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this objective and its key results?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="target"></i><h3>No objectives</h3><p>Set an objective, align it to a parent, and add measurable key results.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
