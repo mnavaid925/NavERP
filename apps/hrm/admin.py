@@ -97,6 +97,12 @@ from .models import (  # 3.18 Goal Setting
     KeyResult,
     Objective,
 )
+from .models import (  # 3.19 Performance Review
+    PerformanceReview,
+    ReviewCycle,
+    ReviewRating,
+    ReviewTemplate,
+)
 
 
 @admin.register(JobGrade)
@@ -918,3 +924,41 @@ class GoalCheckInAdmin(admin.ModelAdmin):
     search_fields = ("number", "comment", "key_result__title")
     raw_id_fields = ("key_result", "created_by")
     readonly_fields = ("number", "created_by", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------- 3.19 Performance Review
+@admin.register(ReviewCycle)
+class ReviewCycleAdmin(admin.ModelAdmin):
+    list_display = ("name", "cycle_type", "status", "self_review_start", "manager_review_start",
+                    "results_release_date", "tenant")
+    list_filter = ("tenant", "status", "cycle_type")
+    search_fields = ("name",)
+    raw_id_fields = ("goal_period",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ReviewTemplate)
+class ReviewTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "review_type", "rating_scale_max", "is_active", "tenant")
+    list_filter = ("tenant", "review_type", "is_active")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(PerformanceReview)
+class PerformanceReviewAdmin(admin.ModelAdmin):
+    list_display = ("number", "subject", "reviewer", "review_type", "cycle", "status", "tenant")
+    list_filter = ("tenant", "review_type", "status")
+    search_fields = ("number", "subject__party__name", "reviewer__party__name")
+    raw_id_fields = ("cycle", "template", "subject", "reviewer", "acknowledged_by")
+    readonly_fields = ("number", "submitted_at", "shared_at", "acknowledged_at", "acknowledged_by",
+                       "created_at", "updated_at")
+
+
+@admin.register(ReviewRating)
+class ReviewRatingAdmin(admin.ModelAdmin):
+    list_display = ("number", "review", "criterion_label", "criterion_category", "rating_value", "weight", "tenant")
+    list_filter = ("tenant", "criterion_category")
+    search_fields = ("number", "criterion_label")
+    raw_id_fields = ("review",)
+    readonly_fields = ("number", "created_at", "updated_at")
