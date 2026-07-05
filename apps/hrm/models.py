@@ -4881,6 +4881,11 @@ def _pace_health(progress_pct, start_date, end_date, *, completed=False):
     return "off_track"
 
 
+# Human labels for the derived health_status codes (no choices= field to give a get_*_display).
+_HEALTH_LABELS = {"on_track": "On Track", "at_risk": "At Risk",
+                  "off_track": "Off Track", "completed": "Completed"}
+
+
 class GoalPeriod(TenantOwned):
     """A named quarterly/half-yearly/annual OKR cycle every ``Objective`` is scoped to
     (3.18.4 Goal Timeline). Small per-tenant catalog identified by ``name`` — not
@@ -5038,6 +5043,10 @@ class Objective(TenantNumbered):
         return _pace_health(self.progress_pct, start, end, completed=(self.status == "completed"))
 
     @property
+    def health_status_display(self):
+        return _HEALTH_LABELS.get(self.health_status, self.health_status)
+
+    @property
     def key_result_count(self):
         return len(self._krs())
 
@@ -5129,6 +5138,10 @@ class KeyResult(TenantNumbered):
         start = period.start_date if period else None
         end = period.end_date if period else None
         return _pace_health(self.progress_pct, start, end, completed=(self.status == "completed"))
+
+    @property
+    def health_status_display(self):
+        return _HEALTH_LABELS.get(self.health_status, self.health_status)
 
     def __str__(self):
         return f"{self.number} · {self.title} ({self.get_metric_type_display()})"
