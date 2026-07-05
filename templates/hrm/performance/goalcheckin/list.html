@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Goal Check-ins{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Goal Check-ins</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Check-ins</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:objective_list' %}" class="btn btn-outline"><i data-lucide="target"></i> Objectives</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:180px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / key result / comment…">
+        </div>
+        <div class="form-group">
+          <select name="key_result" class="form-select">
+            <option value="">All key results</option>
+            {% for kr in key_results %}
+              <option value="{{ kr.pk }}" {% if request.GET.key_result == kr.pk|stringformat:"d" %}selected{% endif %}>{{ kr.title|truncatechars:40 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="confidence" class="form-select">
+            <option value="">All confidence</option>
+            {% for val, label in confidence_choices %}
+              <option value="{{ val }}" {% if request.GET.confidence == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:goalcheckin_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Date</th><th>Key Result</th><th>Value</th><th>Confidence</th><th>By</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:goalcheckin_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.checkin_date }}</td>
+              <td><a href="{% url 'hrm:keyresult_detail' obj.key_result.pk %}">{{ obj.key_result.title|truncatechars:40 }}</a></td>
+              <td>{{ obj.value_at_checkin|default:"—" }}</td>
+              <td>
+                {% if obj.confidence == 'on_track' %}<span class="badge badge-green">{{ obj.get_confidence_display }}</span>
+                {% elif obj.confidence == 'at_risk' %}<span class="badge badge-amber">{{ obj.get_confidence_display }}</span>
+                {% else %}<span class="badge badge-red">{{ obj.get_confidence_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.created_by.party.name|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:goalcheckin_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <form method="post" action="{% url 'hrm:goalcheckin_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this check-in?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="activity"></i><h3>No check-ins</h3><p>Progress updates logged against key results appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
