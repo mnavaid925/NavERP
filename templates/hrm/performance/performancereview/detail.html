@@ -7,11 +7,13 @@
       <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:performancereview_list' %}">Reviews</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
-      <a href="{% url 'hrm:performancereview_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
-      <form method="post" action="{% url 'hrm:performancereview_delete' obj.pk %}" onsubmit="return confirm('Delete this review?');">
-        {% csrf_token %}
-        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
-      </form>
+      {% if can_edit %}<a href="{% url 'hrm:performancereview_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      {% if can_edit or request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:performancereview_delete' obj.pk %}" onsubmit="return confirm('Delete this review?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 
@@ -103,11 +105,14 @@
               <td>{{ r.comment|default:"—"|truncatechars:40 }}</td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'hrm:reviewrating_edit' r.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'hrm:reviewrating_delete' r.pk %}" onsubmit="return confirm('Delete this rating?');">
-                    {% csrf_token %}
-                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  <a href="{% url 'hrm:reviewrating_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if can_edit %}
+                    <a href="{% url 'hrm:reviewrating_edit' r.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:reviewrating_delete' r.pk %}" onsubmit="return confirm('Delete this rating?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -117,24 +122,26 @@
         </tbody>
       </table>
     </div>
-    <div class="card-body">
-      <h3 class="fw-600" style="margin-bottom:.5rem;">Add a rating</h3>
-      <form method="post" action="{% url 'hrm:reviewrating_create' obj.pk %}">
-        {% csrf_token %}
-        <div class="form-grid">
-          {% for field in rating_form %}
-            <div class="form-group">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
-              {{ field }}
-              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
-            </div>
-          {% endfor %}
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Rating</button>
-        </div>
-      </form>
-    </div>
+    {% if can_edit %}
+      <div class="card-body">
+        <h3 class="fw-600" style="margin-bottom:.5rem;">Add a rating</h3>
+        <form method="post" action="{% url 'hrm:reviewrating_create' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in rating_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Rating</button>
+          </div>
+        </form>
+      </div>
+    {% endif %}
   </div>
 
   {% if obj.template.include_goals %}
