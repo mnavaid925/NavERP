@@ -5195,3 +5195,279 @@ class GoalCheckIn(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.key_result.title} · {self.get_confidence_display()}"
+
+
+# ===========================================================================
+# 3.19 Performance Review — Performance Management (formal appraisal cycles)
+# ---------------------------------------------------------------------------
+# The second Performance-Management sub-module (3.18 Goal Setting → 3.19 → 3.20
+# Continuous Feedback → 3.21 Performance Improvement). Formal review-cycle
+# mechanics: self/manager/peer/upward review instances, per-competency weighted
+# ratings, and calibration fields. REFERENCES the built 3.18 GoalPeriod/Objective
+# for the goal-review section (never duplicates OKR fields). subject/reviewer are
+# EmployeeProfile; the manager-review reviewer flows through the DERIVED
+# EmployeeProfile.manager reporting line — no new manager FK. overall_rating is a
+# DERIVED weighted mean (never stored); manager_rating/calibrated_rating are stored
+# (Workday's documented pre/post-calibration two-field distinction). No new
+# core-spine entity, posts no GL.
+# ===========================================================================
+
+# Shared across ReviewTemplate + PerformanceReview (a review instance denormalizes
+# review_type from its template for query convenience).
+REVIEW_TYPE_CHOICES = [
+    ("self", "Self"),
+    ("manager", "Manager"),
+    ("peer", "Peer"),
+    ("upward", "Upward"),
+    ("skip_level", "Skip-Level"),
+]
+
+
+class ReviewCycle(TenantOwned):
+    """A named annual/half-yearly/quarterly appraisal cycle + a phase machine (3.19.1).
+    Small per-tenant catalog identified by ``name`` (not auto-numbered, same pattern as
+    ``GoalPeriod``/``JobGrade``). Optionally aligned to a 3.18 ``GoalPeriod`` so a review's
+    goal section reuses the OKR cycle window."""
+
+    CYCLE_TYPE_CHOICES = [
+        ("annual", "Annual"),
+        ("half_yearly", "Half-Yearly"),
+        ("quarterly", "Quarterly"),
+        ("custom", "Custom"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("self_assessment", "Self-Assessment"),
+        ("manager_review", "Manager Review"),
+        ("calibration", "Calibration"),
+        ("released", "Results Released"),
+        ("closed", "Closed"),
+    ]
+    # Phase order for reviewcycle_advance_phase (no magic-string math duplicated in the view).
+    PHASE_ORDER = ("draft", "self_assessment", "manager_review", "calibration", "released", "closed")
+
+    name = models.CharField(max_length=100, help_text='e.g. "H1 2026 Performance Review".')
+    cycle_type = models.CharField(max_length=15, choices=CYCLE_TYPE_CHOICES, default="annual")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft",
+                              help_text="Phase machine — gates which review actions are open. Advanced via the workflow action.")
+    self_review_start = models.DateField(null=True, blank=True)
+    self_review_end = models.DateField(null=True, blank=True)
+    manager_review_start = models.DateField(null=True, blank=True)
+    manager_review_end = models.DateField(null=True, blank=True)
+    calibration_date = models.DateField(null=True, blank=True)
+    results_release_date = models.DateField(null=True, blank=True)
+    goal_period = models.ForeignKey("hrm.GoalPeriod", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="review_cycles",
+                                    help_text="Aligns the review to a 3.18 OKR cycle (the goal-review section reads its Objectives).")
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-self_review_start", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_rc_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.self_review_start and self.self_review_end and self.self_review_end <= self.self_review_start:
+            raise ValidationError({"self_review_end": "Self-review end must be after its start."})
+        if self.manager_review_start and self.manager_review_end and self.manager_review_end <= self.manager_review_start:
+            raise ValidationError({"manager_review_end": "Manager-review end must be after its start."})
+        if (self.manager_review_start and self.self_review_end
+                and self.manager_review_start < self.self_review_end):
+            raise ValidationError(
+                {"manager_review_start": "Manager review shouldn't start before self-assessment closes."})
+
+    @property
+    def review_count(self):
+        return self.reviews.count()
+
+    def __str__(self):
+        return f"{self.name} ({self.get_cycle_type_display()})"
+
+
+class ReviewTemplate(TenantNumbered):
+    """The review-form definition per participant type (3.19.3/3.19.4). A cycle can attach several
+    templates (one per ``review_type``) so the peer form can differ from the manager form."""
+
+    NUMBER_PREFIX = "RVT"
+
+    REVIEW_TYPE_CHOICES = REVIEW_TYPE_CHOICES
+
+    name = models.CharField(max_length=150)
+    review_type = models.CharField(max_length=15, choices=REVIEW_TYPE_CHOICES, default="self")
+    rating_scale_max = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(2), MaxValueValidator(10)],
+        help_text="Top of the rating scale (5-point is the de-facto standard).")
+    include_goals = models.BooleanField(
+        default=False, help_text="Pull the subject's 3.18 Objectives into a goal-review section.")
+    is_anonymous = models.BooleanField(
+        default=False, help_text="Default anonymity (peer/360 commonly True); overridable per review.")
+    description = models.TextField(blank=True, help_text="Instructions shown to the reviewer.")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["review_type", "name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "review_type"], name="hrm_rvt_tenant_type_idx"),
+            models.Index(fields=["tenant", "is_active"], name="hrm_rvt_tenant_active_idx"),
+        ]
+
+    @property
+    def usage_count(self):
+        return self.reviews.count()
+
+    def __str__(self):
+        return f"{self.number} · {self.name} ({self.get_review_type_display()})"
+
+
+class PerformanceReview(TenantNumbered):
+    """The per-instance review row — one per (cycle, subject, reviewer) (3.19.2/3.19.3/3.19.4/3.19.5).
+    Self/manager/peer/upward all become rows of this one table. ``overall_rating`` is a derived
+    weighted mean of the review's ratings; ``manager_rating``/``calibrated_rating`` are stored
+    (pre/post-calibration audit trail)."""
+
+    NUMBER_PREFIX = "RVW"
+
+    REVIEW_TYPE_CHOICES = REVIEW_TYPE_CHOICES
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("submitted", "Submitted"),
+        ("shared", "Shared"),
+        ("acknowledged", "Acknowledged"),
+    ]
+
+    cycle = models.ForeignKey("hrm.ReviewCycle", on_delete=models.PROTECT, related_name="reviews")
+    template = models.ForeignKey("hrm.ReviewTemplate", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="reviews")
+    subject = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="reviews_received",
+                                help_text="The employee being reviewed.")
+    reviewer = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="reviews_authored",
+                                 help_text="Who fills this instance (== subject for a self review).")
+    review_type = models.CharField(max_length=15, choices=REVIEW_TYPE_CHOICES, default="self",
+                                   help_text="Denormalized from the template at creation for query convenience.")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    # overall_rating is DERIVED (see the property) — never a stored column.
+    manager_rating = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+                                         help_text="As-submitted pre-calibration snapshot (manager reviews).")
+    calibrated_rating = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+                                            help_text="Post-calibration override; downstream comp/promotion reads this.")
+    potential_rating = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+                                           help_text="9-box potential axis (visualization deferred).")
+    strengths = models.TextField(blank=True)
+    improvements = models.TextField(blank=True)
+    private_notes = models.TextField(blank=True,
+                                     help_text="Manager-only — NEVER rendered on the subject-facing view.")
+    calibration_notes = models.TextField(blank=True, help_text="Calibration adjustment rationale.")
+    is_anonymous = models.BooleanField(default=False,
+                                       help_text="Masks the reviewer on the subject-facing view (peer/upward).")
+    submitted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    shared_at = models.DateTimeField(null=True, blank=True, editable=False)
+    acknowledged_at = models.DateTimeField(null=True, blank=True, editable=False)
+    acknowledged_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="reviews_acknowledged", editable=False)
+
+    class Meta:
+        ordering = ["-cycle__self_review_start", "subject__party__name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "cycle"], name="hrm_rvw_tenant_cycle_idx"),
+            models.Index(fields=["tenant", "subject"], name="hrm_rvw_tenant_subject_idx"),
+            models.Index(fields=["tenant", "reviewer"], name="hrm_rvw_tenant_reviewer_idx"),
+            models.Index(fields=["tenant", "review_type"], name="hrm_rvw_tenant_type_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_rvw_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.review_type == "self" and self.subject_id and self.reviewer_id != self.subject_id:
+            raise ValidationError({"reviewer": "A self review must have the subject as the reviewer."})
+        if self.review_type != "self" and self.subject_id and self.reviewer_id == self.subject_id:
+            raise ValidationError({"reviewer": "A non-self review can't have the subject reviewing themselves."})
+        if self.manager_rating is not None and self.review_type != "manager":
+            raise ValidationError({"manager_rating": "Manager rating only applies to a manager review."})
+
+    def _ratings(self):
+        """Materialize the review's rating lines once per instance (prefetched by detail views)
+        so overall_rating/rating_count don't re-query (mirrors Objective._krs())."""
+        if not hasattr(self, "_ratings_cache"):
+            self._ratings_cache = list(self.ratings.all())
+        return self._ratings_cache
+
+    @property
+    def overall_rating(self):
+        """Weighted mean of the review's ``ReviewRating`` values by weight (simple mean if all
+        weights are 0). Returns ``None`` — not 0 — when there are no ratings yet, since a rating
+        of 0 is a valid low score and an unrated review should read "Not yet rated"."""
+        rows = self._ratings()
+        if not rows:
+            return None
+        total_weight = sum((r.weight for r in rows), ZERO)
+        if total_weight > 0:
+            acc = sum((r.rating_value * r.weight for r in rows), ZERO)
+            return (acc / total_weight).quantize(Decimal("0.01"))
+        acc = sum((r.rating_value for r in rows), ZERO)
+        return (acc / Decimal(len(rows))).quantize(Decimal("0.01"))
+
+    @property
+    def rating_count(self):
+        return len(self._ratings())
+
+    @property
+    def effective_rating(self):
+        """The single value downstream consumers (comp/promotion) read — calibrated overrides the
+        derived overall, per Workday's documented pattern."""
+        return self.calibrated_rating if self.calibrated_rating is not None else self.overall_rating
+
+    @property
+    def goal_period(self):
+        """Convenience passthrough to the cycle's aligned OKR period (for the goal-review section)."""
+        return self.cycle.goal_period if self.cycle_id else None
+
+    def __str__(self):
+        return f"{self.number} · {self.subject.party.name} ({self.get_review_type_display()})"
+
+
+class ReviewRating(TenantNumbered):
+    """A per-competency/question rating line under a review (3.19.3/3.19.4). ``weight`` mirrors
+    ``Objective.weight``/``KeyResult.weight`` so the review's ``overall_rating`` derives as a
+    weighted mean rather than a hand-typed duplicate."""
+
+    NUMBER_PREFIX = "RVR"
+
+    CATEGORY_CHOICES = [
+        ("competency", "Competency"),
+        ("goal", "Goal"),
+        ("value", "Company Value"),
+        ("custom", "Custom"),
+    ]
+
+    review = models.ForeignKey("hrm.PerformanceReview", on_delete=models.CASCADE, related_name="ratings")
+    criterion_label = models.CharField(max_length=255, help_text="The competency/question text.")
+    criterion_category = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default="competency")
+    rating_value = models.DecimalField(max_digits=4, decimal_places=2,
+                                       help_text="Per-criterion score (within the template's rating scale).")
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                 validators=[MinValueValidator(0), MaxValueValidator(100)],
+                                 help_text="Weight among sibling ratings under the same review (equal-split by default).")
+    comment = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["review", "-weight", "criterion_label"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "review"], name="hrm_rvr_tenant_review_idx"),
+        ]
+
+    def clean(self):
+        if self.rating_value is not None and self.rating_value < 0:
+            raise ValidationError({"rating_value": "Rating cannot be negative."})
+        if (self.rating_value is not None and self.review_id and self.review.template_id
+                and self.rating_value > self.review.template.rating_scale_max):
+            raise ValidationError(
+                {"rating_value": f"Rating cannot exceed the template's scale max ({self.review.template.rating_scale_max})."})
+        if self.weight is not None and self.weight < 0:
+            raise ValidationError({"weight": "Weight cannot be negative."})
+
+    def __str__(self):
+        return f"{self.number} · {self.criterion_label} ({self.rating_value})"
