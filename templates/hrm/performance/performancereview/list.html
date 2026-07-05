@@ -42,6 +42,14 @@
           </select>
         </div>
         <div class="form-group">
+          <select name="reviewer" class="form-select">
+            <option value="">All reviewers</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.reviewer == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="review_type" class="form-select">
             <option value="">All types</option>
             {% for val, label in review_type_choices %}
