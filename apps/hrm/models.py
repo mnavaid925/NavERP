@@ -4600,6 +4600,8 @@ class PayoutBatch(TenantNumbered):
     source_bank_name = models.CharField(max_length=255, blank=True,
         help_text="The disbursing (company) bank surfaced before initiating payment.")
     source_account_last4 = models.CharField(max_length=8, blank=True,
+        validators=[RegexValidator(r"^(••••)?\d{0,4}$",
+            "Enter only a masked last-4 (e.g. ••••4321), never the full account number.")],
         help_text="Masked disbursing account — never the full number.")
     generated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
