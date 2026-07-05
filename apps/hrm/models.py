@@ -24,7 +24,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import IntegrityError, models, transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from apps.core.utils import next_number
@@ -4559,3 +4559,276 @@ class TaxComputation(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.employee} · {self.financial_year}"
+
+
+# ---------------------------------------------------------------------------
+# 3.17 Payout & Reports — the salary DISBURSEMENT + distribution + reconciliation
+# layer on top of 3.14 (PayrollCycle/Payslip). A PayoutBatch is generated from a
+# LOCKED PayrollCycle's payslips; PayoutPayment tracks per-employee money-movement
+# status (paid/failed/returned) against a snapshot of net_pay + the employee's
+# MASKED bank details; PayslipDistribution tracks send/view/download of the payslip;
+# BankReconciliation matches a batch's payments to the bank statement by UTR. This is
+# bookkeeping ABOUT payments, not a ledger entry — money still posts only through
+# accounting.PayrollRun/JournalEntry (L29); 3.17 posts NOTHING new to the GL. The
+# actual bank-file writer + payslip-PDF rendering + live bank API are deferred.
+# ---------------------------------------------------------------------------
+class PayoutBatch(TenantNumbered):
+    """A salary-disbursement run header (3.17) — ``POB-#####`` — generated from one **locked**
+    ``PayrollCycle``'s payslips. Derived ``total_amount``/``paid_*``/``failed_count`` come from its
+    ``PayoutPayment``s (over the non-superseded, i.e. non-retried, rows). One batch per cycle."""
+
+    NUMBER_PREFIX = "POB"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("approved", "Approved"),
+        ("disbursed", "Disbursed"),
+        ("partially_disbursed", "Partially Disbursed"),
+        ("reconciled", "Reconciled"),
+    ]
+    BANK_FILE_FORMAT_CHOICES = [
+        ("neft", "NEFT"),
+        ("nach", "NACH"),
+        ("ach", "ACH"),
+        ("manual", "Manual"),
+        ("other", "Other"),
+    ]
+
+    cycle = models.ForeignKey("hrm.PayrollCycle", on_delete=models.PROTECT, related_name="payout_batches")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    bank_file_format = models.CharField(max_length=15, choices=BANK_FILE_FORMAT_CHOICES, default="neft")
+    source_bank_name = models.CharField(max_length=255, blank=True,
+        help_text="The disbursing (company) bank surfaced before initiating payment.")
+    source_account_last4 = models.CharField(max_length=8, blank=True,
+        help_text="Masked disbursing account — never the full number.")
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hrm_payout_batch_generations", editable=False)
+    generated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hrm_payout_batch_approvals", editable=False)
+    approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    disbursed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-cycle__pay_date"]
+        unique_together = ("tenant", "cycle")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_pob_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.cycle_id and not self.cycle.is_locked:
+            raise ValidationError({"cycle": "A payout batch can only be created from a locked payroll cycle."})
+
+    @property
+    def is_editable(self):
+        return self.status == "draft"
+
+    def _current_payments(self):
+        """The non-superseded payment rows (a retried failed row is excluded — its retry is the current
+        one) — the correct set for totals so a retried employee is never double-counted."""
+        return self.payments.filter(retries__isnull=True)
+
+    def _totals(self):
+        """One aggregate pass over the current payments, cached per instance (mirrors PayrollCycle._totals)."""
+        if not hasattr(self, "_totals_cache"):
+            cur = self._current_payments()
+            self._totals_cache = cur.aggregate(
+                head=Count("id"), total=Sum("net_amount"),
+                paid_c=Count("id", filter=Q(status="paid")),
+                paid_a=Sum("net_amount", filter=Q(status="paid")),
+                failed_c=Count("id", filter=Q(status__in=["failed", "returned"])),
+                hold_c=Count("id", filter=Q(status="on_hold")))
+        return self._totals_cache
+
+    @property
+    def headcount(self):
+        return self._totals()["head"] or 0
+
+    @property
+    def total_amount(self):
+        return self._totals()["total"] or ZERO
+
+    @property
+    def paid_count(self):
+        return self._totals()["paid_c"] or 0
+
+    @property
+    def paid_amount(self):
+        return self._totals()["paid_a"] or ZERO
+
+    @property
+    def failed_count(self):
+        return self._totals()["failed_c"] or 0
+
+    @property
+    def on_hold_count(self):
+        return self._totals()["hold_c"] or 0
+
+    def __str__(self):
+        return f"{self.number} · {self.cycle.number} · {self.get_status_display()}"
+
+
+class PayoutPayment(TenantOwned):
+    """One employee's disbursement row within a ``PayoutBatch`` (3.17). ``net_amount`` + the bank fields
+    are SNAPSHOTTED at generation — the bank fields are the employee's **already-masked** values
+    (``masked_bank_account()``/``masked_bank_routing()``), never the raw account number, so they need no
+    ``_SENSITIVE_AUDIT_FIELDS`` redaction. A failed payment is re-tried as a NEW row (``retry_of`` → the
+    original), preserving the failure history — so there is deliberately **no** ``unique_together`` on
+    ``(batch, payslip)`` (that would block a retry); the generate action guarantees one *original* per
+    payslip (draft-only delete+recreate), and there is no user-facing create form."""
+
+    PAYMENT_METHOD_CHOICES = [
+        ("bank_transfer", "Bank Transfer"),
+        ("neft", "NEFT"),
+        ("nach", "NACH"),
+        ("ach", "ACH"),
+        ("cheque", "Cheque"),
+        ("cash", "Cash"),
+        ("other", "Other"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("paid", "Paid"),
+        ("failed", "Failed"),
+        ("returned", "Returned"),
+        ("on_hold", "On Hold"),
+    ]
+
+    batch = models.ForeignKey("hrm.PayoutBatch", on_delete=models.CASCADE, related_name="payments")
+    payslip = models.ForeignKey("hrm.Payslip", on_delete=models.PROTECT, related_name="payout_payments")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="payout_payments")
+    net_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False,
+        help_text="Snapshot of Payslip.net_pay at generation time.")
+    bank_name_snapshot = models.CharField(max_length=255, blank=True, editable=False)
+    bank_account_last4_snapshot = models.CharField(max_length=8, blank=True, editable=False,
+        help_text="Masked last-4 of the destination account — never the full number.")
+    bank_routing_snapshot = models.CharField(max_length=20, blank=True, editable=False)
+    payment_method = models.CharField(max_length=15, choices=PAYMENT_METHOD_CHOICES, default="bank_transfer")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    transaction_reference = models.CharField(max_length=64, blank=True,
+        help_text="Bank-assigned UTR / trace number — the reconciliation match key.")
+    initiated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    paid_on = models.DateTimeField(null=True, blank=True, editable=False)
+    failure_reason = models.TextField(blank=True)
+    retry_of = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="retries")
+
+    class Meta:
+        ordering = ["batch", "employee__party__name"]
+        indexes = [
+            models.Index(fields=["tenant", "batch"], name="hrm_pop_tenant_batch_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_pop_tenant_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} · {self.net_amount} · {self.get_status_display()}"
+
+
+class PayslipDistribution(TenantOwned):
+    """Delivery tracking for a ``Payslip`` (3.17) — 1:1. Tracks the send→viewed→downloaded signal chain
+    (the actual PDF render + SMTP dispatch are deferred). Created lazily via ``for_payslip()``."""
+
+    DELIVERY_CHANNEL_CHOICES = [
+        ("email", "Email"),
+        ("portal", "Portal"),
+        ("print", "Print"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("sent", "Sent"),
+        ("viewed", "Viewed"),
+        ("downloaded", "Downloaded"),
+        ("failed", "Failed"),
+    ]
+
+    payslip = models.OneToOneField("hrm.Payslip", on_delete=models.CASCADE, related_name="distribution")
+    delivery_channel = models.CharField(max_length=10, choices=DELIVERY_CHANNEL_CHOICES, default="portal")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    sent_to_email = models.EmailField(blank=True, editable=False,
+        help_text="Snapshot of the employee's email at send time.")
+    sent_at = models.DateTimeField(null=True, blank=True, editable=False)
+    viewed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    downloaded_at = models.DateTimeField(null=True, blank=True, editable=False)
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hrm_payslip_distribution_sends", editable=False)
+
+    class Meta:
+        ordering = ["-payslip__cycle__pay_date"]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_psd_tenant_status_idx"),
+        ]
+
+    @classmethod
+    def for_payslip(cls, payslip):
+        """Get-or-create the one distribution row for ``payslip`` (defaults portal/pending)."""
+        obj, _ = cls.objects.get_or_create(
+            tenant_id=payslip.tenant_id, payslip=payslip,
+            defaults={"delivery_channel": "portal", "status": "pending"})
+        return obj
+
+    def __str__(self):
+        return f"{self.payslip} · {self.get_status_display()}"
+
+
+class BankReconciliation(TenantNumbered):
+    """Reconciles a ``PayoutBatch``'s payments against an imported bank statement (3.17) — ``BRC-#####``.
+    ``recompute()`` matches by ``PayoutPayment.transaction_reference``/``status`` (no separate
+    ``BankStatementLine`` table); matched/unmatched aggregates are derived."""
+
+    NUMBER_PREFIX = "BRC"
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("reconciled", "Reconciled"),
+        ("discrepancy", "Discrepancy"),
+    ]
+
+    batch = models.ForeignKey("hrm.PayoutBatch", on_delete=models.PROTECT, related_name="reconciliations")
+    statement_date = models.DateField()
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    matched_count = models.PositiveIntegerField(default=0, editable=False)
+    matched_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
+    unmatched_count = models.PositiveIntegerField(default=0, editable=False)
+    unmatched_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
+    statement_reference = models.CharField(max_length=100, blank=True)
+    reconciled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hrm_bank_reconciliations", editable=False)
+    reconciled_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-statement_date"]
+        indexes = [
+            models.Index(fields=["tenant", "batch"], name="hrm_brc_tenant_batch_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_brc_tenant_status_idx"),
+        ]
+
+    def recompute(self):
+        """Match the batch's current payments against the (implicit) bank statement by UTR + status:
+        a payment with a transaction_reference AND status=paid is matched; everything else (failed/
+        returned, or a processing/pending row with no UTR) is unmatched. Sets aggregates + status."""
+        cur = self.batch._current_payments()
+        matched = cur.filter(status="paid").exclude(transaction_reference="")
+        unmatched = cur.exclude(pk__in=matched.values("pk"))
+        m = matched.aggregate(c=Count("id"), a=Sum("net_amount"))
+        u = unmatched.aggregate(c=Count("id"), a=Sum("net_amount"))
+        self.matched_count = m["c"] or 0
+        self.matched_amount = m["a"] or ZERO
+        self.unmatched_count = u["c"] or 0
+        self.unmatched_amount = u["a"] or ZERO
+        self.status = "reconciled" if self.unmatched_count == 0 else "discrepancy"
+        self.reconciled_at = timezone.now()
+        self.save(update_fields=["matched_count", "matched_amount", "unmatched_count",
+                                 "unmatched_amount", "status", "reconciled_at", "updated_at"])
+
+    def __str__(self):
+        return f"{self.number} · {self.batch.number} · {self.get_status_display()}"
