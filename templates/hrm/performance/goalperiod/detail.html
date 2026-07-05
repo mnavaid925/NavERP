@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:goalperiod_list' %}">Goal Periods</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:goalperiod_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:goalperiod_delete' obj.pk %}" onsubmit="return confirm('Delete this goal period?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_period_type_display }}</dd></div>
+      <div class="detail-item"><dt>Window</dt><dd>{{ obj.start_date }} → {{ obj.end_date }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'closed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Objectives</dt><dd>{{ obj.objective_count }}</dd></div>
+      <div class="detail-item"><dt>Avg Progress</dt><dd>
+        <div class="progress" style="width:120px;"><div class="progress-bar" style="width:{{ obj.avg_progress_pct|floatformat:0 }}%;"></div></div>
+        <span class="text-muted">{{ obj.avg_progress_pct|floatformat:0 }}%</span>
+      </dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:.5rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Timeline Workflow</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status == 'active' %}
+          <form method="post" action="{% url 'hrm:goalperiod_close' obj.pk %}" style="display:inline;" onsubmit="return confirm('Close this cycle? Objectives stay for history.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="flag"></i> Close Cycle</button>
+          </form>
+          <span class="text-muted" style="margin-left:.5rem;">Active — objectives can be tracked and checked in.</span>
+        {% else %}
+          <form method="post" action="{% url 'hrm:goalperiod_activate' obj.pk %}" style="display:inline;" onsubmit="return confirm('Activate this cycle?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Activate Cycle</button>
+          </form>
+          <span class="text-muted" style="margin-left:.5rem;">{{ obj.get_status_display }} — activate to make it the running cycle.</span>
+        {% endif %}
+      {% else %}
+        <span class="text-muted"><i data-lucide="shield"></i> A tenant admin activates or closes a cycle.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Objectives in this Period</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Owner</th><th>Scope</th><th>Progress</th><th>Health</th></tr></thead>
+        <tbody>
+          {% for o in objectives %}
+            <tr>
+              <td><a href="{% url 'hrm:objective_detail' o.pk %}" class="fw-600">{{ o.number }}</a></td>
+              <td>{{ o.title }}</td>
+              <td>{{ o.owner.party.name }}</td>
+              <td><span class="badge badge-muted">{{ o.get_scope_display }}</span></td>
+              <td>
+                <div class="progress" style="width:100px;"><div class="progress-bar" style="width:{{ o.progress_pct|floatformat:0 }}%;"></div></div>
+                <span class="text-muted">{{ o.progress_pct|floatformat:0 }}%</span>
+              </td>
+              <td>
+                {% if o.health_status == 'on_track' or o.health_status == 'completed' %}<span class="badge badge-green">{{ o.health_status }}</span>
+                {% elif o.health_status == 'at_risk' %}<span class="badge badge-amber">{{ o.health_status }}</span>
+                {% else %}<span class="badge badge-red">{{ o.health_status }}</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="target"></i><p>No objectives scoped to this period yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:goalperiod_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
