@@ -604,4 +604,34 @@ urlpatterns = [
     path("bank-reconciliations/<int:pk>/edit/", views.bankreconciliation_edit, name="bankreconciliation_edit"),
     path("bank-reconciliations/<int:pk>/delete/", views.bankreconciliation_delete, name="bankreconciliation_delete"),
     path("bank-reconciliations/<int:pk>/reconcile/", views.bankreconciliation_reconcile, name="bankreconciliation_reconcile"),
+
+    # ===================== 3.18 Goal Setting (Performance Management) =====================
+    # Goal periods (quarterly/annual cycle catalog) + activate/close workflow
+    path("goal-periods/", views.goalperiod_list, name="goalperiod_list"),
+    path("goal-periods/add/", views.goalperiod_create, name="goalperiod_create"),
+    path("goal-periods/<int:pk>/", views.goalperiod_detail, name="goalperiod_detail"),
+    path("goal-periods/<int:pk>/edit/", views.goalperiod_edit, name="goalperiod_edit"),
+    path("goal-periods/<int:pk>/delete/", views.goalperiod_delete, name="goalperiod_delete"),
+    path("goal-periods/<int:pk>/activate/", views.goalperiod_activate, name="goalperiod_activate"),
+    path("goal-periods/<int:pk>/close/", views.goalperiod_close, name="goalperiod_close"),
+
+    # Objectives (the "O") — CRUD + the cascade/alignment tree view
+    path("objectives/", views.objective_list, name="objective_list"),
+    path("objectives/tree/", views.objective_tree, name="objective_tree"),
+    path("objectives/add/", views.objective_create, name="objective_create"),
+    path("objectives/<int:pk>/", views.objective_detail, name="objective_detail"),
+    path("objectives/<int:pk>/edit/", views.objective_edit, name="objective_edit"),
+    path("objectives/<int:pk>/delete/", views.objective_delete, name="objective_delete"),
+
+    # Key results (the "KR") — created nested under an objective; viewed in its context
+    path("objectives/<int:objective_pk>/key-results/add/", views.keyresult_create, name="keyresult_create"),
+    path("key-results/<int:pk>/", views.keyresult_detail, name="keyresult_detail"),
+    path("key-results/<int:pk>/edit/", views.keyresult_edit, name="keyresult_edit"),
+    path("key-results/<int:pk>/delete/", views.keyresult_delete, name="keyresult_delete"),
+
+    # Goal check-ins (append-only progress log) — created nested under a key result
+    path("key-results/<int:keyresult_pk>/check-ins/add/", views.goalcheckin_create, name="goalcheckin_create"),
+    path("check-ins/", views.goalcheckin_list, name="goalcheckin_list"),
+    path("check-ins/<int:pk>/", views.goalcheckin_detail, name="goalcheckin_detail"),
+    path("check-ins/<int:pk>/delete/", views.goalcheckin_delete, name="goalcheckin_delete"),
 ]
