@@ -4991,6 +4991,7 @@ class Objective(TenantNumbered):
 
     class Meta:
         ordering = ["-goal_period__start_date", "title"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "status"], name="hrm_obj_tenant_status_idx"),
             models.Index(fields=["tenant", "goal_period"], name="hrm_obj_tenant_period_idx"),
@@ -5086,6 +5087,7 @@ class KeyResult(TenantNumbered):
 
     class Meta:
         ordering = ["objective", "-weight", "title"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "objective"], name="hrm_kr_tenant_objective_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_kr_tenant_status_idx"),
@@ -5161,6 +5163,7 @@ class GoalCheckIn(TenantNumbered):
 
     class Meta:
         ordering = ["-checkin_date", "-created_at"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "key_result"], name="hrm_gci_tenant_kr_idx"),
             models.Index(fields=["tenant", "checkin_date"], name="hrm_gci_tenant_date_idx"),
