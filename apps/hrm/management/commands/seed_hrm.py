@@ -110,6 +110,12 @@ from apps.hrm.models import (  # 3.18 Goal Setting
     KeyResult,
     Objective,
 )
+from apps.hrm.models import (  # 3.19 Performance Review
+    PerformanceReview,
+    ReviewCycle,
+    ReviewRating,
+    ReviewTemplate,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -230,6 +236,7 @@ class Command(BaseCommand):
             self._seed_tax(tenant, flush=options["flush"])
             self._seed_payout(tenant, flush=options["flush"])
             self._seed_goals(tenant, flush=options["flush"])
+            self._seed_reviews(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -250,6 +257,11 @@ class Command(BaseCommand):
                           # 3.17: reconciliations/payments FK batch/cycle/payslip (PROTECT) — wipe first.
                           BankReconciliation, PayoutPayment, PayoutBatch, PayslipDistribution,
                           PayslipLine, Payslip, PayrollCycle,
+                          # 3.19: PerformanceReview.subject/reviewer FK EmployeeProfile (PROTECT) + cycle
+                          # (PROTECT) — wipe reviews (ratings→reviews→cycles→templates) BEFORE the employee
+                          # rows below. Also before GoalPeriod (ReviewCycle.goal_period SET_NULL is harmless
+                          # either way, but keep review teardown grouped ahead of the goal teardown).
+                          ReviewRating, PerformanceReview, ReviewCycle, ReviewTemplate,
                           # 3.18: Objective.owner FK EmployeeProfile (PROTECT) + goal_period (PROTECT) —
                           # wipe goals (check-ins→KRs→objectives→periods) BEFORE the employee rows below.
                           GoalCheckIn, KeyResult, Objective, GoalPeriod,
@@ -1881,3 +1893,133 @@ class Command(BaseCommand):
             f"{GoalPeriod.objects.filter(tenant=tenant).count()} periods, "
             f"{Objective.objects.filter(tenant=tenant).count()} objectives (3-level cascade), "
             f"{kr_total} key results, {ci_total} check-ins."))
+
+    def _seed_reviews(self, tenant, *, flush):
+        """3.19 Performance Review — 1 ReviewCycle (mid-phase, linked to the 3.18 active GoalPeriod),
+        3 ReviewTemplates (self/manager/peer), and PerformanceReviews across self/manager/peer for a
+        few employees with varied statuses + ReviewRating lines (spread ratings so the derived
+        overall_rating and the calibrated-override case both show). Reuses seeded EmployeeProfiles +
+        the 3.18 GoalPeriod — creates no new person/period rows. Runs after _seed_goals."""
+        if flush:
+            ReviewRating.objects.filter(tenant=tenant).delete()
+            PerformanceReview.objects.filter(tenant=tenant).delete()
+            ReviewCycle.objects.filter(tenant=tenant).delete()
+            ReviewTemplate.objects.filter(tenant=tenant).delete()
+        if ReviewCycle.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Performance-review data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant)
+                    .select_related("party", "employment").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' — skipping performance-review seed."))
+            return
+
+        def emp(i):
+            return emps[i % len(emps)]
+
+        def manager_profile_of(subject):
+            mp = subject.manager  # a core.Party or None (derived off employment)
+            return getattr(mp, "employee_profile", None) if mp is not None else None
+
+        today = timezone.localdate()
+        td = datetime.timedelta
+        active_gp = GoalPeriod.objects.filter(tenant=tenant, status="active").first()
+
+        cycle = ReviewCycle.objects.create(
+            tenant=tenant, name="H1 Performance Review", cycle_type="half_yearly",
+            status="manager_review", goal_period=active_gp,
+            self_review_start=today - td(days=40), self_review_end=today - td(days=20),
+            manager_review_start=today - td(days=19), manager_review_end=today + td(days=5),
+            calibration_date=today + td(days=12), results_release_date=today + td(days=20),
+            description="Mid-year performance review cycle.")
+
+        # --- 3 templates: self + manager (goal-aware), peer (anonymous) ---
+        t_self = ReviewTemplate.objects.create(
+            tenant=tenant, name="Self-Assessment", review_type="self", rating_scale_max=5,
+            include_goals=True, is_anonymous=False, description="Employee self-evaluation.")
+        t_mgr = ReviewTemplate.objects.create(
+            tenant=tenant, name="Manager Review", review_type="manager", rating_scale_max=5,
+            include_goals=True, is_anonymous=False, description="Manager evaluation of the employee.")
+        t_peer = ReviewTemplate.objects.create(
+            tenant=tenant, name="Peer Feedback", review_type="peer", rating_scale_max=5,
+            include_goals=False, is_anonymous=True, description="Anonymous peer feedback.")
+
+        D = Decimal
+        # (title, category, rating, weight) triples reused per review; ratings spread, weights sum ~100.
+        RATING_SETS = {
+            "high": [("Delivers quality work", "competency", D("4.5"), D("40")),
+                     ("Collaboration", "competency", D("4.0"), D("30")),
+                     ("Goal achievement", "goal", D("4.0"), D("30"))],
+            "mid": [("Delivers quality work", "competency", D("3.5"), D("40")),
+                    ("Collaboration", "competency", D("3.0"), D("30")),
+                    ("Goal achievement", "goal", D("3.5"), D("30"))],
+        }
+
+        def add_ratings(review, key):
+            for label, cat, val, wt in RATING_SETS[key]:
+                ReviewRating.objects.create(
+                    tenant=tenant, review=review, criterion_label=label, criterion_category=cat,
+                    rating_value=val, weight=wt, comment="")
+
+        reviews_made = 0
+        # 1) Self review (subject == reviewer), submitted.
+        subj0 = emp(1)
+        r_self = PerformanceReview.objects.create(
+            tenant=tenant, cycle=cycle, template=t_self, subject=subj0, reviewer=subj0,
+            review_type="self", status="submitted", submitted_at=timezone.now(),
+            strengths="Shipped the v2 migration ahead of schedule.",
+            improvements="Want to grow cross-team influence.")
+        add_ratings(r_self, "high")
+        reviews_made += 1
+
+        # 2) Manager review of subj0 — shared, manager_rating snapshotted.
+        mgr0 = manager_profile_of(subj0) or emp(0)
+        if mgr0.pk == subj0.pk:
+            mgr0 = emp(0) if emp(0).pk != subj0.pk else emp(2)
+        r_mgr = PerformanceReview.objects.create(
+            tenant=tenant, cycle=cycle, template=t_mgr, subject=subj0, reviewer=mgr0,
+            review_type="manager", status="shared", submitted_at=timezone.now(),
+            shared_at=timezone.now(), strengths="Strong technical delivery.",
+            improvements="Delegate more.")
+        add_ratings(r_mgr, "high")
+        r_mgr.manager_rating = r_mgr.overall_rating  # snapshot the as-submitted rating
+        r_mgr.save(update_fields=["manager_rating"])
+        reviews_made += 1
+
+        # 3) Manager review of another employee — acknowledged + calibrated (override differs from overall).
+        subj1 = emp(2) if emp(2).pk != subj0.pk else emp(3)
+        mgr1 = manager_profile_of(subj1) or emp(0)
+        if mgr1.pk == subj1.pk:
+            mgr1 = emp(0) if emp(0).pk != subj1.pk else emp(1)
+        r_mgr2 = PerformanceReview.objects.create(
+            tenant=tenant, cycle=cycle, template=t_mgr, subject=subj1, reviewer=mgr1,
+            review_type="manager", status="acknowledged", submitted_at=timezone.now(),
+            shared_at=timezone.now(), acknowledged_at=timezone.now(), acknowledged_by=subj1,
+            strengths="Reliable and consistent.", improvements="Stretch goals for next cycle.")
+        add_ratings(r_mgr2, "mid")
+        r_mgr2.manager_rating = r_mgr2.overall_rating
+        r_mgr2.calibrated_rating = (r_mgr2.overall_rating or D("3")) - D("0.5")  # calibrated down
+        r_mgr2.potential_rating = D("4")
+        r_mgr2.calibration_notes = "Adjusted for cross-team consistency."
+        r_mgr2.save(update_fields=["manager_rating", "calibrated_rating", "potential_rating", "calibration_notes"])
+        reviews_made += 1
+
+        # 4) Anonymous peer review of subj0.
+        peer0 = emp(3) if emp(3).pk not in (subj0.pk, mgr0.pk) else emp(4)
+        if peer0.pk == subj0.pk:
+            peer0 = emp(0)
+        r_peer = PerformanceReview.objects.create(
+            tenant=tenant, cycle=cycle, template=t_peer, subject=subj0, reviewer=peer0,
+            review_type="peer", status="submitted", is_anonymous=True, submitted_at=timezone.now(),
+            strengths="Great to pair with.", improvements="Sometimes takes on too much.")
+        add_ratings(r_peer, "mid")
+        reviews_made += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Performance review seeded for '{tenant.name}': 1 cycle ({cycle.name}, {cycle.get_status_display()}), "
+            f"{ReviewTemplate.objects.filter(tenant=tenant).count()} templates, "
+            f"{reviews_made} reviews (self/manager/peer, incl. 1 calibrated), "
+            f"{ReviewRating.objects.filter(tenant=tenant).count()} rating lines."))
