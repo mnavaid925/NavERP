@@ -104,6 +104,12 @@ from apps.hrm.models import (  # 3.17 Payout & Reports
     PayoutPayment,
     PayslipDistribution,
 )
+from apps.hrm.models import (  # 3.18 Goal Setting
+    GoalCheckIn,
+    GoalPeriod,
+    KeyResult,
+    Objective,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -223,6 +229,7 @@ class Command(BaseCommand):
             self._seed_statutory(tenant, flush=options["flush"])
             self._seed_tax(tenant, flush=options["flush"])
             self._seed_payout(tenant, flush=options["flush"])
+            self._seed_goals(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -1748,3 +1755,126 @@ class Command(BaseCommand):
             f"({batch.paid_count} paid / {batch.failed_count} failed / {batch.on_hold_count} on-hold), "
             f"{PayslipDistribution.objects.filter(tenant=tenant).count()} distributions, "
             f"1 reconciliation ({recon.number}, {recon.get_status_display()})."))
+
+    def _seed_goals(self, tenant, *, flush):
+        """3.18 Goal Setting — an active + a closed GoalPeriod, a 3-level Objective cascade
+        (company → department → individual) reusing existing EmployeeProfile owners + a
+        core.OrgUnit department, KeyResults with mixed metric_types/weights tuned to a spread of
+        health states (on_track / at_risk / off_track), and staggered GoalCheckIns. Reuses seeded
+        employees/departments — creates no new person/org rows. Runs after _seed_payout."""
+        if flush:
+            # Children first: check-ins → key results → objectives → periods.
+            GoalCheckIn.objects.filter(tenant=tenant).delete()
+            KeyResult.objects.filter(tenant=tenant).delete()
+            Objective.objects.filter(tenant=tenant).delete()
+            GoalPeriod.objects.filter(tenant=tenant).delete()
+        if GoalPeriod.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Goal-setting data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant)
+                    .select_related("party", "employment").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' — skipping goal-setting seed."))
+            return
+
+        def emp(i):
+            return emps[i % len(emps)]
+
+        dept = OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("name").first()
+        today = timezone.localdate()
+        td = datetime.timedelta
+        # Active period ~50% elapsed (so the derived health spread is meaningful), plus a prior closed one.
+        active = GoalPeriod.objects.create(
+            tenant=tenant, name="Current Half-Year Cycle", period_type="half_yearly",
+            start_date=today - td(days=90), end_date=today + td(days=90), status="active",
+            description="The in-flight OKR cycle for the organization.")
+        GoalPeriod.objects.create(
+            tenant=tenant, name="Previous Quarter Cycle", period_type="quarterly",
+            start_date=today - td(days=270), end_date=today - td(days=91), status="closed",
+            description="A wrapped-up prior cycle, kept for history.")
+
+        # --- Objective cascade: 1 company → 2 department → 2 individual ---
+        comp = Objective.objects.create(
+            tenant=tenant, title="Grow ARR to $2M and delight customers", owner=emp(0),
+            goal_period=active, scope="company", target_type="committed", status="active", weight=100,
+            description="The north-star company objective this cycle.")
+        dept1 = Objective.objects.create(
+            tenant=tenant, title="Ship the v2 platform", owner=emp(1), goal_period=active,
+            parent_objective=comp, department=dept, scope="department", target_type="committed",
+            status="active", weight=60)
+        dept2 = Objective.objects.create(
+            tenant=tenant, title="Scale go-to-market", owner=emp(2), goal_period=active,
+            parent_objective=comp, department=dept, scope="department", target_type="aspirational",
+            status="active", weight=40)
+        ind1 = Objective.objects.create(
+            tenant=tenant, title="Close 10 enterprise deals", owner=emp(2), goal_period=active,
+            parent_objective=dept2, scope="individual", target_type="committed", status="active", weight=100)
+        ind2 = Objective.objects.create(
+            tenant=tenant, title="Reduce onboarding time", owner=emp(3), goal_period=active,
+            parent_objective=dept1, scope="individual", target_type="committed", status="active", weight=100)
+
+        D = Decimal
+        # (objective, [(title, metric_type, start, target, current, unit, weight, status), ...])
+        # current values are tuned so each objective lands in a distinct health band vs. ~50% elapsed.
+        KRS = {
+            comp: [  # ~60% → on_track
+                ("ARR reaches $2M", "currency", D("1200000"), D("2000000"), D("1680000"), "$", D("50"), "in_progress"),
+                ("Lift NPS to 60", "numeric", D("45"), D("60"), D("54"), "pts", D("30"), "in_progress"),
+                ("Flagship feature launch progress", "percentage", D("0"), D("100"), D("60"), "%", D("20"), "in_progress"),
+            ],
+            dept1: [  # ~28% → at_risk
+                ("Migrate 100 customers to v2", "numeric", D("0"), D("100"), D("40"), "customers", D("70"), "in_progress"),
+                ("Pass the v2 security audit", "boolean", None, None, D("0"), "", D("30"), "not_started"),
+            ],
+            dept2: [  # ~60% → on_track
+                ("Build $5M qualified pipeline", "currency", D("1000000"), D("5000000"), D("3400000"), "$", D("50"), "in_progress"),
+                ("Raise win rate to 30%", "percentage", D("18"), D("30"), D("25.2"), "%", D("50"), "in_progress"),
+            ],
+            ind1: [  # ~15% → off_track
+                ("Sign 10 enterprise logos", "numeric", D("0"), D("10"), D("1.5"), "deals", D("100"), "in_progress"),
+            ],
+            ind2: [  # ~78% → on_track (milestone done + fast time-to-value)
+                ("Publish the onboarding runbook", "milestone", None, None, None, "", D("40"), "completed"),
+                ("Cut time-to-value under 14 days", "numeric", D("30"), D("14"), D("20"), "days", D("60"), "in_progress"),
+            ],
+        }
+
+        kr_total = ci_total = 0
+        for objective, rows in KRS.items():
+            for title, mtype, start, target, current, unit, weight, status in rows:
+                kr = KeyResult.objects.create(
+                    tenant=tenant, objective=objective, title=title, metric_type=mtype,
+                    start_value=start, target_value=target, current_value=current, unit=unit,
+                    weight=weight, status=status,
+                    is_milestone_event=(mtype == "milestone"))
+                kr_total += 1
+                # Two staggered check-ins; the LATEST reports `current` so save() leaves
+                # current_value consistent with the intended health band above.
+                confidence = "on_track" if objective in (comp, dept2, ind2) else (
+                    "at_risk" if objective is dept1 else "off_track")
+                if current is not None:
+                    GoalCheckIn.objects.create(
+                        tenant=tenant, key_result=kr, created_by=objective.owner,
+                        checkin_date=today - td(days=45), value_at_checkin=(current / 2).quantize(D("0.01")),
+                        confidence="at_risk", comment="Mid-cycle progress — ramping up.")
+                    GoalCheckIn.objects.create(
+                        tenant=tenant, key_result=kr, created_by=objective.owner,
+                        checkin_date=today - td(days=7), value_at_checkin=current, confidence=confidence,
+                        comment="Latest weekly update.")
+                    ci_total += 2
+                else:
+                    GoalCheckIn.objects.create(
+                        tenant=tenant, key_result=kr, created_by=objective.owner,
+                        checkin_date=today - td(days=7), value_at_checkin=None, confidence=confidence,
+                        is_milestone_event=(mtype == "milestone"),
+                        comment="Milestone completed." if status == "completed" else "Qualitative check-in.")
+                    ci_total += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Goal setting seeded for '{tenant.name}': "
+            f"{GoalPeriod.objects.filter(tenant=tenant).count()} periods, "
+            f"{Objective.objects.filter(tenant=tenant).count()} objectives (3-level cascade), "
+            f"{kr_total} key results, {ci_total} check-ins."))
