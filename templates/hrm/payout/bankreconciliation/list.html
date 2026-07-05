@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Bank Reconciliations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Bank Reconciliations</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Bank Reconciliations</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:bankreconciliation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Reconciliation</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, batch or statement ref…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="batch" class="form-select">
+            <option value="">All batches</option>
+            {% for b in batches %}
+              <option value="{{ b.pk }}" {% if request.GET.batch == b.pk|stringformat:"d" %}selected{% endif %}>{{ b.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:bankreconciliation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Batch</th><th>Statement Date</th><th>Matched</th><th>Unmatched</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:bankreconciliation_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.batch.number }}</td>
+              <td>{{ obj.statement_date }}</td>
+              <td>{{ obj.matched_count }} · {{ obj.matched_amount }}</td>
+              <td>{{ obj.unmatched_count }} · {{ obj.unmatched_amount }}</td>
+              <td>
+                {% if obj.status == 'reconciled' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'discrepancy' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:bankreconciliation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'pending' or obj.status == 'in_progress' %}
+                    <a href="{% url 'hrm:bankreconciliation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:bankreconciliation_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this reconciliation?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="scale"></i><h3>No reconciliations</h3><p>Create one for a payout batch, then Reconcile to match payments against the bank statement.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
