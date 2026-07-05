@@ -444,6 +444,18 @@ LIVE_LINKS = {
         "Goal Timeline": "hrm:goalperiod_list",               # bullet (quarterly/annual cycle catalog)
         "Goal Tracking": "hrm:goalcheckin_list",              # bullet (check-in history log)
     },
+    # 3.19 Performance Review — second Performance-Management sub-module (formal appraisal cycles;
+    # continuous feedback/kudos/1:1s are 3.20, PIP/coaching is 3.21). ReviewCycle serves Review
+    # Cycles; the review list filtered by review_type serves Self-Assessment/Manager Review; the
+    # unfiltered list (all review types incl. peer/upward) serves 360 Feedback; the calibration
+    # board serves Calibration.
+    "3.19": {
+        "Review Cycles": "hrm:reviewcycle_list",                              # bullet (cycle catalog + phase machine)
+        "Self-Assessment": "hrm:performancereview_list?review_type=self",     # bullet (self review_type slice)
+        "Manager Review": "hrm:performancereview_list?review_type=manager",   # bullet (manager review_type slice)
+        "360° Feedback": "hrm:performancereview_list",                        # bullet (all review types incl. peer/upward)
+        "Calibration": "hrm:calibration_board",                               # bullet (calibration board)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
