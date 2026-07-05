@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Q, Subquery, Sum)
+from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Prefetch, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -127,6 +127,12 @@ from .forms import (  # 3.16 Tax & Investment
 from .forms import (  # 3.17 Payout & Reports
     BankReconciliationForm,
     PayoutBatchForm,
+)
+from .forms import (  # 3.18 Goal Setting
+    GoalCheckInForm,
+    GoalPeriodForm,
+    KeyResultForm,
+    ObjectiveForm,
 )
 from .models import (
     APPLICATION_STAGE_CHOICES,
@@ -251,6 +257,12 @@ from .models import (  # 3.17 Payout & Reports
     PayoutPayment,
     PayslipDistribution,
 )
+from .models import (  # 3.18 Goal Setting
+    GoalCheckIn,
+    GoalPeriod,
+    KeyResult,
+    Objective,
+)
 
 
 _DEC = DecimalField(max_digits=7, decimal_places=2)
@@ -283,7 +295,8 @@ def hrm_overview(request):
     stats = {"employees": 0, "new_this_month": 0, "on_leave_today": 0,
              "present_today": 0, "absent_today": 0, "pending_regularizations": 0,
              "pending_encashments": 0, "pending_timesheets": 0, "pending_overtime": 0,
-             "open_requisitions": 0, "active_applications": 0, "new_candidates": 0}
+             "open_requisitions": 0, "active_applications": 0, "new_candidates": 0,
+             "active_objectives": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
         today = timezone.localdate()
@@ -308,6 +321,8 @@ def hrm_overview(request):
                                         .exclude(stage__in=APPLICATION_TERMINAL_STAGES).count())
         stats["new_candidates"] = CandidateProfile.objects.filter(
             tenant=tenant, created_at__year=today.year, created_at__month=today.month).count()
+        # 3.18 goal setting — objectives currently in flight.
+        stats["active_objectives"] = Objective.objects.filter(tenant=tenant, status="active").count()
         pending_requests = (LeaveRequest.objects.filter(tenant=tenant, status="pending")
                             .select_related("employee__party", "leave_type")
                             .order_by("start_date")[:10])
@@ -7313,3 +7328,323 @@ def payout_exceptions(request):
         qs = qs.filter(batch_id=int(batch_id))
     return render(request, "hrm/payout/exceptions.html", {
         "payments": qs, "batches": PayoutBatch.objects.filter(tenant=request.tenant)})
+
+
+# ============================================================ 3.18 Goal Setting (Performance Mgmt)
+def _current_employee_profile(request):
+    """Resolve the logged-in user's ``EmployeeProfile`` (via ``User.party`` → reverse O2O), or
+    ``None`` for a user with no linked party/profile (e.g. the superuser). Django's reverse-O2O
+    ``RelatedObjectDoesNotExist`` subclasses ``AttributeError``, so ``getattr(..., None)`` is safe."""
+    party = getattr(request.user, "party", None)
+    if party is None:
+        return None
+    return getattr(party, "employee_profile", None)
+
+
+# ---------------------------------------------------------------- GoalPeriod (3.18.4 Goal Timeline)
+@login_required
+def goalperiod_list(request):
+    return crud_list(
+        request,
+        # O(1) objective count per row via annotation (no N+1 on GoalPeriod.objective_count).
+        # Explicit order_by — the Count() GROUP BY otherwise drops Meta.ordering (paginator warning).
+        GoalPeriod.objects.filter(tenant=request.tenant)
+        .annotate(num_objectives=Count("objectives")).order_by("-start_date", "name"),
+        "hrm/performance/goalperiod/list.html",
+        search_fields=("name",),
+        filters=[("status", "status", False), ("period_type", "period_type", False)],
+        extra_context={
+            "status_choices": GoalPeriod.STATUS_CHOICES,
+            "period_type_choices": GoalPeriod.PERIOD_TYPE_CHOICES,
+        },
+    )
+
+
+@login_required
+def goalperiod_create(request):
+    return crud_create(request, form_class=GoalPeriodForm,
+                       template="hrm/performance/goalperiod/form.html",
+                       success_url="hrm:goalperiod_list")
+
+
+@login_required
+def goalperiod_detail(request, pk):
+    # Prefetch objectives + their key results so avg_progress_pct / per-objective progress_pct
+    # stay a bounded number of queries (not N+1 across objectives).
+    obj = get_object_or_404(
+        GoalPeriod.objects.prefetch_related(
+            Prefetch("objectives",
+                     queryset=Objective.objects.filter(tenant=request.tenant)
+                     .select_related("owner__party", "goal_period", "department")
+                     .prefetch_related("key_results"))),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/performance/goalperiod/detail.html", {
+        "obj": obj,
+        "objectives": obj.objectives.all(),  # prefetched above
+    })
+
+
+@login_required
+def goalperiod_edit(request, pk):
+    return crud_edit(request, model=GoalPeriod, pk=pk, form_class=GoalPeriodForm,
+                     template="hrm/performance/goalperiod/form.html",
+                     success_url="hrm:goalperiod_list")
+
+
+@login_required
+@require_POST
+def goalperiod_delete(request, pk):
+    obj = get_object_or_404(GoalPeriod, pk=pk, tenant=request.tenant)
+    # goal_period is PROTECT on Objective — pre-check for a friendly message instead of a 500.
+    if obj.objectives.exists():
+        messages.error(request, "This goal period has objectives and cannot be deleted.")
+        return redirect("hrm:goalperiod_detail", pk=obj.pk)
+    return crud_delete(request, model=GoalPeriod, pk=pk, success_url="hrm:goalperiod_list")
+
+
+@tenant_admin_required
+@require_POST
+def goalperiod_activate(request, pk):
+    obj = get_object_or_404(GoalPeriod, pk=pk, tenant=request.tenant)
+    if obj.status in ("draft", "closed"):
+        obj.status = "active"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "activate"})
+        messages.success(request, f"Goal period '{obj.name}' activated.")
+    else:
+        messages.error(request, "Only a draft or closed goal period can be activated.")
+    return redirect("hrm:goalperiod_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def goalperiod_close(request, pk):
+    obj = get_object_or_404(GoalPeriod, pk=pk, tenant=request.tenant)
+    if obj.status == "active":
+        obj.status = "closed"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "close"})
+        messages.success(request, f"Goal period '{obj.name}' closed.")
+    else:
+        messages.error(request, "Only an active goal period can be closed.")
+    return redirect("hrm:goalperiod_detail", pk=obj.pk)
+
+
+# ---------------------------------------------------------- Objective (3.18.1/3.18.2/3.18.3 the "O")
+@login_required
+def objective_list(request):
+    qs = (Objective.objects.filter(tenant=request.tenant)
+          .select_related("owner__party", "goal_period", "department", "parent_objective")
+          .prefetch_related("key_results"))
+    # ?mine=1 — my own objectives + my direct reports' (via the derived reporting line), 3.18.2.
+    if request.GET.get("mine") == "1":
+        profile = _current_employee_profile(request)
+        if profile is not None:
+            qs = qs.filter(Q(owner=profile) | Q(owner__employment__manager=profile.party))
+        else:
+            qs = qs.none()
+    return crud_list(
+        request, qs,
+        "hrm/performance/objective/list.html",
+        search_fields=("title", "number", "owner__party__name"),
+        filters=[("status", "status", False), ("scope", "scope", False),
+                 ("target_type", "target_type", False), ("goal_period", "goal_period_id", True),
+                 ("owner", "owner_id", True), ("department", "department_id", True)],
+        extra_context={
+            "status_choices": Objective.STATUS_CHOICES,
+            "scope_choices": Objective.SCOPE_CHOICES,
+            "target_type_choices": Objective.TARGET_TYPE_CHOICES,
+            "goal_periods": GoalPeriod.objects.filter(tenant=request.tenant).order_by("-start_date"),
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "departments": OrgUnit.objects.filter(tenant=request.tenant, kind="department").order_by("name"),
+            "mine": request.GET.get("mine") == "1",
+        },
+    )
+
+
+@login_required
+def objective_tree(request):
+    """Alignment/cascade tree (3.18.2) — top-level objectives with nested children, bounded depth.
+    Prefetches three levels so the recursive template stays query-bounded."""
+    grandchild = Prefetch("child_objectives",
+                          queryset=Objective.objects.filter(tenant=request.tenant)
+                          .select_related("owner__party").prefetch_related("key_results"))
+    child = Prefetch("child_objectives",
+                     queryset=Objective.objects.filter(tenant=request.tenant)
+                     .select_related("owner__party").prefetch_related("key_results", grandchild))
+    top = (Objective.objects.filter(tenant=request.tenant, parent_objective__isnull=True)
+           .select_related("owner__party", "goal_period")
+           .prefetch_related("key_results", child))
+    period_id = request.GET.get("goal_period", "").strip()
+    if period_id.isdigit():
+        top = top.filter(goal_period_id=int(period_id))
+    return render(request, "hrm/performance/objective/tree.html", {
+        "objectives": top,
+        "goal_periods": GoalPeriod.objects.filter(tenant=request.tenant).order_by("-start_date"),
+        "tree_max_depth": 4,
+    })
+
+
+@login_required
+def objective_create(request):
+    return crud_create(request, form_class=ObjectiveForm,
+                       template="hrm/performance/objective/form.html",
+                       success_url="hrm:objective_list")
+
+
+@login_required
+def objective_detail(request, pk):
+    obj = get_object_or_404(
+        Objective.objects.select_related("owner__party", "goal_period", "department", "parent_objective__owner__party")
+        .prefetch_related("key_results"),
+        pk=pk, tenant=request.tenant)
+    key_results = list(obj.key_results.all())
+    for kr in key_results:
+        kr.objective = obj  # wire the parent so kr.health_status doesn't re-query goal_period
+    child_objectives = (obj.child_objectives.filter(tenant=request.tenant)
+                        .select_related("owner__party").prefetch_related("key_results").order_by("title"))
+    recent_checkins = (GoalCheckIn.objects.filter(tenant=request.tenant, key_result__objective=obj)
+                       .select_related("key_result", "created_by__party")
+                       .order_by("-checkin_date", "-created_at")[:20])
+    return render(request, "hrm/performance/objective/detail.html", {
+        "obj": obj,
+        "key_results": key_results,
+        "child_objectives": child_objectives,
+        "recent_checkins": recent_checkins,
+        "kr_form": KeyResultForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def objective_edit(request, pk):
+    return crud_edit(request, model=Objective, pk=pk, form_class=ObjectiveForm,
+                     template="hrm/performance/objective/form.html",
+                     success_url="hrm:objective_list")
+
+
+@login_required
+@require_POST
+def objective_delete(request, pk):
+    # child_objectives are SET_NULL, key_results (+ their check-ins) CASCADE — a clean delete.
+    return crud_delete(request, model=Objective, pk=pk, success_url="hrm:objective_list")
+
+
+# ------------------------------------------------------------- KeyResult (3.18.1/3.18.3 the "KR")
+@login_required
+def keyresult_create(request, objective_pk):
+    objective = get_object_or_404(Objective, pk=objective_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = KeyResultForm(request.POST,
+                             instance=KeyResult(tenant=request.tenant, objective=objective),
+                             tenant=request.tenant)
+        if form.is_valid():
+            kr = form.save()
+            write_audit_log(request.user, kr, "create")
+            messages.success(request, "Key result added.")
+            return redirect("hrm:objective_detail", pk=objective.pk)
+    else:
+        # Default the weight to an equal split among existing siblings (overridable — Lattice pattern).
+        sibling_count = objective.key_results.count()
+        default_weight = (Decimal("100") / (sibling_count + 1)).quantize(Decimal("0.01"))
+        form = KeyResultForm(instance=KeyResult(tenant=request.tenant, objective=objective),
+                             initial={"weight": default_weight}, tenant=request.tenant)
+    return render(request, "hrm/performance/keyresult/form.html", {
+        "form": form, "is_edit": False, "objective": objective})
+
+
+@login_required
+def keyresult_detail(request, pk):
+    kr = get_object_or_404(
+        KeyResult.objects.select_related("objective__goal_period", "objective__owner__party"),
+        pk=pk, tenant=request.tenant)
+    checkins = kr.checkins.select_related("created_by__party").order_by("-checkin_date", "-created_at")
+    return render(request, "hrm/performance/keyresult/detail.html", {
+        "obj": kr,
+        "objective": kr.objective,
+        "checkins": checkins,
+        "checkin_form": GoalCheckInForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def keyresult_edit(request, pk):
+    kr = get_object_or_404(KeyResult.objects.select_related("objective"), pk=pk, tenant=request.tenant)
+    objective = kr.objective
+    if request.method == "POST":
+        form = KeyResultForm(request.POST, instance=kr, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, kr, "update")
+            messages.success(request, "Key result updated.")
+            return redirect("hrm:objective_detail", pk=objective.pk)
+    else:
+        form = KeyResultForm(instance=kr, tenant=request.tenant)
+    return render(request, "hrm/performance/keyresult/form.html", {
+        "form": form, "is_edit": True, "obj": kr, "objective": objective})
+
+
+@login_required
+@require_POST
+def keyresult_delete(request, pk):
+    kr = get_object_or_404(KeyResult.objects.select_related("objective"), pk=pk, tenant=request.tenant)
+    objective_pk = kr.objective_id
+    write_audit_log(request.user, kr, "delete")
+    kr.delete()
+    messages.success(request, "Key result deleted.")
+    return redirect("hrm:objective_detail", pk=objective_pk)
+
+
+# ---------------------------------------------------------- GoalCheckIn (3.18.5 Goal Tracking log)
+@login_required
+def goalcheckin_list(request):
+    return crud_list(
+        request,
+        GoalCheckIn.objects.filter(tenant=request.tenant)
+        .select_related("key_result__objective", "created_by__party"),
+        "hrm/performance/goalcheckin/list.html",
+        search_fields=("number", "key_result__title", "comment"),
+        filters=[("confidence", "confidence", False), ("key_result", "key_result_id", True)],
+        extra_context={
+            "confidence_choices": GoalCheckIn.CONFIDENCE_CHOICES,
+            "key_results": (KeyResult.objects.filter(tenant=request.tenant)
+                            .select_related("objective").order_by("title")),
+        },
+    )
+
+
+@login_required
+def goalcheckin_create(request, keyresult_pk):
+    kr = get_object_or_404(KeyResult.objects.select_related("objective"), pk=keyresult_pk, tenant=request.tenant)
+    if request.method == "POST":
+        checkin = GoalCheckIn(tenant=request.tenant, key_result=kr,
+                              created_by=_current_employee_profile(request))
+        form = GoalCheckInForm(request.POST, instance=checkin, tenant=request.tenant)
+        if form.is_valid():
+            form.save()  # GoalCheckIn.save() advances key_result.current_value
+            write_audit_log(request.user, kr, "update", {"action": "check_in"})
+            messages.success(request, "Check-in logged.")
+            return redirect("hrm:keyresult_detail", pk=kr.pk)
+    else:
+        form = GoalCheckInForm(instance=GoalCheckIn(tenant=request.tenant, key_result=kr),
+                               tenant=request.tenant)
+    return render(request, "hrm/performance/goalcheckin/form.html", {
+        "form": form, "is_edit": False, "key_result": kr, "objective": kr.objective})
+
+
+@login_required
+def goalcheckin_detail(request, pk):
+    return crud_detail(request, model=GoalCheckIn, pk=pk,
+                       template="hrm/performance/goalcheckin/detail.html",
+                       select_related=("key_result__objective", "created_by__party"))
+
+
+@login_required
+@require_POST
+def goalcheckin_delete(request, pk):
+    obj = get_object_or_404(GoalCheckIn.objects.select_related("key_result"), pk=pk, tenant=request.tenant)
+    kr_pk = obj.key_result_id
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Check-in deleted.")
+    return redirect("hrm:keyresult_detail", pk=kr_pk)
