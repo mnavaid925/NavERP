@@ -6905,9 +6905,19 @@ def _recompute_batch_status(batch):
 # ------------------------------------------------------------ PayoutBatch (+ workflow)
 @login_required
 def payoutbatch_list(request):
+    # Annotate the list summary columns so the page is ONE query, not one _totals() aggregate per row.
+    # All aggregates traverse the same `payments` relation filtered to current (non-retried) rows — a
+    # current payment has no `retries`, so its LEFT JOIN yields exactly one row: no Sum fan-out. The
+    # aliases avoid clashing with the model's @property (which the detail page still uses).
+    _current = Q(payments__retries__isnull=True)
+    qs = (PayoutBatch.objects.filter(tenant=request.tenant).select_related("cycle")
+          .annotate(
+              list_headcount=Count("payments", filter=_current, distinct=True),
+              list_paid=Count("payments", filter=_current & Q(payments__status="paid"), distinct=True),
+              list_total=Sum("payments__net_amount", filter=_current)))
     return crud_list(
         request,
-        PayoutBatch.objects.filter(tenant=request.tenant).select_related("cycle"),
+        qs,
         "hrm/payout/payoutbatch/list.html",
         search_fields=["number", "cycle__number"],
         filters=[("status", "status", False), ("bank_file_format", "bank_file_format", False),
@@ -7099,8 +7109,10 @@ def payoutpayment_retry(request, pk):
 def payslipdistribution_list(request):
     return crud_list(
         request,
+        # No payslip__cycle join — the list renders only payslip.number + employee.party.name; the cycle
+        # filter is an _id lookup and the ordering join is added by the ORM independently.
         PayslipDistribution.objects.filter(tenant=request.tenant)
-        .select_related("payslip__employee__party", "payslip__cycle"),
+        .select_related("payslip__employee__party"),
         "hrm/payout/payslipdistribution/list.html",
         search_fields=["payslip__number", "payslip__employee__party__name"],
         filters=[("status", "status", False), ("delivery_channel", "delivery_channel", False),
@@ -7116,7 +7128,7 @@ def payslipdistribution_list(request):
 @login_required
 def payslipdistribution_detail(request, pk):
     obj = get_object_or_404(
-        PayslipDistribution.objects.select_related("payslip__employee__party", "payslip__cycle", "sent_by"),
+        PayslipDistribution.objects.select_related("payslip__employee__party", "sent_by"),
         pk=pk, tenant=request.tenant)
     return render(request, "hrm/payout/payslipdistribution/detail.html", {"obj": obj})
 
@@ -7157,9 +7169,10 @@ def payslipdistribution_send_cycle(request):
         return redirect("hrm:payslipdistribution_list")
     cycle = get_object_or_404(PayrollCycle, pk=int(cycle_id), tenant=request.tenant)
     count = 0
-    for ps in cycle.payslips.select_related("employee").all():
-        _mark_sent(PayslipDistribution.for_payslip(ps), request.user)
-        count += 1
+    with transaction.atomic():
+        for ps in cycle.payslips.select_related("employee").all():
+            _mark_sent(PayslipDistribution.for_payslip(ps), request.user)
+            count += 1
     write_audit_log(request.user, cycle, "update", {"action": "distribute_payslips", "count": count})
     messages.success(request, f"Marked {count} payslip(s) sent for {cycle.number}.")
     return redirect("hrm:payslipdistribution_list")
@@ -7193,7 +7206,8 @@ def payslipdistribution_mark_downloaded(request, pk):
 def bankreconciliation_list(request):
     return crud_list(
         request,
-        BankReconciliation.objects.filter(tenant=request.tenant).select_related("batch__cycle"),
+        # List renders only batch.number — no batch__cycle join (detail keeps it, where cycle IS shown).
+        BankReconciliation.objects.filter(tenant=request.tenant).select_related("batch"),
         "hrm/payout/bankreconciliation/list.html",
         search_fields=["number", "batch__number", "statement_reference"],
         filters=[("status", "status", False), ("batch", "batch_id", True)],
