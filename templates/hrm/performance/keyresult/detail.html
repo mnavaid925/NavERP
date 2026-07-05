@@ -33,9 +33,9 @@
         <span class="text-muted">{{ obj.progress_pct|floatformat:0 }}%</span>
       </dd></div>
       <div class="detail-item"><dt>Health</dt><dd>
-        {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status }}</span>
-        {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status }}</span>
-        {% else %}<span class="badge badge-red">{{ obj.health_status }}</span>{% endif %}
+        {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status_display }}</span>
+        {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status_display }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.health_status_display }}</span>{% endif %}
       </dd></div>
     </dl>
   </div></div>
