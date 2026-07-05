@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:objective_list' %}">Objectives</a><span class="sep">›</span><a href="{% url 'hrm:objective_detail' objective.pk %}">{{ objective.number }}</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:keyresult_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:keyresult_delete' obj.pk %}" onsubmit="return confirm('Delete this key result?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Objective</dt><dd><a href="{% url 'hrm:objective_detail' objective.pk %}">{{ objective.title }}</a></dd></div>
+      <div class="detail-item"><dt>Metric Type</dt><dd><span class="badge badge-muted">{{ obj.get_metric_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Start → Target</dt><dd>{{ obj.start_value|default:"—" }} → {{ obj.target_value|default:"—" }} {{ obj.unit }}</dd></div>
+      <div class="detail-item"><dt>Current</dt><dd>{{ obj.current_value|default:"—" }} {{ obj.unit }}</dd></div>
+      <div class="detail-item"><dt>Weight</dt><dd>{{ obj.weight }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Progress</dt><dd>
+        <div class="progress" style="width:160px;"><div class="progress-bar" style="width:{{ obj.progress_pct|floatformat:0 }}%;"></div></div>
+        <span class="text-muted">{{ obj.progress_pct|floatformat:0 }}%</span>
+      </dd></div>
+      <div class="detail-item"><dt>Health</dt><dd>
+        {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status }}</span>
+        {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.health_status }}</span>{% endif %}
+      </dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Check-in History</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Date</th><th>Value</th><th>Confidence</th><th>By</th><th>Comment</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for ci in checkins %}
+            <tr>
+              <td><a href="{% url 'hrm:goalcheckin_detail' ci.pk %}" class="fw-600">{{ ci.number }}</a></td>
+              <td>{{ ci.checkin_date }}</td>
+              <td>{{ ci.value_at_checkin|default:"—" }}</td>
+              <td>
+                {% if ci.confidence == 'on_track' %}<span class="badge badge-green">{{ ci.get_confidence_display }}</span>
+                {% elif ci.confidence == 'at_risk' %}<span class="badge badge-amber">{{ ci.get_confidence_display }}</span>
+                {% else %}<span class="badge badge-red">{{ ci.get_confidence_display }}</span>{% endif %}
+              </td>
+              <td>{{ ci.created_by.party.name|default:"—" }}</td>
+              <td>{{ ci.comment|default:"—"|truncatechars:40 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:goalcheckin_detail' ci.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <form method="post" action="{% url 'hrm:goalcheckin_delete' ci.pk %}" onsubmit="return confirm('Delete this check-in?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="activity"></i><p>No check-ins yet — log the first progress update below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Log a check-in</h3>
+      <form method="post" action="{% url 'hrm:goalcheckin_create' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in checkin_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted" style="margin-top:.25rem;">Logging a value advances this key result's current value.</p>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Log Check-in</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:objective_detail' objective.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to objective</a>
+{% endblock %}
