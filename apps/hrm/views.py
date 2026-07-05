@@ -7181,8 +7181,12 @@ def payslipdistribution_send_cycle(request):
 @login_required
 @require_POST
 def payslipdistribution_mark_viewed(request, pk):
-    # v1 has no user<->employee link, so any authenticated tenant user's view records the signal;
-    # a real ESS portal would scope this to the payslip's own employee. Forward-only.
+    # SECURITY NOTE (accepted, tracked): no User<->EmployeeProfile link exists yet, so this can't be
+    # scoped to "the payslip's own employee". Intentionally left @login_required (NOT
+    # @tenant_admin_required) — it discloses no data and only bumps a status/timestamp already readable
+    # by any tenant user via payslipdistribution_detail. When a real ESS portal + user<->employee link
+    # lands, replace the tenant filter with an ownership filter (dist.payslip.employee.user==request.user)
+    # rather than gating by admin role. Forward-only.
     dist = get_object_or_404(PayslipDistribution, pk=pk, tenant=request.tenant)
     if dist.status in ("pending", "sent"):
         dist.status = "viewed"
