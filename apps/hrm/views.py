@@ -134,6 +134,13 @@ from .forms import (  # 3.18 Goal Setting
     KeyResultForm,
     ObjectiveForm,
 )
+from .forms import (  # 3.19 Performance Review
+    CalibrationForm,
+    PerformanceReviewForm,
+    ReviewCycleForm,
+    ReviewRatingForm,
+    ReviewTemplateForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -263,6 +270,12 @@ from .models import (  # 3.18 Goal Setting
     KeyResult,
     Objective,
 )
+from .models import (  # 3.19 Performance Review
+    PerformanceReview,
+    ReviewCycle,
+    ReviewRating,
+    ReviewTemplate,
+)
 
 
 _DEC = DecimalField(max_digits=7, decimal_places=2)
@@ -296,7 +309,7 @@ def hrm_overview(request):
              "present_today": 0, "absent_today": 0, "pending_regularizations": 0,
              "pending_encashments": 0, "pending_timesheets": 0, "pending_overtime": 0,
              "open_requisitions": 0, "active_applications": 0, "new_candidates": 0,
-             "active_objectives": 0}
+             "active_objectives": 0, "open_reviews": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
         today = timezone.localdate()
@@ -323,6 +336,9 @@ def hrm_overview(request):
             tenant=tenant, created_at__year=today.year, created_at__month=today.month).count()
         # 3.18 goal setting — objectives currently in flight.
         stats["active_objectives"] = Objective.objects.filter(tenant=tenant, status="active").count()
+        # 3.19 performance review — reviews not yet acknowledged (in flight).
+        stats["open_reviews"] = PerformanceReview.objects.filter(
+            tenant=tenant).exclude(status="acknowledged").count()
         pending_requests = (LeaveRequest.objects.filter(tenant=tenant, status="pending")
                             .select_related("employee__party", "leave_type")
                             .order_by("start_date")[:10])
@@ -7653,3 +7669,376 @@ def goalcheckin_delete(request, pk):
     obj.delete()
     messages.success(request, "Check-in deleted.")
     return redirect("hrm:keyresult_detail", pk=kr_pk)
+
+
+# ============================================================ 3.19 Performance Review (Performance Mgmt)
+def _is_admin(user):
+    """Tenant-admin-or-superuser check (mirrors apps.core.decorators.tenant_admin_required)."""
+    return user.is_superuser or getattr(user, "is_tenant_admin", False)
+
+
+# ---------------------------------------------------------------- ReviewCycle (3.19.1 Review Cycles)
+@login_required
+def reviewcycle_list(request):
+    return crud_list(
+        request,
+        # Explicit order_by — the Count() GROUP BY otherwise drops Meta.ordering (paginator warning).
+        ReviewCycle.objects.filter(tenant=request.tenant).select_related("goal_period")
+        .annotate(num_reviews=Count("reviews")).order_by("-self_review_start", "name"),
+        "hrm/performance/reviewcycle/list.html",
+        search_fields=("name",),
+        filters=[("status", "status", False), ("cycle_type", "cycle_type", False)],
+        extra_context={
+            "status_choices": ReviewCycle.STATUS_CHOICES,
+            "cycle_type_choices": ReviewCycle.CYCLE_TYPE_CHOICES,
+        },
+    )
+
+
+@login_required
+def reviewcycle_create(request):
+    return crud_create(request, form_class=ReviewCycleForm,
+                       template="hrm/performance/reviewcycle/form.html",
+                       success_url="hrm:reviewcycle_list")
+
+
+@login_required
+def reviewcycle_detail(request, pk):
+    obj = get_object_or_404(
+        ReviewCycle.objects.select_related("goal_period"), pk=pk, tenant=request.tenant)
+    reviews = (obj.reviews.select_related("subject__party", "reviewer__party", "template")
+               .order_by("review_type", "subject__party__name"))
+    # Phase-progress summary (single pass over the already-fetched reviews — no extra queries).
+    phase_counts = {"draft": 0, "submitted": 0, "shared": 0, "acknowledged": 0}
+    reviews = list(reviews)
+    for r in reviews:
+        phase_counts[r.status] = phase_counts.get(r.status, 0) + 1
+    # Next phase for the Advance button.
+    order = ReviewCycle.PHASE_ORDER
+    idx = order.index(obj.status) if obj.status in order else 0
+    next_phase = order[idx + 1] if idx + 1 < len(order) else None
+    next_phase_label = dict(ReviewCycle.STATUS_CHOICES).get(next_phase) if next_phase else None
+    return render(request, "hrm/performance/reviewcycle/detail.html", {
+        "obj": obj,
+        "reviews": reviews,
+        "phase_counts": phase_counts,
+        "next_phase_label": next_phase_label,
+    })
+
+
+@login_required
+def reviewcycle_edit(request, pk):
+    return crud_edit(request, model=ReviewCycle, pk=pk, form_class=ReviewCycleForm,
+                     template="hrm/performance/reviewcycle/form.html",
+                     success_url="hrm:reviewcycle_list")
+
+
+@login_required
+@require_POST
+def reviewcycle_delete(request, pk):
+    obj = get_object_or_404(ReviewCycle, pk=pk, tenant=request.tenant)
+    # cycle is PROTECT on PerformanceReview — pre-check for a friendly message.
+    if obj.reviews.exists():
+        messages.error(request, "This review cycle has reviews and cannot be deleted.")
+        return redirect("hrm:reviewcycle_detail", pk=obj.pk)
+    return crud_delete(request, model=ReviewCycle, pk=pk, success_url="hrm:reviewcycle_list")
+
+
+@tenant_admin_required
+@require_POST
+def reviewcycle_advance_phase(request, pk):
+    obj = get_object_or_404(ReviewCycle, pk=pk, tenant=request.tenant)
+    order = ReviewCycle.PHASE_ORDER
+    idx = order.index(obj.status) if obj.status in order else 0
+    if idx + 1 < len(order):
+        obj.status = order[idx + 1]
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "advance_phase", "to": obj.status})
+        messages.success(request, f"Cycle '{obj.name}' advanced to {obj.get_status_display()}.")
+    else:
+        messages.error(request, "This cycle is already closed.")
+    return redirect("hrm:reviewcycle_detail", pk=obj.pk)
+
+
+# ------------------------------------------------------- ReviewTemplate (3.19.3/3.19.4 form definition)
+@login_required
+def reviewtemplate_list(request):
+    return crud_list(
+        request,
+        ReviewTemplate.objects.filter(tenant=request.tenant),
+        "hrm/performance/reviewtemplate/list.html",
+        search_fields=("name", "number"),
+        filters=[("review_type", "review_type", False), ("is_active", "is_active", False)],
+        extra_context={"review_type_choices": ReviewTemplate.REVIEW_TYPE_CHOICES},
+    )
+
+
+@login_required
+def reviewtemplate_create(request):
+    return crud_create(request, form_class=ReviewTemplateForm,
+                       template="hrm/performance/reviewtemplate/form.html",
+                       success_url="hrm:reviewtemplate_list")
+
+
+@login_required
+def reviewtemplate_detail(request, pk):
+    return crud_detail(request, model=ReviewTemplate, pk=pk,
+                       template="hrm/performance/reviewtemplate/detail.html")
+
+
+@login_required
+def reviewtemplate_edit(request, pk):
+    return crud_edit(request, model=ReviewTemplate, pk=pk, form_class=ReviewTemplateForm,
+                     template="hrm/performance/reviewtemplate/form.html",
+                     success_url="hrm:reviewtemplate_list")
+
+
+@login_required
+@require_POST
+def reviewtemplate_delete(request, pk):
+    # template is SET_NULL on PerformanceReview — delete succeeds (historical reviews keep their
+    # data, just lose the template link). No pre-check needed.
+    return crud_delete(request, model=ReviewTemplate, pk=pk, success_url="hrm:reviewtemplate_list")
+
+
+# ---------------------------------------------- PerformanceReview (3.19.2/3.19.3/3.19.4 the review row)
+@login_required
+def performancereview_list(request):
+    qs = (PerformanceReview.objects.filter(tenant=request.tenant)
+          .select_related("cycle", "template", "subject__party", "reviewer__party")
+          .prefetch_related("ratings"))
+    if request.GET.get("mine") == "1":
+        profile = _current_employee_profile(request)
+        if profile is not None:
+            qs = qs.filter(Q(subject=profile) | Q(reviewer=profile))
+        else:
+            qs = qs.none()
+    return crud_list(
+        request, qs,
+        "hrm/performance/performancereview/list.html",
+        search_fields=("number", "subject__party__name", "reviewer__party__name"),
+        filters=[("cycle", "cycle_id", True), ("review_type", "review_type", False),
+                 ("status", "status", False), ("subject", "subject_id", True),
+                 ("reviewer", "reviewer_id", True)],
+        extra_context={
+            "review_type_choices": PerformanceReview.REVIEW_TYPE_CHOICES,
+            "status_choices": PerformanceReview.STATUS_CHOICES,
+            "cycles": ReviewCycle.objects.filter(tenant=request.tenant).order_by("-self_review_start"),
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "mine": request.GET.get("mine") == "1",
+        },
+    )
+
+
+@login_required
+def performancereview_create(request):
+    return crud_create(request, form_class=PerformanceReviewForm,
+                       template="hrm/performance/performancereview/form.html",
+                       success_url="hrm:performancereview_list")
+
+
+@login_required
+def performancereview_detail(request, pk):
+    obj = get_object_or_404(
+        PerformanceReview.objects.select_related(
+            "cycle__goal_period", "template", "subject__party", "reviewer__party", "acknowledged_by__party")
+        .prefetch_related("ratings"),
+        pk=pk, tenant=request.tenant)
+    ratings = list(obj.ratings.all())
+    profile = _current_employee_profile(request)
+    is_admin = _is_admin(request.user)
+    is_reviewer = profile is not None and profile.pk == obj.reviewer_id
+    is_subject = profile is not None and profile.pk == obj.subject_id
+    # Private manager notes: reviewer or admin only — never the subject-only viewer.
+    show_private = is_admin or is_reviewer
+    # Anonymised peer/upward feedback hides the reviewer from the subject (admin/reviewer still see it).
+    show_reviewer = not (obj.is_anonymous and obj.review_type in ("peer", "upward")
+                         and not (is_admin or is_reviewer))
+    # Goal-review section: the subject's Objectives for the cycle's aligned OKR period.
+    goal_objectives = []
+    if obj.template and obj.template.include_goals and obj.goal_period is not None:
+        goal_objectives = (Objective.objects.filter(
+            tenant=request.tenant, owner=obj.subject, goal_period=obj.goal_period)
+            .prefetch_related("key_results").order_by("title"))
+    return render(request, "hrm/performance/performancereview/detail.html", {
+        "obj": obj,
+        "ratings": ratings,
+        "show_private": show_private,
+        "show_reviewer": show_reviewer,
+        "is_subject": is_subject,
+        "is_reviewer": is_reviewer,
+        "goal_objectives": goal_objectives,
+        "rating_form": ReviewRatingForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def performancereview_edit(request, pk):
+    return crud_edit(request, model=PerformanceReview, pk=pk, form_class=PerformanceReviewForm,
+                     template="hrm/performance/performancereview/form.html",
+                     success_url="hrm:performancereview_list")
+
+
+@login_required
+@require_POST
+def performancereview_delete(request, pk):
+    return crud_delete(request, model=PerformanceReview, pk=pk, success_url="hrm:performancereview_list")
+
+
+@login_required
+@require_POST
+def performancereview_submit(request, pk):
+    obj = get_object_or_404(PerformanceReview, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == obj.reviewer_id)):
+        raise PermissionDenied("Only the reviewer (or a tenant admin) can submit this review.")
+    if obj.status == "draft":
+        obj.status = "submitted"
+        obj.submitted_at = timezone.now()
+        # Snapshot the manager's rating at submission time (pre-calibration audit anchor).
+        if obj.review_type == "manager" and obj.manager_rating is None:
+            obj.manager_rating = obj.overall_rating
+        obj.save(update_fields=["status", "submitted_at", "manager_rating", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Review {obj.number} submitted.")
+    else:
+        messages.error(request, "Only a draft review can be submitted.")
+    return redirect("hrm:performancereview_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def performancereview_share(request, pk):
+    obj = get_object_or_404(PerformanceReview, pk=pk, tenant=request.tenant)
+    if obj.status == "submitted":
+        obj.status = "shared"
+        obj.shared_at = timezone.now()
+        obj.save(update_fields=["status", "shared_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "share"})
+        messages.success(request, f"Review {obj.number} shared with the employee.")
+    else:
+        messages.error(request, "Only a submitted review can be shared.")
+    return redirect("hrm:performancereview_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def performancereview_acknowledge(request, pk):
+    obj = get_object_or_404(PerformanceReview, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if profile is None or profile.pk != obj.subject_id:
+        raise PermissionDenied("Only the review subject can acknowledge their review.")
+    if obj.status == "shared":
+        obj.status = "acknowledged"
+        obj.acknowledged_at = timezone.now()
+        obj.acknowledged_by = profile
+        obj.save(update_fields=["status", "acknowledged_at", "acknowledged_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "acknowledge"})
+        messages.success(request, "Review acknowledged.")
+    else:
+        messages.error(request, "Only a shared review can be acknowledged.")
+    return redirect("hrm:performancereview_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+def performancereview_calibrate(request, pk):
+    obj = get_object_or_404(
+        PerformanceReview.objects.select_related("subject__party"), pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = CalibrationForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, obj, "update", {"action": "calibrate"})
+            messages.success(request, f"Calibration saved for {obj.number}.")
+            return redirect("hrm:performancereview_detail", pk=obj.pk)
+    else:
+        form = CalibrationForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/performance/performancereview/calibrate.html", {
+        "form": form, "obj": obj})
+
+
+@tenant_admin_required
+def calibration_board(request):
+    """Report view (no model) — a cycle's manager reviews sorted by effective rating for
+    side-by-side calibration. ?cycle=<id> selects the cycle."""
+    cycles = ReviewCycle.objects.filter(tenant=request.tenant).order_by("-self_review_start")
+    cycle = None
+    reviews = []
+    cycle_id = request.GET.get("cycle", "").strip()
+    if cycle_id.isdigit():
+        cycle = ReviewCycle.objects.filter(tenant=request.tenant, pk=int(cycle_id)).first()
+    if cycle is None:
+        cycle = cycles.first()
+    if cycle is not None:
+        reviews = list(PerformanceReview.objects.filter(
+            tenant=request.tenant, cycle=cycle, review_type="manager")
+            .select_related("subject__party", "reviewer__party")
+            .prefetch_related("ratings"))
+        # Sort by effective rating (calibrated-or-overall) desc; None ratings sort last.
+        reviews.sort(key=lambda r: (r.effective_rating is None,
+                                    -(r.effective_rating or ZERO)))
+    return render(request, "hrm/performance/calibration_board.html", {
+        "cycles": cycles, "cycle": cycle, "reviews": reviews})
+
+
+# ------------------------------------------------------- ReviewRating (3.19.3 per-competency lines)
+@login_required
+def reviewrating_create(request, review_pk):
+    review = get_object_or_404(PerformanceReview, pk=review_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = ReviewRatingForm(request.POST,
+                                instance=ReviewRating(tenant=request.tenant, review=review),
+                                tenant=request.tenant)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    rating = form.save()
+                write_audit_log(request.user, rating, "create")
+                messages.success(request, "Rating added.")
+            except IntegrityError:
+                messages.error(request, "Could not add that rating.")
+            return redirect("hrm:performancereview_detail", pk=review.pk)
+    else:
+        sibling_count = review.ratings.count()
+        default_weight = (Decimal("100") / (sibling_count + 1)).quantize(Decimal("0.01"))
+        form = ReviewRatingForm(instance=ReviewRating(tenant=request.tenant, review=review),
+                                initial={"weight": default_weight}, tenant=request.tenant)
+    return render(request, "hrm/performance/reviewrating/form.html", {
+        "form": form, "is_edit": False, "review": review})
+
+
+@login_required
+def reviewrating_detail(request, pk):
+    rating = get_object_or_404(
+        ReviewRating.objects.select_related("review__subject__party"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/performance/reviewrating/detail.html", {
+        "obj": rating, "review": rating.review})
+
+
+@login_required
+def reviewrating_edit(request, pk):
+    rating = get_object_or_404(ReviewRating.objects.select_related("review"), pk=pk, tenant=request.tenant)
+    review = rating.review
+    if request.method == "POST":
+        form = ReviewRatingForm(request.POST, instance=rating, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, rating, "update")
+            messages.success(request, "Rating updated.")
+            return redirect("hrm:performancereview_detail", pk=review.pk)
+    else:
+        form = ReviewRatingForm(instance=rating, tenant=request.tenant)
+    return render(request, "hrm/performance/reviewrating/form.html", {
+        "form": form, "is_edit": True, "obj": rating, "review": review})
+
+
+@login_required
+@require_POST
+def reviewrating_delete(request, pk):
+    rating = get_object_or_404(ReviewRating.objects.select_related("review"), pk=pk, tenant=request.tenant)
+    review_pk = rating.review_id
+    write_audit_log(request.user, rating, "delete")
+    rating.delete()
+    messages.success(request, "Rating deleted.")
+    return redirect("hrm:performancereview_detail", pk=review_pk)
