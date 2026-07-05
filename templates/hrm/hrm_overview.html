@@ -32,6 +32,7 @@
     <a class="stat-card" href="{% url 'hrm:application_list' %}"><div class="stat-icon orange"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.active_applications }}</div><div class="stat-label">Active Applications</div></a>
     <a class="stat-card" href="{% url 'hrm:candidate_list' %}"><div class="stat-icon green"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.new_candidates }}</div><div class="stat-label">New Candidates</div></a>
     <a class="stat-card" href="{% url 'hrm:objective_list' %}"><div class="stat-icon blue"><i data-lucide="target"></i></div><div class="stat-value">{{ stats.active_objectives }}</div><div class="stat-label">Active Objectives</div></a>
+    <a class="stat-card" href="{% url 'hrm:performancereview_list' %}"><div class="stat-icon orange"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ stats.open_reviews }}</div><div class="stat-label">Open Reviews</div></a>
   </div>
 
   <div class="card">
