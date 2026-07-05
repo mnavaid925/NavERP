@@ -7690,6 +7690,27 @@ def _can_edit_review(request, review):
     return review.status == "draft" and (_is_admin(request.user) or _is_reviewer(request, review))
 
 
+def _can_view_review(request, review):
+    """Who may view a review's content: a tenant admin, the reviewer (their authored review), or
+    the subject. Everyone else is denied — performance reviews are CONFIDENTIAL, not company-open
+    the way 3.18 OKRs are (a curious employee must not read who is rated what across the tenant)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk in (review.subject_id, review.reviewer_id)
+
+
+def _visible_reviews_q(request):
+    """A ``Q`` restricting review rosters/lists to what the requester may see (their own subject or
+    reviewer rows). Returns ``None`` for a tenant admin (no restriction)."""
+    if _is_admin(request.user):
+        return None
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return Q(pk__in=[])  # a tenant-less / employee-less user sees nothing
+    return Q(subject=profile) | Q(reviewer=profile)
+
+
 # ---------------------------------------------------------------- ReviewCycle (3.19.1 Review Cycles)
 @login_required
 def reviewcycle_list(request):
@@ -7719,12 +7740,16 @@ def reviewcycle_create(request):
 def reviewcycle_detail(request, pk):
     obj = get_object_or_404(
         ReviewCycle.objects.select_related("goal_period"), pk=pk, tenant=request.tenant)
-    reviews = (obj.reviews.select_related("subject__party", "reviewer__party", "template")
-               .prefetch_related("ratings")  # effective_rating reads ratings — avoid per-row N+1
-               .order_by("review_type", "subject__party__name"))
+    reviews_qs = (obj.reviews.select_related("subject__party", "reviewer__party", "template")
+                  .prefetch_related("ratings"))  # effective_rating reads ratings — avoid per-row N+1
+    # Confidentiality: a non-admin sees only reviews they're the subject or reviewer of (not the
+    # whole tenant's roster of who-is-rated-what). Admins see the full cycle.
+    vq = _visible_reviews_q(request)
+    if vq is not None:
+        reviews_qs = reviews_qs.filter(vq)
+    reviews = list(reviews_qs.order_by("review_type", "subject__party__name"))
     # Phase-progress summary (single pass over the already-fetched reviews — no extra queries).
     phase_counts = {"draft": 0, "submitted": 0, "shared": 0, "acknowledged": 0}
-    reviews = list(reviews)
     for r in reviews:
         phase_counts[r.status] = phase_counts.get(r.status, 0) + 1
     # Next phase for the Advance button.
@@ -7821,12 +7846,14 @@ def performancereview_list(request):
     qs = (PerformanceReview.objects.filter(tenant=request.tenant)
           .select_related("cycle", "template", "subject__party", "reviewer__party")
           .prefetch_related("ratings"))
+    # Confidentiality: a non-admin sees only reviews they're the subject or reviewer of — the
+    # tenant-wide reviews roster (who-is-rated-what) is admin-only.
+    profile = _current_employee_profile(request)
+    vq = _visible_reviews_q(request)
+    if vq is not None:
+        qs = qs.filter(vq)
     if request.GET.get("mine") == "1":
-        profile = _current_employee_profile(request)
-        if profile is not None:
-            qs = qs.filter(Q(subject=profile) | Q(reviewer=profile))
-        else:
-            qs = qs.none()
+        qs = qs.filter(Q(subject=profile) | Q(reviewer=profile)) if profile is not None else qs.none()
     return crud_list(
         request, qs,
         "hrm/performance/performancereview/list.html",
@@ -7841,6 +7868,9 @@ def performancereview_list(request):
             "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
                           .select_related("party").order_by("party__name")),
             "mine": request.GET.get("mine") == "1",
+            # For gating the row Edit button to who can actually edit (draft + reviewer/admin).
+            "is_admin": _is_admin(request.user),
+            "current_profile_id": profile.pk if profile is not None else None,
         },
     )
 
@@ -7859,6 +7889,9 @@ def performancereview_detail(request, pk):
             "cycle__goal_period", "template", "subject__party", "reviewer__party", "acknowledged_by__party")
         .prefetch_related("ratings"),
         pk=pk, tenant=request.tenant)
+    # Confidentiality: only the subject, the reviewer, or a tenant admin may view a review.
+    if not _can_view_review(request, obj):
+        raise PermissionDenied("You do not have access to this review.")
     ratings = list(obj.ratings.all())
     profile = _current_employee_profile(request)
     is_admin = _is_admin(request.user)
@@ -7882,6 +7915,7 @@ def performancereview_detail(request, pk):
         "show_reviewer": show_reviewer,
         "is_subject": is_subject,
         "is_reviewer": is_reviewer,
+        "can_edit": obj.status == "draft" and (is_admin or is_reviewer),
         "goal_objectives": goal_objectives,
         "rating_form": ReviewRatingForm(tenant=request.tenant),
     })
@@ -8040,9 +8074,14 @@ def reviewrating_create(request, review_pk):
 @login_required
 def reviewrating_detail(request, pk):
     rating = get_object_or_404(
-        ReviewRating.objects.select_related("review__subject__party"), pk=pk, tenant=request.tenant)
+        ReviewRating.objects.select_related("review__subject__party", "review__reviewer__party"),
+        pk=pk, tenant=request.tenant)
+    review = rating.review
+    # Confidentiality: a rating is viewable only by the review's subject, reviewer, or a tenant admin.
+    if not _can_view_review(request, review):
+        raise PermissionDenied("You do not have access to this rating.")
     return render(request, "hrm/performance/reviewrating/detail.html", {
-        "obj": rating, "review": rating.review})
+        "obj": rating, "review": review, "can_edit": _can_edit_review(request, review)})
 
 
 @login_required
