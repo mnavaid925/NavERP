@@ -5002,6 +5002,7 @@ class Objective(TenantNumbered):
             models.Index(fields=["tenant", "goal_period"], name="hrm_obj_tenant_period_idx"),
             models.Index(fields=["tenant", "owner"], name="hrm_obj_tenant_owner_idx"),
             models.Index(fields=["tenant", "parent_objective"], name="hrm_obj_tenant_parent_idx"),
+            models.Index(fields=["tenant", "department"], name="hrm_obj_tenant_department_idx"),
         ]
 
     def clean(self):
