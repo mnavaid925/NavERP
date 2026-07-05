@@ -2543,6 +2543,36 @@ number, not an account number) also does not need redaction.
       extended seeder block, the masked-snapshot convention (never store/render the raw account), and
       mark all 4 bullets of 3.17 as built
 
+## Review — 3.17 Payout & Reports (built 2026-07-05)
+
+**Shipped (4 tables, all wired Live, migrations `0028`+`0029`).** `PayoutBatch` (`POB-`, from a locked `PayrollCycle`,
+draft→approved→disbursed/partially_disbursed→reconciled, cached `_totals()` over `_current_payments()`),
+`PayoutPayment` (per-employee, **masked** bank snapshot — never raw, status lifecycle + `retry_of` supersede chain, no
+`unique_together` so retries coexist), `PayslipDistribution` (1:1, send/view/download, `for_payslip()`),
+`BankReconciliation` (`BRC-`, `recompute()` matches by UTR+paid → reconciled/discrepancy, no `BankStatementLine`).
+Reports (no model): `payment_register` (bank-advice) + `payout_exceptions`. Reuses `PayrollCycle`/`Payslip`/
+`EmployeeProfile`; **posts no GL** (L29). `LIVE_LINKS["3.17"]` — all 4 bullets Live. `_seed_payout` after `_seed_tax`
+(locks the demo cycle, POB-00001 partially_disbursed 1 paid/1 failed/1 on-hold, BRC-00001 discrepancy 1 matched/2
+unmatched).
+
+**Verification.** `manage.py check` clean; no pending migrations; seeder idempotent; smoke sweep 200/302/405 on all
+routes, no leaks, cross-tenant IDOR→404; retry supersede verified (failed original excluded → batch re-derives).
+
+**Review agents (all run in order; findings applied + committed):**
+- code-reviewer — **1 Important fixed**: `PayoutBatchForm.clean()` + dropdown-exclusion close the duplicate-batch
+  IntegrityError-500. + 2 Minor (atomic wraps on mark_*/retry, register `get_*_display` labels).
+- explorer — no wiring bugs; confirmed no raw bank + zero accounting refs.
+- frontend-reviewer — aria-labels + flex-wrap on the per-payment inline forms, `.text-right` utility.
+- performance-reviewer — **payoutbatch_list N+1 → O(1)** (annotated list_headcount/list_total/list_paid; verified flat
+  query count across batch count); dropped dead select_related ×2; atomic-wrapped the bulk send_cycle.
+- qa-smoke-tester — all green, no bugs.
+- security-reviewer — all PASS (masked-bank confirmed); 1 Low fixed: `source_account_last4` RegexValidator (no full
+  account); kept `mark_viewed`/`_downloaded` `@login_required` (discloses no data) with a tracking SECURITY NOTE.
+- test-writer — **160 tests** (38 model / 65 view / 57 security), all pass; HRM suite 2,640→**2,800**, project-wide
+  5,287→**5,447**. **No product bug found** this run — every invariant behaved as documented.
+
+**Next:** 3.18 Goal Setting.
+
 ## Later passes / deferred (carried over from research-payout-reports.md — do not build this pass)
 
 - **Bank-specific file-format writers** (exact NEFT/NACH/ACH/WPS-SIF CSV/fixed-width layouts per bank/
