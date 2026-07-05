@@ -4834,3 +4834,347 @@ class BankReconciliation(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.batch.number} · {self.get_status_display()}"
+
+
+# ===========================================================================
+# 3.18 Goal Setting — Performance Management (OKR mechanics)
+# ---------------------------------------------------------------------------
+# The first Performance-Management sub-module (3.18 → 3.19 Performance Review →
+# 3.20 Continuous Feedback → 3.21 Performance Improvement). Pure HRM-domain
+# extension hanging off ``EmployeeProfile`` (the goal owner) and ``core.OrgUnit``
+# (department scope, reused exactly as ``Designation.department`` does) — NO new
+# core-spine entity. Progress % and health are DERIVED (never stored editable
+# columns), mirroring how ``LeaveAllocation``/``AttendanceRecord.hours_worked``
+# already work. Cascading alignment is the single self-FK ``Objective.parent_objective``
+# (vertical only); weighting is KR-level (``KeyResult.weight``); the KR-type
+# distinction is a ``metric_type`` CharField choice rather than a 5th model.
+# ===========================================================================
+def _clamp_pct(value):
+    """Clamp a Decimal progress percentage into ``[0, 100]``."""
+    if value < ZERO:
+        return ZERO
+    hundred = Decimal("100")
+    return hundred if value > hundred else value
+
+
+def _pace_health(progress_pct, start_date, end_date, *, completed=False):
+    """Derive an on_track/at_risk/off_track health signal by comparing realized
+    progress against the fraction of the period's time already elapsed. Shared by
+    ``Objective.health_status`` and ``KeyResult.health_status`` (3.18.5 status/health
+    coloring — Weekdone/WorkBoard/Betterworks). ``completed`` short-circuits to the
+    terminal state. Guards a zero-length period (no divide-by-zero)."""
+    if completed:
+        return "completed"
+    if not start_date or not end_date:
+        return "on_track"
+    total_days = (end_date - start_date).days
+    if total_days <= 0:
+        expected = Decimal("100")
+    else:
+        elapsed = min(max((timezone.localdate() - start_date).days, 0), total_days)
+        expected = Decimal(elapsed) / Decimal(total_days) * Decimal("100")
+    gap = expected - Decimal(progress_pct)  # positive ⇒ behind the expected pace
+    if gap <= 10:
+        return "on_track"
+    if gap <= 25:
+        return "at_risk"
+    return "off_track"
+
+
+class GoalPeriod(TenantOwned):
+    """A named quarterly/half-yearly/annual OKR cycle every ``Objective`` is scoped to
+    (3.18.4 Goal Timeline). Small per-tenant catalog identified by ``name`` — not
+    auto-numbered, same pattern as ``hrm.JobGrade``. "Current" is simply
+    ``status="active"`` (no second is_current source of truth)."""
+
+    PERIOD_TYPE_CHOICES = [
+        ("quarterly", "Quarterly"),
+        ("half_yearly", "Half-Yearly"),
+        ("annual", "Annual"),
+        ("custom", "Custom"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("closed", "Closed"),
+        ("archived", "Archived"),
+    ]
+
+    name = models.CharField(max_length=100, help_text='e.g. "Q3 2026".')
+    period_type = models.CharField(max_length=15, choices=PERIOD_TYPE_CHOICES, default="quarterly")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-start_date"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_gp_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.start_date and self.end_date and self.end_date <= self.start_date:
+            raise ValidationError({"end_date": "End date must be after the start date."})
+
+    @property
+    def objective_count(self):
+        # A view's list uses an annotated ``num_objectives`` (O(1)); this property is for
+        # the detail page where the objectives are already loaded/prefetched.
+        return self.objectives.count()
+
+    @property
+    def avg_progress_pct(self):
+        """Simple mean of the period's objectives' (already-derived) progress. ``progress_pct``
+        is not a DB column, so this is computed in Python — the detail view prefetches
+        ``objectives__key_results`` to keep it a bounded number of queries."""
+        objs = list(self.objectives.all())
+        if not objs:
+            return ZERO
+        total = sum((o.progress_pct for o in objs), ZERO)
+        return _clamp_pct(total / Decimal(len(objs)))
+
+    def __str__(self):
+        return f"{self.name} ({self.get_period_type_display()})"
+
+
+class Objective(TenantNumbered):
+    """The "O" in OKR (3.18.1/3.18.2/3.18.3/3.18.4). Owned by an ``EmployeeProfile``,
+    scoped to a ``GoalPeriod``, optionally aligned up a cascade via ``parent_objective``
+    and tagged to a ``core.OrgUnit`` department. ``progress_pct``/``health_status`` are
+    derived from its KeyResults, never stored."""
+
+    NUMBER_PREFIX = "OBJ"
+
+    SCOPE_CHOICES = [
+        ("company", "Company"),
+        ("department", "Department"),
+        ("team", "Team"),
+        ("individual", "Individual"),
+    ]
+    TARGET_TYPE_CHOICES = [
+        ("aspirational", "Aspirational"),
+        ("committed", "Committed"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("at_risk", "At Risk"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="objectives",
+                              help_text="The goal owner (an EmployeeProfile — never a raw Party/User).")
+    goal_period = models.ForeignKey("hrm.GoalPeriod", on_delete=models.PROTECT, related_name="objectives")
+    parent_objective = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name="child_objectives",
+                                         help_text="Aligns (rolls up into) a parent objective — the cascade link.")
+    department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="objectives",
+                                   help_text="Department/team scope (a core.OrgUnit); blank for individual goals.")
+    scope = models.CharField(max_length=15, choices=SCOPE_CHOICES, default="individual")
+    target_type = models.CharField(max_length=15, choices=TARGET_TYPE_CHOICES, default="committed",
+                                   help_text="Aspirational (50–70% is a win) vs. committed (100% expected).")
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=100,
+                                 validators=[MinValueValidator(0), MaxValueValidator(100)],
+                                 help_text="Relative weight among SIBLING objectives under the same parent "
+                                           "(for a parent's weighted-children view). NOT used to compute this "
+                                           "objective's own progress_pct — that is strictly a KR-weighted rollup.")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    start_date = models.DateField(null=True, blank=True,
+                                  help_text="Defaults to the period's start; stored so an objective can start later.")
+    due_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-goal_period__start_date", "title"]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_obj_tenant_status_idx"),
+            models.Index(fields=["tenant", "goal_period"], name="hrm_obj_tenant_period_idx"),
+            models.Index(fields=["tenant", "owner"], name="hrm_obj_tenant_owner_idx"),
+            models.Index(fields=["tenant", "parent_objective"], name="hrm_obj_tenant_parent_idx"),
+        ]
+
+    def clean(self):
+        # No self-parenting, and no cycle in the alignment chain (cheap bounded walk).
+        if self.parent_objective_id and self.pk and self.parent_objective_id == self.pk:
+            raise ValidationError({"parent_objective": "An objective cannot align to itself."})
+        node, depth = self.parent_objective, 0
+        while node is not None and depth < 20:
+            if self.pk and node.pk == self.pk:
+                raise ValidationError({"parent_objective": "This alignment would create a cycle."})
+            node, depth = node.parent_objective, depth + 1
+
+    def _krs(self):
+        """Materialize child KeyResults once per instance (prefetched by list/detail views)
+        so ``progress_pct``/``health_status``/``key_result_count`` don't re-query."""
+        if not hasattr(self, "_krs_cache"):
+            self._krs_cache = list(self.key_results.all())
+        return self._krs_cache
+
+    @property
+    def progress_pct(self):
+        """Weighted average of child ``KeyResult.progress_pct`` by ``KeyResult.weight``
+        (3.18.3 weighted rollup). Falls back to a simple mean if all weights are 0;
+        ``0`` when there are no key results."""
+        krs = self._krs()
+        if not krs:
+            return ZERO
+        total_weight = sum((kr.weight for kr in krs), ZERO)
+        if total_weight > 0:
+            acc = sum((kr.progress_pct * kr.weight for kr in krs), ZERO)
+            return _clamp_pct(acc / total_weight)
+        acc = sum((kr.progress_pct for kr in krs), ZERO)
+        return _clamp_pct(acc / Decimal(len(krs)))
+
+    @property
+    def health_status(self):
+        start = self.start_date or (self.goal_period.start_date if self.goal_period_id else None)
+        end = self.due_date or (self.goal_period.end_date if self.goal_period_id else None)
+        return _pace_health(self.progress_pct, start, end, completed=(self.status == "completed"))
+
+    @property
+    def key_result_count(self):
+        return len(self._krs())
+
+    def __str__(self):
+        return f"{self.number} · {self.title}"
+
+
+class KeyResult(TenantNumbered):
+    """The measurable "KR" under an ``Objective`` (3.18.1/3.18.3/3.18.5). ``metric_type``
+    folds the Viva Goals/Perdoo/Profit.co KR-type distinction into one CharField.
+    ``progress_pct``/``health_status`` are derived, never stored."""
+
+    NUMBER_PREFIX = "KR"
+
+    METRIC_TYPE_CHOICES = [
+        ("numeric", "Numeric"),
+        ("percentage", "Percentage"),
+        ("currency", "Currency"),
+        ("boolean", "Boolean"),
+        ("milestone", "Milestone"),
+    ]
+    STATUS_CHOICES = [
+        ("not_started", "Not Started"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+    _METRIC_TYPES = ("numeric", "percentage", "currency")
+
+    objective = models.ForeignKey("hrm.Objective", on_delete=models.CASCADE, related_name="key_results")
+    title = models.CharField(max_length=255)
+    metric_type = models.CharField(max_length=15, choices=METRIC_TYPE_CHOICES, default="numeric")
+    start_value = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True,
+                                      help_text="Baseline value (nullable for boolean/milestone KRs).")
+    target_value = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    current_value = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True,
+                                        help_text="Advanced by GoalCheckIn.save(); also directly editable on the KR form.")
+    is_milestone_event = models.BooleanField(default=False,
+                                             help_text="For milestone-type KRs: progress is driven by discrete "
+                                                       "check-in milestone events rather than a continuous value.")
+    unit = models.CharField(max_length=30, blank=True, help_text='Free text, e.g. "%", "$", "signups".')
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                 validators=[MinValueValidator(0), MaxValueValidator(100)],
+                                 help_text="Weight among sibling KeyResults under the same Objective "
+                                           "(equal-split by default, overridable).")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="not_started")
+
+    class Meta:
+        ordering = ["objective", "-weight", "title"]
+        indexes = [
+            models.Index(fields=["tenant", "objective"], name="hrm_kr_tenant_objective_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_kr_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.metric_type in self._METRIC_TYPES and self.target_value is None:
+            raise ValidationError({"target_value": "A numeric/percentage/currency key result needs a target value."})
+        if self.weight is not None and self.weight < 0:
+            raise ValidationError({"weight": "Weight cannot be negative."})
+
+    @property
+    def progress_pct(self):
+        """Derived completion %. Numeric-family KRs interpolate start→current→target;
+        boolean is 0/100; milestone falls back to completion status (step-weighted
+        milestone sub-tracking is deferred)."""
+        mt = self.metric_type
+        if mt in self._METRIC_TYPES:
+            if self.target_value is None:
+                return ZERO
+            start = self.start_value if self.start_value is not None else ZERO
+            current = self.current_value if self.current_value is not None else start
+            denom = self.target_value - start
+            if denom == 0:
+                return Decimal("100") if current >= self.target_value else ZERO
+            return _clamp_pct((current - start) / denom * Decimal("100"))
+        if mt == "boolean":
+            if self.status == "completed":
+                return Decimal("100")
+            return Decimal("100") if (self.current_value or ZERO) else ZERO
+        # milestone: completion-driven fallback (no milestone_target_count field this pass).
+        return Decimal("100") if self.status == "completed" else ZERO
+
+    @property
+    def health_status(self):
+        # Uses the parent objective's period window; views set kr.objective / select_related
+        # objective__goal_period so this stays query-free at render time.
+        period = self.objective.goal_period if self.objective_id else None
+        start = period.start_date if period else None
+        end = period.end_date if period else None
+        return _pace_health(self.progress_pct, start, end, completed=(self.status == "completed"))
+
+    def __str__(self):
+        return f"{self.number} · {self.title} ({self.get_metric_type_display()})"
+
+
+class GoalCheckIn(TenantNumbered):
+    """A timestamped progress-update log entry against a ``KeyResult`` (3.18.5 Goal
+    Tracking). An append-only history row (no edit view) — Betterworks/Viva Goals/
+    Quantive/Perdoo/Weekdone/Profit.co all treat check-ins as history, not a mutable
+    field. On create it advances the parent ``KeyResult.current_value``."""
+
+    NUMBER_PREFIX = "GCI"
+
+    CONFIDENCE_CHOICES = [
+        ("on_track", "On Track"),
+        ("at_risk", "At Risk"),
+        ("off_track", "Off Track"),
+    ]
+
+    key_result = models.ForeignKey("hrm.KeyResult", on_delete=models.CASCADE, related_name="checkins")
+    checkin_date = models.DateField(default=timezone.localdate)
+    value_at_checkin = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True,
+                                           help_text="The KR value reported at this check-in (advances current_value).")
+    confidence = models.CharField(max_length=15, choices=CONFIDENCE_CHOICES, default="on_track",
+                                  help_text="Self-reported at check-in time (distinct from the derived KR health_status).")
+    is_milestone_event = models.BooleanField(default=False,
+                                             help_text="Marks a discrete milestone-completion event (milestone-type KRs).")
+    comment = models.TextField(blank=True, help_text="Blockers / wins note.")
+    created_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="goal_checkins", editable=False,
+                                   help_text="Resolved from request.user in the view (allows manager overrides).")
+
+    class Meta:
+        ordering = ["-checkin_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "key_result"], name="hrm_gci_tenant_kr_idx"),
+            models.Index(fields=["tenant", "checkin_date"], name="hrm_gci_tenant_date_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        is_create = self.pk is None
+        super().save(*args, **kwargs)
+        # The check-in is the single write path that advances the KR's current value.
+        if is_create and self.value_at_checkin is not None and self.key_result_id:
+            kr = self.key_result
+            if kr.current_value != self.value_at_checkin:
+                kr.current_value = self.value_at_checkin
+                kr.save(update_fields=["current_value", "updated_at"])
+
+    def __str__(self):
+        return f"{self.number} · {self.key_result.title} · {self.get_confidence_display()}"
