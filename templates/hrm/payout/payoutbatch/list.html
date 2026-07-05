@@ -56,9 +56,9 @@
               <td><a href="{% url 'hrm:payoutbatch_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.cycle.number }}</td>
               <td>{{ obj.get_bank_file_format_display }}</td>
-              <td>{{ obj.headcount }}</td>
-              <td>{{ obj.total_amount }}</td>
-              <td>{{ obj.paid_count }}/{{ obj.headcount }}</td>
+              <td>{{ obj.list_headcount }}</td>
+              <td>{{ obj.list_total|default:"0.00" }}</td>
+              <td>{{ obj.list_paid }}/{{ obj.list_headcount }}</td>
               <td>
                 {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'approved' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
