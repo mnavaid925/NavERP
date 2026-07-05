@@ -1286,3 +1286,88 @@ def goal_checkin_b(db, tenant_b, key_result_b, employee_b):
         value_at_checkin=Decimal("10"), confidence="on_track", created_by=employee_b,
     )
 
+
+# ------------------------------------------------------------------ 3.19 Performance Review fixtures
+@pytest.fixture
+def review_cycle_a(db, tenant_a, goal_period_a):
+    """A draft ReviewCycle for tenant_a — H1 2026, aligned to goal_period_a (Q3 2026 OKR window)."""
+    from apps.hrm.models import ReviewCycle
+    return ReviewCycle.objects.create(
+        tenant=tenant_a, name="H1 2026 Performance Review", cycle_type="half_yearly",
+        status="draft", goal_period=goal_period_a,
+        self_review_start=datetime.date(2026, 7, 1), self_review_end=datetime.date(2026, 7, 15),
+        manager_review_start=datetime.date(2026, 7, 16), manager_review_end=datetime.date(2026, 7, 31),
+        calibration_date=datetime.date(2026, 8, 5), results_release_date=datetime.date(2026, 8, 10),
+    )
+
+
+@pytest.fixture
+def review_cycle_b(db, tenant_b):
+    """A draft ReviewCycle belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import ReviewCycle
+    return ReviewCycle.objects.create(
+        tenant=tenant_b, name="H1 2026 Performance Review B", cycle_type="half_yearly", status="draft",
+    )
+
+
+@pytest.fixture
+def review_template_a(db, tenant_a):
+    """An active manager-type ReviewTemplate for tenant_a — 5-point scale, includes goals."""
+    from apps.hrm.models import ReviewTemplate
+    return ReviewTemplate.objects.create(
+        tenant=tenant_a, name="Manager Review Form", review_type="manager",
+        rating_scale_max=5, include_goals=True, is_active=True,
+    )
+
+
+@pytest.fixture
+def review_template_b(db, tenant_b):
+    """An active ReviewTemplate belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import ReviewTemplate
+    return ReviewTemplate.objects.create(
+        tenant=tenant_b, name="Manager Review Form B", review_type="manager",
+        rating_scale_max=5, is_active=True,
+    )
+
+
+@pytest.fixture
+def performance_review_a(db, tenant_a, review_cycle_a, review_template_a, employee_a, employee_a2):
+    """A draft manager PerformanceReview for tenant_a — subject=employee_a, reviewer=employee_a2
+    (a distinct EmployeeProfile so `reviewer != subject` on a non-self review)."""
+    from apps.hrm.models import PerformanceReview
+    return PerformanceReview.objects.create(
+        tenant=tenant_a, cycle=review_cycle_a, template=review_template_a,
+        subject=employee_a, reviewer=employee_a2, review_type="manager", status="draft",
+        private_notes="Confidential: needs coaching on delegation.",
+    )
+
+
+@pytest.fixture
+def performance_review_b(db, tenant_b, review_cycle_b, review_template_b, employee_b):
+    """A draft self-review PerformanceReview belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PerformanceReview
+    return PerformanceReview.objects.create(
+        tenant=tenant_b, cycle=review_cycle_b, template=review_template_b,
+        subject=employee_b, reviewer=employee_b, review_type="self", status="draft",
+    )
+
+
+@pytest.fixture
+def review_rating_a(db, tenant_a, performance_review_a):
+    """A ReviewRating on performance_review_a — competency criterion, rating 4.00 @ weight 100."""
+    from apps.hrm.models import ReviewRating
+    return ReviewRating.objects.create(
+        tenant=tenant_a, review=performance_review_a, criterion_label="Communication",
+        criterion_category="competency", rating_value=Decimal("4.00"), weight=Decimal("100"),
+    )
+
+
+@pytest.fixture
+def review_rating_b(db, tenant_b, performance_review_b):
+    """A ReviewRating belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import ReviewRating
+    return ReviewRating.objects.create(
+        tenant=tenant_b, review=performance_review_b, criterion_label="Communication B",
+        criterion_category="competency", rating_value=Decimal("3.00"), weight=Decimal("100"),
+    )
+
