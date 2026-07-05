@@ -1,6 +1,31 @@
 ---
 # Module 3 — HRM — Sub-module 3.18 Goal Setting (goal-setting) — plan from research-hrm-goal-setting.md (2026-07-05)
 
+## ✅ BUILD REVIEW (3.18 shipped — all 11 Module-Creation-Sequence steps done, 2026-07-05)
+
+**Delivered:** 4 tenant-scoped models exactly as planned — `GoalPeriod` (cycle catalog, activate/close), `Objective`
+(`OBJ-`, parent self-FK cascade + `core.OrgUnit` dept scope + weight + derived weighted `progress_pct`/pace
+`health_status`), `KeyResult` (`KR-`, 5 metric types + weight + derived progress/health), `GoalCheckIn` (`GCI-`,
+append-only log advancing `KeyResult.current_value`). Full CRUD via `crud_*` helpers, nested keyresult/goalcheckin
+create, `goalperiod_activate/close` (`@tenant_admin_required`), `objective_tree` (3-level cascade), `?mine=1`
+own+direct-reports view. 14 templates under `templates/hrm/performance/`, `LIVE_LINKS["3.18"]` (5 bullets live),
+`_seed_goals` (active+closed period, 3-level cascade, 10 KRs tuned to a health spread, 19 check-ins; idempotent).
+Migrations `0030`–`0032`. Reuses `EmployeeProfile` + `core.OrgUnit`; **no new core-spine entity, posts no GL**.
+
+**Verified:** smoke sweep — every page 200/302, cross-tenant IDOR→404 (all 4 models), idempotent seed, derived
+health spread correct (on_track 60% / at_risk 28% / off_track 15% / …). `manage.py check` clean.
+
+**Review agents (all 7 run in order):** `code-reviewer` → fixed a **critical** authz bug (`GoalPeriodForm` exposed
+`status`, letting a non-admin bypass the activate/close gate — dropped from the form) + added `unique_together
+(tenant, number)` to the 3 numbered models + fixed a seeder `--flush` PROTECT-ordering regression (goals must wipe
+before `EmployeeProfile` in the central flush loop) + capped `tree_max_depth` at 3. `explorer` → no wiring gaps.
+`frontend-reviewer` → added `health_status_display` labels (was rendering raw `on_track`), made the All/My-team
+toggle preserve filters via `{% querystring %}`, promoted `.tree-node`/`.tree-children` to RTL-safe theme classes.
+`performance-reviewer` → added `goal_period` to the tree/child-objective `select_related` (killed a per-node N+1)
++ a `(tenant, department)` composite index. `qa-smoke-tester` → 15/15 routes green, no changes. `security-reviewer`
+→ no vulnerabilities. `test-writer` → **204 tests** (74 models + 87 views + 51 security), all green; HRM suite now
+**3,004**, project-wide **5,651**. HRM skill + README + this review updated. **Next: 3.19 Performance Review.**
+
 **Context.** Extends the existing `apps/hrm` app — NOT a new app. Opens the **Performance Management**
 group (3.18 Goal Setting -> 3.19 Performance Review -> 3.20 Continuous Feedback -> 3.21 Performance
 Improvement) with the OKR/goal-mechanics layer only. 4 new models, all appended to
