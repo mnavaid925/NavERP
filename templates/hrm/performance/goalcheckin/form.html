@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}New Check-in{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Log a Check-in</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:objective_detail' objective.pk %}">{{ objective.number }}</a><span class="sep">›</span><a href="{% url 'hrm:keyresult_detail' key_result.pk %}">{{ key_result.number }}</a><span class="sep">›</span><span>Check-in</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted" style="margin-bottom:.5rem;">Key result: <strong>{{ key_result.title }}</strong>{% if key_result.unit %} ({{ key_result.unit }}){% endif %}</p>
+    <form method="post" action="{% url 'hrm:goalcheckin_create' key_result.pk %}" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted" style="margin-top:.25rem;">Logging a value advances this key result's current value.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Log Check-in</button>
+        <a href="{% url 'hrm:keyresult_detail' key_result.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
