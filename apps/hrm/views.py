@@ -7467,12 +7467,14 @@ def objective_list(request):
 def objective_tree(request):
     """Alignment/cascade tree (3.18.2) — top-level objectives with nested children, bounded depth.
     Prefetches three levels so the recursive template stays query-bounded."""
+    # goal_period is in select_related because health_status falls back to the period window when an
+    # objective's own start/due are null (the common case) — else it re-queries per node (N+1).
     grandchild = Prefetch("child_objectives",
                           queryset=Objective.objects.filter(tenant=request.tenant)
-                          .select_related("owner__party").prefetch_related("key_results"))
+                          .select_related("owner__party", "goal_period").prefetch_related("key_results"))
     child = Prefetch("child_objectives",
                      queryset=Objective.objects.filter(tenant=request.tenant)
-                     .select_related("owner__party").prefetch_related("key_results", grandchild))
+                     .select_related("owner__party", "goal_period").prefetch_related("key_results", grandchild))
     top = (Objective.objects.filter(tenant=request.tenant, parent_objective__isnull=True)
            .select_related("owner__party", "goal_period")
            .prefetch_related("key_results", child))
@@ -7505,7 +7507,8 @@ def objective_detail(request, pk):
     for kr in key_results:
         kr.objective = obj  # wire the parent so kr.health_status doesn't re-query goal_period
     child_objectives = (obj.child_objectives.filter(tenant=request.tenant)
-                        .select_related("owner__party").prefetch_related("key_results").order_by("title"))
+                        .select_related("owner__party", "goal_period")  # goal_period: health_status fallback
+                        .prefetch_related("key_results").order_by("title"))
     recent_checkins = (GoalCheckIn.objects.filter(tenant=request.tenant, key_result__objective=obj)
                        .select_related("key_result", "created_by__party")
                        .order_by("-checkin_date", "-created_at")[:20])
@@ -7603,7 +7606,7 @@ def goalcheckin_list(request):
     return crud_list(
         request,
         GoalCheckIn.objects.filter(tenant=request.tenant)
-        .select_related("key_result__objective", "created_by__party"),
+        .select_related("key_result", "created_by__party"),  # template uses key_result.title only
         "hrm/performance/goalcheckin/list.html",
         search_fields=("number", "key_result__title", "comment"),
         filters=[("confidence", "confidence", False), ("key_result", "key_result_id", True)],
