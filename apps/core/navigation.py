@@ -423,6 +423,15 @@ LIVE_LINKS = {
         "Form 16 Generation": "hrm:taxcomputation_list",                            # bullet (detail → Form 16 Part B)
         "Regime Comparison": "hrm:tax_regime_comparison",                           # extra (old-vs-new side-by-side)
     },
+    # 3.17 Payout & Reports — PayoutBatch (generate/approve/disburse from a locked cycle) serves Bank
+    # Integration; PayslipDistribution serves Payslip Generation; the payout-exceptions report + batch
+    # payment-register serve Payment Register; BankReconciliation serves Reconciliation.
+    "3.17": {
+        "Bank Integration": "hrm:payoutbatch_list",                                 # bullet (disbursement batches + bank file)
+        "Payslip Generation": "hrm:payslipdistribution_list",                       # bullet (digital payslip send/view/download)
+        "Payment Register": "hrm:payout_exceptions",                                # bullet (exception/register reports; batch detail → register)
+        "Reconciliation": "hrm:bankreconciliation_list",                            # bullet (bank statement match by UTR)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
