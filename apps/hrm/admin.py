@@ -91,6 +91,12 @@ from .models import (  # 3.17 Payout & Reports
     PayoutPayment,
     PayslipDistribution,
 )
+from .models import (  # 3.18 Goal Setting
+    GoalCheckIn,
+    GoalPeriod,
+    KeyResult,
+    Objective,
+)
 
 
 @admin.register(JobGrade)
@@ -876,3 +882,39 @@ class BankReconciliationAdmin(admin.ModelAdmin):
     raw_id_fields = ("batch", "reconciled_by")
     readonly_fields = ("number", "matched_count", "matched_amount", "unmatched_count", "unmatched_amount",
                        "reconciled_by", "reconciled_at", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------- 3.18 Goal Setting
+@admin.register(GoalPeriod)
+class GoalPeriodAdmin(admin.ModelAdmin):
+    list_display = ("name", "period_type", "status", "start_date", "end_date", "tenant")
+    list_filter = ("tenant", "status", "period_type")
+    search_fields = ("name",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(Objective)
+class ObjectiveAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "owner", "goal_period", "scope", "status", "tenant")
+    list_filter = ("tenant", "status", "scope", "target_type")
+    search_fields = ("number", "title")
+    raw_id_fields = ("owner", "goal_period", "parent_objective", "department")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(KeyResult)
+class KeyResultAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "objective", "metric_type", "status", "weight", "tenant")
+    list_filter = ("tenant", "metric_type", "status")
+    search_fields = ("number", "title")
+    raw_id_fields = ("objective",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(GoalCheckIn)
+class GoalCheckInAdmin(admin.ModelAdmin):
+    list_display = ("number", "key_result", "checkin_date", "confidence", "created_by", "tenant")
+    list_filter = ("tenant", "confidence")
+    search_fields = ("number", "comment", "key_result__title")
+    raw_id_fields = ("key_result", "created_by")
+    readonly_fields = ("number", "created_by", "created_at", "updated_at")
