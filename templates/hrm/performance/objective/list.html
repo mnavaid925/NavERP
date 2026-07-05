@@ -16,8 +16,9 @@
   <div class="card">
     <div class="card-body">
       <div class="badge-group" style="margin-bottom:.6rem;">
-        <a href="{% url 'hrm:objective_list' %}" class="btn {% if not mine %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All Objectives</a>
-        <a href="?mine=1" class="btn {% if mine %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="user-check"></i> My &amp; My Team's</a>
+        {# Flip only the `mine` param — preserve the active q/status/scope/period/owner/department filters; reset page. #}
+        <a href="{% querystring mine=None page=None %}" class="btn {% if not mine %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All Objectives</a>
+        <a href="{% querystring mine=1 page=None %}" class="btn {% if mine %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="user-check"></i> My &amp; My Team's</a>
       </div>
       <form method="get" class="filter-bar">
         {% if mine %}<input type="hidden" name="mine" value="1">{% endif %}
@@ -93,9 +94,9 @@
                 <span class="text-muted">{{ obj.progress_pct|floatformat:0 }}%</span>
               </td>
               <td>
-                {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status }}</span>
-                {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status }}</span>
-                {% else %}<span class="badge badge-red">{{ obj.health_status }}</span>{% endif %}
+                {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status_display }}</span>
+                {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status_display }}</span>
+                {% else %}<span class="badge badge-red">{{ obj.health_status_display }}</span>{% endif %}
               </td>
               <td>
                 {% if obj.status == 'active' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
