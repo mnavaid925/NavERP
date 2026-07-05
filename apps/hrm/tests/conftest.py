@@ -1066,3 +1066,138 @@ def computation_b(db, tenant_b, employee_b, declaration_b, employee_salary_struc
         financial_year=declaration_b.financial_year, computation_type="provisional",
     )
 
+
+# ------------------------------------------------------------------ 3.17 Payout & Reports fixtures
+@pytest.fixture
+def locked_cycle_a(db, tenant_a, employee_a, employee_a2, active_structure_in_window_a,
+                    payroll_component_lines_a):
+    """A LOCKED PayrollCycle for tenant_a with two recomputed Payslips (employee_a, employee_a2) —
+    the pre-req for generating a PayoutBatch. employee_a2 has no active salary structure so its
+    payslip recomputes to zero lines but is still a valid (tenant, cycle, employee) row. Built as
+    DRAFT so Payslip.recompute() is allowed, then flipped to locked afterwards (recompute() forbids
+    a locked cycle's payslips)."""
+    from apps.hrm.models import PayrollCycle, Payslip
+    cycle = PayrollCycle.objects.create(
+        tenant=tenant_a,
+        period_start=datetime.date(2026, 6, 1),
+        period_end=datetime.date(2026, 6, 30),
+        pay_date=datetime.date(2026, 7, 1),
+        cycle_type="regular",
+        status="draft",
+    )
+    ps1 = Payslip.objects.create(
+        tenant=tenant_a, cycle=cycle, employee=employee_a,
+        salary_structure=active_structure_in_window_a, days_in_period=30, days_worked=30,
+    )
+    ps1.recompute()
+    ps2 = Payslip.objects.create(
+        tenant=tenant_a, cycle=cycle, employee=employee_a2, days_in_period=30, days_worked=30,
+    )
+    ps2.recompute()
+    cycle.status = "locked"
+    cycle.save(update_fields=["status", "updated_at"])
+    return cycle
+
+
+@pytest.fixture
+def locked_cycle_with_hold_a(db, locked_cycle_a):
+    """locked_cycle_a with its second payslip (employee_a2) flagged on_hold, for on_hold-snapshot
+    generation tests."""
+    ps2 = locked_cycle_a.payslips.exclude(employee__party__name="Alice Smith").first()
+    ps2.on_hold = True
+    ps2.hold_reason = "Pending manager sign-off"
+    ps2.save(update_fields=["on_hold", "hold_reason", "updated_at"])
+    return locked_cycle_a
+
+
+@pytest.fixture
+def cycle_b_locked(db, tenant_b, employee_b, employee_salary_structure_b):
+    """A LOCKED PayrollCycle for tenant_b with one recomputed Payslip (IDOR tests). Built as draft,
+    recomputed, then locked (mirrors locked_cycle_a)."""
+    from apps.hrm.models import PayrollCycle, Payslip
+    cycle = PayrollCycle.objects.create(
+        tenant=tenant_b,
+        period_start=datetime.date(2026, 6, 1),
+        period_end=datetime.date(2026, 6, 30),
+        pay_date=datetime.date(2026, 7, 1),
+        cycle_type="regular",
+        status="draft",
+    )
+    ps = Payslip.objects.create(
+        tenant=tenant_b, cycle=cycle, employee=employee_b,
+        salary_structure=employee_salary_structure_b, days_in_period=30, days_worked=30,
+    )
+    ps.recompute()
+    cycle.status = "locked"
+    cycle.save(update_fields=["status", "updated_at"])
+    return cycle
+
+
+@pytest.fixture
+def payout_batch_a(db, tenant_a, locked_cycle_a):
+    """A draft PayoutBatch for tenant_a over locked_cycle_a — no payments generated yet."""
+    from apps.hrm.models import PayoutBatch
+    return PayoutBatch.objects.create(tenant=tenant_a, cycle=locked_cycle_a)
+
+
+@pytest.fixture
+def generated_batch_a(db, tenant_a, admin_user, payout_batch_a):
+    """payout_batch_a after payoutbatch_generate-equivalent: one PayoutPayment per payslip of its
+    cycle, snapshot net_pay + masked bank details, on_hold payslips -> status on_hold."""
+    from django.utils import timezone as tz
+    from apps.hrm.models import PayoutPayment
+    batch = payout_batch_a
+    for ps in batch.cycle.payslips.select_related("employee").all():
+        emp = ps.employee
+        PayoutPayment.objects.create(
+            tenant=tenant_a, batch=batch, payslip=ps, employee=emp,
+            net_amount=ps.net_pay,
+            bank_name_snapshot=emp.bank_name,
+            bank_account_last4_snapshot=emp.masked_bank_account(),
+            bank_routing_snapshot=emp.masked_bank_routing(),
+            status="on_hold" if ps.on_hold else "pending",
+        )
+    batch.generated_by = admin_user
+    batch.generated_at = tz.now()
+    batch.save(update_fields=["generated_by", "generated_at", "updated_at"])
+    return batch
+
+
+@pytest.fixture
+def batch_b(db, tenant_b, cycle_b_locked):
+    """A draft PayoutBatch belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PayoutBatch
+    return PayoutBatch.objects.create(tenant=tenant_b, cycle=cycle_b_locked)
+
+
+@pytest.fixture
+def payment_b(db, tenant_b, batch_b):
+    """A pending PayoutPayment belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PayoutPayment
+    ps = batch_b.cycle.payslips.first()
+    emp = ps.employee
+    return PayoutPayment.objects.create(
+        tenant=tenant_b, batch=batch_b, payslip=ps, employee=emp,
+        net_amount=ps.net_pay,
+        bank_name_snapshot=emp.bank_name,
+        bank_account_last4_snapshot=emp.masked_bank_account(),
+        bank_routing_snapshot=emp.masked_bank_routing(),
+        status="pending",
+    )
+
+
+@pytest.fixture
+def distribution_b(db, tenant_b, payment_b):
+    """A pending PayslipDistribution belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PayslipDistribution
+    return PayslipDistribution.for_payslip(payment_b.payslip)
+
+
+@pytest.fixture
+def reconciliation_b(db, tenant_b, batch_b):
+    """A pending BankReconciliation belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import BankReconciliation
+    return BankReconciliation.objects.create(
+        tenant=tenant_b, batch=batch_b, statement_date=datetime.date(2026, 7, 2),
+    )
+
