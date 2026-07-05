@@ -7044,8 +7044,9 @@ def payoutpayment_mark_paid(request, pk):
     payment.status = "paid"
     payment.paid_on = timezone.now()
     payment.transaction_reference = request.POST.get("transaction_reference", "").strip()[:64]
-    payment.save(update_fields=["status", "paid_on", "transaction_reference", "updated_at"])
-    _recompute_batch_status(payment.batch)
+    with transaction.atomic():
+        payment.save(update_fields=["status", "paid_on", "transaction_reference", "updated_at"])
+        _recompute_batch_status(payment.batch)
     write_audit_log(request.user, payment, "update", {"action": "mark_paid"})
     messages.success(request, "Payment marked paid.")
     return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
@@ -7060,8 +7061,9 @@ def payoutpayment_mark_failed(request, pk):
         return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
     payment.status = "failed"
     payment.failure_reason = request.POST.get("failure_reason", "").strip()[:2000]
-    payment.save(update_fields=["status", "failure_reason", "updated_at"])
-    _recompute_batch_status(payment.batch)
+    with transaction.atomic():
+        payment.save(update_fields=["status", "failure_reason", "updated_at"])
+        _recompute_batch_status(payment.batch)
     write_audit_log(request.user, payment, "update", {"action": "mark_failed"})
     messages.success(request, "Payment marked failed.")
     return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
@@ -7078,14 +7080,15 @@ def payoutpayment_retry(request, pk):
         messages.error(request, "Only a failed/returned payment can be retried.")
         return redirect("hrm:payoutbatch_detail", pk=original.batch_id)
     emp = original.employee
-    PayoutPayment.objects.create(
-        tenant=request.tenant, batch=original.batch, payslip=original.payslip, employee=emp,
-        net_amount=original.net_amount,
-        bank_name_snapshot=emp.bank_name,
-        bank_account_last4_snapshot=emp.masked_bank_account(),
-        bank_routing_snapshot=emp.masked_bank_routing(),
-        payment_method=original.payment_method, status="pending", retry_of=original)
-    _recompute_batch_status(original.batch)
+    with transaction.atomic():
+        PayoutPayment.objects.create(
+            tenant=request.tenant, batch=original.batch, payslip=original.payslip, employee=emp,
+            net_amount=original.net_amount,
+            bank_name_snapshot=emp.bank_name,
+            bank_account_last4_snapshot=emp.masked_bank_account(),
+            bank_routing_snapshot=emp.masked_bank_routing(),
+            payment_method=original.payment_method, status="pending", retry_of=original)
+        _recompute_batch_status(original.batch)
     write_audit_log(request.user, original, "update", {"action": "retry"})
     messages.success(request, "Retry payment created (pending). Mark it paid once the bank confirms.")
     return redirect("hrm:payoutbatch_detail", pk=original.batch_id)
@@ -7270,6 +7273,13 @@ def payment_register(request, pk):
     by_status = list(cur.values("status").annotate(c=Count("id"), a=Sum("net_amount")).order_by("status"))
     by_method = list(cur.values("payment_method").annotate(c=Count("id"), a=Sum("net_amount"))
                      .order_by("payment_method"))
+    # Attach human labels (the group-by loses get_*_display).
+    status_labels = dict(PayoutPayment.STATUS_CHOICES)
+    method_labels = dict(PayoutPayment.PAYMENT_METHOD_CHOICES)
+    for r in by_status:
+        r["label"] = status_labels.get(r["status"], r["status"])
+    for r in by_method:
+        r["label"] = method_labels.get(r["payment_method"], r["payment_method"])
     return render(request, "hrm/payout/payment_register.html", {
         "batch": batch, "payments": payments, "by_status": by_status, "by_method": by_method})
 
