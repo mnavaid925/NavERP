@@ -432,6 +432,18 @@ LIVE_LINKS = {
         "Payment Register": "hrm:payout_exceptions",                                # bullet (exception/register reports; batch detail → register)
         "Reconciliation": "hrm:bankreconciliation_list",                            # bullet (bank statement match by UTR)
     },
+    # 3.18 Goal Setting — first Performance-Management sub-module (OKR mechanics only; review
+    # cycles/ratings/360/kudos/PIPs are later 3.19-3.21). Objective+KeyResult CRUD serve OKR/KPI
+    # Management + Weight Assignment (KR weight editable on objective_detail); the objective_tree
+    # serves Goal Alignment (cascade view); GoalPeriod serves Goal Timeline; the GoalCheckIn history
+    # log serves Goal Tracking.
+    "3.18": {
+        "OKR/KPI Management": "hrm:objective_list",            # bullet (Objective + KeyResult CRUD)
+        "Goal Alignment": "hrm:objective_tree",               # bullet (cascade/alignment tree view)
+        "Weight Assignment": "hrm:objective_list",            # bullet (per-KR weight on objective_detail)
+        "Goal Timeline": "hrm:goalperiod_list",               # bullet (quarterly/annual cycle catalog)
+        "Goal Tracking": "hrm:goalcheckin_list",              # bullet (check-in history log)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
