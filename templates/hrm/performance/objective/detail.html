@@ -37,9 +37,9 @@
         <span class="text-muted">{{ obj.progress_pct|floatformat:0 }}% (weighted)</span>
       </dd></div>
       <div class="detail-item"><dt>Health</dt><dd>
-        {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status }}</span>
-        {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status }}</span>
-        {% else %}<span class="badge badge-red">{{ obj.health_status }}</span>{% endif %}
+        {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status_display }}</span>
+        {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status_display }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.health_status_display }}</span>{% endif %}
       </dd></div>
     </dl>
     {% if obj.description %}<p style="margin-top:.5rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
@@ -65,9 +65,9 @@
               </td>
               <td>{{ kr.weight }}</td>
               <td>
-                {% if kr.health_status == 'on_track' or kr.health_status == 'completed' %}<span class="badge badge-green">{{ kr.health_status }}</span>
-                {% elif kr.health_status == 'at_risk' %}<span class="badge badge-amber">{{ kr.health_status }}</span>
-                {% else %}<span class="badge badge-red">{{ kr.health_status }}</span>{% endif %}
+                {% if kr.health_status == 'on_track' or kr.health_status == 'completed' %}<span class="badge badge-green">{{ kr.health_status_display }}</span>
+                {% elif kr.health_status == 'at_risk' %}<span class="badge badge-amber">{{ kr.health_status_display }}</span>
+                {% else %}<span class="badge badge-red">{{ kr.health_status_display }}</span>{% endif %}
               </td>
               <td>
                 <div class="table-actions">
