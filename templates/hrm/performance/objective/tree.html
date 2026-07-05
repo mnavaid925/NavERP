@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Objective Alignment Tree{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Alignment Tree</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:objective_list' %}">Objectives</a><span class="sep">›</span><span>Alignment Tree</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:objective_list' %}" class="btn btn-outline"><i data-lucide="list"></i> List View</a>
+      <a href="{% url 'hrm:objective_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Objective</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="goal_period" class="form-select" onchange="this.form.submit()">
+            <option value="">All periods</option>
+            {% for p in goal_periods %}
+              <option value="{{ p.pk }}" {% if request.GET.goal_period == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <span class="text-muted">Company → department → individual objectives, cascaded by alignment.</span>
+      </form>
+    </div>
+    <div class="card-body">
+      {% if objectives %}
+        <ul style="list-style:none; margin:0; padding:0;">
+          {% for obj in objectives %}
+            {% include "hrm/performance/objective/_tree_node.html" with node=obj depth=1 %}
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state"><i data-lucide="git-fork"></i><h3>No top-level objectives</h3><p>Create a company or department objective (with no parent) to root the alignment tree.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
