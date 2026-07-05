@@ -634,4 +634,40 @@ urlpatterns = [
     path("check-ins/", views.goalcheckin_list, name="goalcheckin_list"),
     path("check-ins/<int:pk>/", views.goalcheckin_detail, name="goalcheckin_detail"),
     path("check-ins/<int:pk>/delete/", views.goalcheckin_delete, name="goalcheckin_delete"),
+
+    # ===================== 3.19 Performance Review (Performance Management) =====================
+    # Review cycles (catalog + phase machine) + advance-phase workflow
+    path("review-cycles/", views.reviewcycle_list, name="reviewcycle_list"),
+    path("review-cycles/add/", views.reviewcycle_create, name="reviewcycle_create"),
+    path("review-cycles/<int:pk>/", views.reviewcycle_detail, name="reviewcycle_detail"),
+    path("review-cycles/<int:pk>/edit/", views.reviewcycle_edit, name="reviewcycle_edit"),
+    path("review-cycles/<int:pk>/delete/", views.reviewcycle_delete, name="reviewcycle_delete"),
+    path("review-cycles/<int:pk>/advance/", views.reviewcycle_advance_phase, name="reviewcycle_advance_phase"),
+
+    # Review templates (form definition per review_type)
+    path("review-templates/", views.reviewtemplate_list, name="reviewtemplate_list"),
+    path("review-templates/add/", views.reviewtemplate_create, name="reviewtemplate_create"),
+    path("review-templates/<int:pk>/", views.reviewtemplate_detail, name="reviewtemplate_detail"),
+    path("review-templates/<int:pk>/edit/", views.reviewtemplate_edit, name="reviewtemplate_edit"),
+    path("review-templates/<int:pk>/delete/", views.reviewtemplate_delete, name="reviewtemplate_delete"),
+
+    # Performance reviews (self/manager/peer/upward) + submit/share/acknowledge/calibrate workflow
+    path("reviews/", views.performancereview_list, name="performancereview_list"),
+    path("reviews/add/", views.performancereview_create, name="performancereview_create"),
+    path("reviews/<int:pk>/", views.performancereview_detail, name="performancereview_detail"),
+    path("reviews/<int:pk>/edit/", views.performancereview_edit, name="performancereview_edit"),
+    path("reviews/<int:pk>/delete/", views.performancereview_delete, name="performancereview_delete"),
+    path("reviews/<int:pk>/submit/", views.performancereview_submit, name="performancereview_submit"),
+    path("reviews/<int:pk>/share/", views.performancereview_share, name="performancereview_share"),
+    path("reviews/<int:pk>/acknowledge/", views.performancereview_acknowledge, name="performancereview_acknowledge"),
+    path("reviews/<int:pk>/calibrate/", views.performancereview_calibrate, name="performancereview_calibrate"),
+
+    # Review ratings (per-competency lines) — created nested under a review
+    path("reviews/<int:review_pk>/ratings/add/", views.reviewrating_create, name="reviewrating_create"),
+    path("ratings/<int:pk>/", views.reviewrating_detail, name="reviewrating_detail"),
+    path("ratings/<int:pk>/edit/", views.reviewrating_edit, name="reviewrating_edit"),
+    path("ratings/<int:pk>/delete/", views.reviewrating_delete, name="reviewrating_delete"),
+
+    # Calibration board (report view — ?cycle=<id>)
+    path("calibration/", views.calibration_board, name="calibration_board"),
 ]
