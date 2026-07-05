@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Calibration Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Calibration Board</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:performancereview_list' %}">Reviews</a><span class="sep">›</span><span>Calibration</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="cycle" class="form-select" onchange="this.form.submit()">
+            <option value="">Select a cycle…</option>
+            {% for c in cycles %}
+              <option value="{{ c.pk }}" {% if cycle and cycle.pk == c.pk %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <span class="text-muted">Manager reviews sorted by effective rating (calibrated overrides overall) — adjust side by side for consistency.</span>
+      </form>
+    </div>
+
+    {% if cycle %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rank</th><th>Employee</th><th>Reviewer</th><th>Overall</th><th>Calibrated</th><th>Effective</th><th>Potential</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for r in reviews %}
+              <tr>
+                <td class="fw-600">{{ forloop.counter }}</td>
+                <td>{{ r.subject.party.name }}</td>
+                <td>{{ r.reviewer.party.name }}</td>
+                <td>{{ r.overall_rating|default:"—" }}</td>
+                <td>{% if r.calibrated_rating is not None %}<span class="badge badge-info">{{ r.calibrated_rating }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="fw-600">{% if r.effective_rating is not None %}{{ r.effective_rating }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ r.potential_rating|default:"—" }}</td>
+                <td><div class="table-actions"><a href="{% url 'hrm:performancereview_calibrate' r.pk %}" class="btn-icon" title="Calibrate"><i data-lucide="sliders-horizontal"></i></a><a href="{% url 'hrm:performancereview_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8"><div class="empty-state"><i data-lucide="sliders-horizontal"></i><p>No manager reviews in this cycle to calibrate yet.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>Select a cycle</h3><p>Choose a review cycle above to calibrate its manager reviews.</p></div></div>
+    {% endif %}
+  </div>
+{% endblock %}
