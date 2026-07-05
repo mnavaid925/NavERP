@@ -1201,3 +1201,88 @@ def reconciliation_b(db, tenant_b, batch_b):
         tenant=tenant_b, batch=batch_b, statement_date=datetime.date(2026, 7, 2),
     )
 
+
+# ------------------------------------------------------------------ 3.18 Goal Setting fixtures
+@pytest.fixture
+def goal_period_a(db, tenant_a):
+    """An active GoalPeriod for tenant_a — Q3 2026, 2026-07-01..2026-09-30."""
+    from apps.hrm.models import GoalPeriod
+    return GoalPeriod.objects.create(
+        tenant=tenant_a, name="Q3 2026", period_type="quarterly",
+        start_date=datetime.date(2026, 7, 1), end_date=datetime.date(2026, 9, 30),
+        status="active",
+    )
+
+
+@pytest.fixture
+def goal_period_b(db, tenant_b):
+    """An active GoalPeriod belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import GoalPeriod
+    return GoalPeriod.objects.create(
+        tenant=tenant_b, name="Q3 2026 B", period_type="quarterly",
+        start_date=datetime.date(2026, 7, 1), end_date=datetime.date(2026, 9, 30),
+        status="active",
+    )
+
+
+@pytest.fixture
+def objective_a(db, tenant_a, employee_a, goal_period_a):
+    """An active Objective for employee_a/tenant_a, no key results yet."""
+    from apps.hrm.models import Objective
+    return Objective.objects.create(
+        tenant=tenant_a, title="Grow revenue", owner=employee_a, goal_period=goal_period_a,
+        scope="individual", target_type="committed", status="active",
+    )
+
+
+@pytest.fixture
+def objective_b(db, tenant_b, employee_b, goal_period_b):
+    """An active Objective belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import Objective
+    return Objective.objects.create(
+        tenant=tenant_b, title="Grow revenue B", owner=employee_b, goal_period=goal_period_b,
+        scope="individual", target_type="committed", status="active",
+    )
+
+
+@pytest.fixture
+def key_result_a(db, tenant_a, objective_a):
+    """A numeric KeyResult on objective_a — start 0, target 100, current 60 (60% progress), weight 70."""
+    from apps.hrm.models import KeyResult
+    return KeyResult.objects.create(
+        tenant=tenant_a, objective=objective_a, title="Close 100 new deals",
+        metric_type="numeric", start_value=Decimal("0"), target_value=Decimal("100"),
+        current_value=Decimal("60"), weight=Decimal("70"), status="in_progress",
+    )
+
+
+@pytest.fixture
+def key_result_b(db, tenant_b, objective_b):
+    """A numeric KeyResult belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import KeyResult
+    return KeyResult.objects.create(
+        tenant=tenant_b, objective=objective_b, title="Close 50 new deals B",
+        metric_type="numeric", start_value=Decimal("0"), target_value=Decimal("50"),
+        current_value=Decimal("10"), weight=Decimal("100"), status="in_progress",
+    )
+
+
+@pytest.fixture
+def goal_checkin_a(db, tenant_a, key_result_a, employee_a):
+    """A GoalCheckIn against key_result_a for tenant_a."""
+    from apps.hrm.models import GoalCheckIn
+    return GoalCheckIn.objects.create(
+        tenant=tenant_a, key_result=key_result_a, checkin_date=datetime.date(2026, 7, 15),
+        value_at_checkin=Decimal("60"), confidence="on_track", created_by=employee_a,
+    )
+
+
+@pytest.fixture
+def goal_checkin_b(db, tenant_b, key_result_b, employee_b):
+    """A GoalCheckIn belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import GoalCheckIn
+    return GoalCheckIn.objects.create(
+        tenant=tenant_b, key_result=key_result_b, checkin_date=datetime.date(2026, 7, 15),
+        value_at_checkin=Decimal("10"), confidence="on_track", created_by=employee_b,
+    )
+
