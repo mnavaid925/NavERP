@@ -7720,6 +7720,7 @@ def reviewcycle_detail(request, pk):
     obj = get_object_or_404(
         ReviewCycle.objects.select_related("goal_period"), pk=pk, tenant=request.tenant)
     reviews = (obj.reviews.select_related("subject__party", "reviewer__party", "template")
+               .prefetch_related("ratings")  # effective_rating reads ratings — avoid per-row N+1
                .order_by("review_type", "subject__party__name"))
     # Phase-progress summary (single pass over the already-fetched reviews — no extra queries).
     phase_counts = {"draft": 0, "submitted": 0, "shared": 0, "acknowledged": 0}
