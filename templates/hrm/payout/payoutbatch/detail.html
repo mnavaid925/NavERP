@@ -98,14 +98,14 @@
               <td>
                 {% if request.user.is_superuser or request.user.is_tenant_admin %}
                   {% if p.status == 'pending' or p.status == 'processing' %}
-                    <form method="post" action="{% url 'hrm:payoutpayment_mark_paid' p.pk %}" style="display:flex; gap:.25rem; margin-bottom:.25rem;">
+                    <form method="post" action="{% url 'hrm:payoutpayment_mark_paid' p.pk %}" style="display:flex; gap:.25rem; margin-bottom:.25rem; flex-wrap:wrap;">
                       {% csrf_token %}
-                      <input type="text" name="transaction_reference" class="form-input" placeholder="UTR" style="max-width:110px; padding:.2rem .4rem;">
+                      <input type="text" name="transaction_reference" class="form-input" placeholder="UTR" aria-label="UTR for {{ p.employee.party.name }}" style="max-width:110px; padding:.2rem .4rem;">
                       <button class="btn btn-primary" type="submit" style="padding:.2rem .5rem;">Paid</button>
                     </form>
-                    <form method="post" action="{% url 'hrm:payoutpayment_mark_failed' p.pk %}" style="display:flex; gap:.25rem;">
+                    <form method="post" action="{% url 'hrm:payoutpayment_mark_failed' p.pk %}" style="display:flex; gap:.25rem; flex-wrap:wrap;">
                       {% csrf_token %}
-                      <input type="text" name="failure_reason" class="form-input" placeholder="reason" style="max-width:110px; padding:.2rem .4rem;">
+                      <input type="text" name="failure_reason" class="form-input" placeholder="reason" aria-label="Failure reason for {{ p.employee.party.name }}" style="max-width:110px; padding:.2rem .4rem;">
                       <button class="btn btn-danger" type="submit" style="padding:.2rem .5rem;">Fail</button>
                     </form>
                   {% elif p.status == 'failed' or p.status == 'returned' %}
