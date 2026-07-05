@@ -115,6 +115,10 @@ from .models import (  # noqa: E402  — 3.16 Tax & Investment
     TaxRegimeConfig,
     TaxSlabBand,
 )
+from .models import (  # noqa: E402  — 3.17 Payout & Reports
+    BankReconciliation,
+    PayoutBatch,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1378,3 +1382,38 @@ class TaxComputationForm(TenantModelForm):
                     raise forms.ValidationError(
                         "A tax computation for this employee and financial year already exists.")
         return cleaned
+
+
+# ----------------------------------------------------------------------- 3.17 Payout & Reports
+class PayoutBatchForm(TenantModelForm):
+    # number + all workflow/derived fields (status/generated_*/approved_*/disbursed_at) are set by the
+    # generate/approve/disburse actions, never form-typed.
+    class Meta:
+        model = PayoutBatch
+        fields = ["cycle", "bank_file_format", "source_bank_name", "source_account_last4", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "cycle" in self.fields:
+            # Only LOCKED cycles can be paid out — a draft/pending/approved cycle must never appear.
+            self.fields["cycle"].queryset = (
+                PayrollCycle.objects.filter(tenant=self.tenant, status="locked").order_by("-pay_date"))
+
+
+class BankReconciliationForm(TenantModelForm):
+    # number + matched/unmatched aggregates + reconciled_by/at are set by recompute()/the reconcile action.
+    class Meta:
+        model = BankReconciliation
+        fields = ["batch", "statement_date", "statement_reference", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "batch" in self.fields:
+            self.fields["batch"].queryset = (
+                PayoutBatch.objects.filter(tenant=self.tenant).select_related("cycle").order_by("-created_at"))
