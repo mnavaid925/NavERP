@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Calibrate {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Calibrate Review</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:performancereview_list' %}">Reviews</a><span class="sep">›</span><a href="{% url 'hrm:performancereview_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Calibrate</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject.party.name }}</dd></div>
+      <div class="detail-item"><dt>Overall (derived)</dt><dd><span class="fw-600">{{ obj.overall_rating|default:"—" }}</span></dd></div>
+      <div class="detail-item"><dt>Manager Rating</dt><dd>{{ obj.manager_rating|default:"—" }}</dd></div>
+    </dl>
+    <p class="text-muted" style="margin:.5rem 0;">Set the calibrated rating — this overrides the manager rating for downstream comp/promotion decisions. The derived overall rating stays unchanged.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save Calibration</button>
+        <a href="{% url 'hrm:performancereview_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
