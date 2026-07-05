@@ -119,6 +119,12 @@ from .models import (  # noqa: E402  — 3.17 Payout & Reports
     BankReconciliation,
     PayoutBatch,
 )
+from .models import (  # noqa: E402  — 3.18 Goal Setting
+    GoalCheckIn,
+    GoalPeriod,
+    KeyResult,
+    Objective,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1434,3 +1440,68 @@ class BankReconciliationForm(TenantModelForm):
         if self.tenant is not None and "batch" in self.fields:
             self.fields["batch"].queryset = (
                 PayoutBatch.objects.filter(tenant=self.tenant).select_related("cycle").order_by("-created_at"))
+
+
+# ------------------------------------------------------------------------- 3.18 Goal Setting
+class GoalPeriodForm(TenantModelForm):
+    # GoalPeriod has no in-module FKs; the tenant= kwarg is kept for signature consistency.
+    class Meta:
+        model = GoalPeriod
+        fields = ["name", "period_type", "start_date", "end_date", "status", "description"]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class ObjectiveForm(TenantModelForm):
+    # number is auto-assigned; progress_pct/health_status are derived, never form-typed.
+    class Meta:
+        model = Objective
+        fields = ["title", "description", "owner", "goal_period", "parent_objective", "department",
+                  "scope", "target_type", "weight", "status", "start_date", "due_date"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "due_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "owner" in self.fields:
+                self.fields["owner"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "goal_period" in self.fields:
+                self.fields["goal_period"].queryset = (
+                    GoalPeriod.objects.filter(tenant=self.tenant).order_by("-start_date"))
+            if "department" in self.fields:
+                self.fields["department"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+            if "parent_objective" in self.fields:
+                # Exclude self so an objective can't be picked as its own parent (model clean() also guards).
+                qs = Objective.objects.filter(tenant=self.tenant).select_related("goal_period").order_by("title")
+                if self.instance.pk:
+                    qs = qs.exclude(pk=self.instance.pk)
+                self.fields["parent_objective"].queryset = qs
+
+
+class KeyResultForm(TenantModelForm):
+    # objective is set from the URL in the nested create view; progress/health are derived.
+    class Meta:
+        model = KeyResult
+        fields = ["title", "metric_type", "start_value", "target_value", "current_value",
+                  "is_milestone_event", "unit", "weight", "status"]
+
+
+class GoalCheckInForm(TenantModelForm):
+    # key_result + created_by are set from the URL/request in the view; number is auto-assigned.
+    class Meta:
+        model = GoalCheckIn
+        fields = ["checkin_date", "value_at_checkin", "confidence", "is_milestone_event", "comment"]
+        widgets = {
+            "checkin_date": forms.DateInput(attrs={"type": "date"}),
+            "comment": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
