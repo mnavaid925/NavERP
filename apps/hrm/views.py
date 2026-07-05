@@ -7677,6 +7677,19 @@ def _is_admin(user):
     return user.is_superuser or getattr(user, "is_tenant_admin", False)
 
 
+def _is_reviewer(request, review):
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == review.reviewer_id
+
+
+def _can_edit_review(request, review):
+    """A review (and its competency ratings) is editable ONLY by the reviewer or a tenant admin,
+    and ONLY while it's still a draft. This protects the manager ``private_notes`` confidentiality
+    boundary (the subject must never reach the edit form to read them) and the submit→share→
+    acknowledge audit trail (content is locked once submitted)."""
+    return review.status == "draft" and (_is_admin(request.user) or _is_reviewer(request, review))
+
+
 # ---------------------------------------------------------------- ReviewCycle (3.19.1 Review Cycles)
 @login_required
 def reviewcycle_list(request):
@@ -7875,6 +7888,12 @@ def performancereview_detail(request, pk):
 
 @login_required
 def performancereview_edit(request, pk):
+    obj = get_object_or_404(PerformanceReview, pk=pk, tenant=request.tenant)
+    # Gate: only the reviewer or a tenant admin, and only while draft — keeps private_notes hidden
+    # from the subject and locks content once the review is submitted.
+    if not _can_edit_review(request, obj):
+        messages.error(request, "Only the reviewer or a tenant admin can edit this review, and only while it is a draft.")
+        return redirect("hrm:performancereview_detail", pk=obj.pk)
     return crud_edit(request, model=PerformanceReview, pk=pk, form_class=PerformanceReviewForm,
                      template="hrm/performance/performancereview/form.html",
                      success_url="hrm:performancereview_list")
@@ -7883,6 +7902,12 @@ def performancereview_edit(request, pk):
 @login_required
 @require_POST
 def performancereview_delete(request, pk):
+    obj = get_object_or_404(PerformanceReview, pk=pk, tenant=request.tenant)
+    # A tenant admin may delete any review; a reviewer may delete only their own still-draft review.
+    # No one else can — protects the acknowledged audit trail from silent removal.
+    if not (_is_admin(request.user) or (obj.status == "draft" and _is_reviewer(request, obj))):
+        messages.error(request, "Only a tenant admin (or the reviewer, while draft) can delete this review.")
+        return redirect("hrm:performancereview_detail", pk=obj.pk)
     return crud_delete(request, model=PerformanceReview, pk=pk, success_url="hrm:performancereview_list")
 
 
@@ -7986,6 +8011,9 @@ def calibration_board(request):
 @login_required
 def reviewrating_create(request, review_pk):
     review = get_object_or_404(PerformanceReview, pk=review_pk, tenant=request.tenant)
+    if not _can_edit_review(request, review):
+        messages.error(request, "Ratings can only be changed on a draft review, by the reviewer or a tenant admin.")
+        return redirect("hrm:performancereview_detail", pk=review.pk)
     if request.method == "POST":
         form = ReviewRatingForm(request.POST,
                                 instance=ReviewRating(tenant=request.tenant, review=review),
@@ -8020,6 +8048,9 @@ def reviewrating_detail(request, pk):
 def reviewrating_edit(request, pk):
     rating = get_object_or_404(ReviewRating.objects.select_related("review"), pk=pk, tenant=request.tenant)
     review = rating.review
+    if not _can_edit_review(request, review):
+        messages.error(request, "Ratings can only be changed on a draft review, by the reviewer or a tenant admin.")
+        return redirect("hrm:performancereview_detail", pk=review.pk)
     if request.method == "POST":
         form = ReviewRatingForm(request.POST, instance=rating, tenant=request.tenant)
         if form.is_valid():
@@ -8037,8 +8068,11 @@ def reviewrating_edit(request, pk):
 @require_POST
 def reviewrating_delete(request, pk):
     rating = get_object_or_404(ReviewRating.objects.select_related("review"), pk=pk, tenant=request.tenant)
-    review_pk = rating.review_id
+    review = rating.review
+    if not _can_edit_review(request, review):
+        messages.error(request, "Ratings can only be changed on a draft review, by the reviewer or a tenant admin.")
+        return redirect("hrm:performancereview_detail", pk=review.pk)
     write_audit_log(request.user, rating, "delete")
     rating.delete()
     messages.success(request, "Rating deleted.")
-    return redirect("hrm:performancereview_detail", pk=review_pk)
+    return redirect("hrm:performancereview_detail", pk=review.pk)
