@@ -85,6 +85,12 @@ from .models import (  # 3.16 Tax & Investment
     TaxRegimeConfig,
     TaxSlabBand,
 )
+from .models import (  # 3.17 Payout & Reports
+    BankReconciliation,
+    PayoutBatch,
+    PayoutPayment,
+    PayslipDistribution,
+)
 
 
 @admin.register(JobGrade)
@@ -819,3 +825,54 @@ class TaxComputationAdmin(admin.ModelAdmin):
     raw_id_fields = ("employee", "declaration", "statutory_return")
     readonly_fields = ("number", "tax_payable", "tax_paid_ytd", "monthly_tds_amount",
                        "statutory_return", "computed_at", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------- 3.17 Payout & Reports
+class PayoutPaymentInline(admin.TabularInline):
+    model = PayoutPayment
+    extra = 0
+    fields = ("employee", "net_amount", "payment_method", "status", "transaction_reference", "retry_of")
+    readonly_fields = ("employee", "net_amount", "retry_of")
+    raw_id_fields = ("payslip",)
+
+
+@admin.register(PayoutBatch)
+class PayoutBatchAdmin(admin.ModelAdmin):
+    list_display = ("number", "cycle", "status", "bank_file_format", "generated_at", "disbursed_at", "tenant")
+    list_filter = ("tenant", "status", "bank_file_format")
+    search_fields = ("number", "cycle__number")
+    raw_id_fields = ("cycle", "generated_by", "approved_by")
+    readonly_fields = ("number", "generated_by", "generated_at", "approved_by", "approved_at",
+                       "disbursed_at", "created_at", "updated_at")
+    inlines = [PayoutPaymentInline]
+
+
+@admin.register(PayoutPayment)
+class PayoutPaymentAdmin(admin.ModelAdmin):
+    list_display = ("batch", "employee", "net_amount", "payment_method", "status",
+                    "transaction_reference", "tenant")
+    list_filter = ("tenant", "status", "payment_method")
+    search_fields = ("employee__party__name", "transaction_reference", "batch__number")
+    raw_id_fields = ("batch", "payslip", "employee", "retry_of")
+    readonly_fields = ("net_amount", "bank_name_snapshot", "bank_account_last4_snapshot",
+                       "bank_routing_snapshot", "initiated_at", "paid_on", "created_at", "updated_at")
+
+
+@admin.register(PayslipDistribution)
+class PayslipDistributionAdmin(admin.ModelAdmin):
+    list_display = ("payslip", "delivery_channel", "status", "sent_at", "viewed_at", "downloaded_at", "tenant")
+    list_filter = ("tenant", "status", "delivery_channel")
+    search_fields = ("payslip__number", "payslip__employee__party__name")
+    raw_id_fields = ("payslip", "sent_by")
+    readonly_fields = ("sent_to_email", "sent_at", "viewed_at", "downloaded_at", "sent_by",
+                       "created_at", "updated_at")
+
+
+@admin.register(BankReconciliation)
+class BankReconciliationAdmin(admin.ModelAdmin):
+    list_display = ("number", "batch", "statement_date", "status", "matched_count", "unmatched_count", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "batch__number", "statement_reference")
+    raw_id_fields = ("batch", "reconciled_by")
+    readonly_fields = ("number", "matched_count", "matched_amount", "unmatched_count", "unmatched_amount",
+                       "reconciled_by", "reconciled_at", "created_at", "updated_at")
