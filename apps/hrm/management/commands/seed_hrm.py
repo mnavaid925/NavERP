@@ -98,6 +98,12 @@ from apps.hrm.models import (  # 3.16 Tax & Investment
     TaxRegimeConfig,
     TaxSlabBand,
 )
+from apps.hrm.models import (  # 3.17 Payout & Reports
+    BankReconciliation,
+    PayoutBatch,
+    PayoutPayment,
+    PayslipDistribution,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -216,6 +222,7 @@ class Command(BaseCommand):
             self._seed_payroll(tenant, flush=options["flush"])
             self._seed_statutory(tenant, flush=options["flush"])
             self._seed_tax(tenant, flush=options["flush"])
+            self._seed_payout(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -233,6 +240,8 @@ class Command(BaseCommand):
                           InvestmentDeclaration, TaxSlabBand, TaxRegimeConfig,
                           StatutoryReturn, EmployeeStatutoryIdentifier, StatutoryStateRule,
                           StatutoryConfig,
+                          # 3.17: reconciliations/payments FK batch/cycle/payslip (PROTECT) — wipe first.
+                          BankReconciliation, PayoutPayment, PayoutBatch, PayslipDistribution,
                           PayslipLine, Payslip, PayrollCycle,
                           FloatingHolidayElection, HolidayPolicy,
                           FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
@@ -1639,3 +1648,103 @@ class Command(BaseCommand):
             f"{InvestmentDeclaration.objects.filter(tenant=tenant).count()} declaration, "
             f"{InvestmentProof.objects.filter(tenant=tenant).count()} proof, "
             f"{TaxComputation.objects.filter(tenant=tenant).count()} computation ({comp_number})."))
+
+    def _seed_payout(self, tenant, *, flush):
+        """3.17 Payout & Reports — locks the seeded PayrollCycle (a payout batch needs a locked cycle),
+        generates a PayoutBatch + one PayoutPayment per payslip (one on-hold, one paid, one failed for
+        demo variety), a PayslipDistribution per payslip (some sent), and a BankReconciliation. Runs
+        AFTER _seed_tax; leaves accounting.PayrollRun untouched (a real lock also creates that run — the
+        seeder just flips the status, the payout only needs is_locked)."""
+        if flush:
+            # Children first: reconciliations → payments → batch → distributions.
+            BankReconciliation.objects.filter(tenant=tenant).delete()
+            PayoutPayment.objects.filter(tenant=tenant).delete()
+            PayoutBatch.objects.filter(tenant=tenant).delete()
+            PayslipDistribution.objects.filter(tenant=tenant).delete()
+        if PayoutBatch.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Payout data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        cycle = (PayrollCycle.objects.filter(tenant=tenant).order_by("pay_date")
+                 .prefetch_related("payslips__employee__party").first())
+        if cycle is None or not cycle.payslips.exists():
+            self.stdout.write(self.style.NOTICE(
+                f"No payroll cycle with payslips for '{tenant.name}' — skipping payout seed."))
+            return
+
+        admin_user = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        # Lock the cycle so it can be paid out (a real lock via payrollcycle_lock also creates the
+        # accounting.PayrollRun; the demo only needs is_locked=True).
+        if not cycle.is_locked:
+            cycle.status = "locked"
+            cycle.save(update_fields=["status"])
+
+        batch = PayoutBatch.objects.create(
+            tenant=tenant, cycle=cycle, status="draft", bank_file_format="neft",
+            source_bank_name="Company Payroll A/C", source_account_last4="••••4321",
+            generated_by=admin_user, generated_at=timezone.now(), notes="Demo salary disbursement.")
+        # Generate one payment per payslip (on-hold → zero-action row).
+        payments = []
+        for ps in cycle.payslips.select_related("employee__party"):
+            emp = ps.employee
+            payments.append(PayoutPayment.objects.create(
+                tenant=tenant, batch=batch, payslip=ps, employee=emp, net_amount=ps.net_pay,
+                bank_name_snapshot=emp.bank_name,
+                bank_account_last4_snapshot=emp.masked_bank_account(),
+                bank_routing_snapshot=emp.masked_bank_routing(),
+                status="on_hold" if ps.on_hold else "pending"))
+        # Approve + disburse.
+        batch.status = "approved"
+        batch.approved_by = admin_user
+        batch.approved_at = timezone.now()
+        batch.save(update_fields=["status", "approved_by", "approved_at"])
+        now = timezone.now()
+        PayoutPayment.objects.filter(batch=batch, status="pending").update(
+            status="processing", initiated_at=now)
+        batch.status = "disbursed"
+        batch.disbursed_at = now
+        batch.save(update_fields=["status", "disbursed_at"])
+        # Mark the processing ones: first paid (with a UTR), the rest failed — for demo variety.
+        processing = list(PayoutPayment.objects.filter(batch=batch, status="processing")
+                          .order_by("employee__party__name"))
+        for i, pay in enumerate(processing):
+            if i == 0:
+                pay.status = "paid"
+                pay.paid_on = timezone.now()
+                pay.transaction_reference = f"UTR{batch.pk:04d}{pay.pk:04d}"
+                pay.save(update_fields=["status", "paid_on", "transaction_reference"])
+            else:
+                pay.status = "failed"
+                pay.failure_reason = "Incorrect bank details (demo)."
+                pay.save(update_fields=["status", "failure_reason"])
+        # Derive the batch status: a failed present → partially_disbursed.
+        if PayoutPayment.objects.filter(batch=batch, status__in=["failed", "returned"]).exists():
+            batch.status = "partially_disbursed"
+            batch.save(update_fields=["status"])
+
+        # A PayslipDistribution per payslip; mark the paid employee's as sent.
+        for ps in cycle.payslips.select_related("employee"):
+            dist = PayslipDistribution.for_payslip(ps)
+            if PayoutPayment.objects.filter(batch=batch, payslip=ps, status="paid").exists():
+                emp = ps.employee
+                dist.sent_to_email = emp.work_email or emp.personal_email or ""
+                dist.status = "sent"
+                dist.sent_at = timezone.now()
+                dist.sent_by = admin_user
+                dist.save(update_fields=["sent_to_email", "status", "sent_at", "sent_by"])
+
+        # A reconciliation over the batch (matches the paid+UTR rows; flags the failed one).
+        recon = BankReconciliation.objects.create(
+            tenant=tenant, batch=batch, statement_date=timezone.localdate(),
+            statement_reference="STMT-DEMO-001", notes="Demo bank statement reconciliation.")
+        recon.reconciled_by = admin_user
+        recon.recompute()
+        recon.save(update_fields=["reconciled_by"])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Payout seeded for '{tenant.name}': 1 batch ({batch.number}, {batch.get_status_display()}), "
+            f"{PayoutPayment.objects.filter(batch=batch).count()} payments "
+            f"({batch.paid_count} paid / {batch.failed_count} failed / {batch.on_hold_count} on-hold), "
+            f"{PayslipDistribution.objects.filter(tenant=tenant).count()} distributions, "
+            f"1 reconciliation ({recon.number}, {recon.get_status_display()})."))
