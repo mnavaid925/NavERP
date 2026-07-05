@@ -42,13 +42,13 @@
             {% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="flag"></i> Close Cycle</button>
           </form>
-          <span class="text-muted" style="margin-left:.5rem;">Active — objectives can be tracked and checked in.</span>
+          <span class="text-muted" style="margin-inline-start:.5rem;">Active — objectives can be tracked and checked in.</span>
         {% else %}
           <form method="post" action="{% url 'hrm:goalperiod_activate' obj.pk %}" style="display:inline;" onsubmit="return confirm('Activate this cycle?');">
             {% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Activate Cycle</button>
           </form>
-          <span class="text-muted" style="margin-left:.5rem;">{{ obj.get_status_display }} — activate to make it the running cycle.</span>
+          <span class="text-muted" style="margin-inline-start:.5rem;">{{ obj.get_status_display }} — activate to make it the running cycle.</span>
         {% endif %}
       {% else %}
         <span class="text-muted"><i data-lucide="shield"></i> A tenant admin activates or closes a cycle.</span>
@@ -73,9 +73,9 @@
                 <span class="text-muted">{{ o.progress_pct|floatformat:0 }}%</span>
               </td>
               <td>
-                {% if o.health_status == 'on_track' or o.health_status == 'completed' %}<span class="badge badge-green">{{ o.health_status }}</span>
-                {% elif o.health_status == 'at_risk' %}<span class="badge badge-amber">{{ o.health_status }}</span>
-                {% else %}<span class="badge badge-red">{{ o.health_status }}</span>{% endif %}
+                {% if o.health_status == 'on_track' or o.health_status == 'completed' %}<span class="badge badge-green">{{ o.health_status_display }}</span>
+                {% elif o.health_status == 'at_risk' %}<span class="badge badge-amber">{{ o.health_status_display }}</span>
+                {% else %}<span class="badge badge-red">{{ o.health_status_display }}</span>{% endif %}
               </td>
             </tr>
           {% empty %}
