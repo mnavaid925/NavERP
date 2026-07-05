@@ -72,7 +72,7 @@
             <tr>
               <td><a href="{% url 'hrm:performancereview_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
               <td>{{ r.subject.party.name }}</td>
-              <td>{% if r.is_anonymous and r.review_type == 'peer' or r.is_anonymous and r.review_type == 'upward' %}<span class="text-muted">Anonymous</span>{% else %}{{ r.reviewer.party.name }}{% endif %}</td>
+              <td>{% if r.reviewer_anonymized %}<span class="text-muted">Anonymous</span>{% else %}{{ r.reviewer.party.name }}{% endif %}</td>
               <td><span class="badge badge-muted">{{ r.get_review_type_display }}</span></td>
               <td>
                 {% if r.status == 'acknowledged' %}<span class="badge badge-green">{{ r.get_status_display }}</span>
