@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Distribution · {{ obj.payslip.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.payslip.number }} · Distribution</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payslipdistribution_list' %}">Payslip Distribution</a><span class="sep">›</span><span>{{ obj.payslip.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.payslip.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Payslip</dt><dd><a href="{% url 'hrm:payslip_detail' obj.payslip.pk %}">{{ obj.payslip.number }}</a></dd></div>
+      <div class="detail-item"><dt>Channel</dt><dd>{{ obj.get_delivery_channel_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'viewed' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'downloaded' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Sent To</dt><dd>{{ obj.sent_to_email|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Sent At</dt><dd>{{ obj.sent_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Viewed At</dt><dd>{{ obj.viewed_at|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Downloaded At</dt><dd>{{ obj.downloaded_at|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:payslipdistribution_send' obj.pk %}" style="display:inline;" onsubmit="return confirm('Mark this payslip sent?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> {% if obj.status == 'pending' %}Send{% else %}Re-send{% endif %}</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{% url 'hrm:payslipdistribution_mark_viewed' obj.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="eye"></i> Mark Viewed</button>
+      </form>
+      <form method="post" action="{% url 'hrm:payslipdistribution_mark_downloaded' obj.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="download"></i> Mark Downloaded</button>
+      </form>
+      <p class="text-muted" style="margin-top:.5rem;">PDF rendering + email dispatch are deferred — these actions record the delivery signal.</p>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:payslipdistribution_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
