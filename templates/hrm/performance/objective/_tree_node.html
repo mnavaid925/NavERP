@@ -2,21 +2,21 @@
 Recursive alignment-tree node. Expects: node (an Objective, children prefetched), depth (int),
 tree_max_depth (int). Renders the objective + its child_objectives up to the bounded depth.
 {% endcomment %}
-<li style="margin:.35rem 0;">
-  <div class="tree-node" style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; padding:.35rem .5rem; background:var(--card-bg); border:1px solid var(--border); border-radius:8px;">
+<li style="margin-block:.35rem;">
+  <div class="tree-node">
     <i data-lucide="target"></i>
     <a href="{% url 'hrm:objective_detail' node.pk %}" class="fw-600">{{ node.title }}</a>
     <span class="badge badge-muted">{{ node.get_scope_display }}</span>
     <span class="text-muted">{{ node.owner.party.name }}</span>
     <span class="text-muted">· {{ node.progress_pct|floatformat:0 }}%</span>
-    {% if node.health_status == 'on_track' or node.health_status == 'completed' %}<span class="badge badge-green">{{ node.health_status }}</span>
-    {% elif node.health_status == 'at_risk' %}<span class="badge badge-amber">{{ node.health_status }}</span>
-    {% else %}<span class="badge badge-red">{{ node.health_status }}</span>{% endif %}
+    {% if node.health_status == 'on_track' or node.health_status == 'completed' %}<span class="badge badge-green">{{ node.health_status_display }}</span>
+    {% elif node.health_status == 'at_risk' %}<span class="badge badge-amber">{{ node.health_status_display }}</span>
+    {% else %}<span class="badge badge-red">{{ node.health_status_display }}</span>{% endif %}
   </div>
   {% if depth < tree_max_depth %}
     {% with children=node.child_objectives.all %}
       {% if children %}
-        <ul style="list-style:none; margin:.15rem 0 .15rem 1.1rem; padding-left:1rem; border-left:1px solid var(--border);">
+        <ul class="tree-children">
           {% for child in children %}
             {% include "hrm/performance/objective/_tree_node.html" with node=child depth=depth|add:1 %}
           {% endfor %}
