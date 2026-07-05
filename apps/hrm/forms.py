@@ -125,6 +125,12 @@ from .models import (  # noqa: E402  — 3.18 Goal Setting
     KeyResult,
     Objective,
 )
+from .models import (  # noqa: E402  — 3.19 Performance Review
+    PerformanceReview,
+    ReviewCycle,
+    ReviewRating,
+    ReviewTemplate,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1507,4 +1513,93 @@ class GoalCheckInForm(TenantModelForm):
         widgets = {
             "checkin_date": forms.DateInput(attrs={"type": "date"}),
             "comment": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+# ------------------------------------------------------------------------- 3.19 Performance Review
+class ReviewCycleForm(TenantModelForm):
+    # `status` is workflow-owned (the phase machine — changed only via reviewcycle_advance_phase,
+    # never a directly-editable field). This mirrors the 3.18 GoalPeriodForm fix: exposing status
+    # on the form would let a non-admin POST a phase change and bypass the @tenant_admin_required gate.
+    class Meta:
+        model = ReviewCycle
+        fields = ["name", "cycle_type", "self_review_start", "self_review_end",
+                  "manager_review_start", "manager_review_end", "calibration_date",
+                  "results_release_date", "goal_period", "description"]
+        widgets = {
+            "self_review_start": forms.DateInput(attrs={"type": "date"}),
+            "self_review_end": forms.DateInput(attrs={"type": "date"}),
+            "manager_review_start": forms.DateInput(attrs={"type": "date"}),
+            "manager_review_end": forms.DateInput(attrs={"type": "date"}),
+            "calibration_date": forms.DateInput(attrs={"type": "date"}),
+            "results_release_date": forms.DateInput(attrs={"type": "date"}),
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "goal_period" in self.fields:
+            self.fields["goal_period"].queryset = (
+                GoalPeriod.objects.filter(tenant=self.tenant).order_by("-start_date"))
+
+
+class ReviewTemplateForm(TenantModelForm):
+    class Meta:
+        model = ReviewTemplate
+        fields = ["name", "review_type", "rating_scale_max", "include_goals", "is_anonymous",
+                  "description", "is_active"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class PerformanceReviewForm(TenantModelForm):
+    # number + all workflow/calibration fields (status/manager_rating/calibrated_rating/
+    # potential_rating/calibration_notes/*_at/acknowledged_by) are set only by the dedicated
+    # submit/share/acknowledge/calibrate actions — never on this create/edit form.
+    class Meta:
+        model = PerformanceReview
+        fields = ["cycle", "template", "subject", "reviewer", "review_type",
+                  "strengths", "improvements", "private_notes", "is_anonymous"]
+        widgets = {
+            "strengths": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "improvements": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "private_notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            emps = (EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "cycle" in self.fields:
+                self.fields["cycle"].queryset = (
+                    ReviewCycle.objects.filter(tenant=self.tenant).order_by("-self_review_start"))
+            if "template" in self.fields:
+                self.fields["template"].queryset = (
+                    ReviewTemplate.objects.filter(tenant=self.tenant, is_active=True).order_by("review_type", "name"))
+            if "subject" in self.fields:
+                self.fields["subject"].queryset = emps
+            if "reviewer" in self.fields:
+                self.fields["reviewer"].queryset = emps
+
+
+class CalibrationForm(TenantModelForm):
+    # A narrow, privileged form — the ONLY write path to calibrated_rating (the general edit form
+    # must never expose it). tenant= kwarg kept for signature consistency (no FK to scope).
+    class Meta:
+        model = PerformanceReview
+        fields = ["calibrated_rating", "potential_rating", "calibration_notes"]
+        widgets = {
+            "calibration_notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class ReviewRatingForm(TenantModelForm):
+    # review is set from the URL in the nested create view; number is auto-assigned.
+    class Meta:
+        model = ReviewRating
+        fields = ["criterion_label", "criterion_category", "rating_value", "weight", "comment"]
+        widgets = {
+            "comment": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
         }
