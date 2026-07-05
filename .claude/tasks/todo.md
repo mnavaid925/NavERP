@@ -1,4 +1,520 @@
 ---
+# Module 3 — HRM — Sub-module 3.18 Goal Setting (goal-setting) — plan from research-hrm-goal-setting.md (2026-07-05)
+
+**Context.** Extends the existing `apps/hrm` app — NOT a new app. Opens the **Performance Management**
+group (3.18 Goal Setting -> 3.19 Performance Review -> 3.20 Continuous Feedback -> 3.21 Performance
+Improvement) with the OKR/goal-mechanics layer only. 4 new models, all appended to
+`apps/hrm/models.py`, migration `0030` (last is `0029_alter_payoutbatch_source_account_last4.py`). No
+core-spine table is added — Goal Setting FKs `hrm.EmployeeProfile` (goal owner, never `core.Party`/
+`accounts.User` directly, per the existing HRM convention) and `core.OrgUnit` (department scope, reused
+exactly as `Designation.department` already does). Progress/health are **derived properties**, never
+stored editable fields — mirrors the spine principle already used for `LeaveAllocation`/
+`AttendanceRecord.hours_worked`/`PayrollCycle.total_*`.
+
+NavERP.md 3.18 bullets (exact text, all 5 go Live this pass):
+- OKR/KPI Management — Set objectives, key results.
+- Goal Alignment — Cascading goals, team alignment.
+- Weight Assignment — Weightage for different goals.
+- Goal Timeline — Quarterly/annual goal periods.
+- Goal Tracking — Progress updates, milestones.
+
+Reuses (no duplication): `hrm.EmployeeProfile` (goal `owner`/`GoalCheckIn.checked_in_by` — never
+`core.Party`/`settings.AUTH_USER_MODEL` directly), `hrm.EmployeeProfile.manager`/`.department` (derived
+properties off `core.Employment` — used for "my direct reports' goals" queryset filters, no new manager
+FK anywhere in this module), `core.OrgUnit` (`Objective.department`, FK'd by string exactly like
+`Designation.department`). **No new core-spine entity.**
+
+**Grounding decisions carried over from research (decide, don't re-litigate at build time):**
+- `metric_type` is a `CharField` choice on `KeyResult`, not a 5th model — buys the Viva Goals/Perdoo/
+  Profit.co KR-type distinction cheaply.
+- Cascading alignment is the single self-FK `Objective.parent_objective` (`on_delete=SET_NULL`,
+  `related_name="child_objectives"`) — vertical only; no M2M horizontal-alignment table this pass.
+- Weighting is KR-level only (`KeyResult.weight`) — no `Objective`-to-parent cascade-weighting field.
+- `GoalCheckIn` also extends `TenantNumbered` (`GCI-`) — every other timestamped-history-log table in
+  HRM (`GoalCheckIn`'s closest analog is `LeaveRequest`/`AttendanceRecord`) is numbered, and a numbered
+  check-in gives the audit trail + detail-page permalink a stable human ID.
+- `GP`/`OBJ`/`KR`/`GCI` do not clash with any of the 39 prefixes already used in `apps/hrm/models.py`
+  (confirmed by research's grep).
+- Milestone-type KR tracking folds into `GoalCheckIn` (a lightweight `is_milestone_event` flag) for this
+  pass — no 5th model.
+
+## A. Models + migration (`apps/hrm/models.py`)
+
+- [ ] `GoalPeriod(TenantOwned)` [no `NUMBER_PREFIX` — small per-tenant catalog identified by `name`,
+      same pattern as `hrm.JobGrade`] — the quarterly/half-yearly/annual cycle container (drivers:
+      3.18.4 Goal Timeline; 15Five/Lattice/BambooHR/Profit.co all scope every Objective to a named,
+      dated cycle):
+  - [ ] `name` — CharField(max_length=100) — e.g. "Q3 2026"
+  - [ ] `period_type` — CharField(max_length=15, choices=`PERIOD_TYPE_CHOICES`, default="quarterly") —
+        `[("quarterly","Quarterly"),("half_yearly","Half-Yearly"),("annual","Annual"),
+        ("custom","Custom")]` — driver: 15Five "usually set quarterly, bi-annually, or yearly"
+  - [ ] `start_date` — DateField()
+  - [ ] `end_date` — DateField()
+  - [ ] `status` — CharField(max_length=15, choices=`STATUS_CHOICES`, default="draft") —
+        `[("draft","Draft"),("active","Active"),("closed","Closed"),("archived","Archived")]` —
+        driver: Lattice/15Five carry-over-to-next-cycle pattern needs an explicit active/closed gate
+  - [ ] `description` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-start_date"]`; `unique_together = ("tenant", "name")`; index
+        `models.Index(fields=["tenant", "status"], name="hrm_gp_tenant_status_idx")`
+  - [ ] `clean()` — raise `ValidationError({"end_date": "..."})` if `end_date <= start_date`
+  - [ ] derived **@property** `objective_count` → `self.objectives.count()`
+  - [ ] derived **@property** `avg_progress_pct` → one aggregate over `self.objectives.all()`
+        (weighted-average of each `Objective.progress_pct`, `Decimal("0")` if no objectives — mirrors
+        `PayrollCycle._totals()`'s single-aggregate-query convention, computed in Python over the
+        already-derived per-objective values since `progress_pct` itself isn't a DB column)
+  - [ ] `save()` — when set `status="active"`, no `is_current` boolean field (dropped per simplification
+        — "current" is just `status="active"`, avoiding a second source of truth); no auto-flip of
+        sibling periods to closed (an explicit `goalperiod_close` action does that, see section B)
+  - [ ] `__str__` → `f"{self.name} ({self.get_period_type_display()})"`
+
+- [ ] `Objective(TenantNumbered, NUMBER_PREFIX="OBJ")` — the "O" (drivers: 3.18.1 OKR/KPI Management,
+      3.18.2 Goal Alignment, 3.18.3 Weight Assignment, 3.18.4 Goal Timeline):
+  - [ ] `title` — CharField(max_length=255)
+  - [ ] `description` — TextField(blank=True)
+  - [ ] `owner` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+        related_name="objectives")` — PROTECT so an objective can't outlive its owner reference,
+        matching `Payslip.employee`'s PROTECT convention; the goal-owner spine-reuse point
+  - [ ] `goal_period` — `models.ForeignKey("hrm.GoalPeriod", on_delete=models.PROTECT,
+        related_name="objectives")` — driver: 3.18.4 Goal Timeline, every Objective scoped to a named
+        cycle (15Five/Lattice/BambooHR/Profit.co)
+  - [ ] `parent_objective` — `models.ForeignKey("self", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="child_objectives")` — driver: 3.18.2 Goal Alignment (cascading/
+        parent-child linkage — Lattice/Betterworks/Quantive/Perdoo/WorkBoard/Viva Goals/Profit.co/
+        Culture Amp/Leapsome all have this); also powers the Goal Tree view (no extra table)
+  - [ ] `department` — `models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="objectives")` — driver: 3.18.2 scope/level tagging, reused exactly
+        as `Designation.department` already does; nullable for individual-scope goals
+  - [ ] `scope` — CharField(max_length=15, choices=`SCOPE_CHOICES`, default="individual") —
+        `[("company","Company"),("department","Department"),("team","Team"),
+        ("individual","Individual")]` — driver: 3.18.2, every one of the 10 surveyed products tags an
+        Objective's organizational level
+  - [ ] `target_type` — CharField(max_length=15, choices=`TARGET_TYPE_CHOICES`, default="committed") —
+        `[("aspirational","Aspirational"),("committed","Committed")]` — driver: 15Five's aspirational-
+        vs-commitment framing (50-70% success is a win vs. 100% expected)
+  - [ ] `weight` — DecimalField(max_digits=5, decimal_places=2, default=100,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]) — driver: 3.18.3 Weight Assignment
+        for **sibling** objectives under the same parent (used only when rendering a parent's
+        weighted-children view; NOT used to compute this objective's own `progress_pct`, which is
+        strictly a KR-weighted rollup per the research scope decision — document this distinction in
+        the field's `help_text` so a future contributor doesn't conflate the two)
+  - [ ] `status` — CharField(max_length=15, choices=`STATUS_CHOICES`, default="draft") —
+        `[("draft","Draft"),("active","Active"),("at_risk","At Risk"),("completed","Completed"),
+        ("cancelled","Cancelled")]` — `at_risk` is manually settable (an owner/manager call) distinct
+        from the derived `health_status` percentage-based signal on `KeyResult`
+  - [ ] `start_date` — DateField(null=True, blank=True) — defaults to `goal_period.start_date` in the
+        form's initial value, but stored so an objective can start later than its period
+  - [ ] `due_date` — DateField(null=True, blank=True) — same pattern, vs. `goal_period.end_date`
+  - [ ] `class Meta`: `ordering = ["-goal_period__start_date", "title"]`; indexes
+        `models.Index(fields=["tenant", "status"], name="hrm_obj_tenant_status_idx")`,
+        `models.Index(fields=["tenant", "goal_period"], name="hrm_obj_tenant_period_idx")`,
+        `models.Index(fields=["tenant", "owner"], name="hrm_obj_tenant_owner_idx")`,
+        `models.Index(fields=["tenant", "parent_objective"], name="hrm_obj_tenant_parent_idx")`
+  - [ ] `clean()` — raise `ValidationError({"parent_objective": "..."})` if
+        `self.parent_objective_id == self.pk` (no self-parenting) and if setting `parent_objective`
+        would create a cycle (walk `parent_objective.parent_objective...` up to a sane depth, e.g. 10,
+        raising if `self.pk` is encountered — cheap guard against a corrupt tree)
+  - [ ] `_krs()` **method** — `self.key_results.all()`, cached per instance (avoids re-querying across
+        `progress_pct`/`health_status`/`key_result_count` on the same request)
+  - [ ] derived **@property** `progress_pct` → weighted average of `kr.progress_pct * kr.weight` over
+        `self._krs()`, normalized by `sum(kr.weight for kr in self._krs())` (falls back to a simple
+        average if all weights are 0); returns `Decimal("0")` if no key results — 3.18.3's weighted-
+        rollup feature (Lattice's documented Progress Calculation, Profit.co's KR weight-roll-up)
+  - [ ] derived **@property** `health_status` → `"completed"` if `status == "completed"`; else derive
+        from `progress_pct` vs. **time-elapsed-in-period** (`(today - goal_period.start_date) /
+        (goal_period.end_date - goal_period.start_date)`): `on_track` if progress_pct >= expected pace
+        (within a 10-point tolerance), `at_risk` if 10-25 points behind pace, `off_track` if >25 points
+        behind — 3.18.5's status/health-coloring feature (Weekdone/WorkBoard/Betterworks), computed
+        not stored
+  - [ ] derived **@property** `key_result_count` → `self._krs().count()` (via `len(self._krs())` since
+        `_krs()` is already materialized)
+  - [ ] `__str__` → `f"{self.number} · {self.title}"`
+
+- [ ] `KeyResult(TenantNumbered, NUMBER_PREFIX="KR")` — the "KR" under an Objective (drivers: 3.18.1
+      OKR/KPI Management KR-type distinction, 3.18.3 Weight Assignment, 3.18.5 Goal Tracking):
+  - [ ] `objective` — `models.ForeignKey("hrm.Objective", on_delete=models.CASCADE,
+        related_name="key_results")`
+  - [ ] `title` — CharField(max_length=255)
+  - [ ] `metric_type` — CharField(max_length=15, choices=`METRIC_TYPE_CHOICES`, default="numeric") —
+        `[("numeric","Numeric"),("percentage","Percentage"),("currency","Currency"),
+        ("boolean","Boolean"),("milestone","Milestone")]` — driver: Viva Goals' 3 formal KR types +
+        Perdoo/Profit.co's metric-vs-milestone split, folded into one CharField per research
+  - [ ] `start_value` — DecimalField(max_digits=16, decimal_places=2, null=True, blank=True) —
+        nullable for boolean/milestone types
+  - [ ] `target_value` — DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+  - [ ] `current_value` — DecimalField(max_digits=16, decimal_places=2, null=True, blank=True) —
+        updated by `GoalCheckIn.save()`, but kept directly editable on the KR form too (an owner can
+        correct it without a formal check-in — matches how `Payslip.on_hold` stays directly editable
+        alongside its workflow actions)
+  - [ ] `is_milestone_event` — BooleanField(default=False) — for `metric_type="milestone"` KRs, marks
+        that progress is driven by discrete `GoalCheckIn` milestone-completion events rather than a
+        continuous numeric value (folds 3.18.5's milestone-tracking feature into the check-in log
+        instead of a 5th model, per research)
+  - [ ] `unit` — CharField(max_length=30, blank=True) — free text, e.g. "%", "$", "signups"
+  - [ ] `weight` — DecimalField(max_digits=5, decimal_places=2, default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]) — driver: 3.18.3, weighting across
+        **sibling KeyResults under the same Objective** (Lattice/Perdoo/Profit.co/Betterworks); form
+        should default new KRs to an equal split (`100 / (existing_sibling_count + 1)`) but leave it
+        overridable, matching Lattice's "equal-by-default, override to e.g. 30/70" behavior
+  - [ ] `status` — CharField(max_length=15, choices=`STATUS_CHOICES`, default="not_started") —
+        `[("not_started","Not Started"),("in_progress","In Progress"),("completed","Completed"),
+        ("cancelled","Cancelled")]`
+  - [ ] `class Meta`: `ordering = ["objective", "-weight", "title"]`; indexes
+        `models.Index(fields=["tenant", "objective"], name="hrm_kr_tenant_objective_idx")`,
+        `models.Index(fields=["tenant", "status"], name="hrm_kr_tenant_status_idx")`
+  - [ ] `clean()` — raise `ValidationError({"target_value": "..."})` if `metric_type` in
+        `("numeric","percentage","currency")` and `target_value` is `None` (a metric KR must have a
+        target); raise `ValidationError({"weight": "..."})` if `weight` is negative (validators already
+        block this at the field level but keep the model-level guard for bulk/fixture writes that skip
+        `full_clean()`)
+  - [ ] derived **@property** `progress_pct` → for `metric_type` in `("numeric","percentage",
+        "currency")`: `(current_value - start_value) / (target_value - start_value) * 100`, clamped to
+        `[0, 100]`, guarding `target_value == start_value` (return 100 if `current_value >=
+        target_value` else 0); for `"boolean"`: `100` if `current_value` truthy/`status="completed"`
+        else `0`; for `"milestone"`: `self.checkins.filter(is_milestone_event=True,
+        confidence="on_track").count() / max(self.milestone_target_count, 1) * 100` — **NOTE**: no
+        `milestone_target_count` field exists in this pass; for milestone KRs without a defined step
+        count, fall back to `100` if `status == "completed"` else `0` (documented simplification —
+        step-weighted milestone sub-tracking is explicitly deferred, see Deferred section)
+  - [ ] derived **@property** `health_status` → same on_track/at_risk/off_track logic as
+        `Objective.health_status`, computed against `objective.goal_period`'s elapsed time — 3.18.5
+        status/health-coloring
+  - [ ] `__str__` → `f"{self.number} · {self.title} ({self.get_metric_type_display()})"`
+
+- [ ] `GoalCheckIn(TenantNumbered, NUMBER_PREFIX="GCI")` — timestamped progress-update log against a
+      KeyResult (driver: 3.18.5 Goal Tracking — Betterworks/Viva Goals/Quantive/Perdoo/Weekdone/
+      Profit.co all treat check-ins as a history log, never a single mutable field):
+  - [ ] `key_result` — `models.ForeignKey("hrm.KeyResult", on_delete=models.CASCADE,
+        related_name="checkins")`
+  - [ ] `checkin_date` — DateField(default=`django.utils.timezone.now` via a
+        `default=timezone.localdate` callable, matching `AttendanceRecord`'s date-default convention)
+  - [ ] `value_at_checkin` — DecimalField(max_digits=16, decimal_places=2, null=True, blank=True) —
+        the KR value reported at this check-in (nullable for a milestone-only/qualitative check-in)
+  - [ ] `confidence` — CharField(max_length=15, choices=`CONFIDENCE_CHOICES`, default="on_track") —
+        `[("on_track","On Track"),("at_risk","At Risk"),("off_track","Off Track")]` — driver:
+        Betterworks/Weekdone/WorkBoard's health-status framing, self-reported at check-in time
+        (distinct from the derived `KeyResult.health_status` percentage-based signal)
+  - [ ] `is_milestone_event` — BooleanField(default=False) — marks this check-in as a discrete
+        milestone-completion event (folds 3.18.5's milestone-tracking into the check-in log, per
+        research; only meaningful when `key_result.metric_type == "milestone"`)
+  - [ ] `comment` — TextField(blank=True) — the blockers/wins note (Quantive/Perdoo/Profit.co)
+  - [ ] `created_by` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="goal_checkins", editable=False)` — set from
+        `request.user`'s linked `EmployeeProfile` in the view (usually the KR/objective owner, but
+        allow manager overrides — the view, not the form, resolves this so a manager checking in on a
+        direct report's KR doesn't need to impersonate them)
+  - [ ] `class Meta`: `ordering = ["-checkin_date", "-created_at"]`; indexes
+        `models.Index(fields=["tenant", "key_result"], name="hrm_gci_tenant_kr_idx")`,
+        `models.Index(fields=["tenant", "checkin_date"], name="hrm_gci_tenant_date_idx")`
+  - [ ] `save()` override — on create (`self.pk is None`), after `super().save()`, if
+        `value_at_checkin is not None`: set `self.key_result.current_value = value_at_checkin` and
+        `self.key_result.save(update_fields=["current_value", "updated_at"])` — the check-in is the
+        single write path that advances `KeyResult.current_value`, matching the research's "on save it
+        can update the parent KeyResult.current_value" spec; if `is_milestone_event` is True, no
+        additional side effect needed since `KeyResult.progress_pct` for milestone-type KRs already
+        reads `self.checkins.filter(is_milestone_event=True, ...)` live
+  - [ ] `__str__` → `f"{self.number} · {self.key_result.title} · {self.get_confidence_display()}"`
+
+- [ ] one incremental migration `apps/hrm/migrations/0030_goalperiod_objective_keyresult_and_more.py`
+      (NOT `0001_initial`; last is `0029_alter_payoutbatch_source_account_last4.py`) —
+      `makemigrations hrm`, review the generated file, adjust index/constraint names to match the ones
+      specified above if Django's auto-names differ
+
+## B. Forms (`apps/hrm/forms.py`)
+
+- [ ] `GoalPeriodForm(ModelForm)` — `tenant=` kwarg accepted (unused for FK-scoping since GoalPeriod has
+      no in-module FKs, but keep the signature consistent with every other HRM form); excludes
+      `tenant`; fields = `name, period_type, start_date, end_date, status, description`
+- [ ] `ObjectiveForm(ModelForm)` — `tenant=` kwarg; excludes `tenant`/`number`; scopes `owner` to
+      `EmployeeProfile.objects.filter(tenant=tenant)`, `goal_period` to
+      `GoalPeriod.objects.filter(tenant=tenant)`, `department` to
+      `core.OrgUnit.objects.filter(tenant=tenant, kind="department")`, `parent_objective` to
+      `Objective.objects.filter(tenant=tenant).exclude(pk=self.instance.pk)` (guard against
+      self-parenting at the form-queryset level, in addition to the model's `clean()`); fields =
+      `title, description, owner, goal_period, parent_objective, department, scope, target_type,
+      weight, status, start_date, due_date`
+- [ ] `KeyResultForm(ModelForm)` — `tenant=` kwarg; excludes `tenant`/`number`/`objective` (objective is
+      set from the URL in the create view, matching `PayslipLine`-style parent-scoped child-create
+      views); scopes nothing else (metric_type/status are plain choices); fields = `title, metric_type,
+      start_value, target_value, current_value, is_milestone_event, unit, weight, status`
+- [ ] `KeyResultInlineForm(ModelForm)` — same as `KeyResultForm` but used from the Objective detail
+      page's "add KR inline" action (thin wrapper or the same form reused with a different template
+      context — decide at build time based on whether a distinct class adds value)
+- [ ] `GoalCheckInForm(ModelForm)` — `tenant=` kwarg; excludes `tenant`/`number`/`key_result`/
+      `created_by` (both set from the URL/request in the view); fields = `checkin_date,
+      value_at_checkin, confidence, is_milestone_event, comment`
+
+## C. Views (`apps/hrm/views.py`) — full CRUD + custom actions, function-based, `@login_required`,
+      tenant-scoped via `crud_list/crud_create/crud_edit/crud_detail/crud_delete`
+
+- [ ] `goalperiod_list` — `crud_list`; `search_fields=("name",)`; `filters=[("status",
+      "status", False), ("period_type", "period_type", False)]`; pass `status_choices=
+      GoalPeriod.STATUS_CHOICES`, `period_type_choices=GoalPeriod.PERIOD_TYPE_CHOICES` in
+      `extra_context` (Filter Implementation Rule)
+- [ ] `goalperiod_create` / `goalperiod_edit` / `goalperiod_detail` / `goalperiod_delete` — standard
+      `crud_create/crud_edit/crud_detail/crud_delete`; `goalperiod_detail` extra_context includes
+      `objective_count`/`avg_progress_pct` (already properties, just pass `obj` — template reads them)
+      and the period's objectives list (`select_related("owner__party", "goal_period")`)
+- [ ] `goalperiod_activate` (`@tenant_admin_required`, POST-only) — sets `status="active"`; no
+      auto-close of sibling periods (explicit `goalperiod_close` handles that separately, avoiding a
+      surprising side effect) — 3.18.4 Goal Timeline
+- [ ] `goalperiod_close` (`@tenant_admin_required`, POST-only) — sets `status="closed"`; guard: only
+      from `status="active"` (else redirect with an error message) — 3.18.4 Goal Timeline
+- [ ] `objective_list` — `crud_list`; `search_fields=("title", "number", "owner__party__name")`;
+      `filters=[("status", "status", False), ("scope", "scope", False), ("target_type", "target_type",
+      False), ("goal_period", "goal_period_id", True), ("owner", "owner_id", True), ("department",
+      "department_id", True)]`; pass `status_choices`, `scope_choices`, `target_type_choices`,
+      `goal_periods=GoalPeriod.objects.filter(tenant=request.tenant)`,
+      `employees=EmployeeProfile.objects.filter(tenant=request.tenant)`,
+      `departments=OrgUnit.objects.filter(tenant=request.tenant, kind="department")` in extra_context;
+      add a `?mine=1` convenience filter that resolves the logged-in user's `EmployeeProfile` (via
+      `request.user.party.employee_profile` if present) and filters `owner=that_profile` OR
+      `owner__employment__manager=that_profile.party` (direct-reports visibility — 3.18.2 "Manager
+      visibility into direct reports' goals", using the **derived** `.manager`/`.department`
+      properties, no new FK)
+- [ ] `objective_create` / `objective_edit` / `objective_detail` / `objective_delete` — standard;
+      `objective_detail` extra_context includes `key_results=obj.key_results.all()` (for inline KR
+      list + add-inline form), `child_objectives=obj.child_objectives.all()` (cascade/alignment
+      children — 3.18.2 Goal Tree), `recent_checkins` (a bounded queryset via
+      `GoalCheckIn.objects.filter(key_result__objective=obj).select_related("key_result",
+      "created_by__party").order_by("-checkin_date")[:20]` for the progress-trend/history panel — no
+      N+1, single query)
+- [ ] `objective_tree` (or a `?view=tree` query param on `objective_list` — decide at build time which
+      is cleaner) — recursive rendering of top-level Objectives (`parent_objective__isnull=True`) with
+      `child_objectives` nested, for the 3.18.2 Goal Tree / alignment-map visualization; bound the
+      recursion depth (e.g. render up to 4 levels) to avoid a runaway template loop on a corrupt tree
+- [ ] `keyresult_create` (nested under an objective: `<int:objective_pk>/key-results/add/`) — fetches
+      the parent `Objective` (`tenant=request.tenant` guard), sets `objective=obj` before save,
+      defaults `weight` to an equal split among existing siblings (`100 / (sibling_count + 1)`) in the
+      form's initial value — 3.18.1/3.18.3
+- [ ] `keyresult_edit` / `keyresult_detail` / `keyresult_delete` — standard `crud_edit/crud_detail/
+      crud_delete`, `success_url` redirects back to the parent `objective_detail`, not a KR list page
+      (KRs are always viewed in the context of their Objective — no standalone `keyresult_list` route
+      needed for navigation, though the URL/view still exists for completeness and direct links)
+- [ ] `goalcheckin_list` — `crud_list`; `search_fields=("key_result__title", "comment")`;
+      `filters=[("confidence", "confidence", False), ("key_result", "key_result_id", True)]`; pass
+      `confidence_choices=GoalCheckIn.CONFIDENCE_CHOICES`, `key_results=
+      KeyResult.objects.filter(tenant=request.tenant)` in extra_context — serves the org-wide 3.18.5
+      Goal Tracking history view
+- [ ] `goalcheckin_create` (nested under a key result: `<int:keyresult_pk>/check-ins/add/`) — fetches
+      the parent `KeyResult` (`tenant=request.tenant` guard), sets `key_result=kr` and
+      `created_by=request.user`'s linked `EmployeeProfile` before save (resolve via
+      `getattr(request.user, "party", None)` then `.employee_profile` if present — guard for a manager/
+      admin user who has no linked EmployeeProfile: leave `created_by=None`, don't 500) — this IS the
+      3.18.5 "Goal Tracking" check-in workflow action
+- [ ] `goalcheckin_detail` / `goalcheckin_delete` — standard (no edit view — a check-in is an
+      immutable history log entry once created, matching the append-only convention already used for
+      `AttendanceRecord`/audit-style rows; if a correction is needed, delete + re-create, never mutate
+      a past check-in's `value_at_checkin`)
+- [ ] all list views pass `q` search + pagination automatically via `crud_list`; no manual
+      `Paginator`/`Q()` code duplicated per view (Filter Implementation Rule + CRUD Completeness Rule)
+
+## D. URLs (`apps/hrm/urls.py`, `app_name = "hrm"`, append to the existing `urlpatterns`)
+
+- [ ] `goal-periods/` -> `goalperiod_list`; `goal-periods/add/` -> `goalperiod_create`;
+      `goal-periods/<int:pk>/` -> `goalperiod_detail`; `goal-periods/<int:pk>/edit/` ->
+      `goalperiod_edit`; `goal-periods/<int:pk>/delete/` -> `goalperiod_delete`;
+      `goal-periods/<int:pk>/activate/` -> `goalperiod_activate`; `goal-periods/<int:pk>/close/` ->
+      `goalperiod_close`
+- [ ] `objectives/` -> `objective_list`; `objectives/tree/` -> `objective_tree`; `objectives/add/` ->
+      `objective_create`; `objectives/<int:pk>/` -> `objective_detail`; `objectives/<int:pk>/edit/` ->
+      `objective_edit`; `objectives/<int:pk>/delete/` -> `objective_delete`
+- [ ] `objectives/<int:objective_pk>/key-results/add/` -> `keyresult_create`; `key-results/<int:pk>/` ->
+      `keyresult_detail`; `key-results/<int:pk>/edit/` -> `keyresult_edit`; `key-results/<int:pk>/delete/`
+      -> `keyresult_delete`
+- [ ] `key-results/<int:keyresult_pk>/check-ins/add/` -> `goalcheckin_create`; `check-ins/` ->
+      `goalcheckin_list`; `check-ins/<int:pk>/` -> `goalcheckin_detail`; `check-ins/<int:pk>/delete/` ->
+      `goalcheckin_delete`
+- [ ] verify every new `path()` name is unique against the ~180 existing `hrm:` names (`grep name=` in
+      `apps/hrm/urls.py` before adding — no accidental collision)
+
+## E. Admin (`apps/hrm/admin.py`)
+
+- [ ] register `GoalPeriod` — `list_display=("name", "period_type", "status", "start_date",
+      "end_date", "tenant")`, `list_filter=("status", "period_type", "tenant")`, `search_fields=
+      ("name",)`
+- [ ] register `Objective` — `list_display=("number", "title", "owner", "goal_period", "status",
+      "scope", "tenant")`, `list_filter=("status", "scope", "target_type", "tenant")`,
+      `search_fields=("number", "title")`, `autocomplete_fields=("owner", "goal_period",
+      "parent_objective", "department")`
+- [ ] register `KeyResult` — `list_display=("number", "title", "objective", "metric_type", "status",
+      "tenant")`, `list_filter=("metric_type", "status", "tenant")`, `search_fields=("number", "title")`,
+      `autocomplete_fields=("objective",)`
+- [ ] register `GoalCheckIn` — `list_display=("number", "key_result", "checkin_date", "confidence",
+      "created_by", "tenant")`, `list_filter=("confidence", "tenant")`, `search_fields=("number",
+      "comment")`, `autocomplete_fields=("key_result", "created_by")`
+
+## F. Seed (`apps/hrm/management/commands/seed_hrm.py`) — extend the existing per-tenant loop,
+      idempotent (skip-if-exists check per model, same pattern as every prior HRM extension)
+
+- [ ] guard: `if GoalPeriod.objects.filter(tenant=tenant).exists(): skip this block, print notice` (do
+      NOT wrap the whole command's idempotency in this — only this section)
+- [ ] seed 1-2 `GoalPeriod` rows per tenant: one `status="active"` covering roughly "now" (e.g. current
+      quarter), optionally one `status="closed"` prior period to exercise the timeline/history view
+- [ ] reuse existing `EmployeeProfile.objects.filter(tenant=tenant).select_related("party")` and
+      `core.OrgUnit.objects.filter(tenant=tenant, kind="department")` querysets (no new employee/org
+      rows created by this seeder) — pick 3-5 employees as objective owners, include at least one
+      manager/direct-report pair if resolvable via `.manager` so the "my direct reports' goals" filter
+      has data to show
+- [ ] seed a handful of `Objective` rows demonstrating **parent cascade**: 1 company-level objective
+      (`scope="company"`, no `department`, owned by a senior/first employee), 1-2 department-level
+      objectives with `parent_objective` pointing at the company one (`scope="department"`,
+      `department` set), 2-3 individual objectives with `parent_objective` pointing at a department one
+      (`scope="individual"`) — demonstrates the 3-level cascade tree end to end
+- [ ] seed 2-3 `KeyResult` rows per Objective with varied `metric_type` (at least one `numeric`, one
+      `percentage`, one `boolean` or `milestone`) and weights that sum sensibly per objective (e.g.
+      60/40 or equal-split 33/33/34) — exercises the weighted-rollup `progress_pct` property
+      immediately after seeding
+  - [ ] set `start_value`/`current_value`/`target_value` so seeded objectives show a MIX of health
+        states after seeding (some on_track, at least one at_risk/off_track) — proves the derived
+        `health_status` property renders correctly across all three states without needing manual
+        testing to discover a broken branch
+- [ ] seed 2-4 `GoalCheckIn` rows per KeyResult (staggered `checkin_date`s within the goal period) with
+      varied `confidence` values, at least one with `comment` text populated — exercises the check-in
+      history list + the "recent check-ins" panel on `objective_detail`; the LAST seeded check-in per
+      KR should leave `key_result.current_value` matching what the seeded `Objective`/`KeyResult` health
+      mix above expects (i.e., don't let the check-in `save()` override silently undo the intentional
+      health-state seeding — seed check-ins with `value_at_checkin` values that are consistent with,
+      not contradictory to, the KR's already-set `current_value`)
+- [ ] idempotent re-run check: run `seed_hrm` a 2nd time with no `--flush`, confirm no duplicate
+      `GoalPeriod`/`Objective`/`KeyResult`/`GoalCheckIn` rows are created (the per-model `.exists()`
+      guard added above handles this — verify at Verify step, not just by inspection)
+
+## G. Wire-up
+
+- [ ] `config/settings.py` — no change needed (`apps.hrm` already in `INSTALLED_APPS`)
+- [ ] `config/urls.py` — no change needed (`hrm/` include already wired from 3.1)
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.18"]` — new entry mapping all 5 NavERP.md bullets:
+  ```python
+  # 3.18 Goal Setting — Objective/KeyResult/GoalCheckIn/GoalPeriod (OKR mechanics only; review
+  # cycles/ratings/360/kudos/PIPs are later Performance Management sub-modules 3.19-3.21).
+  "3.18": {
+      "OKR/KPI Management": "hrm:objective_list",           # bullet (Objective + KeyResult CRUD)
+      "Goal Alignment": "hrm:objective_tree",                # bullet (cascade/alignment tree view)
+      "Weight Assignment": "hrm:objective_list",             # bullet (KR weight editable on objective_detail)
+      "Goal Timeline": "hrm:goalperiod_list",                # bullet (quarterly/annual cycle catalog)
+      "Goal Tracking": "hrm:goalcheckin_list",                # bullet (check-in history log)
+  },
+  ```
+  (confirm no other sub-module already claims these 5 exact bullet strings under a different key —
+  they're new for 3.18, per NavERP.md)
+
+## H. Templates (`templates/hrm/performance/<entity>/{list,detail,form}.html`) — `performance/` is the
+      sub-module folder (first Performance Management sub-module; per Template Folder Structure Rule 2)
+
+- [ ] `performance/goalperiod/list.html` — filter bar (`status`, `period_type` dropdowns reflecting
+      `request.GET`), Actions column (view/edit/delete + Activate/Close buttons conditional on
+      `obj.status`), empty-state, pagination
+- [ ] `performance/goalperiod/detail.html` — shows `objective_count`/`avg_progress_pct`, the period's
+      objectives table, Actions sidebar (Edit/Delete conditional on `status == "draft"`,
+      Activate/Close workflow buttons, Back to List)
+- [ ] `performance/goalperiod/form.html` — create/edit, shared template (`is_edit` flag)
+- [ ] `performance/objective/list.html` — filter bar (`status`, `scope`, `target_type`, `goal_period`,
+      `owner`, `department` dropdowns + `?mine=1` toggle), Actions column, empty-state, pagination —
+      **CRITICAL**: pass every dropdown's options from the view context (Filter Implementation Rule 1),
+      use `|stringformat:"d"` for the FK dropdowns' `selected` comparison (Rule 2)
+- [ ] `performance/objective/detail.html` — header (title/owner/period/status/progress_pct bar/
+      health_status badge), Key Results table (inline, with an "Add Key Result" button ->
+      `keyresult_create`), Child Objectives section (cascade children, links to their own detail
+      pages), Recent Check-ins panel (last 20, from `recent_checkins` context var), Actions sidebar
+      (Edit/Delete conditional on status, Back to List)
+- [ ] `performance/objective/form.html` — create/edit; `parent_objective`/`owner`/`goal_period`/
+      `department` as searchable `<select>`s
+- [ ] `performance/objective/tree.html` — recursive partial rendering `parent_objective__isnull=True`
+      Objectives with nested `child_objectives` (use a `{% include %}` recursive partial, bounded
+      depth per view-level guard) — the 3.18.2 Goal Tree / alignment visualization
+- [ ] `performance/keyresult/detail.html` — shows metric_type/start/current/target/unit,
+      `progress_pct` bar, `health_status` badge, weight, its own check-in list (scoped to this KR) +
+      "Add Check-in" button -> `goalcheckin_create`, Actions sidebar (Edit/Delete, Back to Objective —
+      NOT Back to List, since KRs are always viewed in Objective context)
+- [ ] `performance/keyresult/form.html` — create (nested under objective, via `objective_pk` in URL) +
+      edit, shared template
+- [ ] `performance/goalcheckin/list.html` — org-wide check-in history, filter bar (`confidence`,
+      `key_result` dropdowns), Actions column (view/delete only — no edit, immutable log)
+- [ ] `performance/goalcheckin/detail.html` — read-only, Actions sidebar (Delete only, Back to Key
+      Result)
+- [ ] `performance/goalcheckin/form.html` — create only (nested under key result via `keyresult_pk` in
+      URL); no edit template needed since there's no `goalcheckin_edit` view
+- [ ] an overview/landing link: add a "Goal Setting" card/section to the existing `hrm_overview.html`
+      (or equivalent HRM landing page) pointing at `objective_list` — mirrors how prior sub-modules
+      surface themselves on the module landing page
+
+## I. Verify
+
+- [ ] `python manage.py makemigrations hrm` — confirm exactly one new migration file numbered `0030`,
+      review generated index/constraint names against section A's spec
+- [ ] `python manage.py migrate` — applies cleanly with no errors
+- [ ] `python manage.py seed_hrm` — run once, confirm GoalPeriod/Objective/KeyResult/GoalCheckIn rows
+      created per tenant, confirm login instructions print (tenant admin accounts, superuser warning)
+- [ ] `python manage.py seed_hrm` — run a **2nd time**, confirm idempotent (no duplicate rows, "already
+      exists" notice printed for this section)
+- [ ] `python manage.py check` — no system check errors/warnings introduced
+- [ ] `temp/` smoke sweep — every new `hrm:goalperiod_*`/`hrm:objective_*`/`hrm:keyresult_*`/
+      `hrm:goalcheckin_*` URL returns 200 (GET) or 302 (POST redirect) when logged in as a tenant admin;
+      confirm no `{#`/`{% comment %}` template-leak artifacts render; confirm a cross-tenant objective/
+      KR/check-in ID (belonging to a DIFFERENT tenant) returns 404 via `crud_detail`'s
+      `tenant=request.tenant` guard (IDOR check)
+- [ ] confirm the sidebar shows 3.18's 5 bullets as **Live** (not "On the roadmap") after the
+      `LIVE_LINKS["3.18"]` wire-up, for a logged-in tenant admin
+- [ ] confirm `objective.progress_pct`/`health_status` and `key_result.progress_pct`/`health_status`
+      render without raising on: an Objective with zero KeyResults, a KeyResult with
+      `start_value == target_value`, a GoalPeriod with `end_date == start_date` blocked by `clean()`
+      (edge-case guard sweep — these are exactly the divide-by-zero/empty-queryset traps the derived
+      properties above must defend against)
+
+## J. Close-out
+
+- [ ] `code-reviewer` agent — apply findings, one file per commit
+- [ ] `explorer` agent — apply findings, one file per commit
+- [ ] `frontend-reviewer` agent — apply findings, one file per commit
+- [ ] `performance-reviewer` agent — apply findings (watch specifically for N+1 on `objective_list`'s
+      `owner__party__name`/`goal_period`/`department` and on `objective_tree`'s recursive
+      `child_objectives` traversal — use `select_related`/`prefetch_related` from the start, don't wait
+      for this review to catch it), one file per commit
+- [ ] `qa-smoke-tester` agent — apply findings, one file per commit
+- [ ] `security-reviewer` agent — apply findings (watch specifically for the cross-tenant IDOR check on
+      nested create views — `keyresult_create`/`goalcheckin_create` fetch their parent
+      Objective/KeyResult with an explicit `tenant=request.tenant` guard, not just `pk=`), one file per
+      commit
+- [ ] `test-writer` agent — apply output, one file per commit
+- [ ] create/update `.claude/skills/hrm/SKILL.md` — add the 4-model 3.18 table (GoalPeriod/Objective/
+      KeyResult/GoalCheckIn), the cascade/weight/check-in workflow, routes/templates/seeder/sidebar
+      (`LIVE_LINKS["3.18"]`) notes, update the module's model count and built-sub-module list
+- [ ] update the HRM README entry for 3.18 Goal Setting (mirror the 3.17 README entry's shape and
+      depth) + refresh HRM/project-wide test counts once `test-writer` lands
+
+## Later passes / deferred (carried over from research-hrm-goal-setting.md — do NOT build in 3.18)
+
+- **Always-on KPI catalog** (400+ built-in KPIs, health-metric tracking distinct from cycle-bound
+  OKRs) — Perdoo/Profit.co feature; overlaps Module 10 BI/Analytics scope, bigger than one sub-module.
+- **Horizontal (cross-team, non-hierarchical) M2M alignment** ("contributing objectives" beyond the
+  single `parent_objective` vertical cascade) — Quantive/Profit.co differentiator; add later if demand
+  emerges.
+- **Objective-to-cascade weighting** (weighting how much a child Objective's score contributes to its
+  parent's, on top of KR-level weighting) — Perdoo refinement; this pass ships KR-level weighting only.
+- **AI-drafted OKRs / AI check-in summaries** — Leapsome/WorkBoard/Profit.co; requires an external LLM
+  call, out of a single Django pass.
+- **Automated progress sync from external systems** (Jira, Azure DevOps, Salesforce, Excel, 170+
+  integrations) — Quantive/Viva Goals/Lattice/Leapsome; `GoalCheckIn` stays manual-entry-only, schema
+  doesn't block adding `is_automated`/`source_system` later.
+- **Drift/stagnation Slack or notification alerts** — Betterworks/Profit.co; needs the notification
+  integration layer.
+- **Viva Goals' "control/guardrail" (Quality-type) Key Result behavior** — a KR that alerts on
+  dropping below a floor rather than climbing to a ceiling; folded generically into `metric_type`
+  choices for now, the guardrail *behavior* is a later refinement.
+- **Step-weighted milestone sub-tracking** (discrete, individually-weighted milestone steps driving a
+  KR's progress %, beyond the `is_milestone_event` flag on `GoalCheckIn`) — Perdoo/Profit.co/WorkBoard
+  differentiator; this pass's milestone KRs fall back to a binary completed/not-completed signal.
+- **3.19 Performance Review** — Review Cycles, Self-Assessment, Manager Review, 360° Feedback,
+  Calibration/bell-curve. Explicitly out of scope even though 3.18's OKR data will later feed review
+  scoring.
+- **3.20 Continuous Feedback** — real-time kudos/appreciation, 1:1 meeting notes/action items,
+  feedback dashboard, anonymous feedback channels.
+- **3.21 Performance Improvement** — PIP management, warning letters, coaching notes.
+
+## Review notes
+(filled in at the end)
+
+---
 # HRM 3.14 Payroll Processing (payroll) — plan from research-payroll.md (2026-07-04)
 
 **Context.** Extends the existing `apps/hrm` app — NOT a new app. Builds the **operational** payroll
