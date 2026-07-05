@@ -250,6 +250,9 @@ class Command(BaseCommand):
                           # 3.17: reconciliations/payments FK batch/cycle/payslip (PROTECT) — wipe first.
                           BankReconciliation, PayoutPayment, PayoutBatch, PayslipDistribution,
                           PayslipLine, Payslip, PayrollCycle,
+                          # 3.18: Objective.owner FK EmployeeProfile (PROTECT) + goal_period (PROTECT) —
+                          # wipe goals (check-ins→KRs→objectives→periods) BEFORE the employee rows below.
+                          GoalCheckIn, KeyResult, Objective, GoalPeriod,
                           FloatingHolidayElection, HolidayPolicy,
                           FinalSettlement, ExitInterview, ClearanceItem, SeparationCase,
                           OnboardingTask, OnboardingDocument, OrientationSession, AssetAllocation,
