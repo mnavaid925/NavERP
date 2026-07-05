@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Payout Exceptions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Payout Exceptions</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payoutbatch_list' %}">Payout Batches</a><span class="sep">›</span><span>Exceptions</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="text-muted" style="margin-bottom:.75rem;">Failed / returned payments that have not yet been retried, across all batches — the follow-up queue.</p>
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="batch" class="form-select">
+            <option value="">All batches</option>
+            {% for b in batches %}
+              <option value="{{ b.pk }}" {% if request.GET.batch == b.pk|stringformat:"d" %}selected{% endif %}>{{ b.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:payout_exceptions' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Batch</th><th>Employee</th><th>Amount</th><th>Status</th><th>Reason</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for p in payments %}
+            <tr>
+              <td><a href="{% url 'hrm:payoutbatch_detail' p.batch.pk %}">{{ p.batch.number }}</a></td>
+              <td>{{ p.employee.party.name }}</td>
+              <td>{{ p.net_amount }}</td>
+              <td><span class="badge badge-red">{{ p.get_status_display }}</span></td>
+              <td>{{ p.failure_reason|default:"—" }}</td>
+              <td>
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                  <form method="post" action="{% url 'hrm:payoutpayment_retry' p.pk %}" onsubmit="return confirm('Create a retry payment?');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline" type="submit" style="padding:.2rem .5rem;"><i data-lucide="rotate-cw"></i> Retry</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-circle"></i><h3>No exceptions</h3><p>No failed or returned payments awaiting follow-up.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
