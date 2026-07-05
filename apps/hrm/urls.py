@@ -570,4 +570,38 @@ urlpatterns = [
     path("tax-computations/<int:pk>/generate/", views.taxcomputation_generate, name="taxcomputation_generate"),
     path("tax-computations/<int:pk>/link-form16/", views.taxcomputation_link_form16, name="taxcomputation_link_form16"),
     path("tax-computations/<int:pk>/form16-partb/", views.form16_partb, name="form16_partb"),
+
+    # ===================== 3.17 Payout & Reports =====================
+    # Payout batches (+ generate/approve/disburse from a locked cycle) + payment register
+    path("payout-batches/", views.payoutbatch_list, name="payoutbatch_list"),
+    path("payout-batches/add/", views.payoutbatch_create, name="payoutbatch_create"),
+    path("payout-batches/<int:pk>/", views.payoutbatch_detail, name="payoutbatch_detail"),
+    path("payout-batches/<int:pk>/edit/", views.payoutbatch_edit, name="payoutbatch_edit"),
+    path("payout-batches/<int:pk>/delete/", views.payoutbatch_delete, name="payoutbatch_delete"),
+    path("payout-batches/<int:pk>/generate/", views.payoutbatch_generate, name="payoutbatch_generate"),
+    path("payout-batches/<int:pk>/approve/", views.payoutbatch_approve, name="payoutbatch_approve"),
+    path("payout-batches/<int:pk>/disburse/", views.payoutbatch_disburse, name="payoutbatch_disburse"),
+    path("payout-batches/<int:pk>/register/", views.payment_register, name="payment_register"),
+
+    # Per-payment actions (mark paid/failed/retry)
+    path("payout-payments/<int:pk>/mark-paid/", views.payoutpayment_mark_paid, name="payoutpayment_mark_paid"),
+    path("payout-payments/<int:pk>/mark-failed/", views.payoutpayment_mark_failed, name="payoutpayment_mark_failed"),
+    path("payout-payments/<int:pk>/retry/", views.payoutpayment_retry, name="payoutpayment_retry"),
+    path("payout-exceptions/", views.payout_exceptions, name="payout_exceptions"),
+
+    # Payslip distribution (send / view / download tracking)
+    path("payslip-distributions/", views.payslipdistribution_list, name="payslipdistribution_list"),
+    path("payslip-distributions/<int:pk>/", views.payslipdistribution_detail, name="payslipdistribution_detail"),
+    path("payslip-distributions/<int:pk>/send/", views.payslipdistribution_send, name="payslipdistribution_send"),
+    path("payslip-distributions/<int:pk>/mark-viewed/", views.payslipdistribution_mark_viewed, name="payslipdistribution_mark_viewed"),
+    path("payslip-distributions/<int:pk>/mark-downloaded/", views.payslipdistribution_mark_downloaded, name="payslipdistribution_mark_downloaded"),
+    path("payslip-distributions/send-cycle/", views.payslipdistribution_send_cycle, name="payslipdistribution_send_cycle"),
+
+    # Bank reconciliation (match batch payments to the statement by UTR)
+    path("bank-reconciliations/", views.bankreconciliation_list, name="bankreconciliation_list"),
+    path("bank-reconciliations/add/", views.bankreconciliation_create, name="bankreconciliation_create"),
+    path("bank-reconciliations/<int:pk>/", views.bankreconciliation_detail, name="bankreconciliation_detail"),
+    path("bank-reconciliations/<int:pk>/edit/", views.bankreconciliation_edit, name="bankreconciliation_edit"),
+    path("bank-reconciliations/<int:pk>/delete/", views.bankreconciliation_delete, name="bankreconciliation_delete"),
+    path("bank-reconciliations/<int:pk>/reconcile/", views.bankreconciliation_reconcile, name="bankreconciliation_reconcile"),
 ]
