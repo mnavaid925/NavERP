@@ -8036,6 +8036,10 @@ def calibration_board(request):
             .select_related("subject__party", "reviewer__party")
             .prefetch_related("ratings"))
         # Sort by effective rating (calibrated-or-overall) desc; None ratings sort last.
+        # BUG FIX: `ZERO` was referenced without a local definition or import — every review with
+        # no ratings yet (effective_rating is None, the common state for a brand-new manager
+        # review) raised NameError and 500'd this entire view.
+        ZERO = Decimal("0")
         reviews.sort(key=lambda r: (r.effective_rating is None,
                                     -(r.effective_rating or ZERO)))
     return render(request, "hrm/performance/calibration_board.html", {
