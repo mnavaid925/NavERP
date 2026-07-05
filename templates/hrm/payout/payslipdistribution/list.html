@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Payslip Distribution{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Payslip Distribution</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Payslip Distribution</span></div>
+    </div>
+  </div>
+
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    <div class="card"><div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Send a cycle's payslips</h3>
+      <p class="text-muted" style="margin-bottom:.5rem;">Marks every payslip of the chosen cycle as sent (PDF render + email are deferred — this records the delivery signal).</p>
+      <form method="post" action="{% url 'hrm:payslipdistribution_send_cycle' %}" class="filter-bar">
+        {% csrf_token %}
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <select name="cycle" class="form-select" aria-label="Cycle to distribute" required>
+            <option value="">Select a cycle…</option>
+            {% for cy in cycles %}
+              <option value="{{ cy.pk }}">{{ cy.number }} · {{ cy.period_start }}–{{ cy.period_end }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send Payslips</button>
+      </form>
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search payslip or employee…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="delivery_channel" class="form-select">
+            <option value="">All channels</option>
+            {% for val, label in delivery_channel_choices %}
+              <option value="{{ val }}" {% if request.GET.delivery_channel == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="cycle" class="form-select">
+            <option value="">All cycles</option>
+            {% for cy in cycles %}
+              <option value="{{ cy.pk }}" {% if request.GET.cycle == cy.pk|stringformat:"d" %}selected{% endif %}>{{ cy.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:payslipdistribution_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Payslip</th><th>Employee</th><th>Channel</th><th>Status</th><th>Sent</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>{{ obj.payslip.number }}</td>
+              <td>{{ obj.payslip.employee.party.name }}</td>
+              <td>{{ obj.get_delivery_channel_display }}</td>
+              <td>
+                {% if obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'viewed' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'downloaded' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.sent_at %}{{ obj.sent_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'hrm:payslipdistribution_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="mail"></i><h3>No distributions yet</h3><p>Send a cycle's payslips above to start tracking delivery.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
