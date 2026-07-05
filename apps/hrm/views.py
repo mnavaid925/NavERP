@@ -124,6 +124,10 @@ from .forms import (  # 3.16 Tax & Investment
     TaxRegimeConfigForm,
     TaxSlabBandForm,
 )
+from .forms import (  # 3.17 Payout & Reports
+    BankReconciliationForm,
+    PayoutBatchForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -240,6 +244,12 @@ from .models import (  # 3.16 Tax & Investment
     TaxComputation,
     TaxRegimeConfig,
     TaxSlabBand,
+)
+from .models import (  # 3.17 Payout & Reports
+    BankReconciliation,
+    PayoutBatch,
+    PayoutPayment,
+    PayslipDistribution,
 )
 
 
@@ -6872,3 +6882,406 @@ def form16_partb(request, pk):
         "breakdown": _computation_breakdown(obj),
         "lines": obj.declaration.lines.all(),
     })
+
+
+# ========================= 3.17 Payout & Reports =========================
+# PayoutBatch (generate/approve/disburse from a locked cycle) + inline PayoutPayment
+# mark-paid/failed/retry · PayslipDistribution send/view/download · BankReconciliation
+# reconcile · payment_register + payout_exceptions reports.
+
+def _recompute_batch_status(batch):
+    """Re-derive a disbursed batch's status from its CURRENT payments: any failed/returned →
+    partially_disbursed, else disbursed. Only applies post-disburse (a draft/approved batch keeps its
+    status; a reconciled batch stays reconciled). The one place the derivation lives."""
+    if batch.status not in ("disbursed", "partially_disbursed"):
+        return
+    has_failed = batch._current_payments().filter(status__in=["failed", "returned"]).exists()
+    new_status = "partially_disbursed" if has_failed else "disbursed"
+    if batch.status != new_status:
+        batch.status = new_status
+        batch.save(update_fields=["status", "updated_at"])
+
+
+# ------------------------------------------------------------ PayoutBatch (+ workflow)
+@login_required
+def payoutbatch_list(request):
+    return crud_list(
+        request,
+        PayoutBatch.objects.filter(tenant=request.tenant).select_related("cycle"),
+        "hrm/payout/payoutbatch/list.html",
+        search_fields=["number", "cycle__number"],
+        filters=[("status", "status", False), ("bank_file_format", "bank_file_format", False),
+                 ("cycle", "cycle_id", True)],
+        extra_context={
+            "status_choices": PayoutBatch.STATUS_CHOICES,
+            "bank_file_format_choices": PayoutBatch.BANK_FILE_FORMAT_CHOICES,
+            "cycles": PayrollCycle.objects.filter(tenant=request.tenant, status="locked"),
+        },
+    )
+
+
+@login_required
+def payoutbatch_create(request):
+    return crud_create(request, form_class=PayoutBatchForm,
+                       template="hrm/payout/payoutbatch/form.html", success_url="hrm:payoutbatch_list")
+
+
+@login_required
+def payoutbatch_detail(request, pk):
+    obj = get_object_or_404(PayoutBatch.objects.select_related("cycle"), pk=pk, tenant=request.tenant)
+    payments = (obj.payments.select_related("employee__party", "retry_of")
+                .order_by("employee__party__name"))
+    return render(request, "hrm/payout/payoutbatch/detail.html", {
+        "obj": obj,
+        "payments": payments,
+        "reconciliations": obj.reconciliations.order_by("-statement_date"),
+    })
+
+
+@login_required
+def payoutbatch_edit(request, pk):
+    obj = get_object_or_404(PayoutBatch, pk=pk, tenant=request.tenant)
+    if not obj.is_editable:
+        messages.error(request, "Only a draft payout batch can be edited.")
+        return redirect("hrm:payoutbatch_detail", pk=obj.pk)
+    return crud_edit(request, model=PayoutBatch, pk=pk, form_class=PayoutBatchForm,
+                     template="hrm/payout/payoutbatch/form.html", success_url="hrm:payoutbatch_list")
+
+
+@login_required
+@require_POST
+def payoutbatch_delete(request, pk):
+    obj = get_object_or_404(PayoutBatch, pk=pk, tenant=request.tenant)
+    if not obj.is_editable:
+        messages.error(request, "Only a draft payout batch can be deleted.")
+        return redirect("hrm:payoutbatch_detail", pk=obj.pk)
+    if obj.reconciliations.exists():
+        messages.error(request, "This batch has a reconciliation and cannot be deleted.")
+        return redirect("hrm:payoutbatch_detail", pk=obj.pk)
+    return crud_delete(request, model=PayoutBatch, pk=pk, success_url="hrm:payoutbatch_list")
+
+
+@tenant_admin_required
+@require_POST
+def payoutbatch_generate(request, pk):
+    """(Re)generate one PayoutPayment per payslip of the batch's LOCKED cycle — draft-only. On-hold
+    payslips are included as zero-action ``on_hold`` rows for audit completeness. Snapshots net_pay +
+    the employee's MASKED bank details (never the raw account)."""
+    batch = get_object_or_404(PayoutBatch.objects.select_related("cycle"), pk=pk, tenant=request.tenant)
+    if not batch.cycle.is_locked:
+        messages.error(request, "The payroll cycle must be locked before generating a payout batch.")
+        return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+    if batch.status != "draft":
+        messages.error(request, "Payments can only be (re)generated while the batch is a draft.")
+        return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+    with transaction.atomic():
+        batch.payments.all().delete()  # draft-only → no paid/failed rows to preserve
+        count = 0
+        for ps in batch.cycle.payslips.select_related("employee__party"):
+            emp = ps.employee
+            PayoutPayment.objects.create(
+                tenant=request.tenant, batch=batch, payslip=ps, employee=emp,
+                net_amount=ps.net_pay,
+                bank_name_snapshot=emp.bank_name,
+                bank_account_last4_snapshot=emp.masked_bank_account(),
+                bank_routing_snapshot=emp.masked_bank_routing(),
+                status="on_hold" if ps.on_hold else "pending")
+            count += 1
+        batch.generated_by = request.user
+        batch.generated_at = timezone.now()
+        batch.save(update_fields=["generated_by", "generated_at", "updated_at"])
+    write_audit_log(request.user, batch, "update", {"action": "generate", "headcount": count})
+    messages.success(request, f"Generated {count} payment(s) for {batch.number}.")
+    return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+
+
+@tenant_admin_required
+@require_POST
+def payoutbatch_approve(request, pk):
+    batch = get_object_or_404(PayoutBatch, pk=pk, tenant=request.tenant)
+    if batch.status == "draft":
+        if not batch.payments.exists():
+            messages.error(request, "Generate payments before approving the batch.")
+            return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+        batch.status = "approved"
+        batch.approved_by = request.user
+        batch.approved_at = timezone.now()
+        batch.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+        write_audit_log(request.user, batch, "update", {"action": "approve"})
+        messages.success(request, f"Batch {batch.number} approved.")
+    return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+
+
+@tenant_admin_required
+@require_POST
+def payoutbatch_disburse(request, pk):
+    """Mark an approved batch as sent to the bank: pending payments → processing (initiated_at stamped).
+    The actual bank-file export is deferred. Mark each payment paid/failed as the bank confirms."""
+    batch = get_object_or_404(PayoutBatch, pk=pk, tenant=request.tenant)
+    if batch.status != "approved":
+        messages.error(request, "Only an approved batch can be disbursed.")
+        return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+    now = timezone.now()
+    with transaction.atomic():
+        batch.payments.filter(status="pending").update(status="processing", initiated_at=now)
+        batch.status = "disbursed"
+        batch.disbursed_at = now
+        batch.save(update_fields=["status", "disbursed_at", "updated_at"])
+        _recompute_batch_status(batch)
+    write_audit_log(request.user, batch, "update", {"action": "disburse"})
+    messages.success(request, f"Batch {batch.number} disbursed — mark each payment paid/failed as the bank confirms.")
+    return redirect("hrm:payoutbatch_detail", pk=batch.pk)
+
+
+# ---------------------------------------------------------- PayoutPayment actions
+@tenant_admin_required
+@require_POST
+def payoutpayment_mark_paid(request, pk):
+    payment = get_object_or_404(PayoutPayment.objects.select_related("batch"), pk=pk, tenant=request.tenant)
+    if payment.status not in ("pending", "processing"):
+        messages.error(request, "Only a pending/processing payment can be marked paid.")
+        return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
+    payment.status = "paid"
+    payment.paid_on = timezone.now()
+    payment.transaction_reference = request.POST.get("transaction_reference", "").strip()[:64]
+    payment.save(update_fields=["status", "paid_on", "transaction_reference", "updated_at"])
+    _recompute_batch_status(payment.batch)
+    write_audit_log(request.user, payment, "update", {"action": "mark_paid"})
+    messages.success(request, "Payment marked paid.")
+    return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
+
+
+@tenant_admin_required
+@require_POST
+def payoutpayment_mark_failed(request, pk):
+    payment = get_object_or_404(PayoutPayment.objects.select_related("batch"), pk=pk, tenant=request.tenant)
+    if payment.status not in ("pending", "processing"):
+        messages.error(request, "Only a pending/processing payment can be marked failed.")
+        return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
+    payment.status = "failed"
+    payment.failure_reason = request.POST.get("failure_reason", "").strip()[:2000]
+    payment.save(update_fields=["status", "failure_reason", "updated_at"])
+    _recompute_batch_status(payment.batch)
+    write_audit_log(request.user, payment, "update", {"action": "mark_failed"})
+    messages.success(request, "Payment marked failed.")
+    return redirect("hrm:payoutbatch_detail", pk=payment.batch_id)
+
+
+@tenant_admin_required
+@require_POST
+def payoutpayment_retry(request, pk):
+    """Re-initiate a failed/returned payment as a NEW row (retry_of → the original, preserving history),
+    re-snapshotting the employee's CURRENT bank details (in case they were corrected)."""
+    original = get_object_or_404(
+        PayoutPayment.objects.select_related("batch", "employee"), pk=pk, tenant=request.tenant)
+    if original.status not in ("failed", "returned"):
+        messages.error(request, "Only a failed/returned payment can be retried.")
+        return redirect("hrm:payoutbatch_detail", pk=original.batch_id)
+    emp = original.employee
+    PayoutPayment.objects.create(
+        tenant=request.tenant, batch=original.batch, payslip=original.payslip, employee=emp,
+        net_amount=original.net_amount,
+        bank_name_snapshot=emp.bank_name,
+        bank_account_last4_snapshot=emp.masked_bank_account(),
+        bank_routing_snapshot=emp.masked_bank_routing(),
+        payment_method=original.payment_method, status="pending", retry_of=original)
+    _recompute_batch_status(original.batch)
+    write_audit_log(request.user, original, "update", {"action": "retry"})
+    messages.success(request, "Retry payment created (pending). Mark it paid once the bank confirms.")
+    return redirect("hrm:payoutbatch_detail", pk=original.batch_id)
+
+
+# ---------------------------------------------------------- PayslipDistribution
+@login_required
+def payslipdistribution_list(request):
+    return crud_list(
+        request,
+        PayslipDistribution.objects.filter(tenant=request.tenant)
+        .select_related("payslip__employee__party", "payslip__cycle"),
+        "hrm/payout/payslipdistribution/list.html",
+        search_fields=["payslip__number", "payslip__employee__party__name"],
+        filters=[("status", "status", False), ("delivery_channel", "delivery_channel", False),
+                 ("cycle", "payslip__cycle_id", True)],
+        extra_context={
+            "status_choices": PayslipDistribution.STATUS_CHOICES,
+            "delivery_channel_choices": PayslipDistribution.DELIVERY_CHANNEL_CHOICES,
+            "cycles": PayrollCycle.objects.filter(tenant=request.tenant),
+        },
+    )
+
+
+@login_required
+def payslipdistribution_detail(request, pk):
+    obj = get_object_or_404(
+        PayslipDistribution.objects.select_related("payslip__employee__party", "payslip__cycle", "sent_by"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/payout/payslipdistribution/detail.html", {"obj": obj})
+
+
+def _mark_sent(dist, user):
+    emp = dist.payslip.employee
+    dist.sent_to_email = emp.work_email or emp.personal_email or ""
+    dist.status = "sent"
+    dist.sent_at = timezone.now()
+    dist.sent_by = user
+    dist.save(update_fields=["sent_to_email", "status", "sent_at", "sent_by", "updated_at"])
+
+
+@tenant_admin_required
+@require_POST
+def payslipdistribution_send(request, pk):
+    """Mark one payslip's distribution as sent (actual PDF+SMTP deferred). Soft-warns if the payslip's
+    payout isn't paid yet (Deel's payment-before-payslip ordering — a warning, not a hard block)."""
+    dist = get_object_or_404(
+        PayslipDistribution.objects.select_related("payslip__employee"), pk=pk, tenant=request.tenant)
+    _mark_sent(dist, request.user)
+    if not PayoutPayment.objects.filter(
+            tenant=request.tenant, payslip=dist.payslip, status="paid").exists():
+        messages.warning(request, "Payslip sent, but this employee's payout is not yet marked paid.")
+    else:
+        messages.success(request, "Payslip marked sent.")
+    write_audit_log(request.user, dist, "update", {"action": "send"})
+    return redirect("hrm:payslipdistribution_detail", pk=dist.pk)
+
+
+@tenant_admin_required
+@require_POST
+def payslipdistribution_send_cycle(request):
+    """Bulk: ensure a distribution row exists for every payslip of the POSTed cycle and mark them sent."""
+    cycle_id = request.POST.get("cycle", "").strip()
+    if not cycle_id.isdigit():
+        messages.error(request, "Select a cycle to distribute.")
+        return redirect("hrm:payslipdistribution_list")
+    cycle = get_object_or_404(PayrollCycle, pk=int(cycle_id), tenant=request.tenant)
+    count = 0
+    for ps in cycle.payslips.select_related("employee").all():
+        _mark_sent(PayslipDistribution.for_payslip(ps), request.user)
+        count += 1
+    write_audit_log(request.user, cycle, "update", {"action": "distribute_payslips", "count": count})
+    messages.success(request, f"Marked {count} payslip(s) sent for {cycle.number}.")
+    return redirect("hrm:payslipdistribution_list")
+
+
+@login_required
+@require_POST
+def payslipdistribution_mark_viewed(request, pk):
+    # v1 has no user<->employee link, so any authenticated tenant user's view records the signal;
+    # a real ESS portal would scope this to the payslip's own employee. Forward-only.
+    dist = get_object_or_404(PayslipDistribution, pk=pk, tenant=request.tenant)
+    if dist.status in ("pending", "sent"):
+        dist.status = "viewed"
+    dist.viewed_at = timezone.now()
+    dist.save(update_fields=["status", "viewed_at", "updated_at"])
+    return redirect("hrm:payslipdistribution_detail", pk=dist.pk)
+
+
+@login_required
+@require_POST
+def payslipdistribution_mark_downloaded(request, pk):
+    dist = get_object_or_404(PayslipDistribution, pk=pk, tenant=request.tenant)
+    dist.status = "downloaded"  # terminal signal — always advances
+    dist.downloaded_at = timezone.now()
+    dist.save(update_fields=["status", "downloaded_at", "updated_at"])
+    return redirect("hrm:payslipdistribution_detail", pk=dist.pk)
+
+
+# ---------------------------------------------------------- BankReconciliation
+@login_required
+def bankreconciliation_list(request):
+    return crud_list(
+        request,
+        BankReconciliation.objects.filter(tenant=request.tenant).select_related("batch__cycle"),
+        "hrm/payout/bankreconciliation/list.html",
+        search_fields=["number", "batch__number", "statement_reference"],
+        filters=[("status", "status", False), ("batch", "batch_id", True)],
+        extra_context={
+            "status_choices": BankReconciliation.STATUS_CHOICES,
+            "batches": PayoutBatch.objects.filter(tenant=request.tenant),
+        },
+    )
+
+
+@login_required
+def bankreconciliation_create(request):
+    return crud_create(request, form_class=BankReconciliationForm,
+                       template="hrm/payout/bankreconciliation/form.html",
+                       success_url="hrm:bankreconciliation_list")
+
+
+@login_required
+def bankreconciliation_detail(request, pk):
+    obj = get_object_or_404(
+        BankReconciliation.objects.select_related("batch__cycle", "reconciled_by"),
+        pk=pk, tenant=request.tenant)
+    exceptions = (obj.batch._current_payments().filter(status__in=["failed", "returned"])
+                  .select_related("employee__party"))
+    return render(request, "hrm/payout/bankreconciliation/detail.html",
+                  {"obj": obj, "exceptions": exceptions})
+
+
+@login_required
+def bankreconciliation_edit(request, pk):
+    obj = get_object_or_404(BankReconciliation, pk=pk, tenant=request.tenant)
+    if obj.status not in ("pending", "in_progress"):
+        messages.error(request, "A reconciled/closed reconciliation can no longer be edited.")
+        return redirect("hrm:bankreconciliation_detail", pk=obj.pk)
+    return crud_edit(request, model=BankReconciliation, pk=pk, form_class=BankReconciliationForm,
+                     template="hrm/payout/bankreconciliation/form.html",
+                     success_url="hrm:bankreconciliation_list")
+
+
+@login_required
+@require_POST
+def bankreconciliation_delete(request, pk):
+    obj = get_object_or_404(BankReconciliation, pk=pk, tenant=request.tenant)
+    if obj.status not in ("pending", "in_progress"):
+        messages.error(request, "A reconciled/closed reconciliation can no longer be deleted.")
+        return redirect("hrm:bankreconciliation_detail", pk=obj.pk)
+    return crud_delete(request, model=BankReconciliation, pk=pk, success_url="hrm:bankreconciliation_list")
+
+
+@tenant_admin_required
+@require_POST
+def bankreconciliation_reconcile(request, pk):
+    recon = get_object_or_404(
+        BankReconciliation.objects.select_related("batch"), pk=pk, tenant=request.tenant)
+    recon.recompute()  # sets matched/unmatched + status + reconciled_at
+    recon.reconciled_by = request.user
+    recon.save(update_fields=["reconciled_by", "updated_at"])
+    # On a full match, flip the batch itself to reconciled (batch-level only, no payment changes).
+    if recon.status == "reconciled" and recon.batch.status in ("disbursed", "partially_disbursed"):
+        recon.batch.status = "reconciled"
+        recon.batch.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, recon, "update", {"action": "reconcile", "status": recon.status})
+    messages.success(request,
+        f"Reconciliation {recon.number}: {recon.matched_count} matched, {recon.unmatched_count} "
+        f"unmatched ({recon.get_status_display()}).")
+    return redirect("hrm:bankreconciliation_detail", pk=recon.pk)
+
+
+# ---------------------------------------------------------- Reports (no new model)
+@login_required
+def payment_register(request, pk):
+    """Bank-advice / payment-register report over one batch's current payments — by status, by method,
+    plus the per-employee advice rows (masked accounts, amount, UTR)."""
+    batch = get_object_or_404(PayoutBatch.objects.select_related("cycle"), pk=pk, tenant=request.tenant)
+    cur = batch._current_payments()
+    payments = cur.select_related("employee__party").order_by("employee__party__name")
+    by_status = list(cur.values("status").annotate(c=Count("id"), a=Sum("net_amount")).order_by("status"))
+    by_method = list(cur.values("payment_method").annotate(c=Count("id"), a=Sum("net_amount"))
+                     .order_by("payment_method"))
+    return render(request, "hrm/payout/payment_register.html", {
+        "batch": batch, "payments": payments, "by_status": by_status, "by_method": by_method})
+
+
+@login_required
+def payout_exceptions(request):
+    """Failed/returned payments not yet retried, across all batches — the exception/follow-up report."""
+    qs = (PayoutPayment.objects.filter(
+            tenant=request.tenant, status__in=["failed", "returned"], retries__isnull=True)
+          .select_related("batch__cycle", "employee__party").order_by("-batch__created_at"))
+    batch_id = request.GET.get("batch", "").strip()
+    if batch_id.isdigit():
+        qs = qs.filter(batch_id=int(batch_id))
+    return render(request, "hrm/payout/exceptions.html", {
+        "payments": qs, "batches": PayoutBatch.objects.filter(tenant=request.tenant)})
