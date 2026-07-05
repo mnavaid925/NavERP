@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:reviewcycle_list' %}">Review Cycles</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:reviewcycle_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:reviewcycle_delete' obj.pk %}" onsubmit="return confirm('Delete this review cycle?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_cycle_type_display }}</dd></div>
+      <div class="detail-item"><dt>Phase</dt><dd>
+        {% if obj.status == 'released' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'closed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'self_assessment' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Self-Assessment</dt><dd>{{ obj.self_review_start|default:"—" }} → {{ obj.self_review_end|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Manager Review</dt><dd>{{ obj.manager_review_start|default:"—" }} → {{ obj.manager_review_end|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Calibration</dt><dd>{{ obj.calibration_date|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Results Release</dt><dd>{{ obj.results_release_date|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Goal Period</dt><dd>{% if obj.goal_period_id %}<a href="{% url 'hrm:goalperiod_detail' obj.goal_period.pk %}">{{ obj.goal_period.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Reviews</dt><dd>{{ obj.review_count }}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:.5rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Phase Progress</h2></div>
+    <div class="card-body">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon"><i data-lucide="file-edit"></i></div><div class="stat-value">{{ phase_counts.draft }}</div><div class="stat-label">Draft</div></div>
+        <div class="stat-card"><div class="stat-icon blue"><i data-lucide="send"></i></div><div class="stat-value">{{ phase_counts.submitted }}</div><div class="stat-label">Submitted</div></div>
+        <div class="stat-card"><div class="stat-icon orange"><i data-lucide="share-2"></i></div><div class="stat-value">{{ phase_counts.shared }}</div><div class="stat-label">Shared</div></div>
+        <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ phase_counts.acknowledged }}</div><div class="stat-label">Acknowledged</div></div>
+      </div>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if next_phase_label %}
+          <form method="post" action="{% url 'hrm:reviewcycle_advance_phase' obj.pk %}" style="display:inline; margin-top:.6rem;" onsubmit="return confirm('Advance this cycle to {{ next_phase_label }}?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="chevrons-right"></i> Advance to {{ next_phase_label }}</button>
+          </form>
+        {% else %}
+          <span class="text-muted" style="margin-top:.6rem; display:inline-block;"><i data-lucide="lock"></i> Cycle closed — no further phases.</span>
+        {% endif %}
+      {% else %}
+        <span class="text-muted" style="margin-top:.6rem; display:inline-block;"><i data-lucide="shield"></i> A tenant admin advances the cycle phase.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Reviews</h2>
+      <a href="{% url 'hrm:performancereview_create' %}?cycle={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> New Review</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Subject</th><th>Reviewer</th><th>Type</th><th>Status</th><th>Overall</th></tr></thead>
+        <tbody>
+          {% for r in reviews %}
+            <tr>
+              <td><a href="{% url 'hrm:performancereview_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.subject.party.name }}</td>
+              <td>{% if r.is_anonymous and r.review_type == 'peer' or r.is_anonymous and r.review_type == 'upward' %}<span class="text-muted">Anonymous</span>{% else %}{{ r.reviewer.party.name }}{% endif %}</td>
+              <td><span class="badge badge-muted">{{ r.get_review_type_display }}</span></td>
+              <td>
+                {% if r.status == 'acknowledged' %}<span class="badge badge-green">{{ r.get_status_display }}</span>
+                {% elif r.status == 'shared' %}<span class="badge badge-amber">{{ r.get_status_display }}</span>
+                {% elif r.status == 'submitted' %}<span class="badge badge-info">{{ r.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ r.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{% if r.effective_rating is not None %}{{ r.effective_rating }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="clipboard-list"></i><p>No reviews in this cycle yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:reviewcycle_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
