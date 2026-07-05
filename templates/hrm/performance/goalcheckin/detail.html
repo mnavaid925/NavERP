@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:goalcheckin_list' %}">Check-ins</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'hrm:goalcheckin_delete' obj.pk %}" onsubmit="return confirm('Delete this check-in?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Key Result</dt><dd><a href="{% url 'hrm:keyresult_detail' obj.key_result.pk %}">{{ obj.key_result.title }}</a></dd></div>
+      <div class="detail-item"><dt>Objective</dt><dd><a href="{% url 'hrm:objective_detail' obj.key_result.objective.pk %}">{{ obj.key_result.objective.title }}</a></dd></div>
+      <div class="detail-item"><dt>Date</dt><dd>{{ obj.checkin_date }}</dd></div>
+      <div class="detail-item"><dt>Reported Value</dt><dd>{{ obj.value_at_checkin|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Confidence</dt><dd>
+        {% if obj.confidence == 'on_track' %}<span class="badge badge-green">{{ obj.get_confidence_display }}</span>
+        {% elif obj.confidence == 'at_risk' %}<span class="badge badge-amber">{{ obj.get_confidence_display }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.get_confidence_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Milestone Event</dt><dd>{% if obj.is_milestone_event %}<span class="badge badge-info">Yes</span>{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Logged By</dt><dd>{{ obj.created_by.party.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Logged At</dt><dd>{{ obj.created_at }}</dd></div>
+    </dl>
+    {% if obj.comment %}<p style="margin-top:.5rem;">{{ obj.comment|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'hrm:keyresult_detail' obj.key_result.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to key result</a>
+{% endblock %}
