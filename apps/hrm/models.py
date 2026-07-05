@@ -5424,6 +5424,12 @@ class PerformanceReview(TenantNumbered):
         """Convenience passthrough to the cycle's aligned OKR period (for the goal-review section)."""
         return self.cycle.goal_period if self.cycle_id else None
 
+    @property
+    def reviewer_anonymized(self):
+        """True when the reviewer name should be hidden in summary/list views (anonymous peer/upward
+        feedback). The detail view additionally un-hides it for the reviewer/admin via ``show_reviewer``."""
+        return self.is_anonymous and self.review_type in ("peer", "upward")
+
     def __str__(self):
         return f"{self.number} · {self.subject.party.name} ({self.get_review_type_display()})"
 
