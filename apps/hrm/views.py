@@ -7482,7 +7482,9 @@ def objective_tree(request):
     return render(request, "hrm/performance/objective/tree.html", {
         "objectives": top,
         "goal_periods": GoalPeriod.objects.filter(tenant=request.tenant).order_by("-start_date"),
-        "tree_max_depth": 4,
+        # Matches the 3 prefetched levels above (company→department→individual) — a 4th level would
+        # fall outside the prefetch and re-query per node.
+        "tree_max_depth": 3,
     })
 
 
