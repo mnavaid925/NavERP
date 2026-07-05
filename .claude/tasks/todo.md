@@ -1,6 +1,31 @@
 ---
 # Module 3 — HRM — Sub-module 3.19 Performance Review (performance-review) — plan from research-hrm-performance-review.md (2026-07-05)
 
+## ✅ BUILD REVIEW (3.19 shipped — all 11 Module-Creation-Sequence steps done, 2026-07-05)
+
+**Delivered:** 4 models exactly as planned — `ReviewCycle` (6-phase machine + GoalPeriod link), `ReviewTemplate`
+(`RVT-`, per review_type), `PerformanceReview` (`RVW-`, self/manager/peer/upward, derived weighted `overall_rating`
+[None until rated] + stored `manager`/`calibrated`/`potential` ratings + `effective_rating` calibrated-override +
+manager-only `private_notes`), `ReviewRating` (`RVR-`, weighted competency lines). Full CRUD, submit→share→acknowledge
+workflow, cycle phase-advance, calibration board, goal-review section referencing built-3.18 Objectives. 13 templates
+under `templates/hrm/performance/`, `LIVE_LINKS["3.19"]` (5 bullets), `_seed_reviews` (1 cycle / 3 templates / 4
+reviews / 12 ratings; idempotent). Migration `0033`. Reuses `EmployeeProfile` + 3.18 `GoalPeriod`; **no new spine,
+posts no GL**.
+
+**Key design point (from security review):** performance-review data is **CONFIDENTIAL** — unlike 3.18 OKRs (company-
+open), reviews are visible only to the subject/reviewer/tenant-admin (`_can_view_review` + `_visible_reviews_q` across
+list/detail/roster/rating), `private_notes` is hidden from the subject, and content is edit-locked once non-draft
+(`_can_edit_review`). Carry this model into 3.20/3.21.
+
+**Review agents (all 7, in order):** `code-reviewer` → **critical** authz fix (subject could open the edit form to read
+`private_notes` + tamper an acknowledged review → gated edit/delete/ratings to draft-only + reviewer/admin).
+`explorer` → no gaps (25 views ↔ 25 urls). `frontend-reviewer` → DRY'd reviewer-masking into `reviewer_anonymized`
+property + RTL. `performance-reviewer` → fixed a reviewcycle_detail N+1 (ratings prefetch). `qa-smoke-tester` → all
+green, authz gates hold. `security-reviewer` → the **confidentiality** read-path fix above (Medium roster leak +
+ungated rating detail, extended to list/detail). `test-writer` → **288 tests** (83 models + 111 views + 94 security),
+all green, AND found+fixed a real product bug (`calibration_board` `NameError` on an unrated manager review). HRM suite
+now **3,292**, project-wide **5,939**. HRM skill + README + this review updated. **Next: 3.20 Continuous Feedback.**
+
 **Context.** Extends the existing `apps/hrm` app — NOT a new app. This is the **second**
 Performance Management sub-module (3.18 Goal Setting -> **3.19 Performance Review** -> 3.20
 Continuous Feedback -> 3.21 Performance Improvement). It builds the formal review-cycle
