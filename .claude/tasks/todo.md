@@ -1972,3 +1972,608 @@ routes, no leaks, cross-tenant IDOR→404, idempotent recompute.
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 3 — HRM — Sub-module 3.17 Payout & Reports (payout-reports) — plan from research-payout-reports.md (2026-07-05)
+
+**Context.** Extends the existing `apps/hrm` app — NOT a new app. Builds the disbursement-tracking +
+distribution-tracking + reconciliation layer strictly ON TOP of 3.14 (`PayrollCycle`/`Payslip`/
+`PayslipLine`) and reuses 3.1's `EmployeeProfile` bank fields. 4 new tables, all appended to
+`apps/hrm/models.py`, migration `0028` (last is `0027_investmentdeclaration_investmentdeclarationline_
+and_more.py` from 3.16). Money still posts only through `accounting.PayrollRun`/`JournalEntry` (lesson
+**L29**) — **3.17 posts nothing new to the GL**; it tracks payment status, distribution status, and
+reconciliation status only — bookkeeping *about* a payment already recorded through
+`accounting.PayrollRun`, never a new Dr/Cr entry.
+
+NavERP.md 3.17 bullets (exact text, all 4 go Live this pass):
+- Bank Integration — Bank file generation, direct deposit.
+- Payslip Generation — Digital payslips, email distribution.
+- Payment Register — Payment summary, batch reports.
+- Reconciliation — Bank reconciliation, error reports.
+
+Reuses (no duplication): `hrm.PayrollCycle` (`is_locked` gate + `accounting_payroll_run` — a batch is
+generated only from a locked cycle), `hrm.Payslip` (`net_pay`/`on_hold`/`employee` — the amount to
+disburse is read from here, never re-entered), `hrm.EmployeeProfile` (`bank_name`/`masked_bank_account()`/
+`masked_bank_routing()` — snapshot the MASKED values only, the disbursement destination; no new employee/
+bank-master table), `settings.AUTH_USER_MODEL` (audit actors). Never touches
+`accounting.PayrollRun`/`JournalEntry` — no GL-posting path (L29). **No `BankStatementLine` model** — v1
+reconciles directly against `PayoutPayment.transaction_reference`/`status` (per research recommendation,
+keeping the build at 4 models).
+
+**Sensitive-field note (decide, don't guess):** `PayoutPayment.bank_account_last4_snapshot` /
+`bank_routing_snapshot` store already-MASKED (`••••1234`) copies, never the raw account/routing number —
+unlike `EmployeeProfile.bank_account`/`bank_routing` (which ARE in `core.crud._SENSITIVE_AUDIT_FIELDS`
+because they hold the raw value). Because the snapshot fields hold only masked text, they do **NOT** need
+to be added to `_SENSITIVE_AUDIT_FIELDS` — document this explicitly in the model docstring so a future
+reviewer doesn't "fix" it by redacting an already-safe value. `transaction_reference` (a bank UTR/trace
+number, not an account number) also does not need redaction.
+
+## A. Models + migration (`apps/hrm/models.py`)
+
+- [ ] `PayoutBatch(TenantNumbered, NUMBER_PREFIX="POB")` — the disbursement-run header, generated from
+      one locked `PayrollCycle` (drivers: Keka's payment-automation wizard runs after payroll closes;
+      Darwinbox/Deel's payment-after-approval ordering; greytHR's Bank Transfer Advice report needing a
+      batch to summarize):
+  - [ ] `cycle` — `models.ForeignKey("hrm.PayrollCycle", on_delete=models.PROTECT,
+        related_name="payout_batches")` — PROTECT so a batch can't vanish out from under its
+        `PayoutPayment`/`BankReconciliation` history, matching `Payslip.employee`'s PROTECT convention
+  - [ ] `status` — CharField(max_length=20, choices=`[("draft","Draft"),("approved","Approved"),
+        ("disbursed","Disbursed"),("partially_disbursed","Partially Disbursed"),
+        ("reconciled","Reconciled")]`, default="draft") — mirrors `PayrollCycle`'s state-machine
+        convention; `partially_disbursed` covers some-paid/some-failed (Bank Integration)
+  - [ ] `bank_file_format` — CharField(max_length=15, choices=`[("neft","NEFT"),("nach","NACH"),
+        ("ach","ACH"),("manual","Manual"),("other","Other")]`, default="neft") — Bank Integration
+        (Keka's bank-specific templates, NACH/ACH-rail research; leaves room for a future `wps_sif`
+        value without a schema change)
+  - [ ] `source_bank_name` — CharField(max_length=255, blank=True) — Keka's "disbursal account shown
+        before initiating payment"
+  - [ ] `source_account_last4` — CharField(max_length=8, blank=True) — masked, never the full
+        disbursing account number (Bank Integration)
+  - [ ] `generated_by` — `models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="hrm_payout_batch_generations", editable=False)`
+  - [ ] `generated_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `approved_by` — `models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="hrm_payout_batch_approvals", editable=False)`
+  - [ ] `approved_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `disbursed_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-cycle__pay_date"]`; `unique_together = ("tenant", "cycle")` — one
+        payout batch per cycle (regenerating replaces/updates while draft, matching 3.14's
+        "regenerate while draft" convention); index `models.Index(fields=["tenant", "status"],
+        name="hrm_pob_tenant_status_idx")`
+  - [ ] `clean()` — raise `ValidationError({"cycle": "..."})` if `self.cycle_id` and not
+        `self.cycle.is_locked` (a batch cannot be created/generated against a draft/unlocked cycle)
+  - [ ] `is_editable` **property** → `self.status == "draft"`
+  - [ ] `_totals()` **method** — one aggregate query over `self.payments`, cached per instance
+        (mirrors `PayrollCycle._totals()` exactly): `Sum("net_amount")` for `total_amount`; separate
+        `.filter(status="paid").aggregate(c=Count("id"), a=Sum("net_amount"))` for
+        `paid_count`/`paid_amount`; `.filter(status="failed").count()` for `failed_count`;
+        `.filter(status="on_hold").count()` for `on_hold_count`
+  - [ ] derived **@property**: `headcount` (`self.payments.count()`), `total_amount`, `paid_count`,
+        `paid_amount`, `failed_count`, `on_hold_count` — all read `self._totals()` — feeds the Payment
+        Register report directly
+  - [ ] `__str__` → `f"{self.number} · {self.cycle.number} · {self.get_status_display()}"`
+
+- [ ] `PayoutPayment(TenantOwned)` — child of `PayoutBatch`, one row per disbursed employee (drivers:
+      Zoho Payroll's per-payment status lifecycle, HROne's bank-advice-statement line, NACH/ACH's
+      UTR-matching convention):
+  - [ ] `batch` — `models.ForeignKey("hrm.PayoutBatch", on_delete=models.CASCADE,
+        related_name="payments")`
+  - [ ] `payslip` — `models.ForeignKey("hrm.Payslip", on_delete=models.PROTECT,
+        related_name="payout_payments")` — the amount source; `net_pay` is read from here, never
+        re-entered
+  - [ ] `employee` — `models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+        related_name="payout_payments")` — denormalized off `payslip.employee` for simpler list/filter
+        queries (matches `Payslip.employee` alongside `Payslip.cycle` convention)
+  - [ ] `net_amount` — DecimalField(max_digits=14, decimal_places=2, default=0, editable=False) —
+        snapshot of `payslip.net_pay` at batch-generation time, so a later correction in a NEW cycle
+        never rewrites a historical payment record
+  - [ ] `bank_name_snapshot` — CharField(max_length=255, blank=True, editable=False) — masked copy of
+        `EmployeeProfile.bank_name` at generation time
+  - [ ] `bank_account_last4_snapshot` — CharField(max_length=8, blank=True, editable=False) — from
+        `employee.masked_bank_account()` at generation time (**already masked — never the full
+        account**)
+  - [ ] `bank_routing_snapshot` — CharField(max_length=20, blank=True, editable=False) — from
+        `employee.masked_bank_routing()` at generation time (**already masked**)
+  - [ ] `payment_method` — CharField(max_length=15, choices=`[("bank_transfer","Bank Transfer"),
+        ("neft","NEFT"),("nach","NACH"),("ach","ACH"),("cheque","Cheque"),("cash","Cash"),
+        ("other","Other")]`, default="bank_transfer") — Zoho Payroll / greytHR's alternate-mode
+        recording
+  - [ ] `status` — CharField(max_length=15, choices=`[("pending","Pending"),
+        ("processing","Processing"),("paid","Paid"),("failed","Failed"),("returned","Returned"),
+        ("on_hold","On Hold")]`, default="pending") — Zoho Payroll's Initiated→Pending→Successful/
+        Failed lifecycle, extended with `returned` (NACH return-file concept) and `on_hold` (an
+        employee whose `Payslip.on_hold=True` included as a zero-action row for audit completeness,
+        never actually paid)
+  - [ ] `transaction_reference` — CharField(max_length=64, blank=True) — the bank-assigned UTR/trace
+        number, the reconciliation match key (Reconciliation)
+  - [ ] `initiated_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `paid_on` — DateTimeField(null=True, blank=True, editable=False) — two timestamps, not one
+        (Gusto's "submitted ≠ arrived" distinction; NACH's T+1 settlement lag)
+  - [ ] `failure_reason` — TextField(blank=True) — RazorpayX's documented failure-cause list
+        (non-working-day, non-whitelisted account, incorrect bank details), NACH's return-reason-code
+        convention
+  - [ ] `retry_of` — `models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="retries")` — Zoho Payroll's "Re-initiate Payment" pattern: a corrected retry
+        references the original failed attempt rather than mutating it, preserving failure history
+  - [ ] `class Meta`: `ordering = ["batch", "employee__party__name"]`; `unique_together = ("tenant",
+        "batch", "payslip")` — one payment row per payslip per batch (a retry is a new row via
+        `retry_of`, not an in-place edit); indexes `models.Index(fields=["tenant", "batch"],
+        name="hrm_pop_tenant_batch_idx")`, `models.Index(fields=["tenant", "status"],
+        name="hrm_pop_tenant_status_idx")`
+  - [ ] `__str__` → `f"{self.employee} · {self.net_amount} · {self.get_status_display()}"`
+
+- [ ] `PayslipDistribution(TenantOwned)` — 1:1 with `hrm.Payslip`, delivery-tracking (drivers: Zimyo's
+      send-confirmation flow, Keka/HROne's portal-download-as-primary-channel, Gusto's lifetime-access
+      paystub history, Deel's payment-before-payslip-release ordering):
+  - [ ] `payslip` — `models.OneToOneField("hrm.Payslip", on_delete=models.CASCADE,
+        related_name="distribution")`
+  - [ ] `delivery_channel` — CharField(max_length=10, choices=`[("email","Email"),("portal","Portal"),
+        ("print","Print")]`, default="portal") — Keka's bulk-print fallback, HROne's ESS-portal
+        publish, Zimyo's email flow
+  - [ ] `status` — CharField(max_length=15, choices=`[("pending","Pending"),("sent","Sent"),
+        ("viewed","Viewed"),("downloaded","Downloaded"),("failed","Failed")]`, default="pending") —
+        the sent→viewed→downloaded signal chain common across Keka/HROne/Zimyo
+  - [ ] `sent_to_email` — EmailField(blank=True, editable=False) — snapshot of the employee's email at
+        send time, so a later profile email change never rewrites delivery history
+  - [ ] `sent_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `viewed_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `downloaded_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `sent_by` — `models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="hrm_payslip_distribution_sends", editable=False)`
+  - [ ] `class Meta`: `ordering = ["-payslip__cycle__pay_date"]`; index `models.Index(fields=["tenant",
+        "status"], name="hrm_psd_tenant_status_idx")`
+  - [ ] `classmethod for_payslip(cls, payslip)` — get-or-create helper (`status="pending"`,
+        `delivery_channel="portal"` default), called lazily wherever a distribution row is needed
+        (mirrors the "created lazily" convention noted in research; avoids a signal/post_save hook)
+  - [ ] `__str__` → `f"{self.payslip} · {self.get_status_display()}"`
+
+- [ ] `BankReconciliation(TenantNumbered, NUMBER_PREFIX="BRC")` — matches a batch's payments against an
+      imported bank statement (drivers: NACH/ACH three-way-match convention, ADP's "Bank Reconciliation"
+      standard report, RazorpayX's Payroll↔Current-Account reconciliation framing, greytHR's dedicated
+      reconciliation report):
+  - [ ] `batch` — `models.ForeignKey("hrm.PayoutBatch", on_delete=models.PROTECT,
+        related_name="reconciliations")`
+  - [ ] `statement_date` — DateField() — the bank statement's as-of date
+  - [ ] `status` — CharField(max_length=15, choices=`[("pending","Pending"),
+        ("in_progress","In Progress"),("reconciled","Reconciled"),("discrepancy","Discrepancy")]`,
+        default="pending") — the reconciliation run's own lifecycle, distinct from each
+        `PayoutPayment.status`
+  - [ ] `matched_count` — PositiveIntegerField(default=0, editable=False)
+  - [ ] `matched_amount` — DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
+  - [ ] `unmatched_count` — PositiveIntegerField(default=0, editable=False)
+  - [ ] `unmatched_amount` — DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
+  - [ ] `statement_reference` — CharField(max_length=100, blank=True) — the bank's own statement/file
+        reference number
+  - [ ] `reconciled_by` — `models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="hrm_bank_reconciliations", editable=False)`
+  - [ ] `reconciled_at` — DateTimeField(null=True, blank=True, editable=False)
+  - [ ] `notes` — TextField(blank=True)
+  - [ ] `class Meta`: `ordering = ["-statement_date"]`; index `models.Index(fields=["tenant", "batch"],
+        name="hrm_brc_tenant_batch_idx")`, `models.Index(fields=["tenant", "status"],
+        name="hrm_brc_tenant_status_idx")`
+  - [ ] `recompute()` **method** — matches `self.batch.payments` by `transaction_reference` +
+        `status`: rows with a non-blank `transaction_reference` AND `status="paid"` count as matched
+        (`matched_count`/`matched_amount` = `Sum("net_amount")`); rows `status in ("failed",
+        "returned")` OR blank `transaction_reference` while `status="processing"` count as unmatched
+        (`unmatched_count`/`unmatched_amount`); sets `self.status = "reconciled"` if
+        `unmatched_count == 0` else `"discrepancy"`; `self.reconciled_at = timezone.now()`;
+        `self.save(update_fields=["matched_count", "matched_amount", "unmatched_count",
+        "unmatched_amount", "status", "reconciled_at", "updated_at"])` — no `BankStatementLine` child
+        table (per research recommendation — v1 matches directly against `PayoutPayment` rows)
+  - [ ] `__str__` → `f"{self.number} · {self.batch.number} · {self.get_status_display()}"`
+
+- [ ] one incremental migration `apps/hrm/migrations/0028_payoutbatch_payoutpayment_and_more.py` (NOT
+      `0001_initial`; last is `0027_investmentdeclaration_investmentdeclarationline_and_more.py`) —
+      `makemigrations hrm`, review the generated file, adjust index/constraint names to match the ones
+      specified above if Django's auto-names differ
+
+## B. Workflow + engine actions (views)
+
+- [ ] `payoutbatch_generate` (`@tenant_admin_required`, `@require_POST`) — from a URL-supplied
+      `cycle_pk`: `get_or_create`s (or fetches, if already exists per `unique_together`) the draft
+      `PayoutBatch` for that cycle (validate `cycle.is_locked` first — 400/friendly error if not);
+      only proceeds while `batch.status == "draft"` (mirrors `payrollcycle_generate`'s draft-only
+      preserve-on-regenerate guard); for each `cycle.payslips.all()`: if `payslip.on_hold`,
+      `get_or_create` a `PayoutPayment(status="on_hold", net_amount=payslip.net_pay,
+      employee=payslip.employee)` (zero-action row per research note); else `update_or_create`
+      (keyed on `(batch, payslip)`) a `PayoutPayment` snapshotting `net_amount=payslip.net_pay`,
+      `bank_name_snapshot=employee.bank_name`, `bank_account_last4_snapshot=
+      employee.masked_bank_account()`, `bank_routing_snapshot=employee.masked_bank_routing()`,
+      `status="pending"` — regenerating preserves any payment already past `pending` (paid/failed/
+      processing rows are left untouched, matching 3.14's manual-input-preservation-on-regenerate
+      rule); set `batch.generated_by=request.user`, `generated_at=timezone.now()`;
+      `write_audit_log(..., {"action": "generate", "headcount": batch.headcount})`
+- [ ] `payoutbatch_approve` (`@tenant_admin_required`, `@require_POST`) — only from `status="draft"`;
+      set `status="approved"`, `approved_by=request.user`, `approved_at=timezone.now()`;
+      `write_audit_log(..., {"action": "approve"})`
+- [ ] `payoutbatch_disburse` (`@tenant_admin_required`, `@require_POST`) — only from
+      `status="approved"`; sets `initiated_at=timezone.now()` on every `pending`/`processing` payment
+      in the batch (bulk `update()`), sets `batch.disbursed_at=timezone.now()`; derive
+      `batch.status` from `batch._totals()`: if `failed_count == 0 and on_hold_count == headcount -
+      paid_count` → `"disbursed"`, elif `paid_count > 0 and failed_count > 0` → `"partially_disbursed"`,
+      else `"disbursed"` (simple rule: any `failed` present while some `paid`/`pending`→initiated →
+      `partially_disbursed`; otherwise `disbursed`) — document this exact rule in the view docstring
+      since it's the one piece of derived logic that isn't a straight aggregate; a real bank-file
+      export is DEFERRED, this action marks the batch as sent; `write_audit_log(...,
+      {"action": "disburse"})`
+- [ ] `payoutpayment_mark_paid` (`@tenant_admin_required`, `@require_POST`) — only from `status in
+      ("pending", "processing")`; requires `transaction_reference` from the POST body (small inline
+      form, not a full ModelForm); sets `status="paid"`, `paid_on=timezone.now()`,
+      `transaction_reference=<posted value>`; after save, recompute `batch.status` (call a shared
+      `_recompute_batch_status(batch)` helper used by disburse/mark_paid/mark_failed alike, so the
+      derivation rule lives in exactly one place); `write_audit_log(...)`
+- [ ] `payoutpayment_mark_failed` (`@tenant_admin_required`, `@require_POST`) — only from `status in
+      ("pending", "processing")`; requires `failure_reason` from the POST body; sets `status="failed"`,
+      `failure_reason=<posted value>`; recompute `batch.status`; `write_audit_log(...)`
+- [ ] `payoutpayment_retry` (`@tenant_admin_required`, `@require_POST`) — only from
+      `status="failed"`; creates a NEW `PayoutPayment` row (same `batch`/`payslip`/`employee`,
+      re-snapshotting the CURRENT `employee.bank_name`/`masked_bank_account()`/
+      `masked_bank_routing()` in case the employee corrected their bank details — Zoho Payroll's
+      "edit bank details then re-initiate" pattern), `status="pending"`, `retry_of=original` — but
+      `unique_together (tenant, batch, payslip)` blocks a second row for the same payslip in the SAME
+      batch, so **first flip the original failed row's status to a terminal non-blocking state** (do
+      NOT delete it — instead: since the unique constraint is on `(batch, payslip)`, the retry must
+      replace-in-place: set the ORIGINAL row back to `status="pending"` + bump
+      `initiated_at=None`/clear `failure_reason`/set a NEW `transaction_reference=""`, and record the
+      retry lineage via a NEW field-less approach — **resolve this in code**: either (a) relax the
+      unique_together to `("tenant", "batch", "payslip", "retry_of")`-style so a retry row can coexist,
+      or (b) treat "retry" as resetting the SAME row to pending and use `retry_of` to point at a
+      soft-archived copy created via `PayoutPayment.objects.create(..., batch=None-not-allowed)` —
+      **decision for the build step: relax `unique_together` to only apply when `retry_of__isnull=True`
+      is not expressible in Django's plain `unique_together`, so implement instead as a `UniqueConstraint`
+      with `condition=Q(retry_of__isnull=True)`** (`Meta.constraints`, not `unique_together`) so the
+      original failed row keeps existing untouched (audit trail) and exactly one non-retry OR
+      most-recent-retry row exists per payslip; recompute `batch.status`; `write_audit_log(...,
+      {"action": "retry", "retry_of": original.pk})`
+- [ ] `payslipdistribution_send` (`@tenant_admin_required`, `@require_POST`) — per-payslip (URL
+      `payslip_pk`) or bulk-on-a-cycle (URL `cycle_pk`, iterate `cycle.payslips.all()`): for each,
+      `PayslipDistribution.for_payslip(payslip)`, snapshot `sent_to_email` from the employee's email
+      (check `EmployeeProfile`/`party` for the actual email field name before writing — confirm field
+      name at build time), set `status="sent"`, `sent_at=timezone.now()`, `sent_by=request.user` —
+      actual SMTP/PDF dispatch DEFERRED, this marks it sent; optional workflow guard (per research —
+      Deel's payment-before-payslip pattern): if a `PayoutPayment` exists for this payslip and its
+      `status != "paid"`, still ALLOW send but surface a `messages.warning` (v1 does not hard-block,
+      documented as a soft business rule per the research note); `write_audit_log(...)`
+- [ ] `payslipdistribution_mark_viewed` / `_mark_downloaded` (`@login_required`, `@require_POST`) —
+      the employee-portal self-service signals: set `viewed_at`/`downloaded_at=timezone.now()` and
+      bump `status` to `"viewed"`/`"downloaded"` only forward (never regress `downloaded`→`viewed`);
+      no tenant-admin gate (any authenticated user viewing/downloading THEIR OWN payslip triggers
+      this — verify `request.user`'s linked `EmployeeProfile` matches `distribution.payslip.employee`
+      before allowing, 403 otherwise)
+- [ ] `bankreconciliation_reconcile` (`@tenant_admin_required`, `@require_POST`) — calls
+      `reconciliation.recompute()`; on the resulting `status == "reconciled"`, also flip
+      `reconciliation.batch.status = "reconciled"` and save (only the batch-level flip, no cascading
+      payment-status changes); sets `reconciled_by=request.user`,
+      `reconciled_at=timezone.now()` (already set inside `recompute()` — don't double-set);
+      `write_audit_log(...)`
+- [ ] `payment_register` (`@login_required`) — **read/report view**, no new model: given a `batch_pk`,
+      render headcount/total_amount/paid/failed/on_hold breakdown, a by-`payment_method` group-by
+      table, a by-`status` group-by table, and the bank-advice-style row list (employee, masked
+      account last-4, masked routing, amount, `transaction_reference`, status) — Payment Register
+      (greytHR Bank Transfer Advice / HROne salary bank advice statement); render
+      `hrm/payout/payment_register.html`
+- [ ] `payout_exceptions` (`@login_required`) — **read/report view**, no new model: a filtered
+      `PayoutPayment.objects.filter(tenant=request.tenant, status__in=["failed", "returned"])` list
+      across ALL batches (optionally narrowed by a `?batch=` GET param), each row linking to its
+      `payoutpayment_retry` action — Reconciliation / exception report (Zoho Payroll's failed-status
+      filter feeding re-initiate); render `hrm/payout/exceptions.html`
+
+## C. Forms (`apps/hrm/forms.py`)
+
+- [ ] `PayoutBatchForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["cycle", "bank_file_format", "source_bank_name", "source_account_last4",
+        "notes"]` (exclude `tenant`/auto-number `number`/`status`/`generated_by`/`generated_at`/
+        `approved_by`/`approved_at`/`disbursed_at` — workflow/derived)
+  - [ ] custom `__init__` narrows `cycle` to `PayrollCycle.objects.filter(tenant=tenant,
+        status="locked")` — a draft/pending/approved/rejected cycle must never appear in the picker
+        (Bank Integration — "generated from a locked cycle" rule enforced at the form layer, not just
+        `clean()`)
+- [ ] `BankReconciliationForm(TenantModelForm)`:
+  - [ ] `Meta.fields = ["batch", "statement_date", "statement_reference", "notes"]` (exclude
+        `tenant`/auto-number `number`/`status`/`matched_*`/`unmatched_*`/`reconciled_by`/
+        `reconciled_at` — all derived by `recompute()`)
+  - [ ] custom `__init__` narrows `batch` to `PayoutBatch.objects.filter(tenant=tenant)`
+- [ ] `PayslipDistributionForm(TenantModelForm)` — **only needed if a standalone edit view is added**
+      (v1's `send`/`mark_viewed`/`mark_downloaded` are POST-only actions, not a form-backed edit); if
+      built, `Meta.fields = ["delivery_channel"]` (exclude everything else — workflow-owned); confirm
+      at build time whether a manual override edit is actually needed or whether the list+actions
+      pattern alone suffices (lean toward NOT building this form — document the decision either way)
+
+## D. Views (`apps/hrm/views.py`) — full CRUD + filters via `crud_*`
+
+- [ ] `payoutbatch_list` — `crud_list(request, PayoutBatch.objects.filter(
+      tenant=request.tenant).select_related("cycle"), "hrm/payout/payoutbatch/list.html",
+      search_fields=["number", "cycle__number"], filters=[("status", "status", False),
+      ("bank_file_format", "bank_file_format", False), ("cycle", "cycle_id", True)],
+      extra_context={"status_choices": PayoutBatch._meta.get_field("status").choices,
+      "bank_file_format_choices": PayoutBatch._meta.get_field("bank_file_format").choices, "cycles":
+      PayrollCycle.objects.filter(tenant=request.tenant, status="locked")})`
+- [ ] `payoutbatch_create` / `_edit` / `_delete` — standard `crud_create`/`crud_edit`/`crud_delete`
+      wrappers; `_edit`/`_delete` only while `status == "draft"` (mirror `payrollcycle_edit`/`_delete`'s
+      draft-only guard); `_delete` blocked (PROTECT) if any `BankReconciliation` references the batch —
+      catch and surface a friendly `messages.error`, not a 500
+- [ ] `payoutbatch_detail` — `crud_detail(...)`; extra_context adds `"payments":
+      obj.payments.select_related("employee__party").order_by("employee__party__name")` (inline-managed
+      list) + action buttons (`Generate`/`Approve`/`Disburse` — status-gated) + a link to
+      `payment_register` and `reconciliations` — also the entry point for
+      `payoutpayment_mark_paid`/`_mark_failed`/`_retry` (URL-scoped under this batch's payments) and
+      `bankreconciliation_create` (pre-filled `batch`)
+- [ ] `payoutbatch_generate` / `_approve` / `_disburse` — per Section B spec
+- [ ] `payoutpayment_mark_paid` / `_mark_failed` / `_retry` — per Section B spec; all redirect back to
+      `payoutbatch_detail`
+- [ ] `payslipdistribution_list` — `crud_list(request, PayslipDistribution.objects.filter(
+      tenant=request.tenant).select_related("payslip__employee__party", "payslip__cycle"),
+      "hrm/payout/payslipdistribution/list.html", search_fields=["payslip__number",
+      "payslip__employee__party__name"], filters=[("status", "status", False), ("delivery_channel",
+      "delivery_channel", False), ("cycle", "payslip__cycle_id", True)], extra_context={
+      "status_choices": PayslipDistribution._meta.get_field("status").choices,
+      "delivery_channel_choices": PayslipDistribution._meta.get_field("delivery_channel").choices,
+      "cycles": PayrollCycle.objects.filter(tenant=request.tenant)})` — no create/edit/delete views
+      (rows are lazily get-or-created via `for_payslip()`, matching `EmployeeDocument`'s
+      no-generic-edit-on-a-tracked-artifact pattern)
+- [ ] `payslipdistribution_detail` — `crud_detail(...)`; action buttons (`Send`, tenant-admin,
+      POST+confirm+csrf, gated `status == "pending"`)
+- [ ] `payslipdistribution_send` / `_mark_viewed` / `_mark_downloaded` — per Section B spec
+- [ ] `bankreconciliation_list` — `crud_list(request, BankReconciliation.objects.filter(
+      tenant=request.tenant).select_related("batch__cycle"), "hrm/payout/bankreconciliation/list.html",
+      search_fields=["number", "batch__number", "statement_reference"], filters=[("status", "status",
+      False), ("batch", "batch_id", True)], extra_context={"status_choices":
+      BankReconciliation._meta.get_field("status").choices, "batches": PayoutBatch.objects.filter(
+      tenant=request.tenant)})`
+- [ ] `bankreconciliation_create` / `_edit` / `_delete` — standard wrappers; `_edit`/`_delete` only
+      while `status in ("pending", "in_progress")` (not yet reconciled/discrepancy-closed)
+- [ ] `bankreconciliation_detail` — `crud_detail(...)`; extra_context adds the matched/unmatched
+      breakdown + the batch's exception payments (`status__in=["failed","returned"]`) for quick
+      follow-up; action button (`Reconcile`, tenant-admin, POST+confirm+csrf)
+- [ ] `bankreconciliation_reconcile` — per Section B spec
+- [ ] `payment_register` / `payout_exceptions` — per Section B spec
+- [ ] all new views import the 4 new models + their forms at the top of `views.py`; `Sum`/`Count`/`Q`
+      from `django.db.models` (already imported for 3.14/3.15/3.16 — confirm, don't re-import);
+      `timezone` from `django.utils`
+
+## E. URLs (`apps/hrm/urls.py`, `app_name = "hrm"` already set)
+
+- [ ] `path("payout-batches/", views.payoutbatch_list, name="payoutbatch_list")`
+- [ ] `path("payout-batches/add/", views.payoutbatch_create, name="payoutbatch_create")`
+- [ ] `path("payout-batches/<int:pk>/", views.payoutbatch_detail, name="payoutbatch_detail")`
+- [ ] `path("payout-batches/<int:pk>/edit/", views.payoutbatch_edit, name="payoutbatch_edit")`
+- [ ] `path("payout-batches/<int:pk>/delete/", views.payoutbatch_delete, name="payoutbatch_delete")`
+- [ ] `path("payout-batches/<int:pk>/generate/", views.payoutbatch_generate, name="payoutbatch_generate")`
+- [ ] `path("payout-batches/<int:pk>/approve/", views.payoutbatch_approve, name="payoutbatch_approve")`
+- [ ] `path("payout-batches/<int:pk>/disburse/", views.payoutbatch_disburse, name="payoutbatch_disburse")`
+- [ ] `path("payout-batches/<int:pk>/payment-register/", views.payment_register, name="payment_register")`
+- [ ] `path("payout-payments/<int:pk>/mark-paid/", views.payoutpayment_mark_paid, name="payoutpayment_mark_paid")`
+- [ ] `path("payout-payments/<int:pk>/mark-failed/", views.payoutpayment_mark_failed, name="payoutpayment_mark_failed")`
+- [ ] `path("payout-payments/<int:pk>/retry/", views.payoutpayment_retry, name="payoutpayment_retry")`
+- [ ] `path("payout-exceptions/", views.payout_exceptions, name="payout_exceptions")`
+- [ ] `path("payslip-distributions/", views.payslipdistribution_list, name="payslipdistribution_list")`
+- [ ] `path("payslip-distributions/<int:pk>/", views.payslipdistribution_detail, name="payslipdistribution_detail")`
+- [ ] `path("payslips/<int:payslip_pk>/distribution/send/", views.payslipdistribution_send, name="payslipdistribution_send")`
+- [ ] `path("payroll-cycles/<int:cycle_pk>/distributions/send-bulk/", views.payslipdistribution_send, name="payslipdistribution_send_bulk")`
+- [ ] `path("payslip-distributions/<int:pk>/mark-viewed/", views.payslipdistribution_mark_viewed, name="payslipdistribution_mark_viewed")`
+- [ ] `path("payslip-distributions/<int:pk>/mark-downloaded/", views.payslipdistribution_mark_downloaded, name="payslipdistribution_mark_downloaded")`
+- [ ] `path("bank-reconciliations/", views.bankreconciliation_list, name="bankreconciliation_list")`
+- [ ] `path("bank-reconciliations/add/", views.bankreconciliation_create, name="bankreconciliation_create")`
+- [ ] `path("bank-reconciliations/<int:pk>/", views.bankreconciliation_detail, name="bankreconciliation_detail")`
+- [ ] `path("bank-reconciliations/<int:pk>/edit/", views.bankreconciliation_edit, name="bankreconciliation_edit")`
+- [ ] `path("bank-reconciliations/<int:pk>/delete/", views.bankreconciliation_delete, name="bankreconciliation_delete")`
+- [ ] `path("bank-reconciliations/<int:pk>/reconcile/", views.bankreconciliation_reconcile, name="bankreconciliation_reconcile")`
+
+## F. Admin (`apps/hrm/admin.py`)
+
+- [ ] register `PayoutBatch` — `list_display = ("number", "cycle", "status", "bank_file_format",
+      "headcount", "total_amount")`, `list_filter = ("tenant", "status", "bank_file_format")`,
+      `search_fields = ("number", "cycle__number")`
+- [ ] register `PayoutPayment` as a `TabularInline` on `PayoutBatchAdmin` (`model = PayoutPayment`,
+      `extra = 0`, `fields = ("employee", "net_amount", "payment_method", "status",
+      "transaction_reference")`, `readonly_fields = ("net_amount",)`) — also register standalone with
+      `list_display = ("batch", "employee", "net_amount", "payment_method", "status", "paid_on")`,
+      `list_filter = ("tenant", "status", "payment_method")`, `search_fields = ("employee__party__name",
+      "transaction_reference")`
+- [ ] register `PayslipDistribution` — `list_display = ("payslip", "delivery_channel", "status",
+      "sent_at", "viewed_at", "downloaded_at")`, `list_filter = ("tenant", "delivery_channel",
+      "status")`, `search_fields = ("payslip__number", "sent_to_email")`
+- [ ] register `BankReconciliation` — `list_display = ("number", "batch", "statement_date", "status",
+      "matched_count", "unmatched_count")`, `list_filter = ("tenant", "status")`, `search_fields =
+      ("number", "batch__number", "statement_reference")`
+
+## G. Templates (`templates/hrm/payout/<entity>/<page>.html`)
+
+- [ ] `payout/payoutbatch/list.html` — filter bar: search `q`, `status` select (from
+      `status_choices`), `bank_file_format` select, `cycle` select (from `cycles`,
+      `|stringformat:"d"` pk-compare); columns: number, cycle, status badge (`draft`→`badge-muted`,
+      `approved`→`badge-info`, `disbursed`→`badge-green`, `partially_disbursed`→`badge-amber`,
+      `reconciled`→`badge-slate`), bank_file_format, headcount, total_amount, Actions
+      (view/edit-if-draft/delete-if-draft); pagination; empty-state; `{% else %}
+      {{ obj.get_status_display }}` fallback
+- [ ] `payout/payoutbatch/detail.html` — header (cycle link, status badge, bank_file_format,
+      source_bank_name/source_account_last4, generated_by/at, approved_by/at, disbursed_at); workflow
+      buttons (`Generate` — draft only, POST+confirm+csrf; `Approve` — draft-with-payments only,
+      tenant-admin; `Disburse` — approved only, tenant-admin); **payments table** (employee, net_amount,
+      payment_method, status badge [`pending`→`badge-muted`, `processing`→`badge-info`, `paid`→
+      `badge-green`, `failed`→`badge-red`, `returned`→`badge-amber`, `on_hold`→`badge-slate`],
+      transaction_reference, initiated_at/paid_on) with per-row `Mark Paid`/`Mark Failed`/`Retry`
+      buttons (tenant-admin, POST+confirm+csrf, status-gated); links to `payment_register` and
+      `bankreconciliation_create` (pre-filled batch); Actions sidebar (Edit-if-draft/Delete-if-draft,
+      Back to List)
+- [ ] `payout/payoutbatch/form.html` — standard form
+- [ ] `payout/payment_register.html` — **standalone report page** (Template Folder Structure rule 6):
+      batch header + headcount/total_amount/paid/failed/on_hold summary cards, by-payment_method
+      group-by table, by-status group-by table, bank-advice-style row list (employee, masked account
+      last-4, masked routing, amount, transaction_reference, status) — masked accounts only, never the
+      full number; a print/export-friendly layout note
+- [ ] `payout/exceptions.html` — **standalone report page**: filtered failed/returned `PayoutPayment`
+      list across all batches (optional `?batch=` narrowing), each row showing employee, batch link,
+      net_amount, failure_reason, a `Retry` action button (tenant-admin, POST+confirm+csrf);
+      empty-state when no exceptions exist
+- [ ] `payout/payslipdistribution/list.html` — filter bar: search `q`, `status` select, `delivery_channel`
+      select, `cycle` select (from `cycles`, pk-compare); columns: payslip (→employee), cycle,
+      delivery_channel, status badge (`pending`→`badge-muted`, `sent`→`badge-info`, `viewed`→
+      `badge-amber`, `downloaded`→`badge-green`, `failed`→`badge-red`), sent_at, viewed_at,
+      downloaded_at, Actions (view); pagination; empty-state
+- [ ] `payout/payslipdistribution/detail.html` — header (payslip link, employee, delivery_channel,
+      status badge, sent_to_email, sent_at/viewed_at/downloaded_at, sent_by); Actions sidebar (`Send`
+      — tenant-admin, POST+confirm+csrf, pending only; Back to List)
+- [ ] `payout/bankreconciliation/list.html` — filter bar: search `q`, `status` select, `batch` select
+      (from `batches`, pk-compare); columns: number, batch, statement_date, status badge (`pending`→
+      `badge-muted`, `in_progress`→`badge-info`, `reconciled`→`badge-green`, `discrepancy`→
+      `badge-red`), matched_count/unmatched_count, Actions (view/edit-if-not-reconciled/
+      delete-if-not-reconciled); pagination; empty-state
+- [ ] `payout/bankreconciliation/detail.html` — header (batch link, statement_date, status badge,
+      statement_reference, reconciled_by/at); matched/unmatched summary panel
+      (matched_count/matched_amount, unmatched_count/unmatched_amount); the batch's exception payments
+      table (failed/returned rows) for follow-up; action button (`Reconcile`, tenant-admin,
+      POST+confirm+csrf); Actions sidebar (Edit-if-not-reconciled/Delete-if-not-reconciled, Back to List)
+- [ ] `payout/bankreconciliation/form.html` — standard form
+
+## H. Seeder (`apps/hrm/management/commands/seed_hrm.py`)
+
+- [ ] add `_seed_payout(self, tenant, *, flush)` method, called from `handle()` **AFTER**
+      `self._seed_tax(tenant, flush=options["flush"])` (last method in the current chain — confirm the
+      exact call order at build time; payout needs a LOCKED `PayrollCycle` with `Payslip`s already
+      generated by `_seed_payroll`)
+- [ ] `if flush:` child-first wipe: `BankReconciliation.objects.filter(tenant=tenant).delete()` →
+      `PayoutPayment.objects.filter(tenant=tenant).delete()` →
+      `PayslipDistribution.objects.filter(tenant=tenant).delete()` →
+      `PayoutBatch.objects.filter(tenant=tenant).delete()`
+- [ ] `if PayoutBatch.objects.filter(tenant=tenant).exists(): self.stdout.write(self.style.NOTICE(
+      f"Payout & Reports data already exists for '{tenant.name}'. Use --flush to re-seed.")); return`
+- [ ] **critical precondition** — the `PayrollCycle` seeded by `_seed_payroll` (3.14) is left in
+      `status="draft"` at the end of that method (confirm this at build time by reading
+      `_seed_payroll`'s last lines). A `PayoutBatch` requires `cycle.is_locked`. Resolve by ONE of:
+      (a) locking the SAME seeded cycle in `_seed_payout` (fetch it, set
+      `status="locked"`/`approved_by`/`approved_at`/`submitted_by`/`submitted_at` if not already set,
+      save) — **preferred**, reuses existing demo data and demonstrates the real lock→payout flow
+      end-to-end; or (b) creating a second, dedicated locked demo `PayrollCycle` + its `Payslip`s if
+      locking the shared seeded cycle would break an assumption in 3.14/3.15/3.16's own idempotency
+      checks (verify no other seeder step depends on that cycle staying in `draft`/`approved` before
+      committing to (a)) — **decide and document the choice in the method's docstring**
+- [ ] once a locked cycle is available: create 1 `PayoutBatch` (`bank_file_format="neft"`,
+      `source_bank_name="HDFC Bank"`, `source_account_last4="4321"`, `status="draft"`) via the same
+      logic `payoutbatch_generate` uses (call the view's underlying helper directly, or replicate the
+      snapshot-per-payslip loop inline — prefer calling a shared non-view helper function if one is
+      extracted, to avoid duplicating the snapshot logic between the seeder and the view)
+  - [ ] `generated_by`/`generated_at` set to a seeded tenant-admin user / now
+  - [ ] approve the batch (`status="approved"`, `approved_by`/`approved_at` set)
+  - [ ] mark most payments `status="paid"` with a `transaction_reference` (e.g.
+        `f"UTR{i:08d}"`) and `paid_on=timezone.now()`; mark exactly ONE payment `status="failed"` with
+        a `failure_reason="Incorrect bank account number"` (demonstrating the exception-report path);
+        any on-hold payslip's payment stays `status="on_hold"`
+  - [ ] set `batch.status = "partially_disbursed"` (since one payment failed) and
+        `batch.disbursed_at=timezone.now()`
+- [ ] for every `Payslip` in that cycle: `PayslipDistribution.for_payslip(payslip)`, then mark most
+      `status="sent"` (`sent_at`, `sent_by`) and one `status="viewed"` (`viewed_at` also set) to show
+      the signal progression
+- [ ] create 1 `BankReconciliation` (`statement_date=` a plausible date, `statement_reference=
+      "STMT-2026-06-30"`), call `.recompute()` (will land on `status="discrepancy"` given the one
+      failed payment) — demonstrating the non-trivial reconciliation outcome, not just the happy path
+- [ ] print a summary line: `f"Payout & Reports seeded for '{tenant.name}': 1 batch
+      ({batch.number}, {batch.get_status_display()}), {batch.headcount} payments
+      ({batch.paid_count} paid / {batch.failed_count} failed), {distributions_sent} distributions
+      sent, 1 reconciliation ({recon.number} → {recon.get_status_display()})."`
+- [ ] confirm the seeder still prints the tenant-admin login reminder + "Data already exists" warning
+      path unchanged — the new block is itself idempotent, no new top-level guard needed
+
+## I. Navigation (`apps/core/navigation.py`)
+
+- [ ] add `LIVE_LINKS["3.17"]` (verify the exact query-string/routing convention against 3.14/3.15/
+      3.16's existing entries before finalizing):
+      ```python
+      # 3.17 Payout & Reports — PayoutBatch serves Bank Integration; PayslipDistribution serves
+      # Payslip Generation; the payment_register report (linked from a batch detail) serves Payment
+      # Register; BankReconciliation serves Reconciliation.
+      "3.17": {
+          "Bank Integration": "hrm:payoutbatch_list",                 # bullet
+          "Payslip Generation": "hrm:payslipdistribution_list",       # bullet
+          "Payment Register": "hrm:payoutbatch_list",                 # bullet (detail links to payment_register)
+          "Reconciliation": "hrm:bankreconciliation_list",            # bullet
+      },
+      ```
+      — all 4 NavERP.md 3.17 bullets go Live; "Payment Register" deliberately routes through the batch
+      list (no standalone Payment-Register-model per the "report, not a model" research decision) —
+      document this routing rationale in the navigation.py comment, mirroring 3.16's
+      Form-16-routes-to-computation-list precedent
+
+## J. Migrate / seed / verify (run from the venv)
+
+- [ ] `python manage.py makemigrations hrm` → review `0028_...py` (field/index/unique_together/
+      constraint names match the plan; confirm the `UniqueConstraint(condition=Q(...))` for
+      `PayoutPayment` — if the retry design in Section B lands on this approach — is generated
+      correctly and doesn't collide with the plain FK-by-string chains)
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` (1st run — creates data; confirm `_seed_tax` still runs first and
+      the new `_seed_payout` block correctly locks/reuses the seeded `PayrollCycle` and generates its
+      batch/payments/distributions/reconciliation against it)
+- [ ] `python manage.py seed_hrm` (2nd run — must be idempotent, no duplicates, no errors)
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every new `hrm:payoutbatch_*`, `hrm:payoutpayment_*`,
+      `hrm:payslipdistribution_*`, `hrm:bankreconciliation_*`, `hrm:payment_register`, and
+      `hrm:payout_exceptions` URL returns 200/302 when logged in as a tenant admin; no `{#`/
+      `{% comment` leaks in the new templates; cross-tenant IDOR check — a `PayoutBatch`/
+      `PayoutPayment`/`PayslipDistribution`/`BankReconciliation` pk belonging to tenant A returns 404
+      when fetched as tenant B; `payoutbatch_generate` run twice while draft produces the same
+      headcount/no duplicate `PayoutPayment` rows (idempotent regenerate, preserves past-pending rows);
+      `payoutbatch_generate` blocked (400/friendly error, not 500) against an unlocked cycle;
+      `payoutpayment_retry` on a failed payment creates exactly one new row without violating the
+      unique constraint; `bankreconciliation_reconcile` run twice produces the same matched/unmatched
+      aggregates (idempotent recompute); the seeded batch's `partially_disbursed` status and the
+      seeded reconciliation's `discrepancy` status are visible on their respective detail pages;
+      masked account/routing values render as `••••1234` (never the full number) on
+      `payoutbatch_detail`/`payment_register`; `payslipdistribution_mark_viewed`/`_mark_downloaded`
+      403s for a user whose linked `EmployeeProfile` doesn't match the payslip's employee;
+      `payout_exceptions` surfaces exactly the seeded failed payment
+- [ ] sidebar: confirm 3.17 shows all four bullets as **Live** (not "Coming soon") for a tenant with
+      data
+
+## K. Close-out
+
+- [ ] update `README.md` module-status / HRM section (3.17 bullets: Bank Integration / Payslip
+      Generation / Payment Register / Reconciliation all live; bump the HRM + project-wide test-count
+      lines once test-writer runs)
+- [ ] run the review-agent sequence in order, each ending in its own commit(s): `code-reviewer` →
+      `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` →
+      `security-reviewer` → `test-writer`
+- [ ] create/update `.claude/skills/hrm/SKILL.md` — 3.17 section: document `PayoutBatch`/
+      `PayoutPayment`/`PayslipDistribution`/`BankReconciliation` models, the
+      generate→approve→disburse workflow + mark_paid/mark_failed/retry payment actions, the
+      send/mark_viewed/mark_downloaded distribution signals, the `recompute()` reconciliation-match
+      contract (transaction_reference + status, no `BankStatementLine`), the new
+      `LIVE_LINKS["3.17"]` entries (incl. the Payment-Register-routes-to-batch-list rationale), the
+      extended seeder block, the masked-snapshot convention (never store/render the raw account), and
+      mark all 4 bullets of 3.17 as built
+
+## Later passes / deferred (carried over from research-payout-reports.md — do not build this pass)
+
+- **Bank-specific file-format writers** (exact NEFT/NACH/ACH/WPS-SIF CSV/fixed-width layouts per bank/
+  country) — this pass stores the batch + payment rows needed to generate them, not the format writer.
+- **Live bank-API integration for payment initiation** (RazorpayX Current Account, Keka's direct-bank-
+  integration option) — external API integration; `PayoutPayment.status` transitions are
+  admin/manual actions in v1, wireable to a live API callback later without a schema change.
+- **Bank-account prenote / multi-day verification workflow** (ADP prenote, Zoho Payroll's 2–3-day
+  re-verification after an account edit) — structurally could become a `pending_verification` status
+  value; not built as its own workflow in v1.
+- **Payslip PDF rendering + secure/password-protected delivery** — consistent with the deferral
+  already noted in 3.14/3.15/3.16; `PayslipDistribution` tracks the send/view/download SIGNAL, not
+  the document itself.
+- **Live bank-statement feed / API-based auto-reconciliation** — v1 assumes a manual/CSV-driven
+  statement import matched against `PayoutPayment.transaction_reference`; a live feed is
+  integration/later.
+- **A dedicated `BankStatementLine` persistence model** — considered and explicitly NOT added in this
+  pass to keep the build at 4 models; revisit if raw-statement audit retention becomes a hard
+  requirement.
+- **Period-over-period payroll-cost anomaly/discrepancy detection** (greytHR's Payroll Reconciliation
+  month-over-month compare) — buildable as a query across two periods without a new model; the
+  anomaly-flagging logic itself is a nice-to-have, not core v1.
+- **WPS/country-specific mandatory formats beyond India** (UAE SIF, other GCC wage-protection
+  systems) — out of scope for this India-centric pass; `PayoutBatch.bank_file_format` choices leave
+  room to extend later.
+- **Form 16 / annual tax-document distribution tracking** — 3.16's `StatutoryReturn`
+  (scheme=`tds_form16`) already tracks that document's filing workflow; extending the
+  `PayslipDistribution`-style send/view/download pattern to it is a natural future enhancement.
+- **Automatic re-initiation / retry scheduling** (auto-retry a failed payment after N days) — v1
+  supports a manual retry via `PayoutPayment.retry_of`; an automated retry scheduler is a
+  fast-follow, not blocking.
+
+## Review notes
+(filled in at the end)
