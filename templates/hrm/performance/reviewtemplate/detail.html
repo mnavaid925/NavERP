@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:reviewtemplate_list' %}">Review Templates</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:reviewtemplate_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:reviewtemplate_delete' obj.pk %}" onsubmit="return confirm('Delete this template? Reviews using it keep their data.');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Review Type</dt><dd><span class="badge badge-muted">{{ obj.get_review_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Rating Scale</dt><dd>{{ obj.rating_scale_max }}-point</dd></div>
+      <div class="detail-item"><dt>Includes Goals</dt><dd>{% if obj.include_goals %}<span class="badge badge-info">Yes</span>{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Anonymous Default</dt><dd>{% if obj.is_anonymous %}<span class="badge badge-amber">Yes</span>{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Used By</dt><dd>{{ obj.usage_count }} review{{ obj.usage_count|pluralize }}</dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:.5rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <a href="{% url 'hrm:reviewtemplate_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
