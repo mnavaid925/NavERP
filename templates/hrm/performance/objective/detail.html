@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:objective_list' %}">Objectives</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:objective_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:objective_delete' obj.pk %}" onsubmit="return confirm('Delete this objective and its key results?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{{ obj.owner.party.name }}</dd></div>
+      <div class="detail-item"><dt>Goal Period</dt><dd><a href="{% url 'hrm:goalperiod_detail' obj.goal_period.pk %}">{{ obj.goal_period.name }}</a></dd></div>
+      <div class="detail-item"><dt>Scope</dt><dd><span class="badge badge-muted">{{ obj.get_scope_display }}</span></dd></div>
+      <div class="detail-item"><dt>Department</dt><dd>{{ obj.department.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Target Type</dt><dd>{{ obj.get_target_type_display }}</dd></div>
+      <div class="detail-item"><dt>Aligns To</dt><dd>{% if obj.parent_objective_id %}<a href="{% url 'hrm:objective_detail' obj.parent_objective.pk %}">{{ obj.parent_objective.title }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Weight</dt><dd>{{ obj.weight }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'active' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'at_risk' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Progress</dt><dd>
+        <div class="progress" style="width:140px;"><div class="progress-bar" style="width:{{ obj.progress_pct|floatformat:0 }}%;"></div></div>
+        <span class="text-muted">{{ obj.progress_pct|floatformat:0 }}% (weighted)</span>
+      </dd></div>
+      <div class="detail-item"><dt>Health</dt><dd>
+        {% if obj.health_status == 'on_track' or obj.health_status == 'completed' %}<span class="badge badge-green">{{ obj.health_status }}</span>
+        {% elif obj.health_status == 'at_risk' %}<span class="badge badge-amber">{{ obj.health_status }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.health_status }}</span>{% endif %}
+      </dd></div>
+    </dl>
+    {% if obj.description %}<p style="margin-top:.5rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Key Results</h2>
+      <span class="text-muted">{{ obj.get_target_type_display }} objective · weighted rollup</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Key Result</th><th>Type</th><th>Progress</th><th>Weight</th><th>Health</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for kr in key_results %}
+            <tr>
+              <td><a href="{% url 'hrm:keyresult_detail' kr.pk %}" class="fw-600">{{ kr.number }}</a></td>
+              <td>{{ kr.title }}{% if kr.unit %} <span class="text-muted">({{ kr.unit }})</span>{% endif %}</td>
+              <td><span class="badge badge-muted">{{ kr.get_metric_type_display }}</span></td>
+              <td>
+                <div class="progress" style="width:90px;"><div class="progress-bar" style="width:{{ kr.progress_pct|floatformat:0 }}%;"></div></div>
+                <span class="text-muted">{{ kr.progress_pct|floatformat:0 }}%</span>
+              </td>
+              <td>{{ kr.weight }}</td>
+              <td>
+                {% if kr.health_status == 'on_track' or kr.health_status == 'completed' %}<span class="badge badge-green">{{ kr.health_status }}</span>
+                {% elif kr.health_status == 'at_risk' %}<span class="badge badge-amber">{{ kr.health_status }}</span>
+                {% else %}<span class="badge badge-red">{{ kr.health_status }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:keyresult_detail' kr.pk %}" class="btn-icon" title="Track / check-in"><i data-lucide="line-chart"></i></a>
+                  <a href="{% url 'hrm:keyresult_edit' kr.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:keyresult_delete' kr.pk %}" onsubmit="return confirm('Delete this key result?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list-checks"></i><p>No key results yet — add a measurable outcome below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Add a key result</h3>
+      <form method="post" action="{% url 'hrm:keyresult_create' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in kr_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Key Result</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Aligned Child Objectives</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Owner</th><th>Scope</th><th>Progress</th></tr></thead>
+        <tbody>
+          {% for c in child_objectives %}
+            <tr>
+              <td><a href="{% url 'hrm:objective_detail' c.pk %}" class="fw-600">{{ c.number }}</a></td>
+              <td>{{ c.title }}</td>
+              <td>{{ c.owner.party.name }}</td>
+              <td><span class="badge badge-muted">{{ c.get_scope_display }}</span></td>
+              <td>
+                <div class="progress" style="width:90px;"><div class="progress-bar" style="width:{{ c.progress_pct|floatformat:0 }}%;"></div></div>
+                <span class="text-muted">{{ c.progress_pct|floatformat:0 }}%</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="git-fork"></i><p>No child objectives align to this one.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Check-ins</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Key Result</th><th>Value</th><th>Confidence</th><th>By</th><th>Comment</th></tr></thead>
+        <tbody>
+          {% for ci in recent_checkins %}
+            <tr>
+              <td>{{ ci.checkin_date }}</td>
+              <td>{{ ci.key_result.title }}</td>
+              <td>{{ ci.value_at_checkin|default:"—" }}</td>
+              <td>
+                {% if ci.confidence == 'on_track' %}<span class="badge badge-green">{{ ci.get_confidence_display }}</span>
+                {% elif ci.confidence == 'at_risk' %}<span class="badge badge-amber">{{ ci.get_confidence_display }}</span>
+                {% else %}<span class="badge badge-red">{{ ci.get_confidence_display }}</span>{% endif %}
+              </td>
+              <td>{{ ci.created_by.party.name|default:"—" }}</td>
+              <td>{{ ci.comment|default:"—"|truncatechars:48 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="activity"></i><p>No check-ins logged yet — open a key result to track progress.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:objective_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
