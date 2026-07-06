@@ -467,6 +467,15 @@ LIVE_LINKS = {
         "Feedback Dashboard": "hrm:feedback_dashboard",                       # bullet (given/received/requested computed view)
         "Anonymous Feedback": "hrm:feedback_list?is_anonymous=1",             # bullet (is_anonymous=True slice)
     },
+    # 3.21 Performance Improvement — the FOURTH & FINAL Performance-Management sub-module (the
+    # corrective-action / disciplinary layer): Performance Improvement Plans with an HR-approval
+    # workflow, progressive warning letters, and manager-only coaching notes. The most confidential
+    # HRM records — Coaching Notes intentionally has NO employee-facing view (coach/admin only).
+    "3.21": {
+        "PIP Management": "hrm:pip_list",                # bullet (PerformanceImprovementPlan CRUD + workflow)
+        "Warning Letters": "hrm:warningletter_list",     # bullet (WarningLetter CRUD + issue/acknowledge/print)
+        "Coaching Notes": "hrm:coachingnote_list",       # bullet (CoachingNote — coach/admin only)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
