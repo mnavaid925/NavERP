@@ -1708,6 +1708,12 @@ class MeetingActionItemForm(TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None and "owner" in self.fields:
+            # Scope the owner to the 1:1's two participants — an action item must NOT be assignable to
+            # an outsider (who could then edit/toggle/delete it while being blocked from viewing the
+            # meeting: an inconsistent trust boundary). `meeting` is on the instance (set from the URL
+            # on create, or carried by the edited row).
+            meeting = self.instance.meeting if self.instance and self.instance.meeting_id else None
+            base = EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
             self.fields["owner"].queryset = (
-                EmployeeProfile.objects.filter(tenant=self.tenant)
-                .select_related("party").order_by("party__name"))
+                base.filter(pk__in=[meeting.manager_id, meeting.employee_id]) if meeting is not None else base
+            ).order_by("party__name")
