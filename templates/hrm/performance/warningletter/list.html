@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Warning Letters{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Warning Letters</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:pip_list' %}">Performance Improvement</a><span class="sep">›</span><span>Warning Letters</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:warningletter_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Warning Letter</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:170px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / recipient / description…">
+        </div>
+        <div class="form-group">
+          <select name="level" class="form-select">
+            <option value="">All levels</option>
+            {% for val, label in level_choices %}
+              <option value="{{ val }}" {% if request.GET.level == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" class="form-select">
+            <option value="">All categories</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="issued_to" class="form-select">
+            <option value="">All recipients</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.issued_to == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:warningletter_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Recipient</th><th>Level</th><th>Category</th><th>Status</th><th>Incident</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:warningletter_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.issued_to.party.name }}</td>
+              <td>
+                {% if obj.level == 'verbal' %}<span class="badge badge-muted">{{ obj.get_level_display }}</span>
+                {% elif obj.level == 'written' %}<span class="badge badge-amber">{{ obj.get_level_display }}</span>
+                {% else %}<span class="badge badge-red">{{ obj.get_level_display }}</span>{% endif %}
+              </td>
+              <td><span class="badge badge-slate">{{ obj.get_category_display }}</span></td>
+              <td>
+                {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'issued' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+                {% if obj.is_expired %} <span class="badge badge-red">Expired</span>{% endif %}
+              </td>
+              <td>{{ obj.incident_date|date:"Y-m-d" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:warningletter_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin or obj.status == 'draft' and obj.issued_by_id == current_profile_id %}
+                    <a href="{% url 'hrm:warningletter_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:warningletter_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this warning letter?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="file-warning"></i><h3>No warning letters</h3><p>Document a disciplinary warning (verbal / written / final) with an issue and acknowledgment workflow.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
