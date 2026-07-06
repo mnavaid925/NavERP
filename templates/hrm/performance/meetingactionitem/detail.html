@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Action Item · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:oneononemeeting_list' %}">1:1 Meetings</a><span class="sep">›</span><a href="{% url 'hrm:oneononemeeting_detail' meeting.pk %}">{{ meeting.number }}</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:meetingactionitem_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:meetingactionitem_delete' obj.pk %}" onsubmit="return confirm('Delete this action item?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Meeting</dt><dd><a href="{% url 'hrm:oneononemeeting_detail' meeting.pk %}">{{ meeting.number }}</a></dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{{ obj.owner.party.name }}</dd></div>
+      <div class="detail-item"><dt>Due</dt><dd>{% if obj.due_date %}{{ obj.due_date|date:"Y-m-d" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == 'done' %}<span class="badge badge-green">Done</span>{% else %}<span class="badge badge-amber">Open</span>{% endif %}</dd></div>
+      {% if obj.completed_at %}<div class="detail-item"><dt>Completed</dt><dd>{{ obj.completed_at|date:"Y-m-d H:i" }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.description %}<div style="margin-top:.6rem;"><strong>Description</strong><p>{{ obj.description|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  <a href="{% url 'hrm:oneononemeeting_detail' meeting.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to meeting</a>
+{% endblock %}
