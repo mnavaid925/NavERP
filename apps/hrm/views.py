@@ -8671,8 +8671,11 @@ def meetingactionitem_detail(request, pk):
         pk=pk, tenant=request.tenant)
     if not _can_view_meeting(request, item.meeting):
         raise PermissionDenied("You do not have access to this action item.")
-    return render(request, "hrm/performance/meetingactionitem/detail.html",
-                  {"obj": item, "meeting": item.meeting})
+    return render(request, "hrm/performance/meetingactionitem/detail.html", {
+        "obj": item, "meeting": item.meeting,
+        # Gate the Edit/Delete affordances to who can actually mutate it (owner/manager/admin).
+        "can_manage": _can_manage_action_item(request, item),
+    })
 
 
 @login_required
