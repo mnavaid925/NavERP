@@ -362,3 +362,23 @@ skill/CLAUDE.md's semantic-name list (it's stale). Quick check before shipping b
 `grep -n '\.badge-' static/css/theme.css` to confirm the real class names. (The skill/CLAUDE.md class list should be
 corrected to the colour names in a docs pass.) Related: L13 (agents invent utility classes that don't exist) — same
 root cause, verify the class exists in theme.css before using it.
+
+## L34 — Tenant-admin seed password is `password` (NOT `password123` — the skills are stale) + persist sidebar scroll/expand across full-page nav
+Two things from a user-reported sidebar UX fix. **(a) Credentials:** the tenant admins (`admin_acme`/`admin_globex`)
+are seeded with password **`password`** — `apps/accounts/management/commands/seed_accounts.py:72`
+(`create_user(..., password="password")`), and every seeder's stdout prints "admin_acme / password". The
+`next-module` skill's Step 3 (and `manual-test`) say `password123`, which is **wrong** and cost a wasted preview
+login. **Rule:** for any browser/`Client` login in this project use `admin_acme` / **`password`** (superuser
+`admin`/`admin`, but it has `tenant=None` → sees no module data). **(b) Sidebar state:** the sidebar
+(`templates/partials/sidebar.html`) is server-rendered every full-page load — `resolve_nav` correctly marks the
+ACTIVE module/submodule `open` + highlights the active feature, BUT a plain `<a href>` sidebar link does a full
+navigation, so the sidebar's **scroll position resets to top and any manually-expanded groups collapse** (HRM has
+20+ submodules, so the active item lands far down and the user "loses their place"). Fix WITHOUT going SPA/HTMX
+(which would risk breaking every page's `{% block extra_js %}` charts): persist `.sidebar` `scrollTop` + the set of
+open `.nav-group`/`.nav-subgroup` (keyed by a new `data-nav-key="{{ label }}"`) to **sessionStorage** on
+toggle/`beforeunload`/`pagehide`, and restore at end-of-body (pre-paint) + again in a `requestAnimationFrame` (after
+Lucide icons render and shift heights); only ever ADD `.open` (never collapse the server-active group), and leave the
+active `.active` highlight server-rendered so it's always fresh. First-visit fallback: center the active link in the
+sidebar. Lives in `static/js/app.js` (bump the `?v=` cache-buster in `base.html`, L15). Verified in the preview:
+scroll (500px) + a manually-opened extra module both survived navigating between 3.20 pages, active highlight moved
+correctly, zero console errors.
