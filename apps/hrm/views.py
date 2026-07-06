@@ -147,6 +147,14 @@ from .forms import (  # 3.20 Continuous Feedback
     MeetingActionItemForm,
     OneOnOneMeetingForm,
 )
+from .forms import (  # 3.21 Performance Improvement
+    CoachingNoteForm,
+    PIPCheckInForm,
+    PIPCloseForm,
+    PerformanceImprovementPlanForm,
+    WarningAcknowledgeForm,
+    WarningLetterForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -287,6 +295,12 @@ from .models import (  # 3.20 Continuous Feedback
     KudosBadge,
     MeetingActionItem,
     OneOnOneMeeting,
+)
+from .models import (  # 3.21 Performance Improvement
+    CoachingNote,
+    PIPCheckIn,
+    PerformanceImprovementPlan,
+    WarningLetter,
 )
 
 
@@ -8728,3 +8742,574 @@ def meetingactionitem_toggle(request, pk):
     write_audit_log(request.user, item, "update", {"action": "toggle", "to": item.status})
     messages.success(request, f"Action item marked {item.get_status_display().lower()}.")
     return redirect("hrm:oneononemeeting_detail", pk=meeting.pk)
+
+
+# =========================================================================
+# 3.21 Performance Improvement (Performance Management) — PIPs + progressive
+# warning letters + manager-only coaching notes. The 4th/FINAL Performance-
+# Management sub-module. Reuses _current_employee_profile / _is_admin from the
+# 3.19 section. CONFIDENTIALITY is the crux: PIPs/warnings are subject-or-
+# issuer-or-admin only (no team/public tier); CoachingNote is coach/admin ONLY
+# — the coached employee is NEVER a viewer (the strictest gate in the cluster).
+# =========================================================================
+def _can_view_pip(request, pip):
+    """A PIP is confidential — visible only to the subject, the owning manager, or a tenant admin
+    (mirrors _can_view_review; NO team/public tier)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk in (pip.subject_id, pip.manager_id)
+
+
+def _visible_pips_q(request):
+    """A ``Q`` restricting PIP lists to the subject's or manager's own rows. ``None`` for a tenant admin."""
+    if _is_admin(request.user):
+        return None
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return Q(pk__in=[])
+    return Q(subject=profile) | Q(manager=profile)
+
+
+def _can_edit_pip(request, pip):
+    """A PIP's content is editable ONLY by the manager or a tenant admin, and ONLY while it's a draft
+    (locks once submitted for HR approval — protects the acknowledge/HR-approval audit trail). The
+    subject is NEVER an editor (mirrors _can_edit_review)."""
+    if pip.status != "draft":
+        return False
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == pip.manager_id
+
+
+def _can_view_warning(request, letter):
+    """Visible only to the recipient, the issuer, or a tenant admin (subject-or-issuer-or-admin)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk in (letter.issued_to_id, letter.issued_by_id)
+
+
+def _visible_warnings_q(request):
+    if _is_admin(request.user):
+        return None
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return Q(pk__in=[])
+    return Q(issued_to=profile) | Q(issued_by=profile)
+
+
+def _can_edit_warning(request, letter):
+    """Editable only by the issuer or admin, only while draft (locks once issued). The recipient is
+    never an editor."""
+    if letter.status != "draft":
+        return False
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == letter.issued_by_id
+
+
+def _can_view_coaching(request, note):
+    """THE STRICTEST GATE: a coaching note is visible ONLY to its coach (author) or a tenant admin —
+    the coached ``employee`` is EXCLUDED at every stage (clones OneOnOneMeeting.manager_private_notes at
+    the whole-model level)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == note.coach_id
+
+
+def _visible_coaching_q(request):
+    """A ``Q`` restricting coaching notes to the coach's own rows — the ``employee`` leg is DELIBERATELY
+    omitted (the subject must never see notes about themselves). ``None`` for a tenant admin."""
+    if _is_admin(request.user):
+        return None
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return Q(pk__in=[])
+    return Q(coach=profile)
+
+
+def _can_edit_coaching(request, note):
+    """Coach-or-admin only (edit rights never broader than view rights — the _can_manage_action_item
+    lesson from 3.20)."""
+    return _can_view_coaching(request, note)
+
+
+# ------------------------------------------------------------ PerformanceImprovementPlan (3.21 PIPs)
+@login_required
+def pip_list(request):
+    qs = (PerformanceImprovementPlan.objects.filter(tenant=request.tenant)
+          .select_related("subject__party", "manager__party")
+          .annotate(num_checkins=Count("checkins")))
+    vq = _visible_pips_q(request)
+    if vq is not None:
+        qs = qs.filter(vq)
+    profile = _current_employee_profile(request)
+    return crud_list(
+        request,
+        qs.order_by("-start_date", "number"),
+        "hrm/performance/pip/list.html",
+        search_fields=("number", "subject__party__name", "manager__party__name"),
+        filters=[("status", "status", False), ("outcome", "outcome", False),
+                 ("subject", "subject_id", True), ("manager", "manager_id", True)],
+        extra_context={
+            "status_choices": PerformanceImprovementPlan.STATUS_CHOICES,
+            "outcome_choices": PerformanceImprovementPlan.OUTCOME_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "is_admin": _is_admin(request.user),
+            "current_profile_id": profile.pk if profile is not None else None,
+        },
+    )
+
+
+@login_required
+def pip_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    profile = _current_employee_profile(request)
+    if request.method == "POST":
+        form = PerformanceImprovementPlanForm(request.POST, tenant=request.tenant, viewer_profile=profile)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"PIP {obj.number} created.")
+            return redirect("hrm:pip_detail", pk=obj.pk)
+    else:
+        form = PerformanceImprovementPlanForm(tenant=request.tenant, viewer_profile=profile)
+    return render(request, "hrm/performance/pip/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def pip_detail(request, pk):
+    obj = get_object_or_404(
+        PerformanceImprovementPlan.objects.select_related(
+            "subject__party", "manager__party", "triggering_review",
+            "acknowledged_by__party", "hr_approved_by__party"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_pip(request, obj):
+        raise PermissionDenied("You do not have access to this performance improvement plan.")
+    checkins = list(obj.checkins.order_by("checkin_date"))
+    profile = _current_employee_profile(request)
+    is_subject = profile is not None and profile.pk == obj.subject_id
+    is_manager = profile is not None and profile.pk == obj.manager_id
+    return render(request, "hrm/performance/pip/detail.html", {
+        "obj": obj,
+        "checkins": checkins,
+        "can_edit": _can_edit_pip(request, obj),
+        "is_subject": is_subject,
+        "is_manager": is_manager,
+        "can_add_checkin": _can_view_pip(request, obj),   # subject/manager/admin add check-ins
+        "checkin_form": PIPCheckInForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def pip_edit(request, pk):
+    obj = get_object_or_404(PerformanceImprovementPlan, pk=pk, tenant=request.tenant)
+    if not _can_edit_pip(request, obj):
+        messages.error(request, "Only the manager or a tenant admin can edit a PIP, and only while it is a draft.")
+        return redirect("hrm:pip_detail", pk=obj.pk)
+    return crud_edit(request, model=PerformanceImprovementPlan, pk=pk, form_class=PerformanceImprovementPlanForm,
+                     template="hrm/performance/pip/form.html", success_url="hrm:pip_list")
+
+
+@login_required
+@require_POST
+def pip_delete(request, pk):
+    obj = get_object_or_404(PerformanceImprovementPlan, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user)
+            or (obj.status == "draft" and profile is not None and profile.pk == obj.manager_id)):
+        messages.error(request, "Only a tenant admin (or the manager, while draft) can delete this PIP.")
+        return redirect("hrm:pip_detail", pk=obj.pk)
+    return crud_delete(request, model=PerformanceImprovementPlan, pk=pk, success_url="hrm:pip_list")
+
+
+@login_required
+@require_POST
+def pip_submit(request, pk):
+    """The manager submits a draft PIP for HR approval (draft -> pending_hr_approval)."""
+    obj = get_object_or_404(PerformanceImprovementPlan, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == obj.manager_id)):
+        raise PermissionDenied("Only the manager (or a tenant admin) can submit this PIP.")
+    if obj.status == "draft":
+        obj.status = "pending_hr_approval"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"PIP {obj.number} submitted for HR approval.")
+    else:
+        messages.error(request, "Only a draft PIP can be submitted.")
+    return redirect("hrm:pip_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def pip_hr_approve(request, pk):
+    obj = get_object_or_404(PerformanceImprovementPlan, pk=pk, tenant=request.tenant)
+    if obj.status in ("draft", "pending_hr_approval"):
+        obj.status = "active"
+        obj.hr_approved_at = timezone.now()
+        obj.hr_approved_by = _current_employee_profile(request)
+        obj.save(update_fields=["status", "hr_approved_at", "hr_approved_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "hr_approve"})
+        messages.success(request, f"PIP {obj.number} approved and activated.")
+    else:
+        messages.error(request, "Only a draft or pending PIP can be approved.")
+    return redirect("hrm:pip_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def pip_acknowledge(request, pk):
+    obj = get_object_or_404(PerformanceImprovementPlan, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == obj.subject_id)):
+        raise PermissionDenied("Only the plan's subject can acknowledge it.")
+    if obj.status == "active" and obj.acknowledged_at is None:
+        obj.acknowledged_at = timezone.now()
+        obj.acknowledged_by = profile
+        obj.save(update_fields=["acknowledged_at", "acknowledged_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "acknowledge"})
+        messages.success(request, "Plan acknowledged.")
+    else:
+        messages.error(request, "Only an active, not-yet-acknowledged plan can be acknowledged.")
+    return redirect("hrm:pip_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+def pip_close(request, pk):
+    obj = get_object_or_404(
+        PerformanceImprovementPlan.objects.select_related("subject__party"), pk=pk, tenant=request.tenant)
+    if obj.status != "active":
+        messages.error(request, "Only an active plan can be closed.")
+        return redirect("hrm:pip_detail", pk=obj.pk)
+    if request.method == "POST":
+        obj.status = "closed"  # set before validation so the model's outcome-iff-closed clean() passes
+        form = PIPCloseForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if not obj.outcome_date:
+                obj.outcome_date = timezone.localdate()
+            obj.save()
+            write_audit_log(request.user, obj, "update", {"action": "close", "outcome": obj.outcome})
+            messages.success(request, f"PIP {obj.number} closed ({obj.get_outcome_display()}).")
+            return redirect("hrm:pip_detail", pk=obj.pk)
+    else:
+        form = PIPCloseForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/performance/pip/close.html", {"form": form, "obj": obj})
+
+
+@tenant_admin_required
+@require_POST
+def pip_extend(request, pk):
+    obj = get_object_or_404(PerformanceImprovementPlan, pk=pk, tenant=request.tenant)
+    if obj.status != "active":
+        messages.error(request, "Only an active plan can be extended.")
+        return redirect("hrm:pip_detail", pk=obj.pk)
+    raw = (request.POST.get("extended_end_date") or "").strip()
+    try:
+        parsed = _date.fromisoformat(raw) if raw else None
+    except ValueError:
+        parsed = None
+    if parsed is None or parsed <= (obj.extended_end_date or obj.end_date):
+        messages.error(request, "Enter a new end date later than the plan's current end date.")
+        return redirect("hrm:pip_detail", pk=obj.pk)
+    obj.extended_end_date = parsed
+    obj.save(update_fields=["extended_end_date", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "extend", "to": str(parsed)})
+    messages.success(request, f"PIP {obj.number} extended to {parsed}.")
+    return redirect("hrm:pip_detail", pk=obj.pk)
+
+
+# ------------------------------------------------------------ PIPCheckIn (nested under a PIP)
+@login_required
+def pipcheckin_create(request, pip_pk):
+    pip = get_object_or_404(PerformanceImprovementPlan, pk=pip_pk, tenant=request.tenant)
+    if not _can_view_pip(request, pip):   # subject/manager/admin may log a check-in
+        raise PermissionDenied("You do not have access to this plan.")
+    if request.method == "POST":
+        form = PIPCheckInForm(request.POST,
+                              instance=PIPCheckIn(tenant=request.tenant, pip=pip), tenant=request.tenant)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    ci = form.save(commit=False)
+                    ci.completed_at = timezone.now()  # a logged check-in records a held checkpoint
+                    ci.save()
+                write_audit_log(request.user, ci, "create")
+                messages.success(request, "Check-in logged.")
+            except IntegrityError:
+                messages.error(request, "Could not log that check-in.")
+            return redirect("hrm:pip_detail", pk=pip.pk)
+    else:
+        form = PIPCheckInForm(instance=PIPCheckIn(tenant=request.tenant, pip=pip), tenant=request.tenant)
+    return render(request, "hrm/performance/pipcheckin/form.html", {"form": form, "is_edit": False, "pip": pip})
+
+
+@login_required
+def pipcheckin_detail(request, pk):
+    item = get_object_or_404(
+        PIPCheckIn.objects.select_related("pip__subject__party", "pip__manager__party"), pk=pk, tenant=request.tenant)
+    if not _can_view_pip(request, item.pip):
+        raise PermissionDenied("You do not have access to this check-in.")
+    return render(request, "hrm/performance/pipcheckin/detail.html", {"obj": item, "pip": item.pip})
+
+
+@login_required
+def pipcheckin_edit(request, pk):
+    item = get_object_or_404(PIPCheckIn.objects.select_related("pip"), pk=pk, tenant=request.tenant)
+    if not _can_view_pip(request, item.pip):
+        raise PermissionDenied("You do not have access to this check-in.")
+    if request.method == "POST":
+        form = PIPCheckInForm(request.POST, instance=item, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, item, "update")
+            messages.success(request, "Check-in updated.")
+            return redirect("hrm:pip_detail", pk=item.pip_id)
+    else:
+        form = PIPCheckInForm(instance=item, tenant=request.tenant)
+    return render(request, "hrm/performance/pipcheckin/form.html",
+                  {"form": form, "is_edit": True, "obj": item, "pip": item.pip})
+
+
+@login_required
+@require_POST
+def pipcheckin_delete(request, pk):
+    item = get_object_or_404(PIPCheckIn.objects.select_related("pip"), pk=pk, tenant=request.tenant)
+    pip = item.pip
+    if not _can_view_pip(request, pip):
+        messages.error(request, "You do not have access to this check-in.")
+        return redirect("hrm:pip_detail", pk=pip.pk)
+    write_audit_log(request.user, item, "delete")
+    item.delete()
+    messages.success(request, "Check-in deleted.")
+    return redirect("hrm:pip_detail", pk=pip.pk)
+
+
+# ------------------------------------------------------------ WarningLetter (3.21 progressive discipline)
+@login_required
+def warningletter_list(request):
+    qs = (WarningLetter.objects.filter(tenant=request.tenant)
+          .select_related("issued_to__party", "issued_by__party", "related_pip"))
+    vq = _visible_warnings_q(request)
+    if vq is not None:
+        qs = qs.filter(vq)
+    profile = _current_employee_profile(request)
+    return crud_list(
+        request, qs.order_by("-incident_date", "number"),
+        "hrm/performance/warningletter/list.html",
+        search_fields=("number", "issued_to__party__name", "description"),
+        filters=[("level", "level", False), ("category", "category", False),
+                 ("status", "status", False), ("issued_to", "issued_to_id", True)],
+        extra_context={
+            "level_choices": WarningLetter.LEVEL_CHOICES,
+            "category_choices": WarningLetter.CATEGORY_CHOICES,
+            "status_choices": WarningLetter.STATUS_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "is_admin": _is_admin(request.user),
+            "current_profile_id": profile.pk if profile is not None else None,
+        },
+    )
+
+
+@login_required
+def warningletter_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    profile = _current_employee_profile(request)
+    if request.method == "POST":
+        form = WarningLetterForm(request.POST, tenant=request.tenant, viewer_profile=profile)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Warning letter {obj.number} created.")
+            return redirect("hrm:warningletter_detail", pk=obj.pk)
+    else:
+        form = WarningLetterForm(tenant=request.tenant, viewer_profile=profile)
+    return render(request, "hrm/performance/warningletter/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def warningletter_detail(request, pk):
+    obj = get_object_or_404(
+        WarningLetter.objects.select_related(
+            "issued_to__party", "issued_by__party", "related_pip", "acknowledged_by__party"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_warning(request, obj):
+        raise PermissionDenied("You do not have access to this warning letter.")
+    # Prior-warnings escalation context, scoped to what THIS viewer may see (never the full history).
+    prior = obj.prior_warnings.select_related("issued_by__party")
+    vq = _visible_warnings_q(request)
+    if vq is not None:
+        prior = prior.filter(vq)
+    profile = _current_employee_profile(request)
+    is_recipient = profile is not None and profile.pk == obj.issued_to_id
+    return render(request, "hrm/performance/warningletter/detail.html", {
+        "obj": obj,
+        "prior_warnings": list(prior[:10]),
+        "can_edit": _can_edit_warning(request, obj),
+        "is_recipient": is_recipient,
+        "can_acknowledge": is_recipient and obj.status == "issued",
+        "ack_form": WarningAcknowledgeForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def warningletter_edit(request, pk):
+    obj = get_object_or_404(WarningLetter, pk=pk, tenant=request.tenant)
+    if not _can_edit_warning(request, obj):
+        messages.error(request, "Only the issuer or a tenant admin can edit a warning letter, and only while it is a draft.")
+        return redirect("hrm:warningletter_detail", pk=obj.pk)
+    return crud_edit(request, model=WarningLetter, pk=pk, form_class=WarningLetterForm,
+                     template="hrm/performance/warningletter/form.html", success_url="hrm:warningletter_list")
+
+
+@login_required
+@require_POST
+def warningletter_delete(request, pk):
+    obj = get_object_or_404(WarningLetter, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user)
+            or (obj.status == "draft" and profile is not None and profile.pk == obj.issued_by_id)):
+        messages.error(request, "Only a tenant admin (or the issuer, while draft) can delete this warning letter.")
+        return redirect("hrm:warningletter_detail", pk=obj.pk)
+    return crud_delete(request, model=WarningLetter, pk=pk, success_url="hrm:warningletter_list")
+
+
+@tenant_admin_required
+@require_POST
+def warningletter_issue(request, pk):
+    obj = get_object_or_404(WarningLetter, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "issued"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "issue"})
+        messages.success(request, f"Warning letter {obj.number} issued.")
+    else:
+        messages.error(request, "Only a draft warning letter can be issued.")
+    return redirect("hrm:warningletter_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def warningletter_acknowledge(request, pk):
+    obj = get_object_or_404(WarningLetter, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == obj.issued_to_id)):
+        raise PermissionDenied("Only the recipient can acknowledge this warning letter.")
+    if obj.status != "issued":
+        messages.error(request, "Only an issued warning letter can be acknowledged.")
+        return redirect("hrm:warningletter_detail", pk=obj.pk)
+    form = WarningAcknowledgeForm(request.POST, instance=obj, tenant=request.tenant)
+    if form.is_valid():
+        obj = form.save(commit=False)
+        obj.status = "acknowledged"
+        obj.acknowledged_at = timezone.now()
+        obj.acknowledged_by = profile
+        obj.save(update_fields=["employee_response", "status", "acknowledged_at", "acknowledged_by", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "acknowledge"})
+        messages.success(request, "Warning letter acknowledged.")
+    return redirect("hrm:warningletter_detail", pk=obj.pk)
+
+
+@login_required
+def warningletter_print(request, pk):
+    obj = get_object_or_404(
+        WarningLetter.objects.select_related("issued_to__party", "issued_by__party", "tenant", "related_pip"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_warning(request, obj):
+        raise PermissionDenied("You do not have access to this warning letter.")
+    return render(request, "hrm/performance/warningletter/print.html", {"obj": obj})
+
+
+# ------------------------------------------------------------ CoachingNote (3.21 — coach/admin ONLY)
+@login_required
+def coachingnote_list(request):
+    qs = (CoachingNote.objects.filter(tenant=request.tenant)
+          .select_related("employee__party", "coach__party", "related_pip"))
+    vq = _visible_coaching_q(request)
+    if vq is not None:
+        qs = qs.filter(vq)
+    return crud_list(
+        request, qs.order_by("-note_date", "-created_at"),
+        "hrm/performance/coachingnote/list.html",
+        search_fields=("number", "content", "employee__party__name"),
+        filters=[("category", "category", False), ("employee", "employee_id", True)],
+        extra_context={
+            "category_choices": CoachingNote.CATEGORY_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+        },
+    )
+
+
+@login_required
+def coachingnote_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    coach = _current_employee_profile(request)
+    if coach is None:
+        messages.error(request, "Your account isn't linked to an employee profile, so you can't author a coaching note.")
+        return redirect("hrm:coachingnote_list")
+    if request.method == "POST":
+        form = CoachingNoteForm(request.POST, tenant=request.tenant, viewer_profile=coach)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.coach = coach   # server-set — never form-typed (a user can't log a note as someone else)
+            try:
+                obj.clean()     # coach set server-side (after form validation) — run employee!=coach guard
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            else:
+                obj.save()
+                write_audit_log(request.user, obj, "create")
+                messages.success(request, f"Coaching note {obj.number} logged.")
+                return redirect("hrm:coachingnote_detail", pk=obj.pk)
+    else:
+        form = CoachingNoteForm(tenant=request.tenant, viewer_profile=coach)
+    return render(request, "hrm/performance/coachingnote/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def coachingnote_detail(request, pk):
+    obj = get_object_or_404(
+        CoachingNote.objects.select_related("employee__party", "coach__party", "related_pip"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_coaching(request, obj):
+        raise PermissionDenied("You do not have access to this coaching note.")
+    return render(request, "hrm/performance/coachingnote/detail.html", {"obj": obj})
+
+
+@login_required
+def coachingnote_edit(request, pk):
+    obj = get_object_or_404(CoachingNote, pk=pk, tenant=request.tenant)
+    if not _can_edit_coaching(request, obj):
+        messages.error(request, "Only the coach (author) or a tenant admin can edit this coaching note.")
+        return redirect("hrm:coachingnote_detail", pk=obj.pk)
+    return crud_edit(request, model=CoachingNote, pk=pk, form_class=CoachingNoteForm,
+                     template="hrm/performance/coachingnote/form.html", success_url="hrm:coachingnote_list")
+
+
+@login_required
+@require_POST
+def coachingnote_delete(request, pk):
+    obj = get_object_or_404(CoachingNote, pk=pk, tenant=request.tenant)
+    if not _can_edit_coaching(request, obj):
+        messages.error(request, "Only the coach (author) or a tenant admin can delete this coaching note.")
+        return redirect("hrm:coachingnote_detail", pk=obj.pk)
+    return crud_delete(request, model=CoachingNote, pk=pk, success_url="hrm:coachingnote_list")
