@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_feedback_type_display }} · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:feedback_list' %}">Feedback</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}<a href="{% url 'hrm:feedback_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      {% if can_edit or request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:feedback_delete' obj.pk %}" onsubmit="return confirm('Delete this feedback?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>From</dt><dd>
+        {% if obj.giver_display == 'Anonymous' %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% else %}{{ obj.giver_display }}{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>To</dt><dd>{{ obj.receiver.party.name }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>
+        {% if obj.feedback_type == 'kudos' %}<span class="badge badge-green">{{ obj.get_feedback_type_display }}</span>
+        {% elif obj.feedback_type == 'appreciation' %}<span class="badge badge-info">{{ obj.get_feedback_type_display }}</span>
+        {% elif obj.feedback_type == 'constructive' %}<span class="badge badge-amber">{{ obj.get_feedback_type_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_feedback_type_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Visibility</dt><dd><span class="badge badge-muted">{{ obj.get_visibility_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'requested' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      {% if obj.badge_id %}<div class="detail-item"><dt>Badge</dt><dd><a href="{% url 'hrm:kudosbadge_detail' obj.badge.pk %}"><span class="badge badge-info">{% if obj.badge.icon %}<i data-lucide="{{ obj.badge.icon }}"></i> {% endif %}{{ obj.badge.name }}</span></a></dd></div>{% endif %}
+      {% if obj.related_objective_id %}<div class="detail-item"><dt>Linked Goal</dt><dd><a href="{% url 'hrm:objective_detail' obj.related_objective.pk %}">{{ obj.related_objective.title }}</a></dd></div>{% endif %}
+      {% if obj.related_review_id %}<div class="detail-item"><dt>Linked Review</dt><dd><a href="{% url 'hrm:performancereview_detail' obj.related_review.pk %}">{{ obj.related_review.number }}</a></dd></div>{% endif %}
+      {% if obj.requested_from_id %}<div class="detail-item"><dt>Responds To</dt><dd><a href="{% url 'hrm:feedback_detail' obj.requested_from.pk %}">{{ obj.requested_from.number }}</a></dd></div>{% endif %}
+      {% if obj.acknowledged_at %}<div class="detail-item"><dt>Acknowledged</dt><dd>{{ obj.acknowledged_at|date:"Y-m-d H:i" }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.message %}
+      <div style="margin-top:.6rem; padding:.6rem; background:var(--page-bg); border-radius:8px;">
+        {% if obj.feedback_type == 'request' %}<strong><i data-lucide="help-circle"></i> Request</strong>{% else %}<strong><i data-lucide="message-circle"></i> Message</strong>{% endif %}
+        <p style="margin-top:.3rem;">{{ obj.message|linebreaksbr }}</p>
+      </div>
+    {% endif %}
+  </div></div>
+
+  {% if can_acknowledge or can_respond %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Action</h2></div>
+      <div class="card-body">
+        {% if can_acknowledge %}
+          <form method="post" action="{% url 'hrm:feedback_acknowledge' obj.pk %}" style="display:inline;" onsubmit="return confirm('Acknowledge this feedback?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Acknowledge</button>
+          </form>
+          <span class="text-muted" style="margin-inline-start:.5rem;">Let the sender know you've read it.</span>
+        {% endif %}
+        {% if can_respond %}
+          <a href="{% url 'hrm:feedback_respond' obj.pk %}" class="btn btn-primary"><i data-lucide="reply"></i> Respond</a>
+          <span class="text-muted" style="margin-inline-start:.5rem;">Someone asked you for feedback — respond to close the request.</span>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:feedback_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
