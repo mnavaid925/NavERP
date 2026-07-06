@@ -109,6 +109,12 @@ from .models import (  # 3.20 Continuous Feedback
     MeetingActionItem,
     OneOnOneMeeting,
 )
+from .models import (  # 3.21 Performance Improvement
+    CoachingNote,
+    PIPCheckIn,
+    PerformanceImprovementPlan,
+    WarningLetter,
+)
 
 
 @admin.register(JobGrade)
@@ -1004,3 +1010,43 @@ class MeetingActionItemAdmin(admin.ModelAdmin):
     search_fields = ("number", "description")
     raw_id_fields = ("meeting", "owner")
     readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------------- 3.21 Performance Improvement
+@admin.register(PerformanceImprovementPlan)
+class PerformanceImprovementPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "subject", "manager", "status", "outcome", "start_date", "end_date", "tenant")
+    list_filter = ("tenant", "status", "outcome")
+    search_fields = ("number", "subject__party__name", "manager__party__name")
+    raw_id_fields = ("subject", "manager", "triggering_review", "acknowledged_by", "hr_approved_by")
+    readonly_fields = ("number", "acknowledged_at", "acknowledged_by", "hr_approved_at", "hr_approved_by",
+                       "created_at", "updated_at")
+
+
+@admin.register(PIPCheckIn)
+class PIPCheckInAdmin(admin.ModelAdmin):
+    list_display = ("number", "pip", "checkin_date", "progress_rating", "tenant")
+    list_filter = ("tenant", "progress_rating")
+    search_fields = ("number", "pip__number")
+    raw_id_fields = ("pip",)
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(WarningLetter)
+class WarningLetterAdmin(admin.ModelAdmin):
+    list_display = ("number", "issued_to", "issued_by", "level", "category", "status", "incident_date", "tenant")
+    list_filter = ("tenant", "level", "category", "status")
+    search_fields = ("number", "issued_to__party__name", "description")
+    raw_id_fields = ("issued_to", "issued_by", "related_pip", "acknowledged_by")
+    readonly_fields = ("number", "acknowledged_at", "acknowledged_by", "created_at", "updated_at")
+
+
+# CoachingNote is confidential (coach/admin only) app-side; Django admin is a superuser-only surface, so
+# no extra gating is needed here — but never expose it via a non-admin, non-gated path.
+@admin.register(CoachingNote)
+class CoachingNoteAdmin(admin.ModelAdmin):
+    list_display = ("number", "coach", "employee", "category", "note_date", "tenant")
+    list_filter = ("tenant", "category")
+    search_fields = ("number", "coach__party__name", "employee__party__name")
+    raw_id_fields = ("employee", "coach", "related_pip")
+    readonly_fields = ("number", "created_at", "updated_at")
