@@ -704,4 +704,40 @@ urlpatterns = [
     path("action-items/<int:pk>/edit/", views.meetingactionitem_edit, name="meetingactionitem_edit"),
     path("action-items/<int:pk>/delete/", views.meetingactionitem_delete, name="meetingactionitem_delete"),
     path("action-items/<int:pk>/toggle/", views.meetingactionitem_toggle, name="meetingactionitem_toggle"),
+
+    # ---- 3.21 Performance Improvement ----
+    # Performance Improvement Plans (PIPs)
+    path("pips/", views.pip_list, name="pip_list"),
+    path("pips/add/", views.pip_create, name="pip_create"),
+    path("pips/<int:pk>/", views.pip_detail, name="pip_detail"),
+    path("pips/<int:pk>/edit/", views.pip_edit, name="pip_edit"),
+    path("pips/<int:pk>/delete/", views.pip_delete, name="pip_delete"),
+    path("pips/<int:pk>/submit/", views.pip_submit, name="pip_submit"),
+    path("pips/<int:pk>/hr-approve/", views.pip_hr_approve, name="pip_hr_approve"),
+    path("pips/<int:pk>/acknowledge/", views.pip_acknowledge, name="pip_acknowledge"),
+    path("pips/<int:pk>/close/", views.pip_close, name="pip_close"),
+    path("pips/<int:pk>/extend/", views.pip_extend, name="pip_extend"),
+
+    # PIP check-ins — created nested under a PIP
+    path("pips/<int:pip_pk>/check-ins/add/", views.pipcheckin_create, name="pipcheckin_create"),
+    path("pip-check-ins/<int:pk>/", views.pipcheckin_detail, name="pipcheckin_detail"),
+    path("pip-check-ins/<int:pk>/edit/", views.pipcheckin_edit, name="pipcheckin_edit"),
+    path("pip-check-ins/<int:pk>/delete/", views.pipcheckin_delete, name="pipcheckin_delete"),
+
+    # Warning letters
+    path("warning-letters/", views.warningletter_list, name="warningletter_list"),
+    path("warning-letters/add/", views.warningletter_create, name="warningletter_create"),
+    path("warning-letters/<int:pk>/", views.warningletter_detail, name="warningletter_detail"),
+    path("warning-letters/<int:pk>/edit/", views.warningletter_edit, name="warningletter_edit"),
+    path("warning-letters/<int:pk>/delete/", views.warningletter_delete, name="warningletter_delete"),
+    path("warning-letters/<int:pk>/issue/", views.warningletter_issue, name="warningletter_issue"),
+    path("warning-letters/<int:pk>/acknowledge/", views.warningletter_acknowledge, name="warningletter_acknowledge"),
+    path("warning-letters/<int:pk>/print/", views.warningletter_print, name="warningletter_print"),
+
+    # Coaching notes (coach/admin only — no employee-facing view)
+    path("coaching-notes/", views.coachingnote_list, name="coachingnote_list"),
+    path("coaching-notes/add/", views.coachingnote_create, name="coachingnote_create"),
+    path("coaching-notes/<int:pk>/", views.coachingnote_detail, name="coachingnote_detail"),
+    path("coaching-notes/<int:pk>/edit/", views.coachingnote_edit, name="coachingnote_edit"),
+    path("coaching-notes/<int:pk>/delete/", views.coachingnote_delete, name="coachingnote_delete"),
 ]
