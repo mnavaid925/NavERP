@@ -8,6 +8,56 @@
     }
   }
 
+  // --- Sidebar state: keep the scroll position + expanded groups across full-page navigations, so
+  // clicking a sub-menu link doesn't reset the sidebar (the server already marks the ACTIVE group
+  // open + highlights the active item; this only restores the user's scroll + any EXTRA groups they
+  // expanded). Runs at end-of-body (sidebar DOM present) so scroll is restored before first paint,
+  // then re-applied after the Lucide icons render (which shifts heights slightly). ---
+  (function () {
+    var STORE = "naverp.sidebar";
+    var bar = document.querySelector(".sidebar");
+    if (!bar) return;
+
+    function read() {
+      try { return JSON.parse(sessionStorage.getItem(STORE)) || {}; } catch (e) { return {}; }
+    }
+    function save() {
+      try {
+        var open = [];
+        document.querySelectorAll(".nav-group.open[data-nav-key], .nav-subgroup.open[data-nav-key]")
+          .forEach(function (el) { open.push(el.getAttribute("data-nav-key")); });
+        sessionStorage.setItem(STORE, JSON.stringify({ open: open, scroll: bar.scrollTop }));
+      } catch (e) {}
+    }
+    function centerActive() {
+      var a = bar.querySelector(".nav-features a.active, .nav-link.active");
+      if (!a) return;
+      var top = a.getBoundingClientRect().top - bar.getBoundingClientRect().top + bar.scrollTop;
+      bar.scrollTop = Math.max(0, top - bar.clientHeight / 2);
+    }
+
+    var st = read();
+    // Re-open the groups the user had expanded (merge with the server's active-open — only ADD).
+    if (st.open && st.open.length) {
+      var want = {};
+      st.open.forEach(function (k) { want[k] = true; });
+      document.querySelectorAll("[data-nav-key]").forEach(function (el) {
+        if (want[el.getAttribute("data-nav-key")]) el.classList.add("open");
+      });
+    }
+    function applyScroll() {
+      if (typeof st.scroll === "number") bar.scrollTop = st.scroll;  // restore exact position
+      else centerActive();                                          // first visit / deep link
+    }
+    applyScroll();                              // early (pre-paint)
+    window.requestAnimationFrame(applyScroll);  // again after icons render (heights settled)
+
+    // Persist after any expand/collapse (delegated) and before the page unloads on navigation.
+    bar.addEventListener("click", function () { window.setTimeout(save, 0); });
+    window.addEventListener("beforeunload", save);
+    window.addEventListener("pagehide", save);
+  })();
+
   document.addEventListener("DOMContentLoaded", function () {
     initIcons();
 
