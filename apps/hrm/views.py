@@ -8180,9 +8180,9 @@ def _visible_feedback_q(request):
 
 def _can_edit_feedback(request, feedback):
     """A Feedback row is editable ONLY by the giver (never the receiver) or a tenant admin, and only
-    while it has not been acknowledged (content locks once acknowledged) — mirrors _can_edit_review's
-    status-lock-plus-author-check shape."""
-    if feedback.status == "acknowledged":
+    while it is still open (content locks once acknowledged, or once a request has been responded to)
+    — mirrors _can_edit_review's status-lock-plus-author-check shape."""
+    if feedback.status in ("acknowledged", "responded"):
         return False
     if _is_admin(request.user):
         return True
@@ -8229,6 +8229,16 @@ def _can_manage_meeting(request, meeting):
     return profile is not None and profile.pk == meeting.manager_id
 
 
+def _can_manage_action_item(request, item):
+    """Edit/delete/toggle an action item: the item's owner, the meeting's manager, or an admin (a
+    tighter set than _can_view_meeting — creating one only needs meeting access, but mutating an
+    existing item shouldn't be open to the non-owner employee side)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk in (item.owner_id, item.meeting.manager_id)
+
+
 # ------------------------------------------------------------ KudosBadge (3.20 recognition catalog)
 @login_required
 def kudosbadge_list(request):
@@ -8253,7 +8263,14 @@ def kudosbadge_create(request):
 @login_required
 def kudosbadge_detail(request, pk):
     obj = get_object_or_404(KudosBadge, pk=pk, tenant=request.tenant)
-    recent = list(obj.feedback_items.select_related("receiver__party").order_by("-created_at")[:10])
+    # Confidentiality: a badge's award list must NOT leak private/team feedback recipients to an
+    # outsider — filter the recent awards through the SAME visibility gate as feedback_list, so each
+    # viewer sees only the badge-carrying feedback they're allowed to (public / own / team).
+    recent_qs = obj.feedback_items.filter(tenant=request.tenant).select_related("receiver__party")
+    vq = _visible_feedback_q(request)
+    if vq is not None:
+        recent_qs = recent_qs.filter(vq)
+    recent = list(recent_qs.order_by("-created_at")[:10])
     return render(request, "hrm/performance/kudosbadge/detail.html",
                   {"obj": obj, "recent_feedback": recent})
 
@@ -8333,7 +8350,7 @@ def feedback_create(request):
             if giver is None or giver.pk != respond_to.receiver_id:
                 respond_to = None
     if request.method == "POST":
-        form = FeedbackForm(request.POST, tenant=request.tenant)
+        form = FeedbackForm(request.POST, tenant=request.tenant, viewer_profile=giver)
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
@@ -8352,6 +8369,12 @@ def feedback_create(request):
                 form.add_error(None, exc)
             else:
                 obj.save()
+                # Close the answered request so it can't be re-answered and drops out of the pending
+                # "Requests" views — the response row carries the content forward via requested_from.
+                if respond_to is not None and respond_to.status == "requested":
+                    respond_to.status = "responded"
+                    respond_to.save(update_fields=["status", "updated_at"])
+                    write_audit_log(request.user, respond_to, "update", {"action": "responded"})
                 write_audit_log(request.user, obj, "create")
                 messages.success(request, f"Feedback {obj.number} created.")
                 return redirect("hrm:feedback_detail", pk=obj.pk)
@@ -8359,7 +8382,7 @@ def feedback_create(request):
         initial = {}
         if respond_to is not None:
             initial = {"receiver": respond_to.giver_id, "feedback_type": "appreciation"}
-        form = FeedbackForm(tenant=request.tenant, initial=initial)
+        form = FeedbackForm(tenant=request.tenant, initial=initial, viewer_profile=giver)
     return render(request, "hrm/performance/feedback/form.html",
                   {"form": form, "is_edit": False, "respond_to": respond_to})
 
@@ -8655,8 +8678,8 @@ def meetingactionitem_detail(request, pk):
 @login_required
 def meetingactionitem_edit(request, pk):
     item = get_object_or_404(MeetingActionItem.objects.select_related("meeting"), pk=pk, tenant=request.tenant)
-    if not _can_view_meeting(request, item.meeting):
-        raise PermissionDenied("You do not have access to this action item.")
+    if not _can_manage_action_item(request, item):
+        raise PermissionDenied("Only the item's owner, the meeting's manager, or an admin can edit this action item.")
     if request.method == "POST":
         form = MeetingActionItemForm(request.POST, instance=item, tenant=request.tenant)
         if form.is_valid():
@@ -8675,8 +8698,8 @@ def meetingactionitem_edit(request, pk):
 def meetingactionitem_delete(request, pk):
     item = get_object_or_404(MeetingActionItem.objects.select_related("meeting"), pk=pk, tenant=request.tenant)
     meeting = item.meeting
-    if not _can_view_meeting(request, meeting):
-        messages.error(request, "You do not have access to this action item.")
+    if not _can_manage_action_item(request, item):
+        messages.error(request, "Only the item's owner, the meeting's manager, or an admin can delete this action item.")
         return redirect("hrm:oneononemeeting_detail", pk=meeting.pk)
     write_audit_log(request.user, item, "delete")
     item.delete()
@@ -8689,10 +8712,8 @@ def meetingactionitem_delete(request, pk):
 def meetingactionitem_toggle(request, pk):
     item = get_object_or_404(MeetingActionItem.objects.select_related("meeting"), pk=pk, tenant=request.tenant)
     meeting = item.meeting
-    profile = _current_employee_profile(request)
     # The item's owner, the meeting's manager, or an admin may flip its state.
-    if not (_is_admin(request.user)
-            or (profile is not None and profile.pk in (item.owner_id, meeting.manager_id))):
+    if not _can_manage_action_item(request, item):
         raise PermissionDenied("Only the owner, the meeting's manager, or an admin can update this action item.")
     if item.status == "open":
         item.status, item.completed_at = "done", timezone.now()
