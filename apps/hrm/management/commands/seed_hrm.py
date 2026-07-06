@@ -116,6 +116,12 @@ from apps.hrm.models import (  # 3.19 Performance Review
     ReviewRating,
     ReviewTemplate,
 )
+from apps.hrm.models import (  # 3.20 Continuous Feedback
+    Feedback,
+    KudosBadge,
+    MeetingActionItem,
+    OneOnOneMeeting,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -237,6 +243,7 @@ class Command(BaseCommand):
             self._seed_payout(tenant, flush=options["flush"])
             self._seed_goals(tenant, flush=options["flush"])
             self._seed_reviews(tenant, flush=options["flush"])
+            self._seed_feedback(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -262,6 +269,10 @@ class Command(BaseCommand):
                           # rows below. Also before GoalPeriod (ReviewCycle.goal_period SET_NULL is harmless
                           # either way, but keep review teardown grouped ahead of the goal teardown).
                           ReviewRating, PerformanceReview, ReviewCycle, ReviewTemplate,
+                          # 3.20: Feedback/1:1s PROTECT EmployeeProfile (giver/receiver/manager/
+                          # employee/owner) — wipe the feedback + 1:1 rows (action-items→meetings,
+                          # feedback→badges) BEFORE the employee rows below.
+                          MeetingActionItem, OneOnOneMeeting, Feedback, KudosBadge,
                           # 3.18: Objective.owner FK EmployeeProfile (PROTECT) + goal_period (PROTECT) —
                           # wipe goals (check-ins→KRs→objectives→periods) BEFORE the employee rows below.
                           GoalCheckIn, KeyResult, Objective, GoalPeriod,
@@ -2023,3 +2034,130 @@ class Command(BaseCommand):
             f"{ReviewTemplate.objects.filter(tenant=tenant).count()} templates, "
             f"{reviews_made} reviews (self/manager/peer, incl. 1 calibrated), "
             f"{ReviewRating.objects.filter(tenant=tenant).count()} rating lines."))
+
+    def _seed_feedback(self, tenant, *, flush):
+        """3.20 Continuous Feedback — a small KudosBadge catalog, real-time Feedback rows spanning
+        types/visibility/status (incl. an anonymous one, a goal-linked one, a review-linked one, and
+        a request→response pair demonstrating the pull workflow), and 2 OneOnOneMeetings (one
+        completed with shared + private notes and 2 action items, one upcoming). Reuses seeded
+        EmployeeProfiles + a 3.18 Objective + a 3.19 PerformanceReview — creates no new person rows.
+        Runs after _seed_reviews."""
+        if flush:
+            MeetingActionItem.objects.filter(tenant=tenant).delete()
+            OneOnOneMeeting.objects.filter(tenant=tenant).delete()
+            Feedback.objects.filter(tenant=tenant).delete()
+            KudosBadge.objects.filter(tenant=tenant).delete()
+        if (Feedback.objects.filter(tenant=tenant).exists()
+                or KudosBadge.objects.filter(tenant=tenant).exists()):
+            self.stdout.write(self.style.NOTICE(
+                f"Continuous-feedback data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant)
+                    .select_related("party", "employment").order_by("party__name"))
+        if len(emps) < 3:
+            # Anonymous + request/response demos need ≥3 distinct people to be meaningful.
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' — skipping continuous-feedback seed."))
+            return
+
+        def emp(i):
+            return emps[i % len(emps)]
+
+        def manager_profile_of(subject):
+            mp = subject.manager  # a core.Party or None (derived off employment)
+            return getattr(mp, "employee_profile", None) if mp is not None else None
+
+        now = timezone.now()
+        td = datetime.timedelta
+        today = timezone.localdate()
+
+        # --- KudosBadge catalog (recognition tags; icon = a Lucide icon name) ---
+        BADGES = [
+            ("Team Player", "Goes out of the way to help teammates.", "handshake", "#2563eb", "Collaboration"),
+            ("Above & Beyond", "Delivered well beyond expectations.", "rocket", "#16a34a", "Excellence"),
+            ("Customer Hero", "Delighted a customer.", "star", "#f59e0b", "Customer First"),
+            ("Innovator", "Brought a creative new idea to life.", "lightbulb", "#7c3aed", "Innovation"),
+        ]
+        badges = {}
+        for name, desc, icon, color, value in BADGES:
+            badges[name] = KudosBadge.objects.create(
+                tenant=tenant, name=name, description=desc, icon=icon, color=color, linked_value=value)
+
+        obj0 = Objective.objects.filter(tenant=tenant).order_by("title").first()
+        review0 = PerformanceReview.objects.filter(tenant=tenant).order_by("number").first()
+
+        a, b, c, d = emp(0), emp(1), emp(2), emp(3)
+        fb_made = 0
+        # 1) Public kudos with a badge.
+        Feedback.objects.create(
+            tenant=tenant, giver=a, receiver=b, feedback_type="kudos", visibility="public",
+            status="given", badge=badges["Team Player"],
+            message="Thanks for jumping in on the release — you saved the day!")
+        fb_made += 1
+        # 2) Private constructive feedback.
+        Feedback.objects.create(
+            tenant=tenant, giver=b, receiver=c, feedback_type="constructive", visibility="private",
+            status="given",
+            message="Consider looping in QA earlier next sprint so we catch edge cases sooner.")
+        fb_made += 1
+        # 3) Team-visibility appreciation, acknowledged, goal-linked, badged.
+        Feedback.objects.create(
+            tenant=tenant, giver=c, receiver=a, feedback_type="appreciation", visibility="team",
+            status="acknowledged", acknowledged_at=now, badge=badges["Above & Beyond"],
+            related_objective=obj0,
+            message="Your mentoring this quarter really lifted the whole team.")
+        fb_made += 1
+        # 4) Anonymous public feedback (giver masked on read for non-admins).
+        Feedback.objects.create(
+            tenant=tenant, giver=d, receiver=b, feedback_type="appreciation", visibility="public",
+            status="given", is_anonymous=True,
+            message="Really appreciate how calm and clear you are under pressure.")
+        fb_made += 1
+        # 5) Review-linked feedback (only when the review subject isn't the giver — no self-feedback).
+        if review0 is not None and review0.subject_id != a.pk:
+            Feedback.objects.create(
+                tenant=tenant, giver=a, receiver=review0.subject, feedback_type="appreciation",
+                visibility="private", status="given", related_review=review0,
+                message="Following up on your review — great progress on the growth goals.")
+            fb_made += 1
+        # 6) Request → response pair (the pull workflow: a asks c; c responds, linked via requested_from).
+        ask = Feedback.objects.create(
+            tenant=tenant, giver=a, receiver=c, feedback_type="request", visibility="private",
+            status="requested",
+            message="Could you share feedback on how the Q2 launch went from your side?")
+        fb_made += 1
+        Feedback.objects.create(
+            tenant=tenant, giver=c, receiver=a, feedback_type="appreciation", visibility="private",
+            status="given", requested_from=ask,
+            message="Happy to! The launch was smooth — your cross-team coordination was the highlight.")
+        fb_made += 1
+
+        # --- 1:1 meetings (manager↔employee, distinct people) ---
+        mgr = manager_profile_of(b) or a
+        if mgr.pk == b.pk:
+            mgr = a if a.pk != b.pk else c
+        m1 = OneOnOneMeeting.objects.create(
+            tenant=tenant, manager=mgr, employee=b, scheduled_at=now - td(days=7),
+            status="completed", completed_at=now - td(days=7),
+            agenda="Q2 retro; growth goals; current blockers.",
+            shared_notes="Discussed the launch retro and agreed on two focus areas for Q3.",
+            manager_private_notes="Flight risk is low; ready for a stretch project next quarter.",
+            related_objective=obj0)
+        MeetingActionItem.objects.create(
+            tenant=tenant, meeting=m1, description="Draft the Q3 stretch-project proposal.",
+            owner=b, due_date=today + td(days=7), status="open")
+        MeetingActionItem.objects.create(
+            tenant=tenant, meeting=m1, description="Share the launch retro notes with the team.",
+            owner=mgr, due_date=today - td(days=2), status="done", completed_at=now - td(days=3))
+        OneOnOneMeeting.objects.create(
+            tenant=tenant, manager=mgr, employee=b, scheduled_at=now + td(days=7),
+            status="scheduled", agenda="Career-path check-in; feedback follow-ups.")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Continuous feedback seeded for '{tenant.name}': "
+            f"{KudosBadge.objects.filter(tenant=tenant).count()} badges, "
+            f"{fb_made} feedback items (kudos/appreciation/constructive/request, incl. 1 anonymous + a "
+            f"request→response pair), "
+            f"{OneOnOneMeeting.objects.filter(tenant=tenant).count()} 1:1 meetings, "
+            f"{MeetingActionItem.objects.filter(tenant=tenant).count()} action items."))
