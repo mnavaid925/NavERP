@@ -5477,3 +5477,219 @@ class ReviewRating(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.criterion_label} ({self.rating_value})"
+
+
+# ---------------------------------------------------------------------------
+# 3.20 Continuous Feedback — the ongoing/informal performance layer: real-time
+# kudos/appreciation/constructive feedback (incl. a request-feedback pull
+# workflow + anonymous masking), 1:1 meetings with shared/private notes +
+# action items, and a computed given/received/requested feedback dashboard
+# (a view, NOT a 5th model — mirrors Objective.progress_pct). Third
+# Performance-Management sub-module after 3.18 Goal Setting and 3.19 Performance
+# Review; PIP/warning-letters/coaching are 3.21. Reuses the unified spine +
+# already-built HRM models (NavERP-ERD.md): every person is an
+# ``EmployeeProfile`` (giver/receiver, 1:1 manager/employee, action-item owner);
+# feedback and 1:1s optionally link to a 3.18 ``Objective`` or a 3.19
+# ``PerformanceReview`` for work context. Adds ONLY the Feedback/1:1 tables + a
+# small KudosBadge catalog — no new core-spine entity, posts no GL. Confidentiality
+# clones 3.19 field-for-field: ``OneOnOneMeeting.manager_private_notes`` clones
+# ``PerformanceReview.private_notes`` (manager-only, never rendered employee-side)
+# and ``Feedback.is_anonymous`` clones the reviewer-masking pattern (giver hidden
+# from non-admins on read).
+# ---------------------------------------------------------------------------
+class KudosBadge(TenantOwned):
+    """A small per-tenant recognition-badge catalog — the values/company-value tags a kudos can
+    carry ("Team Player", "Above & Beyond", …). Same shape as ``JobGrade``/``GoalPeriod``/
+    ``ReviewCycle``: identified by ``name``, not auto-numbered."""
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=50, blank=True, help_text="Emoji or icon name for the UI chip.")
+    color = models.CharField(max_length=20, blank=True, help_text="Hex or Tailwind class for the chip.")
+    linked_value = models.CharField(max_length=100, blank=True,
+                                    help_text="Free-text company value this badge celebrates (e.g. 'Customer First').")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_kb_tenant_active_idx"),
+        ]
+
+    @property
+    def usage_count(self):
+        return self.feedback_items.count()
+
+    def __str__(self):
+        return self.name
+
+
+class Feedback(TenantNumbered):
+    """A real-time feedback row (3.20) — any employee to any employee, any time. One table serves
+    kudos/appreciation/constructive feedback AND the "request feedback" pull workflow (via
+    ``status`` + the ``requested_from`` self-FK, so no second table). ``is_anonymous`` masks the
+    giver on read for non-admins — a direct clone of the 3.19 ``PerformanceReview.reviewer`` +
+    ``is_anonymous`` precedent (the FK is kept; only the RENDER is masked)."""
+
+    NUMBER_PREFIX = "FBK"
+
+    FEEDBACK_TYPE_CHOICES = [
+        ("kudos", "Kudos"),
+        ("appreciation", "Appreciation"),
+        ("constructive", "Constructive"),
+        ("request", "Feedback Request"),
+    ]
+    VISIBILITY_CHOICES = [
+        ("private", "Private"),
+        ("team", "Team"),
+        ("public", "Public"),
+    ]
+    STATUS_CHOICES = [
+        ("requested", "Requested"),
+        ("given", "Given"),
+        ("acknowledged", "Acknowledged"),
+    ]
+
+    giver = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="feedback_given",
+                              help_text="Who gave the feedback (masked on read when is_anonymous).")
+    receiver = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+                                 related_name="feedback_received")
+    feedback_type = models.CharField(max_length=15, choices=FEEDBACK_TYPE_CHOICES, default="kudos")
+    visibility = models.CharField(max_length=10, choices=VISIBILITY_CHOICES, default="private",
+                                  help_text="private = giver/receiver/admin; team = receiver's org unit; public = the feed.")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="given",
+                              help_text="A plain kudos is born 'given'; a pull request is born 'requested'.")
+    message = models.TextField(blank=True)
+    is_anonymous = models.BooleanField(default=False,
+                                       help_text="Masks the giver on the receiver-facing view (admins still see it).")
+    badge = models.ForeignKey("hrm.KudosBadge", on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="feedback_items")
+    related_objective = models.ForeignKey("hrm.Objective", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="feedback_items",
+                                          help_text="Optional 3.18 goal this feedback is about.")
+    related_review = models.ForeignKey("hrm.PerformanceReview", on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name="feedback_items",
+                                       help_text="Optional 3.19 review this feedback is about.")
+    requested_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name="requested_responses",
+                                       help_text="On a response row, points back at the 'requested' ask it answers.")
+    acknowledged_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "receiver"], name="hrm_fbk_tenant_recv_idx"),
+            models.Index(fields=["tenant", "giver"], name="hrm_fbk_tenant_giver_idx"),
+            models.Index(fields=["tenant", "feedback_type"], name="hrm_fbk_tenant_type_idx"),
+            models.Index(fields=["tenant", "visibility"], name="hrm_fbk_tenant_vis_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_fbk_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.giver_id and self.receiver_id and self.giver_id == self.receiver_id:
+            raise ValidationError({"receiver": "You cannot give feedback to yourself."})
+
+    @property
+    def giver_anonymized(self):
+        """True when the giver's name should be hidden from non-admin viewers. Kept as a property so
+        any future per-type masking rule has one place to change (mirrors
+        ``PerformanceReview.reviewer_anonymized``)."""
+        return self.is_anonymous
+
+    def __str__(self):
+        who = self.receiver.party.name if self.receiver_id else "?"
+        return f"{self.number} · {self.get_feedback_type_display()} → {who}"
+
+
+class OneOnOneMeeting(TenantNumbered):
+    """A manager↔employee 1:1 meeting shell (3.20) — scheduling + a shared agenda/notes + a
+    manager-only private-notes field. ``manager_private_notes`` is a direct clone of
+    ``PerformanceReview.private_notes``: never rendered on the employee-facing detail. Meeting
+    history is just the ordered queryset (no extra table — mirrors how ``GoalCheckIn`` rows ARE a
+    KeyResult's history)."""
+
+    NUMBER_PREFIX = "O2O"
+
+    STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    manager = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+                                related_name="oneonones_as_manager")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+                                 related_name="oneonones_as_employee")
+    scheduled_at = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="scheduled")
+    agenda = models.TextField(blank=True, help_text="Shared talking points — editable by either party pre-meeting.")
+    shared_notes = models.TextField(blank=True, help_text="Visible to both the manager and the employee.")
+    manager_private_notes = models.TextField(
+        blank=True, help_text="Manager-only — NEVER rendered on the employee-facing view.")
+    related_objective = models.ForeignKey("hrm.Objective", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="oneonones",
+                                          help_text="Optional 3.18 goal this 1:1 is anchored to.")
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-scheduled_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "manager"], name="hrm_o2o_tenant_mgr_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_o2o_tenant_emp_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_o2o_tenant_status_idx"),
+            models.Index(fields=["tenant", "scheduled_at"], name="hrm_o2o_tenant_sched_idx"),
+        ]
+
+    def clean(self):
+        if self.manager_id and self.employee_id and self.manager_id == self.employee_id:
+            raise ValidationError({"employee": "A 1:1 needs two distinct people."})
+
+    @property
+    def open_action_item_count(self):
+        return self.action_items.filter(status="open").count()
+
+    def __str__(self):
+        m = self.manager.party.name if self.manager_id else "?"
+        e = self.employee.party.name if self.employee_id else "?"
+        stamp = f" ({self.scheduled_at:%Y-%m-%d})" if self.scheduled_at else ""
+        return f"{self.number} · {m} & {e}{stamp}"
+
+
+class MeetingActionItem(TenantNumbered):
+    """An action item captured in a 1:1 (3.20) — mirrors the ``KeyResult``→``Objective`` /
+    ``ReviewRating``→``PerformanceReview`` child-row pattern."""
+
+    NUMBER_PREFIX = "MAI"
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("done", "Done"),
+    ]
+
+    meeting = models.ForeignKey("hrm.OneOnOneMeeting", on_delete=models.CASCADE, related_name="action_items")
+    description = models.TextField()
+    owner = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="meeting_action_items")
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="open")
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["meeting", "due_date", "description"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "meeting"], name="hrm_mai_tenant_meeting_idx"),
+            models.Index(fields=["tenant", "owner"], name="hrm_mai_tenant_owner_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_mai_tenant_status_idx"),
+        ]
+
+    @property
+    def is_overdue(self):
+        """Open + past its due date (derived, mirrors the pattern used across HRM child rows)."""
+        return bool(self.status == "open" and self.due_date and self.due_date < timezone.now().date())
+
+    def __str__(self):
+        return f"{self.number} · {self.description[:40]}"
