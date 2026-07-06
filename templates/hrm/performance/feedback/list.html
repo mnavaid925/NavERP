@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Feedback{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Continuous Feedback</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Feedback</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:feedback_dashboard' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+      <a href="{% url 'hrm:kudosbadge_list' %}" class="btn btn-outline"><i data-lucide="award"></i> Badges</a>
+      <a href="{% url 'hrm:oneononemeeting_list' %}" class="btn btn-outline"><i data-lucide="users"></i> 1:1 Meetings</a>
+      <a href="{% url 'hrm:feedback_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Give Feedback</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group" style="margin-bottom:.6rem;">
+        <a href="{% querystring given=None received=None requested=None is_anonymous=None page=None %}" class="btn {% if not request.GET.given and not request.GET.received and not request.GET.requested and not request.GET.is_anonymous %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All</a>
+        <a href="{% querystring given=1 received=None requested=None is_anonymous=None page=None %}" class="btn {% if request.GET.given == '1' %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="send"></i> Given by Me</a>
+        <a href="{% querystring received=1 given=None requested=None is_anonymous=None page=None %}" class="btn {% if request.GET.received == '1' %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="inbox"></i> About Me</a>
+        <a href="{% querystring requested=1 given=None received=None is_anonymous=None page=None %}" class="btn {% if request.GET.requested == '1' %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="help-circle"></i> Requests</a>
+        <a href="{% querystring is_anonymous=1 given=None received=None requested=None page=None %}" class="btn {% if request.GET.is_anonymous == '1' %}btn-primary{% else %}btn-outline{% endif %} btn-sm"><i data-lucide="eye-off"></i> Anonymous</a>
+      </div>
+      <form method="get" class="filter-bar">
+        {% if request.GET.given %}<input type="hidden" name="given" value="1">{% endif %}
+        {% if request.GET.received %}<input type="hidden" name="received" value="1">{% endif %}
+        {% if request.GET.requested %}<input type="hidden" name="requested" value="1">{% endif %}
+        {% if request.GET.is_anonymous %}<input type="hidden" name="is_anonymous" value="1">{% endif %}
+        <div class="form-group" style="flex:1; min-width:170px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / message / recipient…">
+        </div>
+        <div class="form-group">
+          <select name="feedback_type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in feedback_type_choices %}
+              <option value="{{ val }}" {% if request.GET.feedback_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="visibility" class="form-select">
+            <option value="">All visibility</option>
+            {% for val, label in visibility_choices %}
+              <option value="{{ val }}" {% if request.GET.visibility == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="receiver" class="form-select">
+            <option value="">All recipients</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if request.GET.receiver == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:feedback_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>From</th><th>To</th><th>Type</th><th>Visibility</th><th>Badge</th><th>Status</th><th>When</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:feedback_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>
+                {% if obj.giver_anonymized and not is_admin and obj.giver_id != current_profile_id %}
+                  <span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>
+                {% elif obj.giver_id %}{{ obj.giver.party.name }}{% else %}—{% endif %}
+              </td>
+              <td>{{ obj.receiver.party.name }}</td>
+              <td>
+                {% if obj.feedback_type == 'kudos' %}<span class="badge badge-green">{{ obj.get_feedback_type_display }}</span>
+                {% elif obj.feedback_type == 'appreciation' %}<span class="badge badge-info">{{ obj.get_feedback_type_display }}</span>
+                {% elif obj.feedback_type == 'constructive' %}<span class="badge badge-amber">{{ obj.get_feedback_type_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_feedback_type_display }}</span>{% endif %}
+              </td>
+              <td><span class="badge badge-muted">{{ obj.get_visibility_display }}</span></td>
+              <td>{% if obj.badge_id %}<span class="badge badge-info">{% if obj.badge.icon %}<i data-lucide="{{ obj.badge.icon }}"></i> {% endif %}{{ obj.badge.name }}</span>{% else %}—{% endif %}</td>
+              <td>
+                {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'requested' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.created_at|date:"Y-m-d" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:feedback_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin or obj.giver_id == current_profile_id and obj.status != 'acknowledged' %}
+                    <a href="{% url 'hrm:feedback_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:feedback_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this feedback?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="message-circle-heart"></i><h3>No feedback</h3><p>Give a colleague kudos, appreciation, or constructive feedback — or request feedback from someone.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
