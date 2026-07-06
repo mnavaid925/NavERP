@@ -456,6 +456,17 @@ LIVE_LINKS = {
         "360° Feedback": "hrm:performancereview_list",                        # bullet (all review types incl. peer/upward)
         "Calibration": "hrm:calibration_board",                               # bullet (calibration board)
     },
+    # 3.20 Continuous Feedback — third Performance-Management sub-module: the ongoing/informal layer
+    # (real-time kudos/appreciation/constructive feedback incl. a request-pull workflow + anonymous
+    # masking; 1:1 meetings with shared/private notes + action items; a computed given/received/
+    # requested feedback dashboard). PIP/warning-letters/coaching are 3.21. Real-time Feedback →
+    # the Feedback CRUD; Anonymous Feedback → the is_anonymous=1 slice (most-specific match wins).
+    "3.20": {
+        "Real-time Feedback": "hrm:feedback_list",                            # bullet (Feedback CRUD, all types/visibility)
+        "1:1 Meetings": "hrm:oneononemeeting_list",                           # bullet (OneOnOneMeeting + action items)
+        "Feedback Dashboard": "hrm:feedback_dashboard",                       # bullet (given/received/requested computed view)
+        "Anonymous Feedback": "hrm:feedback_list?is_anonymous=1",             # bullet (is_anonymous=True slice)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
