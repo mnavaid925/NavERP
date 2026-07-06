@@ -255,7 +255,8 @@ script in `temp/` (gitignored) like the foundation smoke test:
 - Fix anything that isn't 200/302 (usual culprit: a wrong reverse-accessor name or a context-variable
   mismatch — read the view to confirm the exact name).
 
-Credentials: tenant admins `admin_acme` / `admin_globex`, password `password123`. The superuser `admin` has
+Credentials: tenant admins `admin_acme` / `admin_globex`, password `password` (per
+`apps/accounts/management/commands/seed_accounts.py` — NOT `password123`). The superuser `admin` has
 `tenant=None` and sees no module data (by design).
 
 ---
