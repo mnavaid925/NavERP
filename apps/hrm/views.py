@@ -8503,6 +8503,7 @@ def feedback_dashboard(request):
 # ------------------------------------------------------------ OneOnOneMeeting (3.20 1:1 meetings)
 @login_required
 def oneononemeeting_list(request):
+    profile = _current_employee_profile(request)
     qs = (OneOnOneMeeting.objects.filter(tenant=request.tenant)
           .select_related("manager__party", "employee__party", "related_objective")
           .annotate(num_actions=Count("action_items")))
@@ -8521,6 +8522,9 @@ def oneononemeeting_list(request):
             "status_choices": OneOnOneMeeting.STATUS_CHOICES,
             "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
                           .select_related("party").order_by("party__name")),
+            # For gating the row manage buttons (edit/delete/complete/cancel) to the manager/admin.
+            "is_admin": _is_admin(request.user),
+            "current_profile_id": profile.pk if profile is not None else None,
         },
     )
 
