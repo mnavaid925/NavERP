@@ -50,7 +50,7 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
 management — goals, reviews, and continuous feedback — 20 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **5,939 passing tests**.
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **6,197 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -419,8 +419,8 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   by design (`_can_view_feedback`/`_visible_feedback_q`/`_can_edit_feedback`). Reuses `EmployeeProfile` + the 3.18/3.19
   models (no new spine, posts no GL); PIP/warning-letters/coaching are deferred to 3.21.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,292-test** HRM suite
-(**5,939 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,550-test** HRM suite
+(**6,197 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -654,9 +654,9 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **5,939 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **6,197 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
-  **Accounting 212**, **HRM 3,292**.
+  **Accounting 212**, **HRM 3,550**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
   IDOR (cross-tenant → 404)**, auth flows (email-or-username, bad creds, POST-only logout), permission gating
   (member → 403), forgot-password non-enumeration, invite token/expiry, encryption-key secrecy, branding hex
