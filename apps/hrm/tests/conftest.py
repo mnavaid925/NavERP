@@ -1371,3 +1371,120 @@ def review_rating_b(db, tenant_b, performance_review_b):
         criterion_category="competency", rating_value=Decimal("3.00"), weight=Decimal("100"),
     )
 
+
+# ------------------------------------------------------------------ 3.20 Continuous Feedback fixtures
+@pytest.fixture
+def kudos_badge_a(db, tenant_a):
+    """An active KudosBadge for tenant_a — "Team Player"."""
+    from apps.hrm.models import KudosBadge
+    return KudosBadge.objects.create(
+        tenant=tenant_a, name="Team Player", linked_value="Collaboration", is_active=True,
+    )
+
+
+@pytest.fixture
+def kudos_badge_b(db, tenant_b):
+    """An active KudosBadge belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import KudosBadge
+    return KudosBadge.objects.create(tenant=tenant_b, name="Team Player B", is_active=True)
+
+
+@pytest.fixture
+def feedback_a(db, tenant_a, employee_a2, employee_a):
+    """A private, given kudos Feedback for tenant_a — giver=employee_a2, receiver=employee_a."""
+    from apps.hrm.models import Feedback
+    return Feedback.objects.create(
+        tenant=tenant_a, giver=employee_a2, receiver=employee_a,
+        feedback_type="kudos", visibility="private", status="given",
+        message="Great work on the release!",
+    )
+
+
+@pytest.fixture
+def feedback_b(db, tenant_b, employee_b):
+    """A private, given Feedback belonging to tenant_b (IDOR tests) — self-giver-less (giver=None)."""
+    from apps.hrm.models import Feedback
+    return Feedback.objects.create(
+        tenant=tenant_b, receiver=employee_b,
+        feedback_type="kudos", visibility="private", status="given",
+        message="Nice job B!",
+    )
+
+
+@pytest.fixture
+def outsider_employee_a(db, tenant_a):
+    """A THIRD EmployeeProfile in tenant_a — neither giver nor receiver of feedback_a / participant
+    of oneonone_a, and NOT in dept_a (a distinct org unit) so it also fails the "team" visibility
+    check. Used to build a non-admin user who must be denied access to confidential rows they're
+    not party to (mirrors the 3.19 outsider_employee_a fixture)."""
+    from apps.core.models import Employment, OrgUnit, Party
+    from apps.hrm.models import EmployeeProfile
+    other_dept = OrgUnit.objects.create(tenant=tenant_a, kind="department", name="Sales")
+    party = Party.objects.create(tenant=tenant_a, kind="person", name="Dana Outsider")
+    employment = Employment.objects.create(
+        tenant=tenant_a, party=party, org_unit=other_dept, job_title="Analyst", status="active")
+    return EmployeeProfile.objects.create(
+        tenant=tenant_a, party=party, employment=employment, employee_type="full_time")
+
+
+@pytest.fixture
+def teammate_employee_a(db, tenant_a, dept_a):
+    """A FOURTH EmployeeProfile in tenant_a sharing employee_a's org unit (dept_a) — used for the
+    "team" visibility tests (a colleague in the same department as the receiver)."""
+    from apps.core.models import Employment, Party
+    from apps.hrm.models import EmployeeProfile
+    party = Party.objects.create(tenant=tenant_a, kind="person", name="Eve Teammate")
+    employment = Employment.objects.create(
+        tenant=tenant_a, party=party, org_unit=dept_a, job_title="Engineer", status="active")
+    return EmployeeProfile.objects.create(
+        tenant=tenant_a, party=party, employment=employment, employee_type="full_time")
+
+
+@pytest.fixture
+def oneonone_a(db, tenant_a, employee_a2, employee_a):
+    """A scheduled OneOnOneMeeting for tenant_a — manager=employee_a2, employee=employee_a, with
+    manager-only private notes."""
+    from apps.hrm.models import OneOnOneMeeting
+    return OneOnOneMeeting.objects.create(
+        tenant=tenant_a, manager=employee_a2, employee=employee_a,
+        scheduled_at=datetime.datetime(2026, 7, 10, 14, 0, tzinfo=datetime.timezone.utc),
+        agenda="Career growth check-in",
+        manager_private_notes="Confidential: flight risk, discuss retention plan.",
+    )
+
+
+@pytest.fixture
+def oneonone_b(db, tenant_b, employee_b):
+    """A scheduled OneOnOneMeeting belonging to tenant_b (IDOR tests) — manager=employee=employee_b
+    is disallowed by clean(), so build a second tenant_b EmployeeProfile as the manager."""
+    from apps.core.models import Employment, Party
+    from apps.hrm.models import EmployeeProfile, OneOnOneMeeting
+    party = Party.objects.create(tenant=tenant_b, kind="person", name="Manager B")
+    employment = Employment.objects.create(
+        tenant=tenant_b, party=party, job_title="Manager", status="active")
+    manager_b = EmployeeProfile.objects.create(
+        tenant=tenant_b, party=party, employment=employment, employee_type="full_time")
+    return OneOnOneMeeting.objects.create(
+        tenant=tenant_b, manager=manager_b, employee=employee_b,
+        scheduled_at=datetime.datetime(2026, 7, 10, 14, 0, tzinfo=datetime.timezone.utc),
+    )
+
+
+@pytest.fixture
+def action_item_a(db, tenant_a, oneonone_a, employee_a):
+    """An open MeetingActionItem on oneonone_a, owned by employee_a (the meeting's employee side)."""
+    from apps.hrm.models import MeetingActionItem
+    return MeetingActionItem.objects.create(
+        tenant=tenant_a, meeting=oneonone_a, description="Set up mentorship pairing",
+        owner=employee_a, status="open",
+    )
+
+
+@pytest.fixture
+def action_item_b(db, tenant_b, oneonone_b, employee_b):
+    """An open MeetingActionItem belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import MeetingActionItem
+    return MeetingActionItem.objects.create(
+        tenant=tenant_b, meeting=oneonone_b, description="Action item B", owner=employee_b, status="open",
+    )
+
