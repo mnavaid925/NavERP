@@ -1637,7 +1637,7 @@ class FeedbackForm(TenantModelForm):
             "message": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, viewer_profile=None, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             if "receiver" in self.fields:
@@ -1648,13 +1648,19 @@ class FeedbackForm(TenantModelForm):
                 self.fields["badge"].queryset = (
                     KudosBadge.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
             if "related_objective" in self.fields:
+                # Objectives are company-open in NavERP (unlike reviews), so no visibility scoping.
                 self.fields["related_objective"].queryset = (
                     Objective.objects.filter(tenant=self.tenant)
                     .select_related("goal_period").order_by("title"))
             if "related_review" in self.fields:
-                self.fields["related_review"].queryset = (
-                    PerformanceReview.objects.filter(tenant=self.tenant)
-                    .select_related("subject__party").order_by("-created_at"))
+                # Confidentiality (3.19): only surface reviews the FEEDBACK GIVER may see (their own
+                # subject/reviewer rows) — never the tenant-wide review roster (who-is-reviewed is
+                # confidential). The giver is the edit instance's giver, or (on create) the
+                # viewer_profile the view passes.
+                giver = self.instance.giver if self.instance and self.instance.giver_id else viewer_profile
+                rq = PerformanceReview.objects.filter(tenant=self.tenant).select_related("subject__party")
+                rq = rq.filter(Q(subject=giver) | Q(reviewer=giver)) if giver is not None else rq.none()
+                self.fields["related_review"].queryset = rq.order_by("-created_at")
 
 
 class OneOnOneMeetingForm(TenantModelForm):
