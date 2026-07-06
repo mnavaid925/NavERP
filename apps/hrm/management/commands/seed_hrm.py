@@ -2158,6 +2158,6 @@ class Command(BaseCommand):
             f"Continuous feedback seeded for '{tenant.name}': "
             f"{KudosBadge.objects.filter(tenant=tenant).count()} badges, "
             f"{fb_made} feedback items (kudos/appreciation/constructive/request, incl. 1 anonymous + a "
-            f"request→response pair), "
+            f"request/response pair), "
             f"{OneOnOneMeeting.objects.filter(tenant=tenant).count()} 1:1 meetings, "
             f"{MeetingActionItem.objects.filter(tenant=tenant).count()} action items."))
