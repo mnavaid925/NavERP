@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PIP · {{ obj.subject.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:pip_list' %}">PIPs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}<a href="{% url 'hrm:pip_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      {% if can_edit or request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:pip_delete' obj.pk %}" onsubmit="return confirm('Delete this PIP?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject.party.name }}</dd></div>
+      <div class="detail-item"><dt>Manager</dt><dd>{{ obj.manager.party.name }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'active' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'closed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending_hr_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      {% if obj.outcome %}<div class="detail-item"><dt>Outcome</dt><dd><span class="badge {% if obj.outcome == 'successful' %}badge-green{% elif obj.outcome == 'failed' or obj.outcome == 'terminated' %}badge-red{% else %}badge-amber{% endif %}">{{ obj.get_outcome_display }}</span> {% if obj.outcome_date %}<span class="text-muted">{{ obj.outcome_date|date:"Y-m-d" }}</span>{% endif %}</dd></div>{% endif %}
+      <div class="detail-item"><dt>Timeline</dt><dd>{{ obj.start_date|date:"Y-m-d" }} → {{ obj.effective_end_date|date:"Y-m-d" }}{% if obj.extended_end_date %} <span class="badge badge-amber">Extended</span>{% endif %}</dd></div>
+      {% if obj.triggering_review_id %}<div class="detail-item"><dt>Triggering Review</dt><dd><a href="{% url 'hrm:performancereview_detail' obj.triggering_review.pk %}">{{ obj.triggering_review.number }}</a></dd></div>{% endif %}
+      {% if obj.hr_approved_at %}<div class="detail-item"><dt>HR Approved</dt><dd>{{ obj.hr_approved_at|date:"Y-m-d" }}{% if obj.hr_approved_by %} by {{ obj.hr_approved_by.party.name }}{% endif %}</dd></div>{% endif %}
+      {% if obj.acknowledged_at %}<div class="detail-item"><dt>Acknowledged</dt><dd>{{ obj.acknowledged_at|date:"Y-m-d" }}{% if obj.acknowledged_by %} by {{ obj.acknowledged_by.party.name }}{% endif %}</dd></div>{% endif %}
+    </dl>
+    <div style="margin-top:.6rem;"><strong>Performance Issue</strong><p>{{ obj.performance_issue|linebreaksbr }}</p></div>
+    <div style="margin-top:.4rem;"><strong>Expected Standards</strong><p>{{ obj.expected_standards|linebreaksbr }}</p></div>
+    <div style="margin-top:.4rem;"><strong>Improvement Goals</strong><p>{{ obj.improvement_goals|linebreaksbr }}</p></div>
+    {% if obj.support_provided %}<div style="margin-top:.4rem;"><strong>Support Provided</strong><p>{{ obj.support_provided|linebreaksbr }}</p></div>{% endif %}
+    <div style="margin-top:.4rem;"><strong>Measurement Criteria</strong><p>{{ obj.measurement_criteria|linebreaksbr }}</p></div>
+    {% if obj.outcome_notes %}<div style="margin-top:.4rem;"><strong>Outcome Notes</strong><p class="text-muted">{{ obj.outcome_notes|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'draft' %}
+        {% if is_manager or request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:pip_submit' obj.pk %}" style="display:inline;" onsubmit="return confirm('Submit this PIP for HR approval?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for HR Approval</button>
+          </form>
+        {% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:pip_hr_approve' obj.pk %}" style="display:inline; margin-inline-start:.4rem;" onsubmit="return confirm('Approve and activate this PIP?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="badge-check"></i> HR Approve</button>
+          </form>
+        {% endif %}
+        <span class="text-muted" style="margin-inline-start:.5rem;">Draft — editable until submitted.</span>
+      {% elif obj.status == 'pending_hr_approval' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:pip_hr_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve and activate this PIP?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> HR Approve &amp; Activate</button>
+          </form>
+        {% else %}<span class="text-muted"><i data-lucide="clock"></i> Pending HR approval.</span>{% endif %}
+      {% elif obj.status == 'active' %}
+        {% if is_subject and not obj.acknowledged_at %}
+          <form method="post" action="{% url 'hrm:pip_acknowledge' obj.pk %}" style="display:inline;" onsubmit="return confirm('Acknowledge this plan?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Acknowledge</button>
+          </form>
+        {% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <a href="{% url 'hrm:pip_close' obj.pk %}" class="btn btn-outline" style="margin-inline-start:.4rem;"><i data-lucide="flag"></i> Close with Outcome</a>
+          <form method="post" action="{% url 'hrm:pip_extend' obj.pk %}" style="display:inline-flex; gap:.3rem; margin-inline-start:.4rem; align-items:center;">
+            {% csrf_token %}
+            <input type="date" name="extended_end_date" class="form-input" style="width:auto;" required>
+            <button class="btn btn-outline" type="submit"><i data-lucide="calendar-plus"></i> Extend</button>
+          </form>
+        {% endif %}
+        <span class="text-muted" style="margin-inline-start:.5rem;">Active{% if not obj.acknowledged_at %} — awaiting the subject's acknowledgment{% endif %}.</span>
+      {% else %}
+        <span class="text-muted"><i data-lucide="check-circle"></i> Closed — {{ obj.get_outcome_display }}.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Check-ins</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Date</th><th>Progress</th><th>Notes</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for ci in checkins %}
+            <tr>
+              <td><a href="{% url 'hrm:pipcheckin_detail' ci.pk %}" class="fw-600">{{ ci.number }}</a></td>
+              <td>{{ ci.checkin_date|date:"Y-m-d" }}</td>
+              <td>
+                {% if ci.progress_rating == 'on_track' %}<span class="badge badge-green">On Track</span>
+                {% elif ci.progress_rating == 'at_risk' %}<span class="badge badge-amber">At Risk</span>
+                {% else %}<span class="badge badge-red">Off Track</span>{% endif %}
+              </td>
+              <td>{{ ci.progress_notes|default:"—"|truncatechars:60 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:pipcheckin_detail' ci.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if can_add_checkin %}
+                    <a href="{% url 'hrm:pipcheckin_edit' ci.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:pipcheckin_delete' ci.pk %}" style="display:inline;" onsubmit="return confirm('Delete this check-in?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="list-checks"></i><p>No check-ins yet — log the first below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if can_add_checkin %}
+      <div class="card-body">
+        <h3 class="fw-600" style="margin-bottom:.5rem;">Log a check-in</h3>
+        <form method="post" action="{% url 'hrm:pipcheckin_create' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in checkin_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Check-in</button></div>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <a href="{% url 'hrm:pip_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
