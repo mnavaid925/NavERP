@@ -122,6 +122,12 @@ from apps.hrm.models import (  # 3.20 Continuous Feedback
     MeetingActionItem,
     OneOnOneMeeting,
 )
+from apps.hrm.models import (  # 3.21 Performance Improvement
+    CoachingNote,
+    PIPCheckIn,
+    PerformanceImprovementPlan,
+    WarningLetter,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -244,6 +250,7 @@ class Command(BaseCommand):
             self._seed_goals(tenant, flush=options["flush"])
             self._seed_reviews(tenant, flush=options["flush"])
             self._seed_feedback(tenant, flush=options["flush"])
+            self._seed_improvement(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -272,6 +279,9 @@ class Command(BaseCommand):
                           # 3.20: Feedback/1:1s PROTECT EmployeeProfile (giver/receiver/manager/
                           # employee/owner) — wipe the feedback + 1:1 rows (action-items→meetings,
                           # feedback→badges) BEFORE the employee rows below.
+                          # 3.21: PIPs/warnings/coaching PROTECT EmployeeProfile — wipe them child-first
+                          # (coaching/warnings/check-ins then plans) BEFORE the employee rows below.
+                          CoachingNote, WarningLetter, PIPCheckIn, PerformanceImprovementPlan,
                           MeetingActionItem, OneOnOneMeeting, Feedback, KudosBadge,
                           # 3.18: Objective.owner FK EmployeeProfile (PROTECT) + goal_period (PROTECT) —
                           # wipe goals (check-ins→KRs→objectives→periods) BEFORE the employee rows below.
@@ -2161,3 +2171,104 @@ class Command(BaseCommand):
             f"request/response pair), "
             f"{OneOnOneMeeting.objects.filter(tenant=tenant).count()} 1:1 meetings, "
             f"{MeetingActionItem.objects.filter(tenant=tenant).count()} action items."))
+
+    def _seed_improvement(self, tenant, *, flush):
+        """3.21 Performance Improvement — the corrective-action layer (runs LAST, after _seed_feedback).
+        2 PIPs (one active with check-ins, one closed-successful that cites the subject's review),
+        progressive warning letters, and manager-only coaching notes. Reuses existing EmployeeProfiles +
+        a 3.19 PerformanceReview — creates no new person rows. (ASCII-only stdout — see the 3.20 cp1252
+        console bug.)"""
+        if flush:
+            CoachingNote.objects.filter(tenant=tenant).delete()
+            WarningLetter.objects.filter(tenant=tenant).delete()
+            PIPCheckIn.objects.filter(tenant=tenant).delete()
+            PerformanceImprovementPlan.objects.filter(tenant=tenant).delete()
+        if (PerformanceImprovementPlan.objects.filter(tenant=tenant).exists()
+                or WarningLetter.objects.filter(tenant=tenant).exists()):
+            self.stdout.write(self.style.NOTICE(
+                f"Performance-improvement data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant)
+                    .select_related("party").order_by("party__name"))
+        if len(emps) < 3:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' — skipping performance-improvement seed."))
+            return
+
+        now = timezone.now()
+        today = timezone.localdate()
+        td = datetime.timedelta
+        subj_a, mgr, subj_c = emps[0], emps[1], emps[2]   # distinct (len >= 3); mgr != either subject
+
+        def review_for(profile):
+            return PerformanceReview.objects.filter(tenant=tenant, subject=profile).order_by("number").first()
+
+        # --- PIP 1: active, HR-approved, acknowledged, with 2 check-ins ---
+        pip1 = PerformanceImprovementPlan.objects.create(
+            tenant=tenant, subject=subj_a, manager=mgr, triggering_review=review_for(subj_a),
+            status="active", start_date=today - td(days=20), end_date=today + td(days=40),
+            hr_approved_at=now - td(days=20), hr_approved_by=mgr,
+            acknowledged_at=now - td(days=19), acknowledged_by=subj_a,
+            performance_issue="Consistently missing sprint commitments over the last two cycles.",
+            expected_standards="Deliver committed sprint scope; flag blockers within 24 hours.",
+            improvement_goals="Meet 90% of committed story points for two consecutive sprints.",
+            support_provided="Weekly 1:1 coaching, a senior mentor, and a focused-work time block.",
+            measurement_criteria="Sprint burndown plus peer-review feedback at each check-in.")
+        PIPCheckIn.objects.create(
+            tenant=tenant, pip=pip1, checkin_date=today - td(days=6), completed_at=now - td(days=6),
+            progress_rating="at_risk", progress_notes="Improving, but still behind on the migration task.")
+        PIPCheckIn.objects.create(
+            tenant=tenant, pip=pip1, checkin_date=today + td(days=8), progress_rating="on_track",
+            progress_notes="Scheduled mid-plan review.")
+
+        # --- PIP 2: closed successful, cites the subject's review ---
+        PerformanceImprovementPlan.objects.create(
+            tenant=tenant, subject=subj_c, manager=mgr, triggering_review=review_for(subj_c),
+            status="closed", outcome="successful", outcome_date=today - td(days=2),
+            outcome_notes="Met all improvement goals; plan closed successfully.",
+            start_date=today - td(days=95), end_date=today - td(days=5),
+            hr_approved_at=now - td(days=95), hr_approved_by=mgr,
+            acknowledged_at=now - td(days=94), acknowledged_by=subj_c,
+            performance_issue="Quality gaps in customer-facing deliverables.",
+            expected_standards="Zero critical defects in released work.",
+            improvement_goals="Pass QA on first submission for 8 consecutive deliverables.",
+            support_provided="Pairing with QA, a review checklist, and targeted training.",
+            measurement_criteria="Defect-escape rate per release.")
+
+        # --- Warning letters (progressive discipline) ---
+        WarningLetter.objects.create(
+            tenant=tenant, issued_to=subj_a, issued_by=mgr, level="verbal", category="attendance",
+            incident_date=today - td(days=30), status="acknowledged",
+            acknowledged_at=now - td(days=28), acknowledged_by=subj_a,
+            description="Repeated late arrivals (3 occasions in one week) without prior notice.",
+            policy_reference="Attendance Policy 4.2",
+            employee_response="Acknowledged; commuting issue now resolved.",
+            expiry_date=today + td(days=150))
+        WarningLetter.objects.create(
+            tenant=tenant, issued_to=subj_a, issued_by=mgr, level="written", category="performance",
+            incident_date=today - td(days=10), status="issued", related_pip=pip1,
+            description="Continued failure to meet sprint commitments despite the active improvement plan.",
+            policy_reference="Performance Policy 6.1", expiry_date=today + td(days=180))
+        WarningLetter.objects.create(
+            tenant=tenant, issued_to=subj_c, issued_by=mgr, level="verbal", category="conduct",
+            incident_date=today - td(days=60), status="acknowledged",
+            acknowledged_at=now - td(days=58), acknowledged_by=subj_c,
+            description="Unprofessional tone in a shared team channel.",
+            policy_reference="Code of Conduct 2.3", expiry_date=today - td(days=1))  # past expiry (is_expired demo)
+
+        # --- Coaching notes (coach/admin only — NEVER the coached employee) ---
+        CoachingNote.objects.create(
+            tenant=tenant, coach=mgr, employee=subj_a, related_pip=pip1, note_date=today - td(days=6),
+            category="skill_development",
+            content="Private note: struggles to break large tasks down; pairing them with a mentor for estimation.")
+        CoachingNote.objects.create(
+            tenant=tenant, coach=mgr, employee=subj_c, note_date=today - td(days=40), category="behavior",
+            content="Private note: strong turnaround this quarter; consider for a stretch assignment next cycle.")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Performance improvement seeded for '{tenant.name}': "
+            f"{PerformanceImprovementPlan.objects.filter(tenant=tenant).count()} PIPs (1 active + check-ins, 1 closed), "
+            f"{PIPCheckIn.objects.filter(tenant=tenant).count()} check-ins, "
+            f"{WarningLetter.objects.filter(tenant=tenant).count()} warning letters, "
+            f"{CoachingNote.objects.filter(tenant=tenant).count()} coaching notes."))
