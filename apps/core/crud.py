@@ -134,6 +134,10 @@ _SENSITIVE_AUDIT_FIELDS = frozenset({
     "national_id", "passport_number",
     # HRM 3.15 statutory government IDs — redact from the immutable audit trail.
     "uan_number", "pf_number", "esi_number",
+    # Confidential manager-only notes (HRM 3.19 PerformanceReview.private_notes / 3.20
+    # OneOnOneMeeting.manager_private_notes) — never surfaced to the subject/employee, so must not
+    # be copied verbatim into AuditLog.changes either.
+    "private_notes", "manager_private_notes",
 })
 
 
