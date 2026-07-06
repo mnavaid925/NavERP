@@ -49,7 +49,7 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
-management — goals, reviews, and continuous feedback — 20 of 41 sub-modules). The remaining
+management — goals, reviews, continuous feedback, and performance improvement — 21 of 41 sub-modules). The remaining
 functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **6,197 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -418,6 +418,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   **Feedback Dashboard** (given/received/requested + per-type mix + 30-day velocity — a view, not a model). Confidential
   by design (`_can_view_feedback`/`_visible_feedback_q`/`_can_edit_feedback`). Reuses `EmployeeProfile` + the 3.18/3.19
   models (no new spine, posts no GL); PIP/warning-letters/coaching are deferred to 3.21.
+- **3.21 Performance Improvement** — the fourth & FINAL Performance-Management sub-module (the corrective-action /
+  disciplinary layer, the most confidential HRM records): a `PerformanceImprovementPlan` (`PIP-`) with an HR-approval
+  workflow (draft → pending → active → closed), structured issue/standards/goals/support/measurement sections, an
+  optional link to the triggering 3.19 `PerformanceReview`, a close-with-outcome step (successful/extended/failed/
+  terminated) and an extend path, plus `PIPCheckIn` (`PCI-`) scheduled progress checkpoints; a `WarningLetter`
+  (`WRN-`) for progressive discipline (verbal → written → final → suspension across attendance/conduct/performance/
+  policy) with an issue → acknowledge workflow, an employee-response field, a derived `prior_warnings` escalation
+  view, and a printable letter; and a `CoachingNote` (`CN-`) manager journal — **the strictest gate in the system:
+  visible only to the coach and admin, NEVER to the coached employee**. Confidential throughout
+  (`_can_view_pip`/`_can_view_warning`/`_can_view_coaching`). Reuses `EmployeeProfile` + the 3.19 review (no new
+  spine, posts no GL). **Performance Management (3.18–3.21) is now complete.**
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,550-test** HRM suite
 (**6,197 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
