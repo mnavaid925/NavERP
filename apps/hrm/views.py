@@ -8292,8 +8292,7 @@ def kudosbadge_delete(request, pk):
 @login_required
 def feedback_list(request):
     qs = (Feedback.objects.filter(tenant=request.tenant)
-          .select_related("giver__party", "receiver__party", "badge",
-                          "related_objective", "related_review__subject__party"))
+          .select_related("giver__party", "receiver__party", "badge"))  # the list row only needs these
     vq = _visible_feedback_q(request)
     if vq is not None:
         qs = qs.filter(vq)
@@ -8392,7 +8391,7 @@ def feedback_detail(request, pk):
     obj = get_object_or_404(
         Feedback.objects.select_related(
             "giver__party", "receiver__party", "badge", "related_objective",
-            "related_review__subject__party", "requested_from"),
+            "related_review", "requested_from"),  # detail only shows related_review.number, not its subject
         pk=pk, tenant=request.tenant)
     if not _can_view_feedback(request, obj):
         raise PermissionDenied("You do not have access to this feedback.")
@@ -8483,7 +8482,7 @@ def feedback_dashboard(request):
         elif target is None:
             target = employees.first()
     base = (Feedback.objects.filter(tenant=request.tenant)
-            .select_related("giver__party", "receiver__party", "badge"))
+            .select_related("giver__party", "receiver__party"))  # dashboard rows don't render the badge
     given = received = requested = []
     given_by_type = received_by_type = []
     given_count = received_count = requested_count = recent_30d_received = 0
