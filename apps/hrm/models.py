@@ -5549,6 +5549,7 @@ class Feedback(TenantNumbered):
         ("requested", "Requested"),
         ("given", "Given"),
         ("acknowledged", "Acknowledged"),
+        ("responded", "Responded"),
     ]
 
     giver = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, null=True, blank=True,
@@ -5560,7 +5561,8 @@ class Feedback(TenantNumbered):
     visibility = models.CharField(max_length=10, choices=VISIBILITY_CHOICES, default="private",
                                   help_text="private = giver/receiver/admin; team = receiver's org unit; public = the feed.")
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="given",
-                              help_text="A plain kudos is born 'given'; a pull request is born 'requested'.")
+                              help_text="A plain kudos is born 'given'; a pull request is born 'requested' and "
+                                        "becomes 'responded' once answered.")
     message = models.TextField(blank=True)
     is_anonymous = models.BooleanField(default=False,
                                        help_text="Masks the giver on the receiver-facing view (admins still see it).")
