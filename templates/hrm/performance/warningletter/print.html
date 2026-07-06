@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Warning Letter — {{ obj.issued_to.party.name }}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 48px 56px; line-height: 1.7; }
+    .letterhead { text-align: center; border-bottom: 2px solid #1f3a8a; padding-bottom: 16px; margin-bottom: 32px; }
+    .letterhead h1 { margin: 0; font-size: 24px; color: #1f3a8a; letter-spacing: 1px; }
+    .letterhead p { margin: 4px 0 0; font-size: 13px; color: #555; }
+    .meta { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 28px; }
+    h2.doc-title { text-align: center; text-transform: uppercase; letter-spacing: 2px; font-size: 16px; margin: 24px 0; text-decoration: underline; }
+    .field { margin: 6px 0; font-size: 14px; }
+    .field strong { display: inline-block; min-width: 130px; }
+    .sign { margin-top: 56px; display: flex; justify-content: space-between; }
+    .toolbar { text-align: center; margin-bottom: 24px; }
+    .toolbar button, .toolbar a { font-family: system-ui, sans-serif; font-size: 13px; padding: 8px 16px; border: 1px solid #1f3a8a; background: #1f3a8a; color: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; }
+    .toolbar a { background: #fff; color: #1f3a8a; margin-left: 8px; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <a href="{% url 'hrm:warningletter_detail' obj.pk %}">Back to letter</a>
+  </div>
+
+  <div class="letterhead">
+    <h1>{{ obj.tenant.name|default:"Company" }}</h1>
+    <p>Human Resources Department</p>
+  </div>
+
+  <div class="meta">
+    <span>Ref: {{ obj.number }}</span>
+    <span>Date: {{ obj.incident_date|date:"F j, Y" }}</span>
+  </div>
+
+  <h2 class="doc-title">{{ obj.get_level_display }}</h2>
+
+  <p class="field"><strong>To:</strong> {{ obj.issued_to.party.name }} (Employee ID: {{ obj.issued_to.number }})</p>
+  <p class="field"><strong>Category:</strong> {{ obj.get_category_display }}</p>
+  <p class="field"><strong>Incident Date:</strong> {{ obj.incident_date|date:"F j, Y" }}</p>
+  {% if obj.policy_reference %}<p class="field"><strong>Policy Reference:</strong> {{ obj.policy_reference }}</p>{% endif %}
+
+  <p>Dear {{ obj.issued_to.party.name }},</p>
+
+  <p>This letter serves as a formal <strong>{{ obj.get_level_display|lower }}</strong> regarding the following matter:</p>
+
+  <p style="padding-left:18px; border-left:3px solid #ccc;">{{ obj.description|linebreaksbr }}</p>
+
+  <p>You are expected to correct the conduct/performance described above with immediate effect. Failure to
+     do so may result in further disciplinary action, up to and including termination of employment, in
+     accordance with company policy.</p>
+
+  {% if obj.expiry_date %}<p>This warning remains on record until <strong>{{ obj.expiry_date|date:"F j, Y" }}</strong>.</p>{% endif %}
+
+  {% if obj.employee_response %}
+    <p><strong>Employee response:</strong></p>
+    <p style="padding-left:18px; border-left:3px solid #ccc;">{{ obj.employee_response|linebreaksbr }}</p>
+  {% endif %}
+
+  <div class="sign">
+    <div>
+      <p>__________________________<br>
+         {{ obj.issued_by.party.name }}<br>
+         Issuing Manager</p>
+    </div>
+    <div>
+      <p>__________________________<br>
+         {{ obj.issued_to.party.name }}<br>
+         Employee (Acknowledgment{% if obj.acknowledged_at %} — {{ obj.acknowledged_at|date:"F j, Y" }}{% endif %})</p>
+    </div>
+  </div>
+</body>
+</html>
