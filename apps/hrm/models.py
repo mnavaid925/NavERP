@@ -5695,3 +5695,258 @@ class MeetingActionItem(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.description[:40]}"
+
+
+# ---------------------------------------------------------------------------
+# 3.21 Performance Improvement — the corrective-action / disciplinary layer and
+# the FOURTH & FINAL Performance-Management sub-module (3.18 Goal Setting →
+# 3.19 Performance Review → 3.20 Continuous Feedback → 3.21). Structured
+# Performance Improvement Plans (with an HR-approval workflow), progressive
+# disciplinary warning letters, and manager-only coaching logs — the most
+# sensitive HRM records, so CONFIDENTIALITY is the design crux. Reuses the
+# spine + already-built HRM models (NavERP-ERD.md): every person is an
+# ``EmployeeProfile``; a PIP optionally cites the 3.19 ``PerformanceReview``
+# that triggered it. Adds ONLY these 4 tables — no new core-spine entity,
+# posts no GL. Confidentiality CLONES 3.19/3.20 field-for-field:
+# ``_can_view_pip``/``_visible_pips_q`` mirror ``_can_view_review`` (subject/
+# manager/admin, no team/public tier); ``CoachingNote`` clones the
+# ``OneOnOneMeeting.manager_private_notes`` read-gate at the WHOLE-model level
+# (coach/admin only — the coached employee is NEVER a viewer: the strictest
+# gate in the cluster).
+# ---------------------------------------------------------------------------
+class PerformanceImprovementPlan(TenantNumbered):
+    """A corrective-action plan (3.21) — subject + owning manager, an HR-approval workflow, structured
+    issue/standards/goals/support/measurement sections, a 30/60/90-day window (extendable), and a
+    close-with-outcome step. CONFIDENTIAL — visible only to the subject, the manager, or a tenant admin
+    (clones the 3.19 ``PerformanceReview`` confidentiality). Optionally cites the ``PerformanceReview``
+    that triggered it."""
+
+    NUMBER_PREFIX = "PIP"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_hr_approval", "Pending HR Approval"),
+        ("active", "Active"),
+        ("closed", "Closed"),
+    ]
+    OUTCOME_CHOICES = [
+        ("successful", "Successful"),
+        ("extended", "Extended"),
+        ("failed", "Failed"),
+        ("terminated", "Terminated"),
+    ]
+
+    subject = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="pips_as_subject",
+                                help_text="The employee on the plan.")
+    manager = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="pips_as_manager",
+                                help_text="Who owns/drives the plan (stored explicitly — may differ from the reporting line if escalated).")
+    triggering_review = models.ForeignKey("hrm.PerformanceReview", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="triggered_pips",
+                                          help_text="Optional 3.19 review that prompted this plan.")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft",
+                              help_text="Workflow — HR approves a draft before it goes active; changed only via the workflow actions.")
+    outcome = models.CharField(max_length=15, choices=OUTCOME_CHOICES, blank=True,
+                               help_text="Set only when the plan is closed (via the close action), never on the form.")
+    outcome_date = models.DateField(null=True, blank=True)
+    outcome_notes = models.TextField(blank=True)
+    performance_issue = models.TextField(help_text="The specific performance gap (corrective, not vague criticism).")
+    expected_standards = models.TextField()
+    improvement_goals = models.TextField(help_text="The SMART expectations the employee must meet.")
+    support_provided = models.TextField(blank=True, help_text="Training/coaching/resources the org commits to.")
+    measurement_criteria = models.TextField(help_text="How success is judged.")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    extended_end_date = models.DateField(null=True, blank=True, help_text="Set by the extend action.")
+    acknowledged_at = models.DateTimeField(null=True, blank=True, editable=False)
+    acknowledged_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="pips_acknowledged", editable=False)
+    hr_approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    hr_approved_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name="pips_hr_approved", editable=False)
+
+    class Meta:
+        ordering = ["-start_date", "number"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_pip_tenant_status_idx"),
+            models.Index(fields=["tenant", "subject"], name="hrm_pip_tenant_subject_idx"),
+            models.Index(fields=["tenant", "manager"], name="hrm_pip_tenant_manager_idx"),
+        ]
+
+    def clean(self):
+        if self.subject_id and self.manager_id and self.subject_id == self.manager_id:
+            raise ValidationError({"manager": "The manager can't be the plan's subject."})
+        if self.status == "closed" and not self.outcome:
+            raise ValidationError({"outcome": "A closed plan must record an outcome."})
+        if self.outcome and self.status != "closed":
+            raise ValidationError({"outcome": "An outcome can only be set on a closed plan."})
+        if self.start_date and self.end_date and self.end_date <= self.start_date:
+            raise ValidationError({"end_date": "End date must be after the start date."})
+        if self.extended_end_date and self.end_date and self.extended_end_date <= self.end_date:
+            raise ValidationError({"extended_end_date": "The extended end date must be after the original end date."})
+
+    @property
+    def effective_end_date(self):
+        """The date the plan actually runs to — the extension if set, else the original end."""
+        return self.extended_end_date or self.end_date
+
+    @property
+    def checkin_count(self):
+        return self.checkins.count()
+
+    def __str__(self):
+        return f"{self.number} · {self.subject.party.name}" if self.subject_id else self.number
+
+
+class PIPCheckIn(TenantNumbered):
+    """A scheduled review-checkpoint on a PIP (3.21) — mirrors the ``ReviewRating``→``PerformanceReview``
+    / ``MeetingActionItem``→``OneOnOneMeeting`` child pattern. Inherits the parent PIP's confidentiality
+    (no independent gate — the view checks ``_can_view_pip(request, checkin.pip)``)."""
+
+    NUMBER_PREFIX = "PCI"
+
+    RATING_CHOICES = [
+        ("on_track", "On Track"),
+        ("at_risk", "At Risk"),
+        ("off_track", "Off Track"),
+    ]
+
+    pip = models.ForeignKey("hrm.PerformanceImprovementPlan", on_delete=models.CASCADE, related_name="checkins")
+    checkin_date = models.DateField()
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    progress_notes = models.TextField(blank=True)
+    progress_rating = models.CharField(max_length=10, choices=RATING_CHOICES, default="on_track")
+
+    class Meta:
+        ordering = ["pip", "checkin_date"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "pip"], name="hrm_pci_tenant_pip_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.pip.number} ({self.checkin_date})" if self.pip_id else self.number
+
+
+class WarningLetter(TenantNumbered):
+    """A progressive-discipline warning letter (3.21) — verbal→written→final→suspension across
+    attendance/conduct/performance/policy categories, with an issue→acknowledge workflow + an optional
+    employee response. CONFIDENTIAL — visible only to the recipient, the issuer, or a tenant admin.
+    Optionally linked to a PIP."""
+
+    NUMBER_PREFIX = "WRN"
+
+    LEVEL_CHOICES = [
+        ("verbal", "Verbal Warning"),
+        ("written", "Written Warning"),
+        ("final", "Final Written Warning"),
+        ("suspension", "Suspension"),
+    ]
+    CATEGORY_CHOICES = [
+        ("attendance", "Attendance"),
+        ("conduct", "Conduct"),
+        ("performance", "Performance"),
+        ("policy_violation", "Policy Violation"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("issued", "Issued"),
+        ("acknowledged", "Acknowledged"),
+        ("expired", "Expired"),
+    ]
+
+    issued_to = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="warnings_received")
+    issued_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="warnings_issued")
+    level = models.CharField(max_length=15, choices=LEVEL_CHOICES, default="verbal")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="conduct")
+    incident_date = models.DateField()
+    description = models.TextField(help_text="Specific behaviours/actions (not vague criticism).")
+    policy_reference = models.CharField(max_length=255, blank=True,
+                                        help_text="Which policy/handbook section was violated.")
+    related_pip = models.ForeignKey("hrm.PerformanceImprovementPlan", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="warning_letters")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    acknowledged_at = models.DateTimeField(null=True, blank=True, editable=False)
+    acknowledged_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="warnings_acknowledged", editable=False)
+    employee_response = models.TextField(blank=True, help_text="The recipient's optional written response/rebuttal.")
+    expiry_date = models.DateField(null=True, blank=True, help_text="When this warning goes stale (per company policy).")
+
+    class Meta:
+        ordering = ["-incident_date", "number"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "issued_to"], name="hrm_wrn_tenant_to_idx"),
+            models.Index(fields=["tenant", "level"], name="hrm_wrn_tenant_level_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_wrn_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.issued_to_id and self.issued_by_id and self.issued_to_id == self.issued_by_id:
+            raise ValidationError({"issued_by": "The issuer can't be the recipient."})
+        if self.expiry_date and self.incident_date and self.expiry_date <= self.incident_date:
+            raise ValidationError({"expiry_date": "The expiry date must be after the incident date."})
+
+    @property
+    def is_expired(self):
+        """Derived (never a stored flag) — mirrors ``MeetingActionItem.is_overdue``."""
+        return bool(self.expiry_date and self.expiry_date < timezone.now().date())
+
+    @property
+    def prior_warnings(self):
+        """Earlier warnings to the same employee (escalation context) — a DERIVED query, not a stored
+        self-FK (per the research deferral)."""
+        if not (self.issued_to_id and self.incident_date):
+            return WarningLetter.objects.none()
+        return (WarningLetter.objects.filter(
+            tenant_id=self.tenant_id, issued_to_id=self.issued_to_id, incident_date__lt=self.incident_date)
+            .exclude(pk=self.pk).order_by("-incident_date"))
+
+    def __str__(self):
+        who = self.issued_to.party.name if self.issued_to_id else "?"
+        return f"{self.number} · {who} ({self.get_level_display()})"
+
+
+class CoachingNote(TenantNumbered):
+    """A manager's private coaching log (3.21) — the "manager journal". THE STRICTEST CONFIDENTIALITY IN
+    THE CLUSTER: visible ONLY to the ``coach`` (author) + a tenant admin — NEVER to the coached
+    ``employee`` at any stage (a whole-model clone of ``OneOnOneMeeting.manager_private_notes``'s
+    read-gate). ``content`` is deliberately NOT added to ``core.crud._SENSITIVE_AUDIT_FIELDS`` — it's
+    prose (not a bank/token-style secret), audit changes are already admin-only, and the coach/admin-only
+    gate protects the read surface."""
+
+    NUMBER_PREFIX = "CN"
+
+    CATEGORY_CHOICES = [
+        ("skill_development", "Skill Development"),
+        ("behavior", "Behavior"),
+        ("career_growth", "Career Growth"),
+        ("other", "Other"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="coaching_notes_about",
+                                 help_text="The coached employee (who must NEVER see this note).")
+    coach = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="coaching_notes_authored",
+                              help_text="The author (manager/HRBP). Resolved server-side, not form-typed.")
+    related_pip = models.ForeignKey("hrm.PerformanceImprovementPlan", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="coaching_notes")
+    note_date = models.DateField(default=timezone.localdate, help_text="When the coaching moment happened.")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other")
+    content = models.TextField()
+
+    class Meta:
+        ordering = ["-note_date", "-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_cn_tenant_emp_idx"),
+            models.Index(fields=["tenant", "coach"], name="hrm_cn_tenant_coach_idx"),
+        ]
+
+    def clean(self):
+        if self.employee_id and self.coach_id and self.employee_id == self.coach_id:
+            raise ValidationError({"employee": "You can't coach yourself."})
+
+    def __str__(self):
+        c = self.coach.party.name if self.coach_id else "?"
+        e = self.employee.party.name if self.employee_id else "?"
+        return f"{self.number} · {c} -> {e}"
