@@ -48,7 +48,8 @@ model so that customers, vendors, employees, items, money, and stock are never d
 This repository currently delivers the **Module 0 foundation** (System Admin & Security —
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
-offboarding, recruiting, attendance, leave, time tracking, holidays — 12 of 41 sub-modules). The remaining
+offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
+management — goals, reviews, and continuous feedback — 20 of 41 sub-modules). The remaining
 functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **5,939 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
@@ -261,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -406,6 +407,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   Objectives. **Performance data is confidential** — visible only to the subject, reviewer, or a tenant admin, and
   content is edit-locked once submitted. Reuses `EmployeeProfile` + the 3.18 goal models (no new spine, posts no GL);
   continuous feedback/PIP are deferred to 3.20–3.21.
+- **3.20 Continuous Feedback** — the third Performance-Management sub-module (the ongoing/informal layer): a `Feedback`
+  (`FBK-`) row for real-time kudos/appreciation/constructive feedback with `visibility` (private/team/public), an
+  `is_anonymous` flag that **masks the giver on read** for non-admin/non-giver viewers (cloning the 3.19 reviewer
+  masking), optional `badge`/`related_objective`/`related_review` links, and a `requested_from` self-FK that folds the
+  **request-feedback pull workflow** (requested→given→acknowledged) into one table; a `KudosBadge` recognition catalog
+  (values-tag chips); an `OneOnOneMeeting` (`O2O-`) with a shared agenda/notes and **manager-only
+  `manager_private_notes`** (never rendered employee-side; the edit form is manager/admin-gated), scheduled→completed/
+  cancelled workflow, and `MeetingActionItem` (`MAI-`) children (owner + due date + open/done toggle); plus a computed
+  **Feedback Dashboard** (given/received/requested + per-type mix + 30-day velocity — a view, not a model). Confidential
+  by design (`_can_view_feedback`/`_visible_feedback_q`/`_can_edit_feedback`). Reuses `EmployeeProfile` + the 3.18/3.19
+  models (no new spine, posts no GL); PIP/warning-letters/coaching are deferred to 3.21.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,292-test** HRM suite
 (**5,939 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
