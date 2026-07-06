@@ -474,4 +474,28 @@ the shared `performance/` folder that 3.18/3.19 already use), one entity folder 
 
 ## Review notes
 
-(filled in at the end)
+**Built 3.20 Continuous Feedback end-to-end (2026-07-06).** 4 models as planned — `KudosBadge` (catalog),
+`Feedback` [FBK-], `OneOnOneMeeting` [O2O-], `MeetingActionItem` [MAI-] — + a computed `feedback_dashboard` (no
+5th model). Migrations `0034` (the 4 tables + 13 indexes) and `0035` (the terminal `responded` status added during
+review). Seeder `_seed_feedback` idempotent, both tenants, in the central flush teardown before `EmployeeProfile`.
+`LIVE_LINKS["3.20"]` wires all 4 NavERP.md bullets. Templates under `templates/hrm/performance/` (consistent with
+3.18/3.19, NOT the `feedback/` folder the plan first suggested).
+
+**All 7 review agents applied** (per the mandatory sequence):
+- **code-reviewer** — 1 Critical (`kudosbadge_detail` recent-awards bypassed `_visible_feedback_q` → leaked private/
+  team feedback recipients) + 2 Important (request→response never closed the loop / re-answerable forever → added the
+  terminal `responded` status; `FeedbackForm.related_review` leaked the 3.19 review roster → scoped to the giver's
+  visible reviews) + minors; also the app-wide audit gap (`private_notes`/`manager_private_notes` now in
+  `_SENSITIVE_AUDIT_FIELDS`).
+- **explorer** — 1 real silent-blank bug: `feedback/detail.html` read `obj.giver_display` (a bare context key, not a
+  model attr) → the "From" row rendered blank for everyone; fixed to `giver_display`. + action-item affordance gating.
+- **frontend-reviewer** — gated the standalone `meetingactionitem/detail.html` Edit/Delete (was unconditional).
+- **performance-reviewer** — clean (indexes/annotations/no-N+1 confirmed); trimmed 3 unused `select_related` JOINs.
+- **qa-smoke-tester** — 45/45 checks (GET sweep, content assertions, workflow POSTs, IDOR, idempotency) green.
+- **security-reviewer** — no Critical/High; 1 Medium fixed (`_can_manage_action_item` + `MeetingActionItemForm.owner`
+  — edit rights could exceed view rights for a non-participant owner).
+- **test-writer** — **258 tests** (51 model + 109 view + 98 security), all green; **HRM 3,550 / project-wide 6,197**,
+  full suite exit 0. No product bugs surfaced.
+
+**Deferred to 3.21 (Performance Improvement):** PIP/warning-letters/coaching. Other deferrals (points/leaderboards,
+social feed reactions, AI sentiment, calendar sync, pulse surveys) per the research catalog. **Next: 3.21.**
