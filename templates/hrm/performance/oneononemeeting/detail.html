@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">1:1 · {{ obj.manager.party.name }} &amp; {{ obj.employee.party.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:oneononemeeting_list' %}">1:1 Meetings</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if can_manage %}
+        <a href="{% url 'hrm:oneononemeeting_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:oneononemeeting_delete' obj.pk %}" onsubmit="return confirm('Delete this 1:1?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Manager</dt><dd>{{ obj.manager.party.name }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Scheduled</dt><dd>{{ obj.scheduled_at|date:"Y-m-d H:i" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      {% if obj.related_objective_id %}<div class="detail-item"><dt>Linked Goal</dt><dd><a href="{% url 'hrm:objective_detail' obj.related_objective.pk %}">{{ obj.related_objective.title }}</a></dd></div>{% endif %}
+      {% if obj.completed_at %}<div class="detail-item"><dt>Completed</dt><dd>{{ obj.completed_at|date:"Y-m-d H:i" }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.agenda %}<div style="margin-top:.6rem;"><strong>Agenda</strong><p>{{ obj.agenda|linebreaksbr }}</p></div>{% endif %}
+    {% if obj.shared_notes %}<div style="margin-top:.4rem;"><strong>Shared Notes</strong><p>{{ obj.shared_notes|linebreaksbr }}</p></div>{% endif %}
+    {% if show_private and obj.manager_private_notes %}
+      <div style="margin-top:.4rem; padding:.5rem; background:var(--page-bg); border-radius:8px;">
+        <strong><i data-lucide="lock"></i> Private Manager Notes</strong> <span class="text-muted">(not visible to the employee)</span>
+        <p>{{ obj.manager_private_notes|linebreaksbr }}</p>
+      </div>
+    {% endif %}
+  </div></div>
+
+  {% if can_manage and obj.status == 'scheduled' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'hrm:oneononemeeting_complete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Mark this 1:1 completed?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Mark Completed</button>
+        </form>
+        <form method="post" action="{% url 'hrm:oneononemeeting_cancel' obj.pk %}" style="display:inline; margin-inline-start:.4rem;" onsubmit="return confirm('Cancel this 1:1?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="x-circle"></i> Cancel</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Action Items</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Description</th><th>Owner</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for item in action_items %}
+            <tr>
+              <td><a href="{% url 'hrm:meetingactionitem_detail' item.pk %}" class="fw-600">{{ item.number }}</a></td>
+              <td>{{ item.description|truncatechars:60 }}</td>
+              <td>{{ item.owner.party.name }}</td>
+              <td>{% if item.due_date %}{{ item.due_date|date:"Y-m-d" }}{% if item.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+              <td>{% if item.status == 'done' %}<span class="badge badge-green">Done</span>{% else %}<span class="badge badge-amber">Open</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  {% if can_manage or item.owner_id == current_profile_id %}
+                    <form method="post" action="{% url 'hrm:meetingactionitem_toggle' item.pk %}" style="display:inline;">
+                      {% csrf_token %}
+                      <button class="btn-icon" type="submit" title="{% if item.status == 'done' %}Reopen{% else %}Mark done{% endif %}"><i data-lucide="{% if item.status == 'done' %}rotate-ccw{% else %}check{% endif %}"></i></button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'hrm:meetingactionitem_edit' item.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:meetingactionitem_delete' item.pk %}" style="display:inline;" onsubmit="return confirm('Delete this action item?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><p>No action items yet — add the first below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3 class="fw-600" style="margin-bottom:.5rem;">Add an action item</h3>
+      <form method="post" action="{% url 'hrm:meetingactionitem_create' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in action_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Action Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:oneononemeeting_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
