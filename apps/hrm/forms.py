@@ -137,6 +137,12 @@ from .models import (  # noqa: E402  — 3.20 Continuous Feedback
     MeetingActionItem,
     OneOnOneMeeting,
 )
+from .models import (  # noqa: E402  — 3.21 Performance Improvement
+    CoachingNote,
+    PIPCheckIn,
+    PerformanceImprovementPlan,
+    WarningLetter,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1717,3 +1723,143 @@ class MeetingActionItemForm(TenantModelForm):
             self.fields["owner"].queryset = (
                 base.filter(pk__in=[meeting.manager_id, meeting.employee_id]) if meeting is not None else base
             ).order_by("party__name")
+
+
+# ------------------------------------------------------------------------- 3.21 Performance Improvement
+class PerformanceImprovementPlanForm(TenantModelForm):
+    # status/outcome/outcome_*/extended_end_date/*_at/*_by are workflow-owned (set only by the
+    # hr_approve/acknowledge/close/extend actions — never on this form, mirroring PerformanceReviewForm).
+    class Meta:
+        model = PerformanceImprovementPlan
+        fields = ["subject", "manager", "triggering_review", "performance_issue", "expected_standards",
+                  "improvement_goals", "support_provided", "measurement_criteria", "start_date", "end_date"]
+        widgets = {
+            "performance_issue": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "expected_standards": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "improvement_goals": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "support_provided": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+            "measurement_criteria": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, viewer_profile=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            emps = (EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "subject" in self.fields:
+                self.fields["subject"].queryset = emps
+            if "manager" in self.fields:
+                self.fields["manager"].queryset = emps
+            if "triggering_review" in self.fields:
+                # Confidentiality (3.19): only surface reviews the creator may see (their own subject/
+                # reviewer rows), not the tenant-wide review roster. Viewer = the PIP's manager (edit) or
+                # the passed creator (create); keep the already-linked review selectable on edit.
+                viewer = self.instance.manager if (self.instance and self.instance.manager_id) else viewer_profile
+                rq = PerformanceReview.objects.filter(tenant=self.tenant).select_related("subject__party")
+                rq = rq.filter(Q(subject=viewer) | Q(reviewer=viewer)) if viewer is not None else rq.none()
+                if self.instance and self.instance.triggering_review_id:
+                    rq = (rq | PerformanceReview.objects.filter(pk=self.instance.triggering_review_id)).distinct()
+                self.fields["triggering_review"].queryset = rq.order_by("-created_at")
+
+
+class PIPCheckInForm(TenantModelForm):
+    # `pip` is set from the URL in the nested create view; `number`/`completed_at` are auto/workflow.
+    class Meta:
+        model = PIPCheckIn
+        fields = ["checkin_date", "progress_rating", "progress_notes"]
+        widgets = {
+            "checkin_date": forms.DateInput(attrs={"type": "date"}),
+            "progress_notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+
+class WarningLetterForm(TenantModelForm):
+    # status/acknowledged_* are workflow-owned (issue/acknowledge actions); employee_response is captured
+    # only via the acknowledge action (WarningAcknowledgeForm), never on this edit form; number auto.
+    class Meta:
+        model = WarningLetter
+        fields = ["issued_to", "issued_by", "level", "category", "incident_date", "description",
+                  "policy_reference", "related_pip", "expiry_date"]
+        widgets = {
+            "incident_date": forms.DateInput(attrs={"type": "date"}),
+            "expiry_date": forms.DateInput(attrs={"type": "date"}),
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, viewer_profile=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            emps = (EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "issued_to" in self.fields:
+                self.fields["issued_to"].queryset = emps
+            if "issued_by" in self.fields:
+                self.fields["issued_by"].queryset = emps
+            if "related_pip" in self.fields:
+                # PIPs are confidential — surface only PIPs the issuer may see (their own subject/manager
+                # rows), never the tenant PIP roster. Viewer = the letter's issuer (edit) or creator (create).
+                viewer = self.instance.issued_by if (self.instance and self.instance.issued_by_id) else viewer_profile
+                rq = PerformanceImprovementPlan.objects.filter(tenant=self.tenant).select_related("subject__party")
+                rq = rq.filter(Q(subject=viewer) | Q(manager=viewer)) if viewer is not None else rq.none()
+                if self.instance and self.instance.related_pip_id:
+                    rq = (rq | PerformanceImprovementPlan.objects.filter(pk=self.instance.related_pip_id)).distinct()
+                self.fields["related_pip"].queryset = rq.order_by("-start_date")
+
+
+class CoachingNoteForm(TenantModelForm):
+    # `coach` is resolved server-side from request.user (NEVER form-typed — the strictest-confidentiality
+    # model; a user must not log a coaching note as someone else, like Feedback.giver); `number` auto.
+    class Meta:
+        model = CoachingNote
+        fields = ["employee", "related_pip", "note_date", "category", "content"]
+        widgets = {
+            "note_date": forms.DateInput(attrs={"type": "date"}),
+            "content": forms.Textarea(attrs={"rows": 4, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, viewer_profile=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "employee" in self.fields:
+                self.fields["employee"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "related_pip" in self.fields:
+                viewer = self.instance.coach if (self.instance and self.instance.coach_id) else viewer_profile
+                rq = PerformanceImprovementPlan.objects.filter(tenant=self.tenant).select_related("subject__party")
+                rq = rq.filter(Q(subject=viewer) | Q(manager=viewer)) if viewer is not None else rq.none()
+                if self.instance and self.instance.related_pip_id:
+                    rq = (rq | PerformanceImprovementPlan.objects.filter(pk=self.instance.related_pip_id)).distinct()
+                self.fields["related_pip"].queryset = rq.order_by("-start_date")
+
+
+class PIPCloseForm(TenantModelForm):
+    # The narrow close-with-outcome form (the ONLY write path to outcome/outcome_date/outcome_notes — the
+    # general edit form never exposes them). The close VIEW sets status="closed" on the instance before
+    # validation so the model's outcome-iff-closed clean() passes. tenant= kept for signature parity.
+    class Meta:
+        model = PerformanceImprovementPlan
+        fields = ["outcome", "outcome_date", "outcome_notes"]
+        widgets = {
+            "outcome_date": forms.DateInput(attrs={"type": "date"}),
+            "outcome_notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+    def clean_outcome(self):
+        outcome = self.cleaned_data.get("outcome")
+        if not outcome:
+            raise forms.ValidationError("Select an outcome to close the plan.")
+        return outcome
+
+
+class WarningAcknowledgeForm(TenantModelForm):
+    # Captures the recipient's optional written response at acknowledgment time (the ONLY employee_response
+    # write path). tenant= kept for signature parity.
+    class Meta:
+        model = WarningLetter
+        fields = ["employee_response"]
+        widgets = {
+            "employee_response": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
