@@ -13,7 +13,7 @@
         </a>
       {% else %}
         {% comment %} Module → Sub-module → Feature (mirrors NavERP.md) {% endcomment %}
-        <div class="nav-group{% if section.open %} open{% endif %}">
+        <div class="nav-group{% if section.open %} open{% endif %}" data-nav-key="{{ section.label }}">
           <div class="nav-link">
             <i data-lucide="{{ section.icon }}"></i>
             <span class="nav-label">{{ section.label }}</span>
@@ -21,7 +21,7 @@
           </div>
           <div class="nav-sub">
             {% for sub in section.submodules %}
-              <div class="nav-subgroup{% if sub.open %} open{% endif %}">
+              <div class="nav-subgroup{% if sub.open %} open{% endif %}" data-nav-key="{{ sub.label }}">
                 <div class="nav-sublink">
                   <span class="nav-label">{{ sub.label }}</span>
                   <i data-lucide="chevron-right" class="nav-caret nav-label"></i>
