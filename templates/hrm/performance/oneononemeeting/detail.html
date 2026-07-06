@@ -72,17 +72,18 @@
               <td>{% if item.status == 'done' %}<span class="badge badge-green">Done</span>{% else %}<span class="badge badge-amber">Open</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
+                  <a href="{% url 'hrm:meetingactionitem_detail' item.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% if can_manage or item.owner_id == current_profile_id %}
                     <form method="post" action="{% url 'hrm:meetingactionitem_toggle' item.pk %}" style="display:inline;">
                       {% csrf_token %}
                       <button class="btn-icon" type="submit" title="{% if item.status == 'done' %}Reopen{% else %}Mark done{% endif %}"><i data-lucide="{% if item.status == 'done' %}rotate-ccw{% else %}check{% endif %}"></i></button>
                     </form>
+                    <a href="{% url 'hrm:meetingactionitem_edit' item.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'hrm:meetingactionitem_delete' item.pk %}" style="display:inline;" onsubmit="return confirm('Delete this action item?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
                   {% endif %}
-                  <a href="{% url 'hrm:meetingactionitem_edit' item.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'hrm:meetingactionitem_delete' item.pk %}" style="display:inline;" onsubmit="return confirm('Delete this action item?');">
-                    {% csrf_token %}
-                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
                 </div>
               </td>
             </tr>
