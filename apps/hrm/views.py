@@ -8,7 +8,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
 import secrets
-from datetime import date as _date
+from datetime import date as _date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -140,6 +140,12 @@ from .forms import (  # 3.19 Performance Review
     ReviewCycleForm,
     ReviewRatingForm,
     ReviewTemplateForm,
+)
+from .forms import (  # 3.20 Continuous Feedback
+    FeedbackForm,
+    KudosBadgeForm,
+    MeetingActionItemForm,
+    OneOnOneMeetingForm,
 )
 from .models import (
     APPLICATION_STAGE_CHOICES,
@@ -275,6 +281,12 @@ from .models import (  # 3.19 Performance Review
     ReviewCycle,
     ReviewRating,
     ReviewTemplate,
+)
+from .models import (  # 3.20 Continuous Feedback
+    Feedback,
+    KudosBadge,
+    MeetingActionItem,
+    OneOnOneMeeting,
 )
 
 
@@ -8120,3 +8132,569 @@ def reviewrating_delete(request, pk):
     rating.delete()
     messages.success(request, "Rating deleted.")
     return redirect("hrm:performancereview_detail", pk=review.pk)
+
+
+# =========================================================================
+# 3.20 Continuous Feedback (Performance Management) — real-time feedback + 1:1
+# meetings + a computed feedback dashboard. Reuses _current_employee_profile /
+# _is_admin from the 3.19 section (never redefined). Confidentiality clones 3.19
+# field-for-field: OneOnOneMeeting.manager_private_notes is manager-only (never
+# rendered employee-side, and the edit form that holds it is manager/admin-gated,
+# per L20), and an anonymous Feedback masks its giver on read for non-admin/
+# non-giver viewers.
+# =========================================================================
+def _can_view_feedback(request, feedback):
+    """Who may view a Feedback row: a tenant admin, the giver, or the receiver — plus ANY employee
+    for a public-feed row (giver still masked if anonymous), or a team-mate sharing the receiver's
+    org unit for a team-visibility row. Private rows are otherwise confidential (mirrors
+    _can_view_review)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    if profile is not None and profile.pk in (feedback.giver_id, feedback.receiver_id):
+        return True
+    if feedback.visibility == "public":
+        return True
+    if feedback.visibility == "team" and profile is not None and profile.employment_id:
+        recv = feedback.receiver
+        recv_org = recv.employment.org_unit_id if recv.employment_id else None
+        return recv_org is not None and recv_org == profile.employment.org_unit_id
+    return False
+
+
+def _visible_feedback_q(request):
+    """A ``Q`` restricting feedback lists to what the requester may see: public rows OR their own
+    given/received rows OR team-visible rows sharing the receiver's org unit. ``None`` for a tenant
+    admin (no restriction) — same contract as _visible_reviews_q."""
+    if _is_admin(request.user):
+        return None
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return Q(visibility="public")  # a tenant-less/employee-less user sees only the public feed
+    cond = Q(visibility="public") | Q(giver=profile) | Q(receiver=profile)
+    org_id = profile.employment.org_unit_id if profile.employment_id else None
+    if org_id is not None:
+        cond |= Q(visibility="team", receiver__employment__org_unit_id=org_id)
+    return cond
+
+
+def _can_edit_feedback(request, feedback):
+    """A Feedback row is editable ONLY by the giver (never the receiver) or a tenant admin, and only
+    while it has not been acknowledged (content locks once acknowledged) — mirrors _can_edit_review's
+    status-lock-plus-author-check shape."""
+    if feedback.status == "acknowledged":
+        return False
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == feedback.giver_id
+
+
+def _feedback_giver_display(request, feedback):
+    """The giver name to render — 'Anonymous' for a non-admin/non-giver viewer of an anonymous row,
+    else the real party name (or '—' when the giver FK is null)."""
+    profile = _current_employee_profile(request)
+    is_giver = profile is not None and profile.pk == feedback.giver_id
+    if feedback.giver_anonymized and not (_is_admin(request.user) or is_giver):
+        return "Anonymous"
+    return feedback.giver.party.name if feedback.giver_id else "—"
+
+
+def _can_view_meeting(request, meeting):
+    """A 1:1 is inherently two-party — only its manager, its employee, or a tenant admin may view it."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk in (meeting.manager_id, meeting.employee_id)
+
+
+def _visible_meetings_q(request):
+    """A ``Q`` restricting the 1:1 list to the requester's own meetings (as manager or employee).
+    ``None`` for a tenant admin (no restriction)."""
+    if _is_admin(request.user):
+        return None
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return Q(pk__in=[])
+    return Q(manager=profile) | Q(employee=profile)
+
+
+def _can_manage_meeting(request, meeting):
+    """Manager-or-admin — for the complete/cancel/edit actions and the private-notes read gate. The
+    employee side collaborates via action items + the shared read view but never reaches the edit
+    form (which holds manager_private_notes)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == meeting.manager_id
+
+
+# ------------------------------------------------------------ KudosBadge (3.20 recognition catalog)
+@login_required
+def kudosbadge_list(request):
+    return crud_list(
+        request,
+        # Explicit order_by — the Count() GROUP BY otherwise drops Meta.ordering (paginator warning).
+        KudosBadge.objects.filter(tenant=request.tenant)
+        .annotate(num_feedback=Count("feedback_items")).order_by("name"),
+        "hrm/performance/kudosbadge/list.html",
+        search_fields=("name", "linked_value"),
+        filters=[("is_active", "is_active", False)],
+    )
+
+
+@login_required
+def kudosbadge_create(request):
+    return crud_create(request, form_class=KudosBadgeForm,
+                       template="hrm/performance/kudosbadge/form.html",
+                       success_url="hrm:kudosbadge_list")
+
+
+@login_required
+def kudosbadge_detail(request, pk):
+    obj = get_object_or_404(KudosBadge, pk=pk, tenant=request.tenant)
+    recent = list(obj.feedback_items.select_related("receiver__party").order_by("-created_at")[:10])
+    return render(request, "hrm/performance/kudosbadge/detail.html",
+                  {"obj": obj, "recent_feedback": recent})
+
+
+@login_required
+def kudosbadge_edit(request, pk):
+    return crud_edit(request, model=KudosBadge, pk=pk, form_class=KudosBadgeForm,
+                     template="hrm/performance/kudosbadge/form.html",
+                     success_url="hrm:kudosbadge_list")
+
+
+@login_required
+@require_POST
+def kudosbadge_delete(request, pk):
+    return crud_delete(request, model=KudosBadge, pk=pk, success_url="hrm:kudosbadge_list")
+
+
+# ------------------------------------------------------------ Feedback (3.20 real-time + request-pull)
+@login_required
+def feedback_list(request):
+    qs = (Feedback.objects.filter(tenant=request.tenant)
+          .select_related("giver__party", "receiver__party", "badge",
+                          "related_objective", "related_review__subject__party"))
+    vq = _visible_feedback_q(request)
+    if vq is not None:
+        qs = qs.filter(vq)
+    profile = _current_employee_profile(request)
+    is_admin = _is_admin(request.user)
+    # Given/received/requested cuts (mirror ?mine=1 on performancereview_list).
+    if request.GET.get("given") == "1":
+        qs = qs.filter(giver=profile) if profile is not None else qs.none()
+    if request.GET.get("received") == "1":
+        qs = qs.filter(receiver=profile) if profile is not None else qs.none()
+    if request.GET.get("requested") == "1":
+        qs = qs.filter(status="requested")
+    if request.GET.get("is_anonymous") == "1":
+        qs = qs.filter(is_anonymous=True)
+    # Only an admin may search by giver name — otherwise a non-admin could correlate an anonymous
+    # giver by searching their real name and seeing the masked row surface (an info leak).
+    search = ["number", "message", "receiver__party__name"]
+    if is_admin:
+        search.append("giver__party__name")
+    return crud_list(
+        request, qs,
+        "hrm/performance/feedback/list.html",
+        search_fields=tuple(search),
+        filters=[("feedback_type", "feedback_type", False), ("visibility", "visibility", False),
+                 ("status", "status", False), ("receiver", "receiver_id", True),
+                 ("badge", "badge_id", True)],
+        extra_context={
+            "feedback_type_choices": Feedback.FEEDBACK_TYPE_CHOICES,
+            "visibility_choices": Feedback.VISIBILITY_CHOICES,
+            "status_choices": Feedback.STATUS_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "badges": KudosBadge.objects.filter(tenant=request.tenant, is_active=True).order_by("name"),
+            "is_admin": is_admin,
+            "current_profile_id": profile.pk if profile is not None else None,
+        },
+    )
+
+
+@login_required
+def feedback_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    giver = _current_employee_profile(request)
+    # Responding to a pull-request? ?respond_to=<pk> links the new row back at the 'requested' ask.
+    respond_id = request.GET.get("respond_to") or request.POST.get("respond_to")
+    respond_to = None
+    if respond_id and str(respond_id).isdigit():
+        respond_to = Feedback.objects.filter(
+            tenant=request.tenant, pk=int(respond_id), status="requested").first()
+        # Only the person who was ASKED (the request's receiver) — or an admin — may respond.
+        if respond_to is not None and not _is_admin(request.user):
+            if giver is None or giver.pk != respond_to.receiver_id:
+                respond_to = None
+    if request.method == "POST":
+        form = FeedbackForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.giver = giver
+            if respond_to is not None:
+                obj.requested_from = respond_to
+                obj.status = "given"
+            elif obj.feedback_type == "request":
+                obj.status = "requested"
+            else:
+                obj.status = "given"
+            # giver is set server-side (after form validation) — run the model's giver!=receiver guard.
+            try:
+                obj.clean()
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            else:
+                obj.save()
+                write_audit_log(request.user, obj, "create")
+                messages.success(request, f"Feedback {obj.number} created.")
+                return redirect("hrm:feedback_detail", pk=obj.pk)
+    else:
+        initial = {}
+        if respond_to is not None:
+            initial = {"receiver": respond_to.giver_id, "feedback_type": "appreciation"}
+        form = FeedbackForm(tenant=request.tenant, initial=initial)
+    return render(request, "hrm/performance/feedback/form.html",
+                  {"form": form, "is_edit": False, "respond_to": respond_to})
+
+
+@login_required
+def feedback_detail(request, pk):
+    obj = get_object_or_404(
+        Feedback.objects.select_related(
+            "giver__party", "receiver__party", "badge", "related_objective",
+            "related_review__subject__party", "requested_from"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_feedback(request, obj):
+        raise PermissionDenied("You do not have access to this feedback.")
+    profile = _current_employee_profile(request)
+    is_receiver = profile is not None and profile.pk == obj.receiver_id
+    is_giver = profile is not None and profile.pk == obj.giver_id
+    return render(request, "hrm/performance/feedback/detail.html", {
+        "obj": obj,
+        "giver_display": _feedback_giver_display(request, obj),
+        "can_edit": _can_edit_feedback(request, obj),
+        "is_receiver": is_receiver,
+        "is_giver": is_giver,
+        # The recipient acknowledges given feedback; the person asked responds to a request.
+        "can_acknowledge": is_receiver and obj.status == "given",
+        "can_respond": is_receiver and obj.status == "requested",
+    })
+
+
+@login_required
+def feedback_edit(request, pk):
+    obj = get_object_or_404(Feedback, pk=pk, tenant=request.tenant)
+    if not _can_edit_feedback(request, obj):
+        messages.error(request, "Only the giver or a tenant admin can edit this feedback, and only before it is acknowledged.")
+        return redirect("hrm:feedback_detail", pk=obj.pk)
+    return crud_edit(request, model=Feedback, pk=pk, form_class=FeedbackForm,
+                     template="hrm/performance/feedback/form.html",
+                     success_url="hrm:feedback_list")
+
+
+@login_required
+@require_POST
+def feedback_delete(request, pk):
+    obj = get_object_or_404(Feedback, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    # A tenant admin may delete any; the giver may delete only their own, still-unacknowledged row.
+    if not (_is_admin(request.user)
+            or (obj.status != "acknowledged" and profile is not None and profile.pk == obj.giver_id)):
+        messages.error(request, "Only a tenant admin (or the giver, before acknowledgement) can delete this feedback.")
+        return redirect("hrm:feedback_detail", pk=obj.pk)
+    return crud_delete(request, model=Feedback, pk=pk, success_url="hrm:feedback_list")
+
+
+@login_required
+@require_POST
+def feedback_acknowledge(request, pk):
+    obj = get_object_or_404(Feedback, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == obj.receiver_id)):
+        raise PermissionDenied("Only the recipient can acknowledge this feedback.")
+    if obj.status == "given":
+        obj.status = "acknowledged"
+        obj.acknowledged_at = timezone.now()
+        obj.save(update_fields=["status", "acknowledged_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "acknowledge"})
+        messages.success(request, f"Feedback {obj.number} acknowledged.")
+    else:
+        messages.error(request, "Only given feedback can be acknowledged.")
+    return redirect("hrm:feedback_detail", pk=obj.pk)
+
+
+@login_required
+def feedback_respond(request, pk):
+    """Turn a 'requested' ask into a response — a thin redirect to the create form pre-wired with
+    ?respond_to=<pk> (the create view sets requested_from + status='given')."""
+    ask = get_object_or_404(Feedback, pk=pk, tenant=request.tenant, status="requested")
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == ask.receiver_id)):
+        raise PermissionDenied("Only the person asked can respond to this feedback request.")
+    return redirect(f"{reverse('hrm:feedback_create')}?respond_to={ask.pk}")
+
+
+@login_required
+def feedback_dashboard(request):
+    """Computed view (NO model) — a given/received/requested feedback summary for one employee, plus
+    a per-type breakdown and a 30-day received-velocity count. Every employee sees their OWN
+    dashboard; a tenant admin can view any via ?employee=<pk>. All ORM aggregation, no stored column
+    (mirrors Objective.progress_pct / calibration_board)."""
+    is_admin = _is_admin(request.user)
+    target = _current_employee_profile(request)
+    employees = None
+    if is_admin:
+        employees = (EmployeeProfile.objects.filter(tenant=request.tenant)
+                     .select_related("party").order_by("party__name"))
+        emp_id = request.GET.get("employee", "").strip()
+        if emp_id.isdigit():
+            target = (EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_id))
+                      .select_related("party").first())
+        elif target is None:
+            target = employees.first()
+    base = (Feedback.objects.filter(tenant=request.tenant)
+            .select_related("giver__party", "receiver__party", "badge"))
+    given = received = requested = []
+    given_by_type = received_by_type = []
+    given_count = received_count = requested_count = recent_30d_received = 0
+    if target is not None:
+        done = ("given", "acknowledged")
+        given = list(base.filter(giver=target, status__in=done).order_by("-created_at")[:10])
+        received = list(base.filter(receiver=target, status__in=done).order_by("-created_at")[:10])
+        requested = list(base.filter(giver=target, status="requested").order_by("-created_at")[:10])
+        type_labels = dict(Feedback.FEEDBACK_TYPE_CHOICES)
+        given_by_type = [
+            {"type": type_labels.get(r["feedback_type"], r["feedback_type"]), "count": r["c"]}
+            for r in base.filter(giver=target, status__in=done)
+            .values("feedback_type").annotate(c=Count("pk")).order_by("-c")]
+        received_by_type = [
+            {"type": type_labels.get(r["feedback_type"], r["feedback_type"]), "count": r["c"]}
+            for r in base.filter(receiver=target, status__in=done)
+            .values("feedback_type").annotate(c=Count("pk")).order_by("-c")]
+        given_count = sum(x["count"] for x in given_by_type)
+        received_count = sum(x["count"] for x in received_by_type)
+        requested_count = base.filter(giver=target, status="requested").count()
+        cutoff = timezone.now() - timedelta(days=30)
+        recent_30d_received = base.filter(
+            receiver=target, status__in=done, created_at__gte=cutoff).count()
+    return render(request, "hrm/performance/feedback_dashboard.html", {
+        "target": target,
+        "employees": employees,
+        "is_admin": is_admin,
+        "given": given,
+        "received": received,
+        "requested": requested,
+        "given_by_type": given_by_type,
+        "received_by_type": received_by_type,
+        "given_count": given_count,
+        "received_count": received_count,
+        "requested_count": requested_count,
+        "recent_30d_received": recent_30d_received,
+    })
+
+
+# ------------------------------------------------------------ OneOnOneMeeting (3.20 1:1 meetings)
+@login_required
+def oneononemeeting_list(request):
+    qs = (OneOnOneMeeting.objects.filter(tenant=request.tenant)
+          .select_related("manager__party", "employee__party", "related_objective")
+          .annotate(num_actions=Count("action_items")))
+    vq = _visible_meetings_q(request)
+    if vq is not None:
+        qs = qs.filter(vq)
+    return crud_list(
+        request,
+        # Explicit order_by — the Count() GROUP BY otherwise drops Meta.ordering (paginator warning).
+        qs.order_by("-scheduled_at"),
+        "hrm/performance/oneononemeeting/list.html",
+        search_fields=("number", "manager__party__name", "employee__party__name"),
+        filters=[("status", "status", False), ("manager", "manager_id", True),
+                 ("employee", "employee_id", True)],
+        extra_context={
+            "status_choices": OneOnOneMeeting.STATUS_CHOICES,
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+        },
+    )
+
+
+@login_required
+def oneononemeeting_create(request):
+    return crud_create(request, form_class=OneOnOneMeetingForm,
+                       template="hrm/performance/oneononemeeting/form.html",
+                       success_url="hrm:oneononemeeting_list")
+
+
+@login_required
+def oneononemeeting_detail(request, pk):
+    obj = get_object_or_404(
+        OneOnOneMeeting.objects.select_related("manager__party", "employee__party", "related_objective"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_meeting(request, obj):
+        raise PermissionDenied("You do not have access to this 1:1 meeting.")
+    can_manage = _can_manage_meeting(request, obj)  # manager or admin
+    action_items = list(obj.action_items.select_related("owner__party")
+                        .order_by("status", "due_date", "description"))
+    profile = _current_employee_profile(request)
+    return render(request, "hrm/performance/oneononemeeting/detail.html", {
+        "obj": obj,
+        "show_private": can_manage,   # manager_private_notes block is gated on this
+        "can_manage": can_manage,
+        "action_items": action_items,
+        "current_profile_id": profile.pk if profile is not None else None,
+        "action_form": MeetingActionItemForm(tenant=request.tenant),
+    })
+
+
+@login_required
+def oneononemeeting_edit(request, pk):
+    obj = get_object_or_404(OneOnOneMeeting, pk=pk, tenant=request.tenant)
+    # Manager/admin only — the edit form exposes manager_private_notes, so the employee must never
+    # reach it (L20: masking the read view is not enough; keep the field's holder off the bound form
+    # for anyone who shouldn't read it). The employee collaborates via action items + the read view.
+    if not _can_manage_meeting(request, obj):
+        messages.error(request, "Only the meeting's manager or a tenant admin can edit a 1:1.")
+        return redirect("hrm:oneononemeeting_detail", pk=obj.pk)
+    return crud_edit(request, model=OneOnOneMeeting, pk=pk, form_class=OneOnOneMeetingForm,
+                     template="hrm/performance/oneononemeeting/form.html",
+                     success_url="hrm:oneononemeeting_list")
+
+
+@login_required
+@require_POST
+def oneononemeeting_delete(request, pk):
+    obj = get_object_or_404(OneOnOneMeeting, pk=pk, tenant=request.tenant)
+    if not _can_manage_meeting(request, obj):
+        messages.error(request, "Only the meeting's manager or a tenant admin can delete a 1:1.")
+        return redirect("hrm:oneononemeeting_detail", pk=obj.pk)
+    return crud_delete(request, model=OneOnOneMeeting, pk=pk, success_url="hrm:oneononemeeting_list")
+
+
+@login_required
+@require_POST
+def oneononemeeting_complete(request, pk):
+    obj = get_object_or_404(OneOnOneMeeting, pk=pk, tenant=request.tenant)
+    if not _can_manage_meeting(request, obj):
+        raise PermissionDenied("Only the meeting's manager or a tenant admin can complete a 1:1.")
+    if obj.status == "scheduled":
+        obj.status = "completed"
+        obj.completed_at = timezone.now()
+        obj.save(update_fields=["status", "completed_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, f"1:1 {obj.number} marked completed.")
+    else:
+        messages.error(request, "Only a scheduled 1:1 can be completed.")
+    return redirect("hrm:oneononemeeting_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def oneononemeeting_cancel(request, pk):
+    obj = get_object_or_404(OneOnOneMeeting, pk=pk, tenant=request.tenant)
+    if not _can_manage_meeting(request, obj):
+        raise PermissionDenied("Only the meeting's manager or a tenant admin can cancel a 1:1.")
+    if obj.status == "scheduled":
+        obj.status = "cancelled"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "cancel"})
+        messages.success(request, f"1:1 {obj.number} cancelled.")
+    else:
+        messages.error(request, "Only a scheduled 1:1 can be cancelled.")
+    return redirect("hrm:oneononemeeting_detail", pk=obj.pk)
+
+
+# ------------------------------------------------------------ MeetingActionItem (3.20 nested child)
+@login_required
+def meetingactionitem_create(request, meeting_pk):
+    meeting = get_object_or_404(OneOnOneMeeting, pk=meeting_pk, tenant=request.tenant)
+    if not _can_view_meeting(request, meeting):  # either party or admin may add an action item
+        raise PermissionDenied("You do not have access to this 1:1 meeting.")
+    if request.method == "POST":
+        form = MeetingActionItemForm(
+            request.POST, instance=MeetingActionItem(tenant=request.tenant, meeting=meeting),
+            tenant=request.tenant)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    item = form.save()
+                write_audit_log(request.user, item, "create")
+                messages.success(request, "Action item added.")
+            except IntegrityError:
+                messages.error(request, "Could not add that action item.")
+            return redirect("hrm:oneononemeeting_detail", pk=meeting.pk)
+    else:
+        form = MeetingActionItemForm(
+            instance=MeetingActionItem(tenant=request.tenant, meeting=meeting), tenant=request.tenant)
+    return render(request, "hrm/performance/meetingactionitem/form.html", {
+        "form": form, "is_edit": False, "meeting": meeting})
+
+
+@login_required
+def meetingactionitem_detail(request, pk):
+    item = get_object_or_404(
+        MeetingActionItem.objects.select_related(
+            "meeting__manager__party", "meeting__employee__party", "owner__party"),
+        pk=pk, tenant=request.tenant)
+    if not _can_view_meeting(request, item.meeting):
+        raise PermissionDenied("You do not have access to this action item.")
+    return render(request, "hrm/performance/meetingactionitem/detail.html",
+                  {"obj": item, "meeting": item.meeting})
+
+
+@login_required
+def meetingactionitem_edit(request, pk):
+    item = get_object_or_404(MeetingActionItem.objects.select_related("meeting"), pk=pk, tenant=request.tenant)
+    if not _can_view_meeting(request, item.meeting):
+        raise PermissionDenied("You do not have access to this action item.")
+    if request.method == "POST":
+        form = MeetingActionItemForm(request.POST, instance=item, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, item, "update")
+            messages.success(request, "Action item updated.")
+            return redirect("hrm:oneononemeeting_detail", pk=item.meeting_id)
+    else:
+        form = MeetingActionItemForm(instance=item, tenant=request.tenant)
+    return render(request, "hrm/performance/meetingactionitem/form.html", {
+        "form": form, "is_edit": True, "obj": item, "meeting": item.meeting})
+
+
+@login_required
+@require_POST
+def meetingactionitem_delete(request, pk):
+    item = get_object_or_404(MeetingActionItem.objects.select_related("meeting"), pk=pk, tenant=request.tenant)
+    meeting = item.meeting
+    if not _can_view_meeting(request, meeting):
+        messages.error(request, "You do not have access to this action item.")
+        return redirect("hrm:oneononemeeting_detail", pk=meeting.pk)
+    write_audit_log(request.user, item, "delete")
+    item.delete()
+    messages.success(request, "Action item deleted.")
+    return redirect("hrm:oneononemeeting_detail", pk=meeting.pk)
+
+
+@login_required
+@require_POST
+def meetingactionitem_toggle(request, pk):
+    item = get_object_or_404(MeetingActionItem.objects.select_related("meeting"), pk=pk, tenant=request.tenant)
+    meeting = item.meeting
+    profile = _current_employee_profile(request)
+    # The item's owner, the meeting's manager, or an admin may flip its state.
+    if not (_is_admin(request.user)
+            or (profile is not None and profile.pk in (item.owner_id, meeting.manager_id))):
+        raise PermissionDenied("Only the owner, the meeting's manager, or an admin can update this action item.")
+    if item.status == "open":
+        item.status, item.completed_at = "done", timezone.now()
+    else:
+        item.status, item.completed_at = "open", None
+    item.save(update_fields=["status", "completed_at", "updated_at"])
+    write_audit_log(request.user, item, "update", {"action": "toggle", "to": item.status})
+    messages.success(request, f"Action item marked {item.get_status_display().lower()}.")
+    return redirect("hrm:oneononemeeting_detail", pk=meeting.pk)
