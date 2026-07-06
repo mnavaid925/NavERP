@@ -21,7 +21,7 @@
     <dl class="detail-grid">
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
       <div class="detail-item"><dt>From</dt><dd>
-        {% if obj.giver_display == 'Anonymous' %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% else %}{{ obj.giver_display }}{% endif %}
+        {% if giver_display == 'Anonymous' %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% else %}{{ giver_display }}{% endif %}
       </dd></div>
       <div class="detail-item"><dt>To</dt><dd>{{ obj.receiver.party.name }}</dd></div>
       <div class="detail-item"><dt>Type</dt><dd>
