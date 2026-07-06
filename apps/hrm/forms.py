@@ -131,6 +131,12 @@ from .models import (  # noqa: E402  — 3.19 Performance Review
     ReviewRating,
     ReviewTemplate,
 )
+from .models import (  # noqa: E402  — 3.20 Continuous Feedback
+    Feedback,
+    KudosBadge,
+    MeetingActionItem,
+    OneOnOneMeeting,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -1603,3 +1609,99 @@ class ReviewRatingForm(TenantModelForm):
         widgets = {
             "comment": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
         }
+
+
+# ------------------------------------------------------------------------- 3.20 Continuous Feedback
+class KudosBadgeForm(TenantModelForm):
+    # Small catalog (like GoalPeriodForm) — no in-module FK to scope; tenant= kept for signature parity.
+    class Meta:
+        model = KudosBadge
+        fields = ["name", "description", "icon", "color", "linked_value", "is_active"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class FeedbackForm(TenantModelForm):
+    # `giver` is resolved from request.user server-side (never form-typed, mirroring how
+    # GoalCheckIn.created_by is set in the view). `status`/`number`/`acknowledged_at` are
+    # workflow-owned (the create-as-request path + the feedback_acknowledge action set them) —
+    # never on this form, same reasoning as PerformanceReviewForm's workflow fields. `requested_from`
+    # is a system linkage set from the ?respond_to= URL param in feedback_create, not a manual field.
+    # `is_anonymous` masks the giver on READ only (the FK is still stored).
+    class Meta:
+        model = Feedback
+        fields = ["receiver", "feedback_type", "visibility", "message", "is_anonymous",
+                  "badge", "related_objective", "related_review"]
+        widgets = {
+            "message": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "receiver" in self.fields:
+                self.fields["receiver"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "badge" in self.fields:
+                self.fields["badge"].queryset = (
+                    KudosBadge.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+            if "related_objective" in self.fields:
+                self.fields["related_objective"].queryset = (
+                    Objective.objects.filter(tenant=self.tenant)
+                    .select_related("goal_period").order_by("title"))
+            if "related_review" in self.fields:
+                self.fields["related_review"].queryset = (
+                    PerformanceReview.objects.filter(tenant=self.tenant)
+                    .select_related("subject__party").order_by("-created_at"))
+
+
+class OneOnOneMeetingForm(TenantModelForm):
+    # `status` is workflow-owned (changed only via the complete/cancel actions) — exposing it would
+    # let a non-admin POST a phase change and bypass the gate (the GoalPeriodForm/ReviewCycleForm fix).
+    # `number`/`completed_at` are auto/workflow. `manager_private_notes` STAYS on the form: the writer
+    # (the manager) must be able to type it — only the READ side is confidential, gated in the detail view.
+    class Meta:
+        model = OneOnOneMeeting
+        fields = ["manager", "employee", "scheduled_at", "agenda", "shared_notes",
+                  "manager_private_notes", "related_objective"]
+        widgets = {
+            "agenda": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "shared_notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+            "manager_private_notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            emps = (EmployeeProfile.objects.filter(tenant=self.tenant)
+                    .select_related("party").order_by("party__name"))
+            if "manager" in self.fields:
+                self.fields["manager"].queryset = emps
+            if "employee" in self.fields:
+                self.fields["employee"].queryset = emps
+            if "related_objective" in self.fields:
+                self.fields["related_objective"].queryset = (
+                    Objective.objects.filter(tenant=self.tenant)
+                    .select_related("goal_period").order_by("title"))
+
+
+class MeetingActionItemForm(TenantModelForm):
+    # `meeting` is set from the URL in the nested create view; `status` is toggled only by
+    # meetingactionitem_toggle (off the form, like KeyResultForm/ReviewRatingForm workflow fields);
+    # `number`/`completed_at` are auto/workflow.
+    class Meta:
+        model = MeetingActionItem
+        fields = ["description", "owner", "due_date"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+            "due_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "owner" in self.fields:
+            self.fields["owner"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant)
+                .select_related("party").order_by("party__name"))
