@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Warning Letter · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:warningletter_list' %}">Warning Letters</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:warningletter_print' obj.pk %}" class="btn btn-outline" target="_blank"><i data-lucide="printer"></i> Print</a>
+      {% if can_edit %}<a href="{% url 'hrm:warningletter_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      {% if can_edit or request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'hrm:warningletter_delete' obj.pk %}" onsubmit="return confirm('Delete this warning letter?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Recipient</dt><dd>{{ obj.issued_to.party.name }}</dd></div>
+      <div class="detail-item"><dt>Issued By</dt><dd>{{ obj.issued_by.party.name }}</dd></div>
+      <div class="detail-item"><dt>Level</dt><dd>
+        {% if obj.level == 'verbal' %}<span class="badge badge-muted">{{ obj.get_level_display }}</span>
+        {% elif obj.level == 'written' %}<span class="badge badge-amber">{{ obj.get_level_display }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.get_level_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Category</dt><dd><span class="badge badge-slate">{{ obj.get_category_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'issued' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.is_expired %} <span class="badge badge-red">Expired</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Incident Date</dt><dd>{{ obj.incident_date|date:"Y-m-d" }}</dd></div>
+      {% if obj.policy_reference %}<div class="detail-item"><dt>Policy</dt><dd>{{ obj.policy_reference }}</dd></div>{% endif %}
+      {% if obj.expiry_date %}<div class="detail-item"><dt>Expires</dt><dd>{{ obj.expiry_date|date:"Y-m-d" }}</dd></div>{% endif %}
+      {% if obj.related_pip_id %}<div class="detail-item"><dt>Related PIP</dt><dd><a href="{% url 'hrm:pip_detail' obj.related_pip.pk %}">{{ obj.related_pip.number }}</a></dd></div>{% endif %}
+      {% if obj.acknowledged_at %}<div class="detail-item"><dt>Acknowledged</dt><dd>{{ obj.acknowledged_at|date:"Y-m-d" }}{% if obj.acknowledged_by %} by {{ obj.acknowledged_by.party.name }}{% endif %}</dd></div>{% endif %}
+    </dl>
+    <div style="margin-top:.6rem;"><strong>Incident / Behaviour</strong><p>{{ obj.description|linebreaksbr }}</p></div>
+    {% if obj.employee_response %}<div style="margin-top:.4rem; padding:.5rem; background:var(--page-bg); border-radius:8px;"><strong><i data-lucide="message-square"></i> Employee Response</strong><p>{{ obj.employee_response|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  {% if prior_warnings %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Prior Warnings</h2><span class="text-muted">Escalation context for {{ obj.issued_to.party.name }}</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Level</th><th>Category</th><th>Incident</th></tr></thead>
+          <tbody>
+            {% for w in prior_warnings %}
+              <tr>
+                <td><a href="{% url 'hrm:warningletter_detail' w.pk %}" class="fw-600">{{ w.number }}</a></td>
+                <td>{{ w.get_level_display }}</td>
+                <td>{{ w.get_category_display }}</td>
+                <td>{{ w.incident_date|date:"Y-m-d" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin or can_acknowledge %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body">
+        {% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'hrm:warningletter_issue' obj.pk %}" style="display:inline;" onsubmit="return confirm('Issue this warning letter to the employee?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Issue</button>
+          </form>
+          <span class="text-muted" style="margin-inline-start:.5rem;">Draft — issue it to the recipient.</span>
+        {% endif %}
+        {% if can_acknowledge %}
+          <form method="post" action="{% url 'hrm:warningletter_acknowledge' obj.pk %}">
+            {% csrf_token %}
+            <p class="fw-600" style="margin-bottom:.3rem;">Acknowledge receipt (you may add a written response):</p>
+            <div class="form-group" style="max-width:520px;">{{ ack_form.employee_response }}</div>
+            <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Acknowledge</button></div>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:warningletter_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
