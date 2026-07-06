@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Feedback Dashboard{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Feedback Dashboard{% if target %} · {{ target.party.name }}{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:feedback_list' %}">Feedback</a><span class="sep">›</span><span>Dashboard</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:feedback_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All Feedback</a>
+      <a href="{% url 'hrm:feedback_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Give Feedback</a>
+    </div>
+  </div>
+
+  {% if is_admin %}
+    <div class="card"><div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="employee">View an employee's dashboard</label>
+          <select name="employee" id="employee" class="form-select" onchange="this.form.submit()">
+            <option value="">Select an employee…</option>
+            {% for e in employees %}
+              <option value="{{ e.pk }}" {% if target and target.pk == e.pk %}selected{% endif %}>{{ e.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+    </div></div>
+  {% endif %}
+
+  {% if target %}
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ received_count }}</div><div class="stat-label">Received</div></div>
+      <div class="stat-card"><div class="stat-icon green"><i data-lucide="send"></i></div><div class="stat-value">{{ given_count }}</div><div class="stat-label">Given</div></div>
+      <div class="stat-card"><div class="stat-icon orange"><i data-lucide="help-circle"></i></div><div class="stat-value">{{ requested_count }}</div><div class="stat-label">Requests Sent</div></div>
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ recent_30d_received }}</div><div class="stat-label">Received (30 days)</div></div>
+    </div>
+
+    {% if received_by_type or given_by_type %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Feedback Mix</h2></div>
+        <div class="card-body">
+          <div style="display:flex; gap:2rem; flex-wrap:wrap;">
+            <div>
+              <strong>Received</strong>
+              <div class="badge-group" style="margin-top:.4rem;">
+                {% for row in received_by_type %}<span class="badge badge-info">{{ row.type }}: {{ row.count }}</span>{% empty %}<span class="text-muted">None yet</span>{% endfor %}
+              </div>
+            </div>
+            <div>
+              <strong>Given</strong>
+              <div class="badge-group" style="margin-top:.4rem;">
+                {% for row in given_by_type %}<span class="badge badge-green">{{ row.type }}: {{ row.count }}</span>{% empty %}<span class="text-muted">None yet</span>{% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title"><i data-lucide="inbox"></i> Received</h2><span class="text-muted">Recent feedback about {{ target.party.name }}</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>From</th><th>Type</th><th>When</th></tr></thead>
+          <tbody>
+            {% for f in received %}
+              <tr>
+                <td><a href="{% url 'hrm:feedback_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+                <td>{% if f.is_anonymous and not is_admin %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% elif f.giver_id %}{{ f.giver.party.name }}{% else %}—{% endif %}</td>
+                <td><span class="badge badge-muted">{{ f.get_feedback_type_display }}</span></td>
+                <td>{{ f.created_at|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="inbox"></i><p>No feedback received yet.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title"><i data-lucide="send"></i> Given</h2><span class="text-muted">Recent feedback {{ target.party.name }} gave</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>To</th><th>Type</th><th>When</th></tr></thead>
+          <tbody>
+            {% for f in given %}
+              <tr>
+                <td><a href="{% url 'hrm:feedback_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+                <td>{{ f.receiver.party.name }}</td>
+                <td><span class="badge badge-muted">{{ f.get_feedback_type_display }}</span></td>
+                <td>{{ f.created_at|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="send"></i><p>No feedback given yet.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title"><i data-lucide="help-circle"></i> Requests Sent</h2><span class="text-muted">Feedback {{ target.party.name }} asked for</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Asked</th><th>When</th></tr></thead>
+          <tbody>
+            {% for f in requested %}
+              <tr>
+                <td><a href="{% url 'hrm:feedback_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+                <td>{{ f.receiver.party.name }}</td>
+                <td>{{ f.created_at|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3"><div class="empty-state"><i data-lucide="help-circle"></i><p>No open feedback requests.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="user-x"></i><h3>No employee profile</h3><p>{% if is_admin %}Select an employee above to view their feedback dashboard.{% else %}Your account isn't linked to an employee profile, so there's no personal feedback dashboard to show.{% endif %}</p></div></div></div>
+  {% endif %}
+{% endblock %}
