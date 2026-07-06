@@ -8230,11 +8230,14 @@ def _can_manage_meeting(request, meeting):
 
 
 def _can_manage_action_item(request, item):
-    """Edit/delete/toggle an action item: the item's owner, the meeting's manager, or an admin (a
-    tighter set than _can_view_meeting — creating one only needs meeting access, but mutating an
-    existing item shouldn't be open to the non-owner employee side)."""
+    """Edit/delete/toggle an action item: an admin, or a MEETING PARTICIPANT (per _can_view_meeting)
+    who is the item's owner or the meeting's manager. Requiring meeting access — not owner_id alone —
+    closes the gap where an item assigned to an outsider would grant them mutate rights on a 1:1 they
+    can't even view (edit rights must never be broader than view rights)."""
     if _is_admin(request.user):
         return True
+    if not _can_view_meeting(request, item.meeting):
+        return False
     profile = _current_employee_profile(request)
     return profile is not None and profile.pk in (item.owner_id, item.meeting.manager_id)
 
