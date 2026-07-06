@@ -103,6 +103,12 @@ from .models import (  # 3.19 Performance Review
     ReviewRating,
     ReviewTemplate,
 )
+from .models import (  # 3.20 Continuous Feedback
+    Feedback,
+    KudosBadge,
+    MeetingActionItem,
+    OneOnOneMeeting,
+)
 
 
 @admin.register(JobGrade)
@@ -962,3 +968,39 @@ class ReviewRatingAdmin(admin.ModelAdmin):
     search_fields = ("number", "criterion_label")
     raw_id_fields = ("review",)
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------------- 3.20 Continuous Feedback
+@admin.register(KudosBadge)
+class KudosBadgeAdmin(admin.ModelAdmin):
+    list_display = ("name", "linked_value", "is_active", "tenant")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("name", "linked_value")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ("number", "giver", "receiver", "feedback_type", "visibility", "status", "tenant")
+    list_filter = ("tenant", "feedback_type", "visibility", "status", "is_anonymous")
+    search_fields = ("number", "message", "giver__party__name", "receiver__party__name")
+    raw_id_fields = ("giver", "receiver", "badge", "related_objective", "related_review", "requested_from")
+    readonly_fields = ("number", "acknowledged_at", "created_at", "updated_at")
+
+
+@admin.register(OneOnOneMeeting)
+class OneOnOneMeetingAdmin(admin.ModelAdmin):
+    list_display = ("number", "manager", "employee", "scheduled_at", "status", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "manager__party__name", "employee__party__name")
+    raw_id_fields = ("manager", "employee", "related_objective")
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(MeetingActionItem)
+class MeetingActionItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "meeting", "description", "owner", "due_date", "status", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "description")
+    raw_id_fields = ("meeting", "owner")
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
