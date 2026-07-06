@@ -670,4 +670,38 @@ urlpatterns = [
 
     # Calibration board (report view — ?cycle=<id>)
     path("calibration/", views.calibration_board, name="calibration_board"),
+
+    # ---- 3.20 Continuous Feedback ----
+    # KudosBadge (recognition catalog)
+    path("kudos-badges/", views.kudosbadge_list, name="kudosbadge_list"),
+    path("kudos-badges/add/", views.kudosbadge_create, name="kudosbadge_create"),
+    path("kudos-badges/<int:pk>/", views.kudosbadge_detail, name="kudosbadge_detail"),
+    path("kudos-badges/<int:pk>/edit/", views.kudosbadge_edit, name="kudosbadge_edit"),
+    path("kudos-badges/<int:pk>/delete/", views.kudosbadge_delete, name="kudosbadge_delete"),
+
+    # Feedback (real-time kudos/appreciation/constructive + request-pull workflow)
+    path("feedback/", views.feedback_list, name="feedback_list"),
+    path("feedback/add/", views.feedback_create, name="feedback_create"),
+    path("feedback/dashboard/", views.feedback_dashboard, name="feedback_dashboard"),
+    path("feedback/<int:pk>/", views.feedback_detail, name="feedback_detail"),
+    path("feedback/<int:pk>/edit/", views.feedback_edit, name="feedback_edit"),
+    path("feedback/<int:pk>/delete/", views.feedback_delete, name="feedback_delete"),
+    path("feedback/<int:pk>/acknowledge/", views.feedback_acknowledge, name="feedback_acknowledge"),
+    path("feedback/<int:pk>/respond/", views.feedback_respond, name="feedback_respond"),
+
+    # 1:1 Meetings
+    path("one-on-ones/", views.oneononemeeting_list, name="oneononemeeting_list"),
+    path("one-on-ones/add/", views.oneononemeeting_create, name="oneononemeeting_create"),
+    path("one-on-ones/<int:pk>/", views.oneononemeeting_detail, name="oneononemeeting_detail"),
+    path("one-on-ones/<int:pk>/edit/", views.oneononemeeting_edit, name="oneononemeeting_edit"),
+    path("one-on-ones/<int:pk>/delete/", views.oneononemeeting_delete, name="oneononemeeting_delete"),
+    path("one-on-ones/<int:pk>/complete/", views.oneononemeeting_complete, name="oneononemeeting_complete"),
+    path("one-on-ones/<int:pk>/cancel/", views.oneononemeeting_cancel, name="oneononemeeting_cancel"),
+
+    # Meeting action items — created nested under a 1:1
+    path("one-on-ones/<int:meeting_pk>/action-items/add/", views.meetingactionitem_create, name="meetingactionitem_create"),
+    path("action-items/<int:pk>/", views.meetingactionitem_detail, name="meetingactionitem_detail"),
+    path("action-items/<int:pk>/edit/", views.meetingactionitem_edit, name="meetingactionitem_edit"),
+    path("action-items/<int:pk>/delete/", views.meetingactionitem_delete, name="meetingactionitem_delete"),
+    path("action-items/<int:pk>/toggle/", views.meetingactionitem_toggle, name="meetingactionitem_toggle"),
 ]
