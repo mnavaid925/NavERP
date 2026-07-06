@@ -67,7 +67,7 @@
             {% for f in received %}
               <tr>
                 <td><a href="{% url 'hrm:feedback_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
-                <td>{% if f.is_anonymous and not is_admin %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% elif f.giver_id %}{{ f.giver.party.name }}{% else %}—{% endif %}</td>
+                <td>{% if f.is_anonymous and not is_admin and f.giver_id != target.pk %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% elif f.giver_id %}{{ f.giver.party.name }}{% else %}—{% endif %}</td>
                 <td><span class="badge badge-muted">{{ f.get_feedback_type_display }}</span></td>
                 <td>{{ f.created_at|date:"Y-m-d" }}</td>
               </tr>
