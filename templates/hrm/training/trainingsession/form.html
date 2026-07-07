@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Session{% else %}New Session{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Session{% else %}New Session{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:trainingsession_list' %}">Training Sessions</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+      <h3 class="section-title" style="margin:.2rem 0 .6rem;">Course &amp; Delivery</h3>
+      <div class="form-grid">
+        {% include "partials/form_field.html" with field=form.course %}
+        {% include "partials/form_field.html" with field=form.delivery_mode %}
+        {% include "partials/form_field.html" with field=form.status %}
+      </div>
+
+      <h3 class="section-title" style="margin:1rem 0 .6rem;">Schedule</h3>
+      <div class="form-grid">
+        {% include "partials/form_field.html" with field=form.start_datetime %}
+        {% include "partials/form_field.html" with field=form.end_datetime %}
+        {% include "partials/form_field.html" with field=form.timezone %}
+        {% include "partials/form_field.html" with field=form.capacity %}
+        {% include "partials/form_field.html" with field=form.waitlist_enabled %}
+        {% include "partials/form_field.html" with field=form.instructor_employee %}
+      </div>
+
+      <div data-mode-group="classroom">
+        <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="map-pin"></i> Classroom</h3>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.venue_name %}
+          {% include "partials/form_field.html" with field=form.venue_address %}
+        </div>
+      </div>
+
+      <div data-mode-group="virtual">
+        <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="video"></i> Virtual</h3>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.meeting_platform %}
+          {% include "partials/form_field.html" with field=form.meeting_link %}
+          {% include "partials/form_field.html" with field=form.meeting_id %}
+        </div>
+      </div>
+
+      <div data-mode-group="external">
+        <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="briefcase"></i> External Provider</h3>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.external_vendor %}
+          {% include "partials/form_field.html" with field=form.external_instructor_name %}
+        </div>
+      </div>
+
+      <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="banknote"></i> Cost Tracking</h3>
+      <div class="form-grid">
+        {% include "partials/form_field.html" with field=form.estimated_cost %}
+        {% include "partials/form_field.html" with field=form.actual_cost %}
+        {% include "partials/form_field.html" with field=form.currency %}
+        {% include "partials/form_field.html" with field=form.invoice_reference %}
+      </div>
+
+      <h3 class="section-title" style="margin:1rem 0 .6rem;">Notes</h3>
+      <div class="form-grid">
+        {% include "partials/form_field.html" with field=form.notes %}
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'hrm:trainingsession_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var sel = document.getElementById("{{ form.delivery_mode.id_for_label }}");
+    var groups = document.querySelectorAll("[data-mode-group]");
+    function sync() {
+      var mode = sel ? sel.value : "";
+      groups.forEach(function (g) {
+        // Kept in the DOM (display:none inputs still POST) so server-side clean() validates every mode.
+        g.style.display = (g.getAttribute("data-mode-group") === mode) ? "" : "none";
+      });
+    }
+    if (sel) { sel.addEventListener("change", sync); sync(); }
+  })();
+</script>
+{% endblock %}
