@@ -8,7 +8,7 @@
     </div>
     <div class="page-actions">
       {% if can_edit %}<a href="{% url 'hrm:pip_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
-      {% if can_edit or request.user.is_superuser or request.user.is_tenant_admin %}
+      {% if can_edit or is_admin %}
         <form method="post" action="{% url 'hrm:pip_delete' obj.pk %}" onsubmit="return confirm('Delete this PIP?');">
           {% csrf_token %}
           <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
@@ -46,19 +46,19 @@
     <div class="card-header"><h2 class="card-title">Workflow</h2></div>
     <div class="card-body">
       {% if obj.status == 'draft' %}
-        {% if is_manager or request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if is_manager or is_admin %}
           <form method="post" action="{% url 'hrm:pip_submit' obj.pk %}" style="display:inline;" onsubmit="return confirm('Submit this PIP for HR approval?');">
             {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for HR Approval</button>
           </form>
         {% endif %}
-        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if is_admin %}
           <form method="post" action="{% url 'hrm:pip_hr_approve' obj.pk %}" style="display:inline; margin-inline-start:.4rem;" onsubmit="return confirm('Approve and activate this PIP?');">
             {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="badge-check"></i> HR Approve</button>
           </form>
         {% endif %}
         <span class="text-muted" style="margin-inline-start:.5rem;">Draft — editable until submitted.</span>
       {% elif obj.status == 'pending_hr_approval' %}
-        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if is_admin %}
           <form method="post" action="{% url 'hrm:pip_hr_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve and activate this PIP?');">
             {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> HR Approve &amp; Activate</button>
           </form>
@@ -69,7 +69,7 @@
             {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Acknowledge</button>
           </form>
         {% endif %}
-        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if is_admin %}
           <a href="{% url 'hrm:pip_close' obj.pk %}" class="btn btn-outline" style="margin-inline-start:.4rem;"><i data-lucide="flag"></i> Close with Outcome</a>
           <form method="post" action="{% url 'hrm:pip_extend' obj.pk %}" style="display:inline-flex; gap:.3rem; margin-inline-start:.4rem; align-items:center;">
             {% csrf_token %}
@@ -103,7 +103,7 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'hrm:pipcheckin_detail' ci.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  {% if can_add_checkin %}
+                  {% if can_manage_checkin %}
                     <a href="{% url 'hrm:pipcheckin_edit' ci.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                     <form method="post" action="{% url 'hrm:pipcheckin_delete' ci.pk %}" style="display:inline;" onsubmit="return confirm('Delete this check-in?');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
