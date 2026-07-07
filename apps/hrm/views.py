@@ -15,12 +15,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Prefetch, Q, Subquery, Sum)
+from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.http import require_POST
 
 from django.conf import settings
@@ -154,6 +154,10 @@ from .forms import (  # 3.21 Performance Improvement
     PerformanceImprovementPlanForm,
     WarningAcknowledgeForm,
     WarningLetterForm,
+)
+from .forms import (  # 3.22 Training Management
+    TrainingCourseForm,
+    TrainingSessionForm,
 )
 from .models import (
     APPLICATION_STAGE_CHOICES,
@@ -301,6 +305,10 @@ from .models import (  # 3.21 Performance Improvement
     PIPCheckIn,
     PerformanceImprovementPlan,
     WarningLetter,
+)
+from .models import (  # 3.22 Training Management
+    TrainingCourse,
+    TrainingSession,
 )
 
 
@@ -9338,3 +9346,157 @@ def coachingnote_delete(request, pk):
         messages.error(request, "Only the coach (author) or a tenant admin can delete this coaching note.")
         return redirect("hrm:coachingnote_detail", pk=obj.pk)
     return crud_delete(request, model=CoachingNote, pk=pk, success_url="hrm:coachingnote_list")
+
+
+# ============================================================================
+# 3.22 Training Management — the training catalog (TrainingCourse) + scheduled
+# occurrences (TrainingSession) + a Training Calendar view. Ordinary tenant-scoped
+# CRUD (no confidentiality gate). Reuses hrm.EmployeeProfile (instructor), core.Party
+# (external vendor), accounting.Currency (cost). See models.py 3.22 section.
+# ============================================================================
+
+# ------------------------------------------------------------ TrainingCourse (3.22 Training Catalog)
+@login_required
+def trainingcourse_list(request):
+    qs = (TrainingCourse.objects.filter(tenant=request.tenant)
+          .select_related("prerequisite_course")
+          .annotate(session_count=Count("sessions", distinct=True)))
+    return crud_list(
+        request, qs.order_by("title"),
+        "hrm/training/trainingcourse/list.html",
+        search_fields=("number", "title", "description"),
+        filters=[("category", "category", False), ("provider_type", "provider_type", False),
+                 ("delivery_mode", "delivery_mode", False), ("is_certification", "is_certification", False),
+                 ("is_active", "is_active", False)],
+        extra_context={
+            "category_choices": TrainingCourse.CATEGORY_CHOICES,
+            "provider_type_choices": TrainingCourse.PROVIDER_TYPE_CHOICES,
+            "delivery_mode_choices": TrainingCourse.DELIVERY_MODE_CHOICES,
+        },
+    )
+
+
+@login_required
+def trainingcourse_create(request):
+    return crud_create(request, form_class=TrainingCourseForm,
+                       template="hrm/training/trainingcourse/form.html",
+                       success_url="hrm:trainingcourse_list")
+
+
+@login_required
+def trainingcourse_detail(request, pk):
+    obj = get_object_or_404(
+        TrainingCourse.objects.select_related("prerequisite_course"), pk=pk, tenant=request.tenant)
+    sessions = (obj.sessions.select_related("instructor_employee__party", "external_vendor")
+                .order_by("-start_datetime")[:20])
+    return render(request, "hrm/training/trainingcourse/detail.html", {
+        "obj": obj,
+        "sessions": sessions,
+        "unlocks": obj.unlocks.order_by("title"),   # courses that require THIS one as a prerequisite
+    })
+
+
+@login_required
+def trainingcourse_edit(request, pk):
+    return crud_edit(request, model=TrainingCourse, pk=pk, form_class=TrainingCourseForm,
+                     template="hrm/training/trainingcourse/form.html", success_url="hrm:trainingcourse_list")
+
+
+@login_required
+@require_POST
+def trainingcourse_delete(request, pk):
+    obj = get_object_or_404(TrainingCourse, pk=pk, tenant=request.tenant)
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, obj, "delete")
+            obj.delete()
+    except ProtectedError:
+        # course.sessions is PROTECT — a scheduled course can't be deleted out from under its sessions.
+        messages.error(request, "This course has scheduled sessions and can't be deleted. Delete its sessions first.")
+        return redirect("hrm:trainingcourse_detail", pk=obj.pk)
+    messages.success(request, "Deleted successfully.")
+    return redirect("hrm:trainingcourse_list")
+
+
+# ------------------------------------------------------------ TrainingSession (3.22 Classroom/Virtual/External)
+@login_required
+def trainingsession_list(request):
+    qs = (TrainingSession.objects.filter(tenant=request.tenant)
+          .select_related("course", "instructor_employee__party", "external_vendor", "currency"))
+    return crud_list(
+        request, qs.order_by("-start_datetime", "number"),
+        "hrm/training/trainingsession/list.html",
+        search_fields=("number", "course__title", "venue_name", "instructor_employee__party__name",
+                       "external_instructor_name", "external_vendor__name"),
+        filters=[("status", "status", False), ("delivery_mode", "delivery_mode", False),
+                 ("course", "course_id", True), ("instructor_employee", "instructor_employee_id", True)],
+        extra_context={
+            "status_choices": TrainingSession.STATUS_CHOICES,
+            "delivery_mode_choices": TrainingSession.DELIVERY_MODE_CHOICES,
+            "courses": TrainingCourse.objects.filter(tenant=request.tenant).order_by("title"),
+            "instructors": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                            .select_related("party").order_by("party__name")),
+        },
+    )
+
+
+@login_required
+def trainingsession_create(request):
+    return crud_create(request, form_class=TrainingSessionForm,
+                       template="hrm/training/trainingsession/form.html",
+                       success_url="hrm:trainingsession_list")
+
+
+@login_required
+def trainingsession_detail(request, pk):
+    obj = get_object_or_404(
+        TrainingSession.objects.select_related(
+            "course", "instructor_employee__party", "external_vendor", "currency"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/training/trainingsession/detail.html", {"obj": obj})
+
+
+@login_required
+def trainingsession_edit(request, pk):
+    return crud_edit(request, model=TrainingSession, pk=pk, form_class=TrainingSessionForm,
+                     template="hrm/training/trainingsession/form.html", success_url="hrm:trainingsession_list")
+
+
+@login_required
+@require_POST
+def trainingsession_delete(request, pk):
+    return crud_delete(request, model=TrainingSession, pk=pk, success_url="hrm:trainingsession_list")
+
+
+# ------------------------------------------------------------ Training Calendar (3.22 upcoming sessions)
+@login_required
+def training_calendar(request):
+    """A date-grouped view over TrainingSession (the Training Calendar bullet). Defaults to the
+    upcoming lens (from today) and never shows cancelled sessions; optional ?delivery_mode / ?status
+    / ?from / ?to GET filters narrow it. Bounded by the date range — no pagination."""
+    qs = (TrainingSession.objects.filter(tenant=request.tenant)
+          .select_related("course", "instructor_employee__party")
+          .exclude(status="cancelled"))
+    mode = request.GET.get("delivery_mode", "").strip()
+    status = request.GET.get("status", "").strip()
+    if mode:
+        qs = qs.filter(delivery_mode=mode)
+    if status:
+        qs = qs.filter(status=status)
+    # ?from defaults to today (the "upcoming" lens); ?to is an optional upper bound.
+    from_date = parse_date(request.GET.get("from", "").strip() or "") or timezone.localdate()
+    to_date = parse_date(request.GET.get("to", "").strip() or "")
+    qs = qs.filter(start_datetime__date__gte=from_date)
+    if to_date:
+        qs = qs.filter(start_datetime__date__lte=to_date)
+
+    sessions_by_date = {}
+    for s in qs.order_by("start_datetime", "number")[:200]:
+        sessions_by_date.setdefault(timezone.localtime(s.start_datetime).date(), []).append(s)
+    return render(request, "hrm/training/calendar.html", {
+        "sessions_by_date": list(sessions_by_date.items()),   # [(date, [session, ...]), ...]
+        "delivery_mode_choices": TrainingSession.DELIVERY_MODE_CHOICES,
+        "status_choices": TrainingSession.STATUS_CHOICES,
+        "from_date": from_date,
+        "to_date": to_date,
+    })
