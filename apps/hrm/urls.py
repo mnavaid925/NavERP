@@ -740,4 +740,22 @@ urlpatterns = [
     path("coaching-notes/<int:pk>/", views.coachingnote_detail, name="coachingnote_detail"),
     path("coaching-notes/<int:pk>/edit/", views.coachingnote_edit, name="coachingnote_edit"),
     path("coaching-notes/<int:pk>/delete/", views.coachingnote_delete, name="coachingnote_delete"),
+
+    # ---- 3.22 Training Management ----
+    # Training courses (catalog)
+    path("training-courses/", views.trainingcourse_list, name="trainingcourse_list"),
+    path("training-courses/add/", views.trainingcourse_create, name="trainingcourse_create"),
+    path("training-courses/<int:pk>/", views.trainingcourse_detail, name="trainingcourse_detail"),
+    path("training-courses/<int:pk>/edit/", views.trainingcourse_edit, name="trainingcourse_edit"),
+    path("training-courses/<int:pk>/delete/", views.trainingcourse_delete, name="trainingcourse_delete"),
+
+    # Training sessions (classroom / virtual / external occurrences)
+    path("training-sessions/", views.trainingsession_list, name="trainingsession_list"),
+    path("training-sessions/add/", views.trainingsession_create, name="trainingsession_create"),
+    path("training-sessions/<int:pk>/", views.trainingsession_detail, name="trainingsession_detail"),
+    path("training-sessions/<int:pk>/edit/", views.trainingsession_edit, name="trainingsession_edit"),
+    path("training-sessions/<int:pk>/delete/", views.trainingsession_delete, name="trainingsession_delete"),
+
+    # Training calendar (upcoming sessions, date-grouped)
+    path("training-calendar/", views.training_calendar, name="training_calendar"),
 ]
