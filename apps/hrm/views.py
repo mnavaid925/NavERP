@@ -9081,7 +9081,8 @@ def pipcheckin_detail(request, pk):
         PIPCheckIn.objects.select_related("pip__subject__party", "pip__manager__party"), pk=pk, tenant=request.tenant)
     if not _can_view_pip(request, item.pip):
         raise PermissionDenied("You do not have access to this check-in.")
-    return render(request, "hrm/performance/pipcheckin/detail.html", {"obj": item, "pip": item.pip})
+    return render(request, "hrm/performance/pipcheckin/detail.html",
+                  {"obj": item, "pip": item.pip, "can_manage_checkin": _can_edit_checkin(request, item)})
 
 
 @login_required
