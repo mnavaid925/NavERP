@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Training Calendar{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Training Calendar</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:trainingcourse_list' %}">Training</a><span class="sep">›</span><span>Calendar</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:trainingsession_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All Sessions</a>
+      <a href="{% url 'hrm:trainingsession_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Session</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group">
+        <select name="delivery_mode" class="form-select" aria-label="Delivery mode">
+          <option value="">All modes</option>
+          {% for val, label in delivery_mode_choices %}
+            <option value="{{ val }}" {% if request.GET.delivery_mode == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">All statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cal_from">From</label>
+        <input type="date" id="cal_from" name="from" value="{{ from_date|date:'Y-m-d' }}" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cal_to">To</label>
+        <input type="date" id="cal_to" name="to" value="{{ to_date|date:'Y-m-d' }}" class="form-input">
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Filter</button>
+      <a href="{% url 'hrm:training_calendar' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  {% for day, sessions in sessions_by_date %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><i data-lucide="calendar-days"></i> {{ day|date:"l, M j, Y" }}</h2>
+        <span class="text-muted">{{ sessions|length }} session{{ sessions|length|pluralize }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Time</th><th>Number</th><th>Course</th><th>Mode</th><th>Status</th><th>Instructor</th><th class="table-actions"></th></tr></thead>
+          <tbody>
+            {% for s in sessions %}
+              <tr>
+                <td>{{ s.start_datetime|date:"H:i" }}–{{ s.end_datetime|date:"H:i" }}</td>
+                <td><a href="{% url 'hrm:trainingsession_detail' s.pk %}" class="fw-600">{{ s.number }}</a></td>
+                <td>{{ s.course.title }}</td>
+                <td>
+                  {% if s.delivery_mode == 'classroom' %}<span class="badge badge-info">{{ s.get_delivery_mode_display }}</span>
+                  {% elif s.delivery_mode == 'virtual' %}<span class="badge badge-amber">{{ s.get_delivery_mode_display }}</span>
+                  {% else %}<span class="badge badge-slate">{{ s.get_delivery_mode_display }}</span>{% endif %}
+                </td>
+                <td>
+                  {% if s.status == 'confirmed' %}<span class="badge badge-green">{{ s.get_status_display }}</span>
+                  {% elif s.status == 'scheduled' %}<span class="badge badge-info">{{ s.get_status_display }}</span>
+                  {% elif s.status == 'ongoing' %}<span class="badge badge-amber">{{ s.get_status_display }}</span>
+                  {% else %}<span class="badge badge-muted">{{ s.get_status_display }}</span>{% endif %}
+                </td>
+                <td>{% if s.instructor_employee_id %}{{ s.instructor_employee.party.name }}{% elif s.external_instructor_name %}{{ s.external_instructor_name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="table-actions">
+                  {% if s.can_join %}<a href="{{ s.meeting_link }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener"><i data-lucide="video"></i> Join</a>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="calendar-check"></i><h3>No upcoming sessions</h3><p>Nothing scheduled in this window. Adjust the date range, or schedule a new training session.</p></div>
+    </div></div>
+  {% endfor %}
+{% endblock %}
