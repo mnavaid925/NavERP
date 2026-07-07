@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -429,6 +429,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   visible only to the coach and admin, NEVER to the coached employee**. Confidential throughout
   (`_can_view_pip`/`_can_view_warning`/`_can_view_coaching`). Reuses `EmployeeProfile` + the 3.19 review (no new
   spine, posts no GL). **Performance Management (3.18–3.21) is now complete.**
+- **3.22 Training Management** — the Instructor-Led-Training scheduling/catalog layer (a NEW HRM domain, ordinary
+  tenant-scoped CRUD — no confidentiality gate): a `TrainingCourse` (`TRC-`) catalog (category/delivery-mode/provider
+  split, duration, certification name + validity, a self-FK prerequisite chain, default capacity) and a
+  `TrainingSession` (`TRS-`) scheduled occurrence unifying **Classroom / Virtual / External** delivery via
+  `delivery_mode` — venue + capacity/waitlist, meeting platform/link/id, an internal `EmployeeProfile` instructor or a
+  named external trainer, an external vendor (`core.Party` vendor role — no new vendor table), and estimated/actual
+  cost in an `accounting.Currency` — with a `clean()` that enforces the mode-specific required fields plus an
+  **instructor/venue double-booking overlap guard**, derived `can_join`/`is_upcoming` props, and a **Training Calendar**
+  date-grouped upcoming view. Reuses `EmployeeProfile` + `core.Party` + `accounting.Currency` (no new spine, posts no
+  GL); 3.23 LMS (content/paths/assessments) and 3.24 Training Administration (nomination/attendance/certificates/
+  budget) are deferred sibling sub-modules.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,550-test** HRM suite
 (**6,197 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
