@@ -1488,3 +1488,134 @@ def action_item_b(db, tenant_b, oneonone_b, employee_b):
         tenant=tenant_b, meeting=oneonone_b, description="Action item B", owner=employee_b, status="open",
     )
 
+
+# ------------------------------------------------------------------ 3.21 Performance Improvement fixtures
+@pytest.fixture
+def pip_draft_a(db, tenant_a, employee_a, employee_a2):
+    """A draft PerformanceImprovementPlan for tenant_a — subject=employee_a, manager=employee_a2,
+    window 2026-07-01..2026-09-29 (30/60/90-day style)."""
+    from apps.hrm.models import PerformanceImprovementPlan
+    return PerformanceImprovementPlan.objects.create(
+        tenant=tenant_a, subject=employee_a, manager=employee_a2, status="draft",
+        performance_issue="Missed 3 consecutive sprint deadlines.",
+        expected_standards="Deliver committed sprint items on time.",
+        improvement_goals="Complete all assigned stories within the sprint window for 60 days.",
+        measurement_criteria="Sprint velocity + on-time delivery rate reviewed bi-weekly.",
+        start_date=datetime.date(2026, 7, 1), end_date=datetime.date(2026, 9, 29),
+    )
+
+
+@pytest.fixture
+def pip_active_a(db, pip_draft_a):
+    """pip_draft_a flipped to active (as if HR-approved) — for check-in/close/extend/acknowledge tests."""
+    pip_draft_a.status = "active"
+    pip_draft_a.hr_approved_at = timezone.now()
+    pip_draft_a.save(update_fields=["status", "hr_approved_at", "updated_at"])
+    return pip_draft_a
+
+
+@pytest.fixture
+def pip_b(db, tenant_b, employee_b):
+    """A draft PerformanceImprovementPlan belonging to tenant_b (IDOR tests) — needs a second
+    tenant_b EmployeeProfile as manager (subject != manager per clean())."""
+    from apps.core.models import Employment, Party
+    from apps.hrm.models import EmployeeProfile, PerformanceImprovementPlan
+    party = Party.objects.create(tenant=tenant_b, kind="person", name="Manager B PIP")
+    employment = Employment.objects.create(
+        tenant=tenant_b, party=party, job_title="Manager", status="active")
+    manager_b = EmployeeProfile.objects.create(
+        tenant=tenant_b, party=party, employment=employment, employee_type="full_time")
+    return PerformanceImprovementPlan.objects.create(
+        tenant=tenant_b, subject=employee_b, manager=manager_b, status="draft",
+        performance_issue="Issue B", expected_standards="Standards B",
+        improvement_goals="Goals B", measurement_criteria="Criteria B",
+        start_date=datetime.date(2026, 7, 1), end_date=datetime.date(2026, 9, 29),
+    )
+
+
+@pytest.fixture
+def pipcheckin_a(db, tenant_a, pip_active_a):
+    """A PIPCheckIn on pip_active_a, on_track."""
+    from apps.hrm.models import PIPCheckIn
+    return PIPCheckIn.objects.create(
+        tenant=tenant_a, pip=pip_active_a, checkin_date=datetime.date(2026, 7, 15),
+        progress_rating="on_track", progress_notes="Good progress this fortnight.",
+        completed_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def pipcheckin_b(db, tenant_b, pip_b):
+    """A PIPCheckIn belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import PIPCheckIn
+    return PIPCheckIn.objects.create(
+        tenant=tenant_b, pip=pip_b, checkin_date=datetime.date(2026, 7, 15),
+        progress_rating="on_track", completed_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def warning_draft_a(db, tenant_a, employee_a, employee_a2):
+    """A draft WarningLetter for tenant_a — issued_to=employee_a, issued_by=employee_a2."""
+    from apps.hrm.models import WarningLetter
+    return WarningLetter.objects.create(
+        tenant=tenant_a, issued_to=employee_a, issued_by=employee_a2,
+        level="verbal", category="attendance", incident_date=datetime.date(2026, 6, 1),
+        description="Arrived over an hour late three times this month.",
+        status="draft",
+    )
+
+
+@pytest.fixture
+def warning_issued_a(db, warning_draft_a):
+    """warning_draft_a flipped to issued — for acknowledge/print/IDOR-workflow tests."""
+    warning_draft_a.status = "issued"
+    warning_draft_a.save(update_fields=["status", "updated_at"])
+    return warning_draft_a
+
+
+@pytest.fixture
+def warning_b(db, tenant_b, employee_b):
+    """A draft WarningLetter belonging to tenant_b (IDOR tests) — needs a second tenant_b
+    EmployeeProfile as issuer (issued_to != issued_by per clean())."""
+    from apps.core.models import Employment, Party
+    from apps.hrm.models import EmployeeProfile, WarningLetter
+    party = Party.objects.create(tenant=tenant_b, kind="person", name="Issuer B")
+    employment = Employment.objects.create(
+        tenant=tenant_b, party=party, job_title="Manager", status="active")
+    issuer_b = EmployeeProfile.objects.create(
+        tenant=tenant_b, party=party, employment=employment, employee_type="full_time")
+    return WarningLetter.objects.create(
+        tenant=tenant_b, issued_to=employee_b, issued_by=issuer_b,
+        level="verbal", category="conduct", incident_date=datetime.date(2026, 6, 1),
+        description="Incident B", status="draft",
+    )
+
+
+@pytest.fixture
+def coaching_note_a(db, tenant_a, employee_a, employee_a2):
+    """A CoachingNote for tenant_a — employee=employee_a (coached), coach=employee_a2 (author)."""
+    from apps.hrm.models import CoachingNote
+    return CoachingNote.objects.create(
+        tenant=tenant_a, employee=employee_a, coach=employee_a2,
+        note_date=datetime.date(2026, 7, 5), category="skill_development",
+        content="Discussed prioritization techniques; employee receptive to feedback.",
+    )
+
+
+@pytest.fixture
+def coaching_note_b(db, tenant_b, employee_b):
+    """A CoachingNote belonging to tenant_b (IDOR tests) — needs a second tenant_b EmployeeProfile
+    as coach (employee != coach per clean())."""
+    from apps.core.models import Employment, Party
+    from apps.hrm.models import CoachingNote, EmployeeProfile
+    party = Party.objects.create(tenant=tenant_b, kind="person", name="Coach B")
+    employment = Employment.objects.create(
+        tenant=tenant_b, party=party, job_title="Manager", status="active")
+    coach_b = EmployeeProfile.objects.create(
+        tenant=tenant_b, party=party, employment=employment, employee_type="full_time")
+    return CoachingNote.objects.create(
+        tenant=tenant_b, employee=employee_b, coach=coach_b,
+        note_date=datetime.date(2026, 7, 5), category="other", content="Note B",
+    )
+
