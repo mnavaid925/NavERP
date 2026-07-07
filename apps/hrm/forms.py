@@ -1916,6 +1916,12 @@ class TrainingSessionForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Give the (possibly unsaved) instance its tenant BEFORE validation so the model's clean()
+        # double-booking overlap query is tenant-scoped even on create. crud_create only sets
+        # obj.tenant AFTER form.is_valid(), so without this the create-path clean() would filter on
+        # tenant_id=None and the overlap guard would silently never fire (edit already has it from DB).
+        if self.tenant is not None and self.instance is not None:
+            self.instance.tenant = self.tenant
         # The datetime-local widget round-trips only with a matching input_format.
         for name in ("start_datetime", "end_datetime"):
             if name in self.fields:
