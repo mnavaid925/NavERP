@@ -9387,7 +9387,8 @@ def trainingcourse_create(request):
 def trainingcourse_detail(request, pk):
     obj = get_object_or_404(
         TrainingCourse.objects.select_related("prerequisite_course"), pk=pk, tenant=request.tenant)
-    sessions = (obj.sessions.select_related("instructor_employee__party", "external_vendor")
+    # The sessions sub-table shows the instructor (or external name), not the vendor — no external_vendor JOIN.
+    sessions = (obj.sessions.select_related("instructor_employee__party")
                 .order_by("-start_datetime")[:20])
     return render(request, "hrm/training/trainingcourse/detail.html", {
         "obj": obj,
@@ -9421,8 +9422,9 @@ def trainingcourse_delete(request, pk):
 # ------------------------------------------------------------ TrainingSession (3.22 Classroom/Virtual/External)
 @login_required
 def trainingsession_list(request):
+    # currency is only rendered on the detail page, not this list — keep it off the list JOIN.
     qs = (TrainingSession.objects.filter(tenant=request.tenant)
-          .select_related("course", "instructor_employee__party", "external_vendor", "currency"))
+          .select_related("course", "instructor_employee__party", "external_vendor"))
     return crud_list(
         request, qs.order_by("-start_datetime", "number"),
         "hrm/training/trainingsession/list.html",
