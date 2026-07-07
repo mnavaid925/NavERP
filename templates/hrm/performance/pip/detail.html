@@ -71,9 +71,9 @@
         {% endif %}
         {% if is_admin %}
           <a href="{% url 'hrm:pip_close' obj.pk %}" class="btn btn-outline" style="margin-inline-start:.4rem;"><i data-lucide="flag"></i> Close with Outcome</a>
-          <form method="post" action="{% url 'hrm:pip_extend' obj.pk %}" style="display:inline-flex; gap:.3rem; margin-inline-start:.4rem; align-items:center;">
+          <form method="post" action="{% url 'hrm:pip_extend' obj.pk %}" style="display:inline-flex; gap:.3rem; margin-inline-start:.4rem; align-items:center;" onsubmit="return confirm('Extend this plan to the selected date?');">
             {% csrf_token %}
-            <input type="date" name="extended_end_date" class="form-input" style="width:auto;" required>
+            <input type="date" name="extended_end_date" class="form-input" style="width:auto;" required aria-label="Extended end date">
             <button class="btn btn-outline" type="submit"><i data-lucide="calendar-plus"></i> Extend</button>
           </form>
         {% endif %}
