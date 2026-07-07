@@ -115,6 +115,10 @@ from .models import (  # 3.21 Performance Improvement
     PerformanceImprovementPlan,
     WarningLetter,
 )
+from .models import (  # 3.22 Training Management
+    TrainingCourse,
+    TrainingSession,
+)
 
 
 @admin.register(JobGrade)
@@ -1049,4 +1053,25 @@ class CoachingNoteAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "category")
     search_fields = ("number", "coach__party__name", "employee__party__name")
     raw_id_fields = ("employee", "coach", "related_pip")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------------- 3.22 Training Management
+@admin.register(TrainingCourse)
+class TrainingCourseAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "category", "delivery_mode", "provider_type",
+                    "is_certification", "is_active", "tenant")
+    list_filter = ("tenant", "category", "provider_type", "delivery_mode", "is_certification", "is_active")
+    search_fields = ("number", "title", "description")
+    raw_id_fields = ("prerequisite_course",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(TrainingSession)
+class TrainingSessionAdmin(admin.ModelAdmin):
+    list_display = ("number", "course", "delivery_mode", "status", "start_datetime",
+                    "instructor_employee", "tenant")
+    list_filter = ("tenant", "delivery_mode", "status")
+    search_fields = ("number", "course__title", "venue_name", "external_instructor_name")
+    raw_id_fields = ("course", "instructor_employee", "external_vendor", "currency")
     readonly_fields = ("number", "created_at", "updated_at")
