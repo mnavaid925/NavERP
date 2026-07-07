@@ -9496,7 +9496,9 @@ def training_calendar(request):
     return render(request, "hrm/training/calendar.html", {
         "sessions_by_date": list(sessions_by_date.items()),   # [(date, [session, ...]), ...]
         "delivery_mode_choices": TrainingSession.DELIVERY_MODE_CHOICES,
-        "status_choices": TrainingSession.STATUS_CHOICES,
+        # The calendar unconditionally excludes cancelled sessions, so offering "Cancelled" as a
+        # filter option would be a dead choice that always returns nothing — drop it from the dropdown.
+        "status_choices": [(v, lbl) for v, lbl in TrainingSession.STATUS_CHOICES if v != "cancelled"],
         "from_date": from_date,
         "to_date": to_date,
     })
