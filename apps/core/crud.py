@@ -11,6 +11,7 @@ Context-var contract (pinned, L7):
   * form  -> ``form`` + ``is_edit``
 """
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -56,7 +57,13 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
         else:
             # Map stringified booleans so BooleanField filters work — `.filter(x="False")` would
             # otherwise coerce via bool("False") == True and silently return every row.
-            qs = qs.filter(**{lookup: {"True": True, "False": False}.get(val, val)})
+            mapped = {"True": True, "False": False}.get(val, val)
+            try:
+                qs = qs.filter(**{lookup: mapped})
+            except (ValueError, ValidationError):
+                # L11: a hand-edited/bogus GET value (e.g. ?is_active=abc against a BooleanField)
+                # raises inside .filter() itself — skip the filter instead of 500ing.
+                continue
     page_obj = paginate(request, qs, per_page)
     ctx = {"object_list": page_obj.object_list, "page_obj": page_obj, "q": q}
     ctx.update(extra_context or {})
