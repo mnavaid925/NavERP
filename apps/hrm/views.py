@@ -9174,7 +9174,8 @@ def warningletter_detail(request, pk):
     if not _can_view_warning(request, obj):
         raise PermissionDenied("You do not have access to this warning letter.")
     # Prior-warnings escalation context, scoped to what THIS viewer may see (never the full history).
-    prior = obj.prior_warnings.select_related("issued_by__party")
+    # No select_related — the prior-warnings table renders only local fields (number/level/category/date).
+    prior = obj.prior_warnings
     vq = _visible_warnings_q(request)
     if vq is not None:
         prior = prior.filter(vq)
