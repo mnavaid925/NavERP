@@ -477,7 +477,35 @@ child row. No new core-spine entity; nothing posts to the GL — consistent with
   describing a distinct native PIP feature; flagged as a research gap, not invented.
 
 ## Review notes
-(filled in at the end)
+
+**Built 3.21 Performance Improvement end-to-end (2026-07-07) — the FINAL Performance-Management sub-module.**
+4 models as planned: `PerformanceImprovementPlan` [PIP-], `PIPCheckIn` [PCI-] child, `WarningLetter` [WRN-],
+`CoachingNote` [CN-] — migration `0036`; 13 templates under the shared `templates/hrm/performance/` (incl. a
+standalone printable warning letter); `LIVE_LINKS["3.21"]`; `_seed_improvement` idempotent (both tenants, in the
+central flush teardown before `EmployeeProfile`). Confidentiality was the crux — PIPs/warnings are subject/issuer/
+admin-only; **CoachingNote is the strictest gate in the system** (coach/admin only; the coached employee never sees
+notes about themselves).
+
+**All 7 review agents applied:**
+- **code-reviewer** — 1 Important (the PIP subject could edit/delete a manager check-in + no closed-plan guard →
+  added `_can_edit_checkin` [manager/admin, not-closed] + a create guard) + minors (missing manager-filter widget,
+  admin-empty cross-link dropdowns → `viewer_is_admin`).
+- **explorer** — clean wiring; 1 consistency fix (`warningletter_detail` `is_admin` via context).
+- **frontend-reviewer** — 2 Important (2 stale interspersed admin-checks the earlier replace_all missed; ungated
+  standalone check-in detail Edit/Delete) + accessibility (extend-input aria-label, ack-textarea label, extend confirm).
+- **performance-reviewer** — clean (no N+1, all indexes present, `prior_warnings` DB-limited); 1 dead-JOIN trim.
+- **qa-smoke-tester** — 56/56 checks green; verified the CoachingNote subject-exclusion (0 rows + 403), the PIP
+  subject blocked from approve/close, and the check-in-tamper block byte-for-byte on real HTTP.
+- **security-reviewer** — no Critical/High/Medium; 1 Low (disciplinary prose in the audit log) **declined** — the
+  suggested field names (`content`/`description`) are generic and would over-redact unrelated models app-wide, and
+  audit reads are already admin-only.
+- **test-writer** — **288 tests** (75 model + 132 view + 77 security + 4 query), all green; **HRM 3,838 /
+  project-wide 6,485**, both suites exit 0. No product bugs surfaced. (The first run's process was lost mid-run; the
+  models file + conftest were committed, then a second run finished views/security/queries.)
+
+**Performance Management (3.18 Goal Setting → 3.19 Performance Review → 3.20 Continuous Feedback → 3.21 Performance
+Improvement) is now COMPLETE.** A parallel session has started **3.22 Training Management** (its models/admin/nav are
+already committed on `main`). **Next: 3.22 (in progress elsewhere), then 3.23+.**
 
 ---
 # Module 3 — HRM — Sub-module 3.22 Training Management (hrm-3.22-training-management) — plan from research-hrm-3.22-training-management.md (2026-07-08)
