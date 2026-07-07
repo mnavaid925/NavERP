@@ -13,14 +13,14 @@
       {% csrf_token %}
       {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
 
-      <h3 class="section-title" style="margin:.2rem 0 .6rem;">Course &amp; Delivery</h3>
+      <h3 class="card-title" style="margin:.2rem 0 .6rem;">Course &amp; Delivery</h3>
       <div class="form-grid">
         {% include "partials/form_field.html" with field=form.course %}
         {% include "partials/form_field.html" with field=form.delivery_mode %}
         {% include "partials/form_field.html" with field=form.status %}
       </div>
 
-      <h3 class="section-title" style="margin:1rem 0 .6rem;">Schedule</h3>
+      <h3 class="card-title" style="margin:1rem 0 .6rem;">Schedule</h3>
       <div class="form-grid">
         {% include "partials/form_field.html" with field=form.start_datetime %}
         {% include "partials/form_field.html" with field=form.end_datetime %}
@@ -31,7 +31,7 @@
       </div>
 
       <div data-mode-group="classroom">
-        <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="map-pin"></i> Classroom</h3>
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="map-pin"></i> Classroom</h3>
         <div class="form-grid">
           {% include "partials/form_field.html" with field=form.venue_name %}
           {% include "partials/form_field.html" with field=form.venue_address %}
@@ -39,7 +39,7 @@
       </div>
 
       <div data-mode-group="virtual">
-        <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="video"></i> Virtual</h3>
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="video"></i> Virtual</h3>
         <div class="form-grid">
           {% include "partials/form_field.html" with field=form.meeting_platform %}
           {% include "partials/form_field.html" with field=form.meeting_link %}
@@ -48,14 +48,14 @@
       </div>
 
       <div data-mode-group="external">
-        <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="briefcase"></i> External Provider</h3>
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="briefcase"></i> External Provider</h3>
         <div class="form-grid">
           {% include "partials/form_field.html" with field=form.external_vendor %}
           {% include "partials/form_field.html" with field=form.external_instructor_name %}
         </div>
       </div>
 
-      <h3 class="section-title" style="margin:1rem 0 .6rem;"><i data-lucide="banknote"></i> Cost Tracking</h3>
+      <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="banknote"></i> Cost Tracking</h3>
       <div class="form-grid">
         {% include "partials/form_field.html" with field=form.estimated_cost %}
         {% include "partials/form_field.html" with field=form.actual_cost %}
@@ -63,7 +63,7 @@
         {% include "partials/form_field.html" with field=form.invoice_reference %}
       </div>
 
-      <h3 class="section-title" style="margin:1rem 0 .6rem;">Notes</h3>
+      <h3 class="card-title" style="margin:1rem 0 .6rem;">Notes</h3>
       <div class="form-grid">
         {% include "partials/form_field.html" with field=form.notes %}
       </div>
