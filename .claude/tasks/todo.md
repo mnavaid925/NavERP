@@ -478,3 +478,402 @@ child row. No new core-spine entity; nothing posts to the GL — consistent with
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 3 — HRM — Sub-module 3.22 Training Management (hrm-3.22-training-management) — plan from research-hrm-3.22-training-management.md (2026-07-08)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.21) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** This pass covers ONLY the 5 NavERP.md 3.22 bullets
+(Training Calendar / Training Catalog / Classroom Training / Virtual Training / External Training).
+Sibling sub-modules **3.23 Learning Management (LMS)** and **3.24 Training Administration**
+(nomination/attendance/feedback/certificates/budget) are explicitly OUT of scope — do not add
+content-authoring, learning paths, assessments, gamification, progress tracking, nominations,
+attendance capture, feedback forms, certificates, or budget rollups this pass.
+
+Reuses (never duplicates): `hrm.EmployeeProfile` (internal instructor, by string FK — never a new
+instructor/employee table), `core.Party` (external vendor, `PartyRole.role="vendor"` — reuse
+`Party.objects.filter(tenant=tenant, roles__role="vendor").distinct()`, exactly the filter already
+used in `apps/accounting/views.py:88` and `apps/accounting/forms.py:120,211` — do NOT create a new
+HRM vendor-master table), `accounting.Currency` (global, no tenant FK — **lazy-import**
+`from apps.accounting.models import Currency` inside the form `__init__`/view body, mirroring the
+existing `PayrollRun`/`Project` lazy-import convention in `apps/hrm/views.py:6092` and
+`apps/hrm/management/commands/seed_hrm.py:1344`, never a module-level import — keeps accounting a
+runtime, not module-load, dependency). No new core-spine entity; nothing posts to the GL. Neither
+model carries the 3.18–3.21 confidentiality machinery (`_can_view_*`/`_visible_*_q`) — Training data
+is ordinary tenant-scoped CRUD, visible to every authenticated tenant user (no subject/manager-only
+gate), same openness level as 3.2 Designation/JobGrade or 3.12 PublicHoliday.
+
+## Models (from research)
+
+- [ ] **`TrainingCourse`** [`TRC-`, `TenantNumbered`] — the catalog (Training Catalog bullet).
+  - `title` (CharField, max_length=255), `description` (TextField, blank)
+  - `category` — CharField choices, max_length=20, default `"technical"`: `technical` /
+    `compliance` / `leadership` / `soft_skills` / `safety` / `onboarding` / `product` / `other`
+    (driver: browsable/filterable catalog — TalentLMS, Arlo)
+  - `delivery_mode` — CharField choices, max_length=15, default `"classroom"`: `classroom` /
+    `virtual` / `external` / `blended` — the course's TYPICAL mode; the actual per-occurrence mode
+    lives on `TrainingSession.delivery_mode` and can differ (driver: classroom/webinar choice —
+    TalentLMS, Docebo)
+  - `provider_type` — CharField choices, max_length=10, default `"internal"`: `internal` /
+    `external` (driver: internal vs. external catalog split — Absorb LMS, Training Orchestra)
+  - `duration_hours` — DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(0)])
+  - `is_certification` (BooleanField, default False), `certification_name` (CharField,
+    max_length=255, blank), `certification_validity_months` (PositiveIntegerField, null/blank)
+    (driver: certifications tied to a course — SAP SuccessFactors Learning, Workday)
+  - `prerequisite_course` — self-FK (`"self"`), `on_delete=SET_NULL`, null/blank,
+    `related_name="unlocks"` (driver: prerequisites — SAP SuccessFactors Learning)
+  - `default_capacity` — PositiveIntegerField, null/blank (seeds new sessions; no auto-copy logic
+    required this pass — a nice-to-have form/JS pre-fill, not mandatory) (driver: enrollment limits
+    — SAP SuccessFactors Learning)
+  - `is_active` (BooleanField, default True)
+  - `Meta.ordering = ["title"]`; `unique_together = ("tenant", "number")`; indexes on
+    `(tenant, category)` (name `hrm_trc_tenant_category_idx`), `(tenant, is_active)`
+    (`hrm_trc_tenant_active_idx`)
+  - `clean()`: `is_certification` requires non-blank `certification_name`; `prerequisite_course`
+    can't be the course itself (`self.pk and self.prerequisite_course_id == self.pk`)
+  - `__str__`: `f"{self.number} · {self.title}"`
+  - Reuses: nothing external besides tenant scoping — a new HRM-owned master (analogous to
+    `Designation`/`PayComponent`, other HRM-owned catalogs).
+
+- [ ] **`TrainingSession`** [`TRS-`, `TenantNumbered`] — the scheduled occurrence (Training
+  Calendar + Classroom + Virtual + External bullets, unified via `delivery_mode`).
+  - `course` — FK `hrm.TrainingCourse`, `on_delete=PROTECT` (mirrors `SalaryStructureLine
+    .pay_component` PROTECT-a-referenced-catalog-row house style — a course with scheduled sessions
+    can't be deleted out from under them), `related_name="sessions"`
+  - `delivery_mode` — CharField choices, max_length=10, default `"classroom"`: `classroom` /
+    `virtual` / `external` (per-occurrence; NOTE narrower than the course's 4-choice set — no
+    `blended` at the session level this pass) (driver: course→session→event hierarchy — Docebo, SAP
+    SuccessFactors Learning)
+  - `status` — CharField choices, max_length=15, default `"scheduled"`: `scheduled` / `confirmed` /
+    `ongoing` / `completed` / `cancelled` / `postponed`
+  - `start_datetime`, `end_datetime` (DateTimeField), `timezone` (CharField, max_length=50, default
+    `"UTC"`)
+  - `capacity` — PositiveIntegerField, default 20 (driver: seat limits — SAP SuccessFactors
+    Learning), `waitlist_enabled` (BooleanField, default False) (driver: waitlist flag —
+    SAP SuccessFactors Learning, Absorb LMS; the waitlist QUEUE workflow itself is a 3.24 Nomination
+    concern — this pass ships the flag only)
+  - Classroom fields: `venue_name` (CharField, max_length=255, blank), `venue_address` (TextField,
+    blank) (driver: venue/room management — Absorb LMS, Arlo — no separate Venue master this pass)
+  - Virtual fields: `meeting_platform` — CharField choices, max_length=15, blank: `zoom` / `teams` /
+    `webex` / `google_meet` / `gotomeeting` / `other`; `meeting_link` (URLField, blank); `meeting_id`
+    (CharField, max_length=100, blank) (driver: videoconferencing platform + join-link fields —
+    Docebo, SAP Litmos, 360Learning, Zoho People)
+  - Instructor: `instructor_employee` — FK `hrm.EmployeeProfile`, `on_delete=SET_NULL`, null/blank,
+    `related_name="training_sessions_instructed"` (driver: instructor assignment — Cornerstone
+    OnDemand, Arlo); `external_instructor_name` (CharField, max_length=255, blank — a named
+    vendor-side trainer who isn't an `EmployeeProfile`)
+  - External/vendor: `external_vendor` — FK `core.Party`, `on_delete=SET_NULL`, null/blank,
+    `related_name="training_sessions_as_vendor"`, conceptually scoped to vendor-role parties (form
+    queryset = `Party.objects.filter(tenant=tenant, roles__role="vendor").distinct()`, mirrors
+    `accounting/forms.py`) (driver: vendor register + vendor-linked instructors — Training
+    Orchestra, Cornerstone OnDemand)
+  - Cost: `estimated_cost`, `actual_cost` — DecimalField(max_digits=12, decimal_places=2,
+    null=True, blank=True); `currency` — FK `accounting.Currency` (string FK
+    `"accounting.Currency"`), `on_delete=SET_NULL`, null/blank (global master, NOT tenant-scoped —
+    lazy-import in the form, do not add `tenant` filtering to its queryset); `invoice_reference`
+    (CharField, max_length=100, blank) (driver: per-session cost tracking, multi-currency —
+    Training Orchestra, Arlo)
+  - `notes` (TextField, blank)
+  - `Meta.ordering = ["-start_datetime", "number"]`; `unique_together = ("tenant", "number")`;
+    indexes on `(tenant, status)` (`hrm_trs_tenant_status_idx`), `(tenant, course)`
+    (`hrm_trs_tenant_course_idx`), `(tenant, delivery_mode)` (`hrm_trs_tenant_mode_idx`),
+    `(tenant, start_datetime)` (`hrm_trs_tenant_start_idx`)
+  - `clean()` guards (mirrors the existing HRM `clean()` convention):
+    - `end_datetime > start_datetime`
+    - `delivery_mode == "classroom"` requires non-blank `venue_name`
+    - `delivery_mode == "virtual"` requires non-blank `meeting_link`
+    - `delivery_mode == "external"` requires `external_vendor_id` or non-blank
+      `external_instructor_name`
+    - **Instructor/venue double-booking overlap check** (driver: Absorb LMS): when
+      `instructor_employee_id` is set, reject if another `TrainingSession` in the same tenant with
+      the same `instructor_employee_id`, `status` not in `("cancelled", "postponed")`, excluding
+      `self.pk`, overlaps the time window (`start_datetime__lt=self.end_datetime` AND
+      `end_datetime__gt=self.start_datetime`) — raise on `instructor_employee`. Same check for
+      `venue_name` (case-insensitive, non-blank) when `delivery_mode == "classroom"` — raise on
+      `venue_name`.
+  - `@property can_join` — derived (never stored): `True` when `meeting_link` is set and `now` is
+    within `[start_datetime - 15min, end_datetime]` (driver: TalentLMS "one-click join… active a
+    short window before the session starts" — buildable now as simple date-math, no live
+    meeting-platform API call)
+  - `@property is_upcoming` — derived: `status not in ("completed", "cancelled") and
+    start_datetime > timezone.now()` — used by the calendar view's default filter
+  - `__str__`: `f"{self.number} · {self.course.title} ({self.start_datetime:%Y-%m-%d %H:%M})"` if
+    `course_id` else `self.number`
+  - Reuses: `hrm.EmployeeProfile` (instructor), `core.Party` (external vendor — no new vendor
+    table), `accounting.Currency` (cost currency). No new core-spine entity.
+
+Both models are `TenantNumbered` (mirrors every other HRM entity, local abstract base at
+`apps/hrm/models.py:52`). Add after the existing `CoachingNote` class (current end of file, line
+~5953) with a `# ---... 3.22 Training Management ...` section-header comment block mirroring the
+3.18–3.21 preamble style (states this is a NEW domain — not a Performance-Management sub-module —
+and lists what's reused / explicitly what's deferred to 3.23/3.24).
+
+## Backend (apps/hrm/)
+
+- [ ] **models.py** — add `TrainingCourse`, `TrainingSession` at the end of the file (after
+  `CoachingNote`). `NUMBER_PREFIX = "TRC"` / `"TRS"` respectively.
+- [ ] **forms.py** — `TrainingCourseForm` (exclude `tenant`, `number`; fields: `title`,
+  `description`, `category`, `delivery_mode`, `provider_type`, `duration_hours`,
+  `is_certification`, `certification_name`, `certification_validity_months`,
+  `prerequisite_course`, `default_capacity`, `is_active`; `prerequisite_course` queryset scoped to
+  `tenant` AND excludes `self.instance.pk` on edit so a course can't be its own prerequisite from
+  the dropdown), `TrainingSessionForm` (exclude `tenant`, `number`; fields: `course`,
+  `delivery_mode`, `status`, `start_datetime`, `end_datetime`, `timezone`, `capacity`,
+  `waitlist_enabled`, `venue_name`, `venue_address`, `meeting_platform`, `meeting_link`,
+  `meeting_id`, `instructor_employee`, `external_instructor_name`, `external_vendor`,
+  `estimated_cost`, `actual_cost`, `currency`, `invoice_reference`, `notes`; `course`/
+  `instructor_employee` querysets auto-scoped to `tenant` by `TenantModelForm`;
+  **`external_vendor` queryset explicitly re-scoped** in `__init__` to
+  `Party.objects.filter(tenant=tenant, roles__role="vendor").distinct()` (the base class only
+  filters by `tenant`, not by role); **`currency` queryset set via lazy import**
+  `from apps.accounting.models import Currency` inside `__init__`, `Currency.objects.filter(
+  is_active=True).order_by("code")` (global master — do NOT filter by tenant, `Currency` has no
+  `tenant` field)).
+- [ ] **views.py** — function-based, `@login_required`, tenant-scoped throughout (no
+  confidentiality gating needed — ordinary CRUD):
+  - `trainingcourse_list` (search: `number`, `title`, `description`; filters: `category`,
+    `provider_type`, `delivery_mode`, `is_certification`, `is_active`; `extra_context`:
+    `category_choices`, `provider_type_choices`, `delivery_mode_choices=TrainingCourse
+    .DELIVERY_MODE_CHOICES`), `trainingcourse_create`, `trainingcourse_detail` (prefetch
+    `obj.sessions.order_by("-start_datetime")[:20]` + `obj.unlocks.all()` for courses that require
+    this one as a prerequisite), `trainingcourse_edit`, `trainingcourse_delete` (POST-only; note
+    `TrainingSession.course` is PROTECT so deleting a course with sessions will raise
+    `ProtectedError` — catch it and show a friendly error message rather than a 500, mirroring how
+    other PROTECT-guarded deletes in this app are handled)
+  - `trainingsession_list` (search: `number`, `course__title`, `venue_name`,
+    `instructor_employee__party__name`, `external_vendor__name`; filters: `status`,
+    `delivery_mode`, `course`, `instructor_employee`; `extra_context`: `status_choices`,
+    `delivery_mode_choices`, `courses` queryset, `instructors` queryset — all Filter Implementation
+    Rules from CLAUDE.md apply: view passes every `*_choices`/queryset the template needs; FK/pk
+    comparisons in the template use `|stringformat:"d"`), `trainingsession_create` (`select_related`
+    course for the form's default `capacity`/`delivery_mode` display — no server-side auto-copy
+    required), `trainingsession_detail` (`select_related("course", "instructor_employee__party",
+    "external_vendor", "currency")`; shows `can_join` (renders a "Join Meeting" button when True and
+    `meeting_link` is set), classroom/virtual/external sections conditional on `delivery_mode`),
+    `trainingsession_edit`, `trainingsession_delete`
+  - `training_calendar` — standalone `GET`-only query view over `TrainingSession`: default filter
+    = upcoming (`start_datetime__gte=today`, `status` not in `("cancelled",)`), optional
+    `?delivery_mode=`/`?status=`/`?from=`/`?to=` GET filters, ordered `start_datetime` ascending,
+    grouped by date in the view (a dict of `date -> [sessions]`) for the template to iterate; no
+    pagination (bounded by the date range) — passes `sessions_by_date`, `delivery_mode_choices`,
+    `status_choices`.
+- [ ] **urls.py** — `app_name = "hrm"` (already set); add under a `# 3.22 Training Management`
+  comment block:
+  ```
+  path("training-courses/", views.trainingcourse_list, name="trainingcourse_list"),
+  path("training-courses/add/", views.trainingcourse_create, name="trainingcourse_create"),
+  path("training-courses/<int:pk>/", views.trainingcourse_detail, name="trainingcourse_detail"),
+  path("training-courses/<int:pk>/edit/", views.trainingcourse_edit, name="trainingcourse_edit"),
+  path("training-courses/<int:pk>/delete/", views.trainingcourse_delete, name="trainingcourse_delete"),
+
+  path("training-sessions/", views.trainingsession_list, name="trainingsession_list"),
+  path("training-sessions/add/", views.trainingsession_create, name="trainingsession_create"),
+  path("training-sessions/<int:pk>/", views.trainingsession_detail, name="trainingsession_detail"),
+  path("training-sessions/<int:pk>/edit/", views.trainingsession_edit, name="trainingsession_edit"),
+  path("training-sessions/<int:pk>/delete/", views.trainingsession_delete, name="trainingsession_delete"),
+
+  path("training-calendar/", views.training_calendar, name="training_calendar"),
+  ```
+- [ ] **admin.py** — register both models:
+  - `TrainingCourseAdmin`: `list_display = ("number", "title", "category", "delivery_mode",
+    "provider_type", "is_certification", "is_active", "tenant")`; `list_filter = ("tenant",
+    "category", "provider_type", "is_certification", "is_active")`; `search_fields = ("number",
+    "title")`; `raw_id_fields = ("prerequisite_course",)`; `readonly_fields = ("number",
+    "created_at", "updated_at")`
+  - `TrainingSessionAdmin`: `list_display = ("number", "course", "delivery_mode", "status",
+    "start_datetime", "instructor_employee", "tenant")`; `list_filter = ("tenant",
+    "delivery_mode", "status")`; `search_fields = ("number", "course__title", "venue_name")`;
+    `raw_id_fields = ("course", "instructor_employee", "external_vendor", "currency")`;
+    `readonly_fields = ("number", "created_at", "updated_at")`
+- [ ] **migrations** — `python manage.py makemigrations hrm` — expect
+  `0037_trainingcourse_trainingsession...` (next after the existing `0036_
+  performanceimprovementplan_coachingnote_pipcheckin_and_more.py`).
+- [ ] **seed_hrm.py** — new `_seed_training(self, tenant, *, flush)` method:
+  - Called from `handle()` immediately after `self._seed_improvement(tenant, flush=options
+    ["flush"])` (the 6th call in the per-tenant loop; first call for a NEW domain, not a
+    Performance-Management continuation).
+  - `if flush:` delete in child-first order: `TrainingSession`, then `TrainingCourse` — filtered by
+    `tenant` (session's `course` FK is PROTECT).
+  - Idempotency guard: `if TrainingCourse.objects.filter(tenant=tenant).exists():` -> NOTICE +
+    return.
+  - Reuse EXISTING `EmployeeProfile` rows for `instructor_employee` (`EmployeeProfile.objects
+    .filter(tenant=tenant).select_related("party").order_by("party__name")` — need >= 2 for a
+    realistic classroom + a distinct one for overlap-safety on a second session).
+  - Reuse an existing vendor-role `Party` for `external_vendor`: `Party.objects.filter(tenant=
+    tenant, roles__role="vendor").first()` — if `None`, leave `external_vendor` blank on the
+    external-mode seed row and rely on `external_instructor_name` alone to satisfy the model's
+    `clean()` OR-requirement (do NOT create a new vendor `Party` row here — vendor-master creation
+    belongs to accounting/CRM seeding, not this seeder).
+  - Reuse an existing `accounting.Currency` (lazy import `from apps.accounting.models import
+    Currency`): `Currency.objects.filter(code="USD").first() or Currency.objects.first()` — if
+    `None`, leave `currency` blank on the cost-bearing seed rows.
+  - Demo data: 3 `TrainingCourse` rows spanning distinct `category`/`provider_type` — e.g.
+    "Technical Onboarding Bootcamp" (`category="onboarding"`, `provider_type="internal"`,
+    `delivery_mode="classroom"`), "Workplace Safety Certification" (`category="safety"`,
+    `is_certification=True`, `certification_name="Certified Safety Associate"`,
+    `certification_validity_months=24`), "Leadership Excellence Program" (`category="leadership"`,
+    `provider_type="external"`, `prerequisite_course=` the onboarding bootcamp — demonstrates the
+    self-FK). At least 4 `TrainingSession` rows covering all three `delivery_mode` values and at
+    least 2 `status` values — e.g. one `classroom` `scheduled` session (with `venue_name`,
+    `instructor_employee`), one `virtual` `confirmed` session (with `meeting_platform="zoom"`,
+    `meeting_link`), one `external` `completed` session (with `external_vendor` or
+    `external_instructor_name`, `estimated_cost`/`actual_cost`/`currency`/`invoice_reference`), one
+    more `classroom` session on a DIFFERENT instructor/venue and non-overlapping time window (proves
+    the overlap `clean()` guard doesn't false-positive on legitimate back-to-back scheduling).
+  - **CRITICAL — Windows cp1252 console bug (repeat of the 3.20/3.21 bug):** NO non-cp1252
+    characters (no `→`, `↔`, em-dash arrows, etc.) in ANY `self.stdout.write(...)` string — plain
+    ASCII `->` only. Re-read the whole method for stray Unicode before committing.
+  - Update `_seed_tenant`'s big flush-teardown tuple: insert `TrainingSession, TrainingCourse,`
+    immediately BEFORE the existing `# 3.21: PIPs/warnings/coaching...` comment block, with a new
+    one-line comment: `# 3.22: TrainingSession.course is PROTECT — wipe sessions before courses;
+    instructor_employee is SET_NULL (order-agnostic vs EmployeeProfile).`
+  - Both `management/__init__.py` and `management/commands/__init__.py` already exist (no new dirs
+    this pass) — verify, don't recreate.
+
+## Wire-up
+
+- [ ] `config/settings.py` — `apps.hrm` already in `INSTALLED_APPS` (no change needed this pass).
+- [ ] `config/urls.py` — `hrm/` include already wired (no change needed this pass).
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.22"]` — new block mapping the 5 exact NavERP.md 3.22
+  bullets (confirmed verbatim from `NavERP.md` lines 587–592), placed immediately after the
+  existing `"3.21"` block, with a preamble comment noting this is a NEW HRM domain (not a
+  Performance-Management continuation) and that 3.23 LMS / 3.24 Training Administration are
+  deferred siblings:
+  ```python
+  # 3.22 Training Management — Instructor-Led Training scheduling/catalog (a NEW HRM domain, not a
+  # Performance-Management continuation). Classroom/Virtual/External all resolve to filtered slices
+  # of the one TrainingSession list (delivery_mode) so each highlights on its own page (most-specific
+  # match wins). 3.23 Learning Management (LMS) and 3.24 Training Administration (nomination/
+  # attendance/feedback/certificates/budget) are deferred sibling sub-modules, not built here.
+  "3.22": {
+      "Training Calendar": "hrm:training_calendar",                              # bullet (upcoming TrainingSession query view)
+      "Training Catalog": "hrm:trainingcourse_list",                             # bullet (TrainingCourse CRUD)
+      "Classroom Training": "hrm:trainingsession_list?delivery_mode=classroom",  # bullet (classroom slice)
+      "Virtual Training": "hrm:trainingsession_list?delivery_mode=virtual",      # bullet (virtual slice)
+      "External Training": "hrm:trainingsession_list?delivery_mode=external",    # bullet (external slice)
+  },
+  ```
+
+## Templates (templates/hrm/training/)
+
+- [ ] **New sub-module folder `training/`** (per the Template Folder Structure rule — 3.22 is a
+  distinct NavERP.md sub-module from `performance/`, so it gets its own folder), with one entity
+  folder per model:
+- [ ] `templates/hrm/training/trainingcourse/list.html` — filter bar (`category`, `provider_type`,
+  `delivery_mode`, `is_certification`, `is_active` dropdowns reflecting `request.GET`), Actions
+  column (view/edit/delete-POST+confirm+csrf), pagination, empty-state.
+- [ ] `templates/hrm/training/trainingcourse/detail.html` — catalog fields read-only,
+  certification block conditional on `is_certification`, prerequisite chain (`obj
+  .prerequisite_course` link + `obj.unlocks.all` reverse list), recent/upcoming sessions
+  sub-list (`obj.sessions...`), Actions sidebar (Edit, Delete, Back to List).
+- [ ] `templates/hrm/training/trainingcourse/form.html` — create/edit (shared template, `is_edit`
+  flag).
+- [ ] `templates/hrm/training/trainingsession/list.html` — filter bar (`status`, `delivery_mode`,
+  `course`, `instructor_employee` dropdowns; FK/pk comparisons via `|stringformat:"d"`), Actions
+  column.
+- [ ] `templates/hrm/training/trainingsession/detail.html` — course link, schedule
+  (start/end/timezone), classroom section conditional on `delivery_mode == "classroom"` (venue),
+  virtual section conditional on `"virtual"` (platform/link/id + a "Join Meeting" button shown only
+  when `obj.can_join`), external section conditional on `"external"` (vendor/instructor name/cost/
+  currency/invoice reference), Actions sidebar.
+- [ ] `templates/hrm/training/trainingsession/form.html` — create/edit; JS/HTMX toggling of the
+  classroom/virtual/external field groups based on the `delivery_mode` select (progressive
+  disclosure — all fields still POST-able/validated server-side regardless of JS state, per the
+  model's `clean()` guards).
+- [ ] `templates/hrm/training/calendar.html` — standalone page (sub-module-root, NO entity folder,
+  per Template Folder Structure rule §6 — mirrors `hrm/hrm_overview.html`'s standalone-page
+  pattern), sessions grouped by date (`sessions_by_date` from the view), each row shows course
+  title/time/delivery_mode badge/status badge + a "Join" button when `can_join`, filter bar
+  (`delivery_mode`, `status`, date range) reflecting `request.GET`, empty-state when no upcoming
+  sessions.
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` — expect `0037_trainingcourse_trainingsession...`;
+  review the generated file before applying.
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` — run twice; second run must be a no-op (NOTICE message, zero new
+  rows) proving idempotency.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep — all `hrm:trainingcourse_*`, `hrm:trainingsession_*`,
+  `hrm:training_calendar` URLs return 200/302 (never 500); no `{#`/`{% comment` template-comment
+  leaks in rendered output; cross-tenant IDOR check (a tenant-B admin hitting a tenant-A
+  TrainingCourse/TrainingSession pk returns 404, not the object); explicit double-booking check —
+  attempt to create a second `TrainingSession` with the same `instructor_employee` in an overlapping
+  window and confirm the `clean()` guard rejects it with a form error (not a 500/`IntegrityError`);
+  confirm deleting a `TrainingCourse` that still has `TrainingSession` rows shows a friendly error
+  (PROTECT), not a 500.
+- [ ] Sidebar shows all 5 new 3.22 sub-module bullets as **Live** (Training Calendar, Training
+  Catalog, Classroom Training, Virtual Training, External Training) — confirm via the rendered
+  sidebar, not just the `LIVE_LINKS` dict.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per
+  commit, no `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` ->
+  `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `performance-reviewer` to check `trainingsession_list`/`trainingcourse_detail` for N+1s
+    (select_related on `course`, `instructor_employee__party`, `external_vendor`, `currency`;
+    prefetch on `obj.sessions`/`obj.unlocks`).
+  - Expect `security-reviewer` to confirm no cross-tenant leakage in the `prerequisite_course`/
+    `external_vendor`/`currency` form querysets (tenant-scoped where applicable; `Currency` is
+    intentionally global).
+  - Expect `test-writer` to cover: full CRUD round-trips x2 models; all 4 `clean()` guards on
+    `TrainingSession` (end>start, classroom needs venue, virtual needs meeting_link, external needs
+    vendor-or-instructor-name) each as their own test; the instructor AND venue double-booking
+    overlap guards (both a rejecting-overlap case and a legitimate non-overlapping/back-to-back
+    case that must NOT be rejected); the `prerequisite_course` self-FK guard; the `can_join`/
+    `is_upcoming` derived properties at boundary timestamps.
+- [ ] Update `.claude/skills/hrm/SKILL.md`:
+  - Add a `### 3.22 Training Management (2 tables)` section (mirrors the existing per-sub-module
+    section format) with the model table (fields, FK targets incl. the `core.Party` vendor-role
+    reuse and the `accounting.Currency` lazy-import reuse, no confidentiality note needed — this
+    sub-module is ordinary open CRUD).
+  - Bump the frontmatter/overview "built" sub-module list to include 3.22 and note it is a **NEW
+    domain** (Instructor-Led Training scheduling), not a Performance-Management continuation; 3.23
+    LMS and 3.24 Training Administration remain deferred siblings.
+  - Add a "Training Management (3.22)" routes-list section (`hrm:trainingcourse_*`,
+    `hrm:trainingsession_*`, `hrm:training_calendar`).
+  - Update the seeder section: document `_seed_training(tenant)`, its own-exists guard, what it
+    creates, and that it runs LAST (after `_seed_improvement`).
+  - Update the `LIVE_LINKS` section: "3.22: Training Calendar -> `hrm:training_calendar`; Training
+    Catalog -> `hrm:trainingcourse_list`; Classroom/Virtual/External Training -> filtered
+    `hrm:trainingsession_list` slices. All 5 NavERP.md 3.22 bullets are now live."
+  - Update the "Deferred" section to add 3.22's own carried-forward deferrals (see below) alongside
+    the existing 3.23/3.24 placeholder line.
+  - Commit the SKILL.md update as its own file, per the one-file-per-commit rule.
+- [ ] README (if the project keeps a root test-count/module-count summary) — refresh HRM test
+  counts after `test-writer` runs, same pattern as the 3.20/3.21 README refresh commits.
+
+## Later passes / deferred (carried over from research-hrm-3.22-training-management.md)
+
+- **3.23 Learning Management (LMS)** — Course Content (videos/documents/SCORM), Learning Paths,
+  Assessments, Gamification, Progress Tracking — the content/self-paced-delivery layer on top of
+  `TrainingCourse`. Sibling sub-module, own pass.
+- **3.24 Training Administration** — Nomination/approval workflow, Attendance Tracking (incl.
+  walk-in registration + webinar-synced e-signature check-in), Training Feedback, Certificates,
+  Training Budget (consumes `TrainingSession.estimated_cost`/`actual_cost`). Sibling sub-module, own
+  pass.
+- **Dedicated Venue/Room master** (`TrainingVenue` with capacity/amenities/cross-session calendar) —
+  `venue_name`/`venue_address` text fields + the `clean()` overlap guard cover v1; revisit if
+  multi-room facility management recurs (could align with Module 11 Asset/Facility).
+- **Multi-instructor / co-instructor per session** — a single `instructor_employee` is sufficient
+  for v1 (Cornerstone OnDemand/Docebo support a crew; deferred).
+- **Live videoconferencing API integration** (Zoom/Teams/Webex auto-provisioning, attendee sync,
+  webhook attendance) — this pass stores platform/link as plain organizer-entered data.
+- **Notification/reminder delivery pipeline** (registration confirmations, N-hours-before reminders)
+  — the data model (`start_datetime`) supports it; the email/scheduling worker is cross-module.
+  Session reminders — deferred to that pipeline.
+- **Formal vendor scorecard / accreditation extension** — if needed later, extend via a thin
+  `TenantOwned` 1:1 profile on `core.Party` (mirroring `accounting.VendorProfile`), not a duplicate
+  vendor table.
+- **Public/embeddable course catalog & external learner portal with billing** (Arlo, Absorb LMS) —
+  out of scope; NavERP 3.22 is an internal employee-training tool, not a training-provider
+  storefront.
+- **Cost-vs-performance / ROI reporting** — needs 3.24's Training Budget + Training Feedback data
+  joined with the cost fields captured here; deferred to 3.24.
+- **Auto-generated webinar link on session creation** (360Learning-style API call to mint a join
+  link) — integration/later; requires per-tenant Zoom/Teams/Webex API credentials.
+
+## Review notes
+(filled in at the end)
