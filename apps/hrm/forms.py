@@ -1908,8 +1908,8 @@ class TrainingSessionForm(TenantModelForm):
                   "meeting_link", "meeting_id", "instructor_employee", "external_instructor_name",
                   "external_vendor", "estimated_cost", "actual_cost", "currency", "invoice_reference", "notes"]
         widgets = {
-            "start_datetime": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
-            "end_datetime": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            # start_datetime/end_datetime get their datetime-local widget + round-trip input_formats
+            # from TenantModelForm.__init__ (L22) — no need to re-declare them here.
             "venue_address": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
             "notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
         }
@@ -1922,10 +1922,6 @@ class TrainingSessionForm(TenantModelForm):
         # tenant_id=None and the overlap guard would silently never fire (edit already has it from DB).
         if self.tenant is not None and self.instance is not None:
             self.instance.tenant = self.tenant
-        # The datetime-local widget round-trips only with a matching input_format.
-        for name in ("start_datetime", "end_datetime"):
-            if name in self.fields:
-                self.fields[name].input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"]
         if self.tenant is not None:
             if "external_vendor" in self.fields:
                 # The base only filters by tenant; scope to vendor-role parties (mirrors accounting).
