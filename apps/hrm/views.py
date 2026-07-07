@@ -8873,7 +8873,7 @@ def pip_create(request):
         return redirect("dashboard:home")
     profile = _current_employee_profile(request)
     if request.method == "POST":
-        form = PerformanceImprovementPlanForm(request.POST, tenant=request.tenant, viewer_profile=profile)
+        form = PerformanceImprovementPlanForm(request.POST, tenant=request.tenant, viewer_profile=profile, viewer_is_admin=_is_admin(request.user))
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
@@ -8882,7 +8882,7 @@ def pip_create(request):
             messages.success(request, f"PIP {obj.number} created.")
             return redirect("hrm:pip_detail", pk=obj.pk)
     else:
-        form = PerformanceImprovementPlanForm(tenant=request.tenant, viewer_profile=profile)
+        form = PerformanceImprovementPlanForm(tenant=request.tenant, viewer_profile=profile, viewer_is_admin=_is_admin(request.user))
     return render(request, "hrm/performance/pip/form.html", {"form": form, "is_edit": False})
 
 
@@ -8897,15 +8897,20 @@ def pip_detail(request, pk):
         raise PermissionDenied("You do not have access to this performance improvement plan.")
     checkins = list(obj.checkins.order_by("checkin_date"))
     profile = _current_employee_profile(request)
+    is_admin = _is_admin(request.user)
     is_subject = profile is not None and profile.pk == obj.subject_id
     is_manager = profile is not None and profile.pk == obj.manager_id
+    pip_open = obj.status != "closed"
     return render(request, "hrm/performance/pip/detail.html", {
         "obj": obj,
         "checkins": checkins,
         "can_edit": _can_edit_pip(request, obj),
+        "is_admin": is_admin,
         "is_subject": is_subject,
         "is_manager": is_manager,
-        "can_add_checkin": _can_view_pip(request, obj),   # subject/manager/admin add check-ins
+        # subject/manager/admin may LOG a check-in (open plan); only manager/admin may edit/delete one.
+        "can_add_checkin": pip_open and _can_view_pip(request, obj),
+        "can_manage_checkin": pip_open and (is_admin or is_manager),
         "checkin_form": PIPCheckInForm(tenant=request.tenant),
     })
 
@@ -9029,12 +9034,28 @@ def pip_extend(request, pk):
     return redirect("hrm:pip_detail", pk=obj.pk)
 
 
+def _can_edit_checkin(request, checkin):
+    """Edit/delete a PIP check-in: the plan's manager or a tenant admin ONLY (the subject may LOG
+    check-ins to self-report, but must never rewrite/delete the manager's entries — the check-in
+    trail is the disciplinary record the outcome rests on), and only while the plan isn't closed."""
+    pip = checkin.pip
+    if pip.status == "closed":
+        return False
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and profile.pk == pip.manager_id
+
+
 # ------------------------------------------------------------ PIPCheckIn (nested under a PIP)
 @login_required
 def pipcheckin_create(request, pip_pk):
     pip = get_object_or_404(PerformanceImprovementPlan, pk=pip_pk, tenant=request.tenant)
     if not _can_view_pip(request, pip):   # subject/manager/admin may log a check-in
         raise PermissionDenied("You do not have access to this plan.")
+    if pip.status == "closed":
+        messages.error(request, "This plan is closed — check-ins can no longer be added.")
+        return redirect("hrm:pip_detail", pk=pip.pk)
     if request.method == "POST":
         form = PIPCheckInForm(request.POST,
                               instance=PIPCheckIn(tenant=request.tenant, pip=pip), tenant=request.tenant)
@@ -9066,8 +9087,9 @@ def pipcheckin_detail(request, pk):
 @login_required
 def pipcheckin_edit(request, pk):
     item = get_object_or_404(PIPCheckIn.objects.select_related("pip"), pk=pk, tenant=request.tenant)
-    if not _can_view_pip(request, item.pip):
-        raise PermissionDenied("You do not have access to this check-in.")
+    if not _can_edit_checkin(request, item):
+        messages.error(request, "Only the plan's manager or a tenant admin can edit a check-in, and not once the plan is closed.")
+        return redirect("hrm:pip_detail", pk=item.pip_id)
     if request.method == "POST":
         form = PIPCheckInForm(request.POST, instance=item, tenant=request.tenant)
         if form.is_valid():
@@ -9086,8 +9108,8 @@ def pipcheckin_edit(request, pk):
 def pipcheckin_delete(request, pk):
     item = get_object_or_404(PIPCheckIn.objects.select_related("pip"), pk=pk, tenant=request.tenant)
     pip = item.pip
-    if not _can_view_pip(request, pip):
-        messages.error(request, "You do not have access to this check-in.")
+    if not _can_edit_checkin(request, item):
+        messages.error(request, "Only the plan's manager or a tenant admin can delete a check-in, and not once the plan is closed.")
         return redirect("hrm:pip_detail", pk=pip.pk)
     write_audit_log(request.user, item, "delete")
     item.delete()
@@ -9129,7 +9151,7 @@ def warningletter_create(request):
         return redirect("dashboard:home")
     profile = _current_employee_profile(request)
     if request.method == "POST":
-        form = WarningLetterForm(request.POST, tenant=request.tenant, viewer_profile=profile)
+        form = WarningLetterForm(request.POST, tenant=request.tenant, viewer_profile=profile, viewer_is_admin=_is_admin(request.user))
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
@@ -9138,7 +9160,7 @@ def warningletter_create(request):
             messages.success(request, f"Warning letter {obj.number} created.")
             return redirect("hrm:warningletter_detail", pk=obj.pk)
     else:
-        form = WarningLetterForm(tenant=request.tenant, viewer_profile=profile)
+        form = WarningLetterForm(tenant=request.tenant, viewer_profile=profile, viewer_is_admin=_is_admin(request.user))
     return render(request, "hrm/performance/warningletter/form.html", {"form": form, "is_edit": False})
 
 
@@ -9266,7 +9288,7 @@ def coachingnote_create(request):
         messages.error(request, "Your account isn't linked to an employee profile, so you can't author a coaching note.")
         return redirect("hrm:coachingnote_list")
     if request.method == "POST":
-        form = CoachingNoteForm(request.POST, tenant=request.tenant, viewer_profile=coach)
+        form = CoachingNoteForm(request.POST, tenant=request.tenant, viewer_profile=coach, viewer_is_admin=_is_admin(request.user))
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
@@ -9281,7 +9303,7 @@ def coachingnote_create(request):
                 messages.success(request, f"Coaching note {obj.number} logged.")
                 return redirect("hrm:coachingnote_detail", pk=obj.pk)
     else:
-        form = CoachingNoteForm(tenant=request.tenant, viewer_profile=coach)
+        form = CoachingNoteForm(tenant=request.tenant, viewer_profile=coach, viewer_is_admin=_is_admin(request.user))
     return render(request, "hrm/performance/coachingnote/form.html", {"form": form, "is_edit": False})
 
 
