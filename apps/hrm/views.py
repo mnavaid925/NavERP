@@ -9183,6 +9183,7 @@ def warningletter_detail(request, pk):
         "obj": obj,
         "prior_warnings": list(prior[:10]),
         "can_edit": _can_edit_warning(request, obj),
+        "is_admin": _is_admin(request.user),
         "is_recipient": is_recipient,
         "can_acknowledge": is_recipient and obj.status == "issued",
         "ack_form": WarningAcknowledgeForm(tenant=request.tenant),
