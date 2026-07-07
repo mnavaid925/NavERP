@@ -128,6 +128,10 @@ from apps.hrm.models import (  # 3.21 Performance Improvement
     PerformanceImprovementPlan,
     WarningLetter,
 )
+from apps.hrm.models import (  # 3.22 Training Management
+    TrainingCourse,
+    TrainingSession,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -251,6 +255,7 @@ class Command(BaseCommand):
             self._seed_reviews(tenant, flush=options["flush"])
             self._seed_feedback(tenant, flush=options["flush"])
             self._seed_improvement(tenant, flush=options["flush"])
+            self._seed_training(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -279,6 +284,10 @@ class Command(BaseCommand):
                           # 3.20: Feedback/1:1s PROTECT EmployeeProfile (giver/receiver/manager/
                           # employee/owner) — wipe the feedback + 1:1 rows (action-items→meetings,
                           # feedback→badges) BEFORE the employee rows below.
+                          # 3.22: TrainingSession.course is PROTECT (wipe sessions before courses);
+                          # instructor_employee/external_vendor are SET_NULL (not a PROTECT barrier) — listed
+                          # here only so a full --flush leaves no orphaned training rows.
+                          TrainingSession, TrainingCourse,
                           # 3.21: PIPs/warnings/coaching PROTECT EmployeeProfile — wipe them child-first
                           # (coaching/warnings/check-ins then plans) BEFORE the employee rows below.
                           CoachingNote, WarningLetter, PIPCheckIn, PerformanceImprovementPlan,
@@ -2272,3 +2281,85 @@ class Command(BaseCommand):
             f"{PIPCheckIn.objects.filter(tenant=tenant).count()} check-ins, "
             f"{WarningLetter.objects.filter(tenant=tenant).count()} warning letters, "
             f"{CoachingNote.objects.filter(tenant=tenant).count()} coaching notes."))
+
+    def _seed_training(self, tenant, *, flush):
+        """3.22 Training Management - the ILT catalog + scheduled occurrences (runs after
+        _seed_improvement). 3 courses (an internal classroom onboarding bootcamp, a safety
+        certification, and an external leadership program that requires the bootcamp) + 4 sessions
+        spanning classroom / virtual / external delivery and multiple statuses (incl. one extra
+        classroom on a distinct instructor+venue+day to show the overlap guard doesn't false-positive
+        on legitimate scheduling). Reuses existing EmployeeProfile instructors, an existing vendor-role
+        Party, and an existing accounting.Currency - creates NO new person/vendor/currency rows.
+        (ASCII-only stdout - Windows cp1252 console bug, see 3.20/3.21.)"""
+        if flush:
+            TrainingSession.objects.filter(tenant=tenant).delete()
+            TrainingCourse.objects.filter(tenant=tenant).delete()
+        if TrainingCourse.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Training data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant)
+                    .select_related("party").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' - skipping training seed."))
+            return
+        instructor_a, instructor_b = emps[0], emps[1]
+        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first()
+        from apps.accounting.models import Currency   # lazy - global master, no tenant FK
+        currency = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+
+        # --- Courses (catalog) ---
+        bootcamp = TrainingCourse.objects.create(
+            tenant=tenant, title="Technical Onboarding Bootcamp", category="onboarding",
+            delivery_mode="classroom", provider_type="internal", duration_hours=Decimal("16.00"),
+            default_capacity=25,
+            description="A two-day hands-on introduction to the engineering stack, tools, and workflows.")
+        safety = TrainingCourse.objects.create(
+            tenant=tenant, title="Workplace Safety Certification", category="safety",
+            delivery_mode="classroom", provider_type="internal", duration_hours=Decimal("8.00"),
+            is_certification=True, certification_name="Certified Safety Associate",
+            certification_validity_months=24, default_capacity=30,
+            description="Mandatory workplace health-and-safety training with a certification exam.")
+        leadership = TrainingCourse.objects.create(
+            tenant=tenant, title="Leadership Excellence Program", category="leadership",
+            delivery_mode="external", provider_type="external", duration_hours=Decimal("24.00"),
+            prerequisite_course=bootcamp, default_capacity=15,
+            description="An external facilitator-led program for emerging managers (bootcamp required first).")
+
+        now = timezone.now()
+
+        def at(days, hour):
+            return (now + datetime.timedelta(days=days)).replace(hour=hour, minute=0, second=0, microsecond=0)
+
+        # --- Sessions (classroom / virtual / external, mixed statuses) ---
+        TrainingSession.objects.create(
+            tenant=tenant, course=bootcamp, delivery_mode="classroom", status="scheduled",
+            start_datetime=at(7, 9), end_datetime=at(7, 17), capacity=25,
+            venue_name="HQ Training Room A", venue_address="Head Office, 2nd Floor",
+            instructor_employee=instructor_a, notes="Day 1 of the onboarding bootcamp.")
+        TrainingSession.objects.create(
+            tenant=tenant, course=safety, delivery_mode="virtual", status="confirmed",
+            start_datetime=at(10, 10), end_datetime=at(10, 12), capacity=30,
+            meeting_platform="zoom", meeting_link="https://example.zoom.us/j/1234567890",
+            meeting_id="123 456 7890", instructor_employee=instructor_b,
+            notes="Live virtual safety briefing.")
+        TrainingSession.objects.create(
+            tenant=tenant, course=leadership, delivery_mode="external", status="completed",
+            start_datetime=at(-20, 9), end_datetime=at(-20, 16), capacity=15,
+            external_vendor=vendor, external_instructor_name="" if vendor else "Guest Facilitator",
+            estimated_cost=Decimal("5000.00"), actual_cost=Decimal("5200.00"), currency=currency,
+            invoice_reference="INV-TRN-0001",
+            notes="Off-site leadership workshop delivered by an external provider.")
+        TrainingSession.objects.create(
+            tenant=tenant, course=bootcamp, delivery_mode="classroom", status="scheduled",
+            start_datetime=at(14, 9), end_datetime=at(14, 17), capacity=25,
+            venue_name="HQ Training Room B", venue_address="Head Office, 3rd Floor",
+            instructor_employee=instructor_b,
+            notes="Repeat cohort - distinct room/instructor/day (no scheduling conflict).")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Training seeded for '{tenant.name}': "
+            f"{TrainingCourse.objects.filter(tenant=tenant).count()} courses, "
+            f"{TrainingSession.objects.filter(tenant=tenant).count()} sessions (classroom/virtual/external)."))
