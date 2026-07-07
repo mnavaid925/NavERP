@@ -65,11 +65,11 @@
     </div>
   {% endif %}
 
-  {% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin or can_acknowledge %}
+  {% if obj.status == 'draft' and is_admin or can_acknowledge %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Workflow</h2></div>
       <div class="card-body">
-        {% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin %}
+        {% if obj.status == 'draft' and is_admin %}
           <form method="post" action="{% url 'hrm:warningletter_issue' obj.pk %}" style="display:inline;" onsubmit="return confirm('Issue this warning letter to the employee?');">
             {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Issue</button>
           </form>
@@ -78,8 +78,10 @@
         {% if can_acknowledge %}
           <form method="post" action="{% url 'hrm:warningletter_acknowledge' obj.pk %}">
             {% csrf_token %}
-            <p class="fw-600" style="margin-bottom:.3rem;">Acknowledge receipt (you may add a written response):</p>
-            <div class="form-group" style="max-width:520px;">{{ ack_form.employee_response }}</div>
+            <div class="form-group" style="max-width:520px;">
+              <label class="form-label" for="{{ ack_form.employee_response.id_for_label }}">Acknowledge receipt — you may add a written response (optional)</label>
+              {{ ack_form.employee_response }}
+            </div>
             <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Acknowledge</button></div>
           </form>
         {% endif %}
