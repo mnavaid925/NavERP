@@ -476,6 +476,18 @@ LIVE_LINKS = {
         "Warning Letters": "hrm:warningletter_list",     # bullet (WarningLetter CRUD + issue/acknowledge/print)
         "Coaching Notes": "hrm:coachingnote_list",       # bullet (CoachingNote — coach/admin only)
     },
+    # 3.22 Training Management — Instructor-Led Training scheduling/catalog (a NEW HRM domain, not a
+    # Performance-Management continuation). Classroom/Virtual/External all resolve to filtered slices
+    # of the one TrainingSession list (delivery_mode) so each highlights on its own page (most-specific
+    # match wins). 3.23 Learning Management (LMS) and 3.24 Training Administration (nomination/
+    # attendance/feedback/certificates/budget) are deferred sibling sub-modules, not built here.
+    "3.22": {
+        "Training Calendar": "hrm:training_calendar",                              # bullet (upcoming TrainingSession query view)
+        "Training Catalog": "hrm:trainingcourse_list",                             # bullet (TrainingCourse CRUD)
+        "Classroom Training": "hrm:trainingsession_list?delivery_mode=classroom",  # bullet (classroom slice)
+        "Virtual Training": "hrm:trainingsession_list?delivery_mode=virtual",      # bullet (virtual slice)
+        "External Training": "hrm:trainingsession_list?delivery_mode=external",    # bullet (external slice)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
