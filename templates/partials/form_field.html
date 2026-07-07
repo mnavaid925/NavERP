@@ -1,0 +1,10 @@
+{% comment %}
+Render a single bound form field with the design-system label/help/error markup.
+Usage: {% include "partials/form_field.html" with field=form.some_field %}
+{% endcomment %}
+<div class="form-group">
+  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+  {{ field }}
+  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+  {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+</div>
