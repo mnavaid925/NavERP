@@ -5950,3 +5950,217 @@ class CoachingNote(TenantNumbered):
         c = self.coach.party.name if self.coach_id else "?"
         e = self.employee.party.name if self.employee_id else "?"
         return f"{self.number} · {c} -> {e}"
+
+
+# ---------------------------------------------------------------------------
+# 3.22 Training Management — Instructor-Led Training (ILT) scheduling + catalog.
+# A NEW HRM domain (not a Performance-Management continuation): a course catalog
+# (``TrainingCourse``) and its scheduled occurrences (``TrainingSession``), unified
+# across classroom / virtual / external delivery via ``delivery_mode``. Training data
+# is ORDINARY tenant-scoped CRUD — no subject/manager confidentiality gate (unlike the
+# 3.18–3.21 performance cluster); every authenticated tenant user may see it, same
+# openness as 3.2 Designation/JobGrade.
+#
+# Reuses (never duplicates): ``hrm.EmployeeProfile`` (internal instructor), ``core.Party``
+# (external vendor — a ``PartyRole.role="vendor"`` party, NOT a new HRM vendor table;
+# ``accounting.VendorProfile`` already extends Party on the AP side), and
+# ``accounting.Currency`` (the GLOBAL currency master — string FK, lazy-imported in the
+# form so accounting stays a runtime, not module-load, dependency).
+#
+# Deferred to sibling sub-modules (do NOT build here): 3.23 Learning Management (LMS)
+# owns course content / learning paths / assessments / gamification / progress tracking;
+# 3.24 Training Administration owns nomination, per-employee attendance capture, post-
+# training feedback, certificate generation, and aggregate training-budget/ROI rollups
+# (which will consume the estimated/actual cost captured on ``TrainingSession`` here).
+# ---------------------------------------------------------------------------
+class TrainingCourse(TenantNumbered):
+    """A catalog course (3.22 Training Catalog) — the reusable definition an employee is scheduled
+    into via a ``TrainingSession``. HRM-owned master (analogous to ``Designation``/``PayComponent``),
+    not a core-spine entity. A course can grant a certification and can require a prerequisite course
+    (self-FK) — the actual per-occurrence schedule/venue/instructor lives on ``TrainingSession``."""
+
+    NUMBER_PREFIX = "TRC"
+
+    CATEGORY_CHOICES = [
+        ("technical", "Technical"),
+        ("compliance", "Compliance"),
+        ("leadership", "Leadership"),
+        ("soft_skills", "Soft Skills"),
+        ("safety", "Safety"),
+        ("onboarding", "Onboarding"),
+        ("product", "Product"),
+        ("other", "Other"),
+    ]
+    # The course's TYPICAL delivery mode (a default hint); the real per-occurrence mode is on the
+    # session and may differ. Wider than the session's set — a course can be marketed as "blended".
+    DELIVERY_MODE_CHOICES = [
+        ("classroom", "Classroom"),
+        ("virtual", "Virtual"),
+        ("external", "External"),
+        ("blended", "Blended"),
+    ]
+    PROVIDER_TYPE_CHOICES = [
+        ("internal", "Internal"),
+        ("external", "External"),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="technical")
+    delivery_mode = models.CharField(max_length=15, choices=DELIVERY_MODE_CHOICES, default="classroom",
+                                     help_text="The course's typical mode; each session sets its own actual mode.")
+    provider_type = models.CharField(max_length=10, choices=PROVIDER_TYPE_CHOICES, default="internal",
+                                     help_text="Run in-house (internal) or sourced from an external provider.")
+    duration_hours = models.DecimalField(max_digits=6, decimal_places=2, default=ZERO,
+                                         validators=[MinValueValidator(ZERO)])
+    is_certification = models.BooleanField(default=False,
+                                           help_text="This course grants (or represents) a certification.")
+    certification_name = models.CharField(max_length=255, blank=True)
+    certification_validity_months = models.PositiveIntegerField(null=True, blank=True,
+                                                                help_text="How long the certification stays valid.")
+    prerequisite_course = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                            related_name="unlocks",
+                                            help_text="A course that must be completed first.")
+    default_capacity = models.PositiveIntegerField(null=True, blank=True,
+                                                   help_text="Default seat limit new sessions inherit.")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["title"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "category"], name="hrm_trc_tenant_category_idx"),
+            models.Index(fields=["tenant", "is_active"], name="hrm_trc_tenant_active_idx"),
+        ]
+
+    def clean(self):
+        if self.is_certification and not self.certification_name.strip():
+            raise ValidationError({"certification_name": "Name the certification a certification course grants."})
+        if self.prerequisite_course_id and self.pk and self.prerequisite_course_id == self.pk:
+            raise ValidationError({"prerequisite_course": "A course can't be its own prerequisite."})
+
+    def __str__(self):
+        return f"{self.number} · {self.title}" if self.number else self.title
+
+
+class TrainingSession(TenantNumbered):
+    """A scheduled occurrence of a ``TrainingCourse`` (3.22 Training Calendar / Classroom / Virtual /
+    External) — one date/time window with its own venue OR meeting link OR external vendor, an
+    instructor, a capacity, and (for external sessions) cost tracking. ``delivery_mode`` unifies the
+    three delivery bullets; ``clean()`` enforces the mode-specific required fields plus an
+    instructor/venue double-booking overlap guard (an Absorb LMS differentiator)."""
+
+    NUMBER_PREFIX = "TRS"
+
+    DELIVERY_MODE_CHOICES = [
+        ("classroom", "Classroom"),
+        ("virtual", "Virtual"),
+        ("external", "External"),
+    ]
+    STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("confirmed", "Confirmed"),
+        ("ongoing", "Ongoing"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+        ("postponed", "Postponed"),
+    ]
+    MEETING_PLATFORM_CHOICES = [
+        ("zoom", "Zoom"),
+        ("teams", "Microsoft Teams"),
+        ("webex", "Webex"),
+        ("google_meet", "Google Meet"),
+        ("gotomeeting", "GoToMeeting"),
+        ("other", "Other"),
+    ]
+    # Statuses that free an instructor/venue slot — a cancelled/postponed session never conflicts.
+    _INACTIVE_STATUSES = ("cancelled", "postponed")
+    JOIN_WINDOW = timedelta(minutes=15)   # a "Join" button goes live this long before start.
+
+    course = models.ForeignKey("hrm.TrainingCourse", on_delete=models.PROTECT, related_name="sessions",
+                               help_text="The catalog course this session delivers.")
+    delivery_mode = models.CharField(max_length=10, choices=DELIVERY_MODE_CHOICES, default="classroom")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="scheduled")
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    timezone = models.CharField(max_length=50, default="UTC",
+                                help_text="IANA/display timezone the times are quoted in.")
+    capacity = models.PositiveIntegerField(default=20)
+    waitlist_enabled = models.BooleanField(default=False,
+                                           help_text="Allow a waitlist once full (the queue itself is 3.24 Nomination).")
+    # Classroom
+    venue_name = models.CharField(max_length=255, blank=True)
+    venue_address = models.TextField(blank=True)
+    # Virtual
+    meeting_platform = models.CharField(max_length=15, choices=MEETING_PLATFORM_CHOICES, blank=True)
+    meeting_link = models.URLField(blank=True)
+    meeting_id = models.CharField(max_length=100, blank=True)
+    # Instructor (internal employee OR a named external trainer)
+    instructor_employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                            related_name="training_sessions_instructed")
+    external_instructor_name = models.CharField(max_length=255, blank=True)
+    # External vendor — a core.Party (vendor role); no new vendor table.
+    external_vendor = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="training_sessions_as_vendor")
+    # Cost tracking (external sessions) — currency is the GLOBAL accounting master (no tenant FK).
+    estimated_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    actual_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="training_sessions")
+    invoice_reference = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-start_datetime", "number"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_trs_tenant_status_idx"),
+            models.Index(fields=["tenant", "course"], name="hrm_trs_tenant_course_idx"),
+            models.Index(fields=["tenant", "delivery_mode"], name="hrm_trs_tenant_mode_idx"),
+            models.Index(fields=["tenant", "start_datetime"], name="hrm_trs_tenant_start_idx"),
+        ]
+
+    def clean(self):
+        if self.start_datetime and self.end_datetime and self.end_datetime <= self.start_datetime:
+            raise ValidationError({"end_datetime": "The end time must be after the start time."})
+        if self.delivery_mode == "classroom" and not self.venue_name.strip():
+            raise ValidationError({"venue_name": "A classroom session needs a venue."})
+        if self.delivery_mode == "virtual" and not self.meeting_link.strip():
+            raise ValidationError({"meeting_link": "A virtual session needs a meeting link."})
+        if self.delivery_mode == "external" and not (self.external_vendor_id or self.external_instructor_name.strip()):
+            raise ValidationError(
+                {"external_vendor": "An external session needs a vendor or a named external instructor."})
+        # Double-booking guard — only when we have a real time window and an active status.
+        if self.start_datetime and self.end_datetime and self.status not in self._INACTIVE_STATUSES:
+            overlapping = TrainingSession.objects.filter(
+                tenant_id=self.tenant_id,
+                start_datetime__lt=self.end_datetime,
+                end_datetime__gt=self.start_datetime,
+            ).exclude(pk=self.pk).exclude(status__in=self._INACTIVE_STATUSES)
+            if self.instructor_employee_id and overlapping.filter(
+                    instructor_employee_id=self.instructor_employee_id).exists():
+                raise ValidationError(
+                    {"instructor_employee": "This instructor is already booked for an overlapping session."})
+            if self.delivery_mode == "classroom" and self.venue_name.strip() and overlapping.filter(
+                    delivery_mode="classroom", venue_name__iexact=self.venue_name.strip()).exists():
+                raise ValidationError({"venue_name": "This venue is already booked for an overlapping session."})
+
+    @property
+    def can_join(self):
+        """Derived (never stored) — the virtual "Join" button is live from 15 min before start until
+        the end time, and only when there's a link. Mirrors TalentLMS's calendar Join affordance."""
+        if not self.meeting_link or not (self.start_datetime and self.end_datetime):
+            return False
+        now = timezone.now()
+        return (self.start_datetime - self.JOIN_WINDOW) <= now <= self.end_datetime
+
+    @property
+    def is_upcoming(self):
+        """Derived — a live, not-yet-started session (the calendar's default lens)."""
+        return self.status not in ("completed", "cancelled") and bool(
+            self.start_datetime and self.start_datetime > timezone.now())
+
+    def __str__(self):
+        if self.course_id:
+            return f"{self.number} · {self.course.title} ({self.start_datetime:%Y-%m-%d %H:%M})"
+        return self.number
