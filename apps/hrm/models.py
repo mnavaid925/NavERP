@@ -6031,6 +6031,7 @@ class TrainingCourse(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "category"], name="hrm_trc_tenant_category_idx"),
             models.Index(fields=["tenant", "is_active"], name="hrm_trc_tenant_active_idx"),
+            models.Index(fields=["tenant", "delivery_mode"], name="hrm_trc_tenant_mode_idx"),
         ]
 
     def clean(self):
@@ -6118,6 +6119,7 @@ class TrainingSession(TenantNumbered):
             models.Index(fields=["tenant", "course"], name="hrm_trs_tenant_course_idx"),
             models.Index(fields=["tenant", "delivery_mode"], name="hrm_trs_tenant_mode_idx"),
             models.Index(fields=["tenant", "start_datetime"], name="hrm_trs_tenant_start_idx"),
+            models.Index(fields=["tenant", "instructor_employee"], name="hrm_trs_tenant_instr_idx"),
         ]
 
     def clean(self):
