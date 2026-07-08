@@ -1956,6 +1956,9 @@ class LearningContentItemForm(TenantModelForm):
         }
 
     def clean_document_file(self):
+        # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve with
+        # Content-Disposition: attachment + X-Content-Type-Options: nosniff in production (mirrors the
+        # onboarding-doc upload forms; MEDIA hardening is a tracked README TODO).
         f = self.cleaned_data.get("document_file")
         if f and hasattr(f, "name"):
             ext = os.path.splitext(f.name)[1].lower()
@@ -1968,6 +1971,8 @@ class LearningContentItemForm(TenantModelForm):
     def clean_scorm_package(self):
         # WARNING: stored as an opaque file only — never extracted this pass. A future SCORM-extraction
         # handler MUST guard against zip-slip / path traversal before writing extracted files to disk.
+        # Also (as for every upload here) keep MEDIA_ROOT outside the web root + serve with
+        # Content-Disposition: attachment + X-Content-Type-Options: nosniff in production.
         f = self.cleaned_data.get("scorm_package")
         if f and hasattr(f, "name"):
             ext = os.path.splitext(f.name)[1].lower()
