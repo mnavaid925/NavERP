@@ -19,7 +19,7 @@
       <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
       <div class="detail-item"><dt>Type</dt><dd>{% if obj.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
-      {% if obj.target_designation %}<div class="detail-item"><dt>Target Role</dt><dd>{{ obj.target_designation.title }}</dd></div>{% endif %}
+      {% if obj.target_designation %}<div class="detail-item"><dt>Target Role</dt><dd>{{ obj.target_designation.name }}</dd></div>{% endif %}
       {% if obj.target_department %}<div class="detail-item"><dt>Target Department</dt><dd>{{ obj.target_department.name }}</dd></div>{% endif %}
     </dl>
     {% if obj.description %}<div style="margin-top:.6rem;"><strong>Description</strong><p>{{ obj.description|linebreaksbr }}</p></div>{% endif %}
