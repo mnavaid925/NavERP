@@ -9671,8 +9671,10 @@ def learningpathitem_list(request):
 
 @login_required
 def learningpathitem_detail(request, pk):
+    # course__prerequisite_course: the detail template shows the course's prerequisite title (2nd FK hop).
     return crud_detail(request, model=LearningPathItem, pk=pk,
-                       template="hrm/lms/learningpathitem/detail.html", select_related=("path", "course"))
+                       template="hrm/lms/learningpathitem/detail.html",
+                       select_related=("path", "course", "course__prerequisite_course"))
 
 
 @login_required
