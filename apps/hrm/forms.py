@@ -2010,11 +2010,18 @@ class LearningProgressForm(TenantModelForm):
                   "time_spent_minutes", "score", "passed", "attempt_count", "points_earned",
                   "started_at", "completed_at"]
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Give the (possibly unsaved) instance its tenant BEFORE validation so the
-        # ("tenant","employee","course") unique_together check in ModelForm._post_clean()'s
-        # validate_unique() runs against the real tenant even on the flat create path (crud_create
-        # sets obj.tenant only AFTER is_valid()). Same fix class as TrainingSessionForm's overlap guard.
-        if self.tenant is not None and self.instance is not None and self.instance.tenant_id is None:
-            self.instance.tenant = self.tenant
+    def clean(self):
+        # Enforce the ("tenant","employee","course") uniqueness at the form level. Django's ModelForm
+        # validate_unique() SKIPS any unique_together that involves an excluded field, and `tenant` is
+        # not a form field — so the DB constraint would otherwise only surface as an IntegrityError 500
+        # on the flat create path. Check it explicitly here instead.
+        cleaned = super().clean()
+        employee = cleaned.get("employee")
+        course = cleaned.get("course")
+        if self.tenant is not None and employee and course:
+            dupes = LearningProgress.objects.filter(tenant=self.tenant, employee=employee, course=course)
+            if self.instance and self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                raise forms.ValidationError("This employee already has a progress record for this course.")
+        return cleaned
