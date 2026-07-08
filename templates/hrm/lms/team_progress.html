@@ -11,10 +11,10 @@
     </div>
   </div>
 
-  <div class="stat-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:1rem;">
-    <div class="stat-card"><span class="stat-label">Records</span><span class="stat-value">{{ summary.total }}</span></div>
-    <div class="stat-card"><span class="stat-label">Completed</span><span class="stat-value">{{ summary.completed }}</span></div>
-    <div class="stat-card"><span class="stat-label">In Progress</span><span class="stat-value">{{ summary.in_progress }}</span></div>
+  <div class="stat-grid">
+    <div class="stat-card"><span class="stat-value">{{ summary.total }}</span><span class="stat-label">Records</span></div>
+    <div class="stat-card"><span class="stat-value">{{ summary.completed }}</span><span class="stat-label">Completed</span></div>
+    <div class="stat-card"><span class="stat-value">{{ summary.in_progress }}</span><span class="stat-label">In Progress</span></div>
   </div>
 
   <div class="card">
