@@ -1665,3 +1665,74 @@ def training_session_b(db, tenant_b, training_course_b, employee_b):
         venue_name="Room B", instructor_employee=employee_b, capacity=15,
     )
 
+
+# ------------------------------------------------------------------ 3.23 Learning Management (LMS) fixtures
+@pytest.fixture
+def content_item_a(db, tenant_a, training_course_a):
+    """A required "video" LearningContentItem on training_course_a, sequence 1."""
+    from apps.hrm.models import LearningContentItem
+    return LearningContentItem.objects.create(
+        tenant=tenant_a, course=training_course_a, title="Intro Video",
+        content_type="video", sequence=1, video_url="https://example.com/intro.mp4",
+    )
+
+
+@pytest.fixture
+def content_item_b(db, tenant_b, training_course_b):
+    """A LearningContentItem belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import LearningContentItem
+    return LearningContentItem.objects.create(
+        tenant=tenant_b, course=training_course_b, title="Intro Video B",
+        content_type="video", sequence=1, video_url="https://example.com/intro-b.mp4",
+    )
+
+
+@pytest.fixture
+def learning_path_a(db, tenant_a):
+    """A LearningPath for tenant_a — "Engineering Onboarding" — no items yet."""
+    from apps.hrm.models import LearningPath
+    return LearningPath.objects.create(tenant=tenant_a, title="Engineering Onboarding")
+
+
+@pytest.fixture
+def learning_path_b(db, tenant_b):
+    """A LearningPath belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import LearningPath
+    return LearningPath.objects.create(tenant=tenant_b, title="Engineering Onboarding B")
+
+
+@pytest.fixture
+def path_item_a(db, tenant_a, learning_path_a, training_course_a):
+    """A LearningPathItem linking learning_path_a -> training_course_a at sequence 1."""
+    from apps.hrm.models import LearningPathItem
+    return LearningPathItem.objects.create(
+        tenant=tenant_a, path=learning_path_a, course=training_course_a, sequence=1,
+    )
+
+
+@pytest.fixture
+def path_item_b(db, tenant_b, learning_path_b, training_course_b):
+    """A LearningPathItem belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import LearningPathItem
+    return LearningPathItem.objects.create(
+        tenant=tenant_b, path=learning_path_b, course=training_course_b, sequence=1,
+    )
+
+
+@pytest.fixture
+def learning_progress_a(db, tenant_a, employee_a, training_course_a):
+    """A not_started LearningProgress for employee_a/training_course_a, tenant_a."""
+    from apps.hrm.models import LearningProgress
+    return LearningProgress.objects.create(
+        tenant=tenant_a, employee=employee_a, course=training_course_a,
+    )
+
+
+@pytest.fixture
+def learning_progress_b(db, tenant_b, employee_b, training_course_b):
+    """A LearningProgress belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import LearningProgress
+    return LearningProgress.objects.create(
+        tenant=tenant_b, employee=employee_b, course=training_course_b,
+    )
+
