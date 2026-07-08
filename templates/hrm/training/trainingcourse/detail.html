@@ -103,5 +103,40 @@
     </div>
   </div>
 
+  {# 3.23 LMS — self-paced content items attached to this course #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Learning Content</h2>
+      <a href="{% url 'hrm:learningcontentitem_create' obj.pk %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add content</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Required</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for ci in content_items %}
+            <tr>
+              <td>{{ ci.sequence }}</td>
+              <td><a href="{% url 'hrm:learningcontentitem_detail' ci.pk %}" class="fw-600">{{ ci.title }}</a></td>
+              <td>
+                {% if ci.content_type == 'assessment' %}<span class="badge badge-green">{{ ci.get_content_type_display }}</span>
+                {% elif ci.content_type == 'video' %}<span class="badge badge-info">{{ ci.get_content_type_display }}</span>
+                {% elif ci.content_type == 'scorm' %}<span class="badge badge-amber">{{ ci.get_content_type_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ ci.get_content_type_display }}</span>{% endif %}
+              </td>
+              <td>{% if ci.is_required %}<span class="badge badge-green">Required</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:learningcontentitem_detail' ci.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:learningcontentitem_edit' ci.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="book-open"></i><h3>No content yet</h3><p>Add self-paced lessons (video / document / SCORM / link / text / assessment) to this course.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <a href="{% url 'hrm:trainingcourse_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to catalog</a>
 {% endblock %}
