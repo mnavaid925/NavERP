@@ -1494,5 +1494,35 @@ what's reused / explicitly deferred to 3.24).
   - **Training Budget** — budget allocation/utilization rollups (aggregates `TrainingSession
     .actual_cost` from 3.22, not anything in 3.23).
 
-## Review notes
-(filled in at the end)
+## Review notes (3.23 — as-built)
+
+Built exactly the 4-model scope: `LearningContentItem` (CASCADE child of `TrainingCourse`), `LearningPath` (LNP-) +
+`LearningPathItem`, `LearningProgress` (unique per employee×course), all extending the 3.22 catalog. Full CRUD +
+nested-create children (content under a course, items under a path), a computed `learning_leaderboard` +
+`learning_team_progress` rollup, `LIVE_LINKS["3.23"]` (5 bullets, Assessments = `?content_type=assessment` slice),
+`_seed_lms` (6 content + 2 paths + 4 path-courses + 5 progress/tenant, idempotent), migration 0039, and a
+`trainingcourse_detail` cross-touch. Verified: `manage.py check` clean, seeder idempotent, 20-URL smoke sweep
+200/302 + no leaks, cross-tenant IDOR → 404, prerequisite-gating + dual duplicate-guards + ProtectedError delete.
+
+**Two bugs caught by my own smoke sweep BEFORE the review agents:** (1) `learningpath_list` ordered `Designation` by
+a non-existent `title` field (it's `name`) → 500; (2) the `LearningProgressForm` uniqueness guard didn't fire —
+Django's `validate_unique()` SKIPS a `unique_together` involving the form-excluded `tenant` field, so `instance.tenant`
+alone can't help; replaced with an explicit `clean()` duplicate check.
+
+**Module Creation Sequence — all 7 review agents run in order, findings applied & committed:**
+- **code-reviewer** — 1 Critical: `LearningPathItemForm` had the SAME missing duplicate-guard (L28 sibling of the
+  LearningProgressForm bug) → re-adding a course to a path 500'd; fixed with a `clean()` guard. + Important: generalized
+  the `trainingcourse_delete` ProtectedError message (3.23 added 2 new PROTECT refs). + Minor: content-form edit
+  breadcrumb `{% elif obj %}` fallback.
+- **explorer** — wiring fully consistent, no changes.
+- **frontend-reviewer** — 2 Minor: `team_progress` bare `.stat-grid` (dropped a redundant inline style) + value-before-
+  label stat-card order. No comment leaks, all badge/utility classes real.
+- **performance-reviewer** — 1 Minor: `learningpathitem_detail` select_relates `course__prerequisite_course` (2nd FK
+  hop shown in the template). select_related complete elsewhere; all 8 indexes present; leaderboard = 1 aggregate query.
+- **qa-smoke-tester** — 41 requests all 200/302, no defects, no changes.
+- **security-reviewer** — no Critical/High/Medium; 1 Low doc comment (MEDIA-serving WARNING on the upload cleaners).
+  SCORM confirmed opaque (no extraction code), URLFields reject hostile schemes, CSRF/tenant-isolation clean.
+- **test-writer** — 220 tests (87 model/form + 83 view + 50 security), all green; full HRM suite 4212/4212, no regressions.
+
+Skill `.claude/skills/hrm/SKILL.md` updated (models table, LMS flow, routes, `lms/` templates, seeder, LIVE_LINKS,
+counts 81→85). **3.23 complete; next unbuilt is 3.24 Training Administration.**
