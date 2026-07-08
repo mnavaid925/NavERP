@@ -9597,7 +9597,7 @@ def learningpath_list(request):
                  ("target_designation", "target_designation_id", True),
                  ("target_department", "target_department_id", True)],
         extra_context={
-            "designations": Designation.objects.filter(tenant=request.tenant).order_by("title"),
+            "designations": Designation.objects.filter(tenant=request.tenant).order_by("name"),
             "departments": OrgUnit.objects.filter(tenant=request.tenant, kind="department").order_by("name"),
         },
     )
