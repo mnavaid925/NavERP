@@ -1619,3 +1619,49 @@ def coaching_note_b(db, tenant_b, employee_b):
         note_date=datetime.date(2026, 7, 5), category="other", content="Note B",
     )
 
+
+# ------------------------------------------------------------------ 3.22 Training Management fixtures
+@pytest.fixture
+def training_course_a(db, tenant_a):
+    """A classroom, non-certification TrainingCourse for tenant_a — "Advanced Python"."""
+    from apps.hrm.models import TrainingCourse
+    return TrainingCourse.objects.create(
+        tenant=tenant_a, title="Advanced Python", category="technical",
+        delivery_mode="classroom", duration_hours=Decimal("16"), default_capacity=20,
+    )
+
+
+@pytest.fixture
+def training_course_b(db, tenant_b):
+    """A TrainingCourse belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingCourse
+    return TrainingCourse.objects.create(
+        tenant=tenant_b, title="Advanced Python B", category="technical",
+        delivery_mode="classroom", duration_hours=Decimal("8"),
+    )
+
+
+@pytest.fixture
+def training_session_a(db, tenant_a, training_course_a, employee_a):
+    """A scheduled classroom TrainingSession for tenant_a — 2026-07-20 09:00-17:00, Room 101,
+    instructor=employee_a."""
+    from apps.hrm.models import TrainingSession
+    return TrainingSession.objects.create(
+        tenant=tenant_a, course=training_course_a, delivery_mode="classroom", status="scheduled",
+        start_datetime=datetime.datetime(2026, 7, 20, 9, 0, tzinfo=datetime.timezone.utc),
+        end_datetime=datetime.datetime(2026, 7, 20, 17, 0, tzinfo=datetime.timezone.utc),
+        venue_name="Room 101", instructor_employee=employee_a, capacity=20,
+    )
+
+
+@pytest.fixture
+def training_session_b(db, tenant_b, training_course_b, employee_b):
+    """A scheduled classroom TrainingSession belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingSession
+    return TrainingSession.objects.create(
+        tenant=tenant_b, course=training_course_b, delivery_mode="classroom", status="scheduled",
+        start_datetime=datetime.datetime(2026, 7, 20, 9, 0, tzinfo=datetime.timezone.utc),
+        end_datetime=datetime.datetime(2026, 7, 20, 17, 0, tzinfo=datetime.timezone.utc),
+        venue_name="Room B", instructor_employee=employee_b, capacity=15,
+    )
+
