@@ -932,3 +932,567 @@ cross-tenant IDOR → 404, overlap `clean()` guard + `ProtectedError` course-del
 
 Skill `.claude/skills/hrm/SKILL.md` updated (models table, flow, routes, `training/` templates, seeder,
 LIVE_LINKS, counts 79→81). **3.22 complete; next unbuilt is 3.23 Learning Management (LMS).**
+
+---
+# Module 3 — HRM — Sub-module 3.23 Learning Management (LMS) (hrm-3.23-learning-management) — plan from research-hrm-3.23-learning-management.md (2026-07-09)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.22) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries, next migration is `0039`.** This pass covers ONLY the 5
+NavERP.md 3.23 bullets (Course Content / Learning Paths / Assessments / Gamification / Progress
+Tracking) — the self-paced digital-learning layer that hangs off the already-built 3.22
+`hrm.TrainingCourse` catalog. Sibling sub-module **3.24 Training Administration**
+(nomination/attendance/feedback/certificates/budget) is explicitly OUT of scope this pass, as is a
+real question-bank assessment engine, SCORM runtime/xAPI, and an achievement-badge catalog — see
+Later passes / deferred.
+
+Reuses (never duplicates): `hrm.TrainingCourse` (TRC-, 3.22 — `is_certification`,
+`certification_validity_months`, `prerequisite_course` self-FK already modeled, reused not
+re-added), `hrm.EmployeeProfile` (the learner — no new learner table), `hrm.Designation` (3.2, path
+role-targeting), `core.OrgUnit` filtered `kind="department"` (3.2's real department master — HRM's
+`DepartmentProfile` is a 1:1 companion profile on `OrgUnit`, **not** a standalone department model;
+confirmed via grep of `apps/hrm/models.py`/`apps/core/models.py` — `Designation.department` already
+FKs `core.OrgUnit` the same way). No new core-spine entity; nothing posts to the GL. Ordinary
+tenant-scoped CRUD — no confidentiality gating (same openness level as 3.22).
+
+## Models (from research)
+
+- [ ] **`LearningContentItem`** [no number prefix — `TenantOwned` child of `TrainingCourse`, same
+  child shape as `hrm.ClearanceItem`] — covers **Course Content** + the light **Assessments**
+  variant.
+  - `course` — FK `hrm.TrainingCourse`, `on_delete=CASCADE`, `related_name="content_items"` (a
+    course's lessons die with the course — mirrors `ClearanceItem.case` CASCADE, unlike
+    `TrainingSession.course`/`LearningPathItem.course`/`LearningProgress.course` which are PROTECT
+    catalog references, not ownership)
+  - `title` (CharField, max_length=255), `description` (TextField, blank)
+  - `content_type` — CharField choices, max_length=15, default `"video"`: `video` / `document` /
+    `scorm` / `external_link` / `text` / `assessment` (driver: multi-format content items — Docebo,
+    TalentLMS, SAP SuccessFactors, SAP Litmos, iSpring Learn)
+  - `sequence` — PositiveIntegerField, default 0 (driver: ordered lessons — Docebo, iSpring Learn)
+  - `is_required` — BooleanField, default True (driver: mandatory vs. optional content — Absorb LMS,
+    Cornerstone)
+  - `estimated_duration_minutes` — PositiveIntegerField, null/blank
+  - Content fields (only the one matching `content_type` is expected filled, enforced in `clean()`):
+    `video_url` (URLField, blank), `document_file` (FileField, `upload_to="hrm/lms/documents/%Y/%m/"`,
+    blank), `scorm_package` (FileField, `upload_to="hrm/lms/scorm/%Y/%m/"`, blank), `external_url`
+    (URLField, blank), `body_text` (TextField, blank) (driver: SCORM package storage — Docebo, SAP
+    SuccessFactors, LearnUpon, SAP Litmos)
+  - Assessment-only fields (used when `content_type="assessment"`): `pass_threshold_percent`
+    (PositiveIntegerField, default 70, `MinValueValidator(0)`/`MaxValueValidator(100)`),
+    `max_attempts` (PositiveIntegerField, default 1, `MinValueValidator(1)`), `time_limit_minutes`
+    (PositiveIntegerField, null/blank) (driver: pass threshold + max attempts + time-limited tests —
+    Absorb LMS, LearnUpon, SAP SuccessFactors) — **no question-bank sub-table this pass**, score/pass
+    are recorded outcomes on `LearningProgress`
+  - `Meta.ordering = ["course", "sequence"]`; indexes `(tenant, course)` (`hrm_lci_tenant_course_idx`),
+    `(tenant, content_type)` (`hrm_lci_tenant_ctype_idx`)
+  - `clean()`: `content_type="video"` requires non-blank `video_url`; `"document"` requires
+    `document_file`; `"scorm"` requires `scorm_package`; `"external_link"` requires non-blank
+    `external_url`; `"text"` requires non-blank `body_text`; `"assessment"` has NO required content
+    field (score/attempts fields carry the meaning instead) — this only enforces the ONE
+    type-matching field is present, it never force-blanks the others (an assessment may still carry
+    `body_text` instructions, for example)
+  - `__str__`: `f"{self.course.title} · {self.sequence}. {self.title}"` if `course_id` else
+    `self.title`
+  - Reuses: `hrm.TrainingCourse` only — a new HRM-owned child table (no core-spine change).
+
+- [ ] **`LearningPath`** [`LNP-`, `TenantNumbered`] — covers **Learning Paths** header.
+  - `title` (CharField, max_length=255), `description` (TextField, blank)
+  - `target_designation` — FK `hrm.Designation`, `on_delete=SET_NULL`, null/blank,
+    `related_name="learning_paths"` (driver: role/job-based targeting — Cornerstone, iSpring Learn —
+    reuses the existing 3.2 master, no new "Role" table)
+  - `target_department` — FK `core.OrgUnit`, `on_delete=SET_NULL`, null/blank,
+    `related_name="learning_paths"`, `limit_choices_to={"kind": "department"}` (mirrors
+    `DepartmentProfile.cost_center`'s `limit_choices_to` pattern so the dropdown only offers
+    department-kind org nodes, not company/branch/cost-center ones) (driver: org-branch targeting —
+    Docebo)
+  - `is_mandatory` — BooleanField, default False (driver: compliance-style path vs. optional
+    development path)
+  - `is_active` — BooleanField, default True
+  - `Meta.ordering = ["title"]`; `unique_together = ("tenant", "number")`; indexes `(tenant,
+    is_active)` (`hrm_lnp_tenant_active_idx`), `(tenant, is_mandatory)`
+    (`hrm_lnp_tenant_mandatory_idx`)
+  - `__str__`: `f"{self.number} · {self.title}"`
+  - Reuses: `hrm.Designation`, `core.OrgUnit` — no new "Role"/"Department" table.
+
+- [ ] **`LearningPathItem`** [no number prefix — `TenantOwned` child of `LearningPath`, same child
+  pattern as `hrm.ClearanceItem`] — covers **Learning Paths** ordered content.
+  - `path` — FK `LearningPath`, `on_delete=CASCADE`, `related_name="items"`
+  - `course` — FK `hrm.TrainingCourse`, `on_delete=PROTECT`, `related_name="path_items"` (a course
+    referenced by a path can't be deleted out from under it — mirrors `TrainingSession.course`)
+  - `sequence` — PositiveIntegerField, default 0 (driver: ordered completion sequence — SAP Litmos,
+    LearnUpon, Moodle Workplace Programs)
+  - `is_mandatory` — BooleanField, default True (path-level override of the course's own
+    `is_required`-style intent)
+  - `Meta.ordering = ["path", "sequence"]`; `unique_together = ("tenant", "path", "course")`; indexes
+    `(tenant, path)` (`hrm_lpi_tenant_path_idx`), `(tenant, course)` (`hrm_lpi_tenant_course_idx`)
+  - `clean()` — **prerequisite gating** (driver: research feature #43 — reuses
+    `TrainingCourse.prerequisite_course` rather than a new rule field): if `self.course.
+    prerequisite_course_id` is set AND that prerequisite course is *also* a `LearningPathItem` in
+    the same `path` (excluding `self.pk`), that prerequisite item's `sequence` must be `<
+    self.sequence` — else raise on `sequence` ("This course's prerequisite must appear earlier in
+    the path."). If the prerequisite course is NOT in this path, no error (it's assumed satisfied
+    elsewhere) — a light-touch guard, not a hard requirement that every prerequisite be enrolled.
+  - `__str__`: `f"{self.path.title} · {self.sequence}. {self.course.title}"`
+  - Reuses: `LearningPath`, `hrm.TrainingCourse` — no new rule-engine table.
+
+- [ ] **`LearningProgress`** [no number prefix — `TenantOwned`, unique per employee×course] — covers
+  **Progress Tracking**, assessment *outcomes*, and lightweight **Gamification**.
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=CASCADE`, `related_name="learning_progress"`
+    (mirrors the `LeaveRequest`/`Timesheet`/`AttendanceRecord` house style: a per-employee tracking
+    row dies with the employee profile)
+  - `course` — FK `hrm.TrainingCourse`, `on_delete=PROTECT`, `related_name="learner_progress"`
+    (mirrors `TrainingSession.course`/`LearningPathItem.course` — a course with recorded progress
+    can't vanish silently; NOTE `trainingcourse_delete`'s existing generic `ProtectedError` catch,
+    built in 3.22 for `TrainingSession.course`, already covers this and `LearningPathItem.course`
+    too — Django's `ProtectedError` aggregates every protecting relation across the whole delete
+    collector, so no additional catch code is needed there)
+  - `learning_path` — FK `LearningPath`, `on_delete=SET_NULL`, null/blank, `related_name="progress_
+    records"` ("enrolled via this path", if applicable)
+  - `status` — CharField choices, max_length=15, default `"not_started"`: `not_started` /
+    `in_progress` / `completed` / `failed` / `expired` (all 11 surveyed products)
+  - `percent_complete` — PositiveIntegerField, default 0, `MinValueValidator(0)`/
+    `MaxValueValidator(100)` (Docebo, SAP Litmos, Moodle Workplace)
+  - `time_spent_minutes` — PositiveIntegerField, default 0 (SAP SuccessFactors)
+  - `score` — DecimalField(max_digits=5, decimal_places=2), null/blank; `passed` — BooleanField,
+    null/blank (Absorb LMS/LearnUpon auto-grading pattern — recorded outcome, not question-bank
+    computed, this pass)
+  - `attempt_count` — PositiveIntegerField, default 0 (respects the content item's `max_attempts`,
+    not DB-enforced this pass — a UI/process convention)
+  - `points_earned` — PositiveIntegerField, default 0 (TalentLMS/Absorb LMS/iSpring Learn/Adobe
+    Learning Manager gamification points; **leaderboard + level tier are computed queries/properties
+    over this field — no new table**)
+  - `started_at`, `completed_at` — DateTimeField, null/blank
+  - `Meta.ordering = ["-updated_at"]`; `unique_together = ("tenant", "employee", "course")`; indexes
+    `(tenant, employee)` (`hrm_lprog_tenant_emp_idx`), `(tenant, course)`
+    (`hrm_lprog_tenant_course_idx`), `(tenant, status)` (`hrm_lprog_tenant_status_idx`)
+  - `clean()`: `completed_at` (if set) must be `>= started_at` (if set) — else raise on
+    `completed_at`
+  - `@property certification_expires_on` — derived, **never stored**: `None` unless `completed_at`
+    is set AND `course.is_certification` AND `course.certification_validity_months`; otherwise
+    `completed_at.date()` advanced by `certification_validity_months` using plain stdlib month-math
+    (`calendar.monthrange` for day clamping) — **no `dateutil` dependency added**
+  - `@property is_certification_expired` — derived: `certification_expires_on` is not None and is in
+    the past (`< timezone.now().date()`)
+  - `__str__`: `f"{self.employee} · {self.course.title} ({self.get_status_display()})"`
+  - Reuses: `hrm.EmployeeProfile`, `hrm.TrainingCourse`, `LearningPath` — no new learner/course table.
+
+All four models are children of / satellites around the existing `hrm.TrainingCourse` catalog — add
+after the existing `TrainingSession` class (current end of file, line ~6047 in `apps/hrm/models.py`)
+with a `# ---... 3.23 Learning Management (LMS) ...` section-header comment block (mirrors the
+3.18–3.22 preamble style: states this BUILDS ON 3.22's catalog rather than re-creating one, and lists
+what's reused / explicitly deferred to 3.24).
+
+## Backend (apps/hrm/)
+
+- [ ] **models.py** — add `LearningContentItem`, `LearningPath`, `LearningPathItem`,
+  `LearningProgress` at the end of the file. `LearningPath.NUMBER_PREFIX = "LNP"`; the other three
+  models extend `TenantOwned` (no `NUMBER_PREFIX`, no `number` field).
+- [ ] **forms.py**:
+  - `LearningContentItemForm` (`TenantModelForm`; excludes `tenant`, `course` — `course` is set from
+    the URL in the nested create view, mirrors `PIPCheckInForm` excluding `pip`; fields: `title`,
+    `description`, `content_type`, `sequence`, `is_required`, `estimated_duration_minutes`,
+    `video_url`, `document_file`, `scorm_package`, `external_url`, `body_text`,
+    `pass_threshold_percent`, `max_attempts`, `time_limit_minutes`). Add module constants
+    `ALLOWED_SCORM_EXTENSIONS = {".zip"}` / `MAX_SCORM_BYTES = 50 * 1024 * 1024` (50 MB) next to the
+    existing `ALLOWED_ONBOARDING_DOC_EXTENSIONS`/`MAX_ONBOARDING_DOC_BYTES` (10 MB, reused as-is for
+    `document_file`). `clean_scorm_package()` (extension + size guard, mirrors `clean_photo`/
+    `EmployeeDocumentForm.clean_file`) and `clean_document_file()` (reuses
+    `ALLOWED_ONBOARDING_DOC_EXTENSIONS`/`MAX_ONBOARDING_DOC_BYTES`). **WARNING (carry the research
+    file's flag into the code comment):** this pass stores the SCORM zip as an opaque file only — it
+    is never extracted. Any FUTURE SCORM-extraction handler MUST validate archive member paths
+    (zip-slip / path-traversal guard, reject `../` and absolute paths) before writing extracted
+    files to disk — do not trust package internals.
+  - `LearningPathForm` (`TenantModelForm`; excludes `tenant`, `number`; fields: `title`,
+    `description`, `target_designation`, `target_department`, `is_mandatory`, `is_active`;
+    `target_designation`/`target_department` auto-scoped to `tenant` by the `TenantModelForm` base +
+    `limit_choices_to` narrows `target_department` to `kind="department"` at the model-field level,
+    no extra `__init__` override needed).
+  - `LearningPathItemForm` (`TenantModelForm`; excludes `tenant`, `path` — set from the URL in the
+    nested create view; fields: `course`, `sequence`, `is_mandatory`; `__init__` scopes `course` to
+    `TrainingCourse.objects.filter(tenant=self.tenant, is_active=True)`).
+  - `LearningProgressForm` (`TenantModelForm`; excludes `tenant`; fields: `employee`, `course`,
+    `learning_path`, `status`, `percent_complete`, `time_spent_minutes`, `score`, `passed`,
+    `attempt_count`, `points_earned`, `started_at`, `completed_at`).
+    **CRITICAL — proactively apply the 3.22 code-reviewer fix, don't wait to rediscover it:**
+    `learningprogress_create`/`_edit` are FLAT (not URL-nested), so if built on the generic
+    `crud_create` helper the tenant is only set on `obj` AFTER `form.is_valid()` — but Django's
+    `ModelForm._post_clean()` calls `instance.validate_unique()` *during* `is_valid()`, so the
+    `("tenant","employee","course")` `unique_together` check would silently run against
+    `tenant_id=None` and never catch a real duplicate. Fix at the form level exactly like
+    `TrainingSessionForm`'s create-path fix: `LearningProgressForm.__init__` must set
+    `self.instance.tenant = self.tenant` when `self.instance.tenant_id` is None and `self.tenant` is
+    set, so `validate_unique()` runs against the real tenant even on the create path. Regression-pin
+    this in `test-writer`'s output (duplicate employee+course via the CREATE view, not just the ORM,
+    must be rejected).
+- [ ] **views.py** — function-based, `@login_required`, tenant-scoped throughout (ordinary CRUD, no
+  confidentiality gating):
+  - `learningcontentitem_create(request, course_pk)` — **nested**, mirrors `pipcheckin_create`:
+    `course = get_object_or_404(TrainingCourse, pk=course_pk, tenant=request.tenant)`; builds the
+    form with `instance=LearningContentItem(tenant=request.tenant, course=course)` (tenant set
+    BEFORE validation — sidesteps the `crud_create` gotcha entirely for this model); on success
+    `write_audit_log` + redirect to `hrm:trainingcourse_detail` (pk=course.pk) so the new lesson
+    shows immediately in the course's content list.
+  - `learningcontentitem_list` — `crud_list`, `search_fields=["title", "description",
+    "course__title"]`, `filters=[("content_type", "content_type", False), ("course", "course_id",
+    True), ("is_required", "is_required", False)]`, `extra_context={"content_type_choices":
+    LearningContentItem.CONTENT_TYPE_CHOICES, "courses": TrainingCourse.objects.filter(tenant=
+    request.tenant).order_by("title")}`.
+  - `learningcontentitem_detail` — `crud_detail`, `select_related=("course",)`.
+  - `learningcontentitem_edit` — `crud_edit`, `success_url="hrm:learningcontentitem_list"`.
+  - `learningcontentitem_delete` — manual (mirrors `clearanceitem_delete`'s parent-redirect style):
+    capture `course_id` before delete, `write_audit_log`, delete, `messages.success`, redirect to
+    `hrm:learningcontentitem_list`.
+  - `learningpath_list` — `crud_list`, `search_fields=["number", "title", "description"]`,
+    `filters=[("is_mandatory", "is_mandatory", False), ("is_active", "is_active", False),
+    ("target_designation", "target_designation_id", True), ("target_department",
+    "target_department_id", True)]`, `extra_context={"designations": ..., "departments":
+    OrgUnit.objects.filter(tenant=request.tenant, kind="department").order_by("name")}`.
+  - `learningpath_create` — `crud_create`, `success_url="hrm:learningpath_list"`.
+  - `learningpath_detail` — `crud_detail` with `prefetch_related` on `items__course`, ordered by
+    `sequence`; passes the ordered `items` + a nested "Add course to this path" link.
+  - `learningpath_edit` — `crud_edit`, `success_url="hrm:learningpath_list"`.
+  - `learningpath_delete` — `crud_delete`, `success_url="hrm:learningpath_list"` (note:
+    `LearningPathItem.path` is CASCADE, so deleting a path cascades its items — no `ProtectedError`
+    concern here, unlike `TrainingCourse` delete).
+  - `learningpathitem_create(request, path_pk)` — **nested**, same manual-instance pattern as
+    `learningcontentitem_create`: `instance=LearningPathItem(tenant=request.tenant, path=path)`;
+    redirect to `hrm:learningpath_detail` (pk=path.pk) on success.
+  - `learningpathitem_list` — `crud_list`, `search_fields=["path__title", "course__title"]`,
+    `filters=[("path", "path_id", True), ("course", "course_id", True), ("is_mandatory",
+    "is_mandatory", False)]`, `extra_context={"paths": ..., "courses": ...}`.
+  - `learningpathitem_detail` — `crud_detail`, `select_related=("path", "course")`.
+  - `learningpathitem_edit` — `crud_edit`, `success_url="hrm:learningpathitem_list"`.
+  - `learningpathitem_delete` — manual, parent-redirect to `hrm:learningpath_detail` (pk=path_id),
+    mirrors `clearanceitem_delete`.
+  - `learningprogress_list` — `crud_list`, `search_fields=["employee__party__name",
+    "course__title"]`, `filters=[("status", "status", False), ("course", "course_id", True),
+    ("employee", "employee_id", True), ("learning_path", "learning_path_id", True)]`,
+    `extra_context={"status_choices": LearningProgress.STATUS_CHOICES, "courses": ..., "employees":
+    ..., "paths": ...}` — **all Filter Implementation Rules apply**: every `*_choices`/queryset the
+    template needs is passed explicitly, FK/pk comparisons use `|stringformat:"d"`.
+  - `learningprogress_create` — `crud_create`, `success_url="hrm:learningprogress_list"`.
+  - `learningprogress_detail` — `crud_detail`, `select_related=("employee__party", "course",
+    "learning_path")`; template surfaces `obj.certification_expires_on`/`obj.is_certification_expired`.
+  - `learningprogress_edit` — `crud_edit`, `success_url="hrm:learningprogress_list"`.
+  - `learningprogress_delete` — `crud_delete`, `success_url="hrm:learningprogress_list"`.
+  - `learning_leaderboard` — standalone `GET`-only query view (covers **Gamification**):
+    `LearningProgress.objects.filter(tenant=request.tenant).values("employee_id",
+    "employee__party__name").annotate(total_points=Sum("points_earned"), courses_completed=Count(
+    "id", filter=Q(status="completed"))).order_by("-total_points")`; a small module-level
+    `_LMS_LEVEL_THRESHOLDS = [(0, "Bronze"), (150, "Silver"), (400, "Gold"), (800, "Platinum")]` +
+    `_lms_level_for_points(points)` helper computes each row's tier (the "Levels" research feature —
+    computed, no new table); passes `leaderboard_rows`.
+  - `learning_team_progress` — standalone `GET`-only manager rollup (covers **Progress Tracking**'s
+    manager dashboard): resolve `_current_employee_profile(request)`; if `None`, `messages.error` +
+    redirect `dashboard:home`; `qs = LearningProgress.objects.filter(tenant=request.tenant).filter(
+    Q(employee=profile) | Q(employee__employment__manager=profile.party)).select_related(
+    "employee__party", "course")` — **exact reuse of the existing manager-rollup filter pattern**
+    already used at `apps/hrm/views.py:7493` for goal ownership; optional `?status=`/`?course=` GET
+    filters; passes `progress_rows` + simple summary counts (total/completed/in_progress).
+  - **Cross-touch (existing 3.22 file):** extend `trainingcourse_detail`'s context with
+    `content_items=obj.content_items.all()` (already `Meta.ordering`-sorted by `sequence`) and a
+    nested "Add content" link to `learningcontentitem_create` (course_pk=obj.pk) — a one-line view
+    change plus a template addition to the ALREADY-BUILT `templates/hrm/training/trainingcourse/
+    detail.html`.
+- [ ] **urls.py** — `app_name = "hrm"` (already set); add under a `# 3.23 Learning Management (LMS)`
+  comment block:
+  ```
+  path("training-courses/<int:course_pk>/content/add/", views.learningcontentitem_create, name="learningcontentitem_create"),
+  path("learning-content/", views.learningcontentitem_list, name="learningcontentitem_list"),
+  path("learning-content/<int:pk>/", views.learningcontentitem_detail, name="learningcontentitem_detail"),
+  path("learning-content/<int:pk>/edit/", views.learningcontentitem_edit, name="learningcontentitem_edit"),
+  path("learning-content/<int:pk>/delete/", views.learningcontentitem_delete, name="learningcontentitem_delete"),
+
+  path("learning-paths/", views.learningpath_list, name="learningpath_list"),
+  path("learning-paths/add/", views.learningpath_create, name="learningpath_create"),
+  path("learning-paths/<int:pk>/", views.learningpath_detail, name="learningpath_detail"),
+  path("learning-paths/<int:pk>/edit/", views.learningpath_edit, name="learningpath_edit"),
+  path("learning-paths/<int:pk>/delete/", views.learningpath_delete, name="learningpath_delete"),
+  path("learning-paths/<int:path_pk>/items/add/", views.learningpathitem_create, name="learningpathitem_create"),
+
+  path("learning-path-items/", views.learningpathitem_list, name="learningpathitem_list"),
+  path("learning-path-items/<int:pk>/", views.learningpathitem_detail, name="learningpathitem_detail"),
+  path("learning-path-items/<int:pk>/edit/", views.learningpathitem_edit, name="learningpathitem_edit"),
+  path("learning-path-items/<int:pk>/delete/", views.learningpathitem_delete, name="learningpathitem_delete"),
+
+  path("learning-progress/", views.learningprogress_list, name="learningprogress_list"),
+  path("learning-progress/add/", views.learningprogress_create, name="learningprogress_create"),
+  path("learning-progress/<int:pk>/", views.learningprogress_detail, name="learningprogress_detail"),
+  path("learning-progress/<int:pk>/edit/", views.learningprogress_edit, name="learningprogress_edit"),
+  path("learning-progress/<int:pk>/delete/", views.learningprogress_delete, name="learningprogress_delete"),
+
+  path("learning-leaderboard/", views.learning_leaderboard, name="learning_leaderboard"),
+  path("learning-team-progress/", views.learning_team_progress, name="learning_team_progress"),
+  ```
+- [ ] **admin.py** — register all four models:
+  - `LearningContentItemAdmin`: `list_display = ("course", "sequence", "title", "content_type",
+    "is_required", "tenant")`; `list_filter = ("tenant", "content_type", "is_required")`;
+    `search_fields = ("title", "course__title")`; `raw_id_fields = ("course",)`; `readonly_fields =
+    ("created_at", "updated_at")`
+  - `LearningPathAdmin`: `list_display = ("number", "title", "target_designation",
+    "target_department", "is_mandatory", "is_active", "tenant")`; `list_filter = ("tenant",
+    "is_mandatory", "is_active")`; `search_fields = ("number", "title")`; `raw_id_fields =
+    ("target_designation", "target_department")`; `readonly_fields = ("number", "created_at",
+    "updated_at")`
+  - `LearningPathItemAdmin`: `list_display = ("path", "sequence", "course", "is_mandatory",
+    "tenant")`; `list_filter = ("tenant", "is_mandatory")`; `search_fields = ("path__title",
+    "course__title")`; `raw_id_fields = ("path", "course")`; `readonly_fields = ("created_at",
+    "updated_at")`
+  - `LearningProgressAdmin`: `list_display = ("employee", "course", "status", "percent_complete",
+    "points_earned", "tenant")`; `list_filter = ("tenant", "status")`; `search_fields = (
+    "employee__party__name", "course__title")`; `raw_id_fields = ("employee", "course",
+    "learning_path")`; `readonly_fields = ("created_at", "updated_at")`
+- [ ] **migrations** — `python manage.py makemigrations hrm` — expect a `0039_...` migration creating
+  all four models (Django's autodetector names it after the model set, e.g.
+  `0039_learningcontentitem_learningpath_learningpathitem_learningprogress.py` or similar — next
+  after the existing `0038_...` perf-index migration).
+- [ ] **seed_hrm.py** — new `_seed_lms(self, tenant, *, flush)` method:
+  - Called from `handle()` immediately after `self._seed_training(tenant, flush=options["flush"])`
+    (the 7th call in the per-tenant loop).
+  - `if flush:` delete in child-first order: `LearningProgress`, `LearningPathItem`, `LearningPath`,
+    `LearningContentItem` — filtered by `tenant`.
+  - Idempotency guard: look up the 3 existing courses by exact title (`TrainingCourse.objects.
+    filter(tenant=tenant, title="Technical Onboarding Bootcamp").first()`, `"Workplace Safety
+    Certification"`, `"Leadership Excellence Program"`) — if any is missing (training not seeded
+    yet, or `_seed_training` skipped for <2 employees), NOTICE + return. Then `if
+    LearningContentItem.objects.filter(tenant=tenant).exists():` -> NOTICE + return (mirrors the
+    existing-data guard style).
+  - Reuse EXISTING `EmployeeProfile` rows (`emps = EmployeeProfile.objects.filter(tenant=tenant)
+    .select_related("party").order_by("party__name")` — need >= 2, ideally >= 3 for a meaningful
+    leaderboard spread; gracefully use fewer if that's all that exists).
+  - Reuse `hrm.Designation.objects.filter(tenant=tenant).first()` and `core.OrgUnit.objects.filter(
+    tenant=tenant, kind="department").first()` (lazy top-level import already present:
+    `from apps.core.models import OrgUnit` — mirror the existing import at
+    `apps/hrm/management/commands/seed_hrm.py:16`) for `LearningPath.target_designation`/
+    `target_department` — create NO new Designation/OrgUnit rows here.
+  - Demo data — `LearningContentItem` (6 rows, deliberately skipping `document`/`scorm` content
+    types since a management command has no real file to attach — a management-command limitation,
+    not a model limitation; note this explicitly in the seeder docstring):
+    - Bootcamp course: `video` "Welcome to Engineering" (seq 1, required, 15 min, `video_url=...`),
+      `external_link` "Read: Company Engineering Handbook" (seq 2, required, 20 min,
+      `external_url=...`), `text` "Team Norms & Communication Guidelines" (seq 3, optional, 10 min,
+      `body_text=...`), `assessment` "Onboarding Knowledge Check" (seq 4, required,
+      `pass_threshold_percent=80`, `max_attempts=2`, `time_limit_minutes=20`).
+    - Safety course: `video` "Workplace Hazards Overview" (seq 1, required, 20 min), `assessment`
+      "Safety Certification Exam" (seq 2, required, `pass_threshold_percent=90`, `max_attempts=1`,
+      `time_limit_minutes=45`).
+  - Demo data — `LearningPath` (2 rows): "New Hire Foundations" (`LNP-00001`,
+    `target_designation`=the reused designation, `target_department`=the reused dept OrgUnit,
+    `is_mandatory=True`) with `LearningPathItem` rows `[bootcamp seq 1 mandatory, safety seq 2
+    mandatory]`; "Engineering Leadership Track" (`LNP-00002`, `is_mandatory=False`) with
+    `LearningPathItem` rows `[bootcamp seq 1 mandatory, leadership seq 2 mandatory]` — this second
+    path deliberately exercises the prerequisite-gating `clean()` guard (leadership's
+    `prerequisite_course=bootcamp`, and bootcamp sits at an earlier `sequence` in the same path, so
+    it validates cleanly).
+  - Demo data — `LearningProgress` (using up to the first 3 employees, fewer if that's all that
+    exists): employee[0] × bootcamp `completed` (100%, score 92, passed, 150 pts, via New Hire
+    Foundations path); employee[0] × safety `completed` (100%, score 95, passed, 200 pts, via New
+    Hire Foundations — exercises `certification_expires_on` against the course's 24-month validity);
+    employee[1] × bootcamp `in_progress` (60%, 60 pts, via New Hire Foundations); employee[1] ×
+    leadership `not_started` (0%, via Engineering Leadership Track); employee[2] × safety `failed`
+    (100% attempted, score 55, not passed, 20 pts) if a 3rd employee exists.
+  - **CRITICAL — Windows cp1252 console bug (repeat of the 3.20/3.21/3.22 bug):** ASCII-only
+    `self.stdout.write(...)` strings (`->` not `→`, plain hyphen not em-dash). Re-read the whole
+    method for stray Unicode before committing.
+  - Update `_seed_tenant`'s big flush-teardown tuple: insert `LearningProgress, LearningPathItem,
+    LearningPath, LearningContentItem,` immediately BEFORE the existing `TrainingSession,
+    TrainingCourse,` line, with a comment: `# 3.23: LearningPathItem.course and LearningProgress
+    .course are PROTECT — wipe before TrainingCourse; LearningContentItem.course is CASCADE
+    (auto-clears with its course); LearningProgress.employee is CASCADE and .learning_path is
+    SET_NULL (both order-agnostic vs EmployeeProfile/LearningPath).`
+  - Both `management/__init__.py` and `management/commands/__init__.py` already exist (no new dirs
+    this pass) — verify, don't recreate.
+
+## Wire-up
+
+- [ ] `config/settings.py` — `apps.hrm` already in `INSTALLED_APPS` (no change needed this pass).
+- [ ] `config/urls.py` — `hrm/` include already wired (no change needed this pass).
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.23"]` — new block mapping the 5 exact NavERP.md 3.23
+  bullets (confirmed verbatim from `NavERP.md` lines 594–599), placed immediately after the existing
+  `"3.22"` block, with a preamble comment noting this sub-module BUILDS ON 3.22's course catalog and
+  that 3.24 Training Administration is a deferred sibling:
+  ```python
+  # 3.23 Learning Management (LMS) — the self-paced digital-learning layer on top of the 3.22
+  # TrainingCourse catalog (no new course table). "Assessments" is a filtered slice of the Course
+  # Content list (content_type=assessment) rather than a dedicated question-bank UI this pass.
+  # "Gamification" is the points leaderboard (levels/leaderboard are computed, not stored). 3.24
+  # Training Administration (nomination/attendance/feedback/certificates/budget) is a deferred
+  # sibling sub-module, not built here.
+  "3.23": {
+      "Course Content": "hrm:learningcontentitem_list",                                # bullet (LearningContentItem CRUD)
+      "Learning Paths": "hrm:learningpath_list",                                       # bullet (LearningPath CRUD)
+      "Assessments": "hrm:learningcontentitem_list?content_type=assessment",           # bullet (assessment-type slice)
+      "Gamification": "hrm:learning_leaderboard",                                      # bullet (computed points leaderboard)
+      "Progress Tracking": "hrm:learningprogress_list",                                # bullet (LearningProgress CRUD)
+  },
+  ```
+
+## Templates (templates/hrm/lms/)
+
+- [ ] **New sub-module folder `lms/`** (per the Template Folder Structure rule — 3.23 is a distinct
+  NavERP.md sub-module from `training/`), with one entity folder per model:
+- [ ] `templates/hrm/lms/learningcontentitem/list.html` — filter bar (`content_type`, `course`,
+  `is_required` dropdowns reflecting `request.GET`; FK/pk comparison via `|stringformat:"d"`),
+  Actions column (view/edit/delete-POST+confirm+csrf), pagination, empty-state.
+- [ ] `templates/hrm/lms/learningcontentitem/detail.html` — course link, content_type badge, the
+  ONE populated content field rendered conditionally on `content_type` (video embed/link, document
+  download link, SCORM package download link + a note that it's storage-only this pass, external
+  link, or the text body), assessment fields block conditional on `content_type == "assessment"`,
+  Actions sidebar (Edit, Delete, Back to course).
+- [ ] `templates/hrm/lms/learningcontentitem/form.html` — create/edit (shared, `is_edit` flag); JS
+  toggling which content-field group is visible based on the `content_type` select (progressive
+  disclosure, mirrors `trainingsession/form.html`'s delivery_mode toggling — all fields still
+  server-validated regardless of JS state).
+- [ ] `templates/hrm/lms/learningpath/list.html` — filter bar (`is_mandatory`, `is_active`,
+  `target_designation`, `target_department`), Actions column.
+- [ ] `templates/hrm/lms/learningpath/detail.html` — path header fields, ordered `items` sub-list
+  (course title, sequence, mandatory badge) with a nested "Add course to this path" link, Actions
+  sidebar.
+- [ ] `templates/hrm/lms/learningpath/form.html` — create/edit.
+- [ ] `templates/hrm/lms/learningpathitem/list.html` — filter bar (`path`, `course`, `is_mandatory`),
+  Actions column.
+- [ ] `templates/hrm/lms/learningpathitem/detail.html` — path + course links, sequence, mandatory
+  flag, Actions sidebar (Back to path).
+- [ ] `templates/hrm/lms/learningpathitem/form.html` — nested create/edit (`path` shown read-only as
+  context, not a field, on the create form).
+- [ ] `templates/hrm/lms/learningprogress/list.html` — filter bar (`status`, `course`, `employee`,
+  `learning_path`), Actions column, status badges (not_started/in_progress/completed/failed/expired
+  matching the model's exact CHOICES values).
+- [ ] `templates/hrm/lms/learningprogress/detail.html` — employee/course/path links, percent-complete
+  progress bar, score/passed, `certification_expires_on`/`is_certification_expired` block shown only
+  when the course `is_certification`, Actions sidebar.
+- [ ] `templates/hrm/lms/learningprogress/form.html` — create/edit.
+- [ ] `templates/hrm/lms/leaderboard.html` — standalone page (sub-module-root, NO entity folder, per
+  Template Folder Structure rule §6), ranked table (`leaderboard_rows`: rank, employee, total_points,
+  courses_completed, level-tier badge), empty-state when no progress rows exist yet.
+- [ ] `templates/hrm/lms/team_progress.html` — standalone manager-rollup page (`progress_rows` +
+  summary counts), filter bar (`status`, `course`), empty-state for a non-manager (message: "You have
+  no direct reports.") vs. an empty team (message: "Your team has no learning activity yet.").
+- [ ] **Cross-touch:** `templates/hrm/training/trainingcourse/detail.html` (existing 3.22 file) — add
+  a "Course Content" section rendering `content_items` (title/content_type badge/sequence/required
+  flag) + an "Add content" link to the nested create route.
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` — expect a new `0039_...` migration; review the generated
+  file before applying.
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` — run twice; second run must be a no-op (NOTICE message, zero new
+  rows) proving idempotency.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep — all `hrm:learningcontentitem_*`, `hrm:learningpath_*`,
+  `hrm:learningpathitem_*`, `hrm:learningprogress_*`, `hrm:learning_leaderboard`,
+  `hrm:learning_team_progress` URLs return 200/302 (never 500); no `{#`/`{% comment` template-comment
+  leaks in rendered output; cross-tenant IDOR check (a tenant-B admin hitting a tenant-A
+  `LearningContentItem`/`LearningPath`/`LearningPathItem`/`LearningProgress` pk returns 404, not the
+  object — INCLUDING the nested create routes: `training-courses/<tenant-A course pk>/content/add/`
+  and `learning-paths/<tenant-A path pk>/items/add/` hit as tenant B must 404, not silently create a
+  cross-tenant-linked row); explicit `LearningPathItem` prerequisite-gating check (adding leadership
+  before bootcamp in the same path, at an earlier sequence, must be rejected by `clean()`; adding it
+  after must succeed); explicit `LearningProgress` duplicate check via the CREATE VIEW (not just the
+  ORM) — submitting a second employee+course pair through `learningprogress_create` must show a form
+  validation error, not silently create a duplicate row (the exact regression class the 3.22
+  code-reviewer caught on `TrainingSessionForm`); file-upload guard checks (oversized/wrong-extension
+  `document_file`/`scorm_package` rejected with a form error, not a 500).
+- [ ] Sidebar shows all 5 new 3.23 sub-module bullets as **Live** (Course Content, Learning Paths,
+  Assessments, Gamification, Progress Tracking) — confirm via the rendered sidebar, not just the
+  `LIVE_LINKS` dict.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per
+  commit, no `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` ->
+  `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to double-check the `LearningProgressForm` tenant-pre-validation fix was
+    actually applied (see the forms.py note above) rather than re-discovering the 3.22 bug fresh.
+  - Expect `performance-reviewer` to check `learningcontentitem_list`/`learningpath_detail`/
+    `learning_leaderboard`/`learning_team_progress` for N+1s (select_related on `course`,
+    `employee__party`, `learning_path`; prefetch on `path.items.select_related("course")`; the
+    leaderboard's `.values().annotate()` should not additionally N+1 per row when the template
+    renders employee names).
+  - Expect `security-reviewer` to confirm: tenant scoping on the two nested-create routes
+    (`course_pk`/`path_pk` looked up with `tenant=request.tenant`, never a bare `get_object_or_404`
+    without the tenant filter); the SCORM/document upload extension+size guards are present and the
+    zip-slip WARNING comment is in place for future extraction work; no `|safe` on any
+    user-supplied text field (`description`, `body_text`, notes-like fields).
+  - Expect `test-writer` to cover: full CRUD round-trips × 4 models (incl. the two nested-create
+    routes); the `LearningContentItem.clean()` content-type/field-match guard (one positive + one
+    mismatched-field-negative case per `content_type`); the `LearningPathItem.clean()`
+    prerequisite-gating guard (both the rejecting out-of-order case and the accepting in-order case,
+    AND the case where the prerequisite isn't in the path at all — must not error); the
+    `LearningPathItem`/`LearningProgress` `unique_together` guards, WITH the `LearningProgress`
+    create-path regression pin (form sets `instance.tenant` pre-validation); `certification_expires_
+    on`/`is_certification_expired` at exact boundary dates (day before/after expiry, and `None` when
+    the course isn't a certification or `completed_at` is unset); the leaderboard's points ordering
+    + level-tier thresholds; `learning_team_progress`'s manager-scoping (a manager sees only self +
+    direct reports, never the whole tenant; a non-manager sees only their own row(s)); the file
+    upload extension/size `clean_*` guards.
+- [ ] Update `.claude/skills/hrm/SKILL.md`:
+  - Add a `### 3.23 Learning Management (LMS) (4 tables)` section (mirrors the existing per-sub-module
+    section format) with the model table (fields, FK targets incl. the `core.OrgUnit`
+    `kind="department"` reuse and the `hrm.TrainingCourse.prerequisite_course` gating reuse), the
+    nested-create routes, and the SCORM-is-storage-only + zip-slip WARNING note.
+  - Bump the frontmatter/overview "built" sub-module list to include 3.23 and note it BUILDS ON 3.22
+    (not a new course table); 3.24 Training Administration remains a deferred sibling.
+  - Add a "Learning Management (3.23)" routes-list section (`hrm:learningcontentitem_*`,
+    `hrm:learningpath_*`, `hrm:learningpathitem_*`, `hrm:learningprogress_*`,
+    `hrm:learning_leaderboard`, `hrm:learning_team_progress`).
+  - Update the seeder section: document `_seed_lms(tenant)`, its own-exists guard (+ the "training
+    must already be seeded" dependency), what it creates, and that it runs LAST (after
+    `_seed_training`).
+  - Update the `LIVE_LINKS` section: "3.23: Course Content -> `hrm:learningcontentitem_list`;
+    Learning Paths -> `hrm:learningpath_list`; Assessments -> filtered `hrm:learningcontentitem_list`
+    slice; Gamification -> `hrm:learning_leaderboard`; Progress Tracking ->
+    `hrm:learningprogress_list`. All 5 NavERP.md 3.23 bullets are now live."
+  - Update the "Deferred" section to add 3.23's own carried-forward deferrals (see below) alongside
+    the existing 3.24 placeholder line.
+  - Commit the SKILL.md update as its own file, per the one-file-per-commit rule.
+- [ ] README (if the project keeps a root test-count/module-count summary) — refresh HRM test counts
+  after `test-writer` runs, same pattern as the 3.20/3.21/3.22 README refresh commits.
+
+## Later passes / deferred (carried over from research-hrm-3.23-learning-management.md)
+
+- **Question-bank assessment authoring** (Question, Choice, per-attempt Answer tables, multiple
+  question types, AI-suggested questions) — this pass ships pass/fail + score as recorded outcomes
+  only, no authored question bank. (TalentLMS, Absorb LMS, LearnUpon, 360Learning)
+- **SCORM runtime / xAPI LRS integration** — the JS SCORM API handshake and a proper Learning Record
+  Store for xAPI statements are specialized runtime services; this pass stores the SCORM package
+  file + metadata only. **Vulnerability note carried forward:** any future SCORM upload/extraction
+  handler MUST validate archive contents (zip-slip / path-traversal guard) before writing extracted
+  files to disk. (Docebo, SAP SuccessFactors, LearnUpon, Adobe Learning Manager)
+- **AICC support** — legacy content-packaging standard; low priority, mostly-enterprise ask.
+- **Achievement badge catalog + award table** — a real LMS badge system (icon, criteria, award log)
+  distinct from HRM 3.20's `KudosBadge` (peer recognition); would be a 5th/6th model, dropped from
+  this pass's budget. (TalentLMS, Absorb LMS, iSpring Learn, Adobe Learning Manager)
+- **Flexible completion rules for path sub-groups** ("all in order" / "all in any order" / "at least
+  N of M") — this pass ships a single strict sequence + light prerequisite gating; a full rule engine
+  is deferred. (Moodle Workplace Programs)
+- **Adaptive/conditional ("if/then") learning journeys** and **dynamic auto-enrollment rules** (by
+  job role, hire date, location) — needs a rules/automation engine layered on `LearningPath`.
+  (Cornerstone, LearnUpon, 360Learning, Moodle Workplace)
+- **Path-level certificate issuance** (the PDF/print artifact + issuance record) — this pass only
+  computes *eligibility* via `LearningProgress`/`TrainingCourse.is_certification`; issuance mechanics
+  belong to 3.24 Certificates. (LearnUpon, Moodle Workplace, SAP Litmos)
+- **Content-provider marketplace / licensed course library** — a commercial content-licensing
+  integration, not a data-model concern. (Docebo, SAP Litmos)
+- **AI content/quiz generation** — external AI service integration. (360Learning, TalentLMS, Docebo)
+- **Challenge mode / peer competitions** and **redeemable rewards for points** — differentiator
+  gamification mechanics beyond points+leaderboard+levels; likely never needed for an internal ERP
+  LMS. (360Learning, TalentLMS)
+- **Predictive analytics / org-wide skill-gap dashboards** — a reporting-layer feature to revisit
+  once enough `LearningProgress` data exists. (SAP SuccessFactors, Adobe Learning Manager)
+- **Renewal-reminder delivery** (notifications as a certification nears/passes expiry) — the data
+  model (`certification_expires_on`) supports the calculation; the email/scheduling worker is
+  cross-module, same deferred pipeline noted in 3.22.
+- **3.24 Training Administration (sibling sub-module, NOT built here):**
+  - **Nomination** — employee nomination/approval workflow for being enrolled (into a
+    `TrainingSession` or a `LearningPath`/course).
+  - **Attendance Tracking** — per-`TrainingSession` (ILT) attendance marking — distinct from this
+    sub-module's self-paced `LearningProgress.status`/`percent_complete`.
+  - **Training Feedback** — post-training evaluation forms.
+  - **Certificates** — auto-generation/issuance of the completion certificate document (this pass
+    only computes eligibility, not the artifact).
+  - **Training Budget** — budget allocation/utilization rollups (aggregates `TrainingSession
+    .actual_cost` from 3.22, not anything in 3.23).
+
+## Review notes
+(filled in at the end)
