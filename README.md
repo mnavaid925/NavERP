@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -440,6 +440,19 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   date-grouped upcoming view. Reuses `EmployeeProfile` + `core.Party` + `accounting.Currency` (no new spine, posts no
   GL); 3.23 LMS (content/paths/assessments) and 3.24 Training Administration (nomination/attendance/certificates/
   budget) are deferred sibling sub-modules.
+- **3.23 Learning Management (LMS)** — the self-paced digital-learning layer on top of the 3.22 `TrainingCourse`
+  catalog (ordinary tenant-scoped CRUD, no confidentiality gate): a `LearningContentItem` (a CASCADE child of a
+  course — ordered video/document/SCORM/external-link/text lessons + a lightweight `assessment` variant with
+  pass-threshold/max-attempts/time-limit, `clean()` enforcing the type-matching content field; SCORM stored as an
+  opaque file with a zip-slip WARNING for future extraction), a `LearningPath` (`LNP-`) role-based journey targeting
+  `Designation`/`core.OrgUnit` department + its ordered `LearningPathItem` course steps (with a `clean()`
+  prerequisite-gating guard reusing `TrainingCourse.prerequisite_course`), and a `LearningProgress` (unique per
+  employee×course) tracking status/percent/time-spent/score/passed/attempts/`points_earned` with a derived
+  `certification_expires_on`. Gamification ships as a **computed points leaderboard** (Bronze/Silver/Gold/Platinum
+  tiers) + a manager **team-progress** rollup — no stored leaderboard/badge tables. Reuses `TrainingCourse` +
+  `EmployeeProfile` + `Designation`/`OrgUnit` (no new course/learner/role tables, posts no GL); a question-bank
+  assessment engine, SCORM runtime/xAPI, an achievement-badge catalog, and 3.24 Training Administration
+  (nomination/attendance/feedback/certificates/budget) are deferred.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
