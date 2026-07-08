@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Learning Leaderboard{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Learning Leaderboard</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:learningprogress_list' %}">Learning</a><span class="sep">›</span><span>Leaderboard</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:learningprogress_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Progress</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title"><i data-lucide="trophy"></i> Points Ranking</h2>
+      <span class="text-muted">Bronze &lt;150 · Silver 150+ · Gold 400+ · Platinum 800+</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rank</th><th>Learner</th><th>Level</th><th>Points</th><th>Completed</th><th>Enrolled</th></tr></thead>
+        <tbody>
+          {% for row in leaderboard_rows %}
+            <tr>
+              <td class="fw-600">#{{ row.rank }}</td>
+              <td>{{ row.employee__party__name }}</td>
+              <td>
+                {% if row.level == 'Platinum' %}<span class="badge badge-info">{{ row.level }}</span>
+                {% elif row.level == 'Gold' %}<span class="badge badge-amber">{{ row.level }}</span>
+                {% elif row.level == 'Silver' %}<span class="badge badge-slate">{{ row.level }}</span>
+                {% else %}<span class="badge badge-muted">{{ row.level }}</span>{% endif %}
+              </td>
+              <td class="fw-600">{{ row.total_points }}</td>
+              <td>{{ row.courses_completed }}</td>
+              <td>{{ row.courses_enrolled }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="trophy"></i><h3>No points yet</h3><p>Points appear here as learners earn them on their progress records.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
