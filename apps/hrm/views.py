@@ -159,6 +159,12 @@ from .forms import (  # 3.22 Training Management
     TrainingCourseForm,
     TrainingSessionForm,
 )
+from .forms import (  # 3.23 Learning Management (LMS)
+    LearningContentItemForm,
+    LearningPathForm,
+    LearningPathItemForm,
+    LearningProgressForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -309,6 +315,12 @@ from .models import (  # 3.21 Performance Improvement
 from .models import (  # 3.22 Training Management
     TrainingCourse,
     TrainingSession,
+)
+from .models import (  # 3.23 Learning Management (LMS)
+    LearningContentItem,
+    LearningPath,
+    LearningPathItem,
+    LearningProgress,
 )
 
 
@@ -9394,6 +9406,7 @@ def trainingcourse_detail(request, pk):
         "obj": obj,
         "sessions": sessions,
         "unlocks": obj.unlocks.order_by("title"),   # courses that require THIS one as a prerequisite
+        "content_items": obj.content_items.all(),   # 3.23 LMS lessons (Meta-ordered by sequence)
     })
 
 
@@ -9503,4 +9516,285 @@ def training_calendar(request):
         "status_choices": [(v, lbl) for v, lbl in TrainingSession.STATUS_CHOICES if v != "cancelled"],
         "from_date": from_date,
         "to_date": to_date,
+    })
+
+
+# ============================================================================
+# 3.23 Learning Management (LMS) — self-paced digital learning on top of the 3.22
+# TrainingCourse catalog: content items (lessons + light assessments), role-based
+# learning paths, per-employee progress, a computed gamification leaderboard, and a
+# manager team-progress rollup. Ordinary tenant-scoped CRUD (no confidentiality gate).
+# ============================================================================
+
+# ------------------------------------------------------------ LearningContentItem (3.23 Course Content)
+@login_required
+def learningcontentitem_create(request, course_pk):
+    """Nested under a course (mirrors pipcheckin_create) — tenant+course set on the instance BEFORE
+    validation, so no crud_create tenant-timing gotcha. Redirects to the course so the lesson shows."""
+    course = get_object_or_404(TrainingCourse, pk=course_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = LearningContentItemForm(
+            request.POST, request.FILES,
+            instance=LearningContentItem(tenant=request.tenant, course=course), tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Content added.")
+            return redirect("hrm:trainingcourse_detail", pk=course.pk)
+    else:
+        form = LearningContentItemForm(
+            instance=LearningContentItem(tenant=request.tenant, course=course), tenant=request.tenant)
+    return render(request, "hrm/lms/learningcontentitem/form.html",
+                  {"form": form, "is_edit": False, "course": course})
+
+
+@login_required
+def learningcontentitem_list(request):
+    qs = LearningContentItem.objects.filter(tenant=request.tenant).select_related("course")
+    return crud_list(
+        request, qs.order_by("course", "sequence"),
+        "hrm/lms/learningcontentitem/list.html",
+        search_fields=("title", "description", "course__title"),
+        filters=[("content_type", "content_type", False), ("course", "course_id", True),
+                 ("is_required", "is_required", False)],
+        extra_context={
+            "content_type_choices": LearningContentItem.CONTENT_TYPE_CHOICES,
+            "courses": TrainingCourse.objects.filter(tenant=request.tenant).order_by("title"),
+        },
+    )
+
+
+@login_required
+def learningcontentitem_detail(request, pk):
+    return crud_detail(request, model=LearningContentItem, pk=pk,
+                       template="hrm/lms/learningcontentitem/detail.html", select_related=("course",))
+
+
+@login_required
+def learningcontentitem_edit(request, pk):
+    return crud_edit(request, model=LearningContentItem, pk=pk, form_class=LearningContentItemForm,
+                     template="hrm/lms/learningcontentitem/form.html",
+                     success_url="hrm:learningcontentitem_list")
+
+
+@login_required
+@require_POST
+def learningcontentitem_delete(request, pk):
+    return crud_delete(request, model=LearningContentItem, pk=pk, success_url="hrm:learningcontentitem_list")
+
+
+# ------------------------------------------------------------ LearningPath (3.23 Learning Paths)
+@login_required
+def learningpath_list(request):
+    qs = (LearningPath.objects.filter(tenant=request.tenant)
+          .select_related("target_designation", "target_department")
+          .annotate(item_count=Count("items", distinct=True)))
+    return crud_list(
+        request, qs.order_by("title"),
+        "hrm/lms/learningpath/list.html",
+        search_fields=("number", "title", "description"),
+        filters=[("is_mandatory", "is_mandatory", False), ("is_active", "is_active", False),
+                 ("target_designation", "target_designation_id", True),
+                 ("target_department", "target_department_id", True)],
+        extra_context={
+            "designations": Designation.objects.filter(tenant=request.tenant).order_by("title"),
+            "departments": OrgUnit.objects.filter(tenant=request.tenant, kind="department").order_by("name"),
+        },
+    )
+
+
+@login_required
+def learningpath_create(request):
+    return crud_create(request, form_class=LearningPathForm,
+                       template="hrm/lms/learningpath/form.html", success_url="hrm:learningpath_list")
+
+
+@login_required
+def learningpath_detail(request, pk):
+    obj = get_object_or_404(
+        LearningPath.objects.select_related("target_designation", "target_department"),
+        pk=pk, tenant=request.tenant)
+    items = obj.items.select_related("course").order_by("sequence")
+    return render(request, "hrm/lms/learningpath/detail.html", {"obj": obj, "items": items})
+
+
+@login_required
+def learningpath_edit(request, pk):
+    return crud_edit(request, model=LearningPath, pk=pk, form_class=LearningPathForm,
+                     template="hrm/lms/learningpath/form.html", success_url="hrm:learningpath_list")
+
+
+@login_required
+@require_POST
+def learningpath_delete(request, pk):
+    # LearningPathItem.path is CASCADE (items die with the path); LearningProgress.learning_path is
+    # SET_NULL — so no ProtectedError concern here, plain crud_delete is safe.
+    return crud_delete(request, model=LearningPath, pk=pk, success_url="hrm:learningpath_list")
+
+
+# ------------------------------------------------------------ LearningPathItem (nested under a path)
+@login_required
+def learningpathitem_create(request, path_pk):
+    path = get_object_or_404(LearningPath, pk=path_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = LearningPathItemForm(
+            request.POST, instance=LearningPathItem(tenant=request.tenant, path=path), tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Course added to the path.")
+            return redirect("hrm:learningpath_detail", pk=path.pk)
+    else:
+        form = LearningPathItemForm(
+            instance=LearningPathItem(tenant=request.tenant, path=path), tenant=request.tenant)
+    return render(request, "hrm/lms/learningpathitem/form.html",
+                  {"form": form, "is_edit": False, "path": path})
+
+
+@login_required
+def learningpathitem_list(request):
+    qs = LearningPathItem.objects.filter(tenant=request.tenant).select_related("path", "course")
+    return crud_list(
+        request, qs.order_by("path", "sequence"),
+        "hrm/lms/learningpathitem/list.html",
+        search_fields=("path__title", "course__title"),
+        filters=[("path", "path_id", True), ("course", "course_id", True),
+                 ("is_mandatory", "is_mandatory", False)],
+        extra_context={
+            "paths": LearningPath.objects.filter(tenant=request.tenant).order_by("title"),
+            "courses": TrainingCourse.objects.filter(tenant=request.tenant).order_by("title"),
+        },
+    )
+
+
+@login_required
+def learningpathitem_detail(request, pk):
+    return crud_detail(request, model=LearningPathItem, pk=pk,
+                       template="hrm/lms/learningpathitem/detail.html", select_related=("path", "course"))
+
+
+@login_required
+def learningpathitem_edit(request, pk):
+    return crud_edit(request, model=LearningPathItem, pk=pk, form_class=LearningPathItemForm,
+                     template="hrm/lms/learningpathitem/form.html", success_url="hrm:learningpathitem_list")
+
+
+@login_required
+@require_POST
+def learningpathitem_delete(request, pk):
+    item = get_object_or_404(LearningPathItem, pk=pk, tenant=request.tenant)
+    path_id = item.path_id
+    write_audit_log(request.user, item, "delete")
+    item.delete()
+    messages.success(request, "Course removed from the path.")
+    return redirect("hrm:learningpath_detail", pk=path_id)
+
+
+# ------------------------------------------------------------ LearningProgress (3.23 Progress Tracking)
+@login_required
+def learningprogress_list(request):
+    qs = (LearningProgress.objects.filter(tenant=request.tenant)
+          .select_related("employee__party", "course", "learning_path"))
+    return crud_list(
+        request, qs.order_by("-updated_at"),
+        "hrm/lms/learningprogress/list.html",
+        search_fields=("employee__party__name", "course__title"),
+        filters=[("status", "status", False), ("course", "course_id", True),
+                 ("employee", "employee_id", True), ("learning_path", "learning_path_id", True)],
+        extra_context={
+            "status_choices": LearningProgress.STATUS_CHOICES,
+            "courses": TrainingCourse.objects.filter(tenant=request.tenant).order_by("title"),
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+            "paths": LearningPath.objects.filter(tenant=request.tenant).order_by("title"),
+        },
+    )
+
+
+@login_required
+def learningprogress_create(request):
+    return crud_create(request, form_class=LearningProgressForm,
+                       template="hrm/lms/learningprogress/form.html", success_url="hrm:learningprogress_list")
+
+
+@login_required
+def learningprogress_detail(request, pk):
+    return crud_detail(request, model=LearningProgress, pk=pk,
+                       template="hrm/lms/learningprogress/detail.html",
+                       select_related=("employee__party", "course", "learning_path"))
+
+
+@login_required
+def learningprogress_edit(request, pk):
+    return crud_edit(request, model=LearningProgress, pk=pk, form_class=LearningProgressForm,
+                     template="hrm/lms/learningprogress/form.html", success_url="hrm:learningprogress_list")
+
+
+@login_required
+@require_POST
+def learningprogress_delete(request, pk):
+    return crud_delete(request, model=LearningProgress, pk=pk, success_url="hrm:learningprogress_list")
+
+
+# ------------------------------------------------------------ Gamification leaderboard (3.23, computed)
+# Point thresholds -> level tier (a computed feature, no stored table). Lowest-first; the level is the
+# highest threshold the learner's total points meet.
+_LMS_LEVEL_THRESHOLDS = [(0, "Bronze"), (150, "Silver"), (400, "Gold"), (800, "Platinum")]
+
+
+def _lms_level_for_points(points):
+    level = _LMS_LEVEL_THRESHOLDS[0][1]
+    for threshold, name in _LMS_LEVEL_THRESHOLDS:
+        if points >= threshold:
+            level = name
+    return level
+
+
+@login_required
+def learning_leaderboard(request):
+    """Gamification leaderboard — learners ranked by total points (summed over their LearningProgress),
+    with a computed level tier. A DERIVED aggregate query, not a stored table."""
+    rows = list(
+        LearningProgress.objects.filter(tenant=request.tenant)
+        .values("employee_id", "employee__party__name")
+        .annotate(total_points=Sum("points_earned"),
+                  courses_completed=Count("id", filter=Q(status="completed")),
+                  courses_enrolled=Count("id"))
+        .order_by("-total_points", "employee__party__name"))
+    for i, row in enumerate(rows, start=1):
+        row["rank"] = i
+        row["level"] = _lms_level_for_points(row["total_points"] or 0)
+    return render(request, "hrm/lms/leaderboard.html", {"leaderboard_rows": rows})
+
+
+# ------------------------------------------------------------ Team progress rollup (3.23, manager view)
+@login_required
+def learning_team_progress(request):
+    """Manager rollup — the logged-in manager's own + direct-reports' learning progress (reuses the
+    3.18 goal-ownership reporting-line filter). Optional ?status=/?course= GET filters."""
+    profile = _current_employee_profile(request)
+    if profile is None:
+        messages.error(request, "Your account isn't linked to an employee profile.")
+        return redirect("dashboard:home")
+    qs = (LearningProgress.objects.filter(tenant=request.tenant)
+          .filter(Q(employee=profile) | Q(employee__employment__manager=profile.party))
+          .select_related("employee__party", "course", "learning_path"))
+    status = request.GET.get("status", "").strip()
+    course = request.GET.get("course", "").strip()
+    if status:
+        qs = qs.filter(status=status)
+    if course.isdigit():
+        qs = qs.filter(course_id=int(course))
+    qs = qs.order_by("employee__party__name", "course__title")
+    rows = list(qs)
+    summary = {
+        "total": len(rows),
+        "completed": sum(1 for r in rows if r.status == "completed"),
+        "in_progress": sum(1 for r in rows if r.status == "in_progress"),
+    }
+    return render(request, "hrm/lms/team_progress.html", {
+        "progress_rows": rows,
+        "summary": summary,
+        "status_choices": LearningProgress.STATUS_CHOICES,
+        "courses": TrainingCourse.objects.filter(tenant=request.tenant).order_by("title"),
     })
