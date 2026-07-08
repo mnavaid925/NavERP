@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Course Content{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Course Content</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Learning · Content</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:learningpath_list' %}" class="btn btn-outline"><i data-lucide="route"></i> Paths</a>
+      <a href="{% url 'hrm:learningprogress_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Progress</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:190px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title / description / course…">
+        </div>
+        <div class="form-group">
+          <select name="content_type" class="form-select" aria-label="Content type">
+            <option value="">All types</option>
+            {% for val, label in content_type_choices %}
+              <option value="{{ val }}" {% if request.GET.content_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="course" class="form-select" aria-label="Course">
+            <option value="">All courses</option>
+            {% for c in courses %}
+              <option value="{{ c.pk }}" {% if request.GET.course == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_required" class="form-select" aria-label="Required">
+            <option value="">Required: any</option>
+            <option value="True" {% if request.GET.is_required == 'True' %}selected{% endif %}>Required</option>
+            <option value="False" {% if request.GET.is_required == 'False' %}selected{% endif %}>Optional</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:learningcontentitem_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Course</th><th>#</th><th>Title</th><th>Type</th><th>Required</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:trainingcourse_detail' obj.course.pk %}">{{ obj.course.title }}</a></td>
+              <td>{{ obj.sequence }}</td>
+              <td><a href="{% url 'hrm:learningcontentitem_detail' obj.pk %}" class="fw-600">{{ obj.title }}</a></td>
+              <td>
+                {% if obj.content_type == 'assessment' %}<span class="badge badge-green">{{ obj.get_content_type_display }}</span>
+                {% elif obj.content_type == 'video' %}<span class="badge badge-info">{{ obj.get_content_type_display }}</span>
+                {% elif obj.content_type == 'scorm' %}<span class="badge badge-amber">{{ obj.get_content_type_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_content_type_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.is_required %}<span class="badge badge-green">Required</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:learningcontentitem_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:learningcontentitem_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:learningcontentitem_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this content item?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="book-open-check"></i><h3>No content yet</h3><p>Add lessons (video / document / SCORM / link / text / assessment) to a course from its detail page.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
