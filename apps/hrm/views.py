@@ -9425,8 +9425,10 @@ def trainingcourse_delete(request, pk):
             write_audit_log(request.user, obj, "delete")
             obj.delete()
     except ProtectedError:
-        # course.sessions is PROTECT — a scheduled course can't be deleted out from under its sessions.
-        messages.error(request, "This course has scheduled sessions and can't be deleted. Delete its sessions first.")
+        # course is PROTECT-referenced by TrainingSession (3.22) AND by LearningPathItem / LearningProgress
+        # (3.23) — name all three so the admin knows what to clear first, not just sessions.
+        messages.error(request, "This course is referenced by training sessions, learning paths, or learner "
+                                 "progress and can't be deleted. Remove those references first.")
         return redirect("hrm:trainingcourse_detail", pk=obj.pk)
     messages.success(request, "Deleted successfully.")
     return redirect("hrm:trainingcourse_list")
