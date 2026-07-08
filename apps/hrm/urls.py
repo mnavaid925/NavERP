@@ -758,4 +758,36 @@ urlpatterns = [
 
     # Training calendar (upcoming sessions, date-grouped)
     path("training-calendar/", views.training_calendar, name="training_calendar"),
+
+    # ---- 3.23 Learning Management (LMS) ----
+    # Learning content items (lessons, nested-create under a course)
+    path("training-courses/<int:course_pk>/content/add/", views.learningcontentitem_create, name="learningcontentitem_create"),
+    path("learning-content/", views.learningcontentitem_list, name="learningcontentitem_list"),
+    path("learning-content/<int:pk>/", views.learningcontentitem_detail, name="learningcontentitem_detail"),
+    path("learning-content/<int:pk>/edit/", views.learningcontentitem_edit, name="learningcontentitem_edit"),
+    path("learning-content/<int:pk>/delete/", views.learningcontentitem_delete, name="learningcontentitem_delete"),
+
+    # Learning paths (role-based journeys) + nested-create path items
+    path("learning-paths/", views.learningpath_list, name="learningpath_list"),
+    path("learning-paths/add/", views.learningpath_create, name="learningpath_create"),
+    path("learning-paths/<int:pk>/", views.learningpath_detail, name="learningpath_detail"),
+    path("learning-paths/<int:pk>/edit/", views.learningpath_edit, name="learningpath_edit"),
+    path("learning-paths/<int:pk>/delete/", views.learningpath_delete, name="learningpath_delete"),
+    path("learning-paths/<int:path_pk>/items/add/", views.learningpathitem_create, name="learningpathitem_create"),
+
+    path("learning-path-items/", views.learningpathitem_list, name="learningpathitem_list"),
+    path("learning-path-items/<int:pk>/", views.learningpathitem_detail, name="learningpathitem_detail"),
+    path("learning-path-items/<int:pk>/edit/", views.learningpathitem_edit, name="learningpathitem_edit"),
+    path("learning-path-items/<int:pk>/delete/", views.learningpathitem_delete, name="learningpathitem_delete"),
+
+    # Learning progress (per-employee completion tracking)
+    path("learning-progress/", views.learningprogress_list, name="learningprogress_list"),
+    path("learning-progress/add/", views.learningprogress_create, name="learningprogress_create"),
+    path("learning-progress/<int:pk>/", views.learningprogress_detail, name="learningprogress_detail"),
+    path("learning-progress/<int:pk>/edit/", views.learningprogress_edit, name="learningprogress_edit"),
+    path("learning-progress/<int:pk>/delete/", views.learningprogress_delete, name="learningprogress_delete"),
+
+    # Gamification leaderboard + manager team-progress rollup (computed views)
+    path("learning-leaderboard/", views.learning_leaderboard, name="learning_leaderboard"),
+    path("learning-team-progress/", views.learning_team_progress, name="learning_team_progress"),
 ]
