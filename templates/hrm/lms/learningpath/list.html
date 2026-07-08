@@ -22,7 +22,7 @@
           <select name="target_designation" class="form-select" aria-label="Designation">
             <option value="">All roles</option>
             {% for d in designations %}
-              <option value="{{ d.pk }}" {% if request.GET.target_designation == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.title }}</option>
+              <option value="{{ d.pk }}" {% if request.GET.target_designation == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
             {% endfor %}
           </select>
         </div>
@@ -61,7 +61,7 @@
             <tr>
               <td><a href="{% url 'hrm:learningpath_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.title }}</td>
-              <td>{% if obj.target_designation %}{{ obj.target_designation.title }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.target_designation %}{{ obj.target_designation.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>{% if obj.target_department %}{{ obj.target_department.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>{% if obj.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
               <td>{{ obj.item_count }}</td>
