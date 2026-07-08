@@ -16,6 +16,7 @@ recomputed in ``save()`` from their dates/times, never hand-edited on the form.
 Payroll/GL posting is **owned by ``accounting.PayrollRun`` (PRUN-…)** — HRM does NOT duplicate
 it. The HRM payroll/payslip layer (FKing into ``accounting.PayrollRun``) is a later pass.
 """
+import calendar
 import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -6166,3 +6167,230 @@ class TrainingSession(TenantNumbered):
         if self.course_id:
             return f"{self.number} · {self.course.title} ({self.start_datetime:%Y-%m-%d %H:%M})"
         return self.number
+
+
+# ---------------------------------------------------------------------------
+# 3.23 Learning Management (LMS) — the self-paced digital-learning layer that
+# BUILDS ON the 3.22 ``TrainingCourse`` catalog (it never re-creates a course
+# table). Four models: ``LearningContentItem`` (ordered lessons + a light
+# assessment variant, a CASCADE child of a course), ``LearningPath`` (LNP-, a
+# role-based journey) + ``LearningPathItem`` (its ordered course refs), and
+# ``LearningProgress`` (per-employee×course completion/score/points). Ordinary
+# tenant-scoped CRUD — no confidentiality gate (like 3.22).
+#
+# Reuses: ``hrm.TrainingCourse`` (is_certification/certification_validity_months/
+# prerequisite_course already modeled in 3.22), ``hrm.EmployeeProfile`` (learner),
+# ``hrm.Designation`` + ``core.OrgUnit`` (kind="department") for path targeting.
+# No new core-spine entity; nothing posts to the GL. Gamification leaderboards +
+# level tiers are DERIVED queries over ``LearningProgress.points_earned`` — no
+# stored leaderboard/badge tables.
+#
+# Deferred to later passes / 3.24 (do NOT build here): a real question-bank
+# assessment engine (Question/Choice/Answer tables + multiple question types),
+# the SCORM JS runtime / xAPI LRS (this pass stores the package file only), an LMS
+# achievement-badge catalog (distinct from 3.20 ``KudosBadge``), adaptive/
+# conditional paths + auto-enrollment, and 3.24 Training Administration
+# (nomination, ILT attendance, feedback, certificate issuance, training budget).
+# ---------------------------------------------------------------------------
+class LearningContentItem(TenantOwned):
+    """An ordered lesson/content piece within a ``TrainingCourse`` (3.23 Course Content) — a
+    video/document/SCORM/external-link/text item, or a lightweight ``assessment`` (pass-threshold +
+    attempts + time-limit, NO stored question bank this pass). A CASCADE child of the course (its
+    lessons die with the course), mirroring the ``ClearanceItem``→``SeparationCase`` child pattern."""
+
+    CONTENT_TYPE_CHOICES = [
+        ("video", "Video"),
+        ("document", "Document"),
+        ("scorm", "SCORM Package"),
+        ("external_link", "External Link"),
+        ("text", "Text / Article"),
+        ("assessment", "Assessment"),
+    ]
+
+    course = models.ForeignKey("hrm.TrainingCourse", on_delete=models.CASCADE, related_name="content_items")
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    content_type = models.CharField(max_length=15, choices=CONTENT_TYPE_CHOICES, default="video")
+    sequence = models.PositiveIntegerField(default=0, help_text="Ordered lesson position within the course.")
+    is_required = models.BooleanField(default=True, help_text="Required for course completion (vs. supplemental).")
+    estimated_duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    # Content payload — only the one matching content_type is expected filled (enforced in clean()).
+    video_url = models.URLField(blank=True)
+    document_file = models.FileField(upload_to="hrm/lms/documents/%Y/%m/", blank=True)
+    # WARNING: the SCORM package is stored as an OPAQUE file only this pass — it is never extracted.
+    # A future SCORM-extraction handler MUST validate archive member paths (zip-slip / path-traversal
+    # guard: reject "../" and absolute paths) before writing extracted files to disk — do not trust
+    # package internals. See the deferred note in the 3.23 section header.
+    scorm_package = models.FileField(upload_to="hrm/lms/scorm/%Y/%m/", blank=True)
+    external_url = models.URLField(blank=True)
+    body_text = models.TextField(blank=True)
+    # Assessment-only (content_type="assessment"); score/pass outcomes live on LearningProgress.
+    pass_threshold_percent = models.PositiveIntegerField(
+        default=70, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    max_attempts = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    time_limit_minutes = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["course", "sequence"]
+        indexes = [
+            models.Index(fields=["tenant", "course"], name="hrm_lci_tenant_course_idx"),
+            models.Index(fields=["tenant", "content_type"], name="hrm_lci_tenant_ctype_idx"),
+        ]
+
+    def clean(self):
+        # Enforce the ONE content field matching content_type is present (never force-blanks the
+        # others — an assessment may still carry body_text instructions).
+        required = {
+            "video": ("video_url", "a video URL"),
+            "document": ("document_file", "a document file"),
+            "scorm": ("scorm_package", "a SCORM package file"),
+            "external_link": ("external_url", "an external URL"),
+            "text": ("body_text", "the article text"),
+        }.get(self.content_type)
+        if required:
+            field, label = required
+            value = getattr(self, field, None)
+            if not (str(value).strip() if value else ""):
+                raise ValidationError({field: f"A {self.get_content_type_display()} lesson needs {label}."})
+
+    def __str__(self):
+        if self.course_id:
+            return f"{self.course.title} · {self.sequence}. {self.title}"
+        return self.title
+
+
+class LearningPath(TenantNumbered):
+    """A role-based learning journey (3.23 Learning Paths) — an ordered curriculum of
+    ``TrainingCourse``s (via ``LearningPathItem``) optionally targeted at a ``Designation`` and/or a
+    ``core.OrgUnit`` department. Reuses the 3.2 org masters — no new role/department table."""
+
+    NUMBER_PREFIX = "LNP"
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    target_designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name="learning_paths",
+                                           help_text="Role this path is aimed at (optional).")
+    target_department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="learning_paths", limit_choices_to={"kind": "department"},
+                                          help_text="Department this path is aimed at (optional).")
+    is_mandatory = models.BooleanField(default=False, help_text="Compliance path (vs. optional development).")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["title"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_lnp_tenant_active_idx"),
+            models.Index(fields=["tenant", "is_mandatory"], name="hrm_lnp_tenant_mand_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.title}" if self.number else self.title
+
+
+class LearningPathItem(TenantOwned):
+    """One ordered ``TrainingCourse`` step in a ``LearningPath`` (3.23 Learning Paths). A CASCADE
+    child of the path; the course is PROTECT (a course referenced by a path can't be deleted out from
+    under it). Prerequisite gating reuses ``TrainingCourse.prerequisite_course`` (no new rule field)."""
+
+    path = models.ForeignKey("hrm.LearningPath", on_delete=models.CASCADE, related_name="items")
+    course = models.ForeignKey("hrm.TrainingCourse", on_delete=models.PROTECT, related_name="path_items")
+    sequence = models.PositiveIntegerField(default=0, help_text="Ordered completion position in the path.")
+    is_mandatory = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["path", "sequence"]
+        unique_together = ("tenant", "path", "course")
+        indexes = [
+            models.Index(fields=["tenant", "path"], name="hrm_lpi_tenant_path_idx"),
+            models.Index(fields=["tenant", "course"], name="hrm_lpi_tenant_course_idx"),
+        ]
+
+    def clean(self):
+        # Light-touch prerequisite gating: if this course's prerequisite is ALSO in this path, it must
+        # sit at an earlier sequence. If the prerequisite isn't in the path, it's assumed satisfied
+        # elsewhere (no hard error) — reuses TrainingCourse.prerequisite_course, no new rule table.
+        if self.course_id and self.path_id:
+            prereq_id = getattr(self.course, "prerequisite_course_id", None)
+            if prereq_id:
+                earlier = (LearningPathItem.objects
+                           .filter(tenant_id=self.tenant_id, path_id=self.path_id, course_id=prereq_id)
+                           .exclude(pk=self.pk).first())
+                if earlier is not None and earlier.sequence >= self.sequence:
+                    raise ValidationError(
+                        {"sequence": "This course's prerequisite must appear earlier in the path."})
+
+    def __str__(self):
+        if self.path_id and self.course_id:
+            return f"{self.path.title} · {self.sequence}. {self.course.title}"
+        return super().__str__()
+
+
+class LearningProgress(TenantOwned):
+    """Per-employee×course learning progress (3.23 Progress Tracking) — status/percent/time-spent, the
+    assessment outcome (score/passed/attempts), and gamification ``points_earned``. Unique per
+    (tenant, employee, course). Leaderboards + level tiers are DERIVED queries over ``points_earned``
+    (no stored table). Reuses ``EmployeeProfile`` (learner) + ``TrainingCourse`` — no new tables."""
+
+    STATUS_CHOICES = [
+        ("not_started", "Not Started"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("expired", "Expired"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="learning_progress")
+    course = models.ForeignKey("hrm.TrainingCourse", on_delete=models.PROTECT, related_name="learner_progress")
+    learning_path = models.ForeignKey("hrm.LearningPath", on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="progress_records", help_text="Enrolled via this path (optional).")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="not_started")
+    percent_complete = models.PositiveIntegerField(
+        default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    time_spent_minutes = models.PositiveIntegerField(default=0)
+    score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    passed = models.BooleanField(null=True, blank=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    points_earned = models.PositiveIntegerField(default=0, help_text="Gamification points (leaderboard is derived).")
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        unique_together = ("tenant", "employee", "course")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_lprog_tenant_emp_idx"),
+            models.Index(fields=["tenant", "course"], name="hrm_lprog_tenant_course_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_lprog_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.started_at and self.completed_at and self.completed_at < self.started_at:
+            raise ValidationError({"completed_at": "Completion can't be before the start."})
+
+    @property
+    def certification_expires_on(self):
+        """Derived (never stored) — the expiry date for a completed certification course, or None.
+        Advances completed_at by the course's certification_validity_months with stdlib month-math
+        (calendar.monthrange clamps the day) — no dateutil dependency."""
+        if not (self.completed_at and self.course_id):
+            return None
+        course = self.course
+        months = course.certification_validity_months
+        if not (course.is_certification and months):
+            return None
+        d = self.completed_at.date()
+        total = d.month - 1 + months
+        y, m = d.year + total // 12, total % 12 + 1
+        return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+
+    @property
+    def is_certification_expired(self):
+        exp = self.certification_expires_on
+        return bool(exp and exp < timezone.now().date())
+
+    def __str__(self):
+        who = self.employee if self.employee_id else "?"
+        what = self.course.title if self.course_id else "?"
+        return f"{who} · {what} ({self.get_status_display()})"
