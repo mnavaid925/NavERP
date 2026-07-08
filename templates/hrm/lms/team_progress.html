@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Team Learning Progress{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Team Learning Progress</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:learningprogress_list' %}">Learning</a><span class="sep">›</span><span>My Team</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:learning_leaderboard' %}" class="btn btn-outline"><i data-lucide="trophy"></i> Leaderboard</a>
+    </div>
+  </div>
+
+  <div class="stat-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:1rem;">
+    <div class="stat-card"><span class="stat-label">Records</span><span class="stat-value">{{ summary.total }}</span></div>
+    <div class="stat-card"><span class="stat-label">Completed</span><span class="stat-value">{{ summary.completed }}</span></div>
+    <div class="stat-card"><span class="stat-label">In Progress</span><span class="stat-value">{{ summary.in_progress }}</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="course" class="form-select" aria-label="Course">
+            <option value="">All courses</option>
+            {% for c in courses %}
+              <option value="{{ c.pk }}" {% if request.GET.course == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Filter</button>
+        <a href="{% url 'hrm:learning_team_progress' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Course</th><th>Status</th><th>Progress</th><th>Points</th></tr></thead>
+        <tbody>
+          {% for r in progress_rows %}
+            <tr>
+              <td>{{ r.employee.party.name }}</td>
+              <td><a href="{% url 'hrm:learningprogress_detail' r.pk %}">{{ r.course.title }}</a></td>
+              <td>
+                {% if r.status == 'completed' %}<span class="badge badge-green">{{ r.get_status_display }}</span>
+                {% elif r.status == 'in_progress' %}<span class="badge badge-amber">{{ r.get_status_display }}</span>
+                {% elif r.status == 'failed' %}<span class="badge badge-red">{{ r.get_status_display }}</span>
+                {% elif r.status == 'expired' %}<span class="badge badge-slate">{{ r.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ r.get_status_display }}</span>{% endif %}
+              </td>
+              <td style="min-width:120px;">
+                <div class="progress"><div class="progress-bar" style="width:{{ r.percent_complete }}%;"></div></div>
+                <span class="text-muted">{{ r.percent_complete }}%</span>
+              </td>
+              <td>{{ r.points_earned }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="users"></i><h3>No team records</h3><p>Progress for you and your direct reports appears here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
