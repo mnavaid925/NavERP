@@ -488,6 +488,18 @@ LIVE_LINKS = {
         "Virtual Training": "hrm:trainingsession_list?delivery_mode=virtual",      # bullet (virtual slice)
         "External Training": "hrm:trainingsession_list?delivery_mode=external",    # bullet (external slice)
     },
+    # 3.23 Learning Management (LMS) — the self-paced digital-learning layer on top of the 3.22
+    # TrainingCourse catalog (no new course table). "Assessments" is a filtered slice of the Course
+    # Content list (content_type=assessment) rather than a dedicated question-bank UI this pass;
+    # "Gamification" is the computed points leaderboard (levels/leaderboard derived, not stored).
+    # 3.24 Training Administration (nomination/attendance/feedback/certificates/budget) is deferred.
+    "3.23": {
+        "Course Content": "hrm:learningcontentitem_list",                              # bullet (LearningContentItem CRUD)
+        "Learning Paths": "hrm:learningpath_list",                                     # bullet (LearningPath CRUD)
+        "Assessments": "hrm:learningcontentitem_list?content_type=assessment",         # bullet (assessment-type slice)
+        "Gamification": "hrm:learning_leaderboard",                                    # bullet (computed points leaderboard)
+        "Progress Tracking": "hrm:learningprogress_list",                             # bullet (LearningProgress CRUD)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
