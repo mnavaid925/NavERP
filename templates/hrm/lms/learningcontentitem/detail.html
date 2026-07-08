@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:learningcontentitem_list' %}">Course Content</a><span class="sep">›</span><span>{{ obj.title }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:learningcontentitem_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:learningcontentitem_delete' obj.pk %}" onsubmit="return confirm('Delete this content item?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Course</dt><dd><a href="{% url 'hrm:trainingcourse_detail' obj.course.pk %}">{{ obj.course.title }}</a></dd></div>
+      <div class="detail-item"><dt>Sequence</dt><dd>{{ obj.sequence }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ obj.get_content_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Required</dt><dd>{% if obj.is_required %}<span class="badge badge-green">Required</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</dd></div>
+      {% if obj.estimated_duration_minutes %}<div class="detail-item"><dt>Est. Duration</dt><dd>{{ obj.estimated_duration_minutes }} min</dd></div>{% endif %}
+    </dl>
+    {% if obj.description %}<div style="margin-top:.6rem;"><strong>Description</strong><p>{{ obj.description|linebreaksbr }}</p></div>{% endif %}
+
+    <div style="margin-top:.8rem;">
+      {% if obj.content_type == 'video' and obj.video_url %}
+        <strong><i data-lucide="play-circle"></i> Video</strong><p><a href="{{ obj.video_url }}" target="_blank" rel="noopener">{{ obj.video_url }}</a></p>
+      {% elif obj.content_type == 'document' and obj.document_file %}
+        <strong><i data-lucide="file-text"></i> Document</strong><p><a href="{{ obj.document_file.url }}" target="_blank" rel="noopener">Download document</a></p>
+      {% elif obj.content_type == 'scorm' and obj.scorm_package %}
+        <strong><i data-lucide="package"></i> SCORM Package</strong><p><a href="{{ obj.scorm_package.url }}" target="_blank" rel="noopener">Download package</a> <span class="text-muted">(storage only — no in-browser player this pass)</span></p>
+      {% elif obj.content_type == 'external_link' and obj.external_url %}
+        <strong><i data-lucide="external-link"></i> External Link</strong><p><a href="{{ obj.external_url }}" target="_blank" rel="noopener">{{ obj.external_url }}</a></p>
+      {% elif obj.content_type == 'text' and obj.body_text %}
+        <strong><i data-lucide="align-left"></i> Article</strong><p>{{ obj.body_text|linebreaksbr }}</p>
+      {% endif %}
+    </div>
+
+    {% if obj.content_type == 'assessment' %}
+      <div style="margin-top:.8rem; padding:.6rem .75rem; background:var(--page-bg); border-radius:8px;">
+        <strong><i data-lucide="clipboard-check"></i> Assessment</strong>
+        <dl class="detail-grid" style="margin-top:.4rem;">
+          <div class="detail-item"><dt>Pass threshold</dt><dd>{{ obj.pass_threshold_percent }}%</dd></div>
+          <div class="detail-item"><dt>Max attempts</dt><dd>{{ obj.max_attempts }}</dd></div>
+          {% if obj.time_limit_minutes %}<div class="detail-item"><dt>Time limit</dt><dd>{{ obj.time_limit_minutes }} min</dd></div>{% endif %}
+        </dl>
+        {% if obj.body_text %}<p style="margin-top:.4rem;">{{ obj.body_text|linebreaksbr }}</p>{% endif %}
+      </div>
+    {% endif %}
+  </div></div>
+
+  <a href="{% url 'hrm:trainingcourse_detail' obj.course.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to course</a>
+{% endblock %}
