@@ -22,6 +22,10 @@ MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 ALLOWED_ONBOARDING_DOC_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}
 MAX_ONBOARDING_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# 3.23 LMS SCORM package upload safety: a zipped package only + a 50 MB cap.
+ALLOWED_SCORM_EXTENSIONS = {".zip"}
+MAX_SCORM_BYTES = 50 * 1024 * 1024  # 50 MB
+
 # Resume / cover-letter upload safety (3.6): documents only (no images) + 10 MB cap.
 ALLOWED_RESUME_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_RESUME_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -146,6 +150,12 @@ from .models import (  # noqa: E402  — 3.21 Performance Improvement
 from .models import (  # noqa: E402  — 3.22 Training Management
     TrainingCourse,
     TrainingSession,
+)
+from .models import (  # noqa: E402  — 3.23 Learning Management (LMS)
+    LearningContentItem,
+    LearningPath,
+    LearningPathItem,
+    LearningProgress,
 )
 
 
@@ -1930,3 +1940,81 @@ class TrainingSessionForm(TenantModelForm):
             if "currency" in self.fields:
                 from apps.accounting.models import Currency   # lazy — keep accounting a runtime dep
                 self.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
+
+
+# ----------------------------------------------------------------------- 3.23 Learning Management (LMS)
+class LearningContentItemForm(TenantModelForm):
+    # `course` is set from the URL in the nested create view (mirrors PIPCheckInForm excluding `pip`).
+    class Meta:
+        model = LearningContentItem
+        fields = ["title", "description", "content_type", "sequence", "is_required",
+                  "estimated_duration_minutes", "video_url", "document_file", "scorm_package",
+                  "external_url", "body_text", "pass_threshold_percent", "max_attempts", "time_limit_minutes"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"}),
+            "body_text": forms.Textarea(attrs={"rows": 4, "class": "form-textarea"}),
+        }
+
+    def clean_document_file(self):
+        f = self.cleaned_data.get("document_file")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
+                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+            if getattr(f, "size", 0) and f.size > MAX_ONBOARDING_DOC_BYTES:
+                raise forms.ValidationError("The document exceeds the 10 MB limit.")
+        return f
+
+    def clean_scorm_package(self):
+        # WARNING: stored as an opaque file only — never extracted this pass. A future SCORM-extraction
+        # handler MUST guard against zip-slip / path traversal before writing extracted files to disk.
+        f = self.cleaned_data.get("scorm_package")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_SCORM_EXTENSIONS:
+                raise forms.ValidationError("A SCORM package must be a .zip file.")
+            if getattr(f, "size", 0) and f.size > MAX_SCORM_BYTES:
+                raise forms.ValidationError("The SCORM package exceeds the 50 MB limit.")
+        return f
+
+
+class LearningPathForm(TenantModelForm):
+    # target_designation/target_department are auto tenant-scoped by TenantModelForm; the model's
+    # limit_choices_to={"kind": "department"} narrows the department dropdown to department OrgUnits.
+    class Meta:
+        model = LearningPath
+        fields = ["title", "description", "target_designation", "target_department",
+                  "is_mandatory", "is_active"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
+        }
+
+
+class LearningPathItemForm(TenantModelForm):
+    # `path` is set from the URL in the nested create view; scope `course` to the tenant's active courses.
+    class Meta:
+        model = LearningPathItem
+        fields = ["course", "sequence", "is_mandatory"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "course" in self.fields and self.tenant is not None:
+            self.fields["course"].queryset = (
+                TrainingCourse.objects.filter(tenant=self.tenant, is_active=True).order_by("title"))
+
+
+class LearningProgressForm(TenantModelForm):
+    class Meta:
+        model = LearningProgress
+        fields = ["employee", "course", "learning_path", "status", "percent_complete",
+                  "time_spent_minutes", "score", "passed", "attempt_count", "points_earned",
+                  "started_at", "completed_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Give the (possibly unsaved) instance its tenant BEFORE validation so the
+        # ("tenant","employee","course") unique_together check in ModelForm._post_clean()'s
+        # validate_unique() runs against the real tenant even on the flat create path (crud_create
+        # sets obj.tenant only AFTER is_valid()). Same fix class as TrainingSessionForm's overlap guard.
+        if self.tenant is not None and self.instance is not None and self.instance.tenant_id is None:
+            self.instance.tenant = self.tenant
