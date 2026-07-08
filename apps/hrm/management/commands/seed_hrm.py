@@ -132,6 +132,12 @@ from apps.hrm.models import (  # 3.22 Training Management
     TrainingCourse,
     TrainingSession,
 )
+from apps.hrm.models import (  # 3.23 Learning Management (LMS)
+    LearningContentItem,
+    LearningPath,
+    LearningPathItem,
+    LearningProgress,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -256,6 +262,7 @@ class Command(BaseCommand):
             self._seed_feedback(tenant, flush=options["flush"])
             self._seed_improvement(tenant, flush=options["flush"])
             self._seed_training(tenant, flush=options["flush"])
+            self._seed_lms(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -284,6 +291,11 @@ class Command(BaseCommand):
                           # 3.20: Feedback/1:1s PROTECT EmployeeProfile (giver/receiver/manager/
                           # employee/owner) — wipe the feedback + 1:1 rows (action-items→meetings,
                           # feedback→badges) BEFORE the employee rows below.
+                          # 3.23: LearningPathItem.course + LearningProgress.course are PROTECT — wipe
+                          # them before TrainingCourse; LearningContentItem.course is CASCADE (auto-clears
+                          # with its course); LearningProgress.employee is CASCADE + .learning_path SET_NULL
+                          # (order-agnostic vs EmployeeProfile/LearningPath).
+                          LearningProgress, LearningPathItem, LearningPath, LearningContentItem,
                           # 3.22: TrainingSession.course is PROTECT (wipe sessions before courses);
                           # instructor_employee/external_vendor are SET_NULL (not a PROTECT barrier) — listed
                           # here only so a full --flush leaves no orphaned training rows.
@@ -2363,3 +2375,109 @@ class Command(BaseCommand):
             f"Training seeded for '{tenant.name}': "
             f"{TrainingCourse.objects.filter(tenant=tenant).count()} courses, "
             f"{TrainingSession.objects.filter(tenant=tenant).count()} sessions (classroom/virtual/external)."))
+
+    def _seed_lms(self, tenant, *, flush):
+        """3.23 Learning Management (LMS) — the self-paced layer on the 3.22 TrainingCourse catalog
+        (runs after _seed_training). Adds ordered content items + a light assessment to two existing
+        courses, 2 role-based learning paths (one exercising the prerequisite-gating order), and
+        per-employee progress rows spanning statuses + points (for the leaderboard). Reuses existing
+        TrainingCourses / EmployeeProfiles / Designation / department OrgUnit - creates NO new course/
+        person/role rows. NOTE: document/scorm content types are skipped here (a management command has
+        no real file to attach - a seeder limitation, not a model one). ASCII-only stdout (cp1252 bug)."""
+        if flush:
+            LearningProgress.objects.filter(tenant=tenant).delete()
+            LearningPathItem.objects.filter(tenant=tenant).delete()
+            LearningPath.objects.filter(tenant=tenant).delete()
+            LearningContentItem.objects.filter(tenant=tenant).delete()
+
+        bootcamp = TrainingCourse.objects.filter(tenant=tenant, title="Technical Onboarding Bootcamp").first()
+        safety = TrainingCourse.objects.filter(tenant=tenant, title="Workplace Safety Certification").first()
+        leadership = TrainingCourse.objects.filter(tenant=tenant, title="Leadership Excellence Program").first()
+        if not (bootcamp and safety and leadership):
+            self.stdout.write(self.style.NOTICE(
+                f"Training courses missing for '{tenant.name}' - run the training seed first; skipping LMS seed."))
+            return
+        if LearningContentItem.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"LMS data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name"))
+        if not emps:
+            self.stdout.write(self.style.NOTICE(
+                f"No employees for '{tenant.name}' - skipping LMS seed."))
+            return
+        designation = Designation.objects.filter(tenant=tenant).first()
+        dept = OrgUnit.objects.filter(tenant=tenant, kind="department").first()
+        now = timezone.now()
+        td = datetime.timedelta
+
+        # --- Content items (skip document/scorm - no real file in a management command) ---
+        LearningContentItem.objects.create(
+            tenant=tenant, course=bootcamp, title="Welcome to Engineering", content_type="video",
+            sequence=1, is_required=True, estimated_duration_minutes=15,
+            video_url="https://example.com/videos/welcome-engineering")
+        LearningContentItem.objects.create(
+            tenant=tenant, course=bootcamp, title="Read: Company Engineering Handbook",
+            content_type="external_link", sequence=2, is_required=True, estimated_duration_minutes=20,
+            external_url="https://example.com/handbook/engineering")
+        LearningContentItem.objects.create(
+            tenant=tenant, course=bootcamp, title="Team Norms & Communication Guidelines",
+            content_type="text", sequence=3, is_required=False, estimated_duration_minutes=10,
+            body_text="Our team communication norms, meeting etiquette, and escalation paths.")
+        LearningContentItem.objects.create(
+            tenant=tenant, course=bootcamp, title="Onboarding Knowledge Check", content_type="assessment",
+            sequence=4, is_required=True, pass_threshold_percent=80, max_attempts=2, time_limit_minutes=20,
+            body_text="A short quiz covering the onboarding material.")
+        LearningContentItem.objects.create(
+            tenant=tenant, course=safety, title="Workplace Hazards Overview", content_type="video",
+            sequence=1, is_required=True, estimated_duration_minutes=20,
+            video_url="https://example.com/videos/workplace-hazards")
+        LearningContentItem.objects.create(
+            tenant=tenant, course=safety, title="Safety Certification Exam", content_type="assessment",
+            sequence=2, is_required=True, pass_threshold_percent=90, max_attempts=1, time_limit_minutes=45,
+            body_text="The certification exam - a passing score grants the Certified Safety Associate credential.")
+
+        # --- Learning paths (New Hire Foundations exercises the ordered curriculum; Leadership Track
+        #     exercises prerequisite gating - leadership requires the bootcamp, placed earlier) ---
+        foundations = LearningPath.objects.create(
+            tenant=tenant, title="New Hire Foundations", is_mandatory=True,
+            target_designation=designation, target_department=dept,
+            description="The mandatory onboarding journey for every new hire.")
+        LearningPathItem.objects.create(tenant=tenant, path=foundations, course=bootcamp, sequence=1, is_mandatory=True)
+        LearningPathItem.objects.create(tenant=tenant, path=foundations, course=safety, sequence=2, is_mandatory=True)
+        leadership_track = LearningPath.objects.create(
+            tenant=tenant, title="Engineering Leadership Track", is_mandatory=False,
+            description="A development path for emerging engineering leaders.")
+        LearningPathItem.objects.create(tenant=tenant, path=leadership_track, course=bootcamp, sequence=1, is_mandatory=True)
+        LearningPathItem.objects.create(tenant=tenant, path=leadership_track, course=leadership, sequence=2, is_mandatory=True)
+
+        # --- Progress rows (up to 3 employees; spans statuses + points for the leaderboard) ---
+        LearningProgress.objects.create(
+            tenant=tenant, employee=emps[0], course=bootcamp, learning_path=foundations, status="completed",
+            percent_complete=100, time_spent_minutes=55, score=Decimal("92.00"), passed=True,
+            attempt_count=1, points_earned=150, started_at=now - td(days=40), completed_at=now - td(days=35))
+        LearningProgress.objects.create(
+            tenant=tenant, employee=emps[0], course=safety, learning_path=foundations, status="completed",
+            percent_complete=100, time_spent_minutes=65, score=Decimal("95.00"), passed=True,
+            attempt_count=1, points_earned=200, started_at=now - td(days=30), completed_at=now - td(days=28))
+        if len(emps) > 1:
+            LearningProgress.objects.create(
+                tenant=tenant, employee=emps[1], course=bootcamp, learning_path=foundations, status="in_progress",
+                percent_complete=60, time_spent_minutes=30, attempt_count=0, points_earned=60,
+                started_at=now - td(days=5))
+            LearningProgress.objects.create(
+                tenant=tenant, employee=emps[1], course=leadership, learning_path=leadership_track,
+                status="not_started", percent_complete=0, points_earned=0)
+        if len(emps) > 2:
+            LearningProgress.objects.create(
+                tenant=tenant, employee=emps[2], course=safety, status="failed",
+                percent_complete=100, time_spent_minutes=50, score=Decimal("55.00"), passed=False,
+                attempt_count=1, points_earned=20, started_at=now - td(days=10), completed_at=now - td(days=9))
+
+        self.stdout.write(self.style.SUCCESS(
+            f"LMS seeded for '{tenant.name}': "
+            f"{LearningContentItem.objects.filter(tenant=tenant).count()} content items, "
+            f"{LearningPath.objects.filter(tenant=tenant).count()} paths, "
+            f"{LearningPathItem.objects.filter(tenant=tenant).count()} path courses, "
+            f"{LearningProgress.objects.filter(tenant=tenant).count()} progress records."))
