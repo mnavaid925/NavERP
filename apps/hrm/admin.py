@@ -119,6 +119,12 @@ from .models import (  # 3.22 Training Management
     TrainingCourse,
     TrainingSession,
 )
+from .models import (  # 3.23 Learning Management (LMS)
+    LearningContentItem,
+    LearningPath,
+    LearningPathItem,
+    LearningProgress,
+)
 
 
 @admin.register(JobGrade)
@@ -1075,3 +1081,41 @@ class TrainingSessionAdmin(admin.ModelAdmin):
     search_fields = ("number", "course__title", "venue_name", "external_instructor_name")
     raw_id_fields = ("course", "instructor_employee", "external_vendor", "currency")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+# ----------------------------------------------------------------------- 3.23 Learning Management (LMS)
+@admin.register(LearningContentItem)
+class LearningContentItemAdmin(admin.ModelAdmin):
+    list_display = ("course", "sequence", "title", "content_type", "is_required", "tenant")
+    list_filter = ("tenant", "content_type", "is_required")
+    search_fields = ("title", "course__title")
+    raw_id_fields = ("course",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(LearningPath)
+class LearningPathAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "target_designation", "target_department",
+                    "is_mandatory", "is_active", "tenant")
+    list_filter = ("tenant", "is_mandatory", "is_active")
+    search_fields = ("number", "title")
+    raw_id_fields = ("target_designation", "target_department")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(LearningPathItem)
+class LearningPathItemAdmin(admin.ModelAdmin):
+    list_display = ("path", "sequence", "course", "is_mandatory", "tenant")
+    list_filter = ("tenant", "is_mandatory")
+    search_fields = ("path__title", "course__title")
+    raw_id_fields = ("path", "course")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(LearningProgress)
+class LearningProgressAdmin(admin.ModelAdmin):
+    list_display = ("employee", "course", "status", "percent_complete", "points_earned", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("employee__party__name", "course__title")
+    raw_id_fields = ("employee", "course", "learning_path")
+    readonly_fields = ("created_at", "updated_at")
