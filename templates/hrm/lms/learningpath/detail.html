@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:learningpath_list' %}">Learning Paths</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:learningpath_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:learningpath_delete' obj.pk %}" onsubmit="return confirm('Delete this path? (Its course list will be removed too.)');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{% if obj.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      {% if obj.target_designation %}<div class="detail-item"><dt>Target Role</dt><dd>{{ obj.target_designation.title }}</dd></div>{% endif %}
+      {% if obj.target_department %}<div class="detail-item"><dt>Target Department</dt><dd>{{ obj.target_department.name }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.description %}<div style="margin-top:.6rem;"><strong>Description</strong><p>{{ obj.description|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Courses in this path</h2>
+      <a href="{% url 'hrm:learningpathitem_create' obj.pk %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add course</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Course</th><th>Mandatory</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for it in items %}
+            <tr>
+              <td>{{ it.sequence }}</td>
+              <td><a href="{% url 'hrm:trainingcourse_detail' it.course.pk %}">{{ it.course.title }}</a></td>
+              <td>{% if it.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:learningpathitem_edit' it.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:learningpathitem_delete' it.pk %}" style="display:inline;" onsubmit="return confirm('Remove this course from the path?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="list-plus"></i><h3>No courses yet</h3><p>Add courses in the order learners should complete them.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'hrm:learningpath_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to paths</a>
+{% endblock %}
