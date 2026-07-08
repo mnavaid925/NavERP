@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Content{% else %}Add Content{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Content{% else %}Add Content{% endif %}{% if course %} · {{ course.title }}{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:learningcontentitem_list' %}">Course Content</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}Add{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+      <h3 class="card-title" style="margin:.2rem 0 .6rem;">Lesson</h3>
+      <div class="form-grid">
+        {% include "partials/form_field.html" with field=form.title %}
+        {% include "partials/form_field.html" with field=form.content_type %}
+        {% include "partials/form_field.html" with field=form.sequence %}
+        {% include "partials/form_field.html" with field=form.is_required %}
+        {% include "partials/form_field.html" with field=form.estimated_duration_minutes %}
+        {% include "partials/form_field.html" with field=form.description %}
+      </div>
+
+      <div data-content-group="video">
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="play-circle"></i> Video</h3>
+        <div class="form-grid">{% include "partials/form_field.html" with field=form.video_url %}</div>
+      </div>
+      <div data-content-group="document">
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="file-text"></i> Document</h3>
+        <div class="form-grid">{% include "partials/form_field.html" with field=form.document_file %}</div>
+      </div>
+      <div data-content-group="scorm">
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="package"></i> SCORM Package</h3>
+        <div class="form-grid">{% include "partials/form_field.html" with field=form.scorm_package %}</div>
+      </div>
+      <div data-content-group="external_link">
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="external-link"></i> External Link</h3>
+        <div class="form-grid">{% include "partials/form_field.html" with field=form.external_url %}</div>
+      </div>
+      <div data-content-group="text">
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="align-left"></i> Article Text</h3>
+        <div class="form-grid">{% include "partials/form_field.html" with field=form.body_text %}</div>
+      </div>
+      <div data-content-group="assessment">
+        <h3 class="card-title" style="margin:1rem 0 .6rem;"><i data-lucide="clipboard-check"></i> Assessment</h3>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.pass_threshold_percent %}
+          {% include "partials/form_field.html" with field=form.max_attempts %}
+          {% include "partials/form_field.html" with field=form.time_limit_minutes %}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        {% if course %}<a href="{% url 'hrm:trainingcourse_detail' course.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}<a href="{% url 'hrm:learningcontentitem_list' %}" class="btn btn-outline">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var sel = document.getElementById("{{ form.content_type.id_for_label }}");
+    var groups = document.querySelectorAll("[data-content-group]");
+    function sync() {
+      var t = sel ? sel.value : "";
+      groups.forEach(function (g) {
+        // Kept in the DOM (display:none inputs still POST) so clean() validates the chosen type server-side.
+        g.style.display = (g.getAttribute("data-content-group") === t) ? "" : "none";
+      });
+    }
+    if (sel) { sel.addEventListener("change", sync); sync(); }
+  })();
+</script>
+{% endblock %}
