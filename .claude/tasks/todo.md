@@ -903,5 +903,32 @@ and lists what's reused / explicitly what's deferred to 3.23/3.24).
 - **Auto-generated webinar link on session creation** (360Learning-style API call to mint a join
   link) — integration/later; requires per-tenant Zoom/Teams/Webex API credentials.
 
-## Review notes
-(filled in at the end)
+## Review notes (3.22 — as-built)
+
+Built exactly the 2-model scope: `TrainingCourse` (TRC-) + `TrainingSession` (TRS-), full CRUD + a
+`training_calendar` view, `LIVE_LINKS["3.22"]` (5 bullets, delivery-mode `?query` slices), `_seed_training`
+(3 courses + 4 sessions/tenant, idempotent), migrations 0037 (models) + 0038 (perf indexes). Verified:
+`manage.py check` clean, seeder idempotent (2nd run no-op), 13-URL smoke sweep 200/302 + no comment leaks,
+cross-tenant IDOR → 404, overlap `clean()` guard + `ProtectedError` course-delete confirmed.
+
+**Module Creation Sequence — all 7 review agents run, one at a time, findings applied & committed:**
+- **code-reviewer** — 1 Important: the double-booking guard no-op'd on *create* (`crud_create` sets
+  `obj.tenant` after `is_valid()`, so `clean()`'s overlap query ran on `tenant_id=None`). Fixed:
+  `TrainingSessionForm.__init__` sets `instance.tenant` pre-validation. Regression-pinned in tests.
+- **explorer** — wiring fully consistent; dropped redundant `Meta.widgets`/`input_formats` (the base
+  `TenantModelForm` already forces datetime-local + round-trip formats, L22).
+- **frontend-reviewer** — 2 Important: undefined `.section-title` → `.card-title`; dead "Cancelled" option
+  on the calendar status filter removed. + minor: course form reuses `partials/form_field.html`, calendar
+  badge future-proofed.
+- **performance-reviewer** — added `(tenant, instructor_employee)` + `(tenant, delivery_mode)` indexes
+  (mig 0038); trimmed 2 unused `select_related` legs. No N+1s.
+- **qa-smoke-tester** — found a latent **app-wide** 500 in the shared `crud_list` boolean filter
+  (`?is_active=abc` → uncaught `ValidationError` inside `.filter()`); root-cause fixed in `apps/core/crud.py`
+  (try/except, extends the L11 int-guard intent) — protects every module.
+- **security-reviewer** — no vulnerabilities (tenant isolation, `URLField` rejects hostile schemes,
+  `rel="noopener"`, CSRF, no `|safe`, ORM-only). No changes.
+- **test-writer** — 154 tests (64 model/form + 63 view + 27 security), all green; full HRM suite green,
+  no regressions.
+
+Skill `.claude/skills/hrm/SKILL.md` updated (models table, flow, routes, `training/` templates, seeder,
+LIVE_LINKS, counts 79→81). **3.22 complete; next unbuilt is 3.23 Learning Management (LMS).**
