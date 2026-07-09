@@ -9872,7 +9872,7 @@ def trainingnomination_detail(request, pk):
             "session__course", "employee__party", "nominated_by__party", "approver__party"),
         pk=pk, tenant=request.tenant)
     return render(request, "hrm/trainingadmin/trainingnomination/detail.html", {
-        "obj": obj, "can_decide": _can_decide_nomination(request, obj)})
+        "obj": obj, "can_decide": _can_decide_nomination(request, obj), "is_admin": _is_admin(request.user)})
 
 
 @login_required
