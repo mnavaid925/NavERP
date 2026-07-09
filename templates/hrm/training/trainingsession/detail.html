@@ -93,5 +93,67 @@
     <div class="card"><div class="card-body"><strong>Notes</strong><p>{{ obj.notes|linebreaksbr }}</p></div></div>
   {% endif %}
 
+  {# 3.24 cross-touch — nominations + attendance for this session #}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Nominations</h2>
+      <a href="{% url 'hrm:trainingnomination_create' %}" class="btn btn-outline btn-sm"><i data-lucide="user-plus"></i> Nominate</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Type</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for n in nominations %}
+            <tr>
+              <td><a href="{% url 'hrm:trainingnomination_detail' n.pk %}" class="fw-600">{{ n.number }}</a></td>
+              <td>{{ n.employee.party.name }}</td>
+              <td>{{ n.get_nomination_type_display }}</td>
+              <td>
+                {% if n.status == 'approved' %}<span class="badge badge-green">{{ n.get_status_display }}</span>
+                {% elif n.status == 'pending' %}<span class="badge badge-info">{{ n.get_status_display }}</span>
+                {% elif n.status == 'waitlisted' %}<span class="badge badge-amber">{{ n.get_status_display }}</span>
+                {% elif n.status == 'rejected' %}<span class="badge badge-red">{{ n.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ n.get_status_display }}</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="user-plus"></i><h3>No nominations</h3><p>Nominate employees for this session.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Attendance</h2>
+      <a href="{% url 'hrm:trainingattendance_create' %}" class="btn btn-outline btn-sm"><i data-lucide="clipboard-check"></i> Mark attendance</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Attendance</th><th>Completion</th></tr></thead>
+        <tbody>
+          {% for a in attendance %}
+            <tr>
+              <td><a href="{% url 'hrm:trainingattendance_detail' a.pk %}">{{ a.employee.party.name }}</a></td>
+              <td>
+                {% if a.attendance_status == 'present' %}<span class="badge badge-green">{{ a.get_attendance_status_display }}</span>
+                {% elif a.attendance_status == 'absent' %}<span class="badge badge-red">{{ a.get_attendance_status_display }}</span>
+                {% elif a.attendance_status == 'partial' %}<span class="badge badge-amber">{{ a.get_attendance_status_display }}</span>
+                {% elif a.attendance_status == 'walk_in' %}<span class="badge badge-info">{{ a.get_attendance_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ a.get_attendance_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if a.completion_status == 'completed' %}<span class="badge badge-green">{{ a.get_completion_status_display }}</span>
+                {% elif a.completion_status == 'failed' %}<span class="badge badge-red">{{ a.get_completion_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ a.get_completion_status_display }}</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No attendance records</h3><p>Mark who attended once the session runs.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <a href="{% url 'hrm:trainingsession_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to sessions</a>
 {% endblock %}
