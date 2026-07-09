@@ -1526,3 +1526,784 @@ alone can't help; replaced with an explicit `clean()` duplicate check.
 
 Skill `.claude/skills/hrm/SKILL.md` updated (models table, LMS flow, routes, `lms/` templates, seeder, LIVE_LINKS,
 counts 81→85). **3.23 complete; next unbuilt is 3.24 Training Administration.**
+
+---
+# Module 3 — HRM — Sub-module 3.24 Training Administration (hrm-3.24-training-administration) — plan from research-hrm-3.24-training-administration.md (2026-07-09)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.23) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries, next migration is `0040`.** This is the FINAL sub-module
+of the 3.22 (ILT catalog) / 3.23 (LMS) / 3.24 (Administration) training cluster — it adds only the
+**operational/transactional layer** (who's nominated, who showed up, what they thought, what they
+earned) and must not re-model the catalog (`TrainingCourse`), the ILT occurrence
+(`TrainingSession`), or self-paced progress (`LearningProgress`) already built. Four models cover
+Nomination / Attendance Tracking / Training Feedback / Certificates; **Training Budget does NOT get
+a model** — it's a computed aggregate over `TrainingSession.actual_cost`/`estimated_cost` (3.22) and
+`hrm.CostCenterProfile.budget_annual` (3.2), matching the research finding that budget *tracking* is
+a differentiator (Training Orchestra's specialty), not a table-stakes stored feature.
+
+Reuses (never duplicates): `hrm.TrainingSession` (TRS-, 3.22 — `capacity`, `waitlist_enabled`,
+`status`, `start_datetime`, `estimated_cost`/`actual_cost`/`currency`), `hrm.TrainingCourse` (TRC-,
+3.22 — `is_certification`, `certification_name`, `certification_validity_months`),
+`hrm.LearningProgress` (3.23 — the LMS completion path a certificate can also be issued from),
+`hrm.EmployeeProfile` (nominee/attendee/certificate holder — no new learner table),
+`hrm.CostCenterProfile`/`core.OrgUnit` (kind `department`/`cost_center`, 3.2 — the budget path via
+`DepartmentProfile.cost_center`), `accounting.Currency` (global, lazy-import, already on
+`TrainingSession`). No new core-spine entity; nothing posts to the GL. Ordinary tenant-scoped CRUD —
+no confidentiality gating, except `TrainingFeedback.is_anonymous` masks the attendee's identity on
+render (direct clone of the 3.20 `Feedback.is_anonymous`/`giver_anonymized` pattern, reusing the
+already-defined `_is_admin(request.user)` helper at `apps/hrm/views.py:7721`), and nomination
+approve/reject/waitlist mirror `LeaveRequest.approve`/`reject`'s privileged-action shape
+(`apps/hrm/views.py:985-1039`) but allow the nominee's manager too, not just a tenant admin.
+
+**GOTCHA — apply proactively, don't wait to rediscover it (learned the hard way across 3.22/3.23):**
+any model with `unique_together` involving a field EXCLUDED from its ModelForm needs an EXPLICIT
+`clean()` duplicate query — Django's `validate_unique()` silently SKIPS a `unique_together` tuple
+when ANY field in it isn't a form field (regardless of what's pre-set on `self.instance`), surfacing
+only as a 500 IntegrityError. This applies to:
+- `TrainingNominationForm` — `(tenant, session, employee)`, both `session`/`employee` are ordinary
+  form fields but `tenant` is always excluded → skipped.
+- `TrainingAttendanceForm` — `(tenant, session, employee)`, same shape.
+- `TrainingFeedbackForm` — **a THIRD application, self-caught here, not explicitly named in the
+  brief but the identical root cause**: `attendance` is set from the URL (nested create, excluded
+  from `Meta.fields` entirely) and `tenant` is always excluded, so `unique_together=(tenant,
+  attendance)` has BOTH fields form-excluded — the skip is even more certain than the other two.
+  All three forms need the same explicit `clean()` guard; do not assume pre-setting
+  `self.instance.attendance`/`.session`/`.employee` before `is_valid()` fixes it (that only fixes the
+  *different* `tenant_id=None`-at-validation-time bug from `LearningProgressForm`, 3.23 — a separate
+  gotcha, not this one).
+
+## Models (from research)
+
+- [ ] **`TrainingNomination`** [`NOM-`, `TenantNumbered`] — covers **Nomination**.
+  - `session` — FK `hrm.TrainingSession`, `on_delete=PROTECT`, `related_name="nominations"` (a
+    session with nominations can't vanish silently)
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=PROTECT`, `related_name="training_nominations"`
+    (the nominee)
+  - `nominated_by` — FK `hrm.EmployeeProfile`, `on_delete=SET_NULL`, null/blank,
+    `related_name="nominations_made"` (null = self-nominated)
+  - `nomination_type` — CharField choices, max_length=10, default `"self"`: `self` / `manager` /
+    `hr` (driver: self- or manager-initiated nomination — SAP SuccessFactors Learning, SAP Litmos,
+    Workday Learning's Manager Enroll task, Cornerstone automated enrollment; `hr` covers "Assign as
+    Required" per Workday Learning — a manual force-assign this pass, no rule-based auto-trigger)
+  - `status` — CharField choices, max_length=12, default `"pending"`: `pending` / `approved` /
+    `rejected` / `waitlisted` / `cancelled` / `withdrawn` (driver: single-approver workflow —
+    `LeaveRequest` precedent; waitlist queue — SAP Litmos + the `TrainingSession.waitlist_enabled`
+    help-text's explicit promise "the queue itself is 3.24 Nomination")
+  - `approver` — FK `hrm.EmployeeProfile`, `on_delete=SET_NULL`, null/blank,
+    `related_name="nominations_approved"` (an `EmployeeProfile`, not `AUTH_USER_MODEL` like
+    `LeaveRequest.approver` — deliberate: the manager-permission check compares against
+    `employee.employment.manager`, a `core.Party`, so keeping the decision-maker as an employee/party
+    identity avoids a second User→Party lookup at every permission check)
+  - `approved_at` — DateTimeField, null/blank, `editable=False` (workflow-owned)
+  - `rejected_reason` — TextField, blank (workflow-owned, set by the reject action)
+  - `cancelled_reason` — TextField, blank (workflow-owned, set by cancel/withdraw — added beyond the
+    brief's literal field list, mirroring `LeaveRequest.cancelled_reason`'s exact house style so
+    cancel/withdraw have somewhere to record why, same as every other HRM workflow model)
+  - `justification` — TextField, blank (why this nomination — free text from the nominator)
+  - `priority` — CharField choices, max_length=10, default `"normal"`: `low` / `normal` / `high`
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "session", "employee")`; indexes
+    `(tenant, session)` (`hrm_nom_tenant_session_idx`), `(tenant, employee)`
+    (`hrm_nom_tenant_emp_idx`), `(tenant, status)` (`hrm_nom_tenant_status_idx`)
+  - `clean()`: if `self.session_id` and `self.session.status in ("completed", "cancelled")`, raise on
+    `session` ("Cannot nominate for a completed or cancelled session.") — plus the explicit
+    duplicate-guard is in the FORM's `clean()`, not the model's (model-level `unique_together`
+    already raises via `validate_unique()` for any path that DOES include both fields, e.g. the admin
+    site or a direct `full_clean()`; the form-level guard is the belt-and-suspenders fix for the
+    gotcha above)
+  - `__str__`: `f"{self.number} · {self.employee} · {self.session}"`
+  - **Cross-touch (existing 3.22 `TrainingSession` class):** add two `@property` methods —
+    `approved_nomination_count` (`self.nominations.filter(status="approved").count()`) and `is_full`
+    (`self.approved_nomination_count >= self.capacity`) — fulfilling the research's "waitlisted
+    computed against session.capacity vs approved count" requirement with NO new field/migration
+    (properties only; `related_name="nominations"` already makes `self.nominations` valid the moment
+    `TrainingNomination` exists).
+  - Reuses: `hrm.TrainingSession`, `hrm.EmployeeProfile`, `EmployeeProfile.employment.manager` (a
+    `core.Party`) for the approve/reject manager-permission check — no new "Role"/approval-chain
+    table. **Design note (deviation from the literal brief, documented):** no separate `_submit`
+    workflow view — this scope has no `draft` status, so a created nomination is born `pending`
+    directly via `trainingnomination_create`; `submit` is folded into create. If a future draft-save
+    capability is added, a real `_submit` (`draft`→`pending`) would slot in then.
+
+- [ ] **`TrainingAttendance`** [`TenantOwned`, unique per (tenant, session, employee)] — covers
+  **Attendance Tracking**.
+  - `session` — FK `hrm.TrainingSession`, `on_delete=PROTECT`, `related_name="attendance_records"`
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=PROTECT`, `related_name="training_attendance"`
+  - `nomination` — FK `TrainingNomination`, `on_delete=SET_NULL`, null/blank,
+    `related_name="attendance_records"` (null = unregistered — links back when the attendee WAS
+    nominated)
+  - `attendance_status` — CharField choices, max_length=10, default `"registered"`: `registered` /
+    `present` / `absent` / `partial` / `walk_in` (driver: present/absent/partial marking — Docebo,
+    SAP Litmos, Arlo; **walk-in is a status value, not a separate boolean** — a `walk_in` row with
+    `nomination=None` fully captures Docebo's "add walk-ins at the door" feature with one field, not
+    two)
+  - `completion_status` — CharField choices, max_length=15, default `"not_completed"`:
+    `not_completed` / `completed` / `failed` (driver: session-level completion independent of
+    attendance presence, with manual override — Docebo)
+  - `check_in_at` — DateTimeField, null/blank; `check_out_at` — DateTimeField, null/blank (driver:
+    arrival/departure audit trail — Arlo mobile check-in, Cornerstone audit-ready documentation)
+  - `notes` — TextField, blank
+  - `Meta.ordering = ["-session__start_datetime", "employee__party__name"]`; `unique_together =
+    ("tenant", "session", "employee")`; indexes `(tenant, session)` (`hrm_att_tenant_session_idx`),
+    `(tenant, employee)` (`hrm_att_tenant_emp_idx`), `(tenant, attendance_status)`
+    (`hrm_att_tenant_status_idx`)
+  - `clean()`: `check_out_at` (if set) must be `>= check_in_at` (if set) — else raise on
+    `check_out_at`; if `self.nomination_id`, the nomination's `session_id`/`employee_id` must match
+    `self.session_id`/`self.employee_id` — else raise on `nomination` ("This nomination is for a
+    different session/employee.") — a defense-in-depth consistency check, cheap since `nomination`
+    is already scoped to the tenant by the form
+  - `__str__`: `f"{self.employee} · {self.session} ({self.get_attendance_status_display()})"`
+  - **OPTIONAL (nice-to-have, base CRUD is mandatory, this is a stretch goal if time allows):** a
+    per-session "mark attendance" roster action — `trainingattendance_roster(request, session_pk)`
+    (GET renders every `approved`/`waitlisted` nominee for the session next to their existing
+    attendance row if any; POST bulk-updates `attendance_status` per employee in one submit).
+  - Reuses: `hrm.TrainingSession`, `hrm.EmployeeProfile`, `TrainingNomination` — no new table.
+
+- [ ] **`TrainingFeedback`** [`TenantOwned`, unique per (tenant, attendance)] — covers **Training
+  Feedback** (Kirkpatrick Level-1 "Reaction").
+  - `attendance` — FK `TrainingAttendance`, `on_delete=CASCADE`, `related_name="feedback"` (a plain
+    FK per the brief, not a Django `OneToOneField` — the 1:1 cardinality is enforced instead by
+    `unique_together=(tenant, attendance)`, functionally identical, matches the literal field type
+    requested)
+  - `overall_rating` — PositiveSmallIntegerField, `validators=[MinValueValidator(1),
+    MaxValueValidator(5)]`; `content_rating` — same; `trainer_rating` — same (driver: Kirkpatrick
+    Level-1 course/content/trainer rating — TalentLMS survey units, Kirkpatrick-model best-practice
+    guidance)
+  - `would_recommend` — BooleanField, default True (driver: TalentLMS's satisfaction+recommend
+    framing)
+  - `comments` — TextField, blank
+  - `is_anonymous` — BooleanField, default False (driver: masks the attendee — direct clone of the
+    3.20 `Feedback.is_anonymous` mask-on-render pattern; **no `submitted_at` field** —
+    `TenantOwned.created_at` already carries "when submitted", avoiding a redundant column)
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "attendance")`; no extra indexes
+    needed beyond the one the `unique_together` constraint already provides
+  - `clean()`: **no rating-range logic here** — the `MinValueValidator`/`MaxValueValidator` on each
+    field already enforce 1–5 at the form/field level (matches the brief: "ratings in 1..5
+    (validators handle it)"); `clean()` on the FORM (not the model) carries the
+    `(tenant, attendance)` duplicate guard from the GOTCHA above
+  - `@property giver_anonymized` — `return self.is_anonymous` (mirrors `Feedback.giver_anonymized`
+    exactly, one place to change if a future per-type masking rule is needed)
+  - `__str__`: `f"Feedback · {self.attendance}"`
+  - Reuses: `TrainingAttendance` (no duplicate session/employee FKs — the attendee IS
+    `attendance.employee`, there's no separate "giver" field).
+
+- [ ] **`TrainingCertificate`** [`CERT-`, `TenantNumbered`] — covers **Certificates**.
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=PROTECT`, `related_name="training_certificates"`
+  - `course` — FK `hrm.TrainingCourse`, `on_delete=PROTECT`, `related_name="certificates"` (the
+    certifying course)
+  - `source_attendance` — FK `TrainingAttendance`, `on_delete=SET_NULL`, null/blank,
+    `related_name="certificates_issued"` (the ILT completion that earned it)
+  - `source_progress` — FK `hrm.LearningProgress`, `on_delete=SET_NULL`, null/blank,
+    `related_name="certificates_issued"` (the LMS completion that earned it)
+  - `title` — CharField, max_length=255, blank (defaulted in `save()` from
+    `course.certification_name` or `course.title` — never required from the user)
+  - `issued_on` — DateField (form default = today, set by the view's `initial=`)
+  - `expires_on` — DateField, null/blank, `editable=False` (computed ONCE at `save()` time, from
+    `issued_on` + `course.certification_validity_months`, using the SAME stdlib month-math as
+    `LearningProgress.certification_expires_on` — see the shared-helper extraction below; **stored**,
+    not derived-on-read, because it's an issued artifact and must not silently drift if the course's
+    validity setting changes later)
+  - `verification_code` — CharField, max_length=20, `unique=True`, `editable=False`, blank (generated
+    once in `save()`: `secrets.token_hex(8).upper()`, 16 hex chars, 64 bits of entropy — same
+    `secrets`-module standard the project already uses for `public_token`/`token` fields
+    (`apps/crm/models.py`, `apps/tenants/models.py`, `apps/accounts/models.py`); global `unique=True`
+    mirrors `NPSSurvey.token`'s exact pattern — no per-tenant uniqueness loop needed at this entropy)
+  - `status` — CharField choices, max_length=10, default `"issued"`: `issued` / `revoked` / `expired`
+  - `revoked_reason` — TextField, blank
+  - **Design note (deviation from the research doc, documented, not silently dropped):** NO
+    `certificate_file` FileField and NO `issued_by` FK this pass — the brief's literal field list
+    omits both. `certificate_file` (a future PDF-render/upload target) is pushed to Later
+    passes/deferred rather than shipped half-used; `issued_by` is dropped as redundant — every create
+    already runs `write_audit_log(request.user, obj, "create")`, which already answers "who/when
+    issued" via `AuditLog`, the project's general mechanism, without a duplicate column.
+  - `Meta.ordering = ["-issued_on"]`; `unique_together = ("tenant", "number")`; indexes `(tenant,
+    employee)` (`hrm_cert_tenant_emp_idx`), `(tenant, course)` (`hrm_cert_tenant_course_idx`),
+    `(tenant, status)` (`hrm_cert_tenant_status_idx`)
+  - `clean()`: both `source_attendance` and `source_progress` set at once → raise on
+    `source_progress` ("Link only one source — attendance OR progress, not both."). Neither set is
+    ALLOWED (a flat/manual/administrative issuance, e.g. a legacy-system import or a non-ILT/non-LMS
+    training) — the brief does not mandate "exactly one required", so this stays permissive but still
+    catches the genuinely ambiguous double-sourced case. If `source_attendance_id`, its `employee_id`
+    must equal `self.employee_id` and its `session.course_id` must equal `self.course_id` — else
+    raise (cross-consistency). Same check mirrored for `source_progress` (`employee_id`/`course_id`
+    must match).
+  - `save()`: (1) `if not self.title:` default from `course.certification_name or course.title`; (2)
+    `if not self.verification_code:` generate it; (3) `if self.expires_on is None and self.issued_on
+    and self.course_id:` compute it via the shared month-math helper, only if
+    `course.is_certification` and `course.certification_validity_months` are both set (else stays
+    `None`) — computed ONCE, on first save, never recomputed after.
+  - **Shared-helper extraction (elegance, avoid duplicating the month-math a second time):** pull
+    `LearningProgress.certification_expires_on`'s inline `calendar.monthrange` day-clamp logic out
+    into a module-level `_advance_months(d: date, months: int) -> date` helper near the top of
+    `models.py` (alongside `TenantOwned`/`TenantNumbered`); refactor `LearningProgress
+    .certification_expires_on` to call it (no behavior change, existing tests must still pass
+    unmodified); `TrainingCertificate.save()` calls the same helper. Do not re-derive the
+    `calendar.monthrange` logic inline a second time.
+  - `@property is_expired` — `bool(self.expires_on and self.expires_on < timezone.localdate())`
+    (derived, live truth). **Design tension, flagged not hidden:** `status` ALSO has a stored
+    `expired` choice (per the brief's literal list), but nothing in this pass auto-flips a stored
+    `issued` row to `expired` when its date passes — there is no scheduled job. Templates/badges MUST
+    render off the live `is_expired` property, not solely off `obj.status == "expired"` (which an
+    admin can still set manually, e.g. after an external audit) — document this explicitly in the
+    detail template comment and in the SKILL.md close-out so it isn't rediscovered as a "bug" later.
+  - `__str__`: `f"{self.number} · {self.employee} · {self.title}"` if `self.number` else `self.title`
+  - Reuses: `hrm.TrainingCourse.is_certification`/`certification_name`/
+    `certification_validity_months` (3.22), `hrm.LearningProgress` (3.23), `TrainingAttendance` (this
+    pass) — issues the artifact, never recomputes eligibility itself.
+
+All four models are transactional satellites around the already-built `TrainingSession`/
+`TrainingCourse`/`LearningProgress` — add after the existing `LearningProgress` class (current end of
+file, `apps/hrm/models.py`) with a `# --- 3.24 Training Administration ... ---` section-header
+comment block (mirrors the 3.22/3.23 preamble style: states this is the operational layer, lists what
+it reuses, and notes Training Budget is a computed view with no model).
+
+## Backend (apps/hrm/)
+
+- [ ] **models.py**:
+  - Add a module-level `_advance_months(d, months)` helper (the shared-extraction above) placed near
+    `TenantOwned`/`TenantNumbered`, imports already present (`calendar`, `date` — both already
+    imported for `LearningProgress`).
+  - Refactor `LearningProgress.certification_expires_on` to call `_advance_months` (no behavior
+    change).
+  - Add `TrainingNomination`, `TrainingAttendance`, `TrainingFeedback`, `TrainingCertificate` at the
+    end of the file. `TrainingNomination.NUMBER_PREFIX = "NOM"`, `TrainingCertificate.NUMBER_PREFIX =
+    "CERT"`; the other two extend `TenantOwned` (no `NUMBER_PREFIX`, no `number` field).
+  - Add the `approved_nomination_count`/`is_full` `@property` pair to the EXISTING `TrainingSession`
+    class (cross-touch, no migration — properties only).
+- [ ] **forms.py**:
+  - `TrainingNominationForm` (`TenantModelForm`; excludes `tenant`, `status`, `approver`,
+    `approved_at`, `rejected_reason`, `cancelled_reason`; fields: `session`, `employee`,
+    `nominated_by`, `nomination_type`, `justification`, `priority`). `__init__` scopes `session` to
+    `TrainingSession.objects.filter(tenant=self.tenant).exclude(status__in=("cancelled",
+    "postponed"))` (auto-scoped tenant + a sane active-session default; `employee`/`nominated_by` are
+    already tenant-scoped by the `TenantModelForm` base). `clean()`: explicit `(tenant, session,
+    employee)` duplicate guard — `TrainingNomination.objects.filter(tenant=self.tenant,
+    session=cleaned["session"], employee=cleaned["employee"]).exclude(pk=self.instance.pk).exists()`
+    → raise on `employee` ("This employee is already nominated for this session.").
+  - `TrainingAttendanceForm` (`TenantModelForm`; excludes `tenant`; fields: `session`, `employee`,
+    `nomination`, `attendance_status`, `completion_status`, `check_in_at`, `check_out_at`, `notes`).
+    `__init__` scopes `nomination` to `TrainingNomination.objects.filter(tenant=self.tenant,
+    status__in=("approved", "waitlisted"))` (only real, decided nominations in the dropdown). Same
+    `(tenant, session, employee)` duplicate-guard `clean()` as above.
+  - `TrainingFeedbackForm` (`TenantModelForm`; excludes `tenant`, `attendance` — set from the URL in
+    the nested create view; fields: `overall_rating`, `content_rating`, `trainer_rating`,
+    `would_recommend`, `comments`, `is_anonymous`). `clean()`: explicit `(tenant, attendance)`
+    duplicate guard — `TrainingFeedback.objects.filter(tenant=self.tenant,
+    attendance=self.instance.attendance).exclude(pk=self.instance.pk).exists()` → raise on
+    `__all__`/a non-field error ("Feedback has already been submitted for this attendance record.")
+    — **the THIRD gotcha application**, see the GOTCHA note above; the view must set
+    `form.instance.attendance = attendance` (and `.tenant`) BEFORE calling `form.is_valid()` so this
+    `clean()` has something to check against.
+  - `TrainingCertificateForm` (`TenantModelForm`; excludes `tenant`, `number`, `verification_code`,
+    `expires_on`, `status`, `revoked_reason`; fields: `employee`, `course`, `source_attendance`,
+    `source_progress`, `title`, `issued_on`). `__init__` scopes `course` to
+    `TrainingCourse.objects.filter(tenant=self.tenant).filter(Q(is_certification=True) |
+    Q(pk=self.instance.course_id))` (only certification-granting courses in the dropdown, but an
+    existing edited row's course stays selectable even if it's since been unmarked). ONE form serves
+    all three create entry points (flat + the two "issue from ..." convenience routes) — the nested
+    routes pass `initial=` (pre-selected but still-editable dropdown values), not `instance=`
+    pre-sets, so no unique-together gotcha applies here (only `unique_together=(tenant, number)`,
+    whose `number` is never a form field anyway — the standard, already-safe `TenantNumbered`
+    pattern used everywhere in this codebase).
+- [ ] **views.py** — function-based, `@login_required`, tenant-scoped throughout:
+  - **TrainingNomination:**
+    - `trainingnomination_list` — `crud_list`, `search_fields=["number", "session__course__title",
+      "employee__party__name", "justification"]`, `filters=[("status", "status", False), ("session",
+      "session_id", True), ("employee", "employee_id", True), ("nomination_type", "nomination_type",
+      False)]`, `extra_context={"status_choices": TrainingNomination.STATUS_CHOICES,
+      "nomination_type_choices": TrainingNomination.NOMINATION_TYPE_CHOICES, "sessions":
+      TrainingSession.objects.filter(tenant=request.tenant).order_by("-start_datetime"), "employees":
+      EmployeeProfile.objects.filter(tenant=request.tenant).order_by("party__name")}`.
+    - `trainingnomination_create` — `crud_create`, `success_url="hrm:trainingnomination_list"`.
+    - `trainingnomination_detail` — `crud_detail`, `select_related=("session__course",
+      "employee__party", "nominated_by__party", "approver__party")`.
+    - `trainingnomination_edit` — manual wrapper around `crud_edit`: pre-check `if obj.status !=
+      "pending": messages.error(...); return redirect("hrm:trainingnomination_detail", pk=obj.pk)`
+      before delegating (only an undecided nomination is freely editable).
+    - `trainingnomination_delete` — manual (mirrors `leaverequest_delete`'s guard): block delete when
+      `status in ("approved", "waitlisted")` (message: "A decided nomination cannot be deleted —
+      cancel or withdraw it instead."); otherwise `write_audit_log` + delete + redirect to list.
+    - `_can_decide_nomination(request, obj)` — local helper: `_is_admin(request.user) or
+      (profile is not None and obj.employee.employment_id and
+      obj.employee.employment.manager_id == profile.party_id)` (`profile =
+      _current_employee_profile(request)`) — lets a tenant admin OR the nominee's own manager decide,
+      per the brief's "approve/reject `@tenant_admin_required` or manager".
+    - `trainingnomination_approve(request, pk)` — `@login_required`, `@require_POST`; 403/redirect
+      with an error message if `not _can_decide_nomination(...)`; only if `status == "pending"`:
+      compute `full = obj.session.is_full`; if not full → `status="approved"`; elif
+      `obj.session.waitlist_enabled` → `status="waitlisted"` (+ an info message explaining why);
+      else → stay `pending` + `messages.error("Session is full and waitlisting is disabled.")` (no
+      state change); on an actual transition set `approver=profile`, `approved_at=timezone.now()`,
+      `write_audit_log`.
+    - `trainingnomination_reject(request, pk)` — same permission guard; `status in ("pending",
+      "waitlisted")` → `rejected`, `rejected_reason=request.POST.get("rejected_reason", "").strip()`,
+      `approver=profile`.
+    - `trainingnomination_waitlist(request, pk)` — `@tenant_admin_required` (admin-only manual
+      override, unlike approve/reject); `status == "pending"` → `waitlisted` regardless of current
+      capacity (an admin deliberately queues someone).
+    - `trainingnomination_cancel(request, pk)` — `@login_required`; allowed for `_can_decide_nomination`
+      OR the original `nominated_by`; `status in ("pending", "approved", "waitlisted")` → `cancelled`,
+      `cancelled_reason=request.POST.get(...)`.
+    - `trainingnomination_withdraw(request, pk)` — `@login_required`, nominee-only self-service
+      (`profile is not None and profile.pk == obj.employee_id`); `status in ("pending", "approved",
+      "waitlisted")` → `withdrawn`, `cancelled_reason` reused for the withdrawal note.
+  - **TrainingAttendance:**
+    - `trainingattendance_list` — `crud_list`, `search_fields=["session__course__title",
+      "employee__party__name", "notes"]`, `filters=[("attendance_status", "attendance_status",
+      False), ("completion_status", "completion_status", False), ("session", "session_id", True),
+      ("employee", "employee_id", True)]`, `extra_context={"attendance_status_choices": ...,
+      "completion_status_choices": ..., "sessions": ..., "employees": ...}`.
+    - `trainingattendance_create` — `crud_create`, `success_url="hrm:trainingattendance_list"`.
+    - `trainingattendance_detail` — `crud_detail`, `select_related=("session__course",
+      "employee__party", "nomination")`; template surfaces an "Issue Certificate" button when
+      `completion_status == "completed"` and `session.course.is_certification` and no
+      `certificates_issued` row already exists for this attendance, linking to
+      `trainingcertificate_issue_from_attendance`. Also a "Leave Feedback" link to
+      `trainingfeedback_create` (attendance_pk) when no `feedback` row exists yet.
+    - `trainingattendance_edit` — `crud_edit`, `success_url="hrm:trainingattendance_list"`.
+    - `trainingattendance_delete` — `crud_delete`, `success_url="hrm:trainingattendance_list"`.
+    - `trainingattendance_roster(request, session_pk)` — **OPTIONAL/stretch**, see the model note.
+  - **TrainingFeedback:**
+    - `trainingfeedback_create(request, attendance_pk)` — **nested**, mirrors
+      `learningcontentitem_create`: `attendance = get_object_or_404(TrainingAttendance,
+      pk=attendance_pk, tenant=request.tenant)`; builds the form with `instance=TrainingFeedback(
+      tenant=request.tenant, attendance=attendance)` (tenant + parent set BEFORE validation — the
+      form's `clean()` duplicate-guard still fires because it queries the DB directly, not because of
+      pre-setting the instance); on success `write_audit_log` + redirect to
+      `hrm:trainingattendance_detail` (pk=attendance.pk).
+    - `trainingfeedback_list` — `crud_list`, `search_fields=["attendance__session__course__title",
+      "comments"]`, `filters=[("would_recommend", "would_recommend", False), ("session",
+      "attendance__session_id", True)]`, `extra_context={"sessions": ..., "is_admin":
+      _is_admin(request.user)}` — list template masks `row.attendance.employee` behind "Anonymous"
+      when `row.giver_anonymized and not is_admin`.
+    - `trainingfeedback_detail` — `crud_detail`, `select_related=("attendance__session__course",
+      "attendance__employee__party")`; `extra_context={"is_admin": _is_admin(request.user)}`, same
+      masking rule.
+    - `trainingfeedback_edit` — `crud_edit`, `success_url="hrm:trainingfeedback_list"`.
+    - `trainingfeedback_delete` — `crud_delete`, `success_url="hrm:trainingfeedback_list"`.
+  - **TrainingCertificate:**
+    - `trainingcertificate_list` — `crud_list`, `search_fields=["number", "title",
+      "verification_code", "employee__party__name", "course__title"]`, `filters=[("status", "status",
+      False), ("course", "course_id", True), ("employee", "employee_id", True)]`,
+      `extra_context={"status_choices": ..., "courses": TrainingCourse.objects.filter(tenant=
+      request.tenant, is_certification=True).order_by("title"), "employees": ...}`.
+    - `trainingcertificate_create` — `crud_create`, `success_url="hrm:trainingcertificate_list"`
+      (flat/manual admin issuance path, `initial={"issued_on": timezone.localdate()}`).
+    - `trainingcertificate_issue_from_attendance(request, attendance_pk)` — GET/POST; tenant-scoped
+      lookup; guard `attendance.completion_status == "completed"` and
+      `attendance.session.course.is_certification` (else `messages.error` + redirect to
+      `hrm:trainingattendance_detail`); builds `TrainingCertificateForm` with `initial={"employee":
+      attendance.employee_id, "course": attendance.session.course_id, "source_attendance":
+      attendance.pk, "issued_on": timezone.localdate(), "title":
+      attendance.session.course.certification_name}`; on success redirect to the new certificate's
+      detail.
+    - `trainingcertificate_issue_from_progress(request, progress_pk)` — same shape, guards
+      `progress.status == "completed"` and `progress.course.is_certification`; `initial={"employee":
+      progress.employee_id, "course": progress.course_id, "source_progress": progress.pk,
+      "issued_on": timezone.localdate(), "title": progress.course.certification_name}`.
+    - `trainingcertificate_detail` — `crud_detail`, `select_related=("employee__party", "course",
+      "source_attendance__session", "source_progress")`; surfaces `obj.is_expired`,
+      `verification_code`, a "Print" link (`trainingcertificate_print`) when `status == "issued"`, a
+      "Revoke" action when `status == "issued"`.
+    - `trainingcertificate_edit` — `crud_edit`, `success_url="hrm:trainingcertificate_list"`.
+    - `trainingcertificate_delete` — manual, guarded: block delete when `status == "issued"` (message:
+      "An issued certificate cannot be deleted — revoke it instead."); allow when `status ==
+      "revoked"` (audit-trail integrity, matches the Arlo/Cornerstone research finding on full
+      certificate audit trails).
+    - `trainingcertificate_revoke(request, pk)` — `@tenant_admin_required`, `@require_POST`; `status
+      == "issued"` → `revoked`, `revoked_reason=request.POST.get(...)`, `write_audit_log`.
+    - `trainingcertificate_print(request, pk)` — `@login_required`, GET-only, tenant-scoped; renders
+      `hrm/trainingadmin/trainingcertificate/print.html` (no sidebar, print-friendly layout, mirrors
+      `hrm/offboarding/relieving_letter.html`'s standalone-print convention) — a pure render, no
+      side effect (unlike `separationcase_generate_relieving_letter`, which is POST + creates an
+      `EmployeeDocument`; this pass has no document-generation mechanism, just a printable page of
+      the stored fields + `verification_code`).
+  - **`training_budget(request)`** — standalone `GET`-only computed view (covers **Training Budget**,
+    no model): `?year=` GET param (default current year via `timezone.localdate().year`); year-choices
+    dropdown from `TrainingSession.objects.filter(tenant=request.tenant).dates("start_datetime",
+    "year")`. Tenant-wide totals: `TrainingSession.objects.filter(tenant=request.tenant,
+    start_datetime__year=year).aggregate(total_estimated=Sum("estimated_cost"),
+    total_actual=Sum("actual_cost"))`; total allocated =
+    `CostCenterProfile.objects.filter(tenant=request.tenant,
+    budget_year=year).aggregate(Sum("budget_annual"))`. Per-cost-center breakdown: for each
+    `CostCenterProfile.objects.filter(tenant=request.tenant, budget_year=year,
+    is_active=True).select_related("org_unit")`, actual spend = `TrainingSession.objects.filter(
+    tenant=request.tenant, start_datetime__year=year,
+    attendance_records__employee__employment__org_unit__department_profile__cost_center_id=
+    cc.org_unit_id).distinct().aggregate(Sum("actual_cost"))` (the join path: session →
+    attendance_records → employee → employment.org_unit (department) → department_profile.cost_center
+    → this cost center) — **flag for `performance-reviewer`**: this is one query per cost center,
+    acceptable for typical cost-center cardinality (single digits/low tens per tenant) but note it as
+    a batch-with-`annotate()` follow-up if a tenant ever has dozens. Passes `rows` (cost center, name,
+    allocated, actual, estimated, variance, utilization %) + tenant-wide totals to the template.
+  - **Cross-touch (existing 3.22 file):** extend `trainingsession_detail`'s context with
+    `nominations=obj.nominations.select_related("employee__party").all()` and
+    `attendance=obj.attendance_records.select_related("employee__party").all()`, plus "Nominate
+    someone" / "Mark attendance" links — a one-line view change + a template addition to the
+    ALREADY-BUILT `templates/hrm/training/trainingsession/detail.html`.
+  - **Cross-touch (existing 3.23 file):** extend `learningprogress_detail`'s context with an "Issue
+    Certificate" button (same eligibility guard as the standalone view: `status == "completed"` and
+    `course.is_certification` and no existing `certificates_issued` row) linking to
+    `trainingcertificate_issue_from_progress` — a one-line view change + a template addition to the
+    ALREADY-BUILT `templates/hrm/lms/learningprogress/detail.html`.
+- [ ] **urls.py** — `app_name = "hrm"` (already set); add under a `# 3.24 Training Administration`
+  comment block:
+  ```
+  path("training-nominations/", views.trainingnomination_list, name="trainingnomination_list"),
+  path("training-nominations/add/", views.trainingnomination_create, name="trainingnomination_create"),
+  path("training-nominations/<int:pk>/", views.trainingnomination_detail, name="trainingnomination_detail"),
+  path("training-nominations/<int:pk>/edit/", views.trainingnomination_edit, name="trainingnomination_edit"),
+  path("training-nominations/<int:pk>/delete/", views.trainingnomination_delete, name="trainingnomination_delete"),
+  path("training-nominations/<int:pk>/approve/", views.trainingnomination_approve, name="trainingnomination_approve"),
+  path("training-nominations/<int:pk>/reject/", views.trainingnomination_reject, name="trainingnomination_reject"),
+  path("training-nominations/<int:pk>/waitlist/", views.trainingnomination_waitlist, name="trainingnomination_waitlist"),
+  path("training-nominations/<int:pk>/cancel/", views.trainingnomination_cancel, name="trainingnomination_cancel"),
+  path("training-nominations/<int:pk>/withdraw/", views.trainingnomination_withdraw, name="trainingnomination_withdraw"),
+
+  path("training-attendance/", views.trainingattendance_list, name="trainingattendance_list"),
+  path("training-attendance/add/", views.trainingattendance_create, name="trainingattendance_create"),
+  path("training-attendance/<int:pk>/", views.trainingattendance_detail, name="trainingattendance_detail"),
+  path("training-attendance/<int:pk>/edit/", views.trainingattendance_edit, name="trainingattendance_edit"),
+  path("training-attendance/<int:pk>/delete/", views.trainingattendance_delete, name="trainingattendance_delete"),
+  path("training-sessions/<int:session_pk>/attendance/roster/", views.trainingattendance_roster, name="trainingattendance_roster"),
+
+  path("training-attendance/<int:attendance_pk>/feedback/add/", views.trainingfeedback_create, name="trainingfeedback_create"),
+  path("training-feedback/", views.trainingfeedback_list, name="trainingfeedback_list"),
+  path("training-feedback/<int:pk>/", views.trainingfeedback_detail, name="trainingfeedback_detail"),
+  path("training-feedback/<int:pk>/edit/", views.trainingfeedback_edit, name="trainingfeedback_edit"),
+  path("training-feedback/<int:pk>/delete/", views.trainingfeedback_delete, name="trainingfeedback_delete"),
+
+  path("training-certificates/", views.trainingcertificate_list, name="trainingcertificate_list"),
+  path("training-certificates/add/", views.trainingcertificate_create, name="trainingcertificate_create"),
+  path("training-attendance/<int:attendance_pk>/issue-certificate/", views.trainingcertificate_issue_from_attendance, name="trainingcertificate_issue_from_attendance"),
+  path("learning-progress/<int:progress_pk>/issue-certificate/", views.trainingcertificate_issue_from_progress, name="trainingcertificate_issue_from_progress"),
+  path("training-certificates/<int:pk>/", views.trainingcertificate_detail, name="trainingcertificate_detail"),
+  path("training-certificates/<int:pk>/edit/", views.trainingcertificate_edit, name="trainingcertificate_edit"),
+  path("training-certificates/<int:pk>/delete/", views.trainingcertificate_delete, name="trainingcertificate_delete"),
+  path("training-certificates/<int:pk>/revoke/", views.trainingcertificate_revoke, name="trainingcertificate_revoke"),
+  path("training-certificates/<int:pk>/print/", views.trainingcertificate_print, name="trainingcertificate_print"),
+
+  path("training-budget/", views.training_budget, name="training_budget"),
+  ```
+  (`trainingattendance_roster` stays in the file even if the OPTIONAL view is deferred — remove the
+  line if the view isn't built this pass, don't ship a dangling URL.)
+- [ ] **admin.py** — register all four models:
+  - `TrainingNominationAdmin`: `list_display = ("number", "session", "employee", "nomination_type",
+    "status", "tenant")`; `list_filter = ("tenant", "status", "nomination_type")`; `search_fields =
+    ("number", "session__course__title", "employee__party__name")`; `raw_id_fields = ("session",
+    "employee", "nominated_by", "approver")`; `readonly_fields = ("number", "created_at",
+    "updated_at")`
+  - `TrainingAttendanceAdmin`: `list_display = ("session", "employee", "attendance_status",
+    "completion_status", "tenant")`; `list_filter = ("tenant", "attendance_status",
+    "completion_status")`; `search_fields = ("session__course__title", "employee__party__name")`;
+    `raw_id_fields = ("session", "employee", "nomination")`; `readonly_fields = ("created_at",
+    "updated_at")`
+  - `TrainingFeedbackAdmin`: `list_display = ("attendance", "overall_rating", "trainer_rating",
+    "would_recommend", "is_anonymous", "tenant")`; `list_filter = ("tenant", "would_recommend",
+    "is_anonymous")`; `search_fields = ("attendance__session__course__title",)`; `raw_id_fields =
+    ("attendance",)`; `readonly_fields = ("created_at", "updated_at")`
+  - `TrainingCertificateAdmin`: `list_display = ("number", "employee", "course", "status",
+    "issued_on", "expires_on", "tenant")`; `list_filter = ("tenant", "status")`; `search_fields = (
+    "number", "title", "verification_code", "employee__party__name", "course__title")`;
+    `raw_id_fields = ("employee", "course", "source_attendance", "source_progress")`;
+    `readonly_fields = ("number", "verification_code", "expires_on", "created_at", "updated_at")`
+- [ ] **migrations** — `python manage.py makemigrations hrm` — expect a `0040_...` migration creating
+  all four models (no schema change from the `TrainingSession` property cross-touch or the
+  `_advance_months` refactor — those don't touch the DB).
+- [ ] **seed_hrm.py** — new `_seed_trainingadmin(self, tenant, *, flush)` method:
+  - Called from `handle()` immediately after `self._seed_lms(tenant, flush=options["flush"])` (the
+    22nd call in the per-tenant loop).
+  - `if flush:` delete in order: `TrainingCertificate`, `TrainingFeedback`, `TrainingAttendance`,
+    `TrainingNomination` — filtered by `tenant`.
+  - Idempotency guards: `sessions = list(TrainingSession.objects.filter(tenant=tenant)
+    .select_related("course").order_by("start_datetime"))` — if empty, NOTICE "Training sessions
+    missing for '{tenant}' - run the training seed first; skipping training-admin seed." + return.
+    `emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party")
+    .order_by("party__name"))` — if `len(emps) < 2`, NOTICE + return. Then `if
+    TrainingNomination.objects.filter(tenant=tenant).exists():` → NOTICE + return.
+  - Reuse the EXISTING sessions from `_seed_training` (3.22) by lookup, not by index (session order
+    isn't guaranteed): `session_a = TrainingSession.objects.filter(tenant=tenant,
+    course__title="Technical Onboarding Bootcamp", venue_name="HQ Training Room A").first()`
+    (day+7 classroom), `session_b = TrainingSession.objects.filter(tenant=tenant,
+    course__title="Technical Onboarding Bootcamp", venue_name="HQ Training Room B").first()`
+    (day+14 classroom repeat), `session_safety = TrainingSession.objects.filter(tenant=tenant,
+    course__title="Workplace Safety Certification").first()` (day+10 virtual, confirmed),
+    `session_leadership = TrainingSession.objects.filter(tenant=tenant,
+    course__title="Leadership Excellence Program", status="completed").first()` (day-20 external,
+    the only COMPLETED session in the existing 3.22 seed). If any of these four is `None`, NOTICE +
+    return (defensive — the 3.22 seed's exact shape not present).
+  - Also reuse the 3.23-seeded `progress_safety = LearningProgress.objects.filter(tenant=tenant,
+    employee=emps[0], course__title="Workplace Safety Certification", status="completed").first()`
+    for the certificate-from-progress demo (may be `None` if `_seed_lms` was skipped — degrade
+    gracefully, skip that one certificate row if so, don't hard-fail the whole method).
+  - Demo data — **`TrainingNomination`** (6 rows, using up to 3 employees, degrading gracefully with
+    `if len(emps) > 2:` guards exactly like `_seed_lms`; every (session, employee) pair distinct to
+    respect the `unique_together`):
+    - `(session_a, emps[1])` — `self`, `approved`, `approver=emps[0]`, `approved_at=now`.
+    - `(session_b, emps[0])` — `hr`, `approved`, `approver=emps[1]` if it exists else `None`,
+      `approved_at=now` (demonstrates the "Assign as Required" HR-assigned path).
+    - `(session_safety, emps[0])` — `self`, `waitlisted` (a directly-seeded demo state — not the
+      product of running the real approve action against actual capacity, same convention as other
+      seeders picking an illustrative status directly).
+    - `(session_safety, emps[1])` — `manager`, `rejected`, `nominated_by=emps[0]` if role fits,
+      `rejected_reason="Scheduling conflict with a client deliverable."`.
+    - `(session_a, emps[2])` if it exists — `self`, `withdrawn`.
+    - `(session_safety, emps[2])` if it exists — `manager`, `pending`, `nominated_by=emps[1]`.
+  - Demo data — **`TrainingAttendance`** (up to 4 rows, on the one COMPLETED session
+    `session_leadership` plus one upcoming `session_a` to show a pre-session `registered` row):
+    - `(session_leadership, emps[0])` — `present` / `completed`, `check_in_at`/`check_out_at` set
+      ~7 hours apart, `nomination=None`.
+    - `(session_leadership, emps[1])` — `absent` / `not_completed`, no check-in/out.
+    - `(session_leadership, emps[2])` if it exists — `walk_in` / `completed`, `nomination=None`,
+      `notes="Walked in without prior registration."`.
+    - `(session_a, emps[1])` — `registered` / `not_completed`, `nomination=` the `(session_a,
+      emps[1])` approved nomination row above (demonstrates the nomination→attendance link).
+  - Demo data — **`TrainingFeedback`** (nested under the `completed` attendance rows only):
+    - Under `(session_leadership, emps[0])`'s attendance: `overall_rating=5`, `content_rating=4`,
+      `trainer_rating=5`, `would_recommend=True`,
+      `comments="Excellent leadership program, very practical."`, `is_anonymous=False`.
+    - Under `(session_leadership, emps[2])`'s attendance, if it exists: `overall_rating=3`,
+      `content_rating=3`, `trainer_rating=4`, `would_recommend=False`,
+      `comments="Content felt rushed for a walk-in."`, `is_anonymous=True` (exercises the
+      mask-on-render path).
+  - Demo data — **`TrainingCertificate`** (2 rows, both on the Safety course — the only
+    `is_certification=True` course in the existing 3.22/3.23 seed; the `source_attendance` path isn't
+    exercised here since no existing COMPLETED ILT session grants a certification course — noted as a
+    seeder limitation, covered instead by `test-writer`'s purpose-built fixture):
+    - `employee=emps[0]`, `course=safety`, `source_progress=progress_safety` (if found),
+      `title="Certified Safety Associate"`, `issued_on=today`, `status="issued"` — `expires_on` is
+      computed automatically in `save()`.
+    - `employee=emps[1]` (if it exists, else reuse `emps[0]`), `course=safety`,
+      `source_attendance=None`, `source_progress=None` (the flat/manual path), `title="Certified
+      Safety Associate (Manual Issue)"`, `issued_on=today - 60 days`, `status="revoked"`,
+      `revoked_reason="Issued in error - employee had not completed the certification exam."`
+      (exercises the revoke state + the no-source manual-issuance path in one row).
+  - **CRITICAL — Windows cp1252 console bug (repeat of the 3.20/3.21/3.22/3.23 bug):** ASCII-only
+    `self.stdout.write(...)` strings (`->` not `→`, plain hyphen not em-dash, no `·`/`—`). Re-read the
+    whole method for stray Unicode before committing.
+  - Update `_seed_tenant`'s big flush-teardown tuple: insert `TrainingCertificate, TrainingFeedback,
+    TrainingAttendance, TrainingNomination,` immediately BEFORE the existing `# 3.23:
+    LearningPathItem.course...` comment / `LearningProgress, LearningPathItem, LearningPath,
+    LearningContentItem,` line, with a comment: `# 3.24: TrainingNomination.session/
+    TrainingAttendance.session are PROTECT - wipe before TrainingSession below;
+    TrainingCertificate.employee/course and TrainingAttendance.employee/TrainingNomination.employee
+    are PROTECT - wipe before EmployeeProfile (much later in this tuple); TrainingFeedback.attendance
+    is CASCADE (auto-clears with its attendance) but listed explicitly for a clean, explicit teardown;
+    TrainingCertificate.source_attendance/source_progress are SET_NULL (order-agnostic).`
+  - Both `management/__init__.py` and `management/commands/__init__.py` already exist (no new dirs
+    this pass) — verify, don't recreate.
+
+## Wire-up
+
+- [ ] `config/settings.py` — `apps.hrm` already in `INSTALLED_APPS` (no change needed this pass).
+- [ ] `config/urls.py` — `hrm/` include already wired (no change needed this pass).
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.24"]` — new block mapping the 5 exact NavERP.md 3.24
+  bullets (confirmed verbatim from `NavERP.md` lines 601–606), placed immediately after the existing
+  `"3.23"` block, with a preamble comment noting Training Budget is computed, not a model:
+  ```python
+  # 3.24 Training Administration — the operational/admin layer on top of 3.22 (TrainingSession) and
+  # 3.23 (LearningProgress); it does not re-model the course catalog, the ILT occurrence, or self-paced
+  # progress. "Training Budget" is a COMPUTED aggregate view (TrainingSession.actual_cost /
+  # CostCenterProfile.budget_annual) — no stored model. This is the final sub-module of the 3.22/3.23/
+  # 3.24 training cluster.
+  "3.24": {
+      "Nomination": "hrm:trainingnomination_list",                # bullet (TrainingNomination CRUD + approval workflow)
+      "Attendance Tracking": "hrm:trainingattendance_list",        # bullet (TrainingAttendance CRUD)
+      "Training Feedback": "hrm:trainingfeedback_list",            # bullet (TrainingFeedback CRUD)
+      "Certificates": "hrm:trainingcertificate_list",              # bullet (TrainingCertificate CRUD + issue/revoke/print)
+      "Training Budget": "hrm:training_budget",                    # bullet (computed budget aggregate view)
+  },
+  ```
+
+## Templates (templates/hrm/trainingadmin/)
+
+- [ ] **New sub-module folder `trainingadmin/`** (per the Template Folder Structure rule — 3.24 is a
+  distinct NavERP.md sub-module from `training/`/`lms/`), with one entity folder per model:
+- [ ] `templates/hrm/trainingadmin/trainingnomination/list.html` — filter bar (`status`,
+  `nomination_type`, `session`, `employee` dropdowns reflecting `request.GET`; FK/pk comparison via
+  `|stringformat:"d"`), status badges matching the exact 6 CHOICES values, Actions column
+  (view/edit/delete-POST+confirm+csrf + inline Approve/Reject/Waitlist/Cancel/Withdraw buttons gated
+  on `obj.status`), pagination, empty-state.
+- [ ] `templates/hrm/trainingadmin/trainingnomination/detail.html` — session/employee/nominator
+  links, status badge, decision fields (`approver`, `approved_at`, `rejected_reason`) shown only when
+  populated, Actions sidebar with the same workflow buttons as the list row (each its own POST form +
+  `{% csrf_token %}` + `confirm()`), Back to List link.
+- [ ] `templates/hrm/trainingadmin/trainingnomination/form.html` — create/edit (shared, `is_edit`
+  flag); no workflow fields shown (those are action-only).
+- [ ] `templates/hrm/trainingadmin/trainingattendance/list.html` — filter bar (`attendance_status`,
+  `completion_status`, `session`, `employee`), status badges, Actions column.
+- [ ] `templates/hrm/trainingadmin/trainingattendance/detail.html` — session/employee/nomination
+  links, check-in/out times, the conditional "Issue Certificate" / "Leave Feedback" links described
+  above, Actions sidebar.
+- [ ] `templates/hrm/trainingadmin/trainingattendance/form.html` — create/edit.
+- [ ] `templates/hrm/trainingadmin/trainingfeedback/list.html` — filter bar (`would_recommend`,
+  `session`), rating stars/badges, attendee name masked to "Anonymous" per-row when
+  `row.giver_anonymized and not is_admin`, Actions column.
+- [ ] `templates/hrm/trainingadmin/trainingfeedback/detail.html` — masked-or-real attendee identity
+  (same rule, using the `is_admin` context var), the 3 ratings, would-recommend, comments, Actions
+  sidebar (Back to attendance).
+- [ ] `templates/hrm/trainingadmin/trainingfeedback/form.html` — nested create/edit (`attendance`
+  shown read-only as context on the create form, not a field).
+- [ ] `templates/hrm/trainingadmin/trainingcertificate/list.html` — filter bar (`status`, `course`,
+  `employee`), status badges (issued/revoked/expired) rendered from **`obj.is_expired`** first (live
+  truth) with the stored `status` as a secondary badge — matches the design-tension note above,
+  Actions column + "Print" link when `status == "issued"`.
+- [ ] `templates/hrm/trainingadmin/trainingcertificate/detail.html` — employee/course/source links
+  (whichever of `source_attendance`/`source_progress` is set), `verification_code`, `issued_on`/
+  `expires_on`, the live `is_expired` badge, Actions sidebar (Edit, Revoke when `status=="issued"`,
+  Delete only when `status=="revoked"`, Print, Back to List).
+- [ ] `templates/hrm/trainingadmin/trainingcertificate/form.html` — create/edit (shared by the flat
+  create AND the two "issue from ..." routes, since they all post to the same form shape with
+  different `initial=`).
+- [ ] `templates/hrm/trainingadmin/trainingcertificate/print.html` — standalone print-friendly layout
+  (NO `{% extends "base.html" %}` sidebar chrome — mirrors `hrm/offboarding/relieving_letter.html`):
+  certificate title, employee name, course/certification name, issued/expiry dates,
+  `verification_code`, a "Print this page" JS button (`window.print()`).
+- [ ] `templates/hrm/trainingadmin/budget.html` — standalone page (sub-module-root, NO entity folder,
+  per Template Folder Structure rule §6): year filter dropdown, tenant-wide totals card
+  (allocated/estimated/actual/variance), per-cost-center breakdown table, empty-state when no
+  `CostCenterProfile` rows exist for the selected year.
+- [ ] **OPTIONAL** `templates/hrm/trainingadmin/trainingattendance/roster.html` — only if the
+  OPTIONAL `trainingattendance_roster` view is built this pass.
+- [ ] **Cross-touch:** `templates/hrm/training/trainingsession/detail.html` (existing 3.22 file) —
+  add "Nominations" and "Attendance" sections (name, status/attendance badges) + "Nominate someone" /
+  "Mark attendance" links.
+- [ ] **Cross-touch:** `templates/hrm/lms/learningprogress/detail.html` (existing 3.23 file) — add
+  the conditional "Issue Certificate" button described above.
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` — expect a new `0040_...` migration; review the generated
+  file before applying (confirm no unwanted schema diff from the `TrainingSession` property
+  cross-touch or the `_advance_months` refactor — neither should appear in the migration at all).
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` — run twice; second run must be a no-op (NOTICE message, zero new
+  rows) proving idempotency.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep — all `hrm:trainingnomination_*` (incl. approve/reject/waitlist/cancel/
+  withdraw), `hrm:trainingattendance_*`, `hrm:trainingfeedback_*`, `hrm:trainingcertificate_*` (incl.
+  issue-from-attendance/issue-from-progress/revoke/print), `hrm:training_budget` URLs return 200/302
+  (never 500); no `{#`/`{% comment` template-comment leaks in rendered output; cross-tenant IDOR check
+  (a tenant-B admin hitting a tenant-A row's pk on any of the 4 models' detail/edit/delete/action URLs
+  returns 404, not the object — INCLUDING every nested/action route: `training-attendance/<tenant-A
+  attendance pk>/feedback/add/`, `training-attendance/<tenant-A pk>/issue-certificate/`,
+  `learning-progress/<tenant-A progress pk>/issue-certificate/`, and every `/approve/`, `/reject/`,
+  `/waitlist/`, `/cancel/`, `/withdraw/`, `/revoke/` action against a tenant-A pk while logged in as
+  tenant B must 404, not silently act on a cross-tenant row); explicit duplicate checks via the
+  CREATE VIEWS (not just the ORM) for all three GOTCHA forms
+  (`TrainingNominationForm`/`TrainingAttendanceForm`/`TrainingFeedbackForm`) — a second submission for
+  the same `(session, employee)`/`(session, employee)`/`attendance` must show a form validation error,
+  not a 500; nomination capacity/waitlist logic (`trainingnomination_approve` against a full session
+  with `waitlist_enabled=True` sets `waitlisted`, not `approved`; against a full session with
+  `waitlist_enabled=False` stays `pending` with an error message); `TrainingFeedback.is_anonymous`
+  masking verified as an admin (sees the real name) vs. a non-admin (sees "Anonymous"); certificate
+  `expires_on`/`is_expired` boundary check (day before/after expiry) and the `is_expired`-vs-stored-
+  `status` design-tension note actually rendered correctly in the list/detail badges.
+- [ ] Sidebar shows all 5 new 3.24 sub-module bullets as **Live** (Nomination, Attendance Tracking,
+  Training Feedback, Certificates, Training Budget) — confirm via the rendered sidebar, not just the
+  `LIVE_LINKS` dict. This completes the FULL 3.22/3.23/3.24 training cluster (all 15 NavERP.md bullets
+  across the 3 sub-modules now live).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per
+  commit, no `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` ->
+  `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to double-check all THREE duplicate-guard forms
+    (`TrainingNominationForm`/`TrainingAttendanceForm`/`TrainingFeedbackForm`) actually got the
+    explicit `clean()` fix (see the GOTCHA note above) rather than re-discovering the pattern fresh a
+    fourth time; also to sanity-check the `_advance_months` extraction didn't change
+    `LearningProgress.certification_expires_on`'s existing behavior (no regression on 3.23's own
+    tests).
+  - Expect `performance-reviewer` to check `trainingnomination_list`/`trainingattendance_list`/
+    `trainingfeedback_list`/`trainingcertificate_list`/`training_budget` for N+1s (select_related on
+    every FK the template renders) and to weigh in on the `training_budget` per-cost-center loop
+    flagged above (fine at typical cardinality; note if a batch-`annotate()` rewrite is warranted).
+  - Expect `security-reviewer` to confirm: tenant scoping on every nested/action route (session_pk/
+    attendance_pk/progress_pk always looked up with `tenant=request.tenant`); the manager-permission
+    check (`_can_decide_nomination`) can't be bypassed by a non-manager POSTing directly to
+    `/approve/`; `verification_code`'s `secrets.token_hex(8)` entropy is adequate for its purpose (not
+    a security-critical secret, just a lookup key — no `|safe` on any user-supplied text field
+    (`comments`, `justification`, `notes`, `revoked_reason`)).
+  - Expect `test-writer` to cover: full CRUD round-trips × 4 models (incl. all nested/action routes);
+    the nomination capacity/waitlist decision logic (under capacity → approved; at capacity +
+    waitlist_enabled → waitlisted; at capacity + not waitlist_enabled → stays pending with an error);
+    the manager-vs-admin-vs-neither permission matrix on approve/reject/cancel/withdraw; all THREE
+    duplicate-guard forms' create-path regression pins; `TrainingCertificate.clean()`'s
+    both-sources-set rejection AND the cross-consistency checks (mismatched employee/course via
+    source_attendance or source_progress); `expires_on`/`is_expired` at exact boundary dates
+    (including the "no certification_validity_months" and "course not is_certification" None-cases);
+    `TrainingFeedback.giver_anonymized` masking (admin sees real name, non-admin sees "Anonymous",
+    the underlying FK is never actually altered); the `_advance_months` shared helper (both call
+    sites, LearningProgress AND TrainingCertificate, produce identical results for the same inputs,
+    e.g. Jan 31 + 1 month == Feb 28/29 in both).
+- [ ] Update `.claude/skills/hrm/SKILL.md`:
+  - Add a `### 3.24 Training Administration (4 tables)` section (mirrors the existing per-sub-module
+    section format) with the model table (fields, FK targets incl. the deliberate
+    `approver`-as-`EmployeeProfile` deviation from `LeaveRequest`'s `AUTH_USER_MODEL` pattern, the
+    `is_expired`-vs-stored-`status` design tension, the `_advance_months` shared-helper extraction),
+    the nested/action routes, and the certificate no-`certificate_file`/no-`issued_by` design notes.
+  - Bump the frontmatter/overview "built" sub-module list to include 3.24 and note the FULL 3.22/
+    3.23/3.24 training cluster is now complete (all 15 bullets live).
+  - Add a "Training Administration (3.24)" routes-list section (`hrm:trainingnomination_*` incl.
+    workflow actions, `hrm:trainingattendance_*`, `hrm:trainingfeedback_*`,
+    `hrm:trainingcertificate_*` incl. issue/revoke/print, `hrm:training_budget`).
+  - Update the seeder section: document `_seed_trainingadmin(tenant)`, its own-exists guard (+ the
+    "training AND LMS must already be seeded" dependency), what it creates, and that it runs LAST
+    (after `_seed_lms`).
+  - Update the `LIVE_LINKS` section: "3.24: Nomination -> `hrm:trainingnomination_list`; Attendance
+    Tracking -> `hrm:trainingattendance_list`; Training Feedback -> `hrm:trainingfeedback_list`;
+    Certificates -> `hrm:trainingcertificate_list`; Training Budget -> `hrm:training_budget` (computed,
+    no model). All 5 NavERP.md 3.24 bullets are now live — the training cluster (3.22/3.23/3.24) is
+    complete."
+  - Update the "Deferred" section, replacing the old 3.24-placeholder line with 3.24's own
+    carried-forward deferrals (see below).
+  - Commit the SKILL.md update as its own file, per the one-file-per-commit rule.
+- [ ] README (if the project keeps a root test-count/module-count summary) — refresh HRM test counts
+  after `test-writer` runs, same pattern as the 3.20/3.21/3.22/3.23 README refresh commits.
+
+## Later passes / deferred (carried over from research-hrm-3.24-training-administration.md)
+
+- **Full N-step configurable approval-role engine** (SAP SuccessFactors Learning-style Manager
+  L1/L2/HRBP chains) — this pass ships a single approver + manager-or-admin permission check; a
+  role-chain engine is a distinct, reusable HRM-wide capability (leave/PIP/nomination could all use
+  it), out of scope for one sub-module.
+- **Rule-based auto-nomination / auto-enrollment** (assign training automatically when an employee
+  joins a department/role, per Cornerstone's automated enrollment rules) — needs an event/trigger
+  framework; this pass supports manual `hr`-type "assign as required" only.
+- **QR-code / self-check-in kiosk flow** (Arlo, Cornerstone) — a device/scanning UI beyond a single
+  Django CRUD pass; the `TrainingAttendance` row this pass creates is what such a flow would
+  eventually write to.
+- **Multi-level Kirkpatrick evaluation (L2 knowledge test / L3 on-the-job / L4 ROI) with delayed
+  30/60/90-day follow-up surveys** — this pass ships only the Level-1 reaction form
+  (`TrainingFeedback`); Level-2 knowledge checks already exist via `LearningContentItem
+  (content_type="assessment")` (3.23).
+- **Branded certificate template designer + PDF mail-merge rendering** — this pass ships the
+  certificate RECORD (`number`, `verification_code`, dates, source links) + a login-gated print page;
+  no PDF engine, no `certificate_file` upload field this pass (explicitly deferred, not silently
+  dropped — see the model's design note above).
+- **Public/anonymous certificate verification page** (a third party checks authenticity by
+  `verification_code` without logging in) — this pass keeps `trainingcertificate_detail`/`_print`
+  login-gated; a public verify-by-code endpoint is a distinct, smaller follow-up once the record shape
+  is proven.
+- **Certificate/nomination expiry and renewal email reminders** — needs the notification/scheduler
+  infrastructure; the computed `expires_on`/`is_expired` fields this pass produces are what a reminder
+  job would query. Also needed: the job that would auto-flip `status` to `expired` (see the
+  design-tension note — nothing does this automatically yet).
+- **Dedicated `TrainingBudget` allocation model** (a ring-fenced training-only sub-pool per
+  department/period, separate from `CostCenterProfile.budget_annual`'s whole-department budget) —
+  deferred; this pass ships utilization as a computed aggregate over `TrainingSession.actual_cost`/
+  `estimated_cost` joined via `TrainingAttendance` to `core.OrgUnit`/`CostCenterProfile`. A true
+  training-specific budget pool is a one-model follow-up if Finance later needs it.
+- **Cost-vs-performance ROI reporting** (Training Orchestra's differentiator: budget × outcome score
+  correlation) — needs both the `training_budget` aggregate and `TrainingFeedback`/`LearningProgress`
+  outcome data joined; a reporting-pass concern once both sides have enough data.
+- **Multi-currency training budget ALLOCATION** (Training Orchestra: per-site budgets in local
+  currency) — the SPEND side already supports currency via `TrainingSession.currency`; a
+  currency-aware allocation is deferred with the dedicated-budget-model item above.
+- **Per-session bulk "mark attendance" roster UI** — flagged OPTIONAL above; if not built this pass,
+  it's the first thing to pick up next for 3.24 (the underlying `TrainingAttendance` CRUD already
+  supports it one row at a time).
+
+## Review notes
+
+(filled in at the end)
