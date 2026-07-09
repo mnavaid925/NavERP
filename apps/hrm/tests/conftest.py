@@ -1736,3 +1736,102 @@ def learning_progress_b(db, tenant_b, employee_b, training_course_b):
         tenant=tenant_b, employee=employee_b, course=training_course_b,
     )
 
+
+# ------------------------------------------------------------------ 3.24 Training Administration fixtures
+@pytest.fixture
+def nomination_a(db, tenant_a, training_session_a, employee_a):
+    """A pending TrainingNomination for employee_a on training_session_a, tenant_a."""
+    from apps.hrm.models import TrainingNomination
+    return TrainingNomination.objects.create(
+        tenant=tenant_a, session=training_session_a, employee=employee_a, nomination_type="self",
+    )
+
+
+@pytest.fixture
+def nomination_b(db, tenant_b, training_session_b, employee_b):
+    """A pending TrainingNomination belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingNomination
+    return TrainingNomination.objects.create(
+        tenant=tenant_b, session=training_session_b, employee=employee_b, nomination_type="self",
+    )
+
+
+@pytest.fixture
+def training_attendance_a(db, tenant_a, training_session_a, employee_a):
+    """A 'present' TrainingAttendance for employee_a on training_session_a, tenant_a (not_completed)."""
+    from apps.hrm.models import TrainingAttendance
+    return TrainingAttendance.objects.create(
+        tenant=tenant_a, session=training_session_a, employee=employee_a, attendance_status="present",
+    )
+
+
+@pytest.fixture
+def training_attendance_b(db, tenant_b, training_session_b, employee_b):
+    """A TrainingAttendance belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingAttendance
+    return TrainingAttendance.objects.create(
+        tenant=tenant_b, session=training_session_b, employee=employee_b, attendance_status="present",
+    )
+
+
+@pytest.fixture
+def training_feedback_a(db, tenant_a, training_attendance_a):
+    """Feedback for training_attendance_a, tenant_a — overall 5 / content 4 / trainer 5."""
+    from apps.hrm.models import TrainingFeedback
+    return TrainingFeedback.objects.create(
+        tenant=tenant_a, attendance=training_attendance_a,
+        overall_rating=5, content_rating=4, trainer_rating=5,
+    )
+
+
+@pytest.fixture
+def training_feedback_b(db, tenant_b, training_attendance_b):
+    """A TrainingFeedback belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingFeedback
+    return TrainingFeedback.objects.create(
+        tenant=tenant_b, attendance=training_attendance_b,
+        overall_rating=4, content_rating=4, trainer_rating=4,
+    )
+
+
+@pytest.fixture
+def cert_course_a(db, tenant_a):
+    """A certification-granting TrainingCourse for tenant_a — 12-month validity."""
+    from apps.hrm.models import TrainingCourse
+    return TrainingCourse.objects.create(
+        tenant=tenant_a, title="Certified Safety Training", category="safety",
+        is_certification=True, certification_name="Safety Certification",
+        certification_validity_months=12,
+    )
+
+
+@pytest.fixture
+def cert_course_b(db, tenant_b):
+    """A certification-granting TrainingCourse belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingCourse
+    return TrainingCourse.objects.create(
+        tenant=tenant_b, title="Certified Safety Training B", category="safety",
+        is_certification=True, certification_name="Safety Certification B",
+        certification_validity_months=12,
+    )
+
+
+@pytest.fixture
+def training_certificate_a(db, tenant_a, employee_a, cert_course_a):
+    """An issued TrainingCertificate for employee_a/cert_course_a, tenant_a — issued 2026-07-01."""
+    from apps.hrm.models import TrainingCertificate
+    return TrainingCertificate.objects.create(
+        tenant=tenant_a, employee=employee_a, course=cert_course_a,
+        issued_on=datetime.date(2026, 7, 1),
+    )
+
+
+@pytest.fixture
+def training_certificate_b(db, tenant_b, employee_b, cert_course_b):
+    """A TrainingCertificate belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import TrainingCertificate
+    return TrainingCertificate.objects.create(
+        tenant=tenant_b, employee=employee_b, course=cert_course_b,
+        issued_on=datetime.date(2026, 7, 1),
+    )
+
