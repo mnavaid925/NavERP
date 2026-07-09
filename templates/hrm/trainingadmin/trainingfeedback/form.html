@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Feedback{% else %}Leave Feedback{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Feedback{% else %}Leave Feedback{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span>
+        {% if attendance %}<a href="{% url 'hrm:trainingattendance_detail' attendance.pk %}">{{ attendance.session.course.title }}</a>
+        {% elif obj %}<a href="{% url 'hrm:trainingfeedback_detail' obj.pk %}">Feedback</a>
+        {% else %}<a href="{% url 'hrm:trainingfeedback_list' %}">Feedback</a>{% endif %}
+        <span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if attendance %}<p class="text-muted"><i data-lucide="user"></i> Feedback for <strong>{{ attendance.employee.party.name }}</strong> on <strong>{{ attendance.session.course.title }}</strong>.</p>{% endif %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <p class="text-muted" style="margin-top:.4rem;">Ratings are 1 (poor) to 5 (excellent).</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        {% if attendance %}<a href="{% url 'hrm:trainingattendance_detail' attendance.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}<a href="{% url 'hrm:trainingfeedback_list' %}" class="btn btn-outline">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
