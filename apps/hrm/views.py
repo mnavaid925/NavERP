@@ -9753,7 +9753,8 @@ def learningprogress_create(request):
 def learningprogress_detail(request, pk):
     return crud_detail(request, model=LearningProgress, pk=pk,
                        template="hrm/lms/learningprogress/detail.html",
-                       select_related=("employee__party", "course", "learning_path"))
+                       select_related=("employee__party", "course", "learning_path"),
+                       extra_context={"is_admin": _is_admin(request.user)})   # gate the admin-only Issue-Certificate
 
 
 @login_required
@@ -10177,11 +10178,14 @@ def trainingcertificate_list(request):
             "courses": TrainingCourse.objects.filter(tenant=request.tenant, is_certification=True).order_by("title"),
             "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
                           .select_related("party").order_by("party__name")),
+            "is_admin": _is_admin(request.user),   # gate the admin-only Issue/Edit/Delete buttons
         },
     )
 
 
-@login_required
+# Issuing/editing a certificate mints/alters a real credential — tenant-admin only (revoke already is).
+# An employee must not be able to self-mark a completed attendance and self-issue a verifiable cert.
+@tenant_admin_required
 def trainingcertificate_create(request):
     return crud_create(request, form_class=TrainingCertificateForm,
                        template="hrm/trainingadmin/trainingcertificate/form.html",
@@ -10211,7 +10215,7 @@ def _issue_certificate(request, *, employee_id, course, source_attendance=None, 
                   {"form": form, "is_edit": False})
 
 
-@login_required
+@tenant_admin_required
 def trainingcertificate_issue_from_attendance(request, attendance_pk):
     att = get_object_or_404(
         TrainingAttendance.objects.select_related("session__course"), pk=attendance_pk, tenant=request.tenant)
@@ -10226,7 +10230,7 @@ def trainingcertificate_issue_from_attendance(request, attendance_pk):
                               source_attendance=att)
 
 
-@login_required
+@tenant_admin_required
 def trainingcertificate_issue_from_progress(request, progress_pk):
     prog = get_object_or_404(
         LearningProgress.objects.select_related("course"), pk=progress_pk, tenant=request.tenant)
@@ -10245,10 +10249,11 @@ def trainingcertificate_issue_from_progress(request, progress_pk):
 def trainingcertificate_detail(request, pk):
     return crud_detail(request, model=TrainingCertificate, pk=pk,
                        template="hrm/trainingadmin/trainingcertificate/detail.html",
-                       select_related=("employee__party", "course", "source_attendance__session", "source_progress"))
+                       select_related=("employee__party", "course", "source_attendance__session", "source_progress"),
+                       extra_context={"is_admin": _is_admin(request.user)})
 
 
-@login_required
+@tenant_admin_required
 def trainingcertificate_edit(request, pk):
     obj = get_object_or_404(TrainingCertificate, pk=pk, tenant=request.tenant)
     if obj.status == "revoked":
@@ -10259,7 +10264,7 @@ def trainingcertificate_edit(request, pk):
                      success_url="hrm:trainingcertificate_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def trainingcertificate_delete(request, pk):
     obj = get_object_or_404(TrainingCertificate, pk=pk, tenant=request.tenant)
