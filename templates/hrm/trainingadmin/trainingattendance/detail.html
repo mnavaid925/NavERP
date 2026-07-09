@@ -39,7 +39,7 @@
     <div class="form-actions" style="margin-top:.8rem;">
       {% if obj.feedback.all %}
         <a href="{% url 'hrm:trainingfeedback_detail' obj.feedback.all.0.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> View Feedback</a>
-      {% else %}
+      {% elif is_admin or obj.employee_id == current_profile_id %}
         <a href="{% url 'hrm:trainingfeedback_create' obj.pk %}" class="btn btn-outline"><i data-lucide="message-square-plus"></i> Leave Feedback</a>
       {% endif %}
       {% if obj.completion_status == 'completed' and obj.session.course.is_certification and not obj.certificates_issued.all %}
