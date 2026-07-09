@@ -18,6 +18,7 @@ it. The HRM payroll/payslip layer (FKing into ``accounting.PayrollRun``) is a la
 """
 import calendar
 import math
+import secrets
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -31,6 +32,15 @@ from django.utils import timezone
 from apps.core.utils import next_number
 
 ZERO = Decimal("0")
+
+
+def _advance_months(d, months):
+    """Advance a ``date`` by N calendar months, clamping the day to the target month's length
+    (stdlib month-math — ``calendar.monthrange``; no ``dateutil`` dependency). Shared by
+    ``LearningProgress.certification_expires_on`` (3.23) and ``TrainingCertificate.save()`` (3.24)."""
+    total = d.month - 1 + months
+    y, m = d.year + total // 12, total % 12 + 1
+    return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
 
 
 # ---------------------------------------------------------------------------
@@ -6163,6 +6173,16 @@ class TrainingSession(TenantNumbered):
         return self.status not in ("completed", "cancelled") and bool(
             self.start_datetime and self.start_datetime > timezone.now())
 
+    @property
+    def approved_nomination_count(self):
+        """Derived (3.24 cross-touch) — how many nominations are approved for this session."""
+        return self.nominations.filter(status="approved").count()
+
+    @property
+    def is_full(self):
+        """Derived (3.24 cross-touch) — approved nominations have reached the seat capacity."""
+        return self.approved_nomination_count >= self.capacity
+
     def __str__(self):
         if self.course_id:
             return f"{self.number} · {self.course.title} ({self.start_datetime:%Y-%m-%d %H:%M})"
@@ -6380,10 +6400,7 @@ class LearningProgress(TenantOwned):
         months = course.certification_validity_months
         if not (course.is_certification and months):
             return None
-        d = self.completed_at.date()
-        total = d.month - 1 + months
-        y, m = d.year + total // 12, total % 12 + 1
-        return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+        return _advance_months(self.completed_at.date(), months)
 
     @property
     def is_certification_expired(self):
@@ -6394,3 +6411,227 @@ class LearningProgress(TenantOwned):
         who = self.employee if self.employee_id else "?"
         what = self.course.title if self.course_id else "?"
         return f"{who} · {what} ({self.get_status_display()})"
+
+
+# ---------------------------------------------------------------------------
+# 3.24 Training Administration — the operational/transactional layer over the
+# 3.22 ILT catalog (``TrainingSession``) and 3.23 LMS (``LearningProgress``):
+# who's nominated (``TrainingNomination``), who showed up (``TrainingAttendance``),
+# what they thought (``TrainingFeedback``), and what they earned
+# (``TrainingCertificate``). Ordinary tenant-scoped CRUD; nomination approve/reject
+# mirror the LeaveRequest workflow shape, feedback anonymity clones 3.20 Feedback.
+#
+# Reuses: ``hrm.TrainingSession``/``TrainingCourse`` (3.22), ``hrm.LearningProgress``
+# (3.23), ``hrm.EmployeeProfile`` (nominee/attendee/holder), the reporting line
+# (``EmployeeProfile.employment.manager``) for approvals, ``hrm.CostCenterProfile``/
+# ``core.OrgUnit`` (3.2) for the budget view. **Training Budget is a COMPUTED view**
+# (aggregate over ``TrainingSession`` costs vs ``CostCenterProfile.budget_annual``) —
+# NO model. This is the FINAL sub-module of the 3.22/3.23/3.24 training cluster.
+#
+# Deferred: N-step approval chains, rule-based auto-enrollment, QR self-check-in,
+# multi-level Kirkpatrick (L2-L4), a branded certificate-PDF renderer, a public
+# verify-by-code page, expiry-reminder emails, a ring-fenced TrainingBudget model.
+# ---------------------------------------------------------------------------
+class TrainingNomination(TenantNumbered):
+    """An employee nominated for a ``TrainingSession`` (3.24 Nomination) with a single-approver
+    workflow. Born ``pending`` (no draft); a tenant admin OR the nominee's manager decides. A
+    ``waitlisted`` state queues a nominee when the session is full (fulfilling
+    ``TrainingSession.waitlist_enabled``). Mirrors the ``LeaveRequest`` approve/reject shape."""
+
+    NUMBER_PREFIX = "NOM"
+
+    NOMINATION_TYPE_CHOICES = [
+        ("self", "Self-Nominated"),
+        ("manager", "Manager-Nominated"),
+        ("hr", "HR-Assigned"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("waitlisted", "Waitlisted"),
+        ("cancelled", "Cancelled"),
+        ("withdrawn", "Withdrawn"),
+    ]
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("normal", "Normal"),
+        ("high", "High"),
+    ]
+
+    session = models.ForeignKey("hrm.TrainingSession", on_delete=models.PROTECT, related_name="nominations")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+                                 related_name="training_nominations", help_text="The nominee.")
+    nominated_by = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="nominations_made", help_text="Who nominated (null = self).")
+    nomination_type = models.CharField(max_length=10, choices=NOMINATION_TYPE_CHOICES, default="self")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="pending",
+                              help_text="Workflow — set by the approve/reject/waitlist/cancel/withdraw actions.")
+    approver = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="nominations_approved", editable=False)
+    approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    rejected_reason = models.TextField(blank=True)
+    cancelled_reason = models.TextField(blank=True)
+    justification = models.TextField(blank=True, help_text="Why this nomination (free text).")
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="normal")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "session", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "session"], name="hrm_nom_tenant_session_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_nom_tenant_emp_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_nom_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.session_id and self.session.status in ("completed", "cancelled"):
+            raise ValidationError({"session": "Cannot nominate for a completed or cancelled session."})
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.session}" if self.number else str(self.employee)
+
+
+class TrainingAttendance(TenantOwned):
+    """Per-session-per-employee attendance + completion (3.24 Attendance Tracking). A ``walk_in``
+    status with ``nomination=None`` captures day-of walk-ins; ``completion_status`` is independent of
+    presence (an admin can mark completion). Unique per (tenant, session, employee)."""
+
+    ATTENDANCE_STATUS_CHOICES = [
+        ("registered", "Registered"),
+        ("present", "Present"),
+        ("absent", "Absent"),
+        ("partial", "Partial"),
+        ("walk_in", "Walk-in"),
+    ]
+    COMPLETION_STATUS_CHOICES = [
+        ("not_completed", "Not Completed"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    session = models.ForeignKey("hrm.TrainingSession", on_delete=models.PROTECT, related_name="attendance_records")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="training_attendance")
+    nomination = models.ForeignKey("hrm.TrainingNomination", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="attendance_records", help_text="Links back when nominated.")
+    attendance_status = models.CharField(max_length=10, choices=ATTENDANCE_STATUS_CHOICES, default="registered")
+    completion_status = models.CharField(max_length=15, choices=COMPLETION_STATUS_CHOICES, default="not_completed")
+    check_in_at = models.DateTimeField(null=True, blank=True)
+    check_out_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-session__start_datetime", "employee__party__name"]
+        unique_together = ("tenant", "session", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "session"], name="hrm_tatt_tenant_session_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_tatt_tenant_emp_idx"),
+            models.Index(fields=["tenant", "attendance_status"], name="hrm_tatt_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.check_in_at and self.check_out_at and self.check_out_at < self.check_in_at:
+            raise ValidationError({"check_out_at": "Check-out can't be before check-in."})
+        if self.nomination_id and (self.nomination.session_id != self.session_id
+                                   or self.nomination.employee_id != self.employee_id):
+            raise ValidationError({"nomination": "This nomination is for a different session/employee."})
+
+    def __str__(self):
+        return f"{self.employee} · {self.session} ({self.get_attendance_status_display()})"
+
+
+class TrainingFeedback(TenantOwned):
+    """A post-training (Kirkpatrick Level-1 "reaction") evaluation for one attendance record (3.24
+    Training Feedback). One per attendance (unique_together). ``is_anonymous`` masks the attendee on
+    read for non-admins (clones the 3.20 ``Feedback.is_anonymous`` pattern)."""
+
+    attendance = models.ForeignKey("hrm.TrainingAttendance", on_delete=models.CASCADE, related_name="feedback")
+    overall_rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    content_rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    trainer_rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    would_recommend = models.BooleanField(default=True)
+    comments = models.TextField(blank=True)
+    is_anonymous = models.BooleanField(default=False, help_text="Hide the attendee's identity on read (non-admins).")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "attendance")
+
+    @property
+    def giver_anonymized(self):
+        """Mirrors ``Feedback.giver_anonymized`` — the read-render mask flag (one place to change)."""
+        return self.is_anonymous
+
+    def __str__(self):
+        return f"Feedback · {self.attendance}" if self.attendance_id else "Feedback"
+
+
+class TrainingCertificate(TenantNumbered):
+    """A completion-certificate issuance record (3.24 Certificates) — issued from a completed ILT
+    ``TrainingAttendance`` OR a completed LMS ``LearningProgress`` (or manually). ``expires_on`` is
+    computed ONCE at ``save()`` (the issued artifact must not drift if the course's validity changes
+    later); ``verification_code`` is a one-shot random token. Revoke instead of delete for an issued
+    certificate (audit trail)."""
+
+    NUMBER_PREFIX = "CERT"
+
+    STATUS_CHOICES = [
+        ("issued", "Issued"),
+        ("revoked", "Revoked"),
+        ("expired", "Expired"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT, related_name="training_certificates")
+    course = models.ForeignKey("hrm.TrainingCourse", on_delete=models.PROTECT, related_name="certificates")
+    source_attendance = models.ForeignKey("hrm.TrainingAttendance", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="certificates_issued")
+    source_progress = models.ForeignKey("hrm.LearningProgress", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="certificates_issued")
+    title = models.CharField(max_length=255, blank=True, help_text="Defaults from the course's certification name.")
+    issued_on = models.DateField(default=timezone.localdate)
+    expires_on = models.DateField(null=True, blank=True, editable=False,
+                                  help_text="Computed once from issued_on + the course's validity months.")
+    verification_code = models.CharField(max_length=20, unique=True, editable=False, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="issued")
+    revoked_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-issued_on"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_cert_tenant_emp_idx"),
+            models.Index(fields=["tenant", "course"], name="hrm_cert_tenant_course_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_cert_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        if self.source_attendance_id and self.source_progress_id:
+            raise ValidationError({"source_progress": "Link only one source — attendance OR progress, not both."})
+        if self.source_attendance_id:
+            att = self.source_attendance
+            if att.employee_id != self.employee_id or (att.session_id and att.session.course_id != self.course_id):
+                raise ValidationError({"source_attendance": "Source attendance is for a different employee/course."})
+        if self.source_progress_id:
+            prog = self.source_progress
+            if prog.employee_id != self.employee_id or prog.course_id != self.course_id:
+                raise ValidationError({"source_progress": "Source progress is for a different employee/course."})
+
+    def save(self, *args, **kwargs):
+        if not self.title and self.course_id:
+            self.title = self.course.certification_name or self.course.title
+        if not self.verification_code:
+            self.verification_code = secrets.token_hex(8).upper()   # 16 hex chars, 64 bits of entropy
+        if self.expires_on is None and self.issued_on and self.course_id:
+            months = self.course.certification_validity_months
+            if self.course.is_certification and months:
+                self.expires_on = _advance_months(self.issued_on, months)
+        return super().save(*args, **kwargs)
+
+    @property
+    def is_expired(self):
+        """Live truth (derived) — a stored status='expired' is never auto-flipped this pass (no cron),
+        so templates/badges must render off THIS, not solely off status."""
+        return bool(self.expires_on and self.expires_on < timezone.localdate())
+
+    def __str__(self):
+        return f"{self.number} · {self.employee} · {self.title}" if self.number else self.title
