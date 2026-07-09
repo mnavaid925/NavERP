@@ -165,6 +165,12 @@ from .forms import (  # 3.23 Learning Management (LMS)
     LearningPathItemForm,
     LearningProgressForm,
 )
+from .forms import (  # 3.24 Training Administration
+    TrainingAttendanceForm,
+    TrainingCertificateForm,
+    TrainingFeedbackForm,
+    TrainingNominationForm,
+)
 from .models import (
     APPLICATION_STAGE_CHOICES,
     APPLICATION_TERMINAL_STAGES,
@@ -321,6 +327,12 @@ from .models import (  # 3.23 Learning Management (LMS)
     LearningPath,
     LearningPathItem,
     LearningProgress,
+)
+from .models import (  # 3.24 Training Administration
+    TrainingAttendance,
+    TrainingCertificate,
+    TrainingFeedback,
+    TrainingNomination,
 )
 
 
@@ -9470,7 +9482,12 @@ def trainingsession_detail(request, pk):
         TrainingSession.objects.select_related(
             "course", "instructor_employee__party", "external_vendor", "currency"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/training/trainingsession/detail.html", {"obj": obj})
+    return render(request, "hrm/training/trainingsession/detail.html", {
+        "obj": obj,
+        # 3.24 cross-touch — this session's nominations + attendance roster.
+        "nominations": obj.nominations.select_related("employee__party").all(),
+        "attendance": obj.attendance_records.select_related("employee__party").all(),
+    })
 
 
 @login_required
@@ -9801,4 +9818,447 @@ def learning_team_progress(request):
         "summary": summary,
         "status_choices": LearningProgress.STATUS_CHOICES,
         "courses": TrainingCourse.objects.filter(tenant=request.tenant).order_by("title"),
+    })
+
+
+# ============================================================================
+# 3.24 Training Administration — nomination (+ approval workflow), attendance,
+# post-training feedback, certificates, and a computed training-budget view. The
+# operational layer over 3.22 sessions + 3.23 LMS progress. Ordinary tenant CRUD;
+# nomination decisions mirror the LeaveRequest approve/reject manager gating.
+# ============================================================================
+
+# ------------------------------------------------------------ TrainingNomination (3.24 Nomination)
+def _can_decide_nomination(request, obj):
+    """A tenant admin OR the nominee's own manager may approve/reject (per the reporting line)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return bool(profile is not None and obj.employee.employment_id
+                and obj.employee.employment.manager_id == profile.party_id)
+
+
+@login_required
+def trainingnomination_list(request):
+    qs = (TrainingNomination.objects.filter(tenant=request.tenant)
+          .select_related("session__course", "employee__party"))
+    return crud_list(
+        request, qs.order_by("-created_at"),
+        "hrm/trainingadmin/trainingnomination/list.html",
+        search_fields=("number", "session__course__title", "employee__party__name", "justification"),
+        filters=[("status", "status", False), ("nomination_type", "nomination_type", False),
+                 ("session", "session_id", True), ("employee", "employee_id", True)],
+        extra_context={
+            "status_choices": TrainingNomination.STATUS_CHOICES,
+            "nomination_type_choices": TrainingNomination.NOMINATION_TYPE_CHOICES,
+            "sessions": TrainingSession.objects.filter(tenant=request.tenant).select_related("course").order_by("-start_datetime"),
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+        },
+    )
+
+
+@login_required
+def trainingnomination_create(request):
+    return crud_create(request, form_class=TrainingNominationForm,
+                       template="hrm/trainingadmin/trainingnomination/form.html",
+                       success_url="hrm:trainingnomination_list")
+
+
+@login_required
+def trainingnomination_detail(request, pk):
+    obj = get_object_or_404(
+        TrainingNomination.objects.select_related(
+            "session__course", "employee__party", "nominated_by__party", "approver__party"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/trainingadmin/trainingnomination/detail.html", {
+        "obj": obj, "can_decide": _can_decide_nomination(request, obj)})
+
+
+@login_required
+def trainingnomination_edit(request, pk):
+    obj = get_object_or_404(TrainingNomination, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending nomination can be edited.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    return crud_edit(request, model=TrainingNomination, pk=pk, form_class=TrainingNominationForm,
+                     template="hrm/trainingadmin/trainingnomination/form.html",
+                     success_url="hrm:trainingnomination_list")
+
+
+@login_required
+@require_POST
+def trainingnomination_delete(request, pk):
+    obj = get_object_or_404(TrainingNomination, pk=pk, tenant=request.tenant)
+    if obj.status in ("approved", "waitlisted"):
+        messages.error(request, "A decided nomination can't be deleted — cancel or withdraw it instead.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    return crud_delete(request, model=TrainingNomination, pk=pk, success_url="hrm:trainingnomination_list")
+
+
+@login_required
+@require_POST
+def trainingnomination_approve(request, pk):
+    obj = get_object_or_404(
+        TrainingNomination.objects.select_related("session", "employee__employment"), pk=pk, tenant=request.tenant)
+    if not _can_decide_nomination(request, obj):
+        messages.error(request, "Only a tenant admin or the nominee's manager can decide this nomination.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending nomination can be approved.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    if not obj.session.is_full:
+        obj.status = "approved"
+    elif obj.session.waitlist_enabled:
+        obj.status = "waitlisted"
+        messages.info(request, "The session is full — the nominee was waitlisted.")
+    else:
+        messages.error(request, "The session is full and waitlisting is disabled.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    obj.approver = _current_employee_profile(request)
+    obj.approved_at = timezone.now()
+    obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "approve", "status": obj.status})
+    messages.success(request, f"Nomination {obj.number} {obj.get_status_display().lower()}.")
+    return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def trainingnomination_reject(request, pk):
+    obj = get_object_or_404(
+        TrainingNomination.objects.select_related("employee__employment"), pk=pk, tenant=request.tenant)
+    if not _can_decide_nomination(request, obj):
+        messages.error(request, "Only a tenant admin or the nominee's manager can decide this nomination.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    if obj.status not in ("pending", "waitlisted"):
+        messages.error(request, "Only a pending or waitlisted nomination can be rejected.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    obj.status = "rejected"
+    obj.rejected_reason = request.POST.get("rejected_reason", "").strip()
+    obj.approver = _current_employee_profile(request)
+    obj.save(update_fields=["status", "rejected_reason", "approver", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reject"})
+    messages.success(request, f"Nomination {obj.number} rejected.")
+    return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def trainingnomination_waitlist(request, pk):
+    obj = get_object_or_404(TrainingNomination, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending nomination can be waitlisted.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    obj.status = "waitlisted"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "waitlist"})
+    messages.success(request, f"Nomination {obj.number} waitlisted.")
+    return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def trainingnomination_cancel(request, pk):
+    obj = get_object_or_404(
+        TrainingNomination.objects.select_related("employee__employment"), pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    can_cancel = _can_decide_nomination(request, obj) or (
+        profile is not None and obj.nominated_by_id == profile.pk)
+    if not can_cancel:
+        messages.error(request, "Only the nominator, the nominee's manager, or an admin can cancel this nomination.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    if obj.status not in ("pending", "approved", "waitlisted"):
+        messages.error(request, "This nomination can't be cancelled in its current state.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    obj.status = "cancelled"
+    obj.cancelled_reason = request.POST.get("cancelled_reason", "").strip()
+    obj.save(update_fields=["status", "cancelled_reason", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "cancel"})
+    messages.success(request, f"Nomination {obj.number} cancelled.")
+    return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def trainingnomination_withdraw(request, pk):
+    obj = get_object_or_404(TrainingNomination, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (profile is not None and profile.pk == obj.employee_id):
+        messages.error(request, "Only the nominee can withdraw their own nomination.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    if obj.status not in ("pending", "approved", "waitlisted"):
+        messages.error(request, "This nomination can't be withdrawn in its current state.")
+        return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+    obj.status = "withdrawn"
+    obj.cancelled_reason = request.POST.get("cancelled_reason", "").strip()
+    obj.save(update_fields=["status", "cancelled_reason", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "withdraw"})
+    messages.success(request, f"Nomination {obj.number} withdrawn.")
+    return redirect("hrm:trainingnomination_detail", pk=obj.pk)
+
+
+# ------------------------------------------------------------ TrainingAttendance (3.24 Attendance)
+@login_required
+def trainingattendance_list(request):
+    qs = (TrainingAttendance.objects.filter(tenant=request.tenant)
+          .select_related("session__course", "employee__party"))
+    return crud_list(
+        request, qs.order_by("-session__start_datetime", "employee__party__name"),
+        "hrm/trainingadmin/trainingattendance/list.html",
+        search_fields=("session__course__title", "employee__party__name", "notes"),
+        filters=[("attendance_status", "attendance_status", False),
+                 ("completion_status", "completion_status", False),
+                 ("session", "session_id", True), ("employee", "employee_id", True)],
+        extra_context={
+            "attendance_status_choices": TrainingAttendance.ATTENDANCE_STATUS_CHOICES,
+            "completion_status_choices": TrainingAttendance.COMPLETION_STATUS_CHOICES,
+            "sessions": TrainingSession.objects.filter(tenant=request.tenant).select_related("course").order_by("-start_datetime"),
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+        },
+    )
+
+
+@login_required
+def trainingattendance_create(request):
+    return crud_create(request, form_class=TrainingAttendanceForm,
+                       template="hrm/trainingadmin/trainingattendance/form.html",
+                       success_url="hrm:trainingattendance_list")
+
+
+@login_required
+def trainingattendance_detail(request, pk):
+    obj = get_object_or_404(
+        TrainingAttendance.objects.select_related("session__course", "employee__party", "nomination"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/trainingadmin/trainingattendance/detail.html", {"obj": obj})
+
+
+@login_required
+def trainingattendance_edit(request, pk):
+    return crud_edit(request, model=TrainingAttendance, pk=pk, form_class=TrainingAttendanceForm,
+                     template="hrm/trainingadmin/trainingattendance/form.html",
+                     success_url="hrm:trainingattendance_list")
+
+
+@login_required
+@require_POST
+def trainingattendance_delete(request, pk):
+    return crud_delete(request, model=TrainingAttendance, pk=pk, success_url="hrm:trainingattendance_list")
+
+
+# ------------------------------------------------------------ TrainingFeedback (3.24 Training Feedback)
+@login_required
+def trainingfeedback_create(request, attendance_pk):
+    """Nested under an attendance record. The form's (tenant, attendance) duplicate guard queries the
+    DB directly, so setting instance.attendance before validation is enough."""
+    attendance = get_object_or_404(
+        TrainingAttendance.objects.select_related("session__course", "employee__party"),
+        pk=attendance_pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = TrainingFeedbackForm(
+            request.POST, instance=TrainingFeedback(tenant=request.tenant, attendance=attendance),
+            tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Feedback submitted.")
+            return redirect("hrm:trainingattendance_detail", pk=attendance.pk)
+    else:
+        form = TrainingFeedbackForm(
+            instance=TrainingFeedback(tenant=request.tenant, attendance=attendance), tenant=request.tenant)
+    return render(request, "hrm/trainingadmin/trainingfeedback/form.html",
+                  {"form": form, "is_edit": False, "attendance": attendance})
+
+
+@login_required
+def trainingfeedback_list(request):
+    qs = (TrainingFeedback.objects.filter(tenant=request.tenant)
+          .select_related("attendance__session__course", "attendance__employee__party"))
+    return crud_list(
+        request, qs.order_by("-created_at"),
+        "hrm/trainingadmin/trainingfeedback/list.html",
+        search_fields=("attendance__session__course__title", "comments"),
+        filters=[("would_recommend", "would_recommend", False), ("session", "attendance__session_id", True)],
+        extra_context={
+            "sessions": TrainingSession.objects.filter(tenant=request.tenant).select_related("course").order_by("-start_datetime"),
+            "is_admin": _is_admin(request.user),
+        },
+    )
+
+
+@login_required
+def trainingfeedback_detail(request, pk):
+    return crud_detail(request, model=TrainingFeedback, pk=pk,
+                       template="hrm/trainingadmin/trainingfeedback/detail.html",
+                       select_related=("attendance__session__course", "attendance__employee__party"),
+                       extra_context={"is_admin": _is_admin(request.user)})
+
+
+@login_required
+def trainingfeedback_edit(request, pk):
+    return crud_edit(request, model=TrainingFeedback, pk=pk, form_class=TrainingFeedbackForm,
+                     template="hrm/trainingadmin/trainingfeedback/form.html",
+                     success_url="hrm:trainingfeedback_list")
+
+
+@login_required
+@require_POST
+def trainingfeedback_delete(request, pk):
+    return crud_delete(request, model=TrainingFeedback, pk=pk, success_url="hrm:trainingfeedback_list")
+
+
+# ------------------------------------------------------------ TrainingCertificate (3.24 Certificates)
+@login_required
+def trainingcertificate_list(request):
+    qs = (TrainingCertificate.objects.filter(tenant=request.tenant)
+          .select_related("employee__party", "course"))
+    return crud_list(
+        request, qs.order_by("-issued_on"),
+        "hrm/trainingadmin/trainingcertificate/list.html",
+        search_fields=("number", "title", "verification_code", "employee__party__name", "course__title"),
+        filters=[("status", "status", False), ("course", "course_id", True), ("employee", "employee_id", True)],
+        extra_context={
+            "status_choices": TrainingCertificate.STATUS_CHOICES,
+            "courses": TrainingCourse.objects.filter(tenant=request.tenant, is_certification=True).order_by("title"),
+            "employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                          .select_related("party").order_by("party__name")),
+        },
+    )
+
+
+@login_required
+def trainingcertificate_create(request):
+    return crud_create(request, form_class=TrainingCertificateForm,
+                       template="hrm/trainingadmin/trainingcertificate/form.html",
+                       success_url="hrm:trainingcertificate_list")
+
+
+def _issue_certificate(request, *, employee_id, course, source_attendance=None, source_progress=None,
+                       redirect_ok):
+    """Shared body for the two 'issue from ...' convenience routes — pre-fills the form and saves."""
+    initial = {"employee": employee_id, "course": course.pk, "issued_on": timezone.localdate(),
+               "title": course.certification_name or course.title}
+    if source_attendance is not None:
+        initial["source_attendance"] = source_attendance.pk
+    if source_progress is not None:
+        initial["source_progress"] = source_progress.pk
+    if request.method == "POST":
+        form = TrainingCertificateForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Certificate {obj.number} issued.")
+            return redirect("hrm:trainingcertificate_detail", pk=obj.pk)
+    else:
+        form = TrainingCertificateForm(initial=initial, tenant=request.tenant)
+    return render(request, "hrm/trainingadmin/trainingcertificate/form.html",
+                  {"form": form, "is_edit": False})
+
+
+@login_required
+def trainingcertificate_issue_from_attendance(request, attendance_pk):
+    att = get_object_or_404(
+        TrainingAttendance.objects.select_related("session__course"), pk=attendance_pk, tenant=request.tenant)
+    if att.completion_status != "completed" or not att.session.course.is_certification:
+        messages.error(request, "A certificate can only be issued from a completed session on a certification course.")
+        return redirect("hrm:trainingattendance_detail", pk=att.pk)
+    return _issue_certificate(request, employee_id=att.employee_id, course=att.session.course,
+                              source_attendance=att, redirect_ok=True)
+
+
+@login_required
+def trainingcertificate_issue_from_progress(request, progress_pk):
+    prog = get_object_or_404(
+        LearningProgress.objects.select_related("course"), pk=progress_pk, tenant=request.tenant)
+    if prog.status != "completed" or not prog.course.is_certification:
+        messages.error(request, "A certificate can only be issued from completed progress on a certification course.")
+        return redirect("hrm:learningprogress_detail", pk=prog.pk)
+    return _issue_certificate(request, employee_id=prog.employee_id, course=prog.course,
+                              source_progress=prog, redirect_ok=True)
+
+
+@login_required
+def trainingcertificate_detail(request, pk):
+    return crud_detail(request, model=TrainingCertificate, pk=pk,
+                       template="hrm/trainingadmin/trainingcertificate/detail.html",
+                       select_related=("employee__party", "course", "source_attendance__session", "source_progress"))
+
+
+@login_required
+def trainingcertificate_edit(request, pk):
+    return crud_edit(request, model=TrainingCertificate, pk=pk, form_class=TrainingCertificateForm,
+                     template="hrm/trainingadmin/trainingcertificate/form.html",
+                     success_url="hrm:trainingcertificate_list")
+
+
+@login_required
+@require_POST
+def trainingcertificate_delete(request, pk):
+    obj = get_object_or_404(TrainingCertificate, pk=pk, tenant=request.tenant)
+    if obj.status == "issued":
+        messages.error(request, "An issued certificate can't be deleted — revoke it instead.")
+        return redirect("hrm:trainingcertificate_detail", pk=obj.pk)
+    return crud_delete(request, model=TrainingCertificate, pk=pk, success_url="hrm:trainingcertificate_list")
+
+
+@tenant_admin_required
+@require_POST
+def trainingcertificate_revoke(request, pk):
+    obj = get_object_or_404(TrainingCertificate, pk=pk, tenant=request.tenant)
+    if obj.status != "issued":
+        messages.error(request, "Only an issued certificate can be revoked.")
+        return redirect("hrm:trainingcertificate_detail", pk=obj.pk)
+    obj.status = "revoked"
+    obj.revoked_reason = request.POST.get("revoked_reason", "").strip()
+    obj.save(update_fields=["status", "revoked_reason", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "revoke"})
+    messages.success(request, f"Certificate {obj.number} revoked.")
+    return redirect("hrm:trainingcertificate_detail", pk=obj.pk)
+
+
+@login_required
+def trainingcertificate_print(request, pk):
+    obj = get_object_or_404(
+        TrainingCertificate.objects.select_related("employee__party", "course", "tenant"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/trainingadmin/trainingcertificate/print.html", {"obj": obj})
+
+
+# ------------------------------------------------------------ Training Budget (3.24, computed view)
+@login_required
+def training_budget(request):
+    """Computed training-cost view (no model) — the year's training spend (estimated vs actual, and
+    by course) vs the allocated cost-center budget for that year. Aggregates over TrainingSession
+    costs (3.22) + CostCenterProfile.budget_annual (3.2)."""
+    tenant = request.tenant
+    today = timezone.localdate()
+    try:
+        year = int(request.GET.get("year", "") or today.year)
+    except (TypeError, ValueError):
+        year = today.year
+    years = sorted({d.year for d in TrainingSession.objects.filter(tenant=tenant).dates("start_datetime", "year")},
+                   reverse=True)
+    if today.year not in years:
+        years = sorted(set(years + [today.year]), reverse=True)
+
+    sessions = TrainingSession.objects.filter(tenant=tenant, start_datetime__year=year)
+    totals = sessions.aggregate(estimated=Sum("estimated_cost"), actual=Sum("actual_cost"))
+    allocated = (CostCenterProfile.objects.filter(tenant=tenant, budget_year=year)
+                 .aggregate(total=Sum("budget_annual"))["total"]) or Decimal("0")
+    by_course = list(sessions.values("course__title")
+                     .annotate(sessions=Count("id"), estimated=Sum("estimated_cost"), actual=Sum("actual_cost"))
+                     .order_by("-actual"))
+    total_actual = totals["actual"] or Decimal("0")
+    utilization = round(float(total_actual) / float(allocated) * 100, 1) if allocated else None
+    return render(request, "hrm/trainingadmin/budget.html", {
+        "year": year, "years": years,
+        "total_estimated": totals["estimated"] or Decimal("0"),
+        "total_actual": total_actual,
+        "total_allocated": allocated,
+        "utilization": utilization,
+        "by_course": by_course,
     })
