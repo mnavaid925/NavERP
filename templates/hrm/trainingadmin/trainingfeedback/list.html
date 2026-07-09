@@ -41,7 +41,7 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'hrm:trainingfeedback_detail' obj.pk %}" class="fw-600">{{ obj.attendance.session.course.title }}</a></td>
-              <td>{% if obj.giver_anonymized and not is_admin %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% else %}{{ obj.attendance.employee.party.name }}{% if obj.giver_anonymized %} <span class="badge badge-muted">anon</span>{% endif %}{% endif %}</td>
+              <td>{% if obj.giver_anonymized and not is_admin and obj.attendance.employee_id != current_profile_id %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% else %}{{ obj.attendance.employee.party.name }}{% if obj.giver_anonymized %} <span class="badge badge-muted">anon</span>{% endif %}{% endif %}</td>
               <td>{{ obj.overall_rating }}/5</td>
               <td>{{ obj.trainer_rating }}/5</td>
               <td>{% if obj.would_recommend %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td>
