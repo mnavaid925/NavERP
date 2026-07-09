@@ -6621,10 +6621,13 @@ class TrainingCertificate(TenantNumbered):
             self.title = self.course.certification_name or self.course.title
         if not self.verification_code:
             self.verification_code = secrets.token_hex(8).upper()   # 16 hex chars, 64 bits of entropy
-        if self.expires_on is None and self.issued_on and self.course_id:
+        # Recompute expires_on from issued_on on every save (so correcting a typo'd issued_on fixes the
+        # expiry too) — from the course's current validity window, or cleared if the course isn't a
+        # certification / has no validity set.
+        if self.issued_on and self.course_id:
             months = self.course.certification_validity_months
-            if self.course.is_certification and months:
-                self.expires_on = _advance_months(self.issued_on, months)
+            self.expires_on = (_advance_months(self.issued_on, months)
+                               if (self.course.is_certification and months) else None)
         return super().save(*args, **kwargs)
 
     @property
