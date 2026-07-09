@@ -9880,7 +9880,7 @@ def trainingnomination_create(request):
 def trainingnomination_detail(request, pk):
     obj = get_object_or_404(
         TrainingNomination.objects.select_related(
-            "session__course", "employee__party", "nominated_by__party", "approver__party"),
+            "session__course", "employee__party", "employee__employment", "nominated_by__party", "approver__party"),
         pk=pk, tenant=request.tenant)
     return render(request, "hrm/trainingadmin/trainingnomination/detail.html", {
         "obj": obj, "can_decide": _can_decide_nomination(request, obj), "is_admin": _is_admin(request.user)})
@@ -9911,7 +9911,8 @@ def trainingnomination_delete(request, pk):
 @require_POST
 def trainingnomination_approve(request, pk):
     obj = get_object_or_404(
-        TrainingNomination.objects.select_related("session", "employee__employment"), pk=pk, tenant=request.tenant)
+        TrainingNomination.objects.select_related("session__course", "employee__party", "employee__employment"),
+        pk=pk, tenant=request.tenant)
     if not _can_decide_nomination(request, obj):
         messages.error(request, "Only a tenant admin or the nominee's manager can decide this nomination.")
         return redirect("hrm:trainingnomination_detail", pk=obj.pk)
@@ -9938,7 +9939,8 @@ def trainingnomination_approve(request, pk):
 @require_POST
 def trainingnomination_reject(request, pk):
     obj = get_object_or_404(
-        TrainingNomination.objects.select_related("employee__employment"), pk=pk, tenant=request.tenant)
+        TrainingNomination.objects.select_related("session__course", "employee__party", "employee__employment"),
+        pk=pk, tenant=request.tenant)
     if not _can_decide_nomination(request, obj):
         messages.error(request, "Only a tenant admin or the nominee's manager can decide this nomination.")
         return redirect("hrm:trainingnomination_detail", pk=obj.pk)
@@ -9957,7 +9959,9 @@ def trainingnomination_reject(request, pk):
 @tenant_admin_required
 @require_POST
 def trainingnomination_waitlist(request, pk):
-    obj = get_object_or_404(TrainingNomination, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        TrainingNomination.objects.select_related("session__course", "employee__party"),
+        pk=pk, tenant=request.tenant)
     if obj.status != "pending":
         messages.error(request, "Only a pending nomination can be waitlisted.")
         return redirect("hrm:trainingnomination_detail", pk=obj.pk)
@@ -9972,7 +9976,8 @@ def trainingnomination_waitlist(request, pk):
 @require_POST
 def trainingnomination_cancel(request, pk):
     obj = get_object_or_404(
-        TrainingNomination.objects.select_related("employee__employment"), pk=pk, tenant=request.tenant)
+        TrainingNomination.objects.select_related("session__course", "employee__party", "employee__employment"),
+        pk=pk, tenant=request.tenant)
     profile = _current_employee_profile(request)
     can_cancel = _can_decide_nomination(request, obj) or (
         profile is not None and obj.nominated_by_id == profile.pk)
@@ -9993,7 +9998,9 @@ def trainingnomination_cancel(request, pk):
 @login_required
 @require_POST
 def trainingnomination_withdraw(request, pk):
-    obj = get_object_or_404(TrainingNomination, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        TrainingNomination.objects.select_related("session__course", "employee__party"),
+        pk=pk, tenant=request.tenant)
     profile = _current_employee_profile(request)
     if not (profile is not None and profile.pk == obj.employee_id):
         messages.error(request, "Only the nominee can withdraw their own nomination.")
@@ -10046,7 +10053,8 @@ def trainingattendance_detail(request, pk):
     profile = _current_employee_profile(request)
     return render(request, "hrm/trainingadmin/trainingattendance/detail.html", {
         "obj": obj, "is_admin": _is_admin(request.user),
-        "current_profile_id": profile.pk if profile is not None else None})
+        "current_profile_id": profile.pk if profile is not None else None,
+        "feedback": obj.feedback.first()})
 
 
 @login_required
@@ -10109,6 +10117,7 @@ def trainingfeedback_create(request, attendance_pk):
 def trainingfeedback_list(request):
     qs = (TrainingFeedback.objects.filter(tenant=request.tenant)
           .select_related("attendance__session__course", "attendance__employee__party"))
+    profile = _current_employee_profile(request)
     return crud_list(
         request, qs.order_by("-created_at"),
         "hrm/trainingadmin/trainingfeedback/list.html",
@@ -10117,8 +10126,7 @@ def trainingfeedback_list(request):
         extra_context={
             "sessions": TrainingSession.objects.filter(tenant=request.tenant).select_related("course").order_by("-start_datetime"),
             "is_admin": _is_admin(request.user),
-            "current_profile_id": (_current_employee_profile(request).pk
-                                   if _current_employee_profile(request) is not None else None),
+            "current_profile_id": profile.pk if profile is not None else None,
         },
     )
 
@@ -10264,7 +10272,8 @@ def trainingcertificate_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def trainingcertificate_revoke(request, pk):
-    obj = get_object_or_404(TrainingCertificate, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        TrainingCertificate.objects.select_related("employee__party"), pk=pk, tenant=request.tenant)
     if obj.status != "issued":
         messages.error(request, "Only an issued certificate can be revoked.")
         return redirect("hrm:trainingcertificate_detail", pk=obj.pk)
