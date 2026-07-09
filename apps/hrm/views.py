@@ -10045,10 +10045,24 @@ def trainingattendance_edit(request, pk):
 @login_required
 @require_POST
 def trainingattendance_delete(request, pk):
+    obj = get_object_or_404(TrainingAttendance, pk=pk, tenant=request.tenant)
+    # Deleting would CASCADE its feedback and orphan (SET_NULL) any issued certificate — block it.
+    if obj.feedback.exists() or obj.certificates_issued.exists():
+        messages.error(request, "This attendance record has feedback or a certificate linked — remove those first.")
+        return redirect("hrm:trainingattendance_detail", pk=obj.pk)
     return crud_delete(request, model=TrainingAttendance, pk=pk, success_url="hrm:trainingattendance_list")
 
 
 # ------------------------------------------------------------ TrainingFeedback (3.24 Training Feedback)
+def _can_manage_feedback(request, feedback):
+    """The attendee (the giver) OR a tenant admin — mirrors 3.20 _can_edit_feedback (giver/admin).
+    Without this, any tenant user could edit/delete or unmask anyone's feedback."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return bool(profile is not None and profile.pk == feedback.attendance.employee_id)
+
+
 @login_required
 def trainingfeedback_create(request, attendance_pk):
     """Nested under an attendance record. The form's (tenant, attendance) duplicate guard queries the
@@ -10056,6 +10070,11 @@ def trainingfeedback_create(request, attendance_pk):
     attendance = get_object_or_404(
         TrainingAttendance.objects.select_related("session__course", "employee__party"),
         pk=attendance_pk, tenant=request.tenant)
+    # Only the attendee (or an admin) may leave feedback for their own attendance.
+    profile = _current_employee_profile(request)
+    if not (_is_admin(request.user) or (profile is not None and profile.pk == attendance.employee_id)):
+        messages.error(request, "Only the attendee or a tenant admin can leave feedback for this attendance.")
+        return redirect("hrm:trainingattendance_detail", pk=attendance.pk)
     if request.method == "POST":
         form = TrainingFeedbackForm(
             request.POST, instance=TrainingFeedback(tenant=request.tenant, attendance=attendance),
@@ -10098,6 +10117,10 @@ def trainingfeedback_detail(request, pk):
 
 @login_required
 def trainingfeedback_edit(request, pk):
+    obj = get_object_or_404(TrainingFeedback.objects.select_related("attendance"), pk=pk, tenant=request.tenant)
+    if not _can_manage_feedback(request, obj):
+        messages.error(request, "Only the attendee or a tenant admin can edit this feedback.")
+        return redirect("hrm:trainingfeedback_detail", pk=obj.pk)
     return crud_edit(request, model=TrainingFeedback, pk=pk, form_class=TrainingFeedbackForm,
                      template="hrm/trainingadmin/trainingfeedback/form.html",
                      success_url="hrm:trainingfeedback_list")
@@ -10106,6 +10129,10 @@ def trainingfeedback_edit(request, pk):
 @login_required
 @require_POST
 def trainingfeedback_delete(request, pk):
+    obj = get_object_or_404(TrainingFeedback.objects.select_related("attendance"), pk=pk, tenant=request.tenant)
+    if not _can_manage_feedback(request, obj):
+        messages.error(request, "Only the attendee or a tenant admin can delete this feedback.")
+        return redirect("hrm:trainingfeedback_detail", pk=obj.pk)
     return crud_delete(request, model=TrainingFeedback, pk=pk, success_url="hrm:trainingfeedback_list")
 
 
@@ -10135,8 +10162,7 @@ def trainingcertificate_create(request):
                        success_url="hrm:trainingcertificate_list")
 
 
-def _issue_certificate(request, *, employee_id, course, source_attendance=None, source_progress=None,
-                       redirect_ok):
+def _issue_certificate(request, *, employee_id, course, source_attendance=None, source_progress=None):
     """Shared body for the two 'issue from ...' convenience routes — pre-fills the form and saves."""
     initial = {"employee": employee_id, "course": course.pk, "issued_on": timezone.localdate(),
                "title": course.certification_name or course.title}
@@ -10166,8 +10192,12 @@ def trainingcertificate_issue_from_attendance(request, attendance_pk):
     if att.completion_status != "completed" or not att.session.course.is_certification:
         messages.error(request, "A certificate can only be issued from a completed session on a certification course.")
         return redirect("hrm:trainingattendance_detail", pk=att.pk)
+    existing = att.certificates_issued.first()
+    if existing is not None:
+        messages.info(request, "A certificate has already been issued from this attendance record.")
+        return redirect("hrm:trainingcertificate_detail", pk=existing.pk)
     return _issue_certificate(request, employee_id=att.employee_id, course=att.session.course,
-                              source_attendance=att, redirect_ok=True)
+                              source_attendance=att)
 
 
 @login_required
@@ -10177,8 +10207,12 @@ def trainingcertificate_issue_from_progress(request, progress_pk):
     if prog.status != "completed" or not prog.course.is_certification:
         messages.error(request, "A certificate can only be issued from completed progress on a certification course.")
         return redirect("hrm:learningprogress_detail", pk=prog.pk)
+    existing = prog.certificates_issued.first()
+    if existing is not None:
+        messages.info(request, "A certificate has already been issued from this progress record.")
+        return redirect("hrm:trainingcertificate_detail", pk=existing.pk)
     return _issue_certificate(request, employee_id=prog.employee_id, course=prog.course,
-                              source_progress=prog, redirect_ok=True)
+                              source_progress=prog)
 
 
 @login_required
@@ -10190,6 +10224,10 @@ def trainingcertificate_detail(request, pk):
 
 @login_required
 def trainingcertificate_edit(request, pk):
+    obj = get_object_or_404(TrainingCertificate, pk=pk, tenant=request.tenant)
+    if obj.status == "revoked":
+        messages.error(request, "A revoked certificate can't be edited.")
+        return redirect("hrm:trainingcertificate_detail", pk=obj.pk)
     return crud_edit(request, model=TrainingCertificate, pk=pk, form_class=TrainingCertificateForm,
                      template="hrm/trainingadmin/trainingcertificate/form.html",
                      success_url="hrm:trainingcertificate_list")
