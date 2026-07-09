@@ -6527,6 +6527,7 @@ class TrainingAttendance(TenantOwned):
             models.Index(fields=["tenant", "session"], name="hrm_tatt_tenant_session_idx"),
             models.Index(fields=["tenant", "employee"], name="hrm_tatt_tenant_emp_idx"),
             models.Index(fields=["tenant", "attendance_status"], name="hrm_tatt_tenant_status_idx"),
+            models.Index(fields=["tenant", "completion_status"], name="hrm_tatt_tenant_comp_idx"),
         ]
 
     def clean(self):
