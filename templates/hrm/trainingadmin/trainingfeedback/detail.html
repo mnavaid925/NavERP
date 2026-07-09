@@ -16,7 +16,10 @@
 
   <div class="card"><div class="card-body">
     <dl class="detail-grid">
-      <div class="detail-item"><dt>Session</dt><dd><a href="{% url 'hrm:trainingattendance_detail' obj.attendance.pk %}">{{ obj.attendance.session.number }} · {{ obj.attendance.session.course.title }}</a></dd></div>
+      <div class="detail-item"><dt>Session</dt><dd>
+        {% if obj.giver_anonymized and not is_admin %}{{ obj.attendance.session.course.title }}
+        {% else %}<a href="{% url 'hrm:trainingattendance_detail' obj.attendance.pk %}">{{ obj.attendance.session.number }} · {{ obj.attendance.session.course.title }}</a>{% endif %}
+      </dd></div>
       <div class="detail-item"><dt>Attendee</dt><dd>{% if obj.giver_anonymized and not is_admin %}<span class="text-muted"><i data-lucide="eye-off"></i> Anonymous</span>{% else %}{{ obj.attendance.employee.party.name }}{% if obj.giver_anonymized %} <span class="badge badge-muted">anonymous</span>{% endif %}{% endif %}</dd></div>
       <div class="detail-item"><dt>Overall</dt><dd>{{ obj.overall_rating }}/5</dd></div>
       <div class="detail-item"><dt>Content</dt><dd>{{ obj.content_rating }}/5</dd></div>
