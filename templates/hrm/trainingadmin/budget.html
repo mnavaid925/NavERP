@@ -21,9 +21,9 @@
   </div>
 
   <div class="stat-grid">
-    <div class="stat-card"><span class="stat-value">{{ total_estimated }}</span><span class="stat-label">Estimated Spend ({{ year }})</span></div>
-    <div class="stat-card"><span class="stat-value">{{ total_actual }}</span><span class="stat-label">Actual Spend ({{ year }})</span></div>
-    <div class="stat-card"><span class="stat-value">{{ total_allocated }}</span><span class="stat-label">Allocated Budget</span></div>
+    <div class="stat-card"><span class="stat-value">{{ total_estimated|floatformat:2 }}</span><span class="stat-label">Estimated Spend ({{ year }})</span></div>
+    <div class="stat-card"><span class="stat-value">{{ total_actual|floatformat:2 }}</span><span class="stat-label">Actual Spend ({{ year }})</span></div>
+    <div class="stat-card"><span class="stat-value">{{ total_allocated|floatformat:2 }}</span><span class="stat-label">Allocated Budget</span></div>
     <div class="stat-card">
       <span class="stat-value">{% if utilization is not None %}{{ utilization }}%{% else %}—{% endif %}</span>
       <span class="stat-label">Utilization</span>
@@ -49,8 +49,8 @@
             <tr>
               <td>{{ row.course__title }}</td>
               <td>{{ row.sessions }}</td>
-              <td>{{ row.estimated|default:"—" }}</td>
-              <td class="fw-600">{{ row.actual|default:"—" }}</td>
+              <td>{{ row.estimated|floatformat:2|default:"—" }}</td>
+              <td class="fw-600">{{ row.actual|floatformat:2|default:"—" }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="4"><div class="empty-state"><i data-lucide="banknote"></i><h3>No training sessions in {{ year }}</h3><p>Session costs (estimated / actual) from 3.22 Training Management roll up here.</p></div></td></tr>
