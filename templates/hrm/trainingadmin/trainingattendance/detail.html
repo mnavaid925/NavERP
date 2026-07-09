@@ -37,8 +37,8 @@
     {% if obj.notes %}<div style="margin-top:.6rem;"><strong>Notes</strong><p>{{ obj.notes|linebreaksbr }}</p></div>{% endif %}
 
     <div class="form-actions" style="margin-top:.8rem;">
-      {% if obj.feedback.all %}
-        <a href="{% url 'hrm:trainingfeedback_detail' obj.feedback.all.0.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> View Feedback</a>
+      {% if feedback %}
+        <a href="{% url 'hrm:trainingfeedback_detail' feedback.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> View Feedback</a>
       {% elif is_admin or obj.employee_id == current_profile_id %}
         <a href="{% url 'hrm:trainingfeedback_create' obj.pk %}" class="btn btn-outline"><i data-lucide="message-square-plus"></i> Leave Feedback</a>
       {% endif %}
