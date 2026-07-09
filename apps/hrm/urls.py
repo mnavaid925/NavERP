@@ -790,4 +790,45 @@ urlpatterns = [
     # Gamification leaderboard + manager team-progress rollup (computed views)
     path("learning-leaderboard/", views.learning_leaderboard, name="learning_leaderboard"),
     path("learning-team-progress/", views.learning_team_progress, name="learning_team_progress"),
+
+    # ---- 3.24 Training Administration ----
+    # Nominations + approval workflow
+    path("training-nominations/", views.trainingnomination_list, name="trainingnomination_list"),
+    path("training-nominations/add/", views.trainingnomination_create, name="trainingnomination_create"),
+    path("training-nominations/<int:pk>/", views.trainingnomination_detail, name="trainingnomination_detail"),
+    path("training-nominations/<int:pk>/edit/", views.trainingnomination_edit, name="trainingnomination_edit"),
+    path("training-nominations/<int:pk>/delete/", views.trainingnomination_delete, name="trainingnomination_delete"),
+    path("training-nominations/<int:pk>/approve/", views.trainingnomination_approve, name="trainingnomination_approve"),
+    path("training-nominations/<int:pk>/reject/", views.trainingnomination_reject, name="trainingnomination_reject"),
+    path("training-nominations/<int:pk>/waitlist/", views.trainingnomination_waitlist, name="trainingnomination_waitlist"),
+    path("training-nominations/<int:pk>/cancel/", views.trainingnomination_cancel, name="trainingnomination_cancel"),
+    path("training-nominations/<int:pk>/withdraw/", views.trainingnomination_withdraw, name="trainingnomination_withdraw"),
+
+    # Attendance
+    path("training-attendance/", views.trainingattendance_list, name="trainingattendance_list"),
+    path("training-attendance/add/", views.trainingattendance_create, name="trainingattendance_create"),
+    path("training-attendance/<int:pk>/", views.trainingattendance_detail, name="trainingattendance_detail"),
+    path("training-attendance/<int:pk>/edit/", views.trainingattendance_edit, name="trainingattendance_edit"),
+    path("training-attendance/<int:pk>/delete/", views.trainingattendance_delete, name="trainingattendance_delete"),
+
+    # Feedback (nested-create under an attendance record)
+    path("training-attendance/<int:attendance_pk>/feedback/add/", views.trainingfeedback_create, name="trainingfeedback_create"),
+    path("training-feedback/", views.trainingfeedback_list, name="trainingfeedback_list"),
+    path("training-feedback/<int:pk>/", views.trainingfeedback_detail, name="trainingfeedback_detail"),
+    path("training-feedback/<int:pk>/edit/", views.trainingfeedback_edit, name="trainingfeedback_edit"),
+    path("training-feedback/<int:pk>/delete/", views.trainingfeedback_delete, name="trainingfeedback_delete"),
+
+    # Certificates (+ issue-from-attendance/progress, revoke, print)
+    path("training-certificates/", views.trainingcertificate_list, name="trainingcertificate_list"),
+    path("training-certificates/add/", views.trainingcertificate_create, name="trainingcertificate_create"),
+    path("training-attendance/<int:attendance_pk>/issue-certificate/", views.trainingcertificate_issue_from_attendance, name="trainingcertificate_issue_from_attendance"),
+    path("learning-progress/<int:progress_pk>/issue-certificate/", views.trainingcertificate_issue_from_progress, name="trainingcertificate_issue_from_progress"),
+    path("training-certificates/<int:pk>/", views.trainingcertificate_detail, name="trainingcertificate_detail"),
+    path("training-certificates/<int:pk>/edit/", views.trainingcertificate_edit, name="trainingcertificate_edit"),
+    path("training-certificates/<int:pk>/delete/", views.trainingcertificate_delete, name="trainingcertificate_delete"),
+    path("training-certificates/<int:pk>/revoke/", views.trainingcertificate_revoke, name="trainingcertificate_revoke"),
+    path("training-certificates/<int:pk>/print/", views.trainingcertificate_print, name="trainingcertificate_print"),
+
+    # Training budget (computed aggregate view)
+    path("training-budget/", views.training_budget, name="training_budget"),
 ]
