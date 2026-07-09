@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Attendance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.employee.party.name }} · {{ obj.session.course.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:trainingattendance_list' %}">Attendance</a><span class="sep">›</span><span>Record</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:trainingattendance_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:trainingattendance_delete' obj.pk %}" onsubmit="return confirm('Delete this attendance record?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Session</dt><dd><a href="{% url 'hrm:trainingsession_detail' obj.session.pk %}">{{ obj.session.number }} · {{ obj.session.course.title }}</a></dd></div>
+      <div class="detail-item"><dt>Attendance</dt><dd>
+        {% if obj.attendance_status == 'present' %}<span class="badge badge-green">{{ obj.get_attendance_status_display }}</span>
+        {% elif obj.attendance_status == 'absent' %}<span class="badge badge-red">{{ obj.get_attendance_status_display }}</span>
+        {% elif obj.attendance_status == 'partial' %}<span class="badge badge-amber">{{ obj.get_attendance_status_display }}</span>
+        {% elif obj.attendance_status == 'walk_in' %}<span class="badge badge-info">{{ obj.get_attendance_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_attendance_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Completion</dt><dd>
+        {% if obj.completion_status == 'completed' %}<span class="badge badge-green">{{ obj.get_completion_status_display }}</span>
+        {% elif obj.completion_status == 'failed' %}<span class="badge badge-red">{{ obj.get_completion_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_completion_status_display }}</span>{% endif %}
+      </dd></div>
+      {% if obj.nomination_id %}<div class="detail-item"><dt>Via Nomination</dt><dd><a href="{% url 'hrm:trainingnomination_detail' obj.nomination.pk %}">{{ obj.nomination.number }}</a></dd></div>{% endif %}
+      {% if obj.check_in_at %}<div class="detail-item"><dt>Check-in</dt><dd>{{ obj.check_in_at|date:"Y-m-d H:i" }}</dd></div>{% endif %}
+      {% if obj.check_out_at %}<div class="detail-item"><dt>Check-out</dt><dd>{{ obj.check_out_at|date:"Y-m-d H:i" }}</dd></div>{% endif %}
+    </dl>
+    {% if obj.notes %}<div style="margin-top:.6rem;"><strong>Notes</strong><p>{{ obj.notes|linebreaksbr }}</p></div>{% endif %}
+
+    <div class="form-actions" style="margin-top:.8rem;">
+      {% if obj.feedback.all %}
+        <a href="{% url 'hrm:trainingfeedback_detail' obj.feedback.all.0.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> View Feedback</a>
+      {% else %}
+        <a href="{% url 'hrm:trainingfeedback_create' obj.pk %}" class="btn btn-outline"><i data-lucide="message-square-plus"></i> Leave Feedback</a>
+      {% endif %}
+      {% if obj.completion_status == 'completed' and obj.session.course.is_certification and not obj.certificates_issued.all %}
+        <a href="{% url 'hrm:trainingcertificate_issue_from_attendance' obj.pk %}" class="btn btn-primary"><i data-lucide="award"></i> Issue Certificate</a>
+      {% endif %}
+    </div>
+  </div></div>
+
+  <a href="{% url 'hrm:trainingattendance_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to attendance</a>
+{% endblock %}
