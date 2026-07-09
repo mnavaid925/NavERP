@@ -157,6 +157,12 @@ from .models import (  # noqa: E402  — 3.23 Learning Management (LMS)
     LearningPathItem,
     LearningProgress,
 )
+from .models import (  # noqa: E402  — 3.24 Training Administration
+    TrainingAttendance,
+    TrainingCertificate,
+    TrainingFeedback,
+    TrainingNomination,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -2046,3 +2052,99 @@ class LearningProgressForm(TenantModelForm):
             if dupes.exists():
                 raise forms.ValidationError("This employee already has a progress record for this course.")
         return cleaned
+
+
+# ----------------------------------------------------------------------- 3.24 Training Administration
+class TrainingNominationForm(TenantModelForm):
+    # status/approver/approved_at/rejected_reason/cancelled_reason are workflow-owned (set by the
+    # approve/reject/waitlist/cancel/withdraw actions, never on this form); number auto.
+    class Meta:
+        model = TrainingNomination
+        fields = ["session", "employee", "nominated_by", "nomination_type", "justification", "priority"]
+        widgets = {"justification": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "session" in self.fields and self.tenant is not None:
+            self.fields["session"].queryset = (
+                TrainingSession.objects.filter(tenant=self.tenant)
+                .exclude(status__in=("cancelled", "postponed")).order_by("-start_datetime"))
+
+    def clean(self):
+        # (tenant, session, employee) unique_together — tenant is form-excluded so validate_unique()
+        # skips it; check explicitly (the 3.22/3.23 gotcha).
+        cleaned = super().clean()
+        session, employee = cleaned.get("session"), cleaned.get("employee")
+        if self.tenant is not None and session and employee:
+            dupes = TrainingNomination.objects.filter(tenant=self.tenant, session=session, employee=employee)
+            if self.instance and self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                raise forms.ValidationError({"employee": "This employee is already nominated for this session."})
+        return cleaned
+
+
+class TrainingAttendanceForm(TenantModelForm):
+    class Meta:
+        model = TrainingAttendance
+        fields = ["session", "employee", "nomination", "attendance_status", "completion_status",
+                  "check_in_at", "check_out_at", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2, "class": "form-textarea"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "nomination" in self.fields and self.tenant is not None:
+            self.fields["nomination"].queryset = (
+                TrainingNomination.objects.filter(tenant=self.tenant, status__in=("approved", "waitlisted"))
+                .select_related("employee__party", "session").order_by("-created_at"))
+
+    def clean(self):
+        # (tenant, session, employee) unique_together — same form-excluded-tenant gotcha.
+        cleaned = super().clean()
+        session, employee = cleaned.get("session"), cleaned.get("employee")
+        if self.tenant is not None and session and employee:
+            dupes = TrainingAttendance.objects.filter(tenant=self.tenant, session=session, employee=employee)
+            if self.instance and self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                raise forms.ValidationError({"employee": "This employee already has an attendance record for this session."})
+        return cleaned
+
+
+class TrainingFeedbackForm(TenantModelForm):
+    # `attendance` is set from the URL in the nested create view (excluded here). ratings 1-5 via
+    # model MinValue/MaxValue validators; the form clean() only carries the (tenant, attendance) guard.
+    class Meta:
+        model = TrainingFeedback
+        fields = ["overall_rating", "content_rating", "trainer_rating", "would_recommend",
+                  "comments", "is_anonymous"]
+        widgets = {"comments": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"})}
+
+    def clean(self):
+        # (tenant, attendance) unique_together — BOTH fields form-excluded, so validate_unique() skips
+        # it entirely; the nested create view sets self.instance.attendance before is_valid().
+        cleaned = super().clean()
+        attendance_id = getattr(self.instance, "attendance_id", None)
+        if self.tenant is not None and attendance_id:
+            dupes = TrainingFeedback.objects.filter(tenant=self.tenant, attendance_id=attendance_id)
+            if self.instance and self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                raise forms.ValidationError("Feedback has already been submitted for this attendance record.")
+        return cleaned
+
+
+class TrainingCertificateForm(TenantModelForm):
+    # number/verification_code/expires_on are auto (save()); status/revoked_reason are workflow-owned.
+    class Meta:
+        model = TrainingCertificate
+        fields = ["employee", "course", "source_attendance", "source_progress", "title", "issued_on"]
+        widgets = {"issued_on": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "course" in self.fields and self.tenant is not None:
+            # Only certification-granting courses — but keep an already-linked course selectable on edit.
+            qs = TrainingCourse.objects.filter(tenant=self.tenant).filter(
+                Q(is_certification=True) | Q(pk=getattr(self.instance, "course_id", None)))
+            self.fields["course"].queryset = qs.order_by("title")
