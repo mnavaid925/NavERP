@@ -38,11 +38,14 @@
 
     <div class="form-actions" style="margin-top:.8rem;">
       {% if feedback %}
-        <a href="{% url 'hrm:trainingfeedback_detail' feedback.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> View Feedback</a>
+        {# don't let a non-admin, non-attendee open anonymous feedback via this page (which shows the name) #}
+        {% if not feedback.giver_anonymized or is_admin or obj.employee_id == current_profile_id %}
+          <a href="{% url 'hrm:trainingfeedback_detail' feedback.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> View Feedback</a>
+        {% endif %}
       {% elif is_admin or obj.employee_id == current_profile_id %}
         <a href="{% url 'hrm:trainingfeedback_create' obj.pk %}" class="btn btn-outline"><i data-lucide="message-square-plus"></i> Leave Feedback</a>
       {% endif %}
-      {% if obj.completion_status == 'completed' and obj.session.course.is_certification and not obj.certificates_issued.all %}
+      {% if is_admin and obj.completion_status == 'completed' and obj.session.course.is_certification and not obj.certificates_issued.all %}
         <a href="{% url 'hrm:trainingcertificate_issue_from_attendance' obj.pk %}" class="btn btn-primary"><i data-lucide="award"></i> Issue Certificate</a>
       {% endif %}
     </div>
