@@ -500,6 +500,17 @@ LIVE_LINKS = {
         "Gamification": "hrm:learning_leaderboard",                                    # bullet (computed points leaderboard)
         "Progress Tracking": "hrm:learningprogress_list",                             # bullet (LearningProgress CRUD)
     },
+    # 3.24 Training Administration — the operational/admin layer over 3.22 (TrainingSession) + 3.23
+    # (LearningProgress): nomination + approval workflow, attendance, feedback, certificates. "Training
+    # Budget" is a COMPUTED aggregate view (TrainingSession costs vs CostCenterProfile.budget_annual) —
+    # no stored model. Final sub-module of the 3.22/3.23/3.24 training cluster.
+    "3.24": {
+        "Nomination": "hrm:trainingnomination_list",                # bullet (TrainingNomination CRUD + approval workflow)
+        "Attendance Tracking": "hrm:trainingattendance_list",        # bullet (TrainingAttendance CRUD)
+        "Training Feedback": "hrm:trainingfeedback_list",            # bullet (TrainingFeedback CRUD)
+        "Certificates": "hrm:trainingcertificate_list",              # bullet (TrainingCertificate CRUD + issue/revoke/print)
+        "Training Budget": "hrm:training_budget",                    # bullet (computed budget aggregate view)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
