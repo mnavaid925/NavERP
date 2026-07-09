@@ -2304,6 +2304,38 @@ it reuses, and notes Training Budget is a computed view with no model).
   it's the first thing to pick up next for 3.24 (the underlying `TrainingAttendance` CRUD already
   supports it one row at a time).
 
-## Review notes
+## Review notes (3.24 — as-built)
 
-(filled in at the end)
+Built the 4-model scope: `TrainingNomination` (NOM-, approval workflow), `TrainingAttendance`, `TrainingFeedback`
+(Kirkpatrick-L1 + anonymity), `TrainingCertificate` (CERT-, issuance/revoke/print) + a computed `training_budget`
+view (no model), all extending 3.22 sessions + 3.23 LMS. Shared `_advance_months` helper refactored out of
+LearningProgress; `TrainingSession` gained `approved_nomination_count`/`is_full` cross-touch props; two detail
+cross-touches (trainingsession + learningprogress). Migrations 0040 (models) + 0041 (perf index). Verified:
+`manage.py check` clean, seeder idempotent, 24-URL smoke sweep + workflow POSTs + IDOR 404 + all 3 duplicate-guards.
+The optional per-session roster UI was NOT built (base attendance CRUD covers it one row at a time).
+
+**Module Creation Sequence — all 7 review agents run in order, findings applied & committed:**
+- **code-reviewer** — 1 Critical (TrainingFeedback had NO ownership gate — added `_can_manage_feedback`) + 4
+  Important (certificate duplicate-issuance guard; attendance-delete guard for feedback/cert refs; block editing a
+  revoked cert; recompute expires_on on issued_on change; drop dead `redirect_ok` param).
+- **explorer** — 1 real bug: `trainingsession_delete` had no ProtectedError guard but 3.24 added PROTECT children →
+  500; fixed (+ generalized trainingcourse_delete's message to name certificates).
+- **frontend-reviewer** — 8 fixes: cert Edit hidden on revoked; cert detail status badge honors is_expired; reject
+  input aria-label + cancel/withdraw reason inputs; feedback Edit/Delete + attendance Leave-Feedback gated to
+  giver/admin; budget floatformat:2.
+- **performance-reviewer** — (tenant, completion_status) index (mig 0041); consistent select_related on the 5
+  nomination workflow actions + cert revoke (audit-log str(obj) was firing extra queries); nomination-detail
+  employee__employment; compute profile once; precompute obj.feedback.first().
+- **qa-smoke-tester** — 67/67 checks passed, no defects.
+- **security-reviewer** — 2 High: (1) certificate WRITE chain ungated → any employee could self-mark a completed
+  attendance and self-issue a verifiable credential — fixed with `@tenant_admin_required` on
+  create/edit/issue_from_*/delete (revoke already was) + hid the buttons; (2) attendance-detail "View Feedback" link
+  de-anonymized anonymous feedback — hidden for non-admin/non-attendee. The Medium (attendance/nomination edit
+  ownership) is an app-wide pattern (leaverequest_edit identical) — left consistent now that the credential step is
+  admin-gated.
+- **test-writer** — 317 tests (101 model/form + 146 view + 70 security), all green; full HRM suite 4212→4529, no
+  regressions.
+
+Skill `.claude/skills/hrm/SKILL.md` updated (models table, flow, routes, `trainingadmin/` templates, seeder,
+LIVE_LINKS, fixed model count 81→89). **3.24 complete — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is
+done; next unbuilt HRM sub-module is 3.25 Personal Information (Self-Service).**
