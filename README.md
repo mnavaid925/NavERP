@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -453,6 +453,21 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `EmployeeProfile` + `Designation`/`OrgUnit` (no new course/learner/role tables, posts no GL); a question-bank
   assessment engine, SCORM runtime/xAPI, an achievement-badge catalog, and 3.24 Training Administration
   (nomination/attendance/feedback/certificates/budget) are deferred.
+- **3.24 Training Administration** — the operational/admin layer over 3.22 sessions + 3.23 LMS (ordinary
+  tenant-scoped CRUD): a `TrainingNomination` (`NOM-`) — an employee nominated for a `TrainingSession` with a
+  single-approver workflow (self/manager/HR nomination → pending → approve[/waitlist if the session is full] /
+  reject / cancel / withdraw, manager-or-admin gated via the reporting line, mirroring the LeaveRequest shape); a
+  `TrainingAttendance` (per-session-per-employee — registered/present/absent/partial/walk-in + completion +
+  check-in/out, linking back to its nomination); a `TrainingFeedback` (Kirkpatrick-L1 overall/content/trainer 1–5
+  ratings + would-recommend + anonymous masking cloned from 3.20 Feedback); and a `TrainingCertificate` (`CERT-`) —
+  an issuance record from a completed `TrainingAttendance` (ILT) **or** `LearningProgress` (LMS), with a
+  `secrets`-based verification code, `expires_on` computed once from the course validity (via a shared
+  `_advance_months` helper refactored out of 3.23), a revoke workflow, and a printable certificate. **Training
+  Budget** is a **computed view** (the year's training spend — estimated vs actual, by course — vs the allocated
+  `CostCenterProfile.budget_annual`), no stored model. Reuses `TrainingSession`/`TrainingCourse` (3.22) +
+  `LearningProgress` (3.23) + `EmployeeProfile`/`CostCenterProfile` (no new session/learner tables, posts no GL); the
+  N-step approval engine, QR check-in, multi-level Kirkpatrick, a branded certificate-PDF renderer, and a public
+  verify-by-code page are deferred. **Training (3.22 ILT + 3.23 LMS + 3.24 Administration) is now complete.**
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
