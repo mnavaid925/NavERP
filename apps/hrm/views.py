@@ -10043,7 +10043,10 @@ def trainingattendance_detail(request, pk):
     obj = get_object_or_404(
         TrainingAttendance.objects.select_related("session__course", "employee__party", "nomination"),
         pk=pk, tenant=request.tenant)
-    return render(request, "hrm/trainingadmin/trainingattendance/detail.html", {"obj": obj})
+    profile = _current_employee_profile(request)
+    return render(request, "hrm/trainingadmin/trainingattendance/detail.html", {
+        "obj": obj, "is_admin": _is_admin(request.user),
+        "current_profile_id": profile.pk if profile is not None else None})
 
 
 @login_required
@@ -10114,16 +10117,20 @@ def trainingfeedback_list(request):
         extra_context={
             "sessions": TrainingSession.objects.filter(tenant=request.tenant).select_related("course").order_by("-start_datetime"),
             "is_admin": _is_admin(request.user),
+            "current_profile_id": (_current_employee_profile(request).pk
+                                   if _current_employee_profile(request) is not None else None),
         },
     )
 
 
 @login_required
 def trainingfeedback_detail(request, pk):
+    profile = _current_employee_profile(request)
     return crud_detail(request, model=TrainingFeedback, pk=pk,
                        template="hrm/trainingadmin/trainingfeedback/detail.html",
                        select_related=("attendance__session__course", "attendance__employee__party"),
-                       extra_context={"is_admin": _is_admin(request.user)})
+                       extra_context={"is_admin": _is_admin(request.user),
+                                      "current_profile_id": profile.pk if profile is not None else None})
 
 
 @login_required
