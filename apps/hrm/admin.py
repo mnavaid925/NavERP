@@ -125,6 +125,12 @@ from .models import (  # 3.23 Learning Management (LMS)
     LearningPathItem,
     LearningProgress,
 )
+from .models import (  # 3.24 Training Administration
+    TrainingAttendance,
+    TrainingCertificate,
+    TrainingFeedback,
+    TrainingNomination,
+)
 
 
 @admin.register(JobGrade)
@@ -1119,3 +1125,40 @@ class LearningProgressAdmin(admin.ModelAdmin):
     search_fields = ("employee__party__name", "course__title")
     raw_id_fields = ("employee", "course", "learning_path")
     readonly_fields = ("created_at", "updated_at")
+
+
+# ----------------------------------------------------------------------- 3.24 Training Administration
+@admin.register(TrainingNomination)
+class TrainingNominationAdmin(admin.ModelAdmin):
+    list_display = ("number", "session", "employee", "nomination_type", "status", "tenant")
+    list_filter = ("tenant", "status", "nomination_type")
+    search_fields = ("number", "session__course__title", "employee__party__name")
+    raw_id_fields = ("session", "employee", "nominated_by", "approver")
+    readonly_fields = ("number", "approver", "approved_at", "created_at", "updated_at")
+
+
+@admin.register(TrainingAttendance)
+class TrainingAttendanceAdmin(admin.ModelAdmin):
+    list_display = ("session", "employee", "attendance_status", "completion_status", "tenant")
+    list_filter = ("tenant", "attendance_status", "completion_status")
+    search_fields = ("session__course__title", "employee__party__name")
+    raw_id_fields = ("session", "employee", "nomination")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(TrainingFeedback)
+class TrainingFeedbackAdmin(admin.ModelAdmin):
+    list_display = ("attendance", "overall_rating", "trainer_rating", "would_recommend", "is_anonymous", "tenant")
+    list_filter = ("tenant", "would_recommend", "is_anonymous")
+    search_fields = ("attendance__session__course__title",)
+    raw_id_fields = ("attendance",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(TrainingCertificate)
+class TrainingCertificateAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "course", "status", "issued_on", "expires_on", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "title", "verification_code", "employee__party__name", "course__title")
+    raw_id_fields = ("employee", "course", "source_attendance", "source_progress")
+    readonly_fields = ("number", "verification_code", "expires_on", "created_at", "updated_at")
