@@ -138,6 +138,12 @@ from apps.hrm.models import (  # 3.23 Learning Management (LMS)
     LearningPathItem,
     LearningProgress,
 )
+from apps.hrm.models import (  # 3.24 Training Administration
+    TrainingAttendance,
+    TrainingCertificate,
+    TrainingFeedback,
+    TrainingNomination,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -263,6 +269,7 @@ class Command(BaseCommand):
             self._seed_improvement(tenant, flush=options["flush"])
             self._seed_training(tenant, flush=options["flush"])
             self._seed_lms(tenant, flush=options["flush"])
+            self._seed_trainingadmin(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -291,6 +298,11 @@ class Command(BaseCommand):
                           # 3.20: Feedback/1:1s PROTECT EmployeeProfile (giver/receiver/manager/
                           # employee/owner) — wipe the feedback + 1:1 rows (action-items→meetings,
                           # feedback→badges) BEFORE the employee rows below.
+                          # 3.24: TrainingNomination.session/TrainingAttendance.session are PROTECT — wipe
+                          # before TrainingSession below; their .employee + TrainingCertificate.employee/course
+                          # are PROTECT — wipe before EmployeeProfile/TrainingCourse (later in this tuple);
+                          # TrainingFeedback.attendance is CASCADE + TrainingCertificate.source_* SET_NULL.
+                          TrainingCertificate, TrainingFeedback, TrainingAttendance, TrainingNomination,
                           # 3.23: LearningPathItem.course + LearningProgress.course are PROTECT — wipe
                           # them before TrainingCourse; LearningContentItem.course is CASCADE (auto-clears
                           # with its course); LearningProgress.employee is CASCADE + .learning_path SET_NULL
@@ -2481,3 +2493,107 @@ class Command(BaseCommand):
             f"{LearningPath.objects.filter(tenant=tenant).count()} paths, "
             f"{LearningPathItem.objects.filter(tenant=tenant).count()} path courses, "
             f"{LearningProgress.objects.filter(tenant=tenant).count()} progress records."))
+
+    def _seed_trainingadmin(self, tenant, *, flush):
+        """3.24 Training Administration - the operational layer over the 3.22 sessions + 3.23 LMS
+        (runs LAST, after _seed_lms). Nominations (across the workflow states), attendance on the one
+        COMPLETED session, feedback on completed attendance, and 2 certificates on the Safety course.
+        Reuses the existing seeded TrainingSessions / EmployeeProfiles / LearningProgress - creates NO
+        new session/person rows. ASCII-only stdout (cp1252 bug)."""
+        if flush:
+            TrainingCertificate.objects.filter(tenant=tenant).delete()
+            TrainingFeedback.objects.filter(tenant=tenant).delete()
+            TrainingAttendance.objects.filter(tenant=tenant).delete()
+            TrainingNomination.objects.filter(tenant=tenant).delete()
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' - skipping training-admin seed."))
+            return
+        session_a = TrainingSession.objects.filter(
+            tenant=tenant, course__title="Technical Onboarding Bootcamp", venue_name="HQ Training Room A").first()
+        session_b = TrainingSession.objects.filter(
+            tenant=tenant, course__title="Technical Onboarding Bootcamp", venue_name="HQ Training Room B").first()
+        session_safety = TrainingSession.objects.filter(
+            tenant=tenant, course__title="Workplace Safety Certification").first()
+        session_leadership = TrainingSession.objects.filter(
+            tenant=tenant, course__title="Leadership Excellence Program", status="completed").first()
+        if not (session_a and session_b and session_safety and session_leadership):
+            self.stdout.write(self.style.NOTICE(
+                f"Training sessions missing for '{tenant.name}' - run the training seed first; skipping."))
+            return
+        if TrainingNomination.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Training-admin data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        safety_course = TrainingCourse.objects.filter(tenant=tenant, title="Workplace Safety Certification").first()
+        progress_safety = LearningProgress.objects.filter(
+            tenant=tenant, employee=emps[0], course__title="Workplace Safety Certification", status="completed").first()
+        now = timezone.now()
+        today = timezone.localdate()
+        td = datetime.timedelta
+
+        # --- Nominations (distinct (session, employee) pairs; across the workflow states) ---
+        nom_a1 = TrainingNomination.objects.create(
+            tenant=tenant, session=session_a, employee=emps[1], nominated_by=None, nomination_type="self",
+            status="approved", approver=emps[0], approved_at=now, justification="Onboarding for a new hire.")
+        TrainingNomination.objects.create(
+            tenant=tenant, session=session_b, employee=emps[0], nominated_by=emps[1], nomination_type="hr",
+            status="approved", approver=emps[1], approved_at=now, justification="Assigned as required.")
+        TrainingNomination.objects.create(
+            tenant=tenant, session=session_safety, employee=emps[0], nominated_by=None, nomination_type="self",
+            status="waitlisted", justification="Requested a seat once one opens.")
+        TrainingNomination.objects.create(
+            tenant=tenant, session=session_safety, employee=emps[1], nominated_by=emps[0], nomination_type="manager",
+            status="rejected", approver=emps[0], rejected_reason="Scheduling conflict with a client deliverable.")
+        if len(emps) > 2:
+            TrainingNomination.objects.create(
+                tenant=tenant, session=session_a, employee=emps[2], nominated_by=None, nomination_type="self",
+                status="withdrawn", cancelled_reason="No longer available on that date.")
+            TrainingNomination.objects.create(
+                tenant=tenant, session=session_safety, employee=emps[2], nominated_by=emps[1],
+                nomination_type="manager", status="pending", justification="Compliance requirement.")
+
+        # --- Attendance (on the COMPLETED leadership session + one registered on session_a) ---
+        att0 = TrainingAttendance.objects.create(
+            tenant=tenant, session=session_leadership, employee=emps[0], attendance_status="present",
+            completion_status="completed", check_in_at=now - td(days=20, hours=7), check_out_at=now - td(days=20))
+        TrainingAttendance.objects.create(
+            tenant=tenant, session=session_leadership, employee=emps[1], attendance_status="absent",
+            completion_status="not_completed")
+        att2 = None
+        if len(emps) > 2:
+            att2 = TrainingAttendance.objects.create(
+                tenant=tenant, session=session_leadership, employee=emps[2], attendance_status="walk_in",
+                completion_status="completed", notes="Walked in without prior registration.")
+        TrainingAttendance.objects.create(
+            tenant=tenant, session=session_a, employee=emps[1], nomination=nom_a1,
+            attendance_status="registered", completion_status="not_completed")
+
+        # --- Feedback (on completed attendance rows) ---
+        TrainingFeedback.objects.create(
+            tenant=tenant, attendance=att0, overall_rating=5, content_rating=4, trainer_rating=5,
+            would_recommend=True, comments="Excellent leadership program, very practical.", is_anonymous=False)
+        if att2 is not None:
+            TrainingFeedback.objects.create(
+                tenant=tenant, attendance=att2, overall_rating=3, content_rating=3, trainer_rating=4,
+                would_recommend=False, comments="Content felt rushed for a walk-in.", is_anonymous=True)
+
+        # --- Certificates (Safety is the only is_certification course seeded) ---
+        if safety_course:
+            TrainingCertificate.objects.create(
+                tenant=tenant, employee=emps[0], course=safety_course, source_progress=progress_safety,
+                title="Certified Safety Associate", issued_on=today, status="issued")
+            TrainingCertificate.objects.create(
+                tenant=tenant, employee=emps[1], course=safety_course,
+                title="Certified Safety Associate (Manual Issue)", issued_on=today - td(days=60),
+                status="revoked", revoked_reason="Issued in error - the employee had not passed the exam.")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Training admin seeded for '{tenant.name}': "
+            f"{TrainingNomination.objects.filter(tenant=tenant).count()} nominations, "
+            f"{TrainingAttendance.objects.filter(tenant=tenant).count()} attendance, "
+            f"{TrainingFeedback.objects.filter(tenant=tenant).count()} feedback, "
+            f"{TrainingCertificate.objects.filter(tenant=tenant).count()} certificates."))
