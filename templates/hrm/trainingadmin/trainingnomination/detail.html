@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Nomination · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:trainingnomination_list' %}">Nominations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'pending' %}<a href="{% url 'hrm:trainingnomination_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      {% if obj.status != 'approved' and obj.status != 'waitlisted' %}
+        <form method="post" action="{% url 'hrm:trainingnomination_delete' obj.pk %}" onsubmit="return confirm('Delete this nomination?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Session</dt><dd><a href="{% url 'hrm:trainingsession_detail' obj.session.pk %}">{{ obj.session.number }} · {{ obj.session.course.title }}</a></dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ obj.get_nomination_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'waitlisted' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Priority</dt><dd>{{ obj.get_priority_display }}</dd></div>
+      {% if obj.nominated_by %}<div class="detail-item"><dt>Nominated By</dt><dd>{{ obj.nominated_by.party.name }}</dd></div>{% endif %}
+      {% if obj.approver %}<div class="detail-item"><dt>Decided By</dt><dd>{{ obj.approver.party.name }}{% if obj.approved_at %} · {{ obj.approved_at|date:"Y-m-d H:i" }}{% endif %}</dd></div>{% endif %}
+    </dl>
+    {% if obj.justification %}<div style="margin-top:.6rem;"><strong>Justification</strong><p>{{ obj.justification|linebreaksbr }}</p></div>{% endif %}
+    {% if obj.rejected_reason %}<div style="margin-top:.4rem;"><strong>Rejection Reason</strong><p>{{ obj.rejected_reason|linebreaksbr }}</p></div>{% endif %}
+    {% if obj.cancelled_reason %}<div style="margin-top:.4rem;"><strong>Cancellation / Withdrawal Note</strong><p>{{ obj.cancelled_reason|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  {% if obj.status == 'pending' or obj.status == 'waitlisted' or obj.status == 'approved' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;">
+        {% if can_decide and obj.status == 'pending' %}
+          <form method="post" action="{% url 'hrm:trainingnomination_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve this nomination?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+        {% endif %}
+        {% if can_decide and obj.status == 'pending' or can_decide and obj.status == 'waitlisted' %}
+          <form method="post" action="{% url 'hrm:trainingnomination_reject' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="text" name="rejected_reason" class="form-input" placeholder="Reason (optional)" style="display:inline-block; width:auto; vertical-align:middle;">
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+        {% if is_admin and obj.status == 'pending' %}
+          <form method="post" action="{% url 'hrm:trainingnomination_waitlist' obj.pk %}" style="display:inline;" onsubmit="return confirm('Waitlist this nominee?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="list-ordered"></i> Waitlist</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'hrm:trainingnomination_cancel' obj.pk %}" style="display:inline;" onsubmit="return confirm('Cancel this nomination?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+        </form>
+        <form method="post" action="{% url 'hrm:trainingnomination_withdraw' obj.pk %}" style="display:inline;" onsubmit="return confirm('Withdraw your own nomination?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="undo-2"></i> Withdraw</button>
+        </form>
+      </div>
+      <div class="card-body" style="padding-top:0;"><span class="text-muted">Approve/Reject: the nominee's manager or a tenant admin. Waitlist: admin only. Withdraw: the nominee.</span></div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:trainingnomination_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to nominations</a>
+{% endblock %}
