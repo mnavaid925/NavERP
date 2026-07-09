@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Certificate{% else %}Issue Certificate{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Certificate{% else %}Issue Certificate{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:trainingcertificate_list' %}">Certificates</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}Issue{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <p class="text-muted" style="margin-top:.4rem;"><i data-lucide="info"></i> The verification code and expiry (from the course's validity) are generated automatically on save. Leave the title blank to use the course's certification name.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'hrm:trainingcertificate_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
