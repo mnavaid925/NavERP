@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Certificate — {{ obj.employee.party.name }}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; max-width: 900px; margin: 0 auto; padding: 40px; }
+    .toolbar { text-align: center; margin-bottom: 24px; }
+    .toolbar button, .toolbar a { font-family: system-ui, sans-serif; font-size: 13px; padding: 8px 16px; border: 1px solid #1f3a8a; background: #1f3a8a; color: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; }
+    .toolbar a { background: #fff; color: #1f3a8a; margin-left: 8px; }
+    .cert { border: 6px double #1f3a8a; border-radius: 8px; padding: 56px 64px; text-align: center; background: #fff; }
+    .cert .org { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; color: #555; }
+    .cert h1 { font-size: 34px; color: #1f3a8a; letter-spacing: 2px; margin: 18px 0 6px; }
+    .cert .sub { font-size: 15px; color: #555; margin-bottom: 28px; }
+    .cert .name { font-size: 30px; font-weight: 700; margin: 8px 0; border-bottom: 1px solid #ccc; display: inline-block; padding: 0 24px 6px; }
+    .cert .course { font-size: 20px; margin: 22px 0 6px; }
+    .cert .body { font-size: 15px; color: #333; line-height: 1.7; margin: 10px auto; max-width: 620px; }
+    .cert .meta { display: flex; justify-content: space-between; margin-top: 48px; font-size: 13px; color: #444; }
+    .cert .meta div { text-align: center; }
+    .cert .code { margin-top: 28px; font-family: system-ui, monospace; font-size: 13px; color: #666; letter-spacing: 1px; }
+    .revoked { color: #b91c1c; font-weight: 700; letter-spacing: 2px; margin-top: 12px; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print</button>
+    <a href="{% url 'hrm:trainingcertificate_detail' obj.pk %}">Back</a>
+  </div>
+  <div class="cert">
+    <div class="org">{{ obj.tenant.name }}</div>
+    <h1>Certificate of Completion</h1>
+    <div class="sub">This is to certify that</div>
+    <div class="name">{{ obj.employee.party.name }}</div>
+    <div class="course">has successfully completed</div>
+    <div class="body"><strong>{{ obj.title }}</strong>{% if obj.course.title != obj.title %} ({{ obj.course.title }}){% endif %}</div>
+    {% if obj.status == 'revoked' %}<div class="revoked">— REVOKED —</div>{% endif %}
+    <div class="meta">
+      <div><strong>Certificate No.</strong><br>{{ obj.number }}</div>
+      <div><strong>Issued</strong><br>{{ obj.issued_on|date:"F j, Y" }}</div>
+      {% if obj.expires_on %}<div><strong>Valid Until</strong><br>{{ obj.expires_on|date:"F j, Y" }}</div>{% endif %}
+    </div>
+    <div class="code">Verification code: {{ obj.verification_code }}</div>
+  </div>
+</body>
+</html>
