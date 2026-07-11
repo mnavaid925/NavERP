@@ -12,7 +12,8 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.11 Time Tracking, 3.12 Holiday Management, 3.13 Salary Structure, 3.14 Payroll Processing,
 3.15 Statutory Compliance, 3.16 Tax & Investment, 3.17 Payout & Reports, 3.18 Goal Setting,
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
-3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service).** Reuses the
+3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
+3.26 Request Management (Self-Service).** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -305,6 +306,16 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
 
 **Self-service flow:** an employee opens **`my_info`** (their own profile via `_current_employee_profile(request)` = `request.user.party.employee_profile`; redirects to `hrm_overview` for a user with no profile) → edits contact fields directly via **`my_info_edit`** (address/personal_email/mobile/photo — the `EmployeeProfileMyInfoForm` non-sensitive subset) → for a sensitive field / a bank account / a family member, submits an **`EmployeeInfoChangeRequest`** (`changerequest_create`, a 3-way `?type=` toggle picking `ProfileFieldChangeForm`/`BankAccountChangeForm`/`FamilyMemberChangeForm`; content_type/object_id computed **server-side**, never client-supplied) → a **different** tenant admin **approves** (`apply()` writes the change) or **rejects** (decision_note required) from `changerequest_detail` (the diff table masks account/routing numbers). **Maker-checker separation:** `_is_own_change_request` blocks the requester/subject from approving/rejecting their own request. **Gotchas:** `_ss_scope` restricts non-admins to their own rows (admins see the whole tenant + an `employee` filter); `_ss_child_create`/`_edit`/`_detail`/`_delete` are the shared helpers (admin `?employee=`/`employee_pk` picker, non-admin forced to self); deleting a bank/family row **auto-cancels** any pending change request targeting it (a GFK has no referential integrity on the target-row delete); cross-tenant IDOR→404, cross-employee→403. **Deferred:** per-tenant configurable field-permission matrix, effective-dated history, per-scheme statutory nomination, live bank verification, split-deposit payroll wiring, preferred-name column.
 
+### 3.26 Request Management (Self-Service) (3 tables) — the employee **request portal** over the ESS spine. Two of the five NavERP.md 3.26 bullets **reuse** existing models with NO new table: **Leave Requests** → `LeaveRequest` (3.10), **Attendance Regularization** → `AttendanceRegularization` (3.9) (they just gain a `LIVE_LINKS["3.26"]` entry). This pass adds **3 new request models** + a view-only **My Requests** hub. All three subclass `TenantNumbered`, follow the `draft → pending → approved/rejected/cancelled` (+ one fulfillment tail) lifecycle mirroring `LeaveRequest`/`AttendanceRegularization`, reuse the 3.25 self-service helpers verbatim, and enforce a 3.25-style self-approval guard. Posts no GL.
+
+| Model | Number | Key fields | Notes |
+|---|---|---|---|
+| `DocumentRequest` (3.26) | `DOCREQ-` | **employee FK→`EmployeeProfile`(CASCADE, related_name="document_requests")**, document_type(experience_letter/salary_certificate/address_proof/employment_verification/noc/relieving_letter_copy/other), purpose, addressed_to, copies(PositiveSmallInt, MinValueValidator(1)), delivery_method(soft_copy/hard_copy/both), needed_by, status(+`fulfilled` tail), approver/approved_at/decision_note, **fulfilled_at**(editable=False), **output_file**(FileField, workflow-only) | Official-letter requests. `documentrequest_fulfill` (approved→fulfilled) optionally attaches the signed letter via `DocumentFulfillForm` (reuses the shared `_validate_upload` + `ALLOWED_ONBOARDING_DOC_EXTENSIONS`/`MAX_ONBOARDING_DOC_BYTES` — no new upload constants). |
+| `IdCardRequest` (3.26) | `IDREQ-` | **employee FK→`EmployeeProfile`(CASCADE, related_name="idcard_requests")**, request_type(new/replacement/correction/renewal), reason_type(lost/damaged/stolen/expired/name_change/designation_change/first_issue/other), reason, delivery_location, status(+`issued` tail), approver/approved_at/decision_note, card_number, **issued_at**(editable=False) | New/replacement/correction ID cards. `idcardrequest_issue` (approved→issued) requires a POST `card_number` and stamps `issued_at`. |
+| `AssetRequest` (3.26) | `ASSETREQ-` | **employee FK→`EmployeeProfile`(CASCADE, related_name="asset_requests")**, asset_category(**reuses `AssetAllocation.ASSET_CATEGORY_CHOICES`**), asset_name, justification, priority(low/normal/high/urgent), needed_by, status(+`fulfilled` tail), approver/approved_at/decision_note, **allocation** FK→`AssetAllocation`(SET_NULL, editable=False, related_name="fulfilled_requests") | Equipment requests. `assetrequest_fulfill` (approved→fulfilled) **creates + links an `AssetAllocation`**(program=None, status="issued", issued_by=request.user, optional serial_number/asset_tag from POST) inside `transaction.atomic()`. |
+
+**Request flow:** an employee opens **`my_requests`** (the hub, scoped to their OWN rows via `_require_own_profile` + `employee=profile`; redirects to `hrm_overview` for a user with no profile) showing open/total counts + 5 recent rows across all five request types → creates a request (`<model>_create`, defaults `status="draft"`, employee set server-side by `_ss_child_create`) → **`_submit`** (draft→pending) → a tenant admin **approves**/**rejects** (`@tenant_admin_required @require_POST`; reject requires `decision_note`) → the admin **fulfils/issues** the terminal action. **Self-approval guard:** `_is_own_hr_request` blocks an admin who is the requesting employee from approving/rejecting their own request. Five shared workflow helpers `_hr_request_submit/_cancel/_approve/_reject/_edit/_delete` back all three models (edit/delete gated to `OPEN_STATUSES`, **ownership checked before status** so no cross-employee status oracle). **Gotchas:** reuses `_ss_child_create/_edit/_detail/_delete`, `_ss_scope`, `_can_manage_own_child` verbatim (the hub itself scopes to `employee=profile` directly, NOT `_ss_scope`, so an admin sees only their own on the hub); `_ss_child_detail` now also passes `is_own` (used to hide the self-approval buttons on the viewer's own row); admin `readonly_fields` lock `status` so `/admin/` can't bypass the lifecycle; models carry a `(tenant,employee,status)` + `(tenant,status)` index (matching `LeaveRequest`); cross-tenant IDOR→404, cross-employee→403. **Deferred:** configurable multi-level approval chains, SLA auto-escalation, template-driven letter generation, e-signature, notifications, software/license access requests.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -429,6 +440,13 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
   `hrm:changerequest_*` — `_list`/`_detail`/`_create`/`_edit`/`_delete`/`_cancel` login-gated (own-or-admin, pending-
   only for edit/delete/cancel), **`_approve`/`_reject` `@tenant_admin_required` + blocked by `_is_own_change_request`**
   (maker-checker). `changerequest_approve` calls `EmployeeInfoChangeRequest.apply()`.
+- **Request Management / Self-Service (3.26):** `hrm:my_requests` (the ESS hub, self only); for each of
+  `documentrequest`/`idcardrequest`/`assetrequest`: `_list`/`_detail`/`_create`/`_edit`/`_delete` login-gated
+  (own-or-admin, edit/delete `OPEN_STATUSES`-only), `_submit`/`_cancel` (POST, `_can_manage_own_child`-gated),
+  **`_approve`/`_reject` `@tenant_admin_required @require_POST` + blocked by `_is_own_hr_request`** (reject requires
+  `decision_note`), and the terminal action: `hrm:documentrequest_fulfill` / `hrm:idcardrequest_issue` (requires POST
+  `card_number`) / `hrm:assetrequest_fulfill` (creates+links an `AssetAllocation` atomically). Leave Requests +
+  Attendance Regularization bullets reuse `hrm:leaverequest_*` (3.10) / `hrm:attendanceregularization_*` (3.9).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -825,8 +843,14 @@ manual + revoked). Reuses existing sessions/employees/LearningProgress. ASCII-on
 `FamilyMember`s** (a nominee spouse, a minor child with a guardian, a dependent parent), and **4
 `EmployeeInfoChangeRequest`s** across the workflow states (a pending national_id, an approved bank new-account,
 a rejected family edit, a cancelled DOB). `requested_by=None` (submitted by the employee via self-service, so the
-demo admin can approve the pending one — NOT their own maker-checker request). ASCII-only stdout. Runs **LAST**,
-after `_seed_trainingadmin`.
+demo admin can approve the pending one — NOT their own maker-checker request). ASCII-only stdout. Runs after
+`_seed_trainingadmin`.
+**Request Management / Self-Service (3.26)** is seeded by `_seed_requests(tenant)` (own `DocumentRequest.exists()`
+guard; needs ≥2 employees; flush wipes `AssetRequest`→`IdCardRequest`→`DocumentRequest`, also in the central
+`_seed_tenant` teardown before the 3.25 block): for the first two employees — **3 `DocumentRequest`s**
+(pending / approved / fulfilled), **2 `IdCardRequest`s** (pending / issued with a card_number), and **2
+`AssetRequest`s** (pending / fulfilled — the fulfilled one seeds + links its `AssetAllocation` directly).
+ASCII-only stdout. Runs **LAST**, right after `_seed_selfservice`.
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -919,6 +943,10 @@ tenant and sees nothing.
   Emergency Contacts → `hrm:emergencycontact_list`; Bank Details → `hrm:employeebankaccount_list`; Family Details →
   `hrm:familymember_list`; + extra Change Requests → `hrm:changerequest_list` (the EmployeeInfoChangeRequest
   maker-checker queue). `LIVE_LINKS["3.25"]`.
+- 3.26 (all 5 bullets live): Leave Requests → `hrm:leaverequest_list` (reuses 3.10, no new model); Attendance
+  Regularization → `hrm:attendanceregularization_list` (reuses 3.9, no new model); Document Requests →
+  `hrm:documentrequest_list`; ID Card Request → `hrm:idcardrequest_list`; Asset Requests → `hrm:assetrequest_list`;
+  + extra My Requests → `hrm:my_requests` (the ESS hub over all five). `LIVE_LINKS["3.26"]`.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -1062,7 +1090,7 @@ attachment` in production (project-wide WARNING).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
-upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer, next is 3.26 Request Management),
+upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9), next is 3.27 Communication Hub),
 timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), employee self-service portal, and a per-employee↔user link
 for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
