@@ -163,6 +163,12 @@ from .models import (  # noqa: E402  — 3.24 Training Administration
     TrainingFeedback,
     TrainingNomination,
 )
+from .models import (  # noqa: E402  — 3.25 Personal Information (Self-Service)
+    EmergencyContact,
+    EmployeeBankAccount,
+    EmployeeInfoChangeRequest,
+    FamilyMember,
+)
 
 
 # ----------------------------------------------------------------------- 3.2 Organizational Structure
@@ -2148,3 +2154,142 @@ class TrainingCertificateForm(TenantModelForm):
             qs = TrainingCourse.objects.filter(tenant=self.tenant).filter(
                 Q(is_certification=True) | Q(pk=getattr(self.instance, "course_id", None)))
             self.fields["course"].queryset = qs.order_by("title")
+
+
+# ======================================================= 3.25 Personal Information (Self-Service)
+# The child-entity ModelForms all EXCLUDE ``employee`` — the view sets it from
+# ``_current_employee_profile(request)`` (non-admin) or an ``?employee=<id>`` picker (admin),
+# mirroring the ``_employee_child_create`` pattern. ``verification_status`` is excluded from the bank
+# form (model ``editable=False`` — set only by the verify/reject actions).
+class EmergencyContactForm(TenantModelForm):
+    class Meta:
+        model = EmergencyContact
+        fields = ["name", "relationship", "phone", "alt_phone", "email", "address",
+                  "is_primary", "priority_order", "notes"]
+        widgets = {"address": forms.Textarea(attrs={"rows": 2}),
+                   "notes": forms.Textarea(attrs={"rows": 2})}
+
+
+class EmployeeBankAccountForm(TenantModelForm):
+    class Meta:
+        model = EmployeeBankAccount
+        fields = ["bank_name", "account_holder_name", "account_number", "routing_number",
+                  "account_type", "is_salary_account", "split_percentage", "status", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+
+class FamilyMemberForm(TenantModelForm):
+    class Meta:
+        model = FamilyMember
+        fields = ["name", "relationship", "date_of_birth", "gender", "occupation", "phone",
+                  "is_dependent", "is_minor", "guardian_name", "guardian_relationship",
+                  "is_nominee", "nominee_percentage", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+
+class EmployeeProfileMyInfoForm(TenantModelForm):
+    """The employee's OWN direct-edit form — the non-gated subset of ``EmployeeProfile`` only
+    (address / personal email / mobile / photo). The sensitive fields (legal name / DOB / national
+    ID / passport / bank) are NOT here — they change only via ``EmployeeInfoChangeRequest``."""
+
+    class Meta:
+        model = EmployeeProfile
+        fields = ["current_address", "permanent_address", "personal_email", "mobile", "photo"]
+        widgets = {"current_address": forms.Textarea(attrs={"rows": 2}),
+                   "permanent_address": forms.Textarea(attrs={"rows": 2})}
+
+    def clean_photo(self):
+        f = self.cleaned_data.get("photo")
+        if f and hasattr(f, "name") and hasattr(f, "size"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_PHOTO_EXTENSIONS:
+                raise forms.ValidationError(f"Photo type '{ext}' is not allowed. Use JPG, PNG, WebP or GIF.")
+            if f.size and f.size > MAX_PHOTO_BYTES:
+                raise forms.ValidationError("Photo exceeds the 5 MB limit.")
+        return f
+
+
+class _ThemedForm(forms.Form):
+    """Plain ``forms.Form`` base that applies the theme widget classes (TenantModelForm does this for
+    ModelForms; the change-request forms assemble ``field_changes`` JSON rather than saving a model,
+    so they need the same styling loop)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            widget = field.widget
+            if isinstance(widget, (forms.Select, forms.SelectMultiple)):
+                widget.attrs.setdefault("class", "form-select")
+            elif isinstance(widget, forms.Textarea):
+                widget.attrs.setdefault("class", "form-textarea")
+            elif isinstance(widget, forms.CheckboxInput):
+                widget.attrs.setdefault("class", "form-check")
+            else:
+                widget.attrs.setdefault("class", "form-input")
+
+
+class ProfileFieldChangeForm(_ThemedForm):
+    """Employee proposes a new value for ONE sensitive ``EmployeeProfile`` field (or legal name)."""
+
+    field_name = forms.ChoiceField(
+        choices=[(f, f.replace("_", " ").title()) for f in EmployeeInfoChangeRequest.SENSITIVE_PROFILE_FIELDS])
+    new_value = forms.CharField(max_length=255, label="New value")
+    reason = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+
+class BankAccountChangeForm(_ThemedForm):
+    """Employee proposes a new bank account, or an edit to one of their existing accounts."""
+
+    existing_account = forms.ModelChoiceField(
+        queryset=EmployeeBankAccount.objects.none(), required=False,
+        empty_label="-- Propose a new account --",
+        help_text="Leave blank to add a new account; pick one to edit it.")
+    bank_name = forms.CharField(max_length=255)
+    account_holder_name = forms.CharField(max_length=255)
+    account_number = forms.CharField(max_length=64)
+    routing_number = forms.CharField(max_length=20, required=False)
+    account_type = forms.ChoiceField(choices=EmployeeBankAccount.ACCOUNT_TYPE_CHOICES)
+    split_percentage = forms.DecimalField(max_digits=5, decimal_places=2, required=False,
+                                          min_value=0, max_value=100)
+    reason = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+    def __init__(self, *args, employee=None, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if employee is not None:
+            self.fields["existing_account"].queryset = EmployeeBankAccount.objects.filter(
+                tenant=tenant, employee=employee).order_by("bank_name")
+
+
+class FamilyMemberChangeForm(_ThemedForm):
+    """Employee proposes a new family member, or an edit to one of their existing members."""
+
+    existing_member = forms.ModelChoiceField(
+        queryset=FamilyMember.objects.none(), required=False,
+        empty_label="-- Propose a new family member --",
+        help_text="Leave blank to add a new member; pick one to edit it.")
+    name = forms.CharField(max_length=255)
+    relationship = forms.ChoiceField(choices=FamilyMember.RELATIONSHIP_CHOICES)
+    date_of_birth = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
+    gender = forms.ChoiceField(required=False, choices=[("", "---------")] + list(EmployeeProfile.GENDER_CHOICES))
+    occupation = forms.CharField(max_length=255, required=False)
+    phone = forms.CharField(max_length=30, required=False)
+    is_dependent = forms.BooleanField(required=False)
+    is_minor = forms.BooleanField(required=False)
+    guardian_name = forms.CharField(max_length=255, required=False)
+    guardian_relationship = forms.CharField(max_length=100, required=False)
+    is_nominee = forms.BooleanField(required=False)
+    nominee_percentage = forms.DecimalField(max_digits=5, decimal_places=2, required=False,
+                                            min_value=0, max_value=100)
+    reason = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+    def __init__(self, *args, employee=None, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if employee is not None:
+            self.fields["existing_member"].queryset = FamilyMember.objects.filter(
+                tenant=tenant, employee=employee).order_by("name")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("is_minor") and not cleaned.get("guardian_name"):
+            self.add_error("guardian_name", "Guardian name is required for a minor family member.")
+        return cleaned
