@@ -10423,7 +10423,8 @@ def my_info(request):
         "emergency_contacts": list(profile.emergency_contacts.all()[:3]),
         "bank_accounts": list(profile.bank_accounts.all()[:3]),
         "family_members": list(profile.family_members.all()[:3]),
-        "my_requests": list(profile.info_change_requests.select_related("reviewed_by")[:5]),
+        # The hub's mini-list renders only number/type/status/date — no FK columns, so no join needed.
+        "my_requests": list(profile.info_change_requests.all()[:5]),
     })
 
 
@@ -10736,8 +10737,10 @@ def _resolve_cr_employee(request, is_admin, own):
 
 @login_required
 def changerequest_list(request):
+    # The list renders only obj.employee.party.name (admin col) + local fields — requested_by/
+    # reviewed_by are shown on the detail page, not here.
     qs = _ss_scope(request, EmployeeInfoChangeRequest.objects.filter(tenant=request.tenant)
-                   .select_related("employee__party", "requested_by", "reviewed_by"))
+                   .select_related("employee__party"))
     is_admin = _is_admin(request.user)
     extra = {"is_admin": is_admin,
              "status_choices": EmployeeInfoChangeRequest.STATUS_CHOICES,
@@ -10909,7 +10912,10 @@ def changerequest_cancel(request, pk):
 @tenant_admin_required
 @require_POST
 def changerequest_approve(request, pk):
-    obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
+    # select_related so apply() doesn't re-fetch self.employee / .party for the legal_name write.
+    obj = get_object_or_404(
+        EmployeeInfoChangeRequest.objects.select_related("employee__party", "content_type"),
+        pk=pk, tenant=request.tenant)
     if obj.status != "pending":
         messages.error(request, "Only a pending change request can be approved.")
         return redirect("hrm:changerequest_detail", pk=obj.pk)
