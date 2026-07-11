@@ -9,6 +9,7 @@ import secrets
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -144,6 +145,12 @@ from apps.hrm.models import (  # 3.24 Training Administration
     TrainingFeedback,
     TrainingNomination,
 )
+from apps.hrm.models import (  # 3.25 Personal Information (Self-Service)
+    EmergencyContact,
+    EmployeeBankAccount,
+    EmployeeInfoChangeRequest,
+    FamilyMember,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -270,6 +277,7 @@ class Command(BaseCommand):
             self._seed_training(tenant, flush=options["flush"])
             self._seed_lms(tenant, flush=options["flush"])
             self._seed_trainingadmin(tenant, flush=options["flush"])
+            self._seed_selfservice(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -302,6 +310,11 @@ class Command(BaseCommand):
                           # before TrainingSession below; their .employee + TrainingCertificate.employee/course
                           # are PROTECT — wipe before EmployeeProfile/TrainingCourse (later in this tuple);
                           # TrainingFeedback.attendance is CASCADE + TrainingCertificate.source_* SET_NULL.
+                          # 3.25: EmployeeInfoChangeRequest (SET_NULL content_type/requested_by/
+                          # reviewed_by, no PROTECT dependents) + the 3 child tables (EmergencyContact/
+                          # EmployeeBankAccount/FamilyMember.employee are CASCADE) — order-agnostic vs
+                          # EmployeeProfile; listed here for a clean explicit teardown on --flush.
+                          EmployeeInfoChangeRequest, FamilyMember, EmployeeBankAccount, EmergencyContact,
                           TrainingCertificate, TrainingFeedback, TrainingAttendance, TrainingNomination,
                           # 3.23: LearningPathItem.course + LearningProgress.course are PROTECT — wipe
                           # them before TrainingCourse; LearningContentItem.course is CASCADE (auto-clears
@@ -2597,3 +2610,109 @@ class Command(BaseCommand):
             f"{TrainingAttendance.objects.filter(tenant=tenant).count()} attendance, "
             f"{TrainingFeedback.objects.filter(tenant=tenant).count()} feedback, "
             f"{TrainingCertificate.objects.filter(tenant=tenant).count()} certificates."))
+
+    def _seed_selfservice(self, tenant, *, flush):
+        """3.25 Personal Information (Self-Service) - the ESS layer over EmployeeProfile (runs LAST).
+        Adds emergency contacts, bank accounts and family members for the first two employees, plus a
+        few EmployeeInfoChangeRequests across the workflow states. Reuses the existing seeded
+        EmployeeProfiles - creates NO new person rows. Change requests are seeded directly in their
+        end-states (not by replaying .apply()), matching this seeder's convention. ASCII-only stdout
+        (cp1252 bug)."""
+        if flush:
+            EmployeeInfoChangeRequest.objects.filter(tenant=tenant).delete()
+            FamilyMember.objects.filter(tenant=tenant).delete()
+            EmployeeBankAccount.objects.filter(tenant=tenant).delete()
+            EmergencyContact.objects.filter(tenant=tenant).delete()
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' - skipping self-service seed."))
+            return
+        if EmergencyContact.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Self-service data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        now = timezone.now()
+        today = timezone.localdate()
+
+        # --- Emergency Contacts (unlimited roster; auto-demote keeps one primary per employee) ---
+        EmergencyContact.objects.create(
+            tenant=tenant, employee=emps[0], name="Priya Sharma", relationship="Spouse",
+            phone="+1-555-0111", alt_phone="+1-555-0112", email="priya@example.com",
+            is_primary=True, priority_order=1, notes="Primary contact.")
+        EmergencyContact.objects.create(
+            tenant=tenant, employee=emps[0], name="Rahul Sharma", relationship="Sibling",
+            phone="+1-555-0113", is_primary=False, priority_order=2)
+        EmergencyContact.objects.create(
+            tenant=tenant, employee=emps[1], name="Maria Gomez", relationship="Parent",
+            phone="+1-555-0121", is_primary=True, priority_order=1)
+
+        # --- Bank Accounts (one designated salary account per employee; split-deposit intent) ---
+        EmployeeBankAccount.objects.create(
+            tenant=tenant, employee=emps[0], bank_name="First National Bank",
+            account_holder_name=emps[0].name, account_number="100022223333", routing_number="021000021",
+            account_type="checking", is_salary_account=True, verification_status="verified", status="active")
+        savings_acct = EmployeeBankAccount.objects.create(
+            tenant=tenant, employee=emps[0], bank_name="City Savings & Loan",
+            account_holder_name=emps[0].name, account_number="200044445555", routing_number="121000248",
+            account_type="savings", is_salary_account=False, split_percentage=Decimal("20.00"),
+            verification_status="pending", status="active", notes="20% split into savings.")
+        EmployeeBankAccount.objects.create(
+            tenant=tenant, employee=emps[1], bank_name="First National Bank",
+            account_holder_name=emps[1].name, account_number="300066667777", routing_number="021000021",
+            account_type="checking", is_salary_account=True, verification_status="verified", status="active")
+
+        # --- Family Members (dependents / minor+guardian / nominee) ---
+        FamilyMember.objects.create(
+            tenant=tenant, employee=emps[0], name="Priya Sharma", relationship="spouse",
+            date_of_birth=today.replace(year=today.year - 33), gender="female", occupation="Architect",
+            is_dependent=True, is_nominee=True, nominee_percentage=Decimal("60.00"))
+        rejected_family = FamilyMember.objects.create(
+            tenant=tenant, employee=emps[0], name="Aarav Sharma", relationship="child",
+            date_of_birth=today.replace(year=today.year - 8), gender="male",
+            is_dependent=True, is_minor=True, guardian_name=emps[0].name, guardian_relationship="Parent")
+        FamilyMember.objects.create(
+            tenant=tenant, employee=emps[1], name="Elena Gomez", relationship="mother",
+            date_of_birth=today.replace(year=today.year - 61), gender="female",
+            is_dependent=True, is_nominee=False)
+
+        # --- Change Requests (across the workflow states; seeded directly in end-states) ---
+        ep_ct = ContentType.objects.get_for_model(EmployeeProfile)
+        bank_ct = ContentType.objects.get_for_model(EmployeeBankAccount)
+        family_ct = ContentType.objects.get_for_model(FamilyMember)
+        EmployeeInfoChangeRequest.objects.create(
+            tenant=tenant, employee=emps[1], content_type=ep_ct, object_id=emps[1].pk,
+            request_type="profile_field",
+            field_changes={"national_id": {"old": emps[1].national_id or "", "new": "AB-9988-7766"}},
+            reason="Typo in the originally recorded national ID.", status="pending", requested_by=actor)
+        EmployeeInfoChangeRequest.objects.create(
+            tenant=tenant, employee=emps[0], content_type=bank_ct, object_id=savings_acct.pk,
+            request_type="bank",
+            field_changes={"bank_name": {"old": None, "new": "City Savings & Loan"},
+                           "account_number": {"old": None, "new": "200044445555"},
+                           "account_type": {"old": None, "new": "savings"}},
+            reason="Please add my secondary savings account for split deposit.",
+            status="approved", requested_by=actor, reviewed_by=actor, reviewed_at=now,
+            decision_note="Verified with the employee over a call.")
+        EmployeeInfoChangeRequest.objects.create(
+            tenant=tenant, employee=emps[0], content_type=family_ct, object_id=rejected_family.pk,
+            request_type="family",
+            field_changes={"guardian_name": {"old": emps[0].name, "new": "Priya Sharma"}},
+            reason="Update the guardian to my spouse.", status="rejected",
+            requested_by=actor, reviewed_by=actor, reviewed_at=now,
+            decision_note="Please attach a supporting document for the guardian change.")
+        EmployeeInfoChangeRequest.objects.create(
+            tenant=tenant, employee=emps[0], content_type=ep_ct, object_id=emps[0].pk,
+            request_type="profile_field",
+            field_changes={"date_of_birth": {"old": str(emps[0].date_of_birth or ""), "new": "1990-05-14"}},
+            reason="Correcting my date of birth.", status="cancelled", requested_by=actor)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Self-service seeded for '{tenant.name}': "
+            f"{EmergencyContact.objects.filter(tenant=tenant).count()} emergency contacts, "
+            f"{EmployeeBankAccount.objects.filter(tenant=tenant).count()} bank accounts, "
+            f"{FamilyMember.objects.filter(tenant=tenant).count()} family members, "
+            f"{EmployeeInfoChangeRequest.objects.filter(tenant=tenant).count()} change requests."))
