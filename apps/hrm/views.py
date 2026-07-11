@@ -10414,9 +10414,11 @@ def my_info(request):
     profile, redirect_resp = _require_own_profile(request)
     if redirect_resp:
         return redirect_resp
+    # Employment.manager is a FK straight to core.Party (not EmployeeProfile), so the path stops at
+    # employment__manager — and the profile.manager property returns that Party (use .name, not .party.name).
     profile = (EmployeeProfile.objects
                .select_related("party", "designation",
-                               "employment__org_unit", "employment__manager__party")
+                               "employment__org_unit", "employment__manager")
                .get(pk=profile.pk))
     return render(request, "hrm/selfservice/my_info.html", {
         "profile": profile,
