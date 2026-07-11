@@ -11087,8 +11087,12 @@ def _hr_request_reject(request, model, pk, detail_url):
 
 def _hr_request_edit(request, model, pk, form_class, template, detail_url):
     """Edit only while OPEN (draft/pending) — a decided request is locked — then delegate to the
-    shared ownership-gated _ss_child_edit."""
+    shared ownership-gated _ss_child_edit. Ownership is checked BEFORE the status branch so a
+    non-owner can't read another employee's request state off the differing flash message."""
     obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only edit your own records.")
+        return redirect(detail_url, pk=obj.pk)
     if obj.status not in obj.OPEN_STATUSES:
         messages.error(request, "A decided request can no longer be edited.")
         return redirect(detail_url, pk=obj.pk)
@@ -11096,8 +11100,13 @@ def _hr_request_edit(request, model, pk, form_class, template, detail_url):
 
 
 def _hr_request_delete(request, model, pk, list_url):
-    """Delete only a still-open request (a decided/closed row is preserved for the audit trail)."""
+    """Delete only a still-open request (a decided/closed row is preserved for the audit trail).
+    Ownership is checked BEFORE the status branch so a non-owner can't read another employee's
+    request state off the differing flash message."""
     obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only delete your own records.")
+        return redirect(list_url)
     if obj.status not in obj.OPEN_STATUSES:
         messages.error(request, "A decided request can no longer be deleted.")
         return redirect(list_url)
@@ -11279,7 +11288,9 @@ def idcardrequest_issue(request, pk):
     obj.card_number = card_number[:100]
     obj.issued_at = timezone.now()
     obj.save(update_fields=["status", "card_number", "issued_at", "updated_at"])
-    write_audit_log(request.user, obj, "update", {"action": "issue", "card_number": obj.card_number})
+    # Don't copy the badge/card number into the audit metadata — it's already stored on the row and
+    # is the kind of physical-access identifier the codebase redacts elsewhere (_SENSITIVE_AUDIT_FIELDS).
+    write_audit_log(request.user, obj, "update", {"action": "issue"})
     messages.success(request, f"ID card request {obj.number} issued (card {obj.card_number}).")
     return redirect("hrm:idcardrequest_detail", pk=obj.pk)
 
