@@ -1934,3 +1934,64 @@ def change_request_b(db, tenant_b, employee_b):
         field_changes={"national_id": {"old": "", "new": "XY7654321"}},
     )
 
+
+# ------------------------------------------------------------------ 3.26 Request Management (Self-Service) fixtures
+@pytest.fixture
+def document_request_a(db, tenant_a, employee_a):
+    """A draft DocumentRequest for employee_a, tenant_a."""
+    from apps.hrm.models import DocumentRequest
+    return DocumentRequest.objects.create(
+        tenant=tenant_a, employee=employee_a, document_type="experience_letter",
+        purpose="Needed for a home-loan application.",
+    )
+
+
+@pytest.fixture
+def document_request_b(db, tenant_b, employee_b):
+    """A draft DocumentRequest belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import DocumentRequest
+    return DocumentRequest.objects.create(
+        tenant=tenant_b, employee=employee_b, document_type="salary_certificate",
+        purpose="Salary certificate for tenant B.",
+    )
+
+
+@pytest.fixture
+def idcard_request_a(db, tenant_a, employee_a):
+    """A draft IdCardRequest for employee_a, tenant_a."""
+    from apps.hrm.models import IdCardRequest
+    return IdCardRequest.objects.create(
+        tenant=tenant_a, employee=employee_a, request_type="new", reason_type="first_issue",
+        reason="First-time badge issuance.",
+    )
+
+
+@pytest.fixture
+def idcard_request_b(db, tenant_b, employee_b):
+    """An IdCardRequest belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import IdCardRequest
+    return IdCardRequest.objects.create(
+        tenant=tenant_b, employee=employee_b, request_type="replacement", reason_type="lost",
+        reason="Lost badge — tenant B.",
+    )
+
+
+@pytest.fixture
+def asset_request_a(db, tenant_a, employee_a):
+    """A draft AssetRequest for employee_a, tenant_a."""
+    from apps.hrm.models import AssetRequest
+    return AssetRequest.objects.create(
+        tenant=tenant_a, employee=employee_a, asset_category="laptop", asset_name="Dell XPS 13",
+        justification="Current laptop is out of warranty and underpowered.",
+    )
+
+
+@pytest.fixture
+def asset_request_b(db, tenant_b, employee_b):
+    """An AssetRequest belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import AssetRequest
+    return AssetRequest.objects.create(
+        tenant=tenant_b, employee=employee_b, asset_category="phone", asset_name="iPhone 14",
+        justification="Needed for tenant B field work.",
+    )
+
