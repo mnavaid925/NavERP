@@ -255,15 +255,8 @@ class EmployeeProfileForm(TenantModelForm):
                 tenant=self.tenant, kind="person").order_by("name")
 
     def clean_photo(self):
-        f = self.cleaned_data.get("photo")
-        # Only validate a freshly-uploaded file (an existing FieldFile has no size to re-check).
-        if f and hasattr(f, "name") and hasattr(f, "size"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_PHOTO_EXTENSIONS:
-                raise forms.ValidationError(f"Photo type '{ext}' is not allowed. Use JPG, PNG, WebP or GIF.")
-            if f.size and f.size > MAX_PHOTO_BYTES:
-                raise forms.ValidationError("Photo exceeds the 5 MB limit.")
-        return f
+        return _validate_upload(self.cleaned_data.get("photo"),
+                                allowed_ext=ALLOWED_PHOTO_EXTENSIONS, max_bytes=MAX_PHOTO_BYTES, label="Photo")
 
 
 class EmployeeDocumentForm(TenantModelForm):
@@ -283,18 +276,9 @@ class EmployeeDocumentForm(TenantModelForm):
                 .select_related("party").order_by("party__name"))
 
     def clean_file(self):
-        f = self.cleaned_data.get("file")
-        # Only validate a freshly-uploaded file (an existing FieldFile has no new size to re-check).
-        if f and hasattr(f, "name") and hasattr(f, "size"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
-                raise forms.ValidationError(
-                    f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
-            if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
-                raise forms.ValidationError("File exceeds the 10 MB limit.")
-            # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve with
-            # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
-        return f
+        return _validate_upload(self.cleaned_data.get("file"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="File")
 
 
 class EmployeeLifecycleEventForm(TenantModelForm):
@@ -566,20 +550,12 @@ class OnboardingDocumentForm(TenantModelForm):
                   "due_date", "external_ref"]
 
     def clean_file(self):
-        f = self.cleaned_data.get("file")
-        # Only validate a freshly-uploaded file (an existing FieldFile has no new size to re-check).
-        if f and hasattr(f, "name") and hasattr(f, "size"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
-                raise forms.ValidationError(
-                    f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
-            if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
-                raise forms.ValidationError("File exceeds the 10 MB limit.")
-            # WARNING: this is an extension allowlist only (mirrors core DocumentForm /
-            # EmployeeProfileForm.clean_photo). A renamed file passes — keep MEDIA_ROOT outside the
-            # web root (README) and serve uploads with Content-Disposition: attachment +
-            # X-Content-Type-Options: nosniff. Add MIME sniffing (python-magic) when that dep lands.
-        return f
+        # WARNING: extension allowlist only (a renamed file passes). Keep MEDIA_ROOT outside the web
+        # root (README) and serve uploads with Content-Disposition: attachment +
+        # X-Content-Type-Options: nosniff. Add MIME sniffing (python-magic) when that dep lands.
+        return _validate_upload(self.cleaned_data.get("file"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="File")
 
 
 class AssetAllocationForm(TenantModelForm):
@@ -615,18 +591,9 @@ class SeparationCaseForm(TenantModelForm):
                   "notice_buyout_type", "requires_kt", "notes"]
 
     def clean_resignation_letter(self):
-        f = self.cleaned_data.get("resignation_letter")
-        # Only validate a freshly-uploaded file (an existing FieldFile has no new size to re-check).
-        if f and hasattr(f, "name") and hasattr(f, "size"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
-                raise forms.ValidationError(
-                    f"File type '{ext}' is not allowed. Use PDF, DOC, DOCX, JPG or PNG.")
-            if f.size and f.size > MAX_ONBOARDING_DOC_BYTES:
-                raise forms.ValidationError("File exceeds the 10 MB limit.")
-            # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve with
-            # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
-        return f
+        return _validate_upload(self.cleaned_data.get("resignation_letter"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="File")
 
 
 class ExitInterviewForm(TenantModelForm):
@@ -832,14 +799,8 @@ class CandidateProfileForm(TenantModelForm):
         return _validate_resume(self.cleaned_data.get("resume_file"))
 
     def clean_photo(self):
-        f = self.cleaned_data.get("photo")
-        if f and hasattr(f, "name") and hasattr(f, "size"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_PHOTO_EXTENSIONS:
-                raise forms.ValidationError(f"Photo type '{ext}' is not allowed. Use JPG, PNG, WebP or GIF.")
-            if f.size and f.size > MAX_PHOTO_BYTES:
-                raise forms.ValidationError("Photo exceeds the 5 MB limit.")
-        return f
+        return _validate_upload(self.cleaned_data.get("photo"),
+                                allowed_ext=ALLOWED_PHOTO_EXTENSIONS, max_bytes=MAX_PHOTO_BYTES, label="Photo")
 
 
 class CandidateSkillForm(TenantModelForm):
@@ -918,13 +879,15 @@ def _validate_resume(f):
 
 def _validate_upload(f, *, allowed_ext, max_bytes, label="File"):
     """Generic upload guard — extension allowlist + size cap. Validates a freshly-uploaded file only
-    (an existing FieldFile has no new size to re-check)."""
-    if f and hasattr(f, "name") and hasattr(f, "size"):
+    (an existing FieldFile has no new size to re-check). The extension is enforced whenever the upload
+    exposes a name; the size cap applies only when a size attribute is present (some file-like wrappers
+    omit it), so a name-only upload is still extension-checked rather than skipped."""
+    if f and hasattr(f, "name"):
         ext = os.path.splitext(f.name)[1].lower()
         if ext not in allowed_ext:
             raise forms.ValidationError(
                 f"{label} type '{ext}' is not allowed. Use {', '.join(sorted(allowed_ext))}.")
-        if f.size and f.size > max_bytes:
+        if hasattr(f, "size") and f.size and f.size > max_bytes:
             raise forms.ValidationError(f"{label} exceeds the {max_bytes // (1024 * 1024)} MB limit.")
         # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve uploads with
         # Content-Disposition: attachment + X-Content-Type-Options: nosniff (mirrors onboarding docs).
@@ -1970,29 +1933,20 @@ class LearningContentItemForm(TenantModelForm):
     def clean_document_file(self):
         # WARNING: extension allowlist only — keep MEDIA_ROOT outside the web root and serve with
         # Content-Disposition: attachment + X-Content-Type-Options: nosniff in production (mirrors the
-        # onboarding-doc upload forms; MEDIA hardening is a tracked README TODO).
-        f = self.cleaned_data.get("document_file")
-        if f and hasattr(f, "name"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_ONBOARDING_DOC_EXTENSIONS:
-                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
-            if getattr(f, "size", 0) and f.size > MAX_ONBOARDING_DOC_BYTES:
-                raise forms.ValidationError("The document exceeds the 10 MB limit.")
-        return f
+        # onboarding-doc upload forms; MEDIA hardening is a tracked README TODO). _validate_upload
+        # enforces the extension on name alone, preserving this method's original name-only guard.
+        return _validate_upload(self.cleaned_data.get("document_file"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Document")
 
     def clean_scorm_package(self):
         # WARNING: stored as an opaque file only — never extracted this pass. A future SCORM-extraction
         # handler MUST guard against zip-slip / path traversal before writing extracted files to disk.
         # Also (as for every upload here) keep MEDIA_ROOT outside the web root + serve with
         # Content-Disposition: attachment + X-Content-Type-Options: nosniff in production.
-        f = self.cleaned_data.get("scorm_package")
-        if f and hasattr(f, "name"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_SCORM_EXTENSIONS:
-                raise forms.ValidationError("A SCORM package must be a .zip file.")
-            if getattr(f, "size", 0) and f.size > MAX_SCORM_BYTES:
-                raise forms.ValidationError("The SCORM package exceeds the 50 MB limit.")
-        return f
+        return _validate_upload(self.cleaned_data.get("scorm_package"),
+                                allowed_ext=ALLOWED_SCORM_EXTENSIONS,
+                                max_bytes=MAX_SCORM_BYTES, label="SCORM package")
 
 
 class LearningPathForm(TenantModelForm):
@@ -2199,14 +2153,8 @@ class EmployeeProfileMyInfoForm(TenantModelForm):
                    "permanent_address": forms.Textarea(attrs={"rows": 2})}
 
     def clean_photo(self):
-        f = self.cleaned_data.get("photo")
-        if f and hasattr(f, "name") and hasattr(f, "size"):
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_PHOTO_EXTENSIONS:
-                raise forms.ValidationError(f"Photo type '{ext}' is not allowed. Use JPG, PNG, WebP or GIF.")
-            if f.size and f.size > MAX_PHOTO_BYTES:
-                raise forms.ValidationError("Photo exceeds the 5 MB limit.")
-        return f
+        return _validate_upload(self.cleaned_data.get("photo"),
+                                allowed_ext=ALLOWED_PHOTO_EXTENSIONS, max_bytes=MAX_PHOTO_BYTES, label="Photo")
 
 
 class _ThemedForm(forms.Form):
