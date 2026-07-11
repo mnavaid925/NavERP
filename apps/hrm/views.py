@@ -10518,9 +10518,19 @@ def _ss_child_delete(request, model, pk, list_url):
         messages.error(request, "You can only delete your own records.")
         return redirect(list_url)
     if request.method == "POST":
+        # A GenericForeignKey gives no referential integrity on the TARGET row's deletion, so a
+        # pending change request pointing at this row would be left dangling (unapprovable). Auto-cancel
+        # any such request so nothing is silently orphaned (a no-op for EmergencyContact — never a target).
+        ct = ContentType.objects.get_for_model(model)
+        cancelled = EmployeeInfoChangeRequest.objects.filter(
+            tenant=obj.tenant, content_type=ct, object_id=obj.pk, status="pending"
+        ).update(status="cancelled", decision_note="Auto-cancelled: the target record was deleted.")
         write_audit_log(request.user, obj, "delete")
         obj.delete()
-        messages.success(request, "Deleted successfully.")
+        msg = "Deleted successfully."
+        if cancelled:
+            msg += f" {cancelled} pending change request(s) targeting it were cancelled."
+        messages.success(request, msg)
     return redirect(list_url)
 
 
