@@ -36,6 +36,20 @@ from apps.core.utils import next_number
 ZERO = Decimal("0")
 
 
+def _json_safe(value):
+    """Coerce a model/field value into a JSON-serializable form for ``field_changes`` storage and for
+    comparing a stored snapshot against a live value (dates → ISO strings, Decimals → strings;
+    bools/ints/strings/None pass through). Shared by the 3.25 change-request assembly (views) and
+    ``EmployeeInfoChangeRequest.apply()``'s lost-update guard."""
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return str(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 def _advance_months(d, months):
     """Advance a ``date`` by N calendar months, clamping the day to the target month's length
     (stdlib month-math — ``calendar.monthrange``; no ``dateutil`` dependency). Shared by
@@ -6912,8 +6926,18 @@ class EmployeeInfoChangeRequest(TenantNumbered):
             else:
                 model_cls = self.content_type.model_class()
                 obj = model_cls(tenant=self.tenant, employee=self.employee)
+            # Editing an existing target: guard against a lost update — the stored "old" snapshot must
+            # still match the live value, else another change (or admin edit) has drifted the record
+            # since this request was submitted. New rows (no existing target) have nothing to compare.
+            is_new_row = self.request_type != "profile_field" and self.object_id is None
             for field, change in self.field_changes.items():
                 new = change.get("new") if isinstance(change, dict) else change
+                if not is_new_row and isinstance(change, dict) and "old" in change:
+                    current = obj.party.name if field == "legal_name" else getattr(obj, field, None)
+                    if _json_safe(current) != change["old"]:
+                        raise ValidationError(
+                            f"'{field}' has changed since this request was submitted — "
+                            "ask the employee to resubmit with the current value.")
                 if new is None:
                     # A None new-value keeps the model default (new row) / current value (edit);
                     # clearing a field via a change request is deferred (v1 simplicity).
