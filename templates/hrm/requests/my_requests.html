@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">My Requests</h1>
-      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Request Management</span></div>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Requests</span></div>
     </div>
     <div class="page-actions">
       <a href="{% url 'hrm:my_info' %}" class="btn btn-outline"><i data-lucide="user"></i> My Info</a>
@@ -25,14 +25,14 @@
           {% if t.recent %}
             <ul style="list-style:none; margin:0; padding:0;">
               {% for r in t.recent %}
-                <li style="display:flex; align-items:center; gap:.5rem; padding:.3rem 0; border-top:1px solid var(--border, #eee);">
+                <li style="display:flex; align-items:center; gap:.5rem; padding:.3rem 0; border-top:1px solid var(--border);">
                   <a href="{% url t.detail_url_name r.pk %}" class="fw-600">{{ r.number }}</a>
                   {% if r.status == 'approved' or r.status == 'fulfilled' or r.status == 'issued' %}<span class="badge badge-green">{{ r.get_status_display }}</span>
                   {% elif r.status == 'pending' %}<span class="badge badge-info">{{ r.get_status_display }}</span>
                   {% elif r.status == 'rejected' %}<span class="badge badge-red">{{ r.get_status_display }}</span>
                   {% elif r.status == 'draft' %}<span class="badge badge-slate">{{ r.get_status_display }}</span>
                   {% else %}<span class="badge badge-muted">{{ r.get_status_display }}</span>{% endif %}
-                  <span class="text-muted" style="margin-left:auto; font-size:.8rem;">{{ r.created_at|date:"Y-m-d" }}</span>
+                  <span class="text-muted" style="margin-inline-start:auto; font-size:.8rem;">{{ r.created_at|date:"Y-m-d" }}</span>
                 </li>
               {% endfor %}
             </ul>
