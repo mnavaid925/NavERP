@@ -10972,3 +10972,437 @@ def changerequest_reject(request, pk):
     write_audit_log(request.user, obj, "update", {"action": "reject"})
     messages.success(request, f"Change request {obj.number} rejected.")
     return redirect("hrm:changerequest_detail", pk=obj.pk)
+
+
+# =============================================================================================
+# 3.26 Request Management (Self-Service)
+# =============================================================================================
+# The employee-facing request portal. THREE new request types — DocumentRequest / IdCardRequest /
+# AssetRequest — each on the draft -> pending -> approved/rejected/cancelled (+ fulfillment tail)
+# lifecycle, reusing the shared self-service helpers verbatim (_ss_child_create/_edit/_detail/_delete,
+# _ss_scope, _ss_employees, _can_manage_own_child, _require_own_profile). The other two 3.26 bullets
+# (Leave Requests, Attendance Regularization) reuse the existing 3.10/3.9 views; the My Requests hub
+# links to all five. A 3.26-only _is_own_hr_request guard blocks self-approval (mirrors 3.25's
+# _is_own_change_request); reject requires a decision_note.
+from .models import (  # noqa: E402  — 3.26 Request Management (Self-Service)
+    AssetRequest,
+    DocumentRequest,
+    IdCardRequest,
+)
+from .forms import (  # noqa: E402  — 3.26 Request Management (Self-Service)
+    AssetRequestForm,
+    DocumentFulfillForm,
+    DocumentRequestForm,
+    IdCardRequestForm,
+)
+
+
+def _is_own_hr_request(request, obj):
+    """3.26 self-approval guard: the acting user is the request's SUBMITTER (the `employee`), so
+    they must NOT also be the approver/rejecter — a different admin must review it. `employee` IS
+    the submitter on all three request models, so there's no separate requested_by leg to check."""
+    profile = _current_employee_profile(request)
+    return profile is not None and obj.employee_id == profile.pk
+
+
+# ---- Shared workflow helpers (used by all three 3.26 request models) ------------------------
+def _hr_request_submit(request, model, pk, detail_url):
+    """draft -> pending, gated to the owning employee or an admin (stricter than the older
+    leaverequest_submit, which has no ownership gate — 3.26 follows the 3.25 _can_manage_own_child
+    convention)."""
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only submit your own requests.")
+        return redirect(detail_url, pk=obj.pk)
+    if obj.status == "draft":
+        obj.status = "pending"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "submit"})
+        messages.success(request, f"Request {obj.number} submitted for approval.")
+    else:
+        messages.error(request, "Only a draft request can be submitted.")
+    return redirect(detail_url, pk=obj.pk)
+
+
+def _hr_request_cancel(request, model, pk, detail_url):
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only cancel your own requests.")
+        return redirect(detail_url, pk=obj.pk)
+    if obj.status in obj.OPEN_STATUSES:
+        obj.status = "cancelled"
+        obj.decision_note = (request.POST.get("decision_note") or "").strip()[:2000]
+        obj.save(update_fields=["status", "decision_note", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "cancel"})
+        messages.success(request, f"Request {obj.number} cancelled.")
+    else:
+        messages.error(request, "Only a draft or pending request can be cancelled.")
+    return redirect(detail_url, pk=obj.pk)
+
+
+def _hr_request_approve(request, model, pk, detail_url):
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if _is_own_hr_request(request, obj):
+        messages.error(request, "You can't approve your own request — another admin must review it.")
+        return redirect(detail_url, pk=obj.pk)
+    if obj.status == "pending":
+        obj.status = "approved"
+        obj.approver = request.user
+        obj.approved_at = timezone.now()
+        obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "approve"})
+        messages.success(request, f"Request {obj.number} approved.")
+    else:
+        messages.error(request, "Only a pending request can be approved.")
+    return redirect(detail_url, pk=obj.pk)
+
+
+def _hr_request_reject(request, model, pk, detail_url):
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if _is_own_hr_request(request, obj):
+        messages.error(request, "You can't reject your own request — another admin must review it.")
+        return redirect(detail_url, pk=obj.pk)
+    note = (request.POST.get("decision_note") or "").strip()
+    if not note:
+        messages.error(request, "A reason is required to reject a request.")
+        return redirect(detail_url, pk=obj.pk)
+    if obj.status == "pending":
+        obj.status = "rejected"
+        obj.decision_note = note[:2000]
+        obj.approver = request.user
+        obj.approved_at = timezone.now()
+        obj.save(update_fields=["status", "decision_note", "approver", "approved_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject"})
+        messages.success(request, f"Request {obj.number} rejected.")
+    else:
+        messages.error(request, "Only a pending request can be rejected.")
+    return redirect(detail_url, pk=obj.pk)
+
+
+def _hr_request_edit(request, model, pk, form_class, template, detail_url):
+    """Edit only while OPEN (draft/pending) — a decided request is locked — then delegate to the
+    shared ownership-gated _ss_child_edit."""
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if obj.status not in obj.OPEN_STATUSES:
+        messages.error(request, "A decided request can no longer be edited.")
+        return redirect(detail_url, pk=obj.pk)
+    return _ss_child_edit(request, model, pk, form_class, template, detail_url)
+
+
+def _hr_request_delete(request, model, pk, list_url):
+    """Delete only a still-open request (a decided/closed row is preserved for the audit trail)."""
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if obj.status not in obj.OPEN_STATUSES:
+        messages.error(request, "A decided request can no longer be deleted.")
+        return redirect(list_url)
+    return _ss_child_delete(request, model, pk, list_url)
+
+
+# ---- Document Requests ----------------------------------------------------------------------
+@login_required
+def documentrequest_list(request):
+    qs = _ss_scope(request, DocumentRequest.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "approver"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin,
+             "status_choices": DocumentRequest.STATUS_CHOICES,
+             "document_type_choices": DocumentRequest.DOCUMENT_TYPE_CHOICES}
+    filters = [("status", "status", False), ("document_type", "document_type", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/requests/documentrequest/list.html",
+                     search_fields=("number", "purpose", "addressed_to", "employee__party__name"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def documentrequest_create(request):
+    return _ss_child_create(request, DocumentRequestForm,
+                            "hrm/requests/documentrequest/form.html", "hrm:documentrequest_list")
+
+
+@login_required
+def documentrequest_detail(request, pk):
+    return _ss_child_detail(request, DocumentRequest, pk, "hrm/requests/documentrequest/detail.html",
+                            select_related=("employee__party", "approver"))
+
+
+@login_required
+def documentrequest_edit(request, pk):
+    return _hr_request_edit(request, DocumentRequest, pk, DocumentRequestForm,
+                            "hrm/requests/documentrequest/form.html", "hrm:documentrequest_detail")
+
+
+@login_required
+@require_POST
+def documentrequest_delete(request, pk):
+    return _hr_request_delete(request, DocumentRequest, pk, "hrm:documentrequest_list")
+
+
+@login_required
+@require_POST
+def documentrequest_submit(request, pk):
+    return _hr_request_submit(request, DocumentRequest, pk, "hrm:documentrequest_detail")
+
+
+@login_required
+@require_POST
+def documentrequest_cancel(request, pk):
+    return _hr_request_cancel(request, DocumentRequest, pk, "hrm:documentrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def documentrequest_approve(request, pk):
+    return _hr_request_approve(request, DocumentRequest, pk, "hrm:documentrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def documentrequest_reject(request, pk):
+    return _hr_request_reject(request, DocumentRequest, pk, "hrm:documentrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def documentrequest_fulfill(request, pk):
+    """approved -> fulfilled; optionally attach the signed letter (validated by DocumentFulfillForm)."""
+    obj = get_object_or_404(DocumentRequest, pk=pk, tenant=request.tenant)
+    if obj.status != "approved":
+        messages.error(request, "Only an approved request can be fulfilled.")
+        return redirect("hrm:documentrequest_detail", pk=obj.pk)
+    form = DocumentFulfillForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, "; ".join(form.errors.get("output_file", ["Invalid upload."])))
+        return redirect("hrm:documentrequest_detail", pk=obj.pk)
+    obj.status = "fulfilled"
+    obj.fulfilled_at = timezone.now()
+    update_fields = ["status", "fulfilled_at", "updated_at"]
+    uploaded = form.cleaned_data.get("output_file")
+    if uploaded:
+        obj.output_file = uploaded
+        update_fields.append("output_file")
+    obj.save(update_fields=update_fields)
+    write_audit_log(request.user, obj, "update", {"action": "fulfill"})
+    messages.success(request, f"Document request {obj.number} marked fulfilled.")
+    return redirect("hrm:documentrequest_detail", pk=obj.pk)
+
+
+# ---- ID Card Requests -----------------------------------------------------------------------
+@login_required
+def idcardrequest_list(request):
+    qs = _ss_scope(request, IdCardRequest.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "approver"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin,
+             "status_choices": IdCardRequest.STATUS_CHOICES,
+             "request_type_choices": IdCardRequest.REQUEST_TYPE_CHOICES,
+             "reason_type_choices": IdCardRequest.REASON_TYPE_CHOICES}
+    filters = [("status", "status", False), ("request_type", "request_type", False),
+               ("reason_type", "reason_type", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/requests/idcardrequest/list.html",
+                     search_fields=("number", "reason", "delivery_location", "employee__party__name"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def idcardrequest_create(request):
+    return _ss_child_create(request, IdCardRequestForm,
+                            "hrm/requests/idcardrequest/form.html", "hrm:idcardrequest_list")
+
+
+@login_required
+def idcardrequest_detail(request, pk):
+    return _ss_child_detail(request, IdCardRequest, pk, "hrm/requests/idcardrequest/detail.html",
+                            select_related=("employee__party", "approver"))
+
+
+@login_required
+def idcardrequest_edit(request, pk):
+    return _hr_request_edit(request, IdCardRequest, pk, IdCardRequestForm,
+                            "hrm/requests/idcardrequest/form.html", "hrm:idcardrequest_detail")
+
+
+@login_required
+@require_POST
+def idcardrequest_delete(request, pk):
+    return _hr_request_delete(request, IdCardRequest, pk, "hrm:idcardrequest_list")
+
+
+@login_required
+@require_POST
+def idcardrequest_submit(request, pk):
+    return _hr_request_submit(request, IdCardRequest, pk, "hrm:idcardrequest_detail")
+
+
+@login_required
+@require_POST
+def idcardrequest_cancel(request, pk):
+    return _hr_request_cancel(request, IdCardRequest, pk, "hrm:idcardrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def idcardrequest_approve(request, pk):
+    return _hr_request_approve(request, IdCardRequest, pk, "hrm:idcardrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def idcardrequest_reject(request, pk):
+    return _hr_request_reject(request, IdCardRequest, pk, "hrm:idcardrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def idcardrequest_issue(request, pk):
+    """approved -> issued; requires a non-blank card_number (stamped with issued_at)."""
+    obj = get_object_or_404(IdCardRequest, pk=pk, tenant=request.tenant)
+    if obj.status != "approved":
+        messages.error(request, "Only an approved request can be issued.")
+        return redirect("hrm:idcardrequest_detail", pk=obj.pk)
+    card_number = (request.POST.get("card_number") or "").strip()
+    if not card_number:
+        messages.error(request, "A card number is required to issue the ID card.")
+        return redirect("hrm:idcardrequest_detail", pk=obj.pk)
+    obj.status = "issued"
+    obj.card_number = card_number[:100]
+    obj.issued_at = timezone.now()
+    obj.save(update_fields=["status", "card_number", "issued_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "issue", "card_number": obj.card_number})
+    messages.success(request, f"ID card request {obj.number} issued (card {obj.card_number}).")
+    return redirect("hrm:idcardrequest_detail", pk=obj.pk)
+
+
+# ---- Asset Requests -------------------------------------------------------------------------
+@login_required
+def assetrequest_list(request):
+    qs = _ss_scope(request, AssetRequest.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "approver", "allocation"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin,
+             "status_choices": AssetRequest.STATUS_CHOICES,
+             "asset_category_choices": AssetAllocation.ASSET_CATEGORY_CHOICES,
+             "priority_choices": AssetRequest.PRIORITY_CHOICES}
+    filters = [("status", "status", False), ("asset_category", "asset_category", False),
+               ("priority", "priority", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/requests/assetrequest/list.html",
+                     search_fields=("number", "asset_name", "justification", "employee__party__name"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def assetrequest_create(request):
+    return _ss_child_create(request, AssetRequestForm,
+                            "hrm/requests/assetrequest/form.html", "hrm:assetrequest_list")
+
+
+@login_required
+def assetrequest_detail(request, pk):
+    return _ss_child_detail(request, AssetRequest, pk, "hrm/requests/assetrequest/detail.html",
+                            select_related=("employee__party", "approver", "allocation"))
+
+
+@login_required
+def assetrequest_edit(request, pk):
+    return _hr_request_edit(request, AssetRequest, pk, AssetRequestForm,
+                            "hrm/requests/assetrequest/form.html", "hrm:assetrequest_detail")
+
+
+@login_required
+@require_POST
+def assetrequest_delete(request, pk):
+    return _hr_request_delete(request, AssetRequest, pk, "hrm:assetrequest_list")
+
+
+@login_required
+@require_POST
+def assetrequest_submit(request, pk):
+    return _hr_request_submit(request, AssetRequest, pk, "hrm:assetrequest_detail")
+
+
+@login_required
+@require_POST
+def assetrequest_cancel(request, pk):
+    return _hr_request_cancel(request, AssetRequest, pk, "hrm:assetrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def assetrequest_approve(request, pk):
+    return _hr_request_approve(request, AssetRequest, pk, "hrm:assetrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def assetrequest_reject(request, pk):
+    return _hr_request_reject(request, AssetRequest, pk, "hrm:assetrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def assetrequest_fulfill(request, pk):
+    """approved -> fulfilled; create + link an AssetAllocation (program=None) inside one atomic txn
+    so the request and its issued allocation are written together (never a half-fulfilled request)."""
+    obj = get_object_or_404(AssetRequest, pk=pk, tenant=request.tenant)
+    if obj.status != "approved":
+        messages.error(request, "Only an approved request can be fulfilled.")
+        return redirect("hrm:assetrequest_detail", pk=obj.pk)
+    with transaction.atomic():
+        allocation = AssetAllocation.objects.create(
+            tenant=request.tenant, program=None, employee=obj.employee,
+            asset_name=obj.asset_name, asset_category=obj.asset_category,
+            status="issued", issued_at=timezone.now(), issued_by=request.user,
+            serial_number=(request.POST.get("serial_number") or "").strip()[:100],
+            asset_tag=(request.POST.get("asset_tag") or "").strip()[:100])
+        obj.allocation = allocation
+        obj.status = "fulfilled"
+        obj.save(update_fields=["allocation", "status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "fulfill", "allocation": allocation.number})
+    messages.success(request, f"Asset request {obj.number} fulfilled — issued {allocation.number}.")
+    return redirect("hrm:assetrequest_detail", pk=obj.pk)
+
+
+# ---- My Requests hub ------------------------------------------------------------------------
+@login_required
+def my_requests(request):
+    """3.26 self-service hub: the employee's open/total counts + five most-recent rows across all
+    five request types, with deep links to each type's list/create. Leave Requests and Attendance
+    Regularization reuse the existing 3.10/3.9 models (no new table)."""
+    profile, redirect_resp = _require_own_profile(request)
+    if redirect_resp:
+        return redirect_resp
+    tiles = []
+    for label, model, list_name, create_name, detail_name, icon in [
+        ("Leave Requests", LeaveRequest, "hrm:leaverequest_list",
+         "hrm:leaverequest_create", "hrm:leaverequest_detail", "calendar-days"),
+        ("Attendance Regularization", AttendanceRegularization, "hrm:attendanceregularization_list",
+         "hrm:attendanceregularization_create", "hrm:attendanceregularization_detail", "clock"),
+        ("Document Requests", DocumentRequest, "hrm:documentrequest_list",
+         "hrm:documentrequest_create", "hrm:documentrequest_detail", "file-text"),
+        ("ID Card Requests", IdCardRequest, "hrm:idcardrequest_list",
+         "hrm:idcardrequest_create", "hrm:idcardrequest_detail", "credit-card"),
+        ("Asset Requests", AssetRequest, "hrm:assetrequest_list",
+         "hrm:assetrequest_create", "hrm:assetrequest_detail", "laptop"),
+    ]:
+        qs = _ss_scope(request, model.objects.filter(tenant=request.tenant))
+        tiles.append({
+            "label": label,
+            "list_url_name": list_name,
+            "create_url_name": create_name,
+            "detail_url_name": detail_name,
+            "icon": icon,
+            "open_count": qs.filter(status__in=model.OPEN_STATUSES).count(),
+            "total_count": qs.count(),
+            "recent": list(qs.select_related("employee__party")[:5]),
+        })
+    return render(request, "hrm/requests/my_requests.html", {
+        "tiles": tiles, "is_admin": _is_admin(request.user), "profile": profile,
+    })
