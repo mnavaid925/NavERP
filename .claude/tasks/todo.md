@@ -3344,4 +3344,30 @@ that Leave/Attendance get **no** new model.
 
 ## Review notes
 
-(filled in after the build)
+**3.26 Request Management (Self-Service) — BUILT & reviewed (2026-07-12).** As-built matches the plan: 3 new
+`TenantNumbered` models (`DocumentRequest` DOCREQ-, `IdCardRequest` IDREQ-, `AssetRequest` ASSETREQ-) on the
+`draft→pending→approved/rejected/cancelled` (+ fulfillment tail) lifecycle, a view-only **My Requests** hub, and the
+two reuse bullets (Leave→3.10 `LeaveRequest`, Attendance Regularization→3.9 `AttendanceRegularization`, LIVE_LINKS
+only). Reuses the 3.25 ESS helpers verbatim (`_ss_child_*`, `_ss_scope`, `_can_manage_own_child`,
+`_require_own_profile`); new `_is_own_hr_request` self-approval guard + 5 shared `_hr_request_*` workflow helpers.
+`assetrequest_fulfill` creates+links an `AssetAllocation`(program=None) atomically. Migrations 0043 (create) + 0044
+(swap to the `(tenant,employee,status)` composite index). 10 templates under `templates/hrm/requests/`.
+
+**Review-agent findings applied:**
+- **explorer F1** — locked `status` readonly on the 3 admins (stop `/admin/` bypassing the workflow, esp. a
+  fulfilled AssetRequest with `allocation=None`).
+- **frontend-reviewer** — hub RTL-safe `margin-inline-start`, breadcrumb wording, dead-CSS drop; **and** scoped the
+  My Requests hub to `employee=profile` (was `_ss_scope`, which showed admins the whole tenant on their own hub).
+- **performance-reviewer** — `(tenant,employee,status)` composite index on all 3 models (parity with LeaveRequest);
+  hub counts collapsed to one conditional aggregate (15→10 queries); dropped unused `approver`/`allocation` joins
+  from the list querysets + the dead `employee__party` join on the hub recent list.
+- **security-reviewer** — **Medium**: reordered `_hr_request_edit`/`_hr_request_delete` to check ownership BEFORE
+  status (closed a cross-employee request-status oracle via the flash message); **Low**: dropped the plaintext
+  `card_number` from the `idcardrequest_issue` audit metadata.
+- **code-reviewer / qa-smoke-tester** — no code changes required (clean; qa verified the full lifecycle + IDOR + the
+  atomic AssetAllocation creation end-to-end).
+- **test-writer** — 258 tests (54 models + 116 views + 88 security), all green; full HRM suite still green.
+
+**Deferred (as scoped):** configurable multi-level approval chains, SLA auto-escalation, template-driven letter
+generation, e-signature, delivery-channel dispatch, notifications/watchers, software/license access requests,
+linking ID-card issuance into `AssetAllocation`. **Next unbuilt HRM sub-module: 3.27 Communication Hub.**
