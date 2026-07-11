@@ -11398,7 +11398,10 @@ def my_requests(request):
         ("Asset Requests", AssetRequest, "hrm:assetrequest_list",
          "hrm:assetrequest_create", "hrm:assetrequest_detail", "laptop"),
     ]:
-        qs = _ss_scope(request, model.objects.filter(tenant=request.tenant))
+        # "My Requests" is always the VIEWER's own rows — scope to their profile directly rather than
+        # via _ss_scope (which returns the whole tenant for an admin; the per-type list pages are where
+        # an admin sees everyone). `profile` is guaranteed non-None here by _require_own_profile above.
+        qs = model.objects.filter(tenant=request.tenant, employee=profile)
         tiles.append({
             "label": label,
             "list_url_name": list_name,
