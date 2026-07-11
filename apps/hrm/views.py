@@ -27,7 +27,7 @@ from django.views.decorators.http import require_POST
 from django.conf import settings
 from django.core.mail import send_mail
 
-from apps.core.crud import crud_create, crud_delete, crud_detail, crud_edit, crud_list
+from apps.core.crud import _changed, crud_create, crud_delete, crud_detail, crud_edit, crud_list
 from apps.core.decorators import tenant_admin_required
 from apps.core.models import Employment, OrgUnit, Party, PartyRole
 from apps.core.utils import write_audit_log
@@ -349,6 +349,7 @@ from .models import (  # 3.25 Personal Information (Self-Service)
     EmployeeBankAccount,
     EmployeeInfoChangeRequest,
     FamilyMember,
+    _json_safe,
 )
 
 
@@ -10395,16 +10396,13 @@ def _ss_employees(request):
             .select_related("party").order_by("party__name"))
 
 
-def _json_safe(value):
-    """Coerce a model/field value into a JSON-serializable form for ``field_changes`` storage
-    (dates → ISO strings, Decimals → strings; bools/ints/strings/None pass through)."""
-    if value is None:
-        return None
-    if isinstance(value, Decimal):
-        return str(value)
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return value
+def _is_own_change_request(request, obj):
+    """Maker-checker separation: the acting user is the MAKER (submitted it) or the SUBJECT (their own
+    record), so they must NOT also be the CHECKER who approves/rejects it."""
+    if obj.requested_by_id and obj.requested_by_id == request.user.id:
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and obj.employee_id == profile.pk
 
 
 # ---------------------------------------------------------------- My Info hub (Profile/Contact)
@@ -10426,7 +10424,6 @@ def my_info(request):
         "bank_accounts": list(profile.bank_accounts.all()[:3]),
         "family_members": list(profile.family_members.all()[:3]),
         "my_requests": list(profile.info_change_requests.select_related("reviewed_by")[:5]),
-        "sensitive_fields": EmployeeInfoChangeRequest.SENSITIVE_PROFILE_FIELDS,
     })
 
 
@@ -10493,7 +10490,8 @@ def _ss_child_edit(request, model, pk, form_class, template, detail_url):
         form = form_class(request.POST, request.FILES, instance=obj, tenant=request.tenant)
         if form.is_valid():
             obj = form.save()
-            write_audit_log(request.user, obj, "update")
+            # changes=_changed(form) redacts account_number (etc.) per _SENSITIVE_AUDIT_FIELDS.
+            write_audit_log(request.user, obj, "update", changes=_changed(form))
             messages.success(request, "Updated successfully.")
             return redirect(detail_url, pk=obj.pk)
     else:
@@ -10773,11 +10771,15 @@ def changerequest_create(request):
         form = build(request.POST)
         if form.is_valid():
             cr = _assemble_change_request(request, employee, req_type, form)
-            cr.clean()  # anti-tamper safety net (own-record only); number is set in save()
-            cr.save()
-            write_audit_log(request.user, cr, "create")
-            messages.success(request, f"Change request {cr.number} submitted for review.")
-            return redirect("hrm:changerequest_detail", pk=cr.pk)
+            try:
+                cr.clean()  # anti-tamper safety net (own-record only); number is set in save()
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                cr.save()
+                write_audit_log(request.user, cr, "create")
+                messages.success(request, f"Change request {cr.number} submitted for review.")
+                return redirect("hrm:changerequest_detail", pk=cr.pk)
     else:
         form = build()
     return render(request, "hrm/selfservice/changerequest/form.html", {
@@ -10836,15 +10838,19 @@ def changerequest_edit(request, pk):
         form = build(request.POST)
         if form.is_valid():
             rebuilt = _assemble_change_request(request, employee, req_type, form)
-            rebuilt.clean()
-            obj.field_changes = rebuilt.field_changes
-            obj.content_type = rebuilt.content_type
-            obj.object_id = rebuilt.object_id
-            obj.reason = rebuilt.reason
-            obj.save(update_fields=["field_changes", "content_type", "object_id", "reason", "updated_at"])
-            write_audit_log(request.user, obj, "update")
-            messages.success(request, "Change request updated.")
-            return redirect("hrm:changerequest_detail", pk=obj.pk)
+            try:
+                rebuilt.clean()
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                obj.field_changes = rebuilt.field_changes
+                obj.content_type = rebuilt.content_type
+                obj.object_id = rebuilt.object_id
+                obj.reason = rebuilt.reason
+                obj.save(update_fields=["field_changes", "content_type", "object_id", "reason", "updated_at"])
+                write_audit_log(request.user, obj, "update")
+                messages.success(request, "Change request updated.")
+                return redirect("hrm:changerequest_detail", pk=obj.pk)
     else:
         form = build()
     return render(request, "hrm/selfservice/changerequest/form.html", {
@@ -10894,6 +10900,9 @@ def changerequest_approve(request, pk):
     if obj.status != "pending":
         messages.error(request, "Only a pending change request can be approved.")
         return redirect("hrm:changerequest_detail", pk=obj.pk)
+    if _is_own_change_request(request, obj):
+        messages.error(request, "You can't review your own change request — another admin must approve or reject it.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
     try:
         obj.apply(request.user)
     except ValidationError as exc:
@@ -10910,6 +10919,9 @@ def changerequest_reject(request, pk):
     obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
     if obj.status != "pending":
         messages.error(request, "Only a pending change request can be rejected.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    if _is_own_change_request(request, obj):
+        messages.error(request, "You can't review your own change request — another admin must approve or reject it.")
         return redirect("hrm:changerequest_detail", pk=obj.pk)
     note = (request.POST.get("decision_note") or "").strip()
     if not note:
