@@ -11108,7 +11108,7 @@ def _hr_request_delete(request, model, pk, list_url):
 @login_required
 def documentrequest_list(request):
     qs = _ss_scope(request, DocumentRequest.objects.filter(tenant=request.tenant)
-                   .select_related("employee__party", "approver"))
+                   .select_related("employee__party"))
     is_admin = _is_admin(request.user)
     extra = {"is_admin": is_admin,
              "status_choices": DocumentRequest.STATUS_CHOICES,
@@ -11199,7 +11199,7 @@ def documentrequest_fulfill(request, pk):
 @login_required
 def idcardrequest_list(request):
     qs = _ss_scope(request, IdCardRequest.objects.filter(tenant=request.tenant)
-                   .select_related("employee__party", "approver"))
+                   .select_related("employee__party"))
     is_admin = _is_admin(request.user)
     extra = {"is_admin": is_admin,
              "status_choices": IdCardRequest.STATUS_CHOICES,
@@ -11288,7 +11288,7 @@ def idcardrequest_issue(request, pk):
 @login_required
 def assetrequest_list(request):
     qs = _ss_scope(request, AssetRequest.objects.filter(tenant=request.tenant)
-                   .select_related("employee__party", "approver", "allocation"))
+                   .select_related("employee__party"))
     is_admin = _is_admin(request.user)
     extra = {"is_admin": is_admin,
              "status_choices": AssetRequest.STATUS_CHOICES,
@@ -11402,15 +11402,19 @@ def my_requests(request):
         # via _ss_scope (which returns the whole tenant for an admin; the per-type list pages are where
         # an admin sees everyone). `profile` is guaranteed non-None here by _require_own_profile above.
         qs = model.objects.filter(tenant=request.tenant, employee=profile)
+        # One conditional aggregate instead of two COUNT round trips per tile.
+        counts = qs.aggregate(total=Count("pk"),
+                              open=Count("pk", filter=Q(status__in=model.OPEN_STATUSES)))
         tiles.append({
             "label": label,
             "list_url_name": list_name,
             "create_url_name": create_name,
             "detail_url_name": detail_name,
             "icon": icon,
-            "open_count": qs.filter(status__in=model.OPEN_STATUSES).count(),
-            "total_count": qs.count(),
-            "recent": list(qs.select_related("employee__party")[:5]),
+            "open_count": counts["open"],
+            "total_count": counts["total"],
+            # qs is already scoped to `profile`, so the recent rows need no employee join.
+            "recent": list(qs[:5]),
         })
     return render(request, "hrm/requests/my_requests.html", {
         "tiles": tiles, "is_admin": _is_admin(request.user), "profile": profile,
