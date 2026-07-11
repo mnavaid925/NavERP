@@ -511,6 +511,19 @@ LIVE_LINKS = {
         "Certificates": "hrm:trainingcertificate_list",              # bullet (TrainingCertificate CRUD + issue/revoke/print)
         "Training Budget": "hrm:training_budget",                    # bullet (computed budget aggregate view)
     },
+    # 3.25 Personal Information (Self-Service) — the ESS layer over the existing EmployeeProfile.
+    # Profile Management/Contact Update get NO new model — they're the my_info hub + its direct-edit
+    # form over EmployeeProfile's existing flat columns. Emergency Contacts/Bank Details/Family
+    # Details are proper child tables lifting the 2-slot/1-slot flat-column limits. The
+    # EmployeeInfoChangeRequest maker-checker workflow connecting all five is an extra live leaf.
+    "3.25": {
+        "Profile Management": "hrm:my_info",                        # bullet (ESS hub — view + employment context)
+        "Contact Update": "hrm:my_info_edit",                       # bullet (direct-edit: address/personal email/mobile/photo)
+        "Emergency Contacts": "hrm:emergencycontact_list",          # bullet (EmergencyContact CRUD, direct self-edit)
+        "Bank Details": "hrm:employeebankaccount_list",             # bullet (EmployeeBankAccount CRUD, admin-gated writes)
+        "Family Details": "hrm:familymember_list",                  # bullet (FamilyMember CRUD, admin-gated writes)
+        "Change Requests": "hrm:changerequest_list",                # extra (EmployeeInfoChangeRequest maker-checker queue)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
