@@ -1209,3 +1209,37 @@ class EmployeeInfoChangeRequestAdmin(admin.ModelAdmin):
     raw_id_fields = ("employee", "requested_by", "reviewed_by", "content_type")
     readonly_fields = ("number", "status", "requested_by", "reviewed_by", "reviewed_at",
                        "created_at", "updated_at")
+
+
+from .models import (  # 3.26 Request Management (Self-Service)
+    AssetRequest,
+    DocumentRequest,
+    IdCardRequest,
+)
+
+
+@admin.register(DocumentRequest)
+class DocumentRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "document_type", "status", "delivery_method", "approver", "tenant")
+    list_filter = ("status", "document_type", "delivery_method", "tenant")
+    search_fields = ("number", "employee__party__name", "purpose", "addressed_to")
+    readonly_fields = ("number", "approved_at", "fulfilled_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "approver")
+
+
+@admin.register(IdCardRequest)
+class IdCardRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "request_type", "reason_type", "status", "card_number", "approver", "tenant")
+    list_filter = ("status", "request_type", "reason_type", "tenant")
+    search_fields = ("number", "employee__party__name", "reason", "card_number")
+    readonly_fields = ("number", "approved_at", "issued_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "approver")
+
+
+@admin.register(AssetRequest)
+class AssetRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "asset_category", "asset_name", "priority", "status", "approver", "tenant")
+    list_filter = ("status", "asset_category", "priority", "tenant")
+    search_fields = ("number", "employee__party__name", "asset_name", "justification")
+    readonly_fields = ("number", "approved_at", "allocation", "created_at", "updated_at")
+    raw_id_fields = ("employee", "approver", "allocation")
