@@ -2687,7 +2687,7 @@ class Command(BaseCommand):
             tenant=tenant, employee=emps[1], content_type=ep_ct, object_id=emps[1].pk,
             request_type="profile_field",
             field_changes={"national_id": {"old": emps[1].national_id or "", "new": "AB-9988-7766"}},
-            reason="Typo in the originally recorded national ID.", status="pending", requested_by=actor)
+            reason="Typo in the originally recorded national ID.", status="pending", requested_by=None)
         EmployeeInfoChangeRequest.objects.create(
             tenant=tenant, employee=emps[0], content_type=bank_ct, object_id=savings_acct.pk,
             request_type="bank",
@@ -2695,20 +2695,20 @@ class Command(BaseCommand):
                            "account_number": {"old": None, "new": "200044445555"},
                            "account_type": {"old": None, "new": "savings"}},
             reason="Please add my secondary savings account for split deposit.",
-            status="approved", requested_by=actor, reviewed_by=actor, reviewed_at=now,
+            status="approved", requested_by=None, reviewed_by=actor, reviewed_at=now,
             decision_note="Verified with the employee over a call.")
         EmployeeInfoChangeRequest.objects.create(
             tenant=tenant, employee=emps[0], content_type=family_ct, object_id=rejected_family.pk,
             request_type="family",
             field_changes={"guardian_name": {"old": emps[0].name, "new": "Priya Sharma"}},
             reason="Update the guardian to my spouse.", status="rejected",
-            requested_by=actor, reviewed_by=actor, reviewed_at=now,
+            requested_by=None, reviewed_by=actor, reviewed_at=now,
             decision_note="Please attach a supporting document for the guardian change.")
         EmployeeInfoChangeRequest.objects.create(
             tenant=tenant, employee=emps[0], content_type=ep_ct, object_id=emps[0].pk,
             request_type="profile_field",
             field_changes={"date_of_birth": {"old": str(emps[0].date_of_birth or ""), "new": "1990-05-14"}},
-            reason="Correcting my date of birth.", status="cancelled", requested_by=actor)
+            reason="Correcting my date of birth.", status="cancelled", requested_by=None)
 
         self.stdout.write(self.style.SUCCESS(
             f"Self-service seeded for '{tenant.name}': "
