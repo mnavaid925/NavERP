@@ -10814,6 +10814,9 @@ def changerequest_detail(request, pk):
     return render(request, "hrm/selfservice/changerequest/detail.html", {
         "obj": obj, "diffs": diffs, "is_admin": _is_admin(request.user),
         "can_manage": _can_manage_own_child(request, obj),
+        # Maker-checker: an admin who is the maker/subject may NOT review their own request, so the
+        # Approve/Reject controls are hidden for them (the view would bounce them anyway).
+        "is_own": _is_own_change_request(request, obj),
     })
 
 
