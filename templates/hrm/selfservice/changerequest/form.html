@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Change Request{% else %}New Change Request{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Change Request{% else %}Request a Change{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:changerequest_list' %}">Change Requests</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  {% if not is_edit %}
+    <div class="card"><div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+      {% for val, label in request_type_choices %}
+        <a href="{% url 'hrm:changerequest_create' %}?type={{ val }}{% if request.GET.employee %}&employee={{ request.GET.employee }}{% endif %}"
+           class="btn {% if request_type == val %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="request_type" value="{{ request_type }}">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      {% if not is_edit and is_admin %}
+        <div class="form-group">
+          <label class="form-label" for="id_employee_pk">Employee <span class="req">*</span></label>
+          <select name="employee_pk" id="id_employee_pk" class="form-select">
+            {% for e in employees %}<option value="{{ e.pk }}" {% if employee and e.pk == employee.pk %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+      {% elif employee %}
+        <p class="text-muted" style="margin-bottom:.6rem;">For: <strong>{{ employee.party.name }}</strong></p>
+      {% endif %}
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <p class="text-muted" style="margin-top:.5rem;"><i data-lucide="info"></i> Your request is submitted to HR for review; the change is applied only once approved.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Submit Request</button>
+        <a href="{% if is_edit %}{% url 'hrm:changerequest_detail' obj.pk %}{% else %}{% url 'hrm:changerequest_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
