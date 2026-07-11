@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Asset Request · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:assetrequest_list' %}">Asset Requests</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' or obj.status == 'pending' %}
+        <a href="{% url 'hrm:assetrequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:assetrequest_delete' obj.pk %}" onsubmit="return confirm('Delete this request?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd><span class="badge badge-slate">{{ obj.get_asset_category_display }}</span></dd></div>
+      <div class="detail-item"><dt>Asset</dt><dd>{{ obj.asset_name }}</dd></div>
+      <div class="detail-item"><dt>Priority</dt><dd>
+        {% if obj.priority == 'urgent' %}<span class="badge badge-red">{{ obj.get_priority_display }}</span>
+        {% elif obj.priority == 'high' %}<span class="badge badge-info">{{ obj.get_priority_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_priority_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'approved' or obj.status == 'fulfilled' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Needed By</dt><dd>{{ obj.needed_by|date:"Y-m-d"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Submitted</dt><dd>{{ obj.created_at|date:"Y-m-d H:i" }}</dd></div>
+      {% if obj.approver %}<div class="detail-item"><dt>Reviewed By</dt><dd>{{ obj.approver.username }}{% if obj.approved_at %} · {{ obj.approved_at|date:"Y-m-d H:i" }}{% endif %}</dd></div>{% endif %}
+      {% if obj.allocation %}<div class="detail-item"><dt>Issued Asset</dt><dd><a href="{% url 'hrm:assetallocation_detail' obj.allocation.pk %}">{{ obj.allocation.number }}</a>{% if obj.allocation.serial_number %} · SN {{ obj.allocation.serial_number }}{% endif %}{% if obj.allocation.asset_tag %} · Tag {{ obj.allocation.asset_tag }}{% endif %}</dd></div>{% endif %}
+    </dl>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <div><strong>Justification</strong><p>{{ obj.justification|linebreaksbr }}</p></div>
+    {% if obj.decision_note %}<div style="margin-top:.4rem;"><strong>Decision Note</strong><p>{{ obj.decision_note|linebreaksbr }}</p></div>{% endif %}
+  </div></div>
+
+  {% if obj.status == 'draft' or obj.status == 'pending' or obj.status == 'approved' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'hrm:assetrequest_submit' obj.pk %}" style="display:inline;" onsubmit="return confirm('Submit this request for approval?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+          </form>
+        {% endif %}
+        {% if is_admin and is_own and obj.status == 'pending' %}
+          <p class="text-muted" style="margin:0;"><i data-lucide="info"></i> This is your own request — another admin must approve or reject it.</p>
+        {% endif %}
+        {% if is_admin and not is_own and obj.status == 'pending' %}
+          <form method="post" action="{% url 'hrm:assetrequest_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve this request?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'hrm:assetrequest_reject' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="text" name="decision_note" class="form-input" aria-label="Reject reason" placeholder="Reason (required)" required style="display:inline-block; width:auto; vertical-align:middle;">
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+        {% if is_admin and obj.status == 'approved' %}
+          <form method="post" action="{% url 'hrm:assetrequest_fulfill' obj.pk %}" style="display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;" onsubmit="return confirm('Fulfil this request and issue the asset?');">
+            {% csrf_token %}
+            <input type="text" name="serial_number" class="form-input" aria-label="Serial number (optional)" placeholder="Serial no. (optional)" style="display:inline-block; width:auto;">
+            <input type="text" name="asset_tag" class="form-input" aria-label="Asset tag (optional)" placeholder="Asset tag (optional)" style="display:inline-block; width:auto;">
+            <button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Fulfil &amp; Issue</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'draft' or obj.status == 'pending' %}
+          <form method="post" action="{% url 'hrm:assetrequest_cancel' obj.pk %}" style="display:inline;" onsubmit="return confirm('Cancel this request?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+      </div>
+      <div class="card-body" style="padding-top:0;"><span class="text-muted">Submit/Cancel: you or an admin. Approve/Reject/Fulfil: a tenant admin (not on your own request). Fulfil issues a linked asset allocation.</span></div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:assetrequest_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to asset requests</a>
+{% endblock %}
