@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Emergency Contacts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Emergency Contacts</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Personal Info · Emergency Contacts</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:my_info' %}" class="btn btn-outline"><i data-lucide="user"></i> My Info</a>
+      <a href="{% url 'hrm:emergencycontact_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Contact</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:180px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name / relationship / phone…">
+        </div>
+        <div class="form-group">
+          <select name="is_primary" class="form-select" aria-label="Primary">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_primary == 'True' %}selected{% endif %}>Primary only</option>
+            <option value="False" {% if request.GET.is_primary == 'False' %}selected{% endif %}>Non-primary</option>
+          </select>
+        </div>
+        {% if is_admin %}
+          <div class="form-group">
+            <select name="employee" class="form-select" aria-label="Employee">
+              <option value="">All employees</option>
+              {% for e in employees %}
+                <option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:emergencycontact_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>{% if is_admin %}<th>Employee</th>{% endif %}<th>Name</th><th>Relationship</th><th>Phone</th><th>Primary</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              {% if is_admin %}<td>{{ obj.employee.party.name }}</td>{% endif %}
+              <td><a href="{% url 'hrm:emergencycontact_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>{{ obj.relationship|default:"—" }}</td>
+              <td>{{ obj.phone }}</td>
+              <td>{% if obj.is_primary %}<span class="badge badge-green">Primary</span>{% else %}<span class="badge badge-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:emergencycontact_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:emergencycontact_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:emergencycontact_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this contact?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if is_admin %}6{% else %}5{% endif %}"><div class="empty-state"><i data-lucide="phone"></i><h3>No emergency contacts</h3><p>Add the people to reach in an emergency.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
