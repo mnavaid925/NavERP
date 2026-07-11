@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit ID Card Request{% else %}New ID Card Request{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit ID Card Request{% else %}New ID Card Request{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:idcardrequest_list' %}">ID Card Requests</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      {% if not is_edit and is_admin %}
+        <div class="form-group">
+          <label class="form-label" for="id_employee_pk">Employee <span class="req">*</span></label>
+          <select name="employee_pk" id="id_employee_pk" class="form-select">
+            {% for e in employees %}<option value="{{ e.pk }}" {% if target_employee and e.pk == target_employee.pk %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+      {% elif target_employee %}
+        <p class="text-muted" style="margin-bottom:.6rem;">For: <strong>{{ target_employee.party.name }}</strong></p>
+      {% endif %}
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'hrm:idcardrequest_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
