@@ -1016,14 +1016,18 @@ def leaverequest_submit(request, pk):
 def leaverequest_approve(request, pk):
     obj = get_object_or_404(LeaveRequest, pk=pk, tenant=request.tenant)
     if obj.status == "pending":
-        obj.status = "approved"
-        obj.approver = request.user
-        obj.approved_at = timezone.now()
-        obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
-        # Reflect the approval on any existing attendance rows in the leave window.
-        touched = AttendanceRecord.objects.filter(
-            tenant=request.tenant, employee=obj.employee,
-            date__gte=obj.start_date, date__lte=obj.end_date).update(status="on_leave")
+        # Approval mutates two models (the request + its attendance rows); wrap them so an
+        # interrupted approve can't leave the request approved while attendance stays unsynced.
+        # Mirrors the inverse leaverequest_cancel, which already runs under transaction.atomic().
+        with transaction.atomic():
+            obj.status = "approved"
+            obj.approver = request.user
+            obj.approved_at = timezone.now()
+            obj.save(update_fields=["status", "approver", "approved_at", "updated_at"])
+            # Reflect the approval on any existing attendance rows in the leave window.
+            touched = AttendanceRecord.objects.filter(
+                tenant=request.tenant, employee=obj.employee,
+                date__gte=obj.start_date, date__lte=obj.end_date).update(status="on_leave")
         write_audit_log(request.user, obj, "update", {
             "action": "approve",
             "attendance_set_on_leave": f"{obj.start_date}..{obj.end_date} ({touched} rows)"})
