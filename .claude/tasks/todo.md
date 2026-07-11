@@ -2339,3 +2339,632 @@ The optional per-session roster UI was NOT built (base attendance CRUD covers it
 Skill `.claude/skills/hrm/SKILL.md` updated (models table, flow, routes, `trainingadmin/` templates, seeder,
 LIVE_LINKS, fixed model count 81→89). **3.24 complete — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is
 done; next unbuilt HRM sub-module is 3.25 Personal Information (Self-Service).**
+
+---
+# Module 3 — HRM — Sub-module 3.25 Personal Information (Self-Service) (hrm-3.25-personal-information) — plan from research-hrm-3.25-personal-information.md (2026-07-11)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.24) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries, next migration is `0042`.** Per the research's scope note,
+this sub-module is the **Employee Self-Service (ESS) personal-information layer**, NOT a re-model of
+`hrm.EmployeeProfile` — it does not duplicate the existing flat columns (bank/emergency-contact/address/
+personal-file fields already on `EmployeeProfile`). It adds three proper **child tables** the flat/
+2-slot columns can't model (unlimited emergency contacts, multiple bank accounts with one designated
+salary account, family/dependent members) plus a **maker-checker change-request model** that gates the
+sensitive fields (legal name, DOB, national ID, passport, all bank-account writes, all family-member
+writes) behind HR approval while address/personal-email/mobile/emergency-contacts stay direct-edit.
+
+**"My profile" resolution — ALREADY BUILT, reuse it, don't reinvent it:** `apps/hrm/views.py:7408`
+already has `_current_employee_profile(request)` (`request.user.party` → reverse-O2O
+`employee_profile`, `None`-safe for a user with no linked party/profile) and `apps/hrm/views.py:7733`
+already has `_is_admin(user)` (`user.is_superuser or user.is_tenant_admin`). Every ESS view in this pass
+uses these two existing helpers — no new resolution logic.
+
+Reuses (never duplicates): `hrm.EmployeeProfile` (`current_address`/`permanent_address`/
+`personal_email`/`work_email`/`mobile`/`national_id`/`passport_number`/`date_of_birth`/`photo` — the ESS
+surface edits/reads these, doesn't re-model them), `EmployeeProfile._mask_last4` (ported/duplicated onto
+`EmployeeBankAccount`, matching the existing per-model-duplication convention already used at
+`EmployeeStatutoryIdentifier._mask_last4`, `models.py:3890`), `core.Party.name` (the actual legal-name
+column — `EmployeeProfile.name` is a `@property` proxy, not a DB column, so the change-request `apply()`
+special-cases `legal_name` to write `party.name`, not an `EmployeeProfile` column), `core.Employment`
+(`org_unit`/`manager`/`job_title`/`hired_on` — the read-only employment context on the hub page, via the
+already-existing `EmployeeProfile.department`/`.manager` properties), `django.contrib.contenttypes`
+(`ContentType`/`GenericForeignKey` — the same pattern already used by `core.AuditLog`/`core.Activity`/
+`core.Document`; this is the **first** use of a GenericForeignKey inside `apps/hrm` itself, so
+`GenericForeignKey`/`ContentType` need fresh imports at the top of `apps/hrm/models.py`), the existing
+`@tenant_admin_required` decorator (`apps/core/decorators.py`) for every admin-only write, and the
+existing `EmployeeDocument.mark_verified`/`.reject` action-pair shape (`apps/hrm/views.py` — 3.1) as the
+template for `EmployeeBankAccount`'s own verify/reject actions.
+
+**Design decision (bridges the research's slightly different field lists — documented, not an
+oversight):** the research catalog's per-model field lists (`change_type`/`field_name`/`old_value`/
+`new_value`/`effective_date` on the change-request; `unverified`/`pending`/`verified` on
+`verification_status`) are the earlier, more granular sketch; the task brief that launched this plan
+refined them to a leaner shape (`field_changes` JSON instead of one-field-at-a-time rows so ONE request
+can propose an entire new bank-account/family-member row in one shot; `pending`/`verified`/`rejected` on
+`verification_status`, workflow-owned via dedicated verify/reject actions). This plan builds the
+**leaner, task-brief shape** — it is a strict refinement of the research (same capabilities, fewer
+fields), not a scope cut.
+
+## Models (from research)
+
+- [ ] **`EmergencyContact`** [`TenantOwned`] — covers **Emergency Contacts**. Direct self-edit, **no
+  approval gate** (deliberate scope choice per the research catalog — matches the majority of the ten
+  leaders surveyed).
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=CASCADE`, `related_name="emergency_contacts"`
+    (a true owned child — deleted with the employee, unlike `TrainingNomination`'s `PROTECT`)
+  - `name` — CharField(255)
+  - `relationship` — CharField(100, blank=True) — free text, mirrors the existing
+    `EmployeeProfile.emergency_contact_relation`'s free-text shape (driver: BambooHR/Zoho People/
+    Darwinbox all show relationship as a short label, not a fixed enum)
+  - `phone` — CharField(30); `alt_phone` — CharField(30, blank=True) (driver: BambooHR/Zoho People
+    alt-phone field)
+  - `email` — EmailField(blank=True); `address` — TextField(blank=True)
+  - `is_primary` — BooleanField(default=False) — "which contact to call first" (driver: BambooHR,
+    Workday primary/priority ordering)
+  - `priority_order` — PositiveSmallIntegerField(default=1)
+  - `notes` — TextField(blank=True)
+  - `Meta.ordering = ["employee", "priority_order", "-is_primary"]`; index `(tenant, employee)`
+    (`hrm_ec_tenant_emp_idx`)
+  - `save()`: if `self.is_primary`, demote siblings first inside `transaction.atomic()` —
+    `EmergencyContact.objects.filter(tenant_id=self.tenant_id, employee_id=self.employee_id,
+    is_primary=True).exclude(pk=self.pk).update(is_primary=False)` — enforcing "one `True` per
+    employee" the same auto-demote way `EmployeeBankAccount.is_salary_account` does below (consistent
+    UX, no hard validation error).
+  - `__str__`: `f"{self.name} ({self.relationship}) - {self.employee}"`
+  - Reuses `hrm.EmployeeProfile` as parent; the flat `emergency_contact_*`/`emergency_contact_2_*`
+    fields on `EmployeeProfile` stay as-is (legacy quick-reference, not migrated away this pass).
+
+- [ ] **`EmployeeBankAccount`** [`TenantOwned`] — covers **Bank Details**. **All create/edit routes
+  through `EmployeeInfoChangeRequest`** — the model's own create/edit/delete views are
+  `@tenant_admin_required` (admin-direct management), never reachable by a plain employee (highest
+  fraud-risk field group — every leader surveyed gates it).
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=CASCADE`, `related_name="bank_accounts"`
+  - `bank_name` — CharField(255); `account_holder_name` — CharField(255)
+  - `account_number` — CharField(64) — **WARNING: plaintext for demo purposes**, mirror the
+    `EmployeeProfile.bank_account` note verbatim (encrypt at rest in production); NEVER rendered raw —
+    only via `masked_account_number()`
+  - `routing_number` — CharField(20, blank=True) — IFSC/ABA/sort-code equivalent
+  - `account_type` — CharField choices, max_length=10, default `"checking"`: `checking` / `savings` /
+    `other`
+  - `is_salary_account` — BooleanField(default=False) — "exactly one designated salary account"
+    (driver: greytHR single active Bank Account card, ADP, Gusto default account)
+  - `split_percentage` — DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+    validators `[MinValueValidator(0), MaxValueValidator(100)]`) — Gusto-style split-deposit intent;
+    stored only, NOT wired to any payroll-run disbursement math this pass (deferred — 3.14/3.17
+    territory); **no cross-row "splits sum to 100%" validation this pass** (deliberately simple)
+  - `verification_status` — CharField choices, max_length=10, default `"pending"`: `pending` /
+    `verified` / `rejected` — workflow-owned via dedicated `employeebankaccount_verify`/`_reject`
+    POST actions (`@tenant_admin_required`), mirroring the EXISTING `EmployeeDocument.mark_verified`/
+    `.reject` action-pair shape (3.1) rather than inventing a new verify pattern
+  - `status` — CharField choices, max_length=10, default `"active"`: `active` / `inactive`
+  - `Meta.ordering = ["employee", "-is_salary_account", "bank_name"]`; index `(tenant, employee)`
+    (`hrm_eba_tenant_emp_idx`)
+  - `save()`: same auto-demote pattern as `EmergencyContact.is_primary` — if `self.is_salary_account`,
+    `EmployeeBankAccount.objects.filter(tenant_id=..., employee_id=..., is_salary_account=True)
+    .exclude(pk=self.pk).update(is_salary_account=False)` inside `transaction.atomic()` before
+    `super().save()`.
+  - `_mask_last4()` (staticmethod, duplicated verbatim from `EmployeeProfile._mask_last4` — matches the
+    existing per-model-duplication convention, not a shared util) → `masked_account_number()` /
+    `masked_routing_number()`.
+  - `__str__`: `f"{self.bank_name} ****{last4} - {self.employee}"` (via the masked helper — never the
+    raw number, not even in `__str__`/admin/audit-log `str(obj)` calls)
+  - **Cross-touch:** add `"account_number"` to `apps/core/crud.py`'s `_SENSITIVE_AUDIT_FIELDS`
+    frozenset (mirrors the existing `bank_account`/`bank_routing`/`national_id`/`passport_number`
+    entries — redacts the raw account number from `AuditLog.changes` on every create/edit).
+  - Reuses `hrm.EmployeeProfile` as parent, the exact `_mask_last4` pattern, and the
+    `_SENSITIVE_AUDIT_FIELDS` redaction convention.
+
+- [ ] **`FamilyMember`** [`TenantOwned`] — covers **Family Details**. Create/edit routes through
+  `EmployeeInfoChangeRequest` (same sensitivity tier as bank/legal-name); the model's own create/edit/
+  delete views are `@tenant_admin_required`.
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=CASCADE`, `related_name="family_members"`
+  - `name` — CharField(255)
+  - `relationship` — CharField choices, max_length=10, default `"spouse"`: `spouse` / `child` /
+    `father` / `mother` / `sibling` / `other`
+  - `date_of_birth` — DateField(null=True, blank=True)
+  - `gender` — CharField choices, max_length=20, blank=True — **reuses
+    `EmployeeProfile.GENDER_CHOICES`** directly (no duplicate CHOICES tuple; same file, direct
+    reference)
+  - `occupation` — CharField(255, blank=True); `phone` — CharField(30, blank=True)
+  - `is_dependent` — BooleanField(default=False) — benefits/insurance eligibility (driver: ADP Manage
+    Dependents, greytHR)
+  - `is_minor` — BooleanField(default=False); `guardian_name` — CharField(255, blank=True);
+    `guardian_relationship` — CharField(100, blank=True) (driver: greytHR Minor checkbox + guardian
+    fields, "required when checked")
+  - `is_nominee` — BooleanField(default=False); `nominee_percentage` — DecimalField(max_digits=5,
+    decimal_places=2, null=True, blank=True, validators `[MinValueValidator(0),
+    MaxValueValidator(100)]`) — **one simplified percentage field this pass, NOT a per-scheme
+    (EPF/EPS/ESI/Gratuity) nomination sub-table** and **no cross-row "nominees sum to 100%"
+    validation** (both explicitly deferred — needs 3.15 Statutory Compliance as the consumer)
+  - `notes` — TextField(blank=True)
+  - `Meta.ordering = ["employee", "name"]`; index `(tenant, employee)` (`hrm_fam_tenant_emp_idx`)
+  - `clean()`: if `self.is_minor` and not `self.guardian_name`, raise on `guardian_name` ("Guardian
+    name is required for a minor family member.") — the greytHR "required when checked" rule, enforced
+    in code.
+  - `__str__`: `f"{self.name} ({self.get_relationship_display()}) - {self.employee}"`
+  - Reuses `hrm.EmployeeProfile` as parent and its `GENDER_CHOICES`.
+
+- [ ] **`EmployeeInfoChangeRequest`** [`ICR-`, `TenantNumbered`] — the maker-checker workflow
+  connecting all 5 NavERP.md bullets. **First GenericForeignKey inside `apps/hrm`** — add
+  `from django.contrib.contenttypes.fields import GenericForeignKey` and
+  `from django.contrib.contenttypes.models import ContentType` to the top of `apps/hrm/models.py`.
+  - `employee` — FK `hrm.EmployeeProfile`, `on_delete=CASCADE`, `related_name="info_change_requests"`
+    (whose record is being changed — always the requester's own profile, enforced in `clean()`)
+  - `content_type` — FK `ContentType`, `on_delete=SET_NULL`, null/blank; `object_id` — BigIntegerField,
+    null/blank (**`None` = this request PROPOSES CREATING a brand-new `EmployeeBankAccount`/
+    `FamilyMember` row** — there is no existing target to point at yet; set = propose an edit to an
+    existing row); `target = GenericForeignKey("content_type", "object_id")`
+  - `request_type` — CharField choices, max_length=15, default `"profile_field"`: `profile_field` /
+    `bank` / `family` — **for `profile_field`, `content_type` is ALWAYS `hrm.EmployeeProfile` and
+    `object_id` is ALWAYS `self.employee_id`** (per the brief: "gate sensitive fields on
+    EmployeeProfile itself"); the one exception is the `legal_name` pseudo-field, special-cased in
+    `apply()` below to write through to `target.party.name` since `EmployeeProfile.name` is a
+    `@property`, not a column
+  - `field_changes` — `models.JSONField(default=dict)` — `{"field_name": {"old": ..., "new": ...},
+    ...}`; for a `profile_field` request this holds exactly ONE key (one sensitive field per request,
+    keeps the review UI simple); for `bank`/`family` it holds every proposed field on that row (a full
+    create OR a full edit in one shot — this is the leaner refinement over the research's
+    one-field-at-a-time `field_name`/`old_value`/`new_value` sketch)
+  - `reason` — TextField(blank=True) — the employee's justification
+  - `status` — CharField choices, max_length=10, default `"pending"`, `editable=False` (workflow-
+    owned): `pending` / `approved` / `rejected` / `cancelled`
+  - `requested_by` — FK `settings.AUTH_USER_MODEL`, `on_delete=SET_NULL`, null/blank,
+    `editable=False`, `related_name="+"` (who submitted — usually `request.user`, but an admin may
+    submit on an employee's behalf)
+  - `reviewed_by` — FK `settings.AUTH_USER_MODEL`, `on_delete=SET_NULL`, null/blank,
+    `editable=False`, `related_name="+"`; `reviewed_at` — DateTimeField, null/blank, `editable=False`
+  - `decision_note` — TextField(blank=True) — HR's note on approve/reject
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+    `(tenant, employee)` (`hrm_icr_tenant_emp_idx`), `(tenant, status)` (`hrm_icr_tenant_status_idx`)
+  - `clean()`: `field_changes` must be a non-empty dict — else raise; for `request_type="profile_field"`
+    the resolved `content_type` must be `hrm.EmployeeProfile` and `object_id` must equal
+    `self.employee_id` (anti-tamper — you can only request changes against your own profile); for
+    `bank`/`family`, if `object_id` is set, `self.target.employee_id` must equal `self.employee_id`
+    (can't propose an edit to someone else's bank account/family member).
+  - `apply(user)` — called ONLY from the approve action, inside `transaction.atomic()`:
+    ```python
+    def apply(self, user):
+        with transaction.atomic():
+            if self.request_type == "profile_field":
+                obj = self.employee
+            elif self.object_id:
+                obj = self.target
+            else:
+                Model = self.content_type.model_class()
+                obj = Model(tenant=self.tenant, employee=self.employee)
+            for field, change in self.field_changes.items():
+                if field == "legal_name":
+                    obj.party.name = change["new"]; obj.party.save(update_fields=["name"])
+                else:
+                    setattr(obj, field, change["new"])
+            obj.full_clean(); obj.save()
+            if self.object_id is None and self.request_type != "profile_field":
+                self.object_id = obj.pk   # backfill so the ICR keeps pointing at what it created
+            self.status, self.reviewed_by, self.reviewed_at = "approved", user, timezone.now()
+            self.save(update_fields=["status", "object_id", "reviewed_by", "reviewed_at", "updated_at"])
+    ```
+    (illustrative — the build step wires the exact `update_fields` list and error handling; the
+    contract is: sensitive-field profile writes go through `EmployeeProfile`/`Party`, bank/family
+    writes create-or-update the child row, and the request always ends in `approved` with a full
+    audit trail via the existing `write_audit_log` call in the view.)
+  - `SENSITIVE_PROFILE_FIELDS` — module-level tuple near this class:
+    `("legal_name", "date_of_birth", "national_id", "national_id_type", "passport_number",
+    "passport_expiry")` — the hardcoded sensitive-field list (Keka's per-field matrix concept,
+    simplified to a fixed list this pass, per the research's explicit "hardcoded list, full
+    per-tenant configurable matrix deferred" note).
+  - `__str__`: `f"{self.number} · {self.get_request_type_display()} · {self.employee}"`
+  - Reuses the GenericForeignKey pattern already established by `core.AuditLog`/`core.Activity`/
+    `core.Document` — no new polymorphic-reference shape invented.
+
+## Backend (apps/hrm/)
+
+- [ ] **models.py** — add `GenericForeignKey`/`ContentType` imports at the top; append the 4 classes
+  above with a `# --- 3.25 Personal Information (Self-Service) ... ---` section-header comment block
+  (mirrors the 3.22/3.23/3.24 preamble style: states this is the ESS layer over the existing
+  `EmployeeProfile`, lists what's reused (`EmployeeProfile` flat columns, `core.Party.name`,
+  `core.Employment`, the GenericForeignKey pattern) vs. what's new (the 3 child tables +
+  `EmployeeInfoChangeRequest`), and explicitly notes Profile Management/Contact Update get NO new
+  model — they're an ESS view/edit surface over `EmployeeProfile` itself).
+- [ ] **forms.py**:
+  - `EmergencyContactForm(TenantModelForm)` — `Meta.fields = ["name", "relationship", "phone",
+    "alt_phone", "email", "address", "is_primary", "priority_order", "notes"]` — **`employee` is
+    EXCLUDED** (set in the view from `_current_employee_profile(request)` for a non-admin, or from an
+    `?employee=<id>` picker for an admin — mirrors the existing nested-create pattern where
+    `TrainingFeedbackForm` excludes `attendance`).
+  - `EmployeeBankAccountForm(TenantModelForm)` — `Meta.fields = ["bank_name", "account_holder_name",
+    "account_number", "routing_number", "account_type", "is_salary_account", "split_percentage",
+    "verification_status", "status"]` — `employee` excluded, same pattern.
+  - `FamilyMemberForm(TenantModelForm)` — `Meta.fields = ["name", "relationship", "date_of_birth",
+    "gender", "occupation", "phone", "is_dependent", "is_minor", "guardian_name",
+    "guardian_relationship", "is_nominee", "nominee_percentage", "notes"]` — `employee` excluded, same
+    pattern.
+  - `EmployeeProfileMyInfoForm(TenantModelForm)` — `Meta.model = EmployeeProfile`, `Meta.fields =
+    ["current_address", "permanent_address", "personal_email", "mobile", "photo"]` — the DIRECT-EDIT,
+    non-gated subset only (no `work_email`, no bank/national-ID/DOB/name fields — those are read-only
+    on this form, editable only via a change request).
+  - Three plain `forms.Form` (NOT `ModelForm` — they assemble `field_changes` JSON, they don't save a
+    model instance directly) for `changerequest_create`, each applying the same widget CSS classing
+    `TenantModelForm.__init__` does (`form-input`/`form-select`/`form-textarea` — copy the same
+    attrs-setting loop or factor a tiny shared mixin, since plain `forms.Form` doesn't get it for
+    free):
+    - `ProfileFieldChangeForm` — `field_name = ChoiceField(choices=[(f, f.replace("_", " ").title())
+      for f in EmployeeInfoChangeRequest.SENSITIVE_PROFILE_FIELDS])`, `new_value = CharField(255)`,
+      `reason = CharField(widget=Textarea)`.
+    - `BankAccountChangeForm` — `existing_account = ModelChoiceField(queryset=..., required=False,
+      empty_label="-- Propose a new account --")` (queryset scoped to the requester's own accounts in
+      `__init__`), plus `bank_name`/`account_holder_name`/`account_number`/`routing_number`/
+      `account_type`/`split_percentage`/`reason` (NO `verification_status`/`status` — those stay
+      admin/workflow-only, never proposable by the employee).
+    - `FamilyMemberChangeForm` — `existing_member = ModelChoiceField(...)` (same pattern) plus
+      `name`/`relationship`/`date_of_birth`/`gender`/`occupation`/`phone`/`is_dependent`/`is_minor`/
+      `guardian_name`/`guardian_relationship`/`is_nominee`/`nominee_percentage`/`reason`.
+- [ ] **views.py** — new `# 3.25 Personal Information (Self-Service)` section:
+  - `_can_manage_own_child(request, obj)` helper — `_is_admin(request.user) or (profile := 
+    _current_employee_profile(request)) is not None and obj.employee_id == profile.pk` (mirrors the
+    existing `_is_reviewer`/`_can_edit_review` ownership-helper shape at `views.py:7738`).
+  - `my_info(request)` — `@login_required`; resolves `profile = _current_employee_profile(request)`;
+    404/redirect-with-message if `None` (an admin user with no employee record); renders the read-only
+    employment context (`profile.designation`, `profile.department`, `profile.manager`,
+    `profile.employment.hired_on` if `profile.employment_id`), the direct-edit fields as read display
+    + "Edit Contact Info" link, the sensitive fields MASKED (`profile.masked_national_id()`,
+    `profile.masked_passport_number()`, `profile.date_of_birth`, `profile.party.name`) + "Request a
+    Change" links pre-filled per field, and roster summaries (first 3 `emergency_contacts`/
+    `bank_accounts`/`family_members` + "Manage all" links) plus the requester's own recent
+    `info_change_requests` (last 5, any status).
+  - `my_info_edit(request)` — `@login_required`; same profile resolution; `crud_edit`-shaped but
+    scoped to `profile` itself (not a generic pk lookup) using `EmployeeProfileMyInfoForm`; on success
+    redirect to `my_info`.
+  - **EmergencyContact CRUD** (`emergencycontact_list/_create/_detail/_edit/_delete`) — `@login_required`
+    throughout (no admin gate — direct self-edit). `list`: admin sees ALL tenant rows + an `employee`
+    filter dropdown (per Filter Implementation Rules — pass the tenant's `EmployeeProfile` queryset to
+    the template); non-admin sees only `qs.filter(employee=profile)`, no employee-filter UI shown.
+    `create`: employee resolved as above (admin may pass `?employee=<id>`, validated
+    `tenant=request.tenant`; non-admin forced to self, 403/redirect if no profile). `edit`/`delete`:
+    `get_object_or_404(..., tenant=request.tenant)` then gate with `_can_manage_own_child` — else
+    `PermissionDenied`/redirect with an error message (not a silent 404, so a legitimate cross-employee
+    attempt is distinguishable from an IDOR in logs — but a CROSS-TENANT pk must still 404 via the
+    `tenant=request.tenant` filter in `get_object_or_404`, checked in Verify below).
+  - **EmployeeBankAccount CRUD** — `list`/`detail`: `@login_required`, same admin-sees-all /
+    non-admin-sees-own scoping as EmergencyContact; ALWAYS renders `masked_account_number()`, never
+    `account_number` raw. `create`/`edit`/`delete`: `@tenant_admin_required` (no employee self-save —
+    the only employee-initiated path is `changerequest_create` with `request_type="bank"`).
+    `employeebankaccount_verify`/`_reject` — `@tenant_admin_required`, `@require_POST`, set
+    `verification_status` + `write_audit_log(..., "update", {"action": "verify"/"reject"})` (mirrors
+    `employee_document_mark_verified`/`_reject`).
+  - **FamilyMember CRUD** — same shape as `EmployeeBankAccount`: `list`/`detail` `@login_required` with
+    admin-sees-all/non-admin-sees-own scoping; `create`/`edit`/`delete` `@tenant_admin_required`.
+  - **EmployeeInfoChangeRequest CRUD** (`changerequest_*`):
+    - `changerequest_list` — `@login_required`; admin sees ALL tenant rows + `status`/`request_type`/
+      `employee` filters; non-admin sees only `qs.filter(employee=profile)`.
+    - `changerequest_create` — `@login_required`; branches on `request.GET.get("type",
+      "profile_field")`/POST `request_type` to instantiate the matching plain `Form`; resolves
+      `employee` (admin picker or self, same pattern as the child-entity creates); on valid POST,
+      assembles `content_type`/`object_id`/`field_changes` per the model docstring above (reading the
+      CURRENT value for `"old"` off the live target — `getattr(employee, field_name)` or
+      `employee.party.name` for `legal_name`, or the existing bank/family row's current field values,
+      or `None` for every field when proposing a brand-new bank/family row), creates the
+      `EmployeeInfoChangeRequest` with `status="pending"`, `requested_by=request.user`,
+      `write_audit_log(request.user, obj, "create")`, redirect to `changerequest_detail`.
+    - `changerequest_detail` — `@login_required`; gate: `_is_admin` or the request's own `employee`;
+      renders `field_changes` as an old→new diff table, the resolved `target` (or "will create a new
+      {model}" when `object_id` is `None`), status, decision fields.
+    - `changerequest_edit`/`_delete` — allowed only while `status == "pending"` AND (`_is_admin` or
+      owner) — else redirect with an error message (mirrors `trainingnomination_edit`'s
+      "only a pending nomination can be edited" gate).
+    - `changerequest_cancel` — `@login_required`, `@require_POST`; owner or admin; only while
+      `status == "pending"`; sets `status="cancelled"`.
+    - `changerequest_approve` — `@tenant_admin_required`, `@require_POST`; only while
+      `status == "pending"`; calls `obj.apply(request.user)` inside the view's own
+      `try/except ValidationError` (a stale/invalid proposal — e.g. the target row was deleted since
+      submission — shows a form error instead of a 500); `write_audit_log(request.user, obj, "update",
+      {"action": "approve"})`.
+    - `changerequest_reject` — `@tenant_admin_required`, `@require_POST`; only while
+      `status == "pending"`; requires `decision_note` (non-blank — HR must say why); sets
+      `status="rejected"`, `reviewed_by`, `reviewed_at`.
+- [ ] **urls.py** — `app_name = "hrm"` (already set); add under a `# 3.25 Personal Information
+  (Self-Service)` comment block:
+  ```
+  path("my-info/", views.my_info, name="my_info"),
+  path("my-info/edit/", views.my_info_edit, name="my_info_edit"),
+
+  path("emergency-contacts/", views.emergencycontact_list, name="emergencycontact_list"),
+  path("emergency-contacts/add/", views.emergencycontact_create, name="emergencycontact_create"),
+  path("emergency-contacts/<int:pk>/", views.emergencycontact_detail, name="emergencycontact_detail"),
+  path("emergency-contacts/<int:pk>/edit/", views.emergencycontact_edit, name="emergencycontact_edit"),
+  path("emergency-contacts/<int:pk>/delete/", views.emergencycontact_delete, name="emergencycontact_delete"),
+
+  path("bank-accounts/", views.employeebankaccount_list, name="employeebankaccount_list"),
+  path("bank-accounts/add/", views.employeebankaccount_create, name="employeebankaccount_create"),
+  path("bank-accounts/<int:pk>/", views.employeebankaccount_detail, name="employeebankaccount_detail"),
+  path("bank-accounts/<int:pk>/edit/", views.employeebankaccount_edit, name="employeebankaccount_edit"),
+  path("bank-accounts/<int:pk>/delete/", views.employeebankaccount_delete, name="employeebankaccount_delete"),
+  path("bank-accounts/<int:pk>/verify/", views.employeebankaccount_verify, name="employeebankaccount_verify"),
+  path("bank-accounts/<int:pk>/reject/", views.employeebankaccount_reject, name="employeebankaccount_reject"),
+
+  path("family-members/", views.familymember_list, name="familymember_list"),
+  path("family-members/add/", views.familymember_create, name="familymember_create"),
+  path("family-members/<int:pk>/", views.familymember_detail, name="familymember_detail"),
+  path("family-members/<int:pk>/edit/", views.familymember_edit, name="familymember_edit"),
+  path("family-members/<int:pk>/delete/", views.familymember_delete, name="familymember_delete"),
+
+  path("change-requests/", views.changerequest_list, name="changerequest_list"),
+  path("change-requests/add/", views.changerequest_create, name="changerequest_create"),
+  path("change-requests/<int:pk>/", views.changerequest_detail, name="changerequest_detail"),
+  path("change-requests/<int:pk>/edit/", views.changerequest_edit, name="changerequest_edit"),
+  path("change-requests/<int:pk>/delete/", views.changerequest_delete, name="changerequest_delete"),
+  path("change-requests/<int:pk>/cancel/", views.changerequest_cancel, name="changerequest_cancel"),
+  path("change-requests/<int:pk>/approve/", views.changerequest_approve, name="changerequest_approve"),
+  path("change-requests/<int:pk>/reject/", views.changerequest_reject, name="changerequest_reject"),
+  ```
+- [ ] **admin.py** — register all 4 models:
+  - `EmergencyContactAdmin`: `list_display = ("name", "relationship", "employee", "is_primary",
+    "tenant")`; `list_filter = ("tenant", "is_primary")`; `search_fields = ("name",
+    "employee__party__name", "phone")`; `raw_id_fields = ("employee",)`; `readonly_fields =
+    ("created_at", "updated_at")`.
+  - `EmployeeBankAccountAdmin`: `list_display = ("bank_name", "employee", "account_type",
+    "is_salary_account", "verification_status", "status", "tenant")`; `list_filter = ("tenant",
+    "account_type", "verification_status", "status")`; `search_fields = ("bank_name",
+    "account_holder_name", "employee__party__name")`; `raw_id_fields = ("employee",)`;
+    `readonly_fields = ("created_at", "updated_at")` (admin CAN see/edit `account_number` in the raw
+    Django admin — that's an accepted trade-off of `ModelAdmin`, note it in a comment, don't try to
+    mask it there).
+  - `FamilyMemberAdmin`: `list_display = ("name", "relationship", "employee", "is_dependent",
+    "is_minor", "is_nominee", "tenant")`; `list_filter = ("tenant", "relationship", "is_dependent",
+    "is_minor", "is_nominee")`; `search_fields = ("name", "employee__party__name")`; `raw_id_fields =
+    ("employee",)`; `readonly_fields = ("created_at", "updated_at")`.
+  - `EmployeeInfoChangeRequestAdmin`: `list_display = ("number", "employee", "request_type", "status",
+    "requested_by", "tenant")`; `list_filter = ("tenant", "request_type", "status")`; `search_fields =
+    ("number", "employee__party__name", "reason")`; `raw_id_fields = ("employee", "requested_by",
+    "reviewed_by")`; `readonly_fields = ("number", "status", "requested_by", "reviewed_by",
+    "reviewed_at", "created_at", "updated_at")`.
+- [ ] **migrations** — `python manage.py makemigrations hrm` — expect a new `0042_...` migration
+  creating all 4 models (no unrelated schema diff).
+- [ ] **Cross-touch:** `apps/core/crud.py` — add `"account_number"` to `_SENSITIVE_AUDIT_FIELDS`.
+- [ ] **seed_hrm.py** — new `_seed_selfservice(self, tenant, *, flush)` method:
+  - Called from `handle()` immediately after `self._seed_trainingadmin(tenant, flush=options["flush"])`
+    (the 23rd call in the per-tenant loop — LAST, since it's the final 3.x sub-module built).
+  - `if flush:` delete in order: `EmployeeInfoChangeRequest`, `FamilyMember`, `EmployeeBankAccount`,
+    `EmergencyContact` — filtered by `tenant`.
+  - Idempotency guards: `emps = list(EmployeeProfile.objects.filter(tenant=tenant)
+    .select_related("party").order_by("party__name"))` — if `len(emps) < 2`, NOTICE "Not enough
+    employees for '{tenant.name}' - skipping self-service seed." + return. Then `if
+    EmergencyContact.objects.filter(tenant=tenant).exists():` → NOTICE "Self-service data already
+    exists for '{tenant.name}'. Use --flush to re-seed." + return.
+  - `actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()` (mirrors the
+    existing generic-actor convention used elsewhere in this seeder) for `requested_by`/`reviewed_by`.
+  - Demo data — **`EmergencyContact`** (3 rows): `emps[0]` gets 2 (`is_primary=True` spouse +
+    `is_primary=False` sibling, distinct `priority_order`); `emps[1]` gets 1 (`is_primary=True`
+    parent).
+  - Demo data — **`EmployeeBankAccount`** (3 rows): `emps[0]` gets 2 (`is_salary_account=True`,
+    `verification_status="verified"`, `account_type="checking"` + a second `is_salary_account=False`,
+    `split_percentage=20.00`, `verification_status="pending"`, `account_type="savings"` —
+    demonstrates the Gusto-style split-intent field); `emps[1]` gets 1 (`is_salary_account=True`,
+    `verification_status="verified"`).
+  - Demo data — **`FamilyMember`** (3 rows): `emps[0]` gets a spouse (`is_dependent=True`,
+    `is_nominee=True`, `nominee_percentage=60.00`) + a child (`is_dependent=True`, `is_minor=True`,
+    `guardian_name=emps[0].name`, `guardian_relationship="Parent"`); `emps[1]` gets 1 dependent parent
+    (`is_dependent=True`, `is_nominee=False`).
+  - Demo data — **`EmployeeInfoChangeRequest`** (4 rows, across the workflow states, mirroring the
+    `TrainingNomination` "across the workflow states" seeding convention):
+    - `emps[1]`, `request_type="profile_field"`, `field_changes={"national_id": {"old": emps[1]
+      .national_id, "new": "<corrected demo value>"}}`, `reason="Typo in the originally recorded
+      national ID."`, `status="pending"`, `requested_by=actor`.
+    - `emps[0]`, `request_type="bank"`, `object_id=None` (a NEW-account proposal),
+      `field_changes={...the 3rd bank account's fields as "new", "old": None...}`,
+      `status="approved"`, `requested_by=actor`, `reviewed_by=actor`, `reviewed_at=now`,
+      `decision_note="Verified with the employee over a call."` — **seeded directly in the
+      `approved` state** (not by actually calling `.apply()`), matching this seeder's established
+      convention of seeding illustrative end-states directly rather than replaying every workflow
+      action.
+    - `emps[1]`, `request_type="family"`, existing `object_id` = one of `emps[1]`'s seeded
+      `FamilyMember` rows, `status="rejected"`, `decision_note="Please attach a supporting document
+      for the guardian change."`.
+    - `emps[0]`, `request_type="profile_field"`, `field_changes={"date_of_birth": {...}}`,
+      `status="cancelled"`.
+  - **CRITICAL — Windows cp1252 console bug (repeat of the 3.20–3.24 bug):** ASCII-only
+    `self.stdout.write(...)` strings.
+  - Update `_seed_tenant`'s flush-teardown tuple: insert `EmployeeInfoChangeRequest, FamilyMember,
+    EmployeeBankAccount, EmergencyContact,` with a comment: `# 3.25: all four CASCADE from
+    EmployeeProfile (EmergencyContact/EmployeeBankAccount/FamilyMember.employee are CASCADE) or
+    SET_NULL (EmployeeInfoChangeRequest.content_type/requested_by/reviewed_by) - EmployeeInfoChangeRequest
+    itself has no PROTECT dependents, order-agnostic vs EmployeeProfile, listed here for a clean
+    explicit teardown.` — placed anywhere before the `EmployeeProfile` deletion.
+
+## Wire-up
+
+- [ ] `config/settings.py` — `apps.hrm` already in `INSTALLED_APPS` (no change needed).
+- [ ] `config/urls.py` — `hrm/` include already wired (no change needed).
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.25"]` — new block mapping the 5 exact NavERP.md 3.25
+  bullets (confirmed verbatim from `NavERP.md` lines 609–613), placed immediately after the existing
+  `"3.24"` block:
+  ```python
+  # 3.25 Personal Information (Self-Service) — the ESS layer over the existing EmployeeProfile.
+  # Profile Management/Contact Update get NO new model — they're the my_info hub + its edit form over
+  # EmployeeProfile's existing flat columns. Emergency Contacts/Bank Details/Family Details are proper
+  # child tables lifting the 2-slot/1-slot flat-column limits. EmployeeInfoChangeRequest is the
+  # maker-checker workflow connecting all five — added as an extra live leaf, not its own bullet.
+  "3.25": {
+      "Profile Management": "hrm:my_info",                          # bullet (ESS hub — view + read-only employment context)
+      "Contact Update": "hrm:my_info_edit",                         # bullet (direct-edit form: address/personal_email/mobile/photo)
+      "Emergency Contacts": "hrm:emergencycontact_list",            # bullet (EmergencyContact CRUD, direct self-edit)
+      "Bank Details": "hrm:employeebankaccount_list",               # bullet (EmployeeBankAccount CRUD, admin-gated writes)
+      "Family Details": "hrm:familymember_list",                    # bullet (FamilyMember CRUD, admin-gated writes)
+      "Change Requests": "hrm:changerequest_list",                  # extra live leaf (EmployeeInfoChangeRequest maker-checker queue)
+  },
+  ```
+
+## Templates (templates/hrm/selfservice/)
+
+- [ ] **New sub-module folder `selfservice/`** (per the Template Folder Structure rule — 3.25 is a
+  distinct NavERP.md sub-module), with one entity folder per model plus the standalone hub pages at
+  the sub-module root:
+- [ ] `templates/hrm/selfservice/my_info.html` — standalone hub: employment-context card (read-only:
+  designation, department, manager, hired_on, employee_type, work_email, work_location), direct-edit
+  fields card (address ×2, personal_email, mobile, photo) + "Edit" button → `my_info_edit`, sensitive
+  fields card (masked national ID/passport, DOB, legal name) each with its own "Request a Change" link
+  pre-filled (`?type=profile_field&field=national_id`), 3 roster summary cards (emergency contacts /
+  bank accounts / family members — first 3 rows + "Manage all" links + "Add" links), a "My Pending
+  Requests" mini-list (last 5 `info_change_requests` with status badges) + "View all" link.
+- [ ] `templates/hrm/selfservice/my_info_edit.html` — standalone direct-edit form (address/
+  personal_email/mobile/photo only), Cancel link back to `my_info`.
+- [ ] `templates/hrm/selfservice/emergencycontact/list.html` — filter bar (`employee` dropdown,
+  admin-only per the Filter Implementation Rules — pass `employees` queryset only when `is_admin`),
+  primary badge, Actions column (view/edit/delete-POST+confirm+csrf, gated by
+  `_can_manage_own_child`), pagination, empty-state.
+- [ ] `templates/hrm/selfservice/emergencycontact/detail.html` — full contact card, Actions sidebar
+  (Edit/Delete gated by `_can_manage_own_child`), Back to List.
+- [ ] `templates/hrm/selfservice/emergencycontact/form.html` — create/edit (shared, `is_edit` flag);
+  the `employee` picker shown ONLY when `is_admin` (else a fixed "For: {{ profile }}" display line).
+- [ ] `templates/hrm/selfservice/employeebankaccount/list.html` — filter bar (`employee` dropdown
+  admin-only, `verification_status`, `account_type`), masked account number column (NEVER the raw
+  value), salary-account badge, verification-status badge, Actions column (view always; edit/delete
+  only when `is_admin`; Verify/Reject buttons when `is_admin` and `verification_status == "pending"`).
+- [ ] `templates/hrm/selfservice/employeebankaccount/detail.html` — masked number/routing, all other
+  fields, Actions sidebar (Edit/Delete admin-only; Verify/Reject admin-only + pending-only).
+- [ ] `templates/hrm/selfservice/employeebankaccount/form.html` — admin-only create/edit (masked
+  helper text under the account-number field: "Only the last 4 digits are ever displayed after
+  saving.").
+- [ ] `templates/hrm/selfservice/familymember/list.html` — filter bar (`employee` dropdown admin-only,
+  `relationship`, `is_dependent`), dependent/minor/nominee badges, Actions column (view always; edit/
+  delete admin-only).
+- [ ] `templates/hrm/selfservice/familymember/detail.html` — full record, guardian fields shown only
+  when `is_minor`, Actions sidebar (admin-only Edit/Delete).
+- [ ] `templates/hrm/selfservice/familymember/form.html` — admin-only create/edit; guardian fields
+  shown/required via a small `x-show`/plain-JS toggle on `is_minor` (progressive enhancement — the
+  server-side `clean()` is the real enforcement).
+- [ ] `templates/hrm/selfservice/changerequest/list.html` — filter bar (`status`, `request_type`,
+  `employee` dropdown admin-only), status badges (pending/approved/rejected/cancelled), Actions column
+  (view always; edit/delete/cancel gated to owner-or-admin + pending-only; Approve/Reject buttons
+  admin-only + pending-only).
+- [ ] `templates/hrm/selfservice/changerequest/detail.html` — target summary ("Editing {{
+  target }}" or "Proposing a new {{ content_type.model }}" when `object_id` is null), `field_changes`
+  rendered as an old→new diff table, reason, decision fields (`reviewed_by`/`reviewed_at`/
+  `decision_note`) shown only once decided, Actions sidebar (same gated buttons as the list row, each
+  its own POST form + `{% csrf_token %}` + `confirm()` on Approve/Reject/Cancel/Delete).
+- [ ] `templates/hrm/selfservice/changerequest/form.html` — create form: a `request_type` selector
+  (3 radio/tab options) toggles which of the 3 plain sub-forms renders (`ProfileFieldChangeForm`/
+  `BankAccountChangeForm`/`FamilyMemberChangeForm`) — plain `<details>`/CSS `:target` or minimal JS is
+  fine, no HTMX dependency required for a 3-way toggle; pre-selects `request_type`/`field_name` from
+  `?type=`/`?field=` query params when arriving from a `my_info.html` "Request a Change" link.
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` — expect a new `0042_...` migration; review the generated
+  file before applying (confirm the 4 new tables + their indexes, no unrelated diff).
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` — run twice; second run must be a no-op (NOTICE message, zero new
+  rows) proving idempotency.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep — all `hrm:my_info`/`hrm:my_info_edit`, `hrm:emergencycontact_*`,
+  `hrm:employeebankaccount_*` (incl. verify/reject), `hrm:familymember_*`, `hrm:changerequest_*`
+  (incl. approve/reject/cancel) URLs return 200/302 (never 500); no `{#`/`{% comment` template-comment
+  leaks in rendered output; cross-tenant IDOR check (a tenant-B admin/employee hitting a tenant-A row's
+  pk on any of the 4 models' detail/edit/delete/action URLs returns 404, not the object); cross-EMPLOYEE
+  IDOR check WITHIN the same tenant (employee A, logged in as a non-admin, hitting employee B's
+  `emergencycontact`/`employeebankaccount`/`familymember`/`changerequest` detail/edit/delete pk must be
+  denied — 403 or redirect-with-error, not a silent edit); admin-gate check (a non-admin POSTing
+  directly to `employeebankaccount_create`/`_edit`/`_delete`, `familymember_create`/`_edit`/`_delete`,
+  `employeebankaccount_verify`/`_reject`, `changerequest_approve`/`_reject` must be denied); masked-
+  display check (raw `account_number` never appears in any rendered response body — grep the smoke-test
+  HTML dumps for the seeded raw digits, only the masked `••••NNNN` form should appear); the
+  `is_salary_account`/`is_primary` auto-demote-on-save behavior (setting a 2nd row `True` flips the
+  1st back to `False`, verified via the ORM after a POST); `EmployeeInfoChangeRequest.apply()`
+  end-to-end (submit a real `changerequest_create` POST for each of the 3 `request_type`s, approve it
+  as admin, confirm the target row/field actually changed — including the `legal_name` special case
+  writing through to `party.name`, and a `bank`/`family` `object_id=None` proposal actually creating a
+  new row and backfilling `object_id`); reject path leaves the target UNCHANGED; cancel path is
+  requester-or-admin only and pending-only.
+- [ ] Sidebar shows all 5 new 3.25 sub-module bullets as **Live** (Profile Management, Contact Update,
+  Emergency Contacts, Bank Details, Family Details) plus the extra "Change Requests" leaf — confirm via
+  the rendered sidebar, not just the `LIVE_LINKS` dict.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per
+  commit, no `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` ->
+  `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to scrutinize `EmployeeInfoChangeRequest.apply()` closely (the highest-risk
+    piece of new logic this pass — a bug here writes bad data into `EmployeeProfile`/`Party`/
+    `EmployeeBankAccount`/`FamilyMember` under an admin's own approval action) and to double-check the
+    `legal_name` → `party.name` special case doesn't silently no-op if `field_changes` uses a
+    differently-cased key.
+  - Expect `explorer` to check for `ProtectedError`-shaped surprises on `EmployeeProfile`/`Party`/
+    `EmployeeBankAccount`/`FamilyMember` deletes now that `EmployeeInfoChangeRequest` (SET_NULL) and
+    the 3 child tables (CASCADE) exist — CASCADE means no guard needed for the child-table deletes
+    themselves, but confirm `employee_delete`/any `Party`-delete path still behaves.
+  - Expect `frontend-reviewer` to check the masked-account-number rule is honored on EVERY render path
+    (list/detail/admin — flag if the raw admin.py `ModelAdmin` change-form exposes it, which is an
+    accepted, documented trade-off, not a bug to "fix" by hiding the admin field) and that the
+    `changerequest/form.html` 3-way toggle doesn't leak all 3 sub-forms' hidden-but-still-POSTed field
+    names ambiguously.
+  - Expect `performance-reviewer` to check `my_info`'s roster-summary queries use `select_related`/
+    `[:3]` slicing (not loading full querysets to show 3 rows) and that the admin `list` views'
+    `employee` filter dropdown queryset is `select_related("party")`.
+  - Expect `security-reviewer` to confirm: the cross-EMPLOYEE (same-tenant) IDOR checks above are
+    real (not just cross-tenant); `changerequest_create`'s `content_type`/`object_id` resolution can't
+    be tampered with client-side to point at an arbitrary model/row (the view computes them
+    server-side from `request_type` + the resolved `employee`/existing-row ownership check, never
+    trusts a client-submitted `content_type`); `EmployeeBankAccountForm`/`FamilyMemberChangeForm`
+    never accept `verification_status`/admin-only fields from a non-admin path; `account_number` stays
+    out of every non-admin-facing template AND out of `AuditLog.changes` (the `_SENSITIVE_AUDIT_FIELDS`
+    addition).
+  - Expect `test-writer` to cover: full CRUD × 4 models (incl. the admin-gate matrix — non-admin
+    blocked from bank/family writes, allowed on emergency contacts); the `is_salary_account`/
+    `is_primary` auto-demote behavior; `FamilyMember.clean()`'s guardian-required-when-minor rule;
+    `EmployeeInfoChangeRequest.apply()` for all 3 `request_type`s × both `object_id is None`/`is not
+    None` paths (6 combinations), incl. the `legal_name` special case; the cross-EMPLOYEE and
+    cross-TENANT IDOR matrix on every model + every action route; `changerequest_cancel`/`_approve`/
+    `_reject` status-gate (only from `pending`).
+- [ ] Update `.claude/skills/hrm/SKILL.md`:
+  - Add a `### 3.25 Personal Information (Self-Service) (4 tables)` section (mirrors the existing
+    per-sub-module section format) with the model table, the ESS-vs-admin-CRUD split, the
+    `apply()`/GenericForeignKey design, and the `legal_name` → `party.name` special case.
+  - Bump the frontmatter/overview "built" sub-module list to include 3.25 and the model count
+    89 → 93.
+  - Add a "Personal Information / Self-Service (3.25)" routes-list section (`hrm:my_info*`,
+    `hrm:emergencycontact_*`, `hrm:employeebankaccount_*` incl. verify/reject,
+    `hrm:familymember_*`, `hrm:changerequest_*` incl. approve/reject/cancel).
+  - Update the seeder section: document `_seed_selfservice(tenant)`, its own-exists guard, what it
+    creates, and that it runs LAST (after `_seed_trainingadmin`).
+  - Update the `LIVE_LINKS` section for `"3.25"` (all 5 bullets + the extra Change Requests leaf).
+  - Update the "Deferred" section, replacing the old 3.25-placeholder line (if any) with 3.25's own
+    carried-forward deferrals (see below).
+  - Commit the SKILL.md update as its own file, per the one-file-per-commit rule.
+- [ ] README (if the project keeps a root test-count/module-count summary) — refresh HRM test counts
+  after `test-writer` runs, same pattern as the 3.20–3.24 README refresh commits.
+
+## Later passes / deferred (carried over from research-hrm-3.25-personal-information.md)
+
+- **Full per-tenant configurable field-permission matrix** (Keka-style: admin sets per-field
+  mandatory/viewable/editable/approval-required) — this pass hardcodes `SENSITIVE_PROFILE_FIELDS`; a
+  true configuration UI is a distinct, reusable capability (other self-service sub-modules could reuse
+  it) and belongs with Module 0's form-builder/custom-fields infrastructure (0.10).
+- **True effective-dated / slowly-changing-dimension replay of `EmployeeProfile`** (Workday, SAP
+  SuccessFactors EC) — this pass has no `effective_date` field at all (dropped from the research's
+  earlier sketch in the task-brief refinement); a change applies immediately on approval, no dated
+  future-effective queue.
+- **Multiple address types with full address history** — the existing 2 flat fields on
+  `EmployeeProfile` are reused as-is (direct-edit via `my_info_edit`); no `core.Address` rows added.
+- **Per-scheme statutory nomination (EPF/EPS/ESI/Gratuity)** matching greytHR's exact business rules —
+  deferred until 3.15 Statutory Compliance exists as the consumer; this pass ships one simplified
+  `nominee_percentage` field on `FamilyMember` with no cross-row sum-to-100% validation.
+- **Life-event-triggered benefits re-enrollment** (ADP: birth/marriage/divorce auto-prompts a benefits
+  change) — deferred to 3.37 Compensation & Benefits, which doesn't exist yet.
+- **Live bank-account verification** (Plaid/Open Banking) — `verification_status` is admin-set via the
+  verify/reject actions this pass; the API integration is Module 0.13-territory.
+- **Split-deposit disbursement math wired into an actual payroll run** —
+  `EmployeeBankAccount.split_percentage` is stored this pass; consuming it during a payroll run is
+  3.14/3.17 territory.
+- **Notification delivery** (email/push to HR on a pending request, to the employee on a decision) —
+  this pass ships the in-app `changerequest_list` pending queue only; delivery channels are Module
+  0.12 infrastructure.
+- **Supporting document attachment on a change request** (e.g. proof of DOB/marriage/legal-name
+  change, reusing `core.Document`'s GenericForeignKey) — the research flagged this "buildable now", but
+  it's NOT in this pass's model/view scope (no field, no upload UI on `changerequest/form.html`); the
+  `EmployeeInfoChangeRequest` GFK-target design doesn't block adding it as a same-shaped follow-up.
+- **Preferred/display name distinct from legal name** — this pass only has `party.name` (the single
+  legal name) as a gated field; no separate preferred-name column.
+
+## Review notes
+
+(filled in at the end)
