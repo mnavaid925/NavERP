@@ -831,4 +831,41 @@ urlpatterns = [
 
     # Training budget (computed aggregate view)
     path("training-budget/", views.training_budget, name="training_budget"),
+
+    # 3.25 Personal Information (Self-Service)
+    path("my-info/", views.my_info, name="my_info"),
+    path("my-info/edit/", views.my_info_edit, name="my_info_edit"),
+
+    # Emergency Contacts (direct self-edit)
+    path("emergency-contacts/", views.emergencycontact_list, name="emergencycontact_list"),
+    path("emergency-contacts/add/", views.emergencycontact_create, name="emergencycontact_create"),
+    path("emergency-contacts/<int:pk>/", views.emergencycontact_detail, name="emergencycontact_detail"),
+    path("emergency-contacts/<int:pk>/edit/", views.emergencycontact_edit, name="emergencycontact_edit"),
+    path("emergency-contacts/<int:pk>/delete/", views.emergencycontact_delete, name="emergencycontact_delete"),
+
+    # Bank Accounts (admin-gated writes; verify/reject workflow)
+    path("bank-accounts/", views.employeebankaccount_list, name="employeebankaccount_list"),
+    path("bank-accounts/add/", views.employeebankaccount_create, name="employeebankaccount_create"),
+    path("bank-accounts/<int:pk>/", views.employeebankaccount_detail, name="employeebankaccount_detail"),
+    path("bank-accounts/<int:pk>/edit/", views.employeebankaccount_edit, name="employeebankaccount_edit"),
+    path("bank-accounts/<int:pk>/delete/", views.employeebankaccount_delete, name="employeebankaccount_delete"),
+    path("bank-accounts/<int:pk>/verify/", views.employeebankaccount_verify, name="employeebankaccount_verify"),
+    path("bank-accounts/<int:pk>/reject/", views.employeebankaccount_reject, name="employeebankaccount_reject"),
+
+    # Family Members (admin-gated writes)
+    path("family-members/", views.familymember_list, name="familymember_list"),
+    path("family-members/add/", views.familymember_create, name="familymember_create"),
+    path("family-members/<int:pk>/", views.familymember_detail, name="familymember_detail"),
+    path("family-members/<int:pk>/edit/", views.familymember_edit, name="familymember_edit"),
+    path("family-members/<int:pk>/delete/", views.familymember_delete, name="familymember_delete"),
+
+    # Change Requests (maker-checker workflow)
+    path("change-requests/", views.changerequest_list, name="changerequest_list"),
+    path("change-requests/add/", views.changerequest_create, name="changerequest_create"),
+    path("change-requests/<int:pk>/", views.changerequest_detail, name="changerequest_detail"),
+    path("change-requests/<int:pk>/edit/", views.changerequest_edit, name="changerequest_edit"),
+    path("change-requests/<int:pk>/delete/", views.changerequest_delete, name="changerequest_delete"),
+    path("change-requests/<int:pk>/cancel/", views.changerequest_cancel, name="changerequest_cancel"),
+    path("change-requests/<int:pk>/approve/", views.changerequest_approve, name="changerequest_approve"),
+    path("change-requests/<int:pk>/reject/", views.changerequest_reject, name="changerequest_reject"),
 ]
