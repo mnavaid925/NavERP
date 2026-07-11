@@ -62,13 +62,16 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Workflow</h2></div>
       <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;">
-        {% if is_admin %}
+        {% if is_admin and is_own %}
+          <p class="text-muted" style="margin:0;"><i data-lucide="info"></i> This is your own request — another admin must approve or reject it.</p>
+        {% endif %}
+        {% if is_admin and not is_own %}
           <form method="post" action="{% url 'hrm:changerequest_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve and apply this change?');">
             {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve &amp; Apply</button>
           </form>
           <form method="post" action="{% url 'hrm:changerequest_reject' obj.pk %}" style="display:inline;">
             {% csrf_token %}
-            <input type="text" name="decision_note" class="form-input" aria-label="Reject reason" placeholder="Reason (required)" style="display:inline-block; width:auto; vertical-align:middle;">
+            <input type="text" name="decision_note" class="form-input" aria-label="Reject reason" placeholder="Reason (required)" required style="display:inline-block; width:auto; vertical-align:middle;">
             <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
           </form>
         {% endif %}
