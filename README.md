@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -468,6 +468,22 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `LearningProgress` (3.23) + `EmployeeProfile`/`CostCenterProfile` (no new session/learner tables, posts no GL); the
   N-step approval engine, QR check-in, multi-level Kirkpatrick, a branded certificate-PDF renderer, and a public
   verify-by-code page are deferred. **Training (3.22 ILT + 3.23 LMS + 3.24 Administration) is now complete.**
+- **3.25 Personal Information (Self-Service)** — the Employee Self-Service (ESS) layer over the existing
+  `EmployeeProfile` (which already carries flat bank/emergency/address/personal-file columns), so this pass adds the
+  *self-service surface* + the child tables the flat columns can't model + an HR maker-checker approval workflow, not
+  a re-model of the profile. A `my_info` hub (read-only employment context + the employee's direct-edit contact fields
+  + masked sensitive fields, each with a "Request a Change" link) and its `my_info_edit` form (address / personal
+  email / mobile / photo only); `EmergencyContact` — an unlimited roster (vs the 2 flat profile slots) with an
+  auto-demote `is_primary`, **direct self-edit** (no approval gate); `EmployeeBankAccount` — multiple accounts with an
+  auto-demote `is_salary_account`, Gusto-style `split_percentage`, a pending→verified/rejected verify workflow, and a
+  `masked_account_number()` shown everywhere (the raw number is never rendered, and it's redacted from the AuditLog);
+  `FamilyMember` — dependents/nominees with a guardian-required-when-minor rule; and `EmployeeInfoChangeRequest`
+  (`ICR-`) — the maker-checker workflow (a `GenericForeignKey` gating sensitive `EmployeeProfile` fields [legal name →
+  `core.Party.name`, DOB, national ID, passport], bank writes, and family writes) with an `apply()` that writes the
+  approved change atomically, a lost-update guard, and maker-checker separation (the requester/subject can't self-
+  approve). Bank/family writes are tenant-admin-only (an employee proposes them via a change request); emergency
+  contacts + the my_info contact fields are direct self-edit. A per-tenant configurable field-permission matrix,
+  effective-dated history, per-scheme statutory nomination, and live bank verification are deferred.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
