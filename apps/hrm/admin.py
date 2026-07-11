@@ -131,6 +131,12 @@ from .models import (  # 3.24 Training Administration
     TrainingFeedback,
     TrainingNomination,
 )
+from .models import (  # 3.25 Personal Information (Self-Service)
+    EmergencyContact,
+    EmployeeBankAccount,
+    EmployeeInfoChangeRequest,
+    FamilyMember,
+)
 
 
 @admin.register(JobGrade)
@@ -1162,3 +1168,44 @@ class TrainingCertificateAdmin(admin.ModelAdmin):
     search_fields = ("number", "title", "verification_code", "employee__party__name", "course__title")
     raw_id_fields = ("employee", "course", "source_attendance", "source_progress")
     readonly_fields = ("number", "verification_code", "expires_on", "created_at", "updated_at")
+
+
+# ------------------------------------------------------- 3.25 Personal Information (Self-Service)
+@admin.register(EmergencyContact)
+class EmergencyContactAdmin(admin.ModelAdmin):
+    list_display = ("name", "relationship", "employee", "is_primary", "priority_order", "tenant")
+    list_filter = ("tenant", "is_primary")
+    search_fields = ("name", "employee__party__name", "phone")
+    raw_id_fields = ("employee",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(EmployeeBankAccount)
+class EmployeeBankAccountAdmin(admin.ModelAdmin):
+    # NOTE: the raw Django admin change-form can see/edit account_number in plaintext — an accepted
+    # trade-off of ModelAdmin (superuser-only surface). All app-facing renders use masked_account_number().
+    list_display = ("bank_name", "employee", "account_type", "is_salary_account",
+                    "verification_status", "status", "tenant")
+    list_filter = ("tenant", "account_type", "verification_status", "status")
+    search_fields = ("bank_name", "account_holder_name", "employee__party__name")
+    raw_id_fields = ("employee",)
+    readonly_fields = ("verification_status", "created_at", "updated_at")
+
+
+@admin.register(FamilyMember)
+class FamilyMemberAdmin(admin.ModelAdmin):
+    list_display = ("name", "relationship", "employee", "is_dependent", "is_minor", "is_nominee", "tenant")
+    list_filter = ("tenant", "relationship", "is_dependent", "is_minor", "is_nominee")
+    search_fields = ("name", "employee__party__name")
+    raw_id_fields = ("employee",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(EmployeeInfoChangeRequest)
+class EmployeeInfoChangeRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "request_type", "status", "requested_by", "tenant")
+    list_filter = ("tenant", "request_type", "status")
+    search_fields = ("number", "employee__party__name", "reason")
+    raw_id_fields = ("employee", "requested_by", "reviewed_by", "content_type")
+    readonly_fields = ("number", "status", "requested_by", "reviewed_by", "reviewed_at",
+                       "created_at", "updated_at")
