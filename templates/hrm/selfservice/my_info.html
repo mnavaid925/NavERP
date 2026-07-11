@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}My Information{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Information</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Personal Info · My Information</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:changerequest_list' %}" class="btn btn-outline"><i data-lucide="git-pull-request"></i> My Change Requests</a>
+      <a href="{% url 'hrm:my_info_edit' %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit Contact Info</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Employment</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Employee No.</dt><dd>{{ profile.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ profile.party.name }}</dd></div>
+        <div class="detail-item"><dt>Designation</dt><dd>{{ profile.designation.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Department</dt><dd>{{ profile.department.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Manager</dt><dd>{% if profile.manager %}{{ profile.manager.party.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Employee Type</dt><dd>{{ profile.get_employee_type_display }}</dd></div>
+        <div class="detail-item"><dt>Work Email</dt><dd>{{ profile.work_email|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Work Location</dt><dd>{{ profile.work_location|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Contact Information</h2>
+      <a href="{% url 'hrm:my_info_edit' %}" class="btn btn-outline btn-sm"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Personal Email</dt><dd>{{ profile.personal_email|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Mobile</dt><dd>{{ profile.mobile|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Current Address</dt><dd>{{ profile.current_address|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Permanent Address</dt><dd>{{ profile.permanent_address|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Sensitive Details</h2></div>
+    <div class="card-body">
+      <p class="text-muted" style="margin-bottom:.6rem;"><i data-lucide="shield"></i> These fields change only through an HR-approved request.</p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Legal Name</dt><dd>{{ profile.party.name }} <a href="{% url 'hrm:changerequest_create' %}?type=profile_field&field=legal_name" style="font-size:.85rem;">Request a change</a></dd></div>
+        <div class="detail-item"><dt>Date of Birth</dt><dd>{{ profile.date_of_birth|date:"Y-m-d"|default:"—" }} <a href="{% url 'hrm:changerequest_create' %}?type=profile_field&field=date_of_birth" style="font-size:.85rem;">Request a change</a></dd></div>
+        <div class="detail-item"><dt>National ID</dt><dd>{{ profile.masked_national_id|default:"—" }} <a href="{% url 'hrm:changerequest_create' %}?type=profile_field&field=national_id" style="font-size:.85rem;">Request a change</a></dd></div>
+        <div class="detail-item"><dt>Passport</dt><dd>{{ profile.masked_passport_number|default:"—" }} <a href="{% url 'hrm:changerequest_create' %}?type=profile_field&field=passport_number" style="font-size:.85rem;">Request a change</a></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem;">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Emergency Contacts</h2>
+        <a href="{% url 'hrm:emergencycontact_create' %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add</a>
+      </div>
+      <div class="card-body">
+        {% for c in emergency_contacts %}
+          <div style="padding:.35rem 0;">
+            <div><strong>{{ c.name }}</strong>{% if c.is_primary %} <span class="badge badge-green">Primary</span>{% endif %}<div class="text-muted">{{ c.relationship }} · {{ c.phone }}</div></div>
+          </div>
+        {% empty %}
+          <p class="text-muted">No emergency contacts yet.</p>
+        {% endfor %}
+        <a href="{% url 'hrm:emergencycontact_list' %}" style="font-size:.85rem;">Manage all →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Bank Accounts</h2>
+      </div>
+      <div class="card-body">
+        {% for b in bank_accounts %}
+          <div style="padding:.35rem 0;">
+            <div><strong>{{ b.bank_name }}</strong>{% if b.is_salary_account %} <span class="badge badge-info">Salary</span>{% endif %}<div class="text-muted">{{ b.masked_account_number }} · {{ b.get_verification_status_display }}</div></div>
+          </div>
+        {% empty %}
+          <p class="text-muted">No bank accounts on file. <a href="{% url 'hrm:changerequest_create' %}?type=bank" style="font-size:.85rem;">Request one</a></p>
+        {% endfor %}
+        <a href="{% url 'hrm:employeebankaccount_list' %}" style="font-size:.85rem;">View all →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Family Members</h2>
+      </div>
+      <div class="card-body">
+        {% for f in family_members %}
+          <div style="padding:.35rem 0;">
+            <div><strong>{{ f.name }}</strong>{% if f.is_dependent %} <span class="badge badge-slate">Dependent</span>{% endif %}<div class="text-muted">{{ f.get_relationship_display }}</div></div>
+          </div>
+        {% empty %}
+          <p class="text-muted">No family members on file. <a href="{% url 'hrm:changerequest_create' %}?type=family" style="font-size:.85rem;">Request to add</a></p>
+        {% endfor %}
+        <a href="{% url 'hrm:familymember_list' %}" style="font-size:.85rem;">View all →</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">My Recent Change Requests</h2>
+      <a href="{% url 'hrm:changerequest_create' %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> New Request</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Status</th><th>Submitted</th></tr></thead>
+        <tbody>
+          {% for r in my_requests %}
+            <tr>
+              <td><a href="{% url 'hrm:changerequest_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.get_request_type_display }}</td>
+              <td>
+                {% if r.status == 'approved' %}<span class="badge badge-green">{{ r.get_status_display }}</span>
+                {% elif r.status == 'pending' %}<span class="badge badge-info">{{ r.get_status_display }}</span>
+                {% elif r.status == 'rejected' %}<span class="badge badge-red">{{ r.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ r.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ r.created_at|date:"Y-m-d" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="git-pull-request"></i><h3>No change requests</h3><p>Raise a request to change a sensitive field, bank account or family detail.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body" style="padding-top:0;"><a href="{% url 'hrm:changerequest_list' %}" style="font-size:.85rem;">View all my requests →</a></div>
+  </div>
+{% endblock %}
