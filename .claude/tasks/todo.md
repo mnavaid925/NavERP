@@ -2967,4 +2967,36 @@ fields), not a scope cut.
 
 ## Review notes
 
-(filled in at the end)
+**3.25 Personal Information (Self-Service) — BUILT & reviewed (2026-07-11).** As-built matches the plan (4 models,
+migration `0042`, 14 templates under `templates/hrm/selfservice/`, `LIVE_LINKS["3.25"]`, `_seed_selfservice`). All 5
+NavERP.md bullets are Live in the sidebar + a `Change Requests` extra leaf. Verified end-to-end: migrate clean, seed
+idempotent (2nd run no-op), `manage.py check` clean, a throwaway smoke sweep (all pages 200/302, cross-tenant IDOR
+404, masked-PII never leaks the raw account number, `apply()` works for all 3 request types × new-row/edit incl. the
+`legal_name`→`Party.name` write-through), and a live browser pass (bank list masked, change-request diff + workflow).
+
+**Review-agent findings applied** (Module Creation Sequence, one commit each):
+- **code-reviewer** (0 Critical): added the maker-checker **self-approval guard** (`_is_own_change_request` blocks the
+  requester/subject from approving/rejecting their own request), a **lost-update guard** in `apply()` (stored `old`
+  snapshot must match the live value), **per-field validation** on `ProfileFieldChangeForm` (dates parse, text
+  length-capped), wrapped `changerequest` create/edit `clean()` in try/except (friendly error not 500), redact-aware
+  audit diff on child edits, dropped a dead context var.
+- **explorer**: auto-cancel pending change requests targeting a bank/family row when it is deleted (GenericForeignKey
+  has no referential integrity on the target-row delete).
+- **frontend-reviewer**: hid the dead-end Approve/Reject controls for an admin's own request (+ note), dropped the
+  blind list-row Approve, added `required` to the reject input, `urlencode` on tab links, a photo preview, and a
+  `.form-check` theme rule for the previously-unstyled checkboxes.
+- **performance-reviewer** (0 Critical/Important): `select_related` on `changerequest_approve` (so `apply()` doesn't
+  re-fetch employee/party), trimmed unused joins.
+- **qa-smoke-tester**: no bugs — full URL sweep + IDOR + masking + workflow all PASS.
+- **security-reviewer**: **High** — masked `account_number`/`routing_number` in the `changerequest_detail` diff table
+  (the one surface that was rendering the raw stored value); **Low** — added `routing_number` to
+  `_SENSITIVE_AUDIT_FIELDS`. Confirmed the maker-checker + content_type/object_id anti-tamper design is solid.
+- **test-writer**: added a 3.25 test trio (`test_selfservice_models/_security/_views.py`, ~245 tests) + conftest
+  fixtures, and **found a real bug I'd introduced**: `my_info` used an invalid `select_related("employment__manager__party")`
+  (Employment.manager is a FK straight to `core.Party`) + `profile.manager.party.name` in the template — a 500 for any
+  employee viewing their own hub (my manual pass missed it because the demo admin has no profile → redirects). Fixed
+  the view path (`employment__manager`) + template (`profile.manager.name`); the pinned xfail tests now pass normally.
+
+**Deferred** (carried from research/todo): per-tenant configurable field-permission matrix, effective-dated/temporal
+history, per-scheme statutory nomination (EPF/EPS/ESI/Gratuity), live bank verification (Plaid), split-deposit payroll
+wiring, notification delivery, preferred-name column. Next unbuilt HRM sub-module: **3.26 Request Management (Self-Service)**.
