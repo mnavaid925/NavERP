@@ -23,6 +23,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import IntegrityError, models, transaction
@@ -6639,3 +6641,301 @@ class TrainingCertificate(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} · {self.employee} · {self.title}" if self.number else self.title
+
+
+# ---------------------------------------------------------------------------
+# 3.25 Personal Information (Self-Service) — the Employee Self-Service (ESS) layer over the
+# existing ``EmployeeProfile``. This is NOT a re-model of the profile: ``EmployeeProfile`` already
+# carries flat columns for bank details, two emergency-contact slots, addresses, contact info and
+# personal-file fields (national_id/passport/dob/…). What every researched ESS product adds on top
+# of a flat HR record is (1) the employee-facing self-view/self-edit surface (the ``my_info`` hub —
+# a view, no model), (2) proper CHILD tables the 2-slot/1-slot flat columns can't model — unlimited
+# emergency contacts, multiple bank accounts with one designated salary account, and family/dependent
+# members, and (3) a maker-checker CHANGE-REQUEST workflow that gates the sensitive fields (legal
+# name, DOB, national ID, passport, all bank writes, all family writes) behind HR review.
+#
+# Reuses: ``EmployeeProfile`` (parent of all three child tables; the ESS surface reads/edits its
+# existing flat columns — nothing duplicated), ``core.Party.name`` (the real legal-name column —
+# ``EmployeeProfile.name`` is a @property proxy, so the change-request ``apply()`` special-cases
+# ``legal_name`` to write ``party.name``), and the ``django.contrib.contenttypes`` GenericForeignKey
+# pattern already used by ``core.AuditLog``/``core.Activity``/``core.Document`` (this is the FIRST
+# GenericForeignKey inside apps/hrm). ``EmployeeBankAccount`` ports ``EmployeeProfile._mask_last4``
+# verbatim (per-model duplication convention, matching ``EmployeeStatutoryIdentifier``).
+# ---------------------------------------------------------------------------
+class EmergencyContact(TenantOwned):
+    """3.25 Emergency Contacts — an unlimited roster of who-to-call, replacing the two hard-coded
+    ``EmployeeProfile.emergency_contact_*`` slots (kept as legacy quick-reference, not migrated away).
+    Direct self-edit: an employee manages their OWN contacts with no HR-approval gate (matches the
+    majority of the ESS leaders surveyed). ``is_primary`` is auto-demote-on-save (one True per
+    employee) rather than a hard validation error, for a friction-free UX."""
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="emergency_contacts")
+    name = models.CharField(max_length=255)
+    relationship = models.CharField(max_length=100, blank=True, help_text="e.g. Spouse, Parent, Sibling, Friend.")
+    phone = models.CharField(max_length=30)
+    alt_phone = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    is_primary = models.BooleanField(default=False, help_text="Which contact to call first.")
+    priority_order = models.PositiveSmallIntegerField(default=1)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["employee", "priority_order", "-is_primary"]
+        indexes = [models.Index(fields=["tenant", "employee"], name="hrm_ec_tenant_emp_idx")]
+
+    def save(self, *args, **kwargs):
+        # Auto-demote siblings so at most one contact per employee is primary (same pattern as
+        # EmployeeBankAccount.is_salary_account below).
+        if self.is_primary and self.tenant_id and self.employee_id:
+            with transaction.atomic():
+                EmergencyContact.objects.filter(
+                    tenant_id=self.tenant_id, employee_id=self.employee_id, is_primary=True
+                ).exclude(pk=self.pk).update(is_primary=False)
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        rel = f" ({self.relationship})" if self.relationship else ""
+        return f"{self.name}{rel} - {self.employee}"
+
+
+class EmployeeBankAccount(TenantOwned):
+    """3.25 Bank Details — multiple salary/direct-deposit accounts per employee (Gusto/greytHR/ADP
+    parity), replacing the single flat ``EmployeeProfile.bank_*`` trio. The highest fraud-risk field
+    group: an employee never self-saves here — the model's own create/edit/delete views are
+    ``@tenant_admin_required`` and the only employee-initiated path is an ``EmployeeInfoChangeRequest``
+    (``request_type="bank"``). ``account_number`` is plaintext for the demo (WARNING below) and is
+    NEVER rendered raw — only via ``masked_account_number()``."""
+
+    ACCOUNT_TYPE_CHOICES = [
+        ("checking", "Checking / Current"),
+        ("savings", "Savings"),
+        ("other", "Other"),
+    ]
+    VERIFICATION_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("verified", "Verified"),
+        ("rejected", "Rejected"),
+    ]
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("inactive", "Inactive"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="bank_accounts")
+    bank_name = models.CharField(max_length=255)
+    account_holder_name = models.CharField(max_length=255)
+    # WARNING: account_number is stored in plaintext for demo purposes (mirrors the
+    # EmployeeProfile.bank_account note). In production, encrypt at rest (e.g. the tenants
+    # EncryptionKey pattern) or store only a tokenized/masked value. NEVER render the raw value —
+    # use masked_account_number(). Also redacted from AuditLog.changes via
+    # core.crud._SENSITIVE_AUDIT_FIELDS ("account_number").
+    account_number = models.CharField(max_length=64)
+    routing_number = models.CharField(max_length=20, blank=True, help_text="IFSC / ABA / sort code.")
+    account_type = models.CharField(max_length=10, choices=ACCOUNT_TYPE_CHOICES, default="checking")
+    is_salary_account = models.BooleanField(default=False, help_text="The account salary is paid into (one per employee).")
+    split_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Split-deposit intent (Gusto-style); stored only, not wired to payroll disbursement yet.")
+    verification_status = models.CharField(max_length=10, choices=VERIFICATION_STATUS_CHOICES, default="pending",
+                                           editable=False)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="active")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["employee", "-is_salary_account", "bank_name"]
+        indexes = [models.Index(fields=["tenant", "employee"], name="hrm_eba_tenant_emp_idx")]
+
+    @staticmethod
+    def _mask_last4(value):
+        """Last-4 view of a sensitive number (duplicated verbatim from EmployeeProfile._mask_last4 —
+        per-model duplication convention, not a shared util)."""
+        v = value or ""
+        return f"••••{v[-4:]}" if len(v) >= 4 else ("••••" if v else "")
+
+    def masked_account_number(self):
+        return self._mask_last4(self.account_number)
+
+    def masked_routing_number(self):
+        return self._mask_last4(self.routing_number)
+
+    def save(self, *args, **kwargs):
+        # Auto-demote so at most one salary account per employee (same pattern as
+        # EmergencyContact.is_primary above).
+        if self.is_salary_account and self.tenant_id and self.employee_id:
+            with transaction.atomic():
+                EmployeeBankAccount.objects.filter(
+                    tenant_id=self.tenant_id, employee_id=self.employee_id, is_salary_account=True
+                ).exclude(pk=self.pk).update(is_salary_account=False)
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        # Never expose the raw account number, not even in str()/admin/audit-log str(obj).
+        return f"{self.bank_name} {self.masked_account_number()} - {self.employee}"
+
+
+class FamilyMember(TenantOwned):
+    """3.25 Family Details — dependents/nominees roster feeding benefits eligibility (ADP/greytHR
+    parity). ``is_dependent`` drives benefits/insurance eligibility; ``is_minor`` requires a guardian
+    (greytHR "required when checked", enforced in clean()); ``is_nominee``/``nominee_percentage`` is a
+    SIMPLIFIED single-percentage field this pass — a full per-scheme (EPF/EPS/ESI/Gratuity) nomination
+    sub-table and cross-row "sums to 100%" validation are deferred (need 3.15 as the consumer).
+    Create/edit route through ``EmployeeInfoChangeRequest`` for an employee; the model's own writes
+    are ``@tenant_admin_required``."""
+
+    RELATIONSHIP_CHOICES = [
+        ("spouse", "Spouse"),
+        ("child", "Child"),
+        ("father", "Father"),
+        ("mother", "Mother"),
+        ("sibling", "Sibling"),
+        ("other", "Other"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="family_members")
+    name = models.CharField(max_length=255)
+    relationship = models.CharField(max_length=10, choices=RELATIONSHIP_CHOICES, default="spouse")
+    date_of_birth = models.DateField(null=True, blank=True)
+    # Reuses EmployeeProfile.GENDER_CHOICES directly (same module, no duplicate tuple).
+    gender = models.CharField(max_length=20, choices=EmployeeProfile.GENDER_CHOICES, blank=True)
+    occupation = models.CharField(max_length=255, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
+    is_dependent = models.BooleanField(default=False, help_text="Eligible dependent for benefits/insurance.")
+    is_minor = models.BooleanField(default=False)
+    guardian_name = models.CharField(max_length=255, blank=True)
+    guardian_relationship = models.CharField(max_length=100, blank=True)
+    is_nominee = models.BooleanField(default=False)
+    nominee_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)])
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["employee", "name"]
+        indexes = [models.Index(fields=["tenant", "employee"], name="hrm_fam_tenant_emp_idx")]
+
+    def clean(self):
+        if self.is_minor and not self.guardian_name:
+            raise ValidationError({"guardian_name": "Guardian name is required for a minor family member."})
+
+    def __str__(self):
+        return f"{self.name} ({self.get_relationship_display()}) - {self.employee}"
+
+
+class EmployeeInfoChangeRequest(TenantNumbered):
+    """3.25 maker-checker change request — the workflow connecting all five NavERP.md bullets. An
+    employee proposes a change to a SENSITIVE field on their own record; HR approves (which applies it
+    atomically) or rejects. Uses a GenericForeignKey so ONE model gates sensitive fields on
+    ``EmployeeProfile`` itself (legal name/DOB/national ID/passport) AND ``EmployeeBankAccount`` /
+    ``FamilyMember`` create-or-edit changes. ``field_changes`` is a JSON ``{field: {old, new}}`` map
+    (JSON-safe values); for a ``profile_field`` request it holds exactly one key, for ``bank``/
+    ``family`` it holds a full row (a create when ``object_id`` is None, else an edit)."""
+
+    NUMBER_PREFIX = "ICR"
+
+    REQUEST_TYPE_CHOICES = [
+        ("profile_field", "Profile Field"),
+        ("bank", "Bank Account"),
+        ("family", "Family Member"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    # The sensitive EmployeeProfile fields an employee may only change via approval (Keka's per-field
+    # matrix concept, simplified to a fixed list this pass). "legal_name" is a pseudo-field that
+    # apply() writes through to core.Party.name (EmployeeProfile.name is a read-only @property).
+    SENSITIVE_PROFILE_FIELDS = (
+        "legal_name", "date_of_birth", "national_id", "national_id_type",
+        "passport_number", "passport_expiry",
+    )
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="info_change_requests")
+    content_type = models.ForeignKey(ContentType, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # object_id None => this request PROPOSES CREATING a brand-new bank/family row (no existing target
+    # yet); set => propose an edit to an existing row.
+    object_id = models.BigIntegerField(null=True, blank=True)
+    target = GenericForeignKey("content_type", "object_id")
+    request_type = models.CharField(max_length=15, choices=REQUEST_TYPE_CHOICES, default="profile_field")
+    field_changes = models.JSONField(default=dict, help_text='{"field": {"old": ..., "new": ...}, ...}')
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending", editable=False)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     editable=False, related_name="+")
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    editable=False, related_name="+")
+    reviewed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    decision_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_icr_tenant_emp_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_icr_tenant_status_idx"),
+        ]
+
+    OPEN_STATUSES = ("pending",)
+
+    def clean(self):
+        if not isinstance(self.field_changes, dict) or not self.field_changes:
+            raise ValidationError({"field_changes": "At least one field change is required."})
+        if self.request_type == "profile_field":
+            # Anti-tamper: a profile change may only target the requester's OWN profile.
+            ep_ct = ContentType.objects.get_for_model(EmployeeProfile)
+            if self.content_type_id and (self.content_type_id != ep_ct.id or self.object_id != self.employee_id):
+                raise ValidationError("A profile change must target your own employee profile.")
+        elif self.object_id and self.content_type_id:
+            # Editing an existing bank/family row — it must belong to the same employee.
+            target = self.target
+            if target is not None and getattr(target, "employee_id", None) != self.employee_id:
+                raise ValidationError("You can only propose changes to your own records.")
+
+    def apply(self, user):
+        """Apply the proposed changes to the target and mark approved — called ONLY from the
+        approve action (already @tenant_admin_required + pending-guarded), inside one atomic txn.
+        A stale/invalid proposal (target deleted, value no longer valid) raises ValidationError,
+        which the view turns into a friendly message instead of a 500."""
+        with transaction.atomic():
+            if self.request_type == "profile_field":
+                obj = self.employee
+            elif self.object_id:
+                obj = self.target
+                if obj is None:
+                    raise ValidationError("The record this request targets no longer exists.")
+            else:
+                model_cls = self.content_type.model_class()
+                obj = model_cls(tenant=self.tenant, employee=self.employee)
+            for field, change in self.field_changes.items():
+                new = change.get("new") if isinstance(change, dict) else change
+                if new is None:
+                    # A None new-value keeps the model default (new row) / current value (edit);
+                    # clearing a field via a change request is deferred (v1 simplicity).
+                    continue
+                if field == "legal_name":
+                    party = obj.party
+                    party.name = new
+                    party.full_clean()
+                    party.save(update_fields=["name"])
+                else:
+                    setattr(obj, field, new)
+            obj.full_clean()
+            obj.save()
+            created_pk = obj.pk
+            self.status = "approved"
+            self.reviewed_by = user
+            self.reviewed_at = timezone.now()
+            update_fields = ["status", "reviewed_by", "reviewed_at", "updated_at"]
+            if self.object_id is None and self.request_type != "profile_field":
+                self.object_id = created_pk  # backfill so the request keeps pointing at what it created
+                update_fields.append("object_id")
+            self.save(update_fields=update_fields)
+
+    def __str__(self):
+        return f"{self.number} · {self.get_request_type_display()} · {self.employee}" if self.number else self.get_request_type_display()
