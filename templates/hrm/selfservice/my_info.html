@@ -20,7 +20,7 @@
         <div class="detail-item"><dt>Name</dt><dd>{{ profile.party.name }}</dd></div>
         <div class="detail-item"><dt>Designation</dt><dd>{{ profile.designation.name|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Department</dt><dd>{{ profile.department.name|default:"—" }}</dd></div>
-        <div class="detail-item"><dt>Manager</dt><dd>{% if profile.manager %}{{ profile.manager.party.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Manager</dt><dd>{% if profile.manager %}{{ profile.manager.name }}{% else %}—{% endif %}</dd></div>
         <div class="detail-item"><dt>Employee Type</dt><dd>{{ profile.get_employee_type_display }}</dd></div>
         <div class="detail-item"><dt>Work Email</dt><dd>{{ profile.work_email|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Work Location</dt><dd>{{ profile.work_location|default:"—" }}</dd></div>
