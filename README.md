@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -484,6 +484,21 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   approve). Bank/family writes are tenant-admin-only (an employee proposes them via a change request); emergency
   contacts + the my_info contact fields are direct self-edit. A per-tenant configurable field-permission matrix,
   effective-dated history, per-scheme statutory nomination, and live bank verification are deferred.
+- **3.26 Request Management (Self-Service)** — the employee request portal. Leave Requests and Attendance
+  Regularization **reuse** the existing 3.10 `LeaveRequest` / 3.9 `AttendanceRegularization` models (no new table —
+  they just gain a second sidebar entry), and this pass adds three new request models plus a unified **My Requests**
+  hub. `DocumentRequest` (`DOCREQ-`) — official-letter requests (experience letter / salary certificate / employment
+  verification / NOC / address proof) with purpose, addressed-to, copies and delivery method, whose `document_fulfill`
+  action can attach an HR-uploaded signed letter (validated through the shared `_validate_upload` helper);
+  `IdCardRequest` (`IDREQ-`) — new/replacement/correction/renewal cards with a lost/damaged/expired/name-change reason
+  taxonomy, issued via `idcardrequest_issue` (stamping a card number); `AssetRequest` (`ASSETREQ-`) — equipment
+  requests reusing `AssetAllocation.ASSET_CATEGORY_CHOICES`, whose `assetrequest_fulfill` **creates and links an
+  `AssetAllocation`** (`program=None`, `status=issued`) inside one atomic transaction. All three run the
+  `draft → pending → approved/rejected/cancelled` (+ fulfillment tail) lifecycle, reuse the ESS self-service helpers
+  (`_ss_child_*`, `_ss_scope`, `_can_manage_own_child`) so an employee sees only their own rows, and enforce a
+  3.25-style **self-approval guard** (an admin who is the requesting employee can't approve/reject their own request;
+  reject requires a note). Configurable multi-level approval chains, SLA auto-escalation, template-driven letter
+  generation, e-signature, notifications, and software/license access requests are deferred.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
