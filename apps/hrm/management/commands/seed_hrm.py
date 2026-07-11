@@ -151,6 +151,11 @@ from apps.hrm.models import (  # 3.25 Personal Information (Self-Service)
     EmployeeInfoChangeRequest,
     FamilyMember,
 )
+from apps.hrm.models import (  # 3.26 Request Management (Self-Service)
+    AssetRequest,
+    DocumentRequest,
+    IdCardRequest,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -278,6 +283,7 @@ class Command(BaseCommand):
             self._seed_lms(tenant, flush=options["flush"])
             self._seed_trainingadmin(tenant, flush=options["flush"])
             self._seed_selfservice(tenant, flush=options["flush"])
+            self._seed_requests(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -310,6 +316,10 @@ class Command(BaseCommand):
                           # before TrainingSession below; their .employee + TrainingCertificate.employee/course
                           # are PROTECT — wipe before EmployeeProfile/TrainingCourse (later in this tuple);
                           # TrainingFeedback.attendance is CASCADE + TrainingCertificate.source_* SET_NULL.
+                          # 3.26: request models (employee CASCADE; AssetRequest.allocation is
+                          # SET_NULL vs AssetAllocation — order-agnostic) — wipe the requests before the
+                          # 3.25 block for a tidy explicit teardown on --flush.
+                          AssetRequest, IdCardRequest, DocumentRequest,
                           # 3.25: EmployeeInfoChangeRequest (SET_NULL content_type/requested_by/
                           # reviewed_by, no PROTECT dependents) + the 3 child tables (EmergencyContact/
                           # EmployeeBankAccount/FamilyMember.employee are CASCADE) — order-agnostic vs
@@ -2716,3 +2726,82 @@ class Command(BaseCommand):
             f"{EmployeeBankAccount.objects.filter(tenant=tenant).count()} bank accounts, "
             f"{FamilyMember.objects.filter(tenant=tenant).count()} family members, "
             f"{EmployeeInfoChangeRequest.objects.filter(tenant=tenant).count()} change requests."))
+
+    def _seed_requests(self, tenant, *, flush):
+        """3.26 Request Management (Self-Service) - the employee request portal (runs after 3.25).
+        Adds Document / ID Card / Asset requests across the workflow states for the first two seeded
+        employees. Reuses existing EmployeeProfiles - creates NO new person rows. Rows are seeded
+        directly in their end-states (fulfilled/issued rows carry their stamps; a fulfilled AssetRequest
+        seeds + links its AssetAllocation directly rather than replaying the view action), matching this
+        seeder's convention. ASCII-only stdout (cp1252 bug)."""
+        if flush:
+            AssetRequest.objects.filter(tenant=tenant).delete()
+            IdCardRequest.objects.filter(tenant=tenant).delete()
+            DocumentRequest.objects.filter(tenant=tenant).delete()
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' - skipping request seed."))
+            return
+        if DocumentRequest.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Request data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        now = timezone.now()
+        today = timezone.localdate()
+
+        # --- Document Requests (pending / approved / fulfilled) ---
+        DocumentRequest.objects.create(
+            tenant=tenant, employee=emps[0], document_type="experience_letter",
+            purpose="Applying for a home loan; the bank needs proof of tenure.",
+            addressed_to="To Whom It May Concern", copies=1, delivery_method="soft_copy",
+            needed_by=today + datetime.timedelta(days=7), status="pending")
+        DocumentRequest.objects.create(
+            tenant=tenant, employee=emps[1], document_type="salary_certificate",
+            purpose="Visa application supporting document.", addressed_to="The Consulate",
+            copies=2, delivery_method="both", needed_by=today + datetime.timedelta(days=14),
+            status="approved", approver=actor, approved_at=now,
+            decision_note="Approved - HR to prepare on letterhead.")
+        DocumentRequest.objects.create(
+            tenant=tenant, employee=emps[0], document_type="employment_verification",
+            purpose="Background check for a rental agreement.", addressed_to="Property Manager",
+            copies=1, delivery_method="soft_copy", status="fulfilled",
+            approver=actor, approved_at=now, fulfilled_at=now,
+            decision_note="Issued as a signed PDF.")
+
+        # --- ID Card Requests (pending / issued) ---
+        IdCardRequest.objects.create(
+            tenant=tenant, employee=emps[1], request_type="replacement", reason_type="lost",
+            reason="Misplaced my access card while travelling.",
+            delivery_location="Head Office - Reception", status="pending")
+        IdCardRequest.objects.create(
+            tenant=tenant, employee=emps[0], request_type="new", reason_type="first_issue",
+            reason="New joiner - first ID card.", delivery_location="Head Office - HR Desk",
+            status="issued", approver=actor, approved_at=now,
+            card_number="EMP-CARD-0001", issued_at=now, decision_note="Printed and handed over.")
+
+        # --- Asset Requests (pending / fulfilled with a linked AssetAllocation) ---
+        AssetRequest.objects.create(
+            tenant=tenant, employee=emps[1], asset_category="laptop",
+            asset_name="14-inch developer laptop", justification="Current machine is out of warranty.",
+            priority="high", needed_by=today + datetime.timedelta(days=10), status="pending")
+        fulfilled_asset = AssetRequest.objects.create(
+            tenant=tenant, employee=emps[0], asset_category="phone",
+            asset_name="Company mobile handset", justification="On-call support rotation.",
+            priority="normal", status="approved", approver=actor, approved_at=now,
+            decision_note="Approved for the on-call rotation.")
+        allocation = AssetAllocation.objects.create(
+            tenant=tenant, program=None, employee=emps[0], asset_name=fulfilled_asset.asset_name,
+            asset_category=fulfilled_asset.asset_category, status="issued", issued_at=now, issued_by=actor)
+        fulfilled_asset.allocation = allocation
+        fulfilled_asset.status = "fulfilled"
+        fulfilled_asset.save(update_fields=["allocation", "status", "updated_at"])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Requests seeded for '{tenant.name}': "
+            f"{DocumentRequest.objects.filter(tenant=tenant).count()} document requests, "
+            f"{IdCardRequest.objects.filter(tenant=tenant).count()} ID card requests, "
+            f"{AssetRequest.objects.filter(tenant=tenant).count()} asset requests."))
