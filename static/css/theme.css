@@ -308,6 +308,7 @@ html.dark .search-item:hover, html.dark .search-item.active { background: rgba(5
 }
 .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
 .form-textarea { min-height: 96px; resize: vertical; }
+.form-check { width: 1rem; height: 1rem; accent-color: var(--brand-600); vertical-align: middle; cursor: pointer; }
 .form-error { color: var(--bad); font-size: .78rem; }
 .form-help { color: var(--text-muted); font-size: .78rem; }
 .form-actions { display: flex; gap: .5rem; margin-top: .5rem; }
