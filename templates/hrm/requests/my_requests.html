@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}My Requests{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Requests</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Request Management</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:my_info' %}" class="btn btn-outline"><i data-lucide="user"></i> My Info</a>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-bottom:1rem;">Raise and track your self-service requests. Leave and attendance-regularization requests share this hub with document, ID-card and equipment requests.</p>
+
+  <div class="stat-grid">
+    {% for t in tiles %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="{{ t.icon }}"></i> {{ t.label }}</h2>
+          {% if t.open_count %}<span class="badge badge-info">{{ t.open_count }} open</span>{% else %}<span class="badge badge-muted">0 open</span>{% endif %}
+        </div>
+        <div class="card-body">
+          <p class="text-muted" style="margin:0 0 .5rem;">{{ t.total_count }} total request{{ t.total_count|pluralize }}</p>
+          {% if t.recent %}
+            <ul style="list-style:none; margin:0; padding:0;">
+              {% for r in t.recent %}
+                <li style="display:flex; align-items:center; gap:.5rem; padding:.3rem 0; border-top:1px solid var(--border, #eee);">
+                  <a href="{% url t.detail_url_name r.pk %}" class="fw-600">{{ r.number }}</a>
+                  {% if r.status == 'approved' or r.status == 'fulfilled' or r.status == 'issued' %}<span class="badge badge-green">{{ r.get_status_display }}</span>
+                  {% elif r.status == 'pending' %}<span class="badge badge-info">{{ r.get_status_display }}</span>
+                  {% elif r.status == 'rejected' %}<span class="badge badge-red">{{ r.get_status_display }}</span>
+                  {% elif r.status == 'draft' %}<span class="badge badge-slate">{{ r.get_status_display }}</span>
+                  {% else %}<span class="badge badge-muted">{{ r.get_status_display }}</span>{% endif %}
+                  <span class="text-muted" style="margin-left:auto; font-size:.8rem;">{{ r.created_at|date:"Y-m-d" }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted" style="margin:0;">No requests yet.</p>
+          {% endif %}
+        </div>
+        <div class="card-body" style="padding-top:0; display:flex; gap:.5rem;">
+          <a href="{% url t.list_url_name %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> View All</a>
+          <a href="{% url t.create_url_name %}" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Raise New</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}
