@@ -139,6 +139,9 @@ def crud_delete(request, *, model, pk, success_url, audit=True):
 _SENSITIVE_AUDIT_FIELDS = frozenset({
     "bank_account", "bank_routing", "password", "token", "secret", "api_key",
     "national_id", "passport_number",
+    # HRM 3.25 EmployeeBankAccount.account_number — a self-service direct-deposit account number,
+    # same plaintext-for-demo sensitivity as EmployeeProfile.bank_account above.
+    "account_number",
     # HRM 3.15 statutory government IDs — redact from the immutable audit trail.
     "uan_number", "pf_number", "esi_number",
     # Confidential manager-only notes (HRM 3.19 PerformanceReview.private_notes / 3.20
