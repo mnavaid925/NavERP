@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Change Request · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:changerequest_list' %}">Change Requests</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if can_manage and obj.status == 'pending' %}
+        <a href="{% url 'hrm:changerequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:changerequest_delete' obj.pk %}" onsubmit="return confirm('Delete this request?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ obj.get_request_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>
+        {% if obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Target</dt><dd>
+        {% if obj.object_id %}Editing an existing {{ obj.content_type.name }}{% else %}Proposing a new {{ obj.content_type.name|default:"record" }}{% endif %}
+      </dd></div>
+      <div class="detail-item"><dt>Submitted</dt><dd>{{ obj.created_at|date:"Y-m-d H:i" }}{% if obj.requested_by %} · {{ obj.requested_by.username }}{% endif %}</dd></div>
+      {% if obj.reviewed_by %}<div class="detail-item"><dt>Reviewed By</dt><dd>{{ obj.reviewed_by.username }}{% if obj.reviewed_at %} · {{ obj.reviewed_at|date:"Y-m-d H:i" }}{% endif %}</dd></div>{% endif %}
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Proposed Changes</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead>
+        <tbody>
+          {% for d in diffs %}
+            <tr><td class="fw-600">{{ d.field }}</td><td class="text-muted">{{ d.old|default:"—" }}</td><td>{{ d.new|default:"—" }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-muted">No field changes recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if obj.reason or obj.decision_note %}
+    <div class="card"><div class="card-body">
+      {% if obj.reason %}<div><strong>Reason</strong><p>{{ obj.reason|linebreaksbr }}</p></div>{% endif %}
+      {% if obj.decision_note %}<div style="margin-top:.4rem;"><strong>Decision Note</strong><p>{{ obj.decision_note|linebreaksbr }}</p></div>{% endif %}
+    </div></div>
+  {% endif %}
+
+  {% if obj.status == 'pending' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;">
+        {% if is_admin %}
+          <form method="post" action="{% url 'hrm:changerequest_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve and apply this change?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve &amp; Apply</button>
+          </form>
+          <form method="post" action="{% url 'hrm:changerequest_reject' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="text" name="decision_note" class="form-input" aria-label="Reject reason" placeholder="Reason (required)" style="display:inline-block; width:auto; vertical-align:middle;">
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+        {% if can_manage %}
+          <form method="post" action="{% url 'hrm:changerequest_cancel' obj.pk %}" style="display:inline;" onsubmit="return confirm('Cancel this request?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+      </div>
+      <div class="card-body" style="padding-top:0;"><span class="text-muted">Approve/Reject: a tenant admin. Cancel: the requester or an admin. Approval applies the change and can't be undone.</span></div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:changerequest_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to change requests</a>
+{% endblock %}
