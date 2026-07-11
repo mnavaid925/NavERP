@@ -868,4 +868,43 @@ urlpatterns = [
     path("change-requests/<int:pk>/cancel/", views.changerequest_cancel, name="changerequest_cancel"),
     path("change-requests/<int:pk>/approve/", views.changerequest_approve, name="changerequest_approve"),
     path("change-requests/<int:pk>/reject/", views.changerequest_reject, name="changerequest_reject"),
+
+    # 3.26 Request Management (Self-Service)
+    path("my-requests/", views.my_requests, name="my_requests"),
+
+    # Document Requests (experience letter / salary certificate / ...)
+    path("document-requests/", views.documentrequest_list, name="documentrequest_list"),
+    path("document-requests/add/", views.documentrequest_create, name="documentrequest_create"),
+    path("document-requests/<int:pk>/", views.documentrequest_detail, name="documentrequest_detail"),
+    path("document-requests/<int:pk>/edit/", views.documentrequest_edit, name="documentrequest_edit"),
+    path("document-requests/<int:pk>/delete/", views.documentrequest_delete, name="documentrequest_delete"),
+    path("document-requests/<int:pk>/submit/", views.documentrequest_submit, name="documentrequest_submit"),
+    path("document-requests/<int:pk>/cancel/", views.documentrequest_cancel, name="documentrequest_cancel"),
+    path("document-requests/<int:pk>/approve/", views.documentrequest_approve, name="documentrequest_approve"),
+    path("document-requests/<int:pk>/reject/", views.documentrequest_reject, name="documentrequest_reject"),
+    path("document-requests/<int:pk>/fulfill/", views.documentrequest_fulfill, name="documentrequest_fulfill"),
+
+    # ID Card Requests (new / replacement / correction)
+    path("id-card-requests/", views.idcardrequest_list, name="idcardrequest_list"),
+    path("id-card-requests/add/", views.idcardrequest_create, name="idcardrequest_create"),
+    path("id-card-requests/<int:pk>/", views.idcardrequest_detail, name="idcardrequest_detail"),
+    path("id-card-requests/<int:pk>/edit/", views.idcardrequest_edit, name="idcardrequest_edit"),
+    path("id-card-requests/<int:pk>/delete/", views.idcardrequest_delete, name="idcardrequest_delete"),
+    path("id-card-requests/<int:pk>/submit/", views.idcardrequest_submit, name="idcardrequest_submit"),
+    path("id-card-requests/<int:pk>/cancel/", views.idcardrequest_cancel, name="idcardrequest_cancel"),
+    path("id-card-requests/<int:pk>/approve/", views.idcardrequest_approve, name="idcardrequest_approve"),
+    path("id-card-requests/<int:pk>/reject/", views.idcardrequest_reject, name="idcardrequest_reject"),
+    path("id-card-requests/<int:pk>/issue/", views.idcardrequest_issue, name="idcardrequest_issue"),
+
+    # Asset Requests (laptop / equipment)
+    path("asset-requests/", views.assetrequest_list, name="assetrequest_list"),
+    path("asset-requests/add/", views.assetrequest_create, name="assetrequest_create"),
+    path("asset-requests/<int:pk>/", views.assetrequest_detail, name="assetrequest_detail"),
+    path("asset-requests/<int:pk>/edit/", views.assetrequest_edit, name="assetrequest_edit"),
+    path("asset-requests/<int:pk>/delete/", views.assetrequest_delete, name="assetrequest_delete"),
+    path("asset-requests/<int:pk>/submit/", views.assetrequest_submit, name="assetrequest_submit"),
+    path("asset-requests/<int:pk>/cancel/", views.assetrequest_cancel, name="assetrequest_cancel"),
+    path("asset-requests/<int:pk>/approve/", views.assetrequest_approve, name="assetrequest_approve"),
+    path("asset-requests/<int:pk>/reject/", views.assetrequest_reject, name="assetrequest_reject"),
+    path("asset-requests/<int:pk>/fulfill/", views.assetrequest_fulfill, name="assetrequest_fulfill"),
 ]
