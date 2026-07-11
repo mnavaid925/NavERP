@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.bank_name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.bank_name }}{% if obj.is_salary_account %} <span class="badge badge-info">Salary</span>{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employeebankaccount_list' %}">Bank Accounts</a><span class="sep">›</span><span>{{ obj.bank_name }}</span></div>
+    </div>
+    {% if is_admin %}
+      <div class="page-actions">
+        <a href="{% url 'hrm:employeebankaccount_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:employeebankaccount_delete' obj.pk %}" onsubmit="return confirm('Delete this account?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      {% if is_admin %}<div class="detail-item"><dt>Employee</dt><dd>{{ obj.employee.party.name }}</dd></div>{% endif %}
+      <div class="detail-item"><dt>Bank Name</dt><dd>{{ obj.bank_name }}</dd></div>
+      <div class="detail-item"><dt>Account Holder</dt><dd>{{ obj.account_holder_name }}</dd></div>
+      <div class="detail-item"><dt>Account Number</dt><dd><span class="mono">{{ obj.masked_account_number }}</span></dd></div>
+      <div class="detail-item"><dt>Routing / IFSC</dt><dd><span class="mono">{{ obj.masked_routing_number|default:"—" }}</span></dd></div>
+      <div class="detail-item"><dt>Account Type</dt><dd>{{ obj.get_account_type_display }}</dd></div>
+      <div class="detail-item"><dt>Salary Account</dt><dd>{% if obj.is_salary_account %}<span class="badge badge-info">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Split %</dt><dd>{% if obj.split_percentage is not None %}{{ obj.split_percentage }}%{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Verification</dt><dd>
+        {% if obj.verification_status == 'verified' %}<span class="badge badge-green">{{ obj.get_verification_status_display }}</span>
+        {% elif obj.verification_status == 'pending' %}<span class="badge badge-amber">{{ obj.get_verification_status_display }}</span>
+        {% else %}<span class="badge badge-red">{{ obj.get_verification_status_display }}</span>{% endif %}
+      </dd></div>
+    </dl>
+    {% if obj.notes %}<div style="margin-top:.6rem;"><strong>Notes</strong><p>{{ obj.notes|linebreaksbr }}</p></div>{% endif %}
+    <p class="text-muted" style="margin-top:.6rem;"><i data-lucide="shield"></i> Only the last 4 digits of the account/routing number are ever displayed.</p>
+  </div></div>
+
+  {% if is_admin %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Verification</h2></div>
+      <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;">
+        {% if obj.verification_status == 'pending' %}
+          <form method="post" action="{% url 'hrm:employeebankaccount_verify' obj.pk %}" style="display:inline;" onsubmit="return confirm('Verify this account?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Verify</button>
+          </form>
+        {% endif %}
+        {% if obj.verification_status == 'pending' or obj.verification_status == 'verified' %}
+          <form method="post" action="{% url 'hrm:employeebankaccount_reject' obj.pk %}" style="display:inline;" onsubmit="return confirm('Reject this account?');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+        <span class="text-muted">Verify/Reject is a tenant-admin action.</span>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:employeebankaccount_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to accounts</a>
+{% endblock %}
