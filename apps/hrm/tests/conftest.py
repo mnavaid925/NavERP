@@ -1835,3 +1835,102 @@ def training_certificate_b(db, tenant_b, employee_b, cert_course_b):
         issued_on=datetime.date(2026, 7, 1),
     )
 
+
+# ------------------------------------------------------------------ 3.25 Personal Information (Self-Service) fixtures
+@pytest.fixture
+def emergency_contact_a(db, tenant_a, employee_a):
+    """A primary EmergencyContact for employee_a, tenant_a."""
+    from apps.hrm.models import EmergencyContact
+    return EmergencyContact.objects.create(
+        tenant=tenant_a, employee=employee_a, name="Carol White", relationship="Sibling",
+        phone="+1-555-0101", is_primary=True,
+    )
+
+
+@pytest.fixture
+def emergency_contact_b(db, tenant_b, employee_b):
+    """An EmergencyContact belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import EmergencyContact
+    return EmergencyContact.objects.create(
+        tenant=tenant_b, employee=employee_b, name="Dana Lee", relationship="Friend",
+        phone="+1-555-0202",
+    )
+
+
+@pytest.fixture
+def bank_account_a(db, tenant_a, employee_a):
+    """A checking EmployeeBankAccount for employee_a, tenant_a — 16-digit account_number so
+    masking (last-4) is unambiguous."""
+    from apps.hrm.models import EmployeeBankAccount
+    return EmployeeBankAccount.objects.create(
+        tenant=tenant_a, employee=employee_a, bank_name="First Bank",
+        account_holder_name="Alice Smith", account_number="9988776655001122",
+        routing_number="DEMO00998877", account_type="checking",
+    )
+
+
+@pytest.fixture
+def bank_account_b(db, tenant_b, employee_b):
+    """An EmployeeBankAccount belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import EmployeeBankAccount
+    return EmployeeBankAccount.objects.create(
+        tenant=tenant_b, employee=employee_b, bank_name="Globex Bank",
+        account_holder_name="Bob Jones", account_number="1122334455006677",
+        routing_number="DEMO00110022", account_type="savings",
+    )
+
+
+@pytest.fixture
+def family_member_a(db, tenant_a, employee_a):
+    """A dependent (spouse) FamilyMember for employee_a, tenant_a."""
+    from apps.hrm.models import FamilyMember
+    return FamilyMember.objects.create(
+        tenant=tenant_a, employee=employee_a, name="John Smith", relationship="spouse",
+        is_dependent=True,
+    )
+
+
+@pytest.fixture
+def family_member_b(db, tenant_b, employee_b):
+    """A FamilyMember belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import FamilyMember
+    return FamilyMember.objects.create(
+        tenant=tenant_b, employee=employee_b, name="Jane Jones", relationship="spouse",
+    )
+
+
+@pytest.fixture
+def change_request_a(db, tenant_a, employee_a):
+    """A pending profile_field EmployeeInfoChangeRequest for employee_a, tenant_a — proposes a new
+    national_id. ``old`` matches employee_a's actual (blank) national_id so ``apply()`` succeeds
+    without tripping the lost-update guard. ``requested_by`` is a THIRD user (neither client_a/
+    admin_user nor employee_a's own login) so maker-checker self-approval tests aren't accidentally
+    satisfied by the shared admin_user/client_a fixtures."""
+    from django.contrib.contenttypes.models import ContentType
+    from apps.accounts.models import User
+    from apps.hrm.models import EmployeeInfoChangeRequest, EmployeeProfile
+    maker = User.objects.create_user(
+        email="maker_icr@acme.com", username="maker_icr_acme", password="TestPass123!",
+        tenant=tenant_a, is_tenant_admin=False,
+    )
+    ct = ContentType.objects.get_for_model(EmployeeProfile)
+    return EmployeeInfoChangeRequest.objects.create(
+        tenant=tenant_a, employee=employee_a, content_type=ct, object_id=employee_a.pk,
+        request_type="profile_field",
+        field_changes={"national_id": {"old": "", "new": "AB1234567"}},
+        requested_by=maker,
+    )
+
+
+@pytest.fixture
+def change_request_b(db, tenant_b, employee_b):
+    """A pending profile_field EmployeeInfoChangeRequest belonging to tenant_b (IDOR tests)."""
+    from django.contrib.contenttypes.models import ContentType
+    from apps.hrm.models import EmployeeInfoChangeRequest, EmployeeProfile
+    ct = ContentType.objects.get_for_model(EmployeeProfile)
+    return EmployeeInfoChangeRequest.objects.create(
+        tenant=tenant_b, employee=employee_b, content_type=ct, object_id=employee_b.pk,
+        request_type="profile_field",
+        field_changes={"national_id": {"old": "", "new": "XY7654321"}},
+    )
+
