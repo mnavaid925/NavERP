@@ -10725,6 +10725,17 @@ def _assemble_change_request(request, employee, req_type, form):
     return cr
 
 
+# Change-request diff keys whose raw value must be masked when rendered (the field_changes JSON stores
+# the plaintext account/routing number; every other surface uses masked_account_number()).
+_SENSITIVE_DIFF_FIELDS = frozenset({"account_number", "routing_number"})
+
+
+def _mask_diff_value(field, value):
+    if value and field in _SENSITIVE_DIFF_FIELDS:
+        return EmployeeBankAccount._mask_last4(value)
+    return value
+
+
 def _resolve_cr_employee(request, is_admin, own):
     """Resolve the subject employee for a change request: admins may target ?employee/employee_pk,
     everyone else is forced to themselves."""
@@ -10812,7 +10823,8 @@ def changerequest_detail(request, pk):
     if not _can_manage_own_child(request, obj):
         raise PermissionDenied("This change request belongs to another employee.")
     diffs = [{"field": k.replace("_", " ").title(),
-              "old": (v or {}).get("old"), "new": (v or {}).get("new")}
+              "old": _mask_diff_value(k, (v or {}).get("old")),
+              "new": _mask_diff_value(k, (v or {}).get("new"))}
              for k, v in (obj.field_changes or {}).items()]
     return render(request, "hrm/selfservice/changerequest/detail.html", {
         "obj": obj, "diffs": diffs, "is_admin": _is_admin(request.user),
