@@ -2262,3 +2262,56 @@ class FamilyMemberChangeForm(_ThemedForm):
         if cleaned.get("is_minor") and not cleaned.get("guardian_name"):
             self.add_error("guardian_name", "Guardian name is required for a minor family member.")
         return cleaned
+
+
+# ======================================================= 3.26 Request Management (Self-Service)
+from .models import (  # noqa: E402  — 3.26 Request Management (Self-Service)
+    AssetRequest,
+    DocumentRequest,
+    IdCardRequest,
+)
+
+
+class DocumentRequestForm(TenantModelForm):
+    """Employee's official-letter request. Workflow fields (status/approver/approved_at/
+    decision_note/fulfilled_at/output_file) are set by the approve/fulfill actions, and `employee`
+    is resolved server-side by _ss_child_create — none appear on the form."""
+
+    class Meta:
+        model = DocumentRequest
+        fields = ["document_type", "purpose", "addressed_to", "copies", "delivery_method", "needed_by"]
+        widgets = {"purpose": forms.Textarea(attrs={"rows": 3})}
+
+
+class IdCardRequestForm(TenantModelForm):
+    """Employee's ID-card request. `card_number`/`issued_at` are stamped by the issue action; the
+    reviewer/status fields are workflow-owned — none appear on the form."""
+
+    class Meta:
+        model = IdCardRequest
+        fields = ["request_type", "reason_type", "reason", "delivery_location"]
+        widgets = {"reason": forms.Textarea(attrs={"rows": 3})}
+
+
+class AssetRequestForm(TenantModelForm):
+    """Employee's equipment request. The `allocation` link + reviewer/status fields are set by the
+    approve/fulfill actions — none appear on the form."""
+
+    class Meta:
+        model = AssetRequest
+        fields = ["asset_category", "asset_name", "justification", "priority", "needed_by"]
+        widgets = {"justification": forms.Textarea(attrs={"rows": 3})}
+
+
+class DocumentFulfillForm(_ThemedForm):
+    """The optional signed-letter upload captured by the document_fulfill action (admin-only). Reuses
+    the shared _validate_upload helper + the onboarding-doc allowlist/size cap — no new constants."""
+
+    output_file = forms.FileField(
+        required=False,
+        help_text="Optional: attach the signed letter (PDF/DOC/DOCX/JPG/PNG, max 10 MB).")
+
+    def clean_output_file(self):
+        return _validate_upload(self.cleaned_data.get("output_file"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Letter")
