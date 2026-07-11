@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum)
@@ -170,6 +171,15 @@ from .forms import (  # 3.24 Training Administration
     TrainingCertificateForm,
     TrainingFeedbackForm,
     TrainingNominationForm,
+)
+from .forms import (  # 3.25 Personal Information (Self-Service)
+    BankAccountChangeForm,
+    EmergencyContactForm,
+    EmployeeBankAccountForm,
+    EmployeeProfileMyInfoForm,
+    FamilyMemberChangeForm,
+    FamilyMemberForm,
+    ProfileFieldChangeForm,
 )
 from .models import (
     APPLICATION_STAGE_CHOICES,
@@ -333,6 +343,12 @@ from .models import (  # 3.24 Training Administration
     TrainingCertificate,
     TrainingFeedback,
     TrainingNomination,
+)
+from .models import (  # 3.25 Personal Information (Self-Service)
+    EmergencyContact,
+    EmployeeBankAccount,
+    EmployeeInfoChangeRequest,
+    FamilyMember,
 )
 
 
@@ -10332,3 +10348,578 @@ def training_budget(request):
         "utilization": utilization,
         "by_course": by_course,
     })
+
+
+# ============================================================ 3.25 Personal Information (Self-Service)
+# The Employee Self-Service layer over EmployeeProfile: a "my info" hub the employee edits directly
+# (address/personal email/mobile/photo), three CHILD tables (emergency contacts / bank accounts /
+# family members) with admin CRUD + per-employee self-scoping, and a maker-checker change-request
+# workflow for the sensitive fields. Reuses the existing _current_employee_profile / _is_admin
+# helpers. Direct self-edit: emergency contacts + the my_info contact fields. Admin-gated writes:
+# bank accounts + family members (an employee proposes those via a change request only).
+
+def _require_own_profile(request):
+    """Resolve the requester's own EmployeeProfile, or return ``(None, redirect)`` for a user with no
+    linked employee record (e.g. the superuser) — the ESS hub pages only make sense with a profile."""
+    profile = _current_employee_profile(request)
+    if profile is None:
+        messages.error(request,
+                        "Your account isn't linked to an employee record, so there's no personal info to show.")
+        return None, redirect("hrm:hrm_overview")
+    return profile, None
+
+
+def _can_manage_own_child(request, obj):
+    """A self-service row (emergency contact / bank account / family member / change request) is
+    manageable by a tenant admin or by the employee who owns it (mirrors _can_edit_review's shape)."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and obj.employee_id == profile.pk
+
+
+def _ss_scope(request, qs):
+    """Restrict a self-service queryset: an admin sees the whole tenant; a plain employee sees only
+    their own rows; an employee-less user sees nothing."""
+    if _is_admin(request.user):
+        return qs
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return qs.none()
+    return qs.filter(employee=profile)
+
+
+def _ss_employees(request):
+    """The tenant's employee dropdown for the admin filter/picker (party-joined, name-ordered)."""
+    return (EmployeeProfile.objects.filter(tenant=request.tenant)
+            .select_related("party").order_by("party__name"))
+
+
+def _json_safe(value):
+    """Coerce a model/field value into a JSON-serializable form for ``field_changes`` storage
+    (dates → ISO strings, Decimals → strings; bools/ints/strings/None pass through)."""
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return str(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+# ---------------------------------------------------------------- My Info hub (Profile/Contact)
+@login_required
+def my_info(request):
+    """The employee's self-service landing page: read-only employment context, the direct-edit
+    contact fields, the masked sensitive fields (each with a 'Request a Change' link), roster
+    summaries, and the requester's recent change requests."""
+    profile, redirect_resp = _require_own_profile(request)
+    if redirect_resp:
+        return redirect_resp
+    profile = (EmployeeProfile.objects
+               .select_related("party", "designation",
+                               "employment__org_unit", "employment__manager__party")
+               .get(pk=profile.pk))
+    return render(request, "hrm/selfservice/my_info.html", {
+        "profile": profile,
+        "emergency_contacts": list(profile.emergency_contacts.all()[:3]),
+        "bank_accounts": list(profile.bank_accounts.all()[:3]),
+        "family_members": list(profile.family_members.all()[:3]),
+        "my_requests": list(profile.info_change_requests.select_related("reviewed_by")[:5]),
+        "sensitive_fields": EmployeeInfoChangeRequest.SENSITIVE_PROFILE_FIELDS,
+    })
+
+
+@login_required
+def my_info_edit(request):
+    """Direct-edit the non-sensitive contact subset (address / personal email / mobile / photo)."""
+    profile, redirect_resp = _require_own_profile(request)
+    if redirect_resp:
+        return redirect_resp
+    if request.method == "POST":
+        form = EmployeeProfileMyInfoForm(request.POST, request.FILES, instance=profile, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update", {"action": "self_update_contact"})
+            messages.success(request, "Your contact information was updated.")
+            return redirect("hrm:my_info")
+    else:
+        form = EmployeeProfileMyInfoForm(instance=profile, tenant=request.tenant)
+    return render(request, "hrm/selfservice/my_info_edit.html",
+                  {"form": form, "profile": profile, "is_edit": True})
+
+
+# ---------------------------------------------------------------- Shared self-service child CRUD
+def _ss_child_create(request, form_class, template, list_url):
+    """Create a self-service child row: a non-admin creates for THEMSELVES; an admin may target
+    ``?employee=<id>`` (GET) or ``employee_pk`` (POST). Mirrors _employee_child_create."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    target = own
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            target = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    if target is None:
+        messages.error(request, "Select an employee to attach this record to.")
+        return redirect(list_url)
+    if request.method == "POST":
+        form = form_class(request.POST, request.FILES, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.employee = target
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Created successfully.")
+            return redirect(list_url)
+    else:
+        form = form_class(tenant=request.tenant)
+    return render(request, template, {
+        "form": form, "is_edit": False, "is_admin": is_admin,
+        "target_employee": target, "employees": _ss_employees(request) if is_admin else None,
+    })
+
+
+def _ss_child_edit(request, model, pk, form_class, template, detail_url):
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only edit your own records.")
+        return redirect(detail_url, pk=obj.pk)
+    if request.method == "POST":
+        form = form_class(request.POST, request.FILES, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Updated successfully.")
+            return redirect(detail_url, pk=obj.pk)
+    else:
+        form = form_class(instance=obj, tenant=request.tenant)
+    return render(request, template, {
+        "form": form, "obj": obj, "is_edit": True, "is_admin": _is_admin(request.user),
+        "target_employee": obj.employee, "employees": None,
+    })
+
+
+def _ss_child_detail(request, model, pk, template, select_related=()):
+    qs = model.objects.filter(tenant=request.tenant)
+    if select_related:
+        qs = qs.select_related(*select_related)
+    obj = get_object_or_404(qs, pk=pk)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This record belongs to another employee.")
+    return render(request, template, {"obj": obj, "is_admin": _is_admin(request.user)})
+
+
+def _ss_child_delete(request, model, pk, list_url):
+    obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only delete your own records.")
+        return redirect(list_url)
+    if request.method == "POST":
+        write_audit_log(request.user, obj, "delete")
+        obj.delete()
+        messages.success(request, "Deleted successfully.")
+    return redirect(list_url)
+
+
+# ---------------------------------------------------------------- Emergency Contacts (direct self-edit)
+@login_required
+def emergencycontact_list(request):
+    qs = _ss_scope(request, EmergencyContact.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin}
+    filters = [("is_primary", "is_primary", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/selfservice/emergencycontact/list.html",
+                     search_fields=("name", "relationship", "phone", "employee__party__name"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def emergencycontact_create(request):
+    return _ss_child_create(request, EmergencyContactForm,
+                            "hrm/selfservice/emergencycontact/form.html", "hrm:emergencycontact_list")
+
+
+@login_required
+def emergencycontact_detail(request, pk):
+    return _ss_child_detail(request, EmergencyContact, pk,
+                            "hrm/selfservice/emergencycontact/detail.html", select_related=("employee__party",))
+
+
+@login_required
+def emergencycontact_edit(request, pk):
+    return _ss_child_edit(request, EmergencyContact, pk, EmergencyContactForm,
+                          "hrm/selfservice/emergencycontact/form.html", "hrm:emergencycontact_detail")
+
+
+@login_required
+@require_POST
+def emergencycontact_delete(request, pk):
+    return _ss_child_delete(request, EmergencyContact, pk, "hrm:emergencycontact_list")
+
+
+# ---------------------------------------------------------------- Bank Accounts (admin-gated writes)
+@login_required
+def employeebankaccount_list(request):
+    qs = _ss_scope(request, EmployeeBankAccount.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin,
+             "verification_status_choices": EmployeeBankAccount.VERIFICATION_STATUS_CHOICES,
+             "account_type_choices": EmployeeBankAccount.ACCOUNT_TYPE_CHOICES,
+             "status_choices": EmployeeBankAccount.STATUS_CHOICES}
+    filters = [("verification_status", "verification_status", False),
+               ("account_type", "account_type", False),
+               ("status", "status", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/selfservice/employeebankaccount/list.html",
+                     search_fields=("bank_name", "account_holder_name", "employee__party__name"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def employeebankaccount_detail(request, pk):
+    return _ss_child_detail(request, EmployeeBankAccount, pk,
+                            "hrm/selfservice/employeebankaccount/detail.html", select_related=("employee__party",))
+
+
+@tenant_admin_required
+def employeebankaccount_create(request):
+    return _ss_child_create(request, EmployeeBankAccountForm,
+                            "hrm/selfservice/employeebankaccount/form.html", "hrm:employeebankaccount_list")
+
+
+@tenant_admin_required
+def employeebankaccount_edit(request, pk):
+    return _ss_child_edit(request, EmployeeBankAccount, pk, EmployeeBankAccountForm,
+                          "hrm/selfservice/employeebankaccount/form.html", "hrm:employeebankaccount_detail")
+
+
+@tenant_admin_required
+@require_POST
+def employeebankaccount_delete(request, pk):
+    return _ss_child_delete(request, EmployeeBankAccount, pk, "hrm:employeebankaccount_list")
+
+
+@tenant_admin_required
+@require_POST
+def employeebankaccount_verify(request, pk):
+    obj = get_object_or_404(EmployeeBankAccount, pk=pk, tenant=request.tenant)
+    if obj.verification_status == "pending":
+        obj.verification_status = "verified"
+        obj.save(update_fields=["verification_status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "verify"})
+        messages.success(request, "Bank account verified.")
+    else:
+        messages.error(request, "Only a pending account can be verified.")
+    return redirect("hrm:employeebankaccount_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def employeebankaccount_reject(request, pk):
+    obj = get_object_or_404(EmployeeBankAccount, pk=pk, tenant=request.tenant)
+    if obj.verification_status in ("pending", "verified"):
+        obj.verification_status = "rejected"
+        obj.save(update_fields=["verification_status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "reject"})
+        messages.success(request, "Bank account rejected.")
+    else:
+        messages.error(request, "This account is already rejected.")
+    return redirect("hrm:employeebankaccount_detail", pk=obj.pk)
+
+
+# ---------------------------------------------------------------- Family Members (admin-gated writes)
+@login_required
+def familymember_list(request):
+    qs = _ss_scope(request, FamilyMember.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin, "relationship_choices": FamilyMember.RELATIONSHIP_CHOICES}
+    filters = [("relationship", "relationship", False), ("is_dependent", "is_dependent", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/selfservice/familymember/list.html",
+                     search_fields=("name", "occupation", "employee__party__name"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def familymember_detail(request, pk):
+    return _ss_child_detail(request, FamilyMember, pk,
+                            "hrm/selfservice/familymember/detail.html", select_related=("employee__party",))
+
+
+@tenant_admin_required
+def familymember_create(request):
+    return _ss_child_create(request, FamilyMemberForm,
+                            "hrm/selfservice/familymember/form.html", "hrm:familymember_list")
+
+
+@tenant_admin_required
+def familymember_edit(request, pk):
+    return _ss_child_edit(request, FamilyMember, pk, FamilyMemberForm,
+                          "hrm/selfservice/familymember/form.html", "hrm:familymember_detail")
+
+
+@tenant_admin_required
+@require_POST
+def familymember_delete(request, pk):
+    return _ss_child_delete(request, FamilyMember, pk, "hrm:familymember_list")
+
+
+# ---------------------------------------------------------------- Change Requests (maker-checker)
+_CHANGE_FORMS = {"profile_field": ProfileFieldChangeForm, "bank": BankAccountChangeForm,
+                 "family": FamilyMemberChangeForm}
+_BANK_CR_FIELDS = ["bank_name", "account_holder_name", "account_number", "routing_number",
+                   "account_type", "split_percentage"]
+_FAMILY_CR_FIELDS = ["name", "relationship", "date_of_birth", "gender", "occupation", "phone",
+                     "is_dependent", "is_minor", "guardian_name", "guardian_relationship",
+                     "is_nominee", "nominee_percentage"]
+
+
+def _assemble_change_request(request, employee, req_type, form):
+    """Build (unsaved) an EmployeeInfoChangeRequest from a validated sub-form: resolve
+    content_type/object_id server-side (never trusting the client) and snapshot the old→new
+    field_changes JSON."""
+    cd = form.cleaned_data
+    cr = EmployeeInfoChangeRequest(tenant=request.tenant, employee=employee, request_type=req_type,
+                                   reason=cd.get("reason", ""), requested_by=request.user)
+    if req_type == "profile_field":
+        field = cd["field_name"]
+        old = employee.party.name if field == "legal_name" else getattr(employee, field, None)
+        cr.content_type = ContentType.objects.get_for_model(EmployeeProfile)
+        cr.object_id = employee.pk
+        cr.field_changes = {field: {"old": _json_safe(old), "new": _json_safe(cd["new_value"])}}
+    else:
+        existing = cd.get("existing_account") if req_type == "bank" else cd.get("existing_member")
+        model = EmployeeBankAccount if req_type == "bank" else FamilyMember
+        fields = _BANK_CR_FIELDS if req_type == "bank" else _FAMILY_CR_FIELDS
+        cr.content_type = ContentType.objects.get_for_model(model)
+        cr.object_id = existing.pk if existing else None
+        cr.field_changes = {
+            f: {"old": _json_safe(getattr(existing, f, None)) if existing else None,
+                "new": _json_safe(cd.get(f))}
+            for f in fields
+        }
+    return cr
+
+
+def _resolve_cr_employee(request, is_admin, own):
+    """Resolve the subject employee for a change request: admins may target ?employee/employee_pk,
+    everyone else is forced to themselves."""
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            return EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    return own
+
+
+@login_required
+def changerequest_list(request):
+    qs = _ss_scope(request, EmployeeInfoChangeRequest.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "requested_by", "reviewed_by"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin,
+             "status_choices": EmployeeInfoChangeRequest.STATUS_CHOICES,
+             "request_type_choices": EmployeeInfoChangeRequest.REQUEST_TYPE_CHOICES}
+    filters = [("status", "status", False), ("request_type", "request_type", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/selfservice/changerequest/list.html",
+                     search_fields=("number", "employee__party__name", "reason"),
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def changerequest_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    employee = _resolve_cr_employee(request, is_admin, own)
+    if employee is None:
+        messages.error(request, "No employee record to raise a change request against.")
+        return redirect("hrm:changerequest_list")
+
+    req_type = (request.POST.get("request_type") or request.GET.get("type") or "profile_field").strip()
+    if req_type not in _CHANGE_FORMS:
+        req_type = "profile_field"
+
+    def build(data=None):
+        if req_type == "profile_field":
+            initial = None
+            if data is None:
+                fld = request.GET.get("field", "").strip()
+                if fld in EmployeeInfoChangeRequest.SENSITIVE_PROFILE_FIELDS:
+                    initial = {"field_name": fld}
+            return ProfileFieldChangeForm(data, initial=initial)
+        return _CHANGE_FORMS[req_type](data, employee=employee, tenant=request.tenant)
+
+    if request.method == "POST":
+        form = build(request.POST)
+        if form.is_valid():
+            cr = _assemble_change_request(request, employee, req_type, form)
+            cr.clean()  # anti-tamper safety net (own-record only); number is set in save()
+            cr.save()
+            write_audit_log(request.user, cr, "create")
+            messages.success(request, f"Change request {cr.number} submitted for review.")
+            return redirect("hrm:changerequest_detail", pk=cr.pk)
+    else:
+        form = build()
+    return render(request, "hrm/selfservice/changerequest/form.html", {
+        "form": form, "is_edit": False, "request_type": req_type, "employee": employee,
+        "is_admin": is_admin,
+        "request_type_choices": EmployeeInfoChangeRequest.REQUEST_TYPE_CHOICES,
+        "employees": _ss_employees(request) if is_admin else None,
+    })
+
+
+@login_required
+def changerequest_detail(request, pk):
+    obj = get_object_or_404(
+        EmployeeInfoChangeRequest.objects.select_related(
+            "employee__party", "requested_by", "reviewed_by", "content_type"),
+        pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This change request belongs to another employee.")
+    diffs = [{"field": k.replace("_", " ").title(),
+              "old": (v or {}).get("old"), "new": (v or {}).get("new")}
+             for k, v in (obj.field_changes or {}).items()]
+    return render(request, "hrm/selfservice/changerequest/detail.html", {
+        "obj": obj, "diffs": diffs, "is_admin": _is_admin(request.user),
+        "can_manage": _can_manage_own_child(request, obj),
+    })
+
+
+@login_required
+def changerequest_edit(request, pk):
+    obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only edit your own requests.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending change request can be edited.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    req_type, employee = obj.request_type, obj.employee
+
+    # Pre-fill the sub-form from the stored proposal (the "new" values).
+    if req_type == "profile_field":
+        (fname, change), = (obj.field_changes or {"": {}}).items()
+        initial = {"field_name": fname, "new_value": (change or {}).get("new"), "reason": obj.reason}
+    else:
+        initial = {k: (v or {}).get("new") for k, v in (obj.field_changes or {}).items()}
+        initial["reason"] = obj.reason
+        if obj.object_id:
+            initial["existing_account" if req_type == "bank" else "existing_member"] = obj.object_id
+
+    def build(data=None):
+        if req_type == "profile_field":
+            return ProfileFieldChangeForm(data, initial=None if data else initial)
+        return _CHANGE_FORMS[req_type](data, initial=None if data else initial,
+                                       employee=employee, tenant=request.tenant)
+
+    if request.method == "POST":
+        form = build(request.POST)
+        if form.is_valid():
+            rebuilt = _assemble_change_request(request, employee, req_type, form)
+            rebuilt.clean()
+            obj.field_changes = rebuilt.field_changes
+            obj.content_type = rebuilt.content_type
+            obj.object_id = rebuilt.object_id
+            obj.reason = rebuilt.reason
+            obj.save(update_fields=["field_changes", "content_type", "object_id", "reason", "updated_at"])
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Change request updated.")
+            return redirect("hrm:changerequest_detail", pk=obj.pk)
+    else:
+        form = build()
+    return render(request, "hrm/selfservice/changerequest/form.html", {
+        "form": form, "is_edit": True, "obj": obj, "request_type": req_type, "employee": employee,
+        "is_admin": _is_admin(request.user),
+        "request_type_choices": EmployeeInfoChangeRequest.REQUEST_TYPE_CHOICES, "employees": None,
+    })
+
+
+@login_required
+@require_POST
+def changerequest_delete(request, pk):
+    obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only delete your own requests.")
+        return redirect("hrm:changerequest_list")
+    if obj.status != "pending":
+        messages.error(request, "Only a pending change request can be deleted.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Change request deleted.")
+    return redirect("hrm:changerequest_list")
+
+
+@login_required
+@require_POST
+def changerequest_cancel(request, pk):
+    obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only cancel your own requests.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending change request can be cancelled.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    obj.status = "cancelled"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "cancel"})
+    messages.success(request, "Change request cancelled.")
+    return redirect("hrm:changerequest_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def changerequest_approve(request, pk):
+    obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending change request can be approved.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    try:
+        obj.apply(request.user)
+    except ValidationError as exc:
+        messages.error(request, f"Could not apply this change: {'; '.join(exc.messages)}")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "update", {"action": "approve"})
+    messages.success(request, f"Change request {obj.number} approved and applied.")
+    return redirect("hrm:changerequest_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def changerequest_reject(request, pk):
+    obj = get_object_or_404(EmployeeInfoChangeRequest, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending change request can be rejected.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    note = (request.POST.get("decision_note") or "").strip()
+    if not note:
+        messages.error(request, "A reason is required to reject a change request.")
+        return redirect("hrm:changerequest_detail", pk=obj.pk)
+    obj.status = "rejected"
+    obj.decision_note = note
+    obj.reviewed_by = request.user
+    obj.reviewed_at = timezone.now()
+    obj.save(update_fields=["status", "decision_note", "reviewed_by", "reviewed_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reject"})
+    messages.success(request, f"Change request {obj.number} rejected.")
+    return redirect("hrm:changerequest_detail", pk=obj.pk)
