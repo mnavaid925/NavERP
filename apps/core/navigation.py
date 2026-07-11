@@ -524,6 +524,19 @@ LIVE_LINKS = {
         "Family Details": "hrm:familymember_list",                  # bullet (FamilyMember CRUD, admin-gated writes)
         "Change Requests": "hrm:changerequest_list",                # extra (EmployeeInfoChangeRequest maker-checker queue)
     },
+    # 3.26 Request Management (Self-Service) — the employee request portal. Leave Requests /
+    # Attendance Regularization reuse the existing 3.10/3.9 models verbatim (NO new model — this is
+    # the second place their list URLs surface, alongside 3.9/3.10). Document Requests / ID Card
+    # Request / Asset Requests are the three new request models (CRUD + submit/approve/reject +
+    # fulfil/issue). My Requests is the unified ESS hub over all five request types.
+    "3.26": {
+        "Leave Requests": "hrm:leaverequest_list",                          # bullet (reuse 3.10 LeaveRequest, no new model)
+        "Attendance Regularization": "hrm:attendanceregularization_list",   # bullet (reuse 3.9 AttendanceRegularization, no new model)
+        "Document Requests": "hrm:documentrequest_list",                    # bullet (new DocumentRequest CRUD + workflow)
+        "ID Card Request": "hrm:idcardrequest_list",                        # bullet (new IdCardRequest CRUD + workflow)
+        "Asset Requests": "hrm:assetrequest_list",                          # bullet (new AssetRequest CRUD + workflow)
+        "My Requests": "hrm:my_requests",                                   # extra (unified ESS hub over all five types)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
