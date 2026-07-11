@@ -70,11 +70,7 @@
                   <a href="{% url 'hrm:changerequest_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% if obj.status == 'pending' %}
                     <a href="{% url 'hrm:changerequest_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                    {% if is_admin %}
-                      <form method="post" action="{% url 'hrm:changerequest_approve' obj.pk %}" style="display:inline;" onsubmit="return confirm('Approve and apply this change?');">
-                        {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check"></i></button>
-                      </form>
-                    {% endif %}
+                    {# Approve/Reject live on the detail page, where the admin reviews the diff first. #}
                     <form method="post" action="{% url 'hrm:changerequest_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this request?');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
