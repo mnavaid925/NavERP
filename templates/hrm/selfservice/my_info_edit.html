@@ -10,6 +10,12 @@
 
   <div class="card"><div class="card-body">
     <p class="text-muted" style="margin-bottom:.6rem;"><i data-lucide="info"></i> You can update these directly. Sensitive fields (legal name, date of birth, national ID, passport, bank details) change only through an HR-approved <a href="{% url 'hrm:changerequest_create' %}">change request</a>.</p>
+    {% if profile.photo %}
+      <div style="margin-bottom:.6rem;">
+        <div class="form-label">Current photo</div>
+        <img src="{{ profile.photo.url }}" alt="Current profile photo" style="max-width:120px; border-radius:var(--radius-sm);">
+      </div>
+    {% endif %}
     <form method="post" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
