@@ -10516,7 +10516,13 @@ def _ss_child_detail(request, model, pk, template, select_related=()):
     obj = get_object_or_404(qs, pk=pk)
     if not _can_manage_own_child(request, obj):
         raise PermissionDenied("This record belongs to another employee.")
-    return render(request, template, {"obj": obj, "is_admin": _is_admin(request.user)})
+    # `is_own` lets a detail template hide review actions on the viewer's OWN row (e.g. the 3.26
+    # self-approval guard: an admin can't approve/reject their own request). Harmless extra context
+    # for the 3.25 child templates, which don't reference it.
+    profile = _current_employee_profile(request)
+    is_own = profile is not None and obj.employee_id == profile.pk
+    return render(request, template,
+                  {"obj": obj, "is_admin": _is_admin(request.user), "is_own": is_own})
 
 
 def _ss_child_delete(request, model, pk, list_url):
