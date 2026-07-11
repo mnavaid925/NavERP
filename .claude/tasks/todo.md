@@ -3000,3 +3000,348 @@ idempotent (2nd run no-op), `manage.py check` clean, a throwaway smoke sweep (al
 **Deferred** (carried from research/todo): per-tenant configurable field-permission matrix, effective-dated/temporal
 history, per-scheme statutory nomination (EPF/EPS/ESI/Gratuity), live bank verification (Plaid), split-deposit payroll
 wiring, notification delivery, preferred-name column. Next unbuilt HRM sub-module: **3.26 Request Management (Self-Service)**.
+
+---
+# Module 3 — HRM — Sub-module 3.26 Request Management (Self-Service) (hrm) — plan from research-hrm-3.26.md, authoritative design C:\Users\user\.claude\plans\snug-knitting-rose.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.25) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Covers the 5 NavERP.md 3.26 bullets (Leave Requests /
+Attendance Regularization / Document Requests / ID Card Request / Asset Requests) by **REUSING**
+`LeaveRequest` (3.10, `LR-`) and `AttendanceRegularization` (3.9, `REG-`) verbatim — link from the hub,
+no new fields/views for either — and adding **3 new models** (`DocumentRequest`, `IdCardRequest`,
+`AssetRequest`) + a view-only **My Requests** ESS hub (no new table). All 3 new models subclass
+`TenantNumbered` and follow the `draft → pending → approved/rejected/cancelled` (+ one fulfillment tail
+state) lifecycle mirroring `LeaveRequest`/`AttendanceRegularization`, with a **3.25-style self-approval
+guard** on approve/reject (an admin who is also the requesting employee cannot approve/reject their own
+row) and a **stricter-than-`LeaveRequest`** ownership gate on submit/cancel (see Views below).
+
+Reuses (never duplicates): `hrm.EmployeeProfile` (the `employee` FK on all 3 new models — never a new
+employee table); the existing ESS helpers verbatim from `apps/hrm/views.py`: `_current_employee_profile`
+(7429), `_is_admin` (7754), `_require_own_profile` (10366), `_can_manage_own_child` (10377), `_ss_scope`
+(10386), `_ss_employees` (10397), and — critically — the **shared self-service child-CRUD helpers**
+`_ss_child_create` (10457), `_ss_child_edit` (10491), `_ss_child_detail` (10512), `_ss_child_delete`
+(10522) already built generically enough (any model with `tenant`+`employee` FKs) to reuse **verbatim**
+for all 3 new models' create/detail/edit/delete — no per-model employee-resolution logic to reimplement.
+`_ss_child_delete`'s `EmployeeInfoChangeRequest` GFK auto-cancel check is a safe no-op here (none of these
+3 models are ever an ICR target). `hrm.AssetAllocation` (`AST-`) is reused as the fulfillment ledger for
+`AssetRequest` only (`allocation` FK, created+linked on fulfill) — **not** for `IdCardRequest` (card
+issuance is tracked with plain `card_number`/`issued_at` fields on the request itself this pass; linking
+ID-card issuance into `AssetAllocation` too is a documented deferral, see below). No new core-spine
+entity; nothing posts to the GL.
+
+## Models (from research + the approved design)
+
+- [ ] **`DocumentRequest`** [`DOCREQ-`, `TenantNumbered`] — official-letter requests (Document Requests
+  bullet: experience letter, salary certificate).
+  - `employee` = FK `hrm.EmployeeProfile` (`on_delete=CASCADE`, `related_name="document_requests"`)
+  - `document_type` — CharField(max_length=30), choices `experience_letter` / `salary_certificate` /
+    `address_proof` / `employment_verification` / `noc` / `relieving_letter_copy` / `other`, default
+    `"experience_letter"` (driver: NavERP.md 3.26 + Darwinbox/Freshservice letter catalogs)
+  - `purpose` — TextField, required (driver: "why the document is needed" — visa/bank loan/education)
+  - `addressed_to` — CharField(max_length=255, blank=True) (driver: "To Whom It May Concern" / named
+    recipient convention)
+  - `copies` — PositiveSmallIntegerField, default `1`, `validators=[MinValueValidator(1)]`
+  - `delivery_method` — CharField(max_length=15), choices `soft_copy` / `hard_copy` / `both`, default
+    `"soft_copy"`
+  - `needed_by` — DateField, null/blank (SLA target date)
+  - `status` — CharField(max_length=20), choices `draft` / `pending` / `approved` / `rejected` /
+    `cancelled` / `fulfilled`, default `"draft"`; `OPEN_STATUSES = ("draft", "pending")`
+  - `approver` — FK `settings.AUTH_USER_MODEL` (`on_delete=SET_NULL`, null/blank,
+    `related_name="hrm_documentrequest_approvals"`) — **workflow-owned**
+  - `approved_at` — DateTimeField, null/blank — **workflow-owned**
+  - `decision_note` — TextField, blank — **workflow-owned** (also used for cancel notes — no separate
+    `cancelled_reason` field, unlike `LeaveRequest`)
+  - `fulfilled_at` — DateTimeField, null/blank, `editable=False` — **workflow-owned**
+  - `output_file` — FileField(`upload_to="hrm/requests/documents/%Y/%m/"`, blank=True) — the HR-uploaded
+    signed letter, set only by `document_fulfill` (never a create/edit form field) — **workflow-owned**
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+    `(tenant, employee)` → `hrm_docreq_tenant_emp_idx`, `(tenant, status)` → `hrm_docreq_tenant_status_idx`
+  - `__str__`: `f"{self.number} · {self.employee} · {self.get_document_type_display()}"`
+  - **Excluded from `DocumentRequestForm`:** `tenant`, `number`, `status`, `approver`, `approved_at`,
+    `decision_note`, `fulfilled_at`, `output_file`, `employee` (resolved server-side by `_ss_child_create`)
+
+- [ ] **`IdCardRequest`** [`IDREQ-`, `TenantNumbered`] — new/replacement/correction ID cards (ID Card
+  Request bullet).
+  - `employee` = FK `hrm.EmployeeProfile` (`on_delete=CASCADE`, `related_name="idcard_requests"`)
+  - `request_type` — CharField(max_length=15), choices `new` / `replacement` / `correction` /
+    `renewal`, default `"new"`
+  - `reason_type` — CharField(max_length=20), choices `lost` / `damaged` / `stolen` / `expired` /
+    `name_change` / `designation_change` / `first_issue` / `other`, default `"first_issue"` (driver:
+    greytHR's reason taxonomy)
+  - `reason` — TextField, required
+  - `delivery_location` — CharField(max_length=255, blank=True)
+  - `status` — CharField(max_length=20), choices `draft` / `pending` / `approved` / `rejected` /
+    `cancelled` / `issued`, default `"draft"`; `OPEN_STATUSES = ("draft", "pending")`
+  - `approver` — FK `settings.AUTH_USER_MODEL` (`on_delete=SET_NULL`, null/blank,
+    `related_name="hrm_idcardrequest_approvals"`) — **workflow-owned**
+  - `approved_at` — DateTimeField, null/blank — **workflow-owned**
+  - `decision_note` — TextField, blank — **workflow-owned**
+  - `card_number` — CharField(max_length=100, blank=True) — set only by `idcardrequest_issue` —
+    **workflow-owned**
+  - `issued_at` — DateTimeField, null/blank, `editable=False` — **workflow-owned**
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+    `(tenant, employee)` → `hrm_idreq_tenant_emp_idx`, `(tenant, status)` → `hrm_idreq_tenant_status_idx`
+  - `__str__`: `f"{self.number} · {self.employee} · {self.get_request_type_display()}"`
+  - **Excluded from `IdCardRequestForm`:** `tenant`, `number`, `status`, `approver`, `approved_at`,
+    `decision_note`, `card_number`, `issued_at`, `employee`
+
+- [ ] **`AssetRequest`** [`ASSETREQ-`, `TenantNumbered`] — equipment requests (Asset Requests bullet:
+  laptop, equipment).
+  - `employee` = FK `hrm.EmployeeProfile` (`on_delete=CASCADE`, `related_name="asset_requests"`)
+  - `asset_category` — CharField(max_length=30), choices = **reuse
+    `AssetAllocation.ASSET_CATEGORY_CHOICES`** as-is (laptop/desktop/phone/id_card/access_card/uniform/
+    vehicle/sim/other — same taxonomy as what fulfillment creates), default `"other"`
+  - `asset_name` — CharField(max_length=255), required
+  - `justification` — TextField, required (business reason)
+  - `priority` — CharField(max_length=10), choices `low` / `normal` / `high` / `urgent`, default
+    `"normal"`
+  - `needed_by` — DateField, null/blank
+  - `status` — CharField(max_length=20), choices `draft` / `pending` / `approved` / `rejected` /
+    `cancelled` / `fulfilled`, default `"draft"`; `OPEN_STATUSES = ("draft", "pending")`
+  - `approver` — FK `settings.AUTH_USER_MODEL` (`on_delete=SET_NULL`, null/blank,
+    `related_name="hrm_assetrequest_approvals"`) — **workflow-owned**
+  - `approved_at` — DateTimeField, null/blank — **workflow-owned**
+  - `decision_note` — TextField, blank — **workflow-owned**
+  - `allocation` — FK `hrm.AssetAllocation` (`on_delete=SET_NULL`, null/blank, `editable=False`,
+    `related_name="fulfilled_requests"`) — created + linked by `assetrequest_fulfill` inside
+    `transaction.atomic()` — **workflow-owned**
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+    `(tenant, employee)` → `hrm_astreq_tenant_emp_idx`, `(tenant, status)` → `hrm_astreq_tenant_status_idx`
+  - `__str__`: `f"{self.number} · {self.employee} · {self.asset_name}"`
+  - **Excluded from `AssetRequestForm`:** `tenant`, `number`, `status`, `approver`, `approved_at`,
+    `decision_note`, `allocation`, `employee`
+
+All 3 FK `hrm.EmployeeProfile` by string (never a new employee table); no independent confidentiality
+gate needed (ordinary self-service visibility via `_ss_scope`, same openness level as `EmergencyContact`/
+`EmployeeBankAccount`, not the 3.18–3.21 subject/manager-only tier). Add after the existing
+`EmployeeInfoChangeRequest` class (current end of `models.py`) with a `# --- 3.26 Request Management
+(Self-Service) ---` section-header comment block stating what's reused (`LeaveRequest`/
+`AttendanceRegularization` verbatim, `EmployeeProfile`, `AssetAllocation` for `AssetRequest` only) and
+that Leave/Attendance get **no** new model.
+
+## Backend (apps/hrm/)
+
+- [ ] **models.py** — add `DocumentRequest`, `IdCardRequest`, `AssetRequest` per the field lists above.
+- [ ] **migrations** — `python manage.py makemigrations hrm` (expect `0043_documentrequest_idcardrequest_assetrequest...`, incrementing from `0042`).
+- [ ] **forms.py** — `DocumentRequestForm(TenantModelForm)` (fields: `document_type`, `purpose`,
+  `addressed_to`, `copies`, `delivery_method`, `needed_by`), `IdCardRequestForm(TenantModelForm)`
+  (fields: `request_type`, `reason_type`, `reason`, `delivery_location`), `AssetRequestForm
+  (TenantModelForm)` (fields: `asset_category`, `asset_name`, `justification`, `priority`,
+  `needed_by`) — all exclude `tenant`/`number`/`status`/`employee`/reviewer+fulfillment fields per the
+  per-model "Excluded" notes above. Plus **`DocumentFulfillForm(forms.Form)`** — a single optional
+  `output_file = forms.FileField(required=False, ...)`; `clean_output_file` calls the shared
+  `_validate_upload(f, allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS, max_bytes=MAX_ONBOARDING_DOC_BYTES,
+  label="Letter")` — **reuse the existing constants, no new `ALLOWED_*`/`MAX_*` pair** (PDF/DOC/DOCX/JPG/
+  PNG already covers a signed letter scan). Mirrors 3.21's `WarningAcknowledgeForm`/`PIPCloseForm`
+  small-action-form pattern. New `# --- 3.26 Request Management (Self-Service) ---` section banner.
+- [ ] **views.py** — new `_is_own_hr_request(request, obj)` helper (near `_is_own_change_request`):
+  `profile = _current_employee_profile(request); return profile is not None and obj.employee_id ==
+  profile.pk` — the 3.26 self-approval guard (no separate `requested_by` leg needed — `employee` IS the
+  submitter on these 3 models). Then per model (`documentrequest_*` / `idcardrequest_*` /
+  `assetrequest_*`):
+  - `_list` (`@login_required`): `_ss_scope`-filtered qs (`select_related("employee__party",
+    "approver")`), `crud_list` with search fields (`number`, `employee__party__name`, +
+    `purpose`/`reason`/`justification`), filters `status` + the model's type field(s) (`document_type`;
+    `request_type`+`reason_type`; `asset_category`+`priority`), `extra_context` = `status_choices` +
+    type-choice constants + (`employees`: `_ss_employees(request)` when admin, mirrors
+    `emergencycontact_list`).
+  - `_create` (`@login_required`): `_ss_child_create(request, <Form>, "<template>",
+    "hrm:<model>_list")` verbatim.
+  - `_detail` (`@login_required`): `_ss_child_detail(request, <Model>, pk, "<template>",
+    select_related=("employee__party", "approver"))` verbatim (raises `PermissionDenied` via
+    `_can_manage_own_child`).
+  - `_edit` (`@login_required`): fetch the obj, **status-gate** (`if obj.status not in
+    <Model>.OPEN_STATUSES: messages.error(...); return redirect("hrm:<model>_detail", pk=obj.pk)` —
+    mirrors `leaverequest_edit`), then delegate to `_ss_child_edit(...)` verbatim.
+  - `_delete` (`@login_required @require_POST`): status-gate (only `draft`/`pending`/`approved`
+    deletable — a `rejected`/`cancelled`/fulfilled-tail row is a closed record, mirrors
+    `leaverequest_delete`'s "decided request cannot be deleted" guard), then delegate to
+    `_ss_child_delete(request, <Model>, pk, "hrm:<model>_list")` verbatim.
+  - `_submit` (`@login_required @require_POST`): fetch obj, **gate with `_can_manage_own_child(request,
+    obj)`** (own employee or admin — 403/redirect otherwise) — **NOTE: stricter than the older
+    `leaverequest_submit`/`attendanceregularization`-precedent, which has no ownership gate; 3.26
+    intentionally follows the more correct 3.25 `_can_manage_own_child` pattern**; `draft → pending`.
+  - `_cancel` (`@login_required @require_POST`): same `_can_manage_own_child` gate; `draft`/`pending` →
+    `cancelled`, optional note captured into `decision_note` (`request.POST.get("decision_note",
+    "").strip()[:2000]`).
+  - `_approve` (`@tenant_admin_required @require_POST`): `_is_own_hr_request` **self-approval block**
+    first (error + redirect if true); from `pending` → `approved`, stamp `approver`/`approved_at`;
+    `write_audit_log(..., {"action": "approve"})`.
+  - `_reject` (`@tenant_admin_required @require_POST`): `_is_own_hr_request` block first; **requires
+    non-blank `decision_note`** (error + redirect if blank — stricter than the existing
+    `attendanceregularization_reject`, which allows a blank note); from `pending` → `rejected`, stamp
+    `approver`/`approved_at`/`decision_note`.
+  - Fulfillment action per model:
+    - `document_fulfill` (`@tenant_admin_required @require_POST`): from `approved` → `fulfilled`, stamp
+      `fulfilled_at`; validate+attach an optional `output_file` via `DocumentFulfillForm`.
+    - `idcardrequest_issue` (`@tenant_admin_required @require_POST`): from `approved` → `issued`;
+      requires non-blank POST `card_number` (error + redirect if blank); stamps `card_number`/`issued_at`.
+    - `assetrequest_fulfill` (`@tenant_admin_required @require_POST`): from `approved` → `fulfilled`;
+      inside `transaction.atomic()` creates `AssetAllocation(tenant=request.tenant, program=None,
+      employee=obj.employee, asset_name=obj.asset_name, asset_category=obj.asset_category,
+      status="issued", issued_at=timezone.now(), issued_by=request.user,
+      serial_number=request.POST.get("serial_number", "").strip(),
+      asset_tag=request.POST.get("asset_tag", "").strip())`, links `obj.allocation`, sets
+      `obj.status = "fulfilled"`.
+  - `my_requests` (`@login_required`): `profile, redirect_resp = _require_own_profile(request)` (redirect
+    if none); for each of the 5 request types build `_ss_scope(request, <Model>.objects.filter(
+    tenant=request.tenant))` and compute an open-count + total-count + the 5 most recent rows;
+    `extra_context`: `is_admin`, deep links to each type's list/create + `hrm:leaverequest_list` /
+    `hrm:leaverequest_create` / `hrm:attendanceregularization_list` /
+    `hrm:attendanceregularization_create`.
+  - All list views follow the Filter Implementation Rules (CLAUDE.md): every `*_choices`/queryset the
+    template needs is passed explicitly; string-field comparisons use `request.GET.status == value`;
+    FK/pk comparisons use `|stringformat:"d"`.
+- [ ] **urls.py** — append a `# 3.26 Request Management (Self-Service)` block under the existing 3.25
+  block: `my-requests/` (`my_requests`), then for each of `document-requests/`, `id-card-requests/`,
+  `asset-requests/`: the 5 CRUD paths + `submit/` + `cancel/` + `approve/` + `reject/` + the
+  fulfill/issue path (`fulfill/` for document/asset, `issue/` for id-card), all names `<model>_<action>`
+  (mirrors the `leave-requests/`/`regularizations/` block shape exactly).
+- [ ] **admin.py** — register `DocumentRequestAdmin`, `IdCardRequestAdmin`, `AssetRequestAdmin`
+  (`list_display`/`list_filter`/`search_fields` mirroring the existing `LeaveRequestAdmin`/
+  `AttendanceRegularizationAdmin` registrations — tenant, number, employee, status, type field).
+- [ ] **seed_hrm.py** — new `_seed_requests(self, tenant, *, flush)` method:
+  - Called from `handle()` immediately after `self._seed_selfservice(tenant, flush=options["flush"])`
+    (the new last call in the per-tenant loop).
+  - `if flush:` delete `AssetRequest`, `IdCardRequest`, `DocumentRequest` — filtered by `tenant` (all
+    `employee` CASCADE, order-agnostic vs `EmployeeProfile`; `AssetRequest.allocation` is `SET_NULL`
+    so no ordering hazard vs `AssetAllocation` either, but wipe requests before allocations for a tidy
+    teardown).
+  - Idempotency guard: `if DocumentRequest.objects.filter(tenant=tenant).exists():` → NOTICE + return.
+  - Reuse existing `EmployeeProfile` rows (same `select_related("party").order_by("party__name")` +
+    `len(emps) < 2` guard style as `_seed_selfservice`).
+  - Demo data: 2–3 `DocumentRequest` rows spanning `pending`/`approved`/`fulfilled` (the fulfilled one
+    stamped with `fulfilled_at`, no real `output_file` upload needed); 2 `IdCardRequest` rows spanning
+    `pending`/`issued` (the issued one stamped with `card_number`/`issued_at`); 2 `AssetRequest` rows
+    spanning `pending`/`fulfilled` — **seed the fulfilled row's `AssetAllocation` directly** (create +
+    link `allocation=`, `status="fulfilled"`) rather than replaying the view action, matching
+    `_seed_selfservice`'s "seed end-states directly" convention.
+  - Insert `AssetRequest, IdCardRequest, DocumentRequest,` into the `_seed_tenant` flush teardown tuple
+    immediately before the existing 3.25 block (`EmployeeInfoChangeRequest, FamilyMember,
+    EmployeeBankAccount, EmergencyContact,`), with a one-line comment explaining the (non-blocking,
+    tidy-teardown-only) ordering.
+  - ASCII-only `self.stdout.write(...)` (no `→`/em-dash arrows — repeat of the 3.20/3.21 cp1252 bug).
+  - Both `management/__init__.py` and `management/commands/__init__.py` already exist — no new dirs.
+
+## Wire-up
+
+- [ ] `config/settings.py` / `config/urls.py` — already wired for `apps.hrm`; no change needed.
+- [ ] `apps/core/navigation.py` — new `LIVE_LINKS["3.26"]` block placed immediately after the existing
+  `"3.25"` block, with a preamble comment noting Leave/Attendance are reused verbatim (no new model) and
+  this is the only place their bullets get a Live entry alongside 3.9/3.10 (mirrors the existing
+  `hrm:leaverequest_list` reuse under both "Leave Application" and "Leave Calendar"):
+  ```python
+  "3.26": {
+      "Leave Requests": "hrm:leaverequest_list",                          # bullet (reuse 3.10 LeaveRequest, no new model)
+      "Attendance Regularization": "hrm:attendanceregularization_list",   # bullet (reuse 3.9 AttendanceRegularization, no new model)
+      "Document Requests": "hrm:documentrequest_list",                    # bullet (new DocumentRequest CRUD + workflow)
+      "ID Card Request": "hrm:idcardrequest_list",                        # bullet (new IdCardRequest CRUD + workflow)
+      "Asset Requests": "hrm:assetrequest_list",                          # bullet (new AssetRequest CRUD + workflow)
+      "My Requests": "hrm:my_requests",                                   # extra (unified ESS hub over all 5 types)
+  },
+  ```
+
+## Templates (templates/hrm/requests/)
+
+- [ ] `templates/hrm/requests/my_requests.html` — standalone sub-module-root page (ESS hub): 5 tiles
+  (Leave / Attendance Regularization / Document / ID Card / Asset) each with an open-count badge, a
+  "View All" link to that type's list, and a "Raise New Request" launcher into its create form; recent-5
+  mini-list per type.
+- [ ] `templates/hrm/requests/documentrequest/{list,detail,form}.html` — list: filter bar (`status`,
+  `document_type`, admin-only `employee`) reflecting `request.GET`, Actions column (view/edit-if-open/
+  submit/cancel/delete-POST+confirm+csrf), pagination, empty-state. detail: purpose/addressed-to/
+  copies/delivery fields, workflow buttons (Submit/Cancel/Approve/Reject/Fulfill) gated by `status` +
+  `is_admin`/ownership, `output_file` download link once fulfilled, Actions sidebar. form: create/edit
+  shared template (`is_edit` flag).
+- [ ] `templates/hrm/requests/idcardrequest/{list,detail,form}.html` — same shape; detail shows
+  `card_number`/`issued_at` once issued, an Issue action form (admin-only, `card_number` text input).
+- [ ] `templates/hrm/requests/assetrequest/{list,detail,form}.html` — same shape; detail shows the linked
+  `allocation` (serial number/asset tag) once fulfilled, a Fulfill action form (admin-only, optional
+  `serial_number`/`asset_tag` inputs).
+- [ ] All list/detail templates use exact model-choice values for badges with `{{ obj.get_<field>_display
+  }}` fallback (CLAUDE.md Badge rule); reject/cancel action forms include the note/reason textarea +
+  `{% csrf_token %}`.
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` — review the generated file name/number before applying
+  (expect `0043_...`).
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` — run **twice**; second run must be a no-op (NOTICE, zero new rows).
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep: every new `hrm:documentrequest_*`, `hrm:idcardrequest_*`, `hrm:assetrequest_*`,
+  `hrm:my_requests` URL returns 200/302 (never 500); no `{#`/`{% comment` leak markers in rendered output.
+- [ ] **Cross-tenant IDOR**: `admin_acme` hitting an `admin_globex` document/ID-card/asset-request pk (any
+  action route: detail/edit/submit/cancel/approve/reject/fulfill) → 404.
+- [ ] **ESS scoping**: a plain (non-admin) employee's `_list` shows only their own rows across all 3 new
+  models; another employee's `_detail`/`_edit`/`_submit`/`_cancel` on a pk that isn't theirs →
+  403/`PermissionDenied` or blocked redirect (not the object).
+- [ ] **Self-approval**: an admin who is the requesting employee is blocked from approving/rejecting their
+  own row (`_is_own_hr_request`), on all 3 models.
+- [ ] **Reject requires `decision_note`**: a blank-note reject POST is rejected with an error message, on
+  all 3 models.
+- [ ] **AssetRequest fulfill** creates + links an `AssetAllocation` (`program=None`) atomically; confirm a
+  second fulfill attempt on an already-`fulfilled` row is a no-op (status guard).
+- [ ] **Document fulfill** upload passes through `_validate_upload` (reject a `.exe`/oversized file with a
+  friendly error, not a 500).
+- [ ] Sidebar shows all 6 3.26 entries as **Live** (5 bullets + My Requests) — confirm via the rendered
+  sidebar, not just the `LIVE_LINKS` dict.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit,
+  no `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `security-reviewer` to specifically probe the new `_can_manage_own_child`-gated
+    submit/cancel (confirm it's actually wired, not just planned) and the `_is_own_hr_request`
+    self-approval block on all 3 models — mirrors how the 3.25 pass's security review focused on the
+    maker-checker anti-tamper design.
+  - Expect `performance-reviewer` to check `_list`/`my_requests` use `select_related("employee__party",
+    "approver")` (no N+1 across 3 new list pages + the 5-type hub).
+  - Expect `test-writer` to cover: full CRUD × 3 models; the workflow chain (draft → pending →
+    approved/rejected/cancelled + the fulfillment tail) × 3 models; self-approval block + reject-note
+    requirement as their own dedicated security-test block (mirrors 3.21/3.25's weighting); the
+    `AssetRequest` fulfill → `AssetAllocation` linkage; cross-tenant + cross-employee IDOR matrix on
+    every action route.
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.26 Request Management (Self-Service) (3 tables)`
+  section (model table + reuse notes), bump the frontmatter/overview built-list + model count, add a
+  "Request Management (3.26)" routes-list section, document `_seed_requests(tenant)` in the seeder
+  section, update the `LIVE_LINKS` section for `"3.26"`, update the Deferred section with this pass's
+  carried-forward deferrals. Commit as its own file.
+- [ ] README.md — add `/3.26` to the Module 3 header line (line ~265) + a new bullet describing the hub +
+  3 new models + the maker-checker-adjacent approve/reject/fulfill workflow; refresh HRM test counts
+  after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.26.md)
+
+- **Multi-level configurable approval chains (1–5 stages), auto-forward-on-inactivity, reopen,
+  auto-close** — greytHR Request Hub's differentiator; a cross-cutting workflow-engine feature better
+  solved once, module-wide, not per sub-module.
+- **SLA breach auto-escalation** — `needed_by` is captured now; the scheduled-job escalation/alerting
+  engine is integration/later.
+- **Auto-merge document generation from a template engine** (pull name/designation/DOJ/salary into a
+  letter body) — v1 ships request → approve → HR-uploads-the-signed-file; template rendering is a
+  follow-up pass.
+- **Digital / e-signature on generated letters** — needs an e-sign provider integration, out of scope.
+- **Email/courier dispatch automation for `delivery_method`** — the field is captured now; actual
+  dispatch integration is later.
+- **Linking `IdCardRequest` issuance into `hrm.AssetAllocation`** (the research's recommended
+  `fulfilled_asset` FK) — the approved design simplified this to plain `card_number`/`issued_at` fields
+  on the request itself; adding the `AssetAllocation` link later is additive, not a breaking change.
+- **FAQ / knowledge-base article linkage per request type** — belongs with 3.27 Communication Hub / Help
+  Desk, not 3.26.
+- **CC/watcher notifications, push/email alerts on status change** — needs notification infrastructure
+  common to many modules; not built per sub-module.
+- **App/software/license access requests (SaaS, VPN, system access)** — needs a software/license
+  inventory entity NavERP doesn't have yet; candidate for a future IT/Assets module (Module 11) pass.
+- **Automatic asset-retrieval prompts on offboarding** — already indirectly covered by 3.4
+  `SeparationCase` → `ClearanceItem` reusing `AssetAllocation`; no new 3.26 work needed.
+- **Bulk document generation/download, catalog/SKU-level asset picker with pricing** — nice-to-have
+  breadth features, not required for a first tenant-scoped CRUD pass.
+- **Estimated cost / budget check before approval** on `AssetRequest` — not in the approved model's
+  field list this pass (dropped from the research sketch); add `estimated_cost` in a later pass if
+  procurement budget-checking becomes a requirement.
+
+## Review notes
+
+(filled in after the build)
