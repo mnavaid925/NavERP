@@ -7031,7 +7031,7 @@ class DocumentRequest(TenantNumbered):
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
         indexes = [
-            models.Index(fields=["tenant", "employee"], name="hrm_docreq_tenant_emp_idx"),
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_docreq_emp_status_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_docreq_tenant_status_idx"),
         ]
 
@@ -7090,7 +7090,7 @@ class IdCardRequest(TenantNumbered):
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
         indexes = [
-            models.Index(fields=["tenant", "employee"], name="hrm_idreq_tenant_emp_idx"),
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_idreq_emp_status_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_idreq_tenant_status_idx"),
         ]
 
@@ -7142,7 +7142,7 @@ class AssetRequest(TenantNumbered):
         ordering = ["-created_at"]
         unique_together = ("tenant", "number")
         indexes = [
-            models.Index(fields=["tenant", "employee"], name="hrm_astreq_tenant_emp_idx"),
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_astreq_emp_status_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_astreq_tenant_status_idx"),
         ]
 
