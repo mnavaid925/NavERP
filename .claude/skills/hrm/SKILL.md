@@ -13,7 +13,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.15 Statutory Compliance, 3.16 Tax & Investment, 3.17 Payout & Reports, 3.18 Goal Setting,
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
-3.26 Request Management (Self-Service).** Reuses the
+3.26 Request Management (Self-Service), 3.27 Communication Hub.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -316,6 +316,17 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
 
 **Request flow:** an employee opens **`my_requests`** (the hub, scoped to their OWN rows via `_require_own_profile` + `employee=profile`; redirects to `hrm_overview` for a user with no profile) showing open/total counts + 5 recent rows across all five request types → creates a request (`<model>_create`, defaults `status="draft"`, employee set server-side by `_ss_child_create`) → **`_submit`** (draft→pending) → a tenant admin **approves**/**rejects** (`@tenant_admin_required @require_POST`; reject requires `decision_note`) → the admin **fulfils/issues** the terminal action. **Self-approval guard:** `_is_own_hr_request` blocks an admin who is the requesting employee from approving/rejecting their own request. Five shared workflow helpers `_hr_request_submit/_cancel/_approve/_reject/_edit/_delete` back all three models (edit/delete gated to `OPEN_STATUSES`, **ownership checked before status** so no cross-employee status oracle). **Gotchas:** reuses `_ss_child_create/_edit/_detail/_delete`, `_ss_scope`, `_can_manage_own_child` verbatim (the hub itself scopes to `employee=profile` directly, NOT `_ss_scope`, so an admin sees only their own on the hub); `_ss_child_detail` now also passes `is_own` (used to hide the self-approval buttons on the viewer's own row); admin `readonly_fields` lock `status` so `/admin/` can't bypass the lifecycle; models carry a `(tenant,employee,status)` + `(tenant,status)` index (matching `LeaveRequest`); cross-tenant IDOR→404, cross-employee→403. **Deferred:** configurable multi-level approval chains, SLA auto-escalation, template-driven letter generation, e-signature, notifications, software/license access requests.
 
+### 3.27 Communication Hub (4 tables + a derived view) — the internal employee-communications surface. FOUR new models + a **derived Celebrations view** (Birthday/Anniversary — NO model, mirrors `org_chart`, computed off `EmployeeProfile.date_of_birth` + `core.Employment.hired_on`). Reuses the 3.25/3.26 ESS helpers (`_current_employee_profile`, `_ss_scope`, `_ss_child_create`/`_detail`, and the 3.26 `_hr_request_*` workflow helpers **verbatim** for `Suggestion`), and the `LearningPath` 3.23 audience-targeting precedent (`target_department` FK `core.OrgUnit` `kind=department` + `target_designation` FK `hrm.Designation`). The 5th NavERP.md bullet (**Help Desk**) is DEFERRED to the dedicated future **3.36 Helpdesk** — its `LIVE_LINKS` bullet points at `hrm:suggestion_list` as the interim query channel. Posts no GL.
+
+| Model | Number | Key fields | Notes |
+|---|---|---|---|
+| `Announcement` (3.27) | `ANN-` | title, body, category(general/news/policy/event/it/hr/benefits), **audience_type**(all/department/designation) + **target_department** FK→`core.OrgUnit`(SET_NULL, `limit_choices_to={"kind":"department"}`) + **target_designation** FK→`hrm.Designation`(SET_NULL), is_pinned, status(draft/published/archived), **published_at**(editable=False), expires_at, **author** FK→User(SET_NULL, editable=False) | Admin-authored; reads `@login_required` (employees see only **published + un-expired + for-them** via the audience `Q`), writes `@tenant_admin_required`. `clean()` requires the matching target FK for dept/designation audience. `announcement_publish` (draft→published, stamps `published_at`) / `announcement_archive` (published→archived). `Meta.ordering=["-is_pinned","-published_at","-created_at"]`. |
+| `Survey` (3.27) | `SUR-` | title, description, **questions**(JSONField: list of `{text, type: rating\|text\|single_choice, options}`), status(draft/open/closed), is_anonymous, opens_at/closes_at, **author** FK→User(SET_NULL, editable=False) | Admin CRUD (edit/delete **draft-only**), `survey_open`/`survey_close`. `SurveyForm.clean_questions` validates the JSON structure. |
+| `SurveyResponse` (3.27) | — (`TenantOwned`) | **survey** FK→`Survey`(CASCADE, related_name="responses"), **employee** FK→`EmployeeProfile`(CASCADE, related_name="survey_responses"), **answers**(JSONField `{question_index: answer}`), submitted_at | `unique_together=("survey","employee")` **respond-once**. No standalone CRUD — created via `survey_respond` (`@login_required`, only while `open`, `try/except IntegrityError` on the race), read via `survey_results` aggregation. |
+| `Suggestion` (3.27) | `SUG-` | **employee** FK→`EmployeeProfile`(CASCADE, related_name="suggestions"), title, body, category, is_anonymous, status(draft/pending/**approved [label "Accepted"]**/rejected/cancelled/**implemented**), **approver**/**approved_at**/**decision_note**, **implementation_note**/**implemented_at** | **Clones the 3.26 request lifecycle field-for-field** (owner FK `employee` + `approver`/`approved_at` — the names `_hr_request_approve`/`_reject` hard-code) so `_ss_scope`/`_ss_child_*`/`_hr_request_*` apply **verbatim**. `suggestion_implement` (`@tenant_admin_required @require_POST`, approved→implemented). `OPEN_STATUSES=("draft","pending")`; indexes `(tenant,employee,status)`+`(tenant,status)`. |
+
+**Celebrations** (`hrm:celebrations`, no model): computes upcoming birthdays (`date_of_birth`) + work anniversaries (`employment.hired_on`) within a `?window=` (default 30, cap 90), Feb-29-safe `_next_occurrence`/`_days_until` helpers, excludes terminated employees, capped at 500 (surfaces a `capped` notice). **Communication flow:** admins author/publish `Announcement`s (audience-scoped) + `Survey`s; employees read their feed, respond once to open surveys, and submit `Suggestion`s (submit→pending→admin accept/reject[note required]→implement, self-approval blocked by `_is_own_hr_request`). **Gotchas:** the employee audience `Q` and `_announcement_targets` (detail gate) must agree — both skip the dept/designation clause when the viewer's id is `None` (else a `SET_NULL`'d orphan would list-but-403); `is_anonymous` is **display-layer only** (the FK is still stored — not a real anonymity guarantee); the `hrm_overview` "Pinned Announcements" tile is audience-scoped for non-admins; `announcement_create`/`survey_create` carry the `request.tenant is None` guard (the superuser). Templates under `templates/hrm/communication/`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -447,6 +458,13 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
   `decision_note`), and the terminal action: `hrm:documentrequest_fulfill` / `hrm:idcardrequest_issue` (requires POST
   `card_number`) / `hrm:assetrequest_fulfill` (creates+links an `AssetAllocation` atomically). Leave Requests +
   Attendance Regularization bullets reuse `hrm:leaverequest_*` (3.10) / `hrm:attendanceregularization_*` (3.9).
+- **Communication Hub (3.27):** `hrm:celebrations` (derived, self+everyone); `hrm:announcement_*` — `_list`/`_detail`
+  `@login_required` (employees see only their published+for-them feed), **`_create`/`_edit`/`_delete`/`_publish`/
+  `_archive` `@tenant_admin_required`** (create/publish/archive POST; author server-set); `hrm:survey_*` — `_list`/
+  `_detail` login-gated (drafts admin-only), **`_create`/`_edit`(draft)/`_delete`(draft)/`_open`/`_close`/`_results`
+  `@tenant_admin_required`**, `_respond` `@login_required` (once, only while open); `hrm:suggestion_*` — same
+  own-or-admin CRUD + `_submit`/`_cancel` + **`_approve`/`_reject`/`_implement` `@tenant_admin_required`** (reuses the
+  3.26 `_hr_request_*` helpers; `_implement` approved→implemented). "Help Desk" reuses `hrm:suggestion_list` (→ 3.36).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -850,7 +868,13 @@ guard; needs ≥2 employees; flush wipes `AssetRequest`→`IdCardRequest`→`Doc
 `_seed_tenant` teardown before the 3.25 block): for the first two employees — **3 `DocumentRequest`s**
 (pending / approved / fulfilled), **2 `IdCardRequest`s** (pending / issued with a card_number), and **2
 `AssetRequest`s** (pending / fulfilled — the fulfilled one seeds + links its `AssetAllocation` directly).
-ASCII-only stdout. Runs **LAST**, right after `_seed_selfservice`.
+ASCII-only stdout. Runs right after `_seed_selfservice`.
+**Communication Hub (3.27)** is seeded by `_seed_communication(tenant)` (own `Announcement.exists()` guard;
+needs ≥2 employees; flush wipes `Suggestion`→`SurveyResponse`→`Survey`→`Announcement`, also in the central
+`_seed_tenant` teardown before the 3.26 block): **3 `Announcement`s** (pinned published all-audience / a
+department-targeted published one with expiry / a draft), **2 `Survey`s** (one `open` anonymous pulse [3 question
+types] with 2 `SurveyResponse`s, one draft), and **3 `Suggestion`s** (pending / accepted / implemented — the
+implemented one stamped directly). ASCII-only stdout. Runs **LAST**, right after `_seed_requests`.
 Login as `admin_acme` / `admin_globex` (password `password`); superuser `admin` has no
 tenant and sees nothing.
 
@@ -947,6 +971,11 @@ tenant and sees nothing.
   Regularization → `hrm:attendanceregularization_list` (reuses 3.9, no new model); Document Requests →
   `hrm:documentrequest_list`; ID Card Request → `hrm:idcardrequest_list`; Asset Requests → `hrm:assetrequest_list`;
   + extra My Requests → `hrm:my_requests` (the ESS hub over all five). `LIVE_LINKS["3.26"]`.
+- 3.27 (all 5 bullets live): Announcements → `hrm:announcement_list`; Birthday/Anniversary → `hrm:celebrations`
+  (derived, no model); Surveys → `hrm:survey_list`; Suggestions → `hrm:suggestion_list`; **Help Desk →
+  `hrm:suggestion_list`** (deferred to the future 3.36 Helpdesk — interim: the Suggestions box, so both bullets
+  resolve there). `LIVE_LINKS["3.27"]`. Two `hrm_overview` stat-cards were added (Birthdays This Month →
+  `hrm:celebrations`; Pinned Announcements → `hrm:announcement_list?status=published`).
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -1090,7 +1119,7 @@ attachment` in production (project-wide WARNING).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
-upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9), next is 3.27 Communication Hub),
+upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk deferred to 3.36), next is 3.28 HR Reports),
 timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), employee self-service portal, and a per-employee↔user link
 for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
