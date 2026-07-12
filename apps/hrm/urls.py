@@ -972,4 +972,18 @@ urlpatterns = [
     path("reports/payroll/statutory/", views.statutory_report, name="statutory_report"),
     path("reports/payroll/ctc/", views.ctc_report, name="ctc_report"),
     path("reports/payroll/cost-center/", views.cost_center_report, name="cost_center_report"),
+
+    # 3.32 Analytics Dashboard
+    path("analytics/executive/", views.executive_dashboard, name="executive_dashboard"),
+    path("analytics/predictive/", views.predictive_analytics, name="predictive_analytics"),
+    path("analytics/benchmarking/", views.benchmarking, name="benchmarking"),
+    path("analytics/dashboards/", views.hr_dashboard_list, name="hr_dashboard_list"),
+    path("analytics/dashboards/add/", views.hr_dashboard_create, name="hr_dashboard_create"),
+    path("analytics/dashboards/<int:pk>/", views.hr_dashboard_detail, name="hr_dashboard_detail"),
+    path("analytics/dashboards/<int:pk>/edit/", views.hr_dashboard_edit, name="hr_dashboard_edit"),
+    path("analytics/dashboards/<int:pk>/delete/", views.hr_dashboard_delete, name="hr_dashboard_delete"),
+    path("analytics/dashboards/<int:dash_pk>/widgets/add/", views.hr_widget_create, name="hr_widget_create"),
+    path("analytics/widgets/<int:pk>/edit/", views.hr_widget_edit, name="hr_widget_edit"),
+    path("analytics/widgets/<int:pk>/delete/", views.hr_widget_delete, name="hr_widget_delete"),
+    path("analytics/widgets/<int:pk>/move/<str:direction>/", views.hr_widget_move, name="hr_widget_move"),
 ]
