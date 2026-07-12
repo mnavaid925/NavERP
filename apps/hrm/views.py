@@ -419,8 +419,21 @@ def hrm_overview(request):
         # Exclude terminated employees so the tile's population matches the celebrations page it links to.
         stats["birthdays_this_month"] = (employees.exclude(employment__status="terminated")
                                          .filter(date_of_birth__month=today.month).count())
-        stats["pinned_announcements"] = Announcement.objects.filter(
-            tenant=tenant, status="published", is_pinned=True).count()
+        # Audience-scope the pinned count for a non-admin viewer so the tile doesn't disclose the count
+        # of announcements targeted at other departments/designations (security-reviewer, Low).
+        pinned_qs = Announcement.objects.filter(tenant=tenant, status="published", is_pinned=True)
+        if not _is_admin(request.user):
+            profile = _current_employee_profile(request)
+            dept_id = profile.employment.org_unit_id if (profile and profile.employment_id) else None
+            desig_id = profile.designation_id if profile else None
+            audience_q = Q(audience_type="all")
+            if dept_id is not None:
+                audience_q |= Q(audience_type="department", target_department_id=dept_id)
+            if desig_id is not None:
+                audience_q |= Q(audience_type="designation", target_designation_id=desig_id)
+            pinned_qs = pinned_qs.filter(
+                Q(expires_at__isnull=True) | Q(expires_at__gte=today)).filter(audience_q)
+        stats["pinned_announcements"] = pinned_qs.count()
         pending_requests = (LeaveRequest.objects.filter(tenant=tenant, status="pending")
                             .select_related("employee__party", "leave_type")
                             .order_by("start_date")[:10])
