@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -499,6 +499,22 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   3.25-style **self-approval guard** (an admin who is the requesting employee can't approve/reject their own request;
   reject requires a note). Configurable multi-level approval chains, SLA auto-escalation, template-driven letter
   generation, e-signature, notifications, and software/license access requests are deferred.
+- **3.27 Communication Hub** — the internal employee-communications surface. Four new models + a derived
+  celebrations view. `Announcement` (`ANN-`) — admin-authored company news with category, audience targeting
+  (all / a department [`core.OrgUnit` kind=department] / a designation [`hrm.Designation`], reusing the
+  `LearningPath` 3.23 precedent), pinning, and a draft→published→archived lifecycle (`publish` stamps
+  `published_at`; the employee feed shows only published, un-expired, for-them posts via an audience `Q`-filter,
+  enforced on the detail page too); `Survey` (`SUR-`) + `SurveyResponse` — an engagement survey whose questions are
+  structured JSON (rating / text / single-choice; a 0–10 rating covers eNPS), draft→open→closed, employees respond
+  **once** (`unique_together(survey, employee)`), and `is_anonymous` suppresses respondent identity in the aggregated
+  results; `Suggestion` (`SUG-`) — an employee idea box that **clones the 3.26 request lifecycle field-for-field**
+  (owner `employee` FK + `approver`/`approved_at`) so the shared `_hr_request_*` helpers apply verbatim
+  (draft→pending→approved[Accepted]/rejected/cancelled + an `implemented` tail), with the same self-approval guard;
+  and **Celebrations** — a derived view (no model, mirrors `org_chart`) of upcoming birthdays
+  (`EmployeeProfile.date_of_birth`) + work anniversaries (`core.Employment.hired_on`) within a `?window=`. The 5th
+  bullet, **Help Desk**, is deferred to the dedicated future **3.36 Helpdesk** sub-module (its sidebar entry points
+  at the Suggestions box interim). Read receipts, reactions, delivery fan-out, survey k-anonymity, voting, and the
+  full ticketing system are deferred.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
