@@ -6466,4 +6466,36 @@ Asset Return, Maintenance, Depreciation.
 
 ## Review notes
 
-(filled in at the end)
+**3.33 Asset Management — BUILT & reviewed (2026-07-13).** 2 new models (`Asset` [ASSET-] register with computed
+depreciation properties + `AssetMaintenance` [ASSETMNT-], migration `0048`) + a nullable `AssetAllocation.asset` FK.
+The Asset↔allocation and Asset↔maintenance status/current_holder sync lives entirely in two **atomic `save()`
+overrides** (`_sync_linked_asset` / `_sync_asset_status`, no-op for pre-3.33 rows), so all existing issue/return/
+clearance paths gained the sync with zero changes. Full CRUD + lifecycle actions (assign/return/retire/dispose,
+maintenance complete), `_seed_assets` (6 assets), 6 templates. README + SKILL.md updated; counts refreshed to 5,906
+HRM / 8,553 project-wide.
+
+**Review-agent findings applied:**
+- **code-reviewer:** made both save-override syncs `transaction.atomic()`; moved the maintenance→asset repair sync
+  into `AssetMaintenance.save()` (`_sync_asset_status`) so it fires on every save path (create/edit/complete), not
+  just the two dedicated views; added the `request.tenant is None` guard + `AssetAllocationForm.clean()` double-issue
+  guard; seeded assets `in_stock` so the sync actually fires on seed data.
+- **explorer:** no wiring gaps found (context keys, url names, icons, badges, cross-links all consistent).
+- **frontend-reviewer:** maintenance badge `{% else %}` uses `get_status_display` (not a hardcoded "Scheduled");
+  3-level breadcrumbs on the detail pages; confirm dialog on the assign action.
+- **performance-reviewer:** no Critical/Important — efficient as built (select_related covers per-row FK access;
+  computed depreciation is query-free; asset_assign uses the FK cache, no re-fetch; indexes cover the hot filters).
+  The 3 Minor notes were all "no change required."
+- **qa-smoke-tester:** 72/72 checks passed — assign/return sync, maintenance repair sync (incl. the plain-edit
+  path via the model save()), lifecycle guards, form validation, IDOR, idempotency, and no regression to the
+  existing AssetAllocation flow. No code changes needed.
+- **security-reviewer:** no Critical/High/Medium (safe to ship). Applied its 4 Low data-integrity hardenings:
+  `asset_assign` locks the row (`select_for_update`) to kill the TOCTOU double-assign race; `AssetForm.clean()`
+  blocks hand-editing status to in_stock while an issued allocation is open; `asset_delete` also blocks in_repair;
+  `assetmaintenance_delete` blocks deleting the active repair that would strand the asset in_repair.
+- **test-writer:** `apps/hrm/tests/test_assets.py` — 152 tests (hand-verified depreciation math + floor-at-salvage,
+  both sync overrides incl. the critical asset=None regression guard, lifecycle-view guards, maintenance flows,
+  form clean() rules, cross-tenant IDOR, empty-tenant, query-count ceilings). All green; existing AssetAllocation/
+  onboarding/clearance tests still pass.
+
+**Next: 3.34 Expense Management** (Expense Categories, Claims with receipts, multi-level Approval Workflow,
+Reimbursement, Policy Compliance — coordinate with CRM 1.7 expenses + the payroll reimbursement path).
