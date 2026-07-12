@@ -11558,10 +11558,15 @@ def announcement_list(request):
     profile = _current_employee_profile(request)
     dept_id = profile.employment.org_unit_id if (profile and profile.employment_id) else None
     desig_id = profile.designation_id if profile else None
-    qs = qs.filter(
-        Q(audience_type="all")
-        | Q(audience_type="department", target_department_id=dept_id)
-        | Q(audience_type="designation", target_designation_id=desig_id))
+    # Only add the department/designation clause when the viewer actually HAS one — otherwise a None id
+    # degrades to `target_* IS NULL`, which would match an orphaned-target announcement (its FK was
+    # SET_NULL'd by deleting the OrgUnit/Designation) that _announcement_targets then 403s on click.
+    audience_q = Q(audience_type="all")
+    if dept_id is not None:
+        audience_q |= Q(audience_type="department", target_department_id=dept_id)
+    if desig_id is not None:
+        audience_q |= Q(audience_type="designation", target_designation_id=desig_id)
+    qs = qs.filter(audience_q)
     return crud_list(request, qs, "hrm/communication/announcement/list.html",
                      search_fields=("number", "title", "body"), extra_context={"is_admin": False})
 
@@ -11582,6 +11587,9 @@ def announcement_detail(request, pk):
 
 @tenant_admin_required
 def announcement_create(request):
+    if request.tenant is None:  # the superuser has tenant=None — don't create an orphan row (IntegrityError)
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     if request.method == "POST":
         form = AnnouncementForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -11674,6 +11682,9 @@ def survey_detail(request, pk):
 
 @tenant_admin_required
 def survey_create(request):
+    if request.tenant is None:  # the superuser has tenant=None — don't create an orphan row (IntegrityError)
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     if request.method == "POST":
         form = SurveyForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -11702,6 +11713,12 @@ def survey_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def survey_delete(request, pk):
+    # Status guard at the VIEW layer (not just the template) — deleting an opened/closed survey would
+    # CASCADE-delete every SurveyResponse already collected. Only a draft (no responses) is deletable.
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    if survey.status != "draft":
+        messages.error(request, "Only a draft survey can be deleted (an opened survey has responses).")
+        return redirect("hrm:survey_detail", pk=survey.pk)
     return crud_delete(request, model=Survey, pk=pk, success_url="hrm:survey_list")
 
 
@@ -11752,7 +11769,13 @@ def survey_respond(request, pk):
         form = form_class(request.POST)
         if form.is_valid():
             answers = {str(i): form.cleaned_data.get(f"q_{i}") for i in range(len(survey.questions or []))}
-            SurveyResponse.objects.create(tenant=request.tenant, survey=survey, employee=profile, answers=answers)
+            try:
+                SurveyResponse.objects.create(
+                    tenant=request.tenant, survey=survey, employee=profile, answers=answers)
+            except IntegrityError:
+                # respond-once race (double-click / duplicate tab) — the unique_together caught it.
+                messages.info(request, "You've already responded to this survey.")
+                return redirect("hrm:survey_detail", pk=survey.pk)
             write_audit_log(request.user, survey, "update", {"action": "respond"})
             messages.success(request, "Thanks — your response was recorded.")
             return redirect("hrm:survey_detail", pk=survey.pk)
