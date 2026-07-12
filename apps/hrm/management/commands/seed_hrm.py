@@ -292,6 +292,7 @@ class Command(BaseCommand):
             self._seed_requests(tenant, flush=options["flush"])
             self._seed_communication(tenant, flush=options["flush"])
             self._seed_analytics(tenant, flush=options["flush"])
+            self._seed_assets(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -2964,3 +2965,88 @@ class Command(BaseCommand):
             f"Analytics seeded for '{tenant.name}': "
             f"{HRDashboard.objects.filter(tenant=tenant).count()} dashboards, "
             f"{HRDashboardWidget.objects.filter(tenant=tenant).count()} widgets."))
+
+    def _seed_assets(self, tenant, *, flush):
+        """3.33 Asset Management - a central Asset register + maintenance records (runs after 3.32).
+        6 assets spanning every status/category (some assigned via a linked AssetAllocation, one
+        in_repair with a repair record, one retired at its salvage floor, one with an AMC contract).
+        Idempotent. Reuses existing employees/OrgUnits - creates no new person rows. ASCII-only."""
+        from apps.hrm.models import Asset, AssetMaintenance, AssetAllocation, EmployeeProfile
+        from apps.accounting.models import Currency
+
+        if flush:
+            Asset.objects.filter(tenant=tenant).delete()  # cascades AssetMaintenance; SET_NULL on allocations
+        if Asset.objects.filter(tenant=tenant).exists():
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:4])
+        if not emps:
+            return
+        e0 = emps[0]
+        e1 = emps[1] if len(emps) > 1 else emps[0]
+        dept = OrgUnit.objects.filter(tenant=tenant, kind="department").first()
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        usd = Currency.objects.filter(code="USD").first()
+        today = timezone.localdate()
+        day = datetime.timedelta(days=1)
+
+        def _link_alloc(asset, emp):
+            AssetAllocation.objects.get_or_create(
+                tenant=tenant, employee=emp, asset=asset, asset_name=asset.name,
+                defaults={"asset_category": asset.category, "status": "issued", "issued_at": timezone.now(),
+                          "issued_by": actor, "serial_number": asset.serial_number, "asset_tag": asset.asset_tag})
+
+        a1 = Asset.objects.create(
+            tenant=tenant, asset_tag="LT-0001", name="MacBook Pro 14-inch", category="laptop",
+            manufacturer="Apple", model_number="A2442", serial_number="C02FL0001XYZ", status="assigned",
+            condition="good", current_holder=e0, location=dept, purchase_date=today - 730 * day,
+            purchase_cost=Decimal("2499.00"), currency=usd, warranty_expiry=today + 365 * day,
+            depreciation_method="straight_line", useful_life_months=36, salvage_value=Decimal("200.00"))
+        _link_alloc(a1, e0)
+
+        Asset.objects.create(
+            tenant=tenant, asset_tag="LT-0002", name="Dell Latitude 5420", category="laptop",
+            manufacturer="Dell", model_number="5420", serial_number="DL5420-00042", status="in_stock",
+            condition="new", location=dept, purchase_date=today - 90 * day, purchase_cost=Decimal("1200.00"),
+            currency=usd, warranty_expiry=today + 640 * day, depreciation_method="straight_line",
+            useful_life_months=36, salvage_value=Decimal("100.00"))
+
+        a3 = Asset.objects.create(
+            tenant=tenant, asset_tag="PH-0001", name="iPhone 13", category="phone", manufacturer="Apple",
+            model_number="A2482", serial_number="IP13-0000123", status="assigned", condition="good",
+            current_holder=e1, purchase_date=today - 400 * day, purchase_cost=Decimal("699.00"), currency=usd,
+            warranty_expiry=today - 35 * day, depreciation_method="declining_balance", useful_life_months=24,
+            salvage_value=Decimal("50.00"))
+        _link_alloc(a3, e1)
+
+        a4 = Asset.objects.create(
+            tenant=tenant, asset_tag="PR-0001", name="HP Color LaserJet Printer", category="other",
+            manufacturer="HP", model_number="M454dw", serial_number="HP454-0007", status="in_repair",
+            condition="fair", location=dept, purchase_date=today - 500 * day, purchase_cost=Decimal("650.00"),
+            currency=usd, depreciation_method="straight_line", useful_life_months=60, salvage_value=Decimal("50.00"))
+        AssetMaintenance.objects.get_or_create(
+            tenant=tenant, asset=a4, maintenance_type="repair", scheduled_date=today - 3 * day,
+            defaults={"status": "in_progress", "vendor": "CityTech Repairs", "cost": Decimal("85.00"),
+                      "notes": "Paper feed jam + fuser unit replacement."})
+
+        Asset.objects.create(
+            tenant=tenant, asset_tag="VN-0001", name="Toyota Hiace Delivery Van", category="vehicle",
+            manufacturer="Toyota", model_number="Hiace", serial_number="JTFHS02P100012345", status="retired",
+            condition="poor", purchase_date=today - 2190 * day, purchase_cost=Decimal("28000.00"), currency=usd,
+            depreciation_method="straight_line", useful_life_months=60, salvage_value=Decimal("3000.00"))
+
+        a6 = Asset.objects.create(
+            tenant=tenant, asset_tag="AC-0001", name="Server Room AC Unit", category="other",
+            manufacturer="Daikin", model_number="FTKF50", serial_number="DK-AC-0099", status="in_stock",
+            condition="good", location=dept, purchase_date=today - 200 * day, purchase_cost=Decimal("1800.00"),
+            currency=usd, depreciation_method="none")
+        AssetMaintenance.objects.get_or_create(
+            tenant=tenant, asset=a6, maintenance_type="amc", scheduled_date=today + 30 * day,
+            defaults={"status": "scheduled", "vendor": "CoolAir Services", "cost": Decimal("400.00"),
+                      "contract_start": datetime.date(today.year, 1, 1),
+                      "contract_end": datetime.date(today.year + 1, 12, 31),
+                      "notes": "Quarterly HVAC preventive service contract."})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Assets seeded for '{tenant.name}': {Asset.objects.filter(tenant=tenant).count()} assets, "
+            f"{AssetMaintenance.objects.filter(tenant=tenant).count()} maintenance records."))
