@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Asset Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Asset Register</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Asset Management</span><span class="sep">›</span><span>Register</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:assetmaintenance_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Maintenance</a>
+      <a href="{% url 'hrm:asset_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Asset</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search tag / name / serial...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" class="form-select"><option value="">All categories</option>
+            {% for val, label in category_choices %}<option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" class="form-select"><option value="">All locations</option>
+            {% for l in locations %}<option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="current_holder" class="form-select"><option value="">All holders</option>
+            {% for h in holders %}<option value="{{ h.pk }}" {% if request.GET.current_holder == h.pk|stringformat:"d" %}selected{% endif %}>{{ h.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:asset_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Category</th><th>Status</th><th>Condition</th><th>Holder</th><th>Location</th><th style="text-align:end;">Book Value</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:asset_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>{% if obj.asset_tag %}<br><span class="text-muted">{{ obj.asset_tag }}</span>{% endif %}</td>
+              <td>{{ obj.name }}</td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>{% if obj.status == 'assigned' %}<span class="badge badge-green">Assigned</span>{% elif obj.status == 'in_stock' %}<span class="badge badge-slate">In Stock</span>{% elif obj.status == 'in_repair' %}<span class="badge badge-amber">In Repair</span>{% elif obj.status == 'disposed' %}<span class="badge badge-red">Disposed</span>{% elif obj.status == 'retired' %}<span class="badge badge-muted">Retired</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{{ obj.get_condition_display }}</td>
+              <td>{% if obj.current_holder %}{{ obj.current_holder.party.name }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td>{% if obj.location %}{{ obj.location.name }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td style="text-align:end;">{{ obj.current_book_value|floatformat:2 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:asset_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:asset_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if obj.status != 'assigned' %}
+                  <form method="post" action="{% url 'hrm:asset_delete' obj.pk %}" onsubmit="return confirm('Delete this asset?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="package"></i><h3>No assets registered yet</h3><p>Register laptops, phones and equipment to track allocation, maintenance and depreciation.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
