@@ -1248,3 +1248,51 @@ class AssetRequestAdmin(admin.ModelAdmin):
     # without going through assetrequest_fulfill's atomic AssetAllocation creation.
     readonly_fields = ("number", "status", "approved_at", "allocation", "created_at", "updated_at")
     raw_id_fields = ("employee", "approver", "allocation")
+
+
+from .models import (  # 3.27 Communication Hub
+    Announcement,
+    Suggestion,
+    Survey,
+    SurveyResponse,
+)
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "category", "audience_type", "status", "is_pinned", "published_at", "tenant")
+    list_filter = ("status", "category", "audience_type", "is_pinned", "tenant")
+    search_fields = ("number", "title", "body")
+    # `status`/`published_at`/`author` are workflow-owned (publish action + server-set author) — lock
+    # readonly so /admin/ can't bypass the publish lifecycle (mirrors the 3.26 admin convention).
+    readonly_fields = ("number", "status", "published_at", "author", "created_at", "updated_at")
+    raw_id_fields = ("target_department", "target_designation")
+
+
+@admin.register(Survey)
+class SurveyAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "status", "is_anonymous", "opens_at", "closes_at", "tenant")
+    list_filter = ("status", "is_anonymous", "tenant")
+    search_fields = ("number", "title", "description")
+    readonly_fields = ("number", "status", "author", "created_at", "updated_at")
+
+
+@admin.register(SurveyResponse)
+class SurveyResponseAdmin(admin.ModelAdmin):
+    list_display = ("survey", "employee", "submitted_at", "tenant")
+    list_filter = ("tenant",)
+    search_fields = ("survey__title", "employee__party__name")
+    raw_id_fields = ("survey", "employee")
+    readonly_fields = ("submitted_at",)
+
+
+@admin.register(Suggestion)
+class SuggestionAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "title", "category", "status", "approver", "tenant")
+    list_filter = ("status", "category", "is_anonymous", "tenant")
+    search_fields = ("number", "employee__party__name", "title", "body")
+    # workflow-owned fields readonly so /admin/ can't bypass the approve/implement lifecycle (e.g.
+    # hand-editing to "implemented" with approver=None).
+    readonly_fields = ("number", "status", "approver", "approved_at", "implemented_at",
+                       "created_at", "updated_at")
+    raw_id_fields = ("employee", "approver")
