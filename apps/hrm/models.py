@@ -7742,10 +7742,15 @@ class ExpenseClaim(TenantNumbered):
 
     @property
     def total_amount(self):
+        # Reuse the prefetch cache when a list/detail view already fetched the lines (sum in Python,
+        # 0 extra queries); fall back to one efficient SQL aggregate for a standalone claim.
+        if "lines" in getattr(self, "_prefetched_objects_cache", {}):
+            return sum((line.amount for line in self.lines.all()), Decimal("0"))
         return self.lines.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     @property
     def line_count(self):
+        # If a future prefetched-list template renders this per row, make it cache-aware like total_amount.
         return self.lines.count()
 
     @property
