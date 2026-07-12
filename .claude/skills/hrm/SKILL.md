@@ -14,7 +14,8 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
-3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management.** Reuses the
+3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management,
+3.34 Expense Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -469,6 +470,28 @@ an issued allocation is open), `AssetMaintenanceForm` (date-order + contract cle
 in_stock so the allocation/repair sync actually fires). Templates: `templates/hrm/assets/asset/{list,detail,form}.html`
 + `assets/assetmaintenance/{list,detail,form}.html`.
 
+### 3.34 Expense Management (3 NEW models) — employee T&E claims (distinct from `crm.Expense` [sales] and the
+payroll `reimbursement_amount` payout, which is a deferred integration). **Models** (`apps/hrm/models.py`, migration
+`0049`): `ExpenseCategory` (`TenantOwned`; per_claim_limit/monthly_limit/requires_receipt_above + `gl_account_hint`
+[hint only, no posting]), `ExpenseClaim` (`ECL-`; a **2-stage** status machine `draft→submitted→manager_approved→
+approved→reimbursed` + `rejected`/`cancelled`, `manager_approver`/`finance_approver` + timestamp pairs, payment
+tracking; **computed** `total_amount` [prefetch-aware — sums cached lines when prefetched, else one aggregate],
+`line_count`, `has_violations`), `ExpenseClaimLine` (`category` [PROTECT], amount, `receipt` FileField [reuses
+`_validate_upload`], + **computed** `policy_violation`/`violation_reason` checking per_claim_limit + receipt
+threshold, None-guarded). **Views** (`apps/hrm/views.py`, `# --- 3.34 Expense Management ---`): `ExpenseCategory`
+CRUD (list `@login_required`, writes `@tenant_admin_required`, delete guarded when lines reference it +
+`on_delete=PROTECT` backstop). `ExpenseClaim` own-vs-admin CRUD (`_ss_scope`/`_ss_child_*`/`_can_manage_own_child`,
+edit/delete draft-only) + **6 workflow actions**: `expenseclaim_submit` (owner, needs ≥1 line), `_manager_approve` +
+`_approve` (`@tenant_admin_required`, self-approval blocked via `_is_own_hr_request`, 2-stage), `_reject` (needs a
+reason, stamps the stage's approver pair), `_cancel` (owner, draft/submitted), `_reimburse` (`@tenant_admin_required`,
+**self-block too**, validates payment_method). Inline `expenseclaimline_add/_edit/_delete` (multipart receipt,
+draft-only). **Gotchas:** `total_amount`/`has_violations` recompute from `.lines` → the list/detail views
+`prefetch_related("lines__category")`; the annotate-for-delete-gate on the category list needs `.order_by("name")`
+(GROUP BY drops Meta.ordering). `LIVE_LINKS["3.34"]`: Approval Workflow→`expenseclaim_list?status=submitted`,
+Reimbursement→`?status=approved`, Policy Compliance→`expensecategory_list`. Seeder `_seed_expenses` (3 categories +
+3 claims across the states). Templates: `templates/hrm/expenses/{expensecategory,expenseclaim}/{list,detail,form}.html`
++ `expenses/expenseclaimline/form.html`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -632,6 +655,10 @@ in_stock so the allocation/repair sync actually fires). Templates: `templates/hr
 - **Asset Management (3.33):** `hrm:asset_list`/`_create`/`_detail`/`_edit`/`_delete` (`/hrm/asset-register/...`) +
   lifecycle `hrm:asset_assign`/`_return`/`_retire`/`_dispose` (pk, POST) + `hrm:assetmaintenance_list`/`_create`/
   `_detail`/`_edit`/`_delete`/`_complete` (`/hrm/asset-maintenance/...`). All `@login_required`, tenant-scoped.
+- **Expense Management (3.34):** `hrm:expensecategory_list`/`_create`/`_detail`/`_edit`/`_delete`
+  (`/hrm/expense-categories/...`, writes admin-only) + `hrm:expenseclaim_list`/`_create`/`_detail`/`_edit`/`_delete`
+  + workflow `hrm:expenseclaim_submit`/`_manager_approve`/`_approve`/`_reject`/`_cancel`/`_reimburse`
+  (`/hrm/expense-claims/...`) + inline `hrm:expenseclaimline_add`(claim_pk)/`_edit`/`_delete` (`/hrm/expense-lines/...`).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1163,6 +1190,9 @@ tenant and sees nothing.
   Asset Return → `hrm:assetallocation_list?status=returned` (the existing 3.3 allocation list, its system of record);
   Maintenance → `hrm:assetmaintenance_list`; Depreciation → `hrm:asset_list` (book-value column, no dedicated page).
   `LIVE_LINKS["3.33"]`. Two bullets deep-link to filtered slices; two reuse the register.
+- 3.34 (all 5 bullets live): Expense Categories → `hrm:expensecategory_list`; Expense Claims → `hrm:expenseclaim_list`;
+  Approval Workflow → `hrm:expenseclaim_list?status=submitted`; Reimbursement → `hrm:expenseclaim_list?status=approved`;
+  Policy Compliance → `hrm:expensecategory_list` (limits config; violations surface as claim badges). `LIVE_LINKS["3.34"]`.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
