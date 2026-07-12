@@ -11936,9 +11936,11 @@ def _dept_choices(tenant):
 
 
 def _report_department(request, tenant):
-    """Resolve ?department to a tenant-scoped department OrgUnit, or None (never trust the raw pk)."""
+    """Resolve ?department to a tenant-scoped department OrgUnit, or None (never trust the raw pk).
+    Uses isdecimal() (not isdigit(), which accepts Unicode superscripts like "²" that int() rejects)
+    + a length cap so a crafted ?department can't reach int() and raise a 500."""
     pk = (request.GET.get("department") or "").strip()
-    if tenant is not None and pk.isdigit():
+    if tenant is not None and pk.isdecimal() and len(pk) <= 18:
         return OrgUnit.objects.filter(tenant=tenant, kind="department", pk=int(pk)).first()
     return None
 
@@ -12523,7 +12525,8 @@ def overtime_report(request):
 # =============================================================================================
 def _report_year(request):
     y = (request.GET.get("year") or "").strip()
-    return int(y) if y.isdigit() else timezone.localdate().year
+    # isdecimal()+cap: isdigit() accepts Unicode superscripts ("²") that int() would ValueError on.
+    return int(y) if y.isdecimal() and len(y) <= 4 else timezone.localdate().year
 
 
 def _leave_years(tenant, year):
@@ -12694,7 +12697,7 @@ def leave_trend_report(request):
                                            start_date__gte=date_from, start_date__lte=date_to)
         if dept:
             base = base.filter(employee__employment__org_unit=dept)
-        if ltype.isdigit() and LeaveType.objects.filter(tenant=tenant, pk=int(ltype)).exists():
+        if ltype.isdecimal() and len(ltype) <= 18 and LeaveType.objects.filter(tenant=tenant, pk=int(ltype)).exists():
             # Validate the leave-type pk belongs to this tenant before filtering (IDOR-safe,
             # mirrors _report_department's ownership check) — a foreign pk is ignored, not applied.
             base = base.filter(leave_type_id=int(ltype))
@@ -12762,7 +12765,7 @@ def _report_cost_center(request, tenant):
     profile-less / garbage / cross-tenant pk resolves to None -> the report shows all cost centres
     (so that spend surfaces in the Unassigned callout) rather than a misleading empty state."""
     pk = (request.GET.get("cost_center") or "").strip()
-    if tenant is not None and pk.isdigit():
+    if tenant is not None and pk.isdecimal() and len(pk) <= 18:
         return OrgUnit.objects.filter(tenant=tenant, kind="cost_center",
                                       cost_center_profile__isnull=False, pk=int(pk)).first()
     return None
@@ -12777,7 +12780,7 @@ def _grade_choices(tenant):
 def _report_job_grade(request, tenant):
     """Resolve ?grade to a tenant-scoped JobGrade, or None (IDOR-safe)."""
     pk = (request.GET.get("grade") or "").strip()
-    if tenant is not None and pk.isdigit():
+    if tenant is not None and pk.isdecimal() and len(pk) <= 18:
         return JobGrade.objects.filter(tenant=tenant, pk=int(pk)).first()
     return None
 
@@ -12965,7 +12968,7 @@ def ctc_report(request):
             if tid is None:
                 continue
             if tid not in template_lines:
-                template_lines[tid] = list(SalaryStructureLine.objects.filter(template_id=tid)
+                template_lines[tid] = list(SalaryStructureLine.objects.filter(tenant=tenant, template_id=tid)
                                            .select_related("pay_component"))
             for line in template_lines[tid]:
                 ct = line.pay_component.component_type
