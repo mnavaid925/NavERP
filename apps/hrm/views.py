@@ -13044,3 +13044,390 @@ def cost_center_report(request):
         if not cc and (unassigned["gross"] or unassigned["employer"] or unassigned["hc"]):
             ctx["unassigned"] = unassigned
     return render(request, "hrm/reports/cost_center.html", ctx)
+
+
+# =============================================================================================
+# 3.32 Analytics Dashboard — 2 models (HRDashboard/HRDashboardWidget, mirroring CRM 1.6's
+# AnalyticsDashboard/DashboardWidget) + 3 derived @tenant_admin_required views. Widgets compute
+# LIVE via apps/hrm/analytics.compute_widget over the 3.28-3.31 data. The 3 derived views reuse the
+# report helpers (_report_period/_report_department/_dept_choices/_headcount_at) + the analytics
+# helpers. Dashboard CRUD is @login_required (any tenant user), owner-or-admin gated for writes.
+# =============================================================================================
+from collections import Counter  # noqa: E402
+from django.contrib.auth import get_user_model as _get_user_model  # noqa: E402
+from .analytics import (  # noqa: E402
+    compute_widget as _compute_widget, _turnover_rate, _headcount_trend_series,
+    _present_absent_counts, _attrition_risk_scores,
+)
+from .models import HRDashboard, HRDashboardWidget  # noqa: E402
+from .forms import HRDashboardForm, HRDashboardWidgetForm  # noqa: E402
+
+
+def _can_share_hrdash(user):
+    # Publishing (is_shared) / defaulting (is_default) a dashboard is a tenant-wide setting.
+    return bool(user.is_superuser or getattr(user, "is_tenant_admin", False))
+
+
+def _can_manage_hrdash(user, dashboard):
+    # The owner, a tenant admin, or a superuser may edit/delete a dashboard + its widgets.
+    return bool(dashboard.owner_id == user.pk or user.is_superuser
+                or getattr(user, "is_tenant_admin", False))
+
+
+@login_required
+def hr_dashboard_list(request):
+    qs = (HRDashboard.objects.filter(tenant=request.tenant)
+          .filter(Q(owner=request.user) | Q(is_shared=True)).select_related("owner"))
+    # Owner filter dropdown lists only owners of VISIBLE dashboards (never leaks a private one's owner).
+    owner_ids = set(qs.values_list("owner_id", flat=True))
+    owners = _get_user_model().objects.filter(pk__in=owner_ids).order_by("username")
+    return crud_list(
+        request, qs, "hrm/analytics/dashboard/list.html",
+        search_fields=["name", "number", "description"],
+        filters=[("owner", "owner_id", True)],
+        extra_context={"owners": owners, "current_user_id": request.user.pk,
+                       "is_admin": _can_share_hrdash(request.user)},
+    )
+
+
+@login_required
+def hr_dashboard_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    can_share = _can_share_hrdash(request.user)
+    if request.method == "POST":
+        form = HRDashboardForm(request.POST, tenant=request.tenant, can_share=can_share)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.owner = request.user  # owner is ALWAYS the creator, never a form field
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Dashboard created.")
+            return redirect("hrm:hr_dashboard_detail", pk=obj.pk)
+    else:
+        form = HRDashboardForm(tenant=request.tenant, can_share=can_share)
+    return render(request, "hrm/analytics/dashboard/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def hr_dashboard_detail(request, pk):
+    obj = get_object_or_404(HRDashboard.objects.select_related("owner"), pk=pk, tenant=request.tenant)
+    if not (obj.is_shared or obj.owner_id == request.user.pk or _can_share_hrdash(request.user)):
+        raise PermissionDenied("You do not have access to this dashboard.")
+    cols = {"one": 1, "two": 2, "three": 3}.get(obj.layout, 2)
+    span_map = {"small": 1, "medium": 2, "large": 3, "full": cols}
+    rendered, chart_configs = [], []
+    for w in obj.widgets.filter(tenant=request.tenant):
+        result = _compute_widget(w)
+        rendered.append({"widget": w, "result": result, "span": min(span_map.get(w.size, 1), cols)})
+        if result.get("kind") == "series" and w.chart_type in ("bar", "line", "pie", "doughnut"):
+            chart_configs.append({"id": w.pk, "type": w.chart_type,
+                                  "labels": result.get("labels", []), "data": result.get("data", [])})
+    return render(request, "hrm/analytics/dashboard/detail.html",
+                  {"obj": obj, "rendered_widgets": rendered, "chart_configs": chart_configs,
+                   "cols": cols, "can_manage": _can_manage_hrdash(request.user, obj)})
+
+
+@login_required
+def hr_dashboard_edit(request, pk):
+    obj = get_object_or_404(HRDashboard, pk=pk, tenant=request.tenant)
+    if not _can_manage_hrdash(request.user, obj):
+        raise PermissionDenied("Only the dashboard owner or a tenant admin can edit this dashboard.")
+    can_share = _can_share_hrdash(request.user)
+    if request.method == "POST":
+        form = HRDashboardForm(request.POST, instance=obj, tenant=request.tenant, can_share=can_share)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Dashboard updated.")
+            return redirect("hrm:hr_dashboard_detail", pk=obj.pk)
+    else:
+        form = HRDashboardForm(instance=obj, tenant=request.tenant, can_share=can_share)
+    return render(request, "hrm/analytics/dashboard/form.html", {"form": form, "obj": obj, "is_edit": True})
+
+
+@login_required
+@require_POST
+def hr_dashboard_delete(request, pk):
+    obj = get_object_or_404(HRDashboard, pk=pk, tenant=request.tenant)
+    if not _can_manage_hrdash(request.user, obj):
+        raise PermissionDenied("Only the dashboard owner or a tenant admin can delete this dashboard.")
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Dashboard deleted.")
+    return redirect("hrm:hr_dashboard_list")
+
+
+@login_required
+def hr_widget_create(request, dash_pk):
+    dashboard = get_object_or_404(HRDashboard, pk=dash_pk, tenant=request.tenant)
+    if not _can_manage_hrdash(request.user, dashboard):
+        raise PermissionDenied("Only the dashboard owner or a tenant admin can add widgets.")
+    if request.method == "POST":
+        form = HRDashboardWidgetForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            widget = form.save(commit=False)
+            widget.tenant = request.tenant
+            widget.dashboard = dashboard
+            last = dashboard.widgets.order_by("-position").first()
+            widget.position = (last.position + 1) if last else 0
+            widget.save()
+            write_audit_log(request.user, widget, "create")
+            messages.success(request, "Widget added.")
+            return redirect("hrm:hr_dashboard_detail", pk=dashboard.pk)
+    else:
+        form = HRDashboardWidgetForm(tenant=request.tenant)
+    return render(request, "hrm/analytics/widget/form.html",
+                  {"form": form, "is_edit": False, "dashboard": dashboard})
+
+
+@login_required
+def hr_widget_edit(request, pk):
+    widget = get_object_or_404(HRDashboardWidget.objects.select_related("dashboard"),
+                               pk=pk, tenant=request.tenant)
+    if not _can_manage_hrdash(request.user, widget.dashboard):
+        raise PermissionDenied("Only the dashboard owner or a tenant admin can edit widgets.")
+    if request.method == "POST":
+        form = HRDashboardWidgetForm(request.POST, instance=widget, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Widget updated.")
+            return redirect("hrm:hr_dashboard_detail", pk=widget.dashboard_id)
+    else:
+        form = HRDashboardWidgetForm(instance=widget, tenant=request.tenant)
+    return render(request, "hrm/analytics/widget/form.html",
+                  {"form": form, "is_edit": True, "obj": widget, "dashboard": widget.dashboard})
+
+
+@login_required
+@require_POST
+def hr_widget_delete(request, pk):
+    widget = get_object_or_404(HRDashboardWidget.objects.select_related("dashboard"),
+                               pk=pk, tenant=request.tenant)
+    if not _can_manage_hrdash(request.user, widget.dashboard):
+        raise PermissionDenied("Only the dashboard owner or a tenant admin can remove widgets.")
+    dash_pk = widget.dashboard_id
+    write_audit_log(request.user, widget, "delete")
+    widget.delete()
+    messages.success(request, "Widget removed.")
+    return redirect("hrm:hr_dashboard_detail", pk=dash_pk)
+
+
+@login_required
+@require_POST
+def hr_widget_move(request, pk, direction):
+    """Reorder a widget one slot up/down; normalize positions to 0..n-1 (one bulk_update, not N)."""
+    widget = get_object_or_404(HRDashboardWidget.objects.select_related("dashboard"),
+                               pk=pk, tenant=request.tenant)
+    if not _can_manage_hrdash(request.user, widget.dashboard):
+        raise PermissionDenied("Only the dashboard owner or a tenant admin can reorder widgets.")
+    order = list(widget.dashboard.widgets.filter(tenant=request.tenant).order_by("position", "id"))
+    idx = next((i for i, w in enumerate(order) if w.pk == widget.pk), None)
+    if idx is not None and direction in ("up", "down"):
+        swap = idx - 1 if direction == "up" else idx + 1
+        if 0 <= swap < len(order):
+            order[idx], order[swap] = order[swap], order[idx]
+            to_update = []
+            for i, w in enumerate(order):
+                if w.position != i:
+                    w.position = i
+                    to_update.append(w)
+            if to_update:
+                HRDashboardWidget.objects.bulk_update(to_update, ["position"])
+                write_audit_log(request.user, widget, "update", {"action": "move", "direction": direction})
+    return redirect("hrm:hr_dashboard_detail", pk=widget.dashboard_id)
+
+
+@tenant_admin_required
+def executive_dashboard(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "tiles": [], "alerts": []}
+    if tenant is not None:
+        today = timezone.localdate()
+        active = EmployeeProfile.objects.filter(tenant=tenant, employment__status="active")
+        if dept:
+            active = active.filter(employment__org_unit=dept)
+        headcount = active.count()
+        hc_labels, hc_values = _headcount_trend_series(tenant, today, months=6)
+        # Avg tenure (dept-filtered)
+        hired = active.filter(employment__hired_on__isnull=False).values_list("employment__hired_on", flat=True)
+        tenures = [(today - h).days / 365.25 for h in hired]
+        avg_tenure = round(sum(tenures) / len(tenures), 1) if tenures else 0.0
+        open_reqs = JobRequisition.objects.filter(tenant=tenant, status__in=("approved", "posted"))
+        if dept:
+            open_reqs = open_reqs.filter(department=dept)
+        open_reqs_n = open_reqs.count()
+        turnover = _turnover_rate(tenant, date_from, date_to)
+        # Latest payroll cycle (tenant-wide totals by construction)
+        cycles = list(PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date")[:12])
+        latest = cycles[0] if cycles else None
+        gross = float(latest.total_gross) if latest else 0.0
+        pay_recent = list(reversed(cycles))
+        pending_leave = LeaveRequest.objects.filter(tenant=tenant, status="pending").count()
+        overdue_stat = StatutoryReturn.objects.filter(tenant=tenant, status="pending", due_date__lt=today).count()
+        ctx["tiles"] = [
+            {"label": "Active Headcount", "value": headcount, "url": "hrm:headcount_report", "icon": "users",
+             "trend_labels": json.dumps(hc_labels), "trend_values": json.dumps(hc_values)},
+            {"label": "Attrition Rate (12mo)", "value": f"{turnover:.1f}%", "url": "hrm:attrition_report", "icon": "trending-down"},
+            {"label": "Open Requisitions", "value": open_reqs_n, "url": "hrm:hiring_report", "icon": "briefcase"},
+            {"label": "Avg Tenure (yrs)", "value": f"{avg_tenure:.1f}", "url": "hrm:diversity_report", "icon": "clock"},
+            {"label": "Gross Payroll (latest)", "value": f"{gross:,.0f}", "url": "hrm:cost_report", "icon": "banknote",
+             "trend_labels": json.dumps([c.pay_date.strftime("%b %Y") for c in pay_recent]),
+             "trend_values": json.dumps([float(c.total_gross) for c in pay_recent])},
+            {"label": "Pending Approvals", "value": pending_leave + overdue_stat, "url": "hrm:leave_reports_index", "icon": "clock"},
+        ]
+        expiring_prob = EmployeeProfile.objects.filter(
+            tenant=tenant, confirmed_on__isnull=True, probation_end_date__gte=today,
+            probation_end_date__lte=today + timedelta(days=30)).count()
+        ctx["alerts"] = [
+            {"label": "Overdue Statutory Returns", "count": overdue_stat, "url": "hrm:statutory_report",
+             "severity": "red" if overdue_stat else "muted"},
+            {"label": "Pending Leave Requests", "count": pending_leave, "url": "hrm:leave_trend_report",
+             "severity": "amber" if pending_leave else "muted"},
+            {"label": "Expiring Probations (30d)", "count": expiring_prob, "url": "hrm:employee_list",
+             "severity": "amber" if expiring_prob else "muted"},
+        ]
+    return render(request, "hrm/analytics/executive.html", ctx)
+
+
+@tenant_admin_required
+def predictive_analytics(request):
+    tenant = request.tenant
+    dept = _report_department(request, tenant)
+    ctx = {"department": dept, "department_choices": _dept_choices(tenant), "risk_rows": [],
+           "avg_risk": 0.0, "band_counts": {}, "risk_by_department": [], "hiring_rows": []}
+    if tenant is not None:
+        today = timezone.localdate()
+        scores = _attrition_risk_scores(tenant, dept)
+        if scores:
+            ctx["avg_risk"] = round(sum(s["score"] for s in scores) / len(scores), 1)
+            bc = Counter(s["band"] for s in scores)
+            ctx["band_counts"] = {b: bc.get(b, 0) for b in ("Low", "Medium", "High", "Critical")}
+            ctx["risk_rows"] = sorted(scores, key=lambda s: s["score"], reverse=True)[:25]
+            by_dept = {}
+            for s in scores:
+                d = by_dept.setdefault(s["department_name"], {"count": 0, "sum": 0, "hi": 0})
+                d["count"] += 1
+                d["sum"] += s["score"]
+                if s["band"] in ("High", "Critical"):
+                    d["hi"] += 1
+            ctx["risk_by_department"] = sorted(
+                [{"name": k, "count": v["count"], "avg_score": round(v["sum"] / v["count"], 1),
+                  "high_or_critical_count": v["hi"]} for k, v in by_dept.items()],
+                key=lambda r: r["avg_score"], reverse=True)
+        # Hiring-needs projection — 3 grouped dicts, no N+1.
+        desigs = Designation.objects.filter(tenant=tenant, budgeted_headcount__isnull=False).select_related("department")
+        if dept:
+            desigs = desigs.filter(department=dept)
+        filled_by = {r["designation_id"]: r["c"] for r in EmployeeProfile.objects.filter(
+            tenant=tenant, employment__status="active").values("designation_id").annotate(c=Count("id"))}
+        exits_by = {r["employee__designation_id"]: r["c"] for r in SeparationCase.objects.filter(
+            tenant=tenant, actual_last_working_day__gte=today - timedelta(days=365),
+            actual_last_working_day__lte=today).values("employee__designation_id").annotate(c=Count("id"))}
+        reqs_by = {r["designation_id"]: r["c"] for r in JobRequisition.objects.filter(
+            tenant=tenant, status__in=("approved", "posted")).values("designation_id").annotate(c=Count("id"))}
+        rows = []
+        for d in desigs:
+            filled = filled_by.get(d.pk, 0)
+            gap = (d.budgeted_headcount or 0) - filled
+            trailing_exits = exits_by.get(d.pk, 0)
+            projected = round(trailing_exits / 4)
+            rows.append({"designation": d.name,
+                         "department": d.department.name if d.department_id else "-",
+                         "budgeted": d.budgeted_headcount, "filled": filled, "gap": gap,
+                         "trailing_exits": trailing_exits, "projected_exits": projected,
+                         "open_reqs": reqs_by.get(d.pk, 0), "net_need": max(0, gap) + projected})
+        ctx["hiring_rows"] = sorted(rows, key=lambda r: r["net_need"], reverse=True)
+    return render(request, "hrm/analytics/predictive.html", ctx)
+
+
+def _bench_target(request, key):
+    """Parse an optional ?target_* float, never trusting raw GET into a bare float()."""
+    try:
+        raw = request.GET.get(key)
+        return float(raw) if raw not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+@tenant_admin_required
+def benchmarking(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    period_days = max(1, (date_to - date_from).days)
+    prior_to = date_from - timedelta(days=1)
+    prior_from = prior_to - timedelta(days=period_days)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "prior_from": prior_from, "prior_to": prior_to,
+           "scorecard": [], "pay_equity": [],
+           "target_attrition_rate": request.GET.get("target_attrition_rate", ""),
+           "target_absenteeism_rate": request.GET.get("target_absenteeism_rate", "")}
+    if tenant is not None:
+        def _delta(cur, prior):
+            d = cur - prior
+            return d, (round(d / prior * 100, 1) if prior else None)
+
+        def _down_good_rag(cur, prior):
+            if cur <= prior:
+                return "green"
+            return "amber" if prior and cur <= prior * 1.10 else "red"
+
+        def _vs_target_rag(cur, target):
+            if target <= 0:
+                return "info"
+            ratio = cur / target
+            return "green" if ratio <= 1.05 else "amber" if ratio <= 1.15 else "red"
+
+        # Headcount
+        hc_cur, hc_prior = _headcount_at(tenant, date_to), _headcount_at(tenant, prior_to)
+        hc_d, hc_dp = _delta(hc_cur, hc_prior)
+        # Attrition
+        at_cur = _turnover_rate(tenant, date_from, date_to)
+        at_prior = _turnover_rate(tenant, prior_from, prior_to)
+        at_d, at_dp = _delta(at_cur, at_prior)
+        t_att = _bench_target(request, "target_attrition_rate")
+        at_rag = _vs_target_rag(at_cur, t_att) if t_att is not None else _down_good_rag(at_cur, at_prior)
+        # Absenteeism
+        ab_a, ab_t = _present_absent_counts(tenant, date_from, date_to, dept)
+        ab_cur = round(ab_a / ab_t * 100, 1) if ab_t else 0.0
+        pa_a, pa_t = _present_absent_counts(tenant, prior_from, prior_to, dept)
+        ab_prior = round(pa_a / pa_t * 100, 1) if pa_t else 0.0
+        ab_d, ab_dp = _delta(ab_cur, ab_prior)
+        t_abs = _bench_target(request, "target_absenteeism_rate")
+        ab_rag = _vs_target_rag(ab_cur, t_abs) if t_abs is not None else _down_good_rag(ab_cur, ab_prior)
+        # Gross payroll (cycles paid in each window)
+        gp_cur = float(Payslip.objects.filter(tenant=tenant, cycle__pay_date__gte=date_from,
+                                              cycle__pay_date__lte=date_to).aggregate(s=Sum("gross_pay"))["s"] or 0)
+        gp_prior = float(Payslip.objects.filter(tenant=tenant, cycle__pay_date__gte=prior_from,
+                                               cycle__pay_date__lte=prior_to).aggregate(s=Sum("gross_pay"))["s"] or 0)
+        gp_d, gp_dp = _delta(gp_cur, gp_prior)
+        ctx["scorecard"] = [
+            {"label": "Headcount", "current": hc_cur, "prior": hc_prior, "delta": hc_d, "delta_pct": hc_dp,
+             "rag": "info", "fmt": "int"},
+            {"label": "Attrition Rate (%)", "current": at_cur, "prior": at_prior, "delta": at_d,
+             "delta_pct": at_dp, "rag": at_rag, "fmt": "pct"},
+            {"label": "Absenteeism Rate (%)", "current": ab_cur, "prior": ab_prior, "delta": ab_d,
+             "delta_pct": ab_dp, "rag": ab_rag, "fmt": "pct"},
+            {"label": "Gross Payroll ($)", "current": gp_cur, "prior": gp_prior, "delta": gp_d,
+             "delta_pct": gp_dp, "rag": "info", "fmt": "money"},
+        ]
+        # Pay-equity mini-table from the latest cycle
+        latest = PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date").first()
+        if latest is not None:
+            gender_labels = dict(EmployeeProfile.GENDER_CHOICES)
+            for r in (Payslip.objects.filter(tenant=tenant, cycle=latest)
+                      .values("employee__gender", "employee__employment__org_unit__name")
+                      .annotate(avg_gross=Avg("gross_pay"), headcount=Count("employee_id", distinct=True))
+                      .order_by("employee__employment__org_unit__name")):
+                ctx["pay_equity"].append({
+                    "gender": gender_labels.get(r["employee__gender"], "Not specified"),
+                    "department": r["employee__employment__org_unit__name"] or "Unassigned",
+                    "avg_gross": r["avg_gross"] or 0, "headcount": r["headcount"]})
+    return render(request, "hrm/analytics/benchmarking.html", ctx)
