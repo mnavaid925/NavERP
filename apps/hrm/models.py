@@ -7149,3 +7149,188 @@ class AssetRequest(TenantNumbered):
     def __str__(self):
         return (f"{self.number} · {self.employee} · {self.asset_name}"
                 if self.number else self.asset_name)
+
+
+# ---------------------------------------------------------------------------
+# 3.27 Communication Hub
+# ---------------------------------------------------------------------------
+# The internal employee-communications surface. FOUR new models — Announcement, Survey +
+# SurveyResponse, Suggestion — plus a DERIVED Celebrations view (Birthday/Anniversary) that has NO
+# model (computed in views.celebrations off EmployeeProfile.date_of_birth + core.Employment.hired_on,
+# mirroring org_chart). Announcement audience targeting reuses core.OrgUnit(kind=department) +
+# hrm.Designation (the LearningPath 3.23 precedent). Suggestion clones the 3.26 request lifecycle
+# field-for-field (employee owner FK + approver/approved_at) so the shared _hr_request_* view helpers
+# apply verbatim. The 5th NavERP.md bullet (Help Desk) is deferred to the future 3.36 Helpdesk. No GL.
+
+
+class Announcement(TenantNumbered):
+    """3.27 admin-authored company announcement — news / policy / event, audience-targeted (all / a
+    department / a designation) with a draft -> published -> archived lifecycle + pinning + optional
+    expiry. Employees read the published, un-expired, for-them feed; admins author/manage."""
+
+    NUMBER_PREFIX = "ANN"
+
+    CATEGORY_CHOICES = [
+        ("general", "General"),
+        ("news", "News"),
+        ("policy", "Policy"),
+        ("event", "Event"),
+        ("it", "IT"),
+        ("hr", "HR"),
+        ("benefits", "Benefits"),
+    ]
+    AUDIENCE_TYPE_CHOICES = [
+        ("all", "All Employees"),
+        ("department", "A Department"),
+        ("designation", "A Designation"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("published", "Published"),
+        ("archived", "Archived"),
+    ]
+
+    title = models.CharField(max_length=255)
+    body = models.TextField()
+    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default="general")
+    audience_type = models.CharField(max_length=15, choices=AUDIENCE_TYPE_CHOICES, default="all")
+    target_department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="announcements", limit_choices_to={"kind": "department"})
+    target_designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name="announcements")
+    is_pinned = models.BooleanField(default=False)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    published_at = models.DateTimeField(null=True, blank=True, editable=False)
+    expires_at = models.DateField(null=True, blank=True)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                               editable=False, related_name="hrm_announcement_authored")
+
+    class Meta:
+        ordering = ["-is_pinned", "-published_at", "-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_ann_tenant_status_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.audience_type == "department" and self.target_department_id is None:
+            raise ValidationError({"target_department": "Select the department this announcement targets."})
+        if self.audience_type == "designation" and self.target_designation_id is None:
+            raise ValidationError({"target_designation": "Select the designation this announcement targets."})
+
+    def __str__(self):
+        return f"{self.number} · {self.title}" if self.number else self.title
+
+
+class Survey(TenantNumbered):
+    """3.27 admin-authored engagement survey. `questions` is a JSON list of
+    {"text", "type": rating|text|single_choice, "options": [...]} — a rating question with a 0-10 scale
+    covers the eNPS pattern with no extra schema. Lifecycle draft -> open -> closed; employees respond
+    once (SurveyResponse). `is_anonymous` suppresses respondent identity in results (display-layer only —
+    the response still stores employee for the respond-once guard)."""
+
+    NUMBER_PREFIX = "SUR"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("open", "Open"),
+        ("closed", "Closed"),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    questions = models.JSONField(default=list,
+                                 help_text='List of {"text": str, "type": "rating"|"text"|"single_choice", "options": [...]}.')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    is_anonymous = models.BooleanField(default=False)
+    opens_at = models.DateField(null=True, blank=True)
+    closes_at = models.DateField(null=True, blank=True)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                               editable=False, related_name="hrm_survey_authored")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_survey_tenant_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} · {self.title}" if self.number else self.title
+
+
+class SurveyResponse(TenantOwned):
+    """One employee's answers to a Survey. `answers` is a {question_index: answer} JSON map mirroring
+    Survey.questions. `unique_together (survey, employee)` enforces respond-once. Created only via
+    views.survey_respond, read only via views.survey_results aggregation — no standalone CRUD (exempt
+    from the CRUD-list rule, like PayslipLine / LearningPathItem)."""
+
+    survey = models.ForeignKey("hrm.Survey", on_delete=models.CASCADE, related_name="responses")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="survey_responses")
+    answers = models.JSONField(default=dict)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        unique_together = ("survey", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "survey"], name="hrm_survresp_tenant_surv_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_survresp_tenant_emp_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.survey} · {self.employee}"
+
+
+class Suggestion(TenantNumbered):
+    """3.27 employee idea box, admin-reviewed. Clones the 3.26 request lifecycle field-for-field
+    (employee owner FK named `employee`; reviewer stamps named `approver`/`approved_at`) so the shared
+    _hr_request_* view helpers apply verbatim. Lifecycle draft -> pending -> approved (label "Accepted")
+    / rejected / cancelled, then approved -> implemented (a fulfillment tail like the 3.26 fulfill/issue
+    actions). `is_anonymous` suppresses the submitter's name in admin-facing views (display-layer only)."""
+
+    NUMBER_PREFIX = "SUG"
+
+    CATEGORY_CHOICES = [
+        ("process", "Process Improvement"),
+        ("workplace", "Workplace / Facilities"),
+        ("product", "Product / Service"),
+        ("cost_saving", "Cost Saving"),
+        ("wellbeing", "Wellbeing / Culture"),
+        ("other", "Other"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending"),
+        ("approved", "Accepted"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+        ("implemented", "Implemented"),
+    ]
+    OPEN_STATUSES = ("draft", "pending")
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="suggestions")
+    title = models.CharField(max_length=255)
+    body = models.TextField()
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other")
+    is_anonymous = models.BooleanField(default=False)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_suggestion_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    implementation_note = models.TextField(blank=True)
+    implemented_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_sug_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_sug_tenant_status_idx"),
+        ]
+
+    def __str__(self):
+        return (f"{self.number} · {self.employee} · {self.title}"
+                if self.number else self.title)
