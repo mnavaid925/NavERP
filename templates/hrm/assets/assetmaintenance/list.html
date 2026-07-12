@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">Asset Maintenance</h1>
-      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:asset_list' %}">Asset Management</a><span class="sep">›</span><span>Maintenance</span></div>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Asset Management</span><span class="sep">›</span><span>Maintenance</span></div>
     </div>
     <div class="page-actions"><a href="{% url 'hrm:assetmaintenance_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Log Maintenance</a></div>
   </div>
@@ -44,7 +44,7 @@
               <td><a href="{% url 'hrm:assetmaintenance_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.asset.name }}</td>
               <td>{{ obj.get_maintenance_type_display }}</td>
-              <td>{% if obj.status == 'completed' %}<span class="badge badge-green">Completed</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-amber">In Progress</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-red">Cancelled</span>{% else %}<span class="badge badge-info">Scheduled</span>{% endif %}</td>
+              <td>{% if obj.status == 'completed' %}<span class="badge badge-green">Completed</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-amber">In Progress</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-red">Cancelled</span>{% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td>{{ obj.scheduled_date|date:"d M Y" }}</td>
               <td>{{ obj.completed_date|date:"d M Y"|default:"-" }}</td>
               <td>{{ obj.vendor|default:"-" }}</td>
