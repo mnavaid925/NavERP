@@ -13,7 +13,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.15 Statutory Compliance, 3.16 Tax & Investment, 3.17 Payout & Reports, 3.18 Goal Setting,
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
-3.26 Request Management (Self-Service), 3.27 Communication Hub.** Reuses the
+3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -327,6 +327,27 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
 
 **Celebrations** (`hrm:celebrations`, no model): computes upcoming birthdays (`date_of_birth`) + work anniversaries (`employment.hired_on`) within a `?window=` (default 30, cap 90), Feb-29-safe `_next_occurrence`/`_days_until` helpers, excludes terminated employees, capped at 500 (surfaces a `capped` notice). **Communication flow:** admins author/publish `Announcement`s (audience-scoped) + `Survey`s; employees read their feed, respond once to open surveys, and submit `Suggestion`s (submit→pending→admin accept/reject[note required]→implement, self-approval blocked by `_is_own_hr_request`). **Gotchas:** the employee audience `Q` and `_announcement_targets` (detail gate) must agree — both skip the dept/designation clause when the viewer's id is `None` (else a `SET_NULL`'d orphan would list-but-403); `is_anonymous` is **display-layer only** (the FK is still stored — not a real anonymity guarantee); the `hrm_overview` "Pinned Announcements" tile is audience-scoped for non-admins; `announcement_create`/`survey_create` carry the `request.tenant is None` guard (the superuser). Templates under `templates/hrm/communication/`.
 
+### 3.28 HR Reports (NO models — 6 derived read-only views) — the core HR analytics surface, all
+`@tenant_admin_required` (company-wide salary/attrition/demographics), mirroring accounting's
+`trial_balance`/`ap_aging`. **No models / migration / seeder** — pure tenant-scoped aggregates over the
+existing spine. Views (`apps/hrm/views.py`, `# --- 3.28 HR Reports ---` block): `hr_reports_index`
+(`/hrm/reports/hr/`, 5 KPI tiles) + `headcount_report` (active/joins/exits by department/designation
+[+budgeted variance]/type, 12-month trend via a **2-query bisect** over hire/first-separation dates),
+`attrition_report` (SHRM annualized turnover = separations ÷ avg-headcount × 365/period-days, guarded
+div-by-zero; voluntary/involuntary via the `VOLUNTARY_SEPARATION_TYPES` constant; by department/exit-reason/
+tenure-band; monthly trend anchored on `date_to`), `diversity_report` (gender split, avg age/tenure, age-band
++ tenure-band distributions, department × gender cross-tab — single `select_related` pass), `cost_report`
+(per-`PayrollCycle` gross + employer-contribution + dept-wise + CTC-component, cross-cycle trend, with an
+`EmployeeSalaryStructure` CTC/12 **estimate fallback** [`is_estimate`] when no cycle exists), `hiring_report`
+(time-to-fill/hire, source-of-hire mix [range-scoped], application funnel, offer-acceptance approximation).
+**Shared helpers:** `_report_period` (trailing-12-mo default, clamps a reversed range), `_report_department`
+(tenant-scoped OrgUnit resolve — IDOR-safe), `_month_end`/`_age`/`_tenure_band`/`_age_band`/`_headcount_at`.
+**Gotchas:** `EmployeeProfile.department`/`.manager` are `@property` — aggregate through `employment__org_unit`,
+never `.filter(department=)` (FieldError); every rate guards div-by-zero; the superuser (`tenant=None`) renders
+an empty report; `?department`/`?cycle` resolved against the tenant's own rows only; Chart.js trends feed
+`json.dumps`'d server-computed labels/values via `|safe` (no user input reaches the sink). Templates under
+`templates/hrm/reports/` (`hr_index.html` + `headcount/attrition/diversity/cost/hiring.html`).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -465,6 +486,10 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
   `@tenant_admin_required`**, `_respond` `@login_required` (once, only while open); `hrm:suggestion_*` — same
   own-or-admin CRUD + `_submit`/`_cancel` + **`_approve`/`_reject`/`_implement` `@tenant_admin_required`** (reuses the
   3.26 `_hr_request_*` helpers; `_implement` approved→implemented). "Help Desk" reuses `hrm:suggestion_list` (→ 3.36).
+- **HR Reports (3.28):** all `@tenant_admin_required`, read-only (no models). `hrm:hr_reports_index`
+  (`/hrm/reports/hr/`, landing) + `hrm:headcount_report` / `hrm:attrition_report` / `hrm:diversity_report` /
+  `hrm:cost_report` / `hrm:hiring_report` (`/hrm/reports/hr/<name>/`). GET-filtered (`date_from`/`date_to`/
+  `department`/`cycle`/`separation_type`); no POST/CRUD.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -976,6 +1001,9 @@ tenant and sees nothing.
   `hrm:suggestion_list`** (deferred to the future 3.36 Helpdesk — interim: the Suggestions box, so both bullets
   resolve there). `LIVE_LINKS["3.27"]`. Two `hrm_overview` stat-cards were added (Birthdays This Month →
   `hrm:celebrations`; Pinned Announcements → `hrm:announcement_list?status=published`).
+- 3.28 (all 5 bullets live): Headcount Report → `hrm:headcount_report`; Attrition Report → `hrm:attrition_report`;
+  Diversity Report → `hrm:diversity_report`; Cost Reports → `hrm:cost_report`; Hiring Reports → `hrm:hiring_report`.
+  `LIVE_LINKS["3.28"]`. The `hr_reports_index` landing hub is NOT a bullet (reached from each report's Back link).
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -1119,7 +1147,7 @@ attachment` in production (project-wide WARNING).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
-upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk deferred to 3.36), next is 3.28 HR Reports),
+upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk deferred to 3.36); 3.28 HR Reports is now **built** — 6 derived, admin-only report views (headcount/attrition/diversity/cost/hiring + index; NO models), next is 3.29 Attendance Reports),
 timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), employee self-service portal, and a per-employee↔user link
 for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
