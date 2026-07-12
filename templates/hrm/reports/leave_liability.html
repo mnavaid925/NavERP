@@ -29,7 +29,7 @@
   {% if is_estimate %}<div class="card"><div class="card-body"><p style="margin:0;"><span class="badge badge-amber">Estimated</span> Some rows use an estimated per-day rate (annual CTC ÷ 365) where no encashment rate exists.</p></div></div>{% endif %}
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar-days"></i></div><div class="stat-value">{{ liability_days }}</div><div class="stat-label">Liability Days (encashable)</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar-days"></i></div><div class="stat-value">{{ liability_days|floatformat:1 }}</div><div class="stat-label">Liability Days (encashable)</div></div>
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="landmark"></i></div><div class="stat-value">{{ liability_value|floatformat:2 }}</div><div class="stat-label">Estimated Value</div></div>
   </div>
   <p class="text-muted" style="margin:-.5rem 0 1rem;">Only encashable leave types count toward the value. Currency is the tenant's payroll currency.</p>
@@ -42,7 +42,7 @@
         {% for r in rows %}
           <tr><td>{{ r.employee }}</td><td>{{ r.leave_type }}</td>
             <td style="text-align:end;">{{ r.balance|floatformat:1 }}</td>
-            <td style="text-align:end;">{% if r.rate %}{{ r.rate|floatformat:2 }}{% if r.estimate %} <span class="badge badge-amber">est</span>{% endif %}{% else %}—{% endif %}</td>
+            <td style="text-align:end;">{% if r.rate is not None %}{{ r.rate|floatformat:2 }}{% if r.estimate %} <span class="badge badge-amber">est</span>{% endif %}{% else %}—{% endif %}</td>
             <td style="text-align:end;">{% if r.value != None %}{{ r.value|floatformat:2 }}{% else %}—{% endif %}</td>
           </tr>
         {% endfor %}
