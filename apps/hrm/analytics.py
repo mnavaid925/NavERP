@@ -121,15 +121,18 @@ def _headcount_at(tenant, as_of):
 # Shared derived helpers (also imported by the 3.32 derived views).
 # ---------------------------------------------------------------------------
 
-def _turnover_rate(tenant, date_from, date_to, seps_count=None):
+def _turnover_rate(tenant, date_from, date_to, seps_count=None, hc_to=None):
     """Annualized turnover % over [date_from, date_to]. Denominator is the avg of point-in-time
     headcount at each end. Documented pre-existing simplification (carried from attrition_report):
-    the headcount denominator is always TENANT-WIDE, never department-filtered."""
+    the headcount denominator is always TENANT-WIDE, never department-filtered. ``seps_count`` and
+    ``hc_to`` let a caller that already computed those (e.g. benchmarking) avoid re-querying them."""
     if seps_count is None:
         seps_count = (SeparationCase.objects.filter(
             tenant=tenant, actual_last_working_day__gte=date_from, actual_last_working_day__lte=date_to)
             .values("employee_id").distinct().count())
-    avg_hc = (_headcount_at(tenant, date_from) + _headcount_at(tenant, date_to)) / 2
+    if hc_to is None:
+        hc_to = _headcount_at(tenant, date_to)
+    avg_hc = (_headcount_at(tenant, date_from) + hc_to) / 2
     days = max(1, (date_to - date_from).days)
     return round((seps_count / avg_hc) * (365 / days) * 100, 1) if avg_hc else 0.0
 
