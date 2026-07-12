@@ -1527,9 +1527,10 @@ class AssetAllocation(TenantNumbered):
         return f"{self.number} · {self.asset_name} → {self.employee}" if self.number else self.asset_name
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if self.asset_id:
-            self._sync_linked_asset()
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if self.asset_id:
+                self._sync_linked_asset()
 
     def _sync_linked_asset(self):
         """Mirror this allocation's status onto the linked Asset's status/current_holder — the SINGLE
@@ -7626,3 +7627,24 @@ class AssetMaintenance(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} - {self.asset.name} ({self.get_maintenance_type_display()})"
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            self._sync_asset_status()
+
+    def _sync_asset_status(self):
+        """Keep the linked Asset's status in step with a REPAIR record — the single sync point so it
+        fires on create, edit, AND the mark-complete action (not just the dedicated views). An active
+        repair (scheduled/in_progress) takes an in-service asset out to 'in_repair'; a completed or
+        cancelled repair returns an 'in_repair' asset to service (assigned if it still has a holder,
+        else in_stock). Non-repair records never change Asset.status."""
+        if self.maintenance_type != "repair":
+            return
+        asset = self.asset
+        if self.status in ("scheduled", "in_progress") and asset.status in ("in_stock", "assigned"):
+            asset.status = "in_repair"
+            asset.save(update_fields=["status", "updated_at"])
+        elif self.status in ("completed", "cancelled") and asset.status == "in_repair":
+            asset.status = "assigned" if asset.current_holder_id else "in_stock"
+            asset.save(update_fields=["status", "updated_at"])
