@@ -44,29 +44,29 @@
             <td style="text-align:end;">{{ r.actual|floatformat:2 }}</td>
             <td style="text-align:end;">{{ r.employer|floatformat:2 }}</td>
             <td style="text-align:end;">{{ r.headcount }}</td>
-            <td style="text-align:end;">{{ r.variance|floatformat:2 }}</td>
+            <td style="text-align:end;">{% if r.variance != None %}{{ r.variance|floatformat:2 }}{% else %}—{% endif %}</td>
             <td style="text-align:end;">{% if r.variance_pct != None %}{{ r.variance_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
           </tr>
         {% endfor %}
-        {% if unassigned %}
-          <tr>
-            <td colspan="3"><em class="text-muted">Unassigned (no cost-centre mapping)</em></td>
-            <td style="text-align:end;">{{ unassigned.gross|floatformat:2 }}</td>
-            <td style="text-align:end;">{{ unassigned.employer|floatformat:2 }}</td>
-            <td style="text-align:end;">{{ unassigned.hc }}</td>
-            <td style="text-align:end;">—</td>
-            <td style="text-align:end;">—</td>
-          </tr>
-        {% endif %}
       </tbody>
       <tfoot><tr>
         <td colspan="2"><strong>Totals</strong></td>
         <td style="text-align:end;"><strong>{{ total_budget|floatformat:2 }}</strong></td>
-        <td style="text-align:end;" colspan="2"><strong>{{ total_actual|floatformat:2 }}</strong></td>
-        <td colspan="3"></td>
+        <td style="text-align:end;"><strong>{{ total_actual|floatformat:2 }}</strong></td>
+        <td colspan="4"></td>
       </tr></tfoot>
     </table></div>
   </div>
+
+  {% if unassigned %}
+  <div class="card"><div class="card-body">
+    <p style="margin:0;"><span class="badge badge-amber">Unassigned</span>
+      Payroll spend not mapped to any cost centre (employee org unit has no cost-centre mapping):
+      <strong>{{ unassigned.gross|floatformat:2 }}</strong> gross ·
+      {{ unassigned.employer|floatformat:2 }} employer cost · {{ unassigned.hc }} employee{{ unassigned.hc|pluralize }}.
+      Map the relevant departments to a cost centre to attribute it. (Excluded from the totals above.)</p>
+  </div></div>
+  {% endif %}
   {% else %}
     <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="building-2"></i><h3>No cost centres</h3><p>No <code>CostCenterProfile</code> rows exist for this tenant. Map departments to cost centres to see budget-vs-actual.</p></div></div></div>
   {% endif %}
