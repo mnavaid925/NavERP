@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Tax Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tax Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payroll_reports_index' %}">Payroll Reports</a><span class="sep">›</span><span>Tax</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:payroll_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="financial_year">Financial year</label>
+        <select name="financial_year" id="financial_year" class="form-select">
+          {% if not financial_year_choices %}<option value="">— None —</option>{% endif %}
+          {% for y in financial_year_choices %}<option value="{{ y }}" {% if y == financial_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="regime">Regime</label>
+        <select name="regime" id="regime" class="form-select"><option value="">All regimes</option>
+          <option value="old" {% if regime == "old" %}selected{% endif %}>Old</option>
+          <option value="new" {% if regime == "new" %}selected{% endif %}>New</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:tax_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  {% if financial_year %}
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="receipt"></i></div><div class="stat-value">{{ total_payable|floatformat:2 }}</div><div class="stat-label">Total Tax Payable (FY {{ financial_year }})</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ total_paid|floatformat:2 }}</div><div class="stat-label">Tax Paid YTD</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="user"></i></div><div class="stat-value">{{ avg_payable|floatformat:2 }}</div><div class="stat-label">Avg Tax / Employee</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="user-x"></i></div><div class="stat-value">{{ not_filed }}</div><div class="stat-label">Not Declared</div></div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Declaration Status (FY {{ financial_year }})</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+      {% for s in decl_status %}<span class="badge badge-info">{{ s.name }}: {{ s.count }}</span>{% endfor %}
+      <span class="badge badge-muted">Not filed: {{ not_filed }}</span>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">TDS Summary</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Employee</th><th>Regime</th><th>Type</th><th style="text-align:end;">Tax Payable</th><th style="text-align:end;">Paid YTD</th><th style="text-align:end;">Monthly TDS</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.employee.party.name }}</td>
+            <td>{% if r.declaration %}{{ r.declaration.get_regime_elected_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td><span class="badge {% if r.computation_type == 'final' %}badge-success{% else %}badge-info{% endif %}">{{ r.get_computation_type_display }}</span></td>
+            <td style="text-align:end;">{{ r.tax_payable|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.tax_paid_ytd|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.monthly_tds_amount|floatformat:2 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-muted">No tax computations for FY {{ financial_year }}.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+
+  {% if by_section %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Investment Declarations by Section</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Section</th><th style="text-align:end;">Declared</th><th style="text-align:end;">Verified</th></tr></thead><tbody>
+      {% for r in by_section %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.declared|floatformat:2 }}</td><td style="text-align:end;">{{ r.verified|floatformat:2 }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% endif %}
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Form 16 Register</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Employee</th><th>Form 16 Status</th><th style="text-align:end;">Tax Payable</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.employee.party.name }}</td>
+            <td>{% if r.statutory_return_id %}<span class="badge badge-success">Linked · {{ r.statutory_return.get_status_display }}</span>{% else %}<span class="badge badge-warning">Pending link</span>{% endif %}</td>
+            <td style="text-align:end;">{{ r.tax_payable|floatformat:2 }}</td>
+            <td style="text-align:end;"><a href="{% url 'hrm:form16_partb' pk=r.pk %}" class="btn btn-icon btn-sm" title="View Form 16 Part B"><i data-lucide="file-text"></i></a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-muted">No Form 16 rows for FY {{ financial_year }}.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="file-text"></i><h3>No tax data</h3><p>No investment declarations or tax computations exist for this tenant yet.</p></div></div></div>
+  {% endif %}
+{% endblock %}
