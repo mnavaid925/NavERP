@@ -7648,3 +7648,153 @@ class AssetMaintenance(TenantNumbered):
         elif self.status in ("completed", "cancelled") and asset.status == "in_repair":
             asset.status = "assigned" if asset.current_holder_id else "in_stock"
             asset.save(update_fields=["status", "updated_at"])
+
+
+# ---------------------------------------------------------------------------
+# 3.34 Expense Management — ExpenseCategory / ExpenseClaim / ExpenseClaimLine
+#
+# Employee T&E claims (distinct from crm.Expense [sales/deal] and from payroll's
+# reimbursement_amount/PayComponent(reimbursement), which is a deferred payout integration).
+# A claim header has line items (each with a receipt) and a 2-stage manager->finance approval
+# machine. Policy compliance is a COMPUTED soft-flag per line (never stored). No GL posting.
+# ---------------------------------------------------------------------------
+class ExpenseCategory(TenantOwned):
+    """3.34 expense taxonomy (Travel/Food/Accommodation/...) + the per-category policy limits that
+    ExpenseClaimLine.policy_violation checks against. gl_account_hint is a coding HINT only — no GL
+    posting happens from this module."""
+
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20, blank=True)
+    description = models.TextField(blank=True)
+    per_claim_limit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Max amount for a single expense line in this category. Blank = no limit.")
+    monthly_limit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Max total per employee per month. Not enforced automatically this pass.")
+    requires_receipt_above = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="A line above this amount must have a receipt attached. Blank = never required.")
+    gl_account_hint = models.ForeignKey("accounting.GLAccount", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="hrm_expense_category_hints")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "name")
+        indexes = [models.Index(fields=["tenant", "is_active"], name="hrm_expcat_tnt_active_idx")]
+
+    def __str__(self):
+        return f"{self.name} ({self.code})" if self.code else self.name
+
+
+class ExpenseClaim(TenantNumbered):
+    """3.34 employee T&E claim header. Lean 2-stage status machine (draft -> submitted ->
+    manager_approved -> approved -> reimbursed; rejected/cancelled off the open stages).
+    total_amount/line_count/has_violations are properties recomputed from .lines — callers MUST
+    prefetch_related("lines__category") to avoid N+1."""
+
+    NUMBER_PREFIX = "ECL"
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("submitted", "Submitted"),
+        ("manager_approved", "Manager Approved"),
+        ("approved", "Approved (Finance)"),
+        ("reimbursed", "Reimbursed"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    ]
+    OPEN_STATUSES = ("draft", "submitted")  # cancel-eligible; edit/delete are stricter (draft only)
+    PAYMENT_METHOD_CHOICES = [
+        ("bank_transfer", "Bank Transfer"),
+        ("cash", "Cash"),
+        ("payroll", "Payroll"),
+        ("other", "Other"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="expense_claims")
+    title = models.CharField(max_length=255)
+    purpose = models.TextField(blank=True, help_text="Why this expense was incurred (trip name, project, etc).")
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_expense_claims")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    manager_approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                         blank=True, related_name="hrm_expenseclaim_manager_approvals")
+    manager_approved_at = models.DateTimeField(null=True, blank=True)
+    finance_approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                         blank=True, related_name="hrm_expenseclaim_finance_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)  # finance-stage decision timestamp
+    rejection_reason = models.TextField(blank=True)  # also holds an optional cancel note
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
+    payment_reference = models.CharField(max_length=100, blank=True)
+    reimbursed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_expclaim_tnt_emp_st_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_expclaim_tnt_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.title}" if self.number else self.title
+
+    @property
+    def total_amount(self):
+        return self.lines.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    @property
+    def line_count(self):
+        return self.lines.count()
+
+    @property
+    def has_violations(self):
+        return any(line.policy_violation for line in self.lines.all())
+
+
+class ExpenseClaimLine(TenantOwned):
+    """One expense line on a claim. policy_violation/violation_reason are COMPUTED (never stored) —
+    always current, no stale-flag risk. Editable only while the parent claim is status='draft'
+    (enforced in the views)."""
+
+    claim = models.ForeignKey("hrm.ExpenseClaim", on_delete=models.CASCADE, related_name="lines")
+    category = models.ForeignKey("hrm.ExpenseCategory", on_delete=models.PROTECT, related_name="claim_lines")
+    expense_date = models.DateField()
+    merchant = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    # WARNING: extension allowlist + size cap enforced in ExpenseClaimLineForm.clean_receipt (shared
+    # _validate_upload). Keep MEDIA_ROOT outside the web root and serve with Content-Disposition:
+    # attachment + X-Content-Type-Options: nosniff in production (mirrors InvestmentProof).
+    receipt = models.FileField(upload_to="hrm/expense_receipts/%Y/%m/", null=True, blank=True)
+
+    class Meta:
+        ordering = ["expense_date", "id"]
+        indexes = [models.Index(fields=["tenant", "claim"], name="hrm_expline_tnt_claim_idx")]
+
+    def __str__(self):
+        cat = self.category.name if self.category_id else "Uncategorized"
+        return f"{self.claim.number if self.claim_id else '?'} - {cat} - {self.amount}"
+
+    def _policy_check(self):
+        """(violation, reason) — both comparisons None-guarded. Checks per_claim_limit (amount) +
+        requires_receipt_above (receipt presence). monthly_limit is NOT checked here (deferred)."""
+        if not self.category_id or self.amount is None:
+            return False, ""
+        cat = self.category
+        reasons = []
+        if cat.per_claim_limit is not None and self.amount > cat.per_claim_limit:
+            reasons.append(f"Exceeds per-claim limit of {cat.per_claim_limit}")
+        if (cat.requires_receipt_above is not None and self.amount > cat.requires_receipt_above
+                and not self.receipt):
+            reasons.append(f"Receipt required above {cat.requires_receipt_above}")
+        return bool(reasons), "; ".join(reasons)
+
+    @property
+    def policy_violation(self):
+        return self._policy_check()[0]
+
+    @property
+    def violation_reason(self):
+        return self._policy_check()[1]
