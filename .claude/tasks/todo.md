@@ -4105,3 +4105,248 @@ models/migration/seeder): `hr_reports_index` + headcount/attrition/diversity/cos
 even under a `?department` filter (only the numerator narrows); the hiring funnel is not date-scoped (only source/
 time-to-hire/offer-accept are). **Deferred:** FTE/EEO PII fields, true cost-per-hire, attrition-risk ML,
 benchmarking, CSV export, and the 3.32 dashboard builder. **Next unbuilt HRM sub-module: 3.29 Attendance Reports.**
+
+---
+# Module 3 — HRM — Sub-module 3.29 Attendance Reports (hrm) — plan from research-hrm-3.29.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.28) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Same shape as 3.28: **derived, read-only,
+`@tenant_admin_required` report views — NO new models, NO migration, NO seeder.** Reuses the 3.28 helpers
+verbatim (`_report_period`, `_report_department`, `_dept_choices`, `_month_end`, `_tenure_band`, all at
+`apps/hrm/views.py:11932-11983`), the flat `templates/hrm/reports/` folder, the Chart.js trend pattern, and
+the now-existing `.stat-icon.slate` CSS rule (`static/css/theme.css`, added during 3.28's frontend-review
+pass). URL prefix `reports/attendance/...` (new, distinct from `reports/hr/...`). The 5th NavERP.md bullet
+("Utilization Report") is satisfied by **linking to the existing `hrm:timesheet_utilization_report`** (3.11,
+`apps/hrm/views.py:1678`) — do not rebuild it.
+
+## 1. Confirm NO new models / migration / seeder — source fields/methods verified against apps/hrm/models.py
+
+- [ ] State in the commit message: **3.29 adds zero models, zero migrations, zero seed data.**
+- [ ] `AttendanceRecord` (`apps/hrm/models.py:1021-1101`) confirmed fields: `employee` FK `EmployeeProfile`,
+  `date`, `check_in`/`check_out` (`TimeField`, nullable), `hours_worked` (derived, `editable=False`), `shift`
+  FK `Shift` (nullable, `on_delete=SET_NULL`), `status` (`STATUS_CHOICES` = `present/absent/half_day/
+  on_leave/holiday/regularized`), `source` (`SOURCE_CHOICES` = `web/mobile/biometric/manual`).
+  **`is_late()` CONFIRMED to exist** (line 1081-1088) — `True` when `check_in` minutes-of-day exceeds
+  `shift.start_time` minutes-of-day + `shift.grace_minutes`; returns `False` (not `None`) when no
+  `check_in`/`shift`/`shift.start_time` — safe to call unconditionally, but rows with no `shift` should
+  still be tallied separately as "no shift assigned" per the research (they read as "not late" which is
+  potentially misleading — surface the count, don't silently drop it).
+- [ ] **No early-departure model method exists** — `late_early_report` must compute it inline, same
+  minutes-of-day pattern as `is_late()`: `check_out` minutes-of-day `<` `shift.end_time` minutes-of-day −
+  `shift.grace_minutes` (reuse `grace_minutes` symmetrically for early-leave — no separate field exists;
+  state this choice in a code comment, matching the research's explicit call-out).
+- [ ] `Shift` (`apps/hrm/models.py:975-993`) confirmed: `start_time`, `end_time` (`TimeField`),
+  `grace_minutes` (`PositiveSmallIntegerField`, default 15).
+- [ ] `OvertimeRequest` (`apps/hrm/models.py:716-775`) confirmed fields: `employee` FK `EmployeeProfile`,
+  `date`, `hours_claimed` (`DecimalField`), `multiplier` (`DecimalField`, default `1.50`), `status`
+  (`STATUS_CHOICES` = `draft/pending/approved/rejected/cancelled`), `payout_method`
+  (`PAYOUT_CHOICES` = `pay/comp_leave`). **`overtime_pay_equivalent_hours` CONFIRMED to exist** as a
+  `@property` (line 768-772) = `hours_claimed × multiplier`. Model docstring explicitly states **no stored
+  currency amount** ("no stable employee pay-rate source yet (3.13 Salary Structure)") — `overtime_report`
+  must respect this: hours + pay-equivalent-hours only, clearly labeled non-currency.
+- [ ] **`EmployeeProfile.department` is a Python `@property`** (`apps/hrm/models.py:343`), **not a DB
+  column** — same gotcha as 3.28 (`todo.md` 3.28 §1). `AttendanceRecord`/`OvertimeRequest` department
+  breakdowns/filters MUST aggregate via the real FK path `employee__employment__org_unit` (never
+  `.values("employee__department")` or `.filter(employee__department=...)`).
+- [ ] No field/method gaps degrade any report to a 500 — everything above exists; div-by-zero (zero tracked
+  days, zero late rows, zero OT rows) is a **view-logic** guard (§2), not a data gap.
+
+## 2. Views (apps/hrm/views.py) — new `# --- 3.29 Attendance Reports ---` banner (append after the 3.28 block, current EOF ~line 12298)
+
+- [ ] All 5 functions decorated `@tenant_admin_required`, `if tenant is not None:` guard pattern (superuser
+  `tenant=None` renders an empty report, never `.filter(tenant=None)`). Reuse `_report_period(request)`,
+  `_report_department(request, tenant)`, `_dept_choices(tenant)` as-is — no new period/department helpers.
+- [ ] `attendance_reports_index(request)` — `/hrm/reports/attendance/`. No filters. 5 KPI tiles
+  (`{label, value, url}`, mirrors `hr_reports_index`): current-period Attendance % (present-days ÷
+  tracked-days over the trailing-12-month default window), Late-arrival count, Absent-days count, Total OT
+  hours (approved), and an overall Utilization % tile computed as a lightweight aggregate over
+  `TimesheetEntry.objects.filter(tenant=tenant, timesheet__status="approved")`
+  (`Sum("hours", filter=Q(is_billable=True)) / Sum("hours")`, same shape as
+  `timesheet_utilization_report` but summed not grouped) — **the tile links to
+  `hrm:timesheet_utilization_report`, not a new page.** Render `hrm/reports/attendance_index.html`.
+- [ ] `attendance_summary_report(request)` — `/hrm/reports/attendance/summary/`. Filters: `date_from`,
+  `date_to`, `department`. Query: `AttendanceRecord.objects.filter(tenant=tenant, date__range=(date_from,
+  date_to))`, `.filter(employee__employment__org_unit=dept)` when set. Status breakdown:
+  `.values("status").annotate(count=Count("id"))` labelled via `STATUS_CHOICES`. **Attendance % = present
+  ÷ tracked**, where **tracked = total rows excluding `status="holiday"`** (per research — no
+  scheduled-days/calendar table exists; document this substitution in a code comment + template caption).
+  **Guard `tracked == 0` → 0%, not `ZeroDivisionError`.** By-department table:
+  `.values("employee__employment__org_unit__name").annotate(present=Count("id", filter=Q(status="present")),
+  total=Count("id"))`, per-row % guarded. 12-month trend: reuse the `_month_end` bisect/loop pattern
+  (O(≤12) iterations over one materialized/sorted list, not one query per month) — monthly attendance %.
+  Render `hrm/reports/attendance_summary.html`.
+- [ ] `late_early_report(request)` — `/hrm/reports/attendance/late-early/`. Filters: `date_from`, `date_to`,
+  `department`. Single `.select_related("employee__employment__org_unit", "shift")` query over
+  `AttendanceRecord` in range (+ department filter) to avoid N+1. Python per-row: skip rows with no
+  `shift_id` (tally as `no_shift_count`, shown as a caveat line); for the rest, call `.is_late()` for the
+  late flag and inline-compute early-departure (per §1) + minutes-late/minutes-early
+  (`check_in_minutes − (start_minutes + grace)` / `(end_minutes − grace) − check_out_minutes`, clamped
+  `≥ 0`). Aggregate: late count, avg minutes late (**guard zero late rows → None/"—"**), early count, avg
+  minutes early (same guard), top-offenders table (group by employee, sort by late+early count desc, cap
+  top 10-20), day-of-week trend (`date.weekday()` Python bucket, 7 bars, Mon-Sun). Render
+  `hrm/reports/late_early.html`.
+- [ ] `absenteeism_report(request)` — `/hrm/reports/attendance/absenteeism/`. Filters: `date_from`,
+  `date_to`, `department`. Same tracked-denominator definition as summary (`status != "holiday"` count).
+  Absence rate = absent-days ÷ tracked (**guard `tracked == 0`**). By-department breakdown (same
+  `employee__employment__org_unit` path). Frequent-absentee list: `.filter(status="absent")
+  .values("employee_id", "employee__party__name").annotate(count=Count("id")).order_by("-count")`, cap
+  top 10-20. 12-month absence-count trend (`_month_end` loop, O(≤12)). **Bradford Factor: Nice, only if
+  time allows** — `S² × D` where `S` = count of consecutive-day absence runs (Python: sort an employee's
+  absent dates, break into runs where `gap > 1 day`), `D` = total absent days in period; if included, add
+  as an extra column on the frequent-absentee table with a tooltip/caption explaining the formula; if
+  skipped, note it under Later passes below (research already flags it Nice-not-Must).
+- [ ] `overtime_report(request)` — `/hrm/reports/attendance/overtime/`. Filters: `date_from`, `date_to`,
+  `department`, `status` (default unfiltered — pass `status_choices = OvertimeRequest.STATUS_CHOICES`, let
+  the admin narrow to `approved` via the dropdown rather than hard-defaulting, since the status-mix KPI
+  needs the full set to be meaningful). Query: `OvertimeRequest.objects.filter(tenant=tenant,
+  date__range=(date_from, date_to))`, department via `employee__employment__org_unit`, status via
+  `.filter(status=status)` when set. KPIs: total `hours_claimed` (`Sum`), total pay-equivalent hours
+  (Python sum of `.overtime_pay_equivalent_hours` over a materialized queryset, or equivalent
+  `Sum(F("hours_claimed") * F("multiplier"))` annotation — prefer the DB annotation to avoid a Python loop
+  over all rows). **No currency total anywhere on this page** — state in the template: "Hours-based only —
+  no stable pay-rate source yet (see OvertimeRequest model)." By-employee + by-department breakdown tables,
+  status mix (`.values("status").annotate(count=Count("id"))`), 12-month OT-hours trend (`_month_end`
+  loop). Render `hrm/reports/overtime.html`.
+- [ ] Every view follows the **Filter Implementation Rules**: pass `department_choices = _dept_choices
+  (tenant)` and any `*_CHOICES` constant the template's `<select>`s need explicitly in context; FK/pk
+  `<select>` comparisons use `|stringformat:"d"`, string-field comparisons (`status`) use
+  `request.GET.status == value`.
+- [ ] Every rate (`attendance %`, `absence rate`, `avg minutes late/early`, `utilization %`) is guarded
+  against a zero denominator — audit each before considering the view done.
+
+## 3. URLs (apps/hrm/urls.py) — append after the existing 3.28 block (after line 952 `reports/hr/hiring/`, before the closing `]`)
+
+- [ ] New `# 3.29 Attendance Reports` comment block:
+  ```python
+  # 3.29 Attendance Reports
+  path("reports/attendance/", views.attendance_reports_index, name="attendance_reports_index"),
+  path("reports/attendance/summary/", views.attendance_summary_report, name="attendance_summary_report"),
+  path("reports/attendance/late-early/", views.late_early_report, name="late_early_report"),
+  path("reports/attendance/absenteeism/", views.absenteeism_report, name="absenteeism_report"),
+  path("reports/attendance/overtime/", views.overtime_report, name="overtime_report"),
+  ```
+- [ ] Confirm no path/name collision with `reports/hr/...` (3.28) or `reports/utilization/`/
+  `reports/project-time/` (3.11) — distinct `reports/attendance/` segment, no clash.
+
+## 4. Navigation — apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.29"]` block (insert near the `"3.28"` entry for readability; dict order isn't
+  strictly numeric elsewhere in the file), bullet text copied **verbatim** from `NavERP.md:636-641`:
+  ```python
+  "3.29": {
+      "Attendance Summary": "hrm:attendance_summary_report",  # bullet (daily/weekly/monthly, status breakdown + trend)
+      "Late/Early Departure": "hrm:late_early_report",        # bullet (lateness trends, day-of-week pattern)
+      "Absenteeism Report": "hrm:absenteeism_report",         # bullet (absence rate, frequent absentees)
+      "Overtime Report": "hrm:overtime_report",                # bullet (OT hours, pay-equivalent hours — no currency)
+      "Utilization Report": "hrm:timesheet_utilization_report", # bullet — REUSE 3.11, not rebuilt
+  },
+  ```
+  (`attendance_reports_index` is the landing hub — not itself a bullet, same precedent as `hr_reports_index`
+  in 3.28; reachable via each report's "Back to Attendance Reports" link.)
+
+## 5. Templates (templates/hrm/reports/)
+
+- [ ] `templates/hrm/reports/attendance_index.html` — standalone landing page (sub-module root, no entity
+  folder), 5 `.stat-card` KPI tiles matching `hr_index.html`'s visual language (use `.stat-icon.slate` for
+  the Utilization tile alongside whatever icon classes the other 4 tiles use), Utilization tile links out to
+  `hrm:timesheet_utilization_report`.
+- [ ] `templates/hrm/reports/attendance_summary.html` — filter bar (`date_from`, `date_to`, `department`
+  `<select>` reflecting `request.GET`), KPI stat-cards (attendance %, present/absent/late/half-day counts),
+  status-breakdown table, by-department table, Chart.js 12-month trend (`<canvas>`, same wiring as
+  `headcount.html`'s `trendChart` — `json.dumps` labels/values from the view), a caption noting the derived
+  tracked-days denominator, `.empty-state` when zero records in range.
+- [ ] `templates/hrm/reports/late_early.html` — filter bar (`date_from`, `date_to`, `department`), KPI cards
+  (late count, avg minutes late, early count, avg minutes early — each render "—" when its guard triggers),
+  a "N records skipped — no shift assigned" caveat line, top-offenders table, day-of-week bar chart
+  (Chart.js or simple CSS bars), `.empty-state` when zero shift-assigned records in range.
+- [ ] `templates/hrm/reports/absenteeism.html` — filter bar (`date_from`, `date_to`, `department`), KPI
+  cards (absence rate, total absent days), by-department table, frequent-absentee ranked table (+ Bradford
+  Factor column only if built in §2), 12-month trend chart, `.empty-state` when zero absences in range.
+- [ ] `templates/hrm/reports/overtime.html` — filter bar (`date_from`, `date_to`, `department`, `status`
+  `<select>` from `OvertimeRequest.STATUS_CHOICES`), KPI cards (total hours claimed, total pay-equivalent
+  hours — **no currency card**), a visible "Hours-based only" note, by-employee + by-department tables,
+  status-mix table/chips, 12-month OT-hours trend chart, `.empty-state` when zero OT requests in range.
+- [ ] All 4 drill-in templates: filter `<form method="get">` re-submits every active param; `text-align:end`
+  (logical, not `right`) for numeric columns; `floatformat:1` or `:2` on hours/percentages consistently;
+  `{% csrf_token %}` n/a (GET-only, read-only pages, no POST forms).
+
+## 6. Admin
+
+- [ ] None — no new models, nothing to register in `apps/hrm/admin.py`.
+
+## 7. Verify
+
+- [ ] **No migration** — `python manage.py makemigrations hrm` produces **zero** changes.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep: `attendance_reports_index` + all 4 drill-in `hrm:*_report` URLs return 200 for a
+  tenant admin (a) with no query params (defaults), (b) with a full filter set (`date_from`/`date_to`/
+  `department`/`status`), and (c) with odd/nonsensical values (`date_from` after `date_to`, a non-digit or
+  cross-tenant `?department`, an invalid `?status`) — must render an empty/zero report, never 500. No
+  `{#`/`{% comment` leak markers in any rendered page.
+- [ ] **403 for non-admin**: a plain employee user hitting any of the 5 `hrm:*_report`/`attendance_reports_index`
+  URLs gets 403 (`@tenant_admin_required`).
+- [ ] **Cross-tenant isolation**: a second tenant's attendance/OT data never appears in tenant A's totals;
+  a `?department=<pk>` belonging to another tenant is silently ignored (falls back to "no filter"), never
+  leaks that tenant's `OrgUnit` name — same IDOR-prevention pattern as 3.28 (`_report_department` already
+  tenant-scopes the lookup).
+- [ ] **Div-by-zero guards**: an empty tenant (zero `AttendanceRecord`/`OvertimeRequest` rows) renders every
+  report's `.empty-state`/zero KPIs, not a 500 — specifically: `tracked == 0` in summary/absenteeism,
+  zero late/early rows in late_early (avg minutes → "—"), zero utilization denominator on the index tile.
+- [ ] Sidebar shows all 5 3.29 entries as **Live** for a tenant-admin login (including the Utilization tile
+  correctly deep-linking to the existing 3.11 page, not a 404).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to check the `EmployeeProfile.department` property gotcha is avoided, that the
+    early-departure inline logic mirrors `is_late()`'s minutes-of-day approach (no naive `TimeField`
+    subtraction), and that every rate has a zero-denominator guard.
+  - Expect `performance-reviewer` to confirm `late_early_report`'s per-row Python bucketing is a single
+    `.select_related()` pass (no N+1 on `shift`/`employee__employment__org_unit`), and that OT
+    pay-equivalent-hours prefers a DB `Sum(F(...)*F(...))` annotation over a Python loop when the queryset
+    could be large.
+  - Expect `security-reviewer` to confirm `@tenant_admin_required` on all 5 views and IDOR-safe `department`/
+    `status` resolution.
+  - Expect `test-writer` to cover: 403 for non-admin on every report URL; cross-tenant isolation; div-by-zero
+    on an empty tenant; the tracked-days denominator math on a known fixture (present/absent/holiday mix);
+    the late/early minutes computation against a hand-checked `check_in`/`shift` fixture; the OT
+    pay-equivalent-hours formula; filter round-tripping (date range + department + status narrows results).
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.29 Attendance Reports (0 new tables — derived
+  views)` section documenting the 5 routes, source fields/methods each report reads (incl. the confirmed
+  `is_late()` / `overtime_pay_equivalent_hours` reuse and the inline early-departure logic), the
+  tracked-days denominator substitution, and the "no currency OT cost" decision; update `LIVE_LINKS` for
+  `"3.29"`; update the Deferred section with this pass's carried-forward deferrals.
+- [ ] README.md — add `/3.29` to the Module 3 header line + a bullet describing the 5 reports + the
+  no-new-models note; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.29.md)
+
+- **Daily muster-roll snapshot grid** (single-day view) — Nice-to-have UI mode; add a `?date=` single-day
+  toggle to `attendance_summary_report` later if requested.
+- **Points/occurrence-based discipline tracking** (UKG-style, e.g. late-in = 0.5pt) and
+  **compensation-linked lateness penalization** (Keka-style) — both need a new policy/rules table + payroll
+  deduction linkage (3.13/3.31); out of scope for a read-only report pass.
+- **Approaching-overtime-threshold proactive alerts** (ADP-style) — needs a notification/policy engine, not
+  a report.
+- **Currency OT cost** (`hours × multiplier × pay rate`) — deferred until 3.13/3.31 payroll defines an
+  authoritative per-employee hourly rate; `EmployeeSalaryStructure.annual_ctc_amount` alone is not reliable
+  (annualized, no standard hours-per-year divisor).
+- **Worked-vs-scheduled-hours comparison** (ADP/UKG-style) — no shift-roster/scheduling model exists yet;
+  revisit once one does.
+- **Absence-reason / leave-type breakdown** — belongs to 3.30 Leave Reports (`hrm.LeaveRequest.leave_type`),
+  not 3.29's `AttendanceRecord`.
+- **Return-to-work workflow / auto-triggers at N occurrences** (Workday-style) — policy-engine feature, not
+  a report.
+- **Productivity/output metrics** (revenue-per-employee, task-completion rate) — needs Project Management
+  (Module 7) data, not available yet.
+- **Bradford Factor** — build it in §2 if time allows this pass; otherwise it carries here as a Nice-to-have
+  addable without a schema change.
+- **Source breakdown** (web/mobile/biometric/manual mix) and **OT-by-category** (regular/weekend/holiday) —
+  low-priority Nice extras noted in research; add to `attendance_summary_report`/`overtime_report` later if
+  requested.
+
+## Review notes
+
+(filled in at the end)
