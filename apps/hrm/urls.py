@@ -942,4 +942,12 @@ urlpatterns = [
     path("suggestions/<int:pk>/approve/", views.suggestion_approve, name="suggestion_approve"),
     path("suggestions/<int:pk>/reject/", views.suggestion_reject, name="suggestion_reject"),
     path("suggestions/<int:pk>/implement/", views.suggestion_implement, name="suggestion_implement"),
+
+    # 3.28 HR Reports (derived, read-only, admin-only)
+    path("reports/hr/", views.hr_reports_index, name="hr_reports_index"),
+    path("reports/hr/headcount/", views.headcount_report, name="headcount_report"),
+    path("reports/hr/attrition/", views.attrition_report, name="attrition_report"),
+    path("reports/hr/diversity/", views.diversity_report, name="diversity_report"),
+    path("reports/hr/cost/", views.cost_report, name="cost_report"),
+    path("reports/hr/hiring/", views.hiring_report, name="hiring_report"),
 ]
