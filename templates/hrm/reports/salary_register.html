@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Salary Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Salary Register</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payroll_reports_index' %}">Payroll Reports</a><span class="sep">›</span><span>Salary Register</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:payroll_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="cycle">Payroll cycle</label>
+        <select name="cycle" id="cycle" class="form-select">
+          {% if not cycle %}<option value="">— No payroll run —</option>{% endif %}
+          {% for c in cycle_choices %}<option value="{{ c.pk }}" {% if cycle and c.pk == cycle.pk %}selected{% endif %}>{{ c.number }} · {{ c.pay_date|date:"M Y" }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="on_hold">Status</label>
+        <select name="on_hold" id="on_hold" class="form-select">
+          <option value="">All payslips</option>
+          <option value="1" {% if on_hold %}selected{% endif %}>On hold only</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:salary_register_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  {% if cycle %}
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ totals.gross|default:0|floatformat:2 }}</div><div class="stat-label">Total Gross</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="minus-circle"></i></div><div class="stat-value">{{ totals.ded|default:0|floatformat:2 }}</div><div class="stat-label">Total Deductions</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="wallet"></i></div><div class="stat-value">{{ totals.net|default:0|floatformat:2 }}</div><div class="stat-label">Total Net</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="users"></i></div><div class="stat-value">{{ rows|length }}</div><div class="stat-label">Payslips</div></div>
+  </div>
+
+  {% if rows %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Register · {{ cycle.number }} ({{ cycle.period_start|date:"d M" }}–{{ cycle.period_end|date:"d M Y" }})</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Employee</th><th>Department</th><th style="text-align:end;">Gross</th><th style="text-align:end;">LOP</th><th style="text-align:end;">Arrears</th><th style="text-align:end;">Bonus</th><th style="text-align:end;">Deductions</th><th style="text-align:end;">Net</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.employee.party.name }}</td>
+            <td>{% if r.employee.department %}{{ r.employee.department.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td style="text-align:end;">{{ r.gross_pay|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.lop_amount|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.arrears_amount|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.bonus_amount|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.total_deductions|floatformat:2 }}</td>
+            <td style="text-align:end;"><strong>{{ r.net_pay|floatformat:2 }}</strong></td>
+            <td>{% if r.on_hold %}<span class="badge badge-danger">On hold</span>{% else %}<span class="badge badge-success">Released</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="2"><strong>Totals</strong></td>
+        <td style="text-align:end;"><strong>{{ totals.gross|default:0|floatformat:2 }}</strong></td>
+        <td style="text-align:end;">{{ totals.lop|default:0|floatformat:2 }}</td>
+        <td style="text-align:end;">{{ totals.arrears|default:0|floatformat:2 }}</td>
+        <td style="text-align:end;">{{ totals.bonus|default:0|floatformat:2 }}</td>
+        <td style="text-align:end;"><strong>{{ totals.ded|default:0|floatformat:2 }}</strong></td>
+        <td style="text-align:end;"><strong>{{ totals.net|default:0|floatformat:2 }}</strong></td>
+        <td></td>
+      </tr></tfoot>
+    </table></div>
+  </div>
+
+  {% if by_component %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Component Breakdown (this cycle)</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Component Type</th><th style="text-align:end;">Amount</th></tr></thead><tbody>
+      {% for r in by_component %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.total|floatformat:2 }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% endif %}
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="table"></i><h3>No payslips</h3><p>No payslips for {{ cycle.number }} match the current filters.</p></div></div></div>
+  {% endif %}
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="table"></i><h3>No payroll runs</h3><p>Run a payroll cycle to populate the salary register.</p></div></div></div>
+  {% endif %}
+{% endblock %}
