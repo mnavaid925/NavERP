@@ -2315,3 +2315,75 @@ class DocumentFulfillForm(_ThemedForm):
         return _validate_upload(self.cleaned_data.get("output_file"),
                                 allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
                                 max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Letter")
+
+
+# ======================================================= 3.27 Communication Hub
+from .models import (  # noqa: E402  — 3.27 Communication Hub
+    Announcement,
+    Suggestion,
+    Survey,
+)
+
+
+class AnnouncementForm(TenantModelForm):
+    """Admin-authored announcement. `status`/`published_at`/`author` are workflow-owned (set by the
+    publish action + server-side on create) and excluded. The department/designation targets are
+    tenant-scoped automatically by TenantModelForm; `clean()` mirrors the model's matching-target rule
+    so a mismatch surfaces inline on the form, not only at full_clean()."""
+
+    class Meta:
+        model = Announcement
+        fields = ["title", "body", "category", "audience_type",
+                  "target_department", "target_designation", "is_pinned", "expires_at"]
+        widgets = {"body": forms.Textarea(attrs={"rows": 6})}
+
+    def clean(self):
+        cleaned = super().clean()
+        audience = cleaned.get("audience_type")
+        if audience == "department" and not cleaned.get("target_department"):
+            self.add_error("target_department", "Select the department this announcement targets.")
+        if audience == "designation" and not cleaned.get("target_designation"):
+            self.add_error("target_designation", "Select the designation this announcement targets.")
+        return cleaned
+
+
+class SurveyForm(TenantModelForm):
+    """Admin-authored survey. `questions` is a JSON list validated by clean_questions (structure, not
+    just 'valid JSON'). `status`/`author` are workflow-owned and excluded."""
+
+    class Meta:
+        model = Survey
+        fields = ["title", "description", "questions", "is_anonymous", "opens_at", "closes_at"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2}),
+            "questions": forms.Textarea(attrs={"rows": 8, "class": "form-textarea",
+                                               "placeholder": '[{"text": "How likely are you to recommend us?", "type": "rating"},\n {"text": "What should we improve?", "type": "text"},\n {"text": "Preferred work mode?", "type": "single_choice", "options": ["Remote", "Hybrid", "Onsite"]}]'}),
+        }
+
+    def clean_questions(self):
+        questions = self.cleaned_data.get("questions")
+        if not isinstance(questions, list) or not questions:
+            raise forms.ValidationError("Add at least one question as a JSON list of objects.")
+        valid_types = {"rating", "text", "single_choice"}
+        for idx, item in enumerate(questions, start=1):
+            if not isinstance(item, dict) or not str(item.get("text", "")).strip():
+                raise forms.ValidationError(f"Question {idx}: each entry needs a non-empty \"text\".")
+            qtype = item.get("type")
+            if qtype not in valid_types:
+                raise forms.ValidationError(
+                    f"Question {idx}: \"type\" must be one of rating, text, single_choice.")
+            if qtype == "single_choice" and not (isinstance(item.get("options"), list) and item["options"]):
+                raise forms.ValidationError(
+                    f"Question {idx}: a single_choice question needs a non-empty \"options\" list.")
+        return questions
+
+
+class SuggestionForm(TenantModelForm):
+    """Employee's suggestion. `employee` is resolved server-side by _ss_child_create; all workflow
+    fields (status/approver/approved_at/decision_note/implementation_note/implemented_at) are excluded.
+    Mirrors AssetRequestForm's shape."""
+
+    class Meta:
+        model = Suggestion
+        fields = ["title", "body", "category", "is_anonymous"]
+        widgets = {"body": forms.Textarea(attrs={"rows": 5})}
