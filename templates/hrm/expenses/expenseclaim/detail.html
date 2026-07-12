@@ -108,6 +108,7 @@
         <form method="post" action="{% url 'hrm:expenseclaim_reimburse' obj.pk %}" onsubmit="return confirm('Mark this claim reimbursed?');" style="display:flex; gap:.5rem; align-items:flex-end; flex-wrap:wrap;">{% csrf_token %}
           <div class="form-group"><label class="form-label" for="pay_method">Payment method</label>
             <select name="payment_method" id="pay_method" class="form-select" required>
+              <option value="">-- Select method --</option>
               {% for val, label in payment_method_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
             </select>
           </div>
