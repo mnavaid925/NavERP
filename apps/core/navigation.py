@@ -586,6 +586,15 @@ LIVE_LINKS = {
         "Statutory Reports": "hrm:statutory_report",       # bullet (PF/ESI/PT/LWF register, masked employee coverage)
         "Cost Analysis": "hrm:ctc_report",                 # bullet (structural CTC breakdown; cost_center_report cross-linked)
     },
+    # 3.32 Analytics Dashboard — 2 new models (HRDashboard/HRDashboardWidget, mirrors CRM 1.6's
+    # Analytics Dashboard mechanic) + 3 derived @tenant_admin_required views. Custom Dashboards ->
+    # the CRUD list (any tenant user, @login_required); the other 3 bullets -> admin-only derived views.
+    "3.32": {
+        "Executive Dashboard": "hrm:executive_dashboard",   # bullet (curated KPI strip + alerts, admin-only)
+        "Custom Dashboards": "hrm:hr_dashboard_list",        # bullet (saved widget dashboards, owner's + shared)
+        "Predictive Analytics": "hrm:predictive_analytics",  # bullet (attrition-risk heuristic + hiring-needs projection, admin-only)
+        "Benchmarking": "hrm:benchmarking",                  # bullet (period-over-period + vs-target scorecard, admin-only)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
