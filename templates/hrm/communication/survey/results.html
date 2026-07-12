@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Results · {{ survey.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Results · {{ survey.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:survey_list' %}">Surveys</a><span class="sep">›</span><a href="{% url 'hrm:survey_detail' survey.pk %}">{{ survey.number }}</a><span class="sep">›</span><span>Results</span></div>
+    </div>
+    <div class="page-actions">
+      <span class="badge badge-info">{{ response_count }} response{{ response_count|pluralize }}</span>
+      {% if survey.is_anonymous %}<span class="badge badge-slate">Anonymous</span>{% endif %}
+    </div>
+  </div>
+
+  {% if response_count == 0 %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No responses yet</h3><p>Results appear here as employees respond.</p></div></div></div>
+  {% endif %}
+
+  {% for r in results %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">{{ forloop.counter }}. {{ r.text }}</h2><span class="badge badge-slate">{{ r.type }}</span></div>
+      <div class="card-body">
+        {% if r.type == 'rating' %}
+          {% if r.average is not None %}<p style="font-size:1.4rem; margin:0;"><strong>{{ r.average }}</strong> <span class="text-muted" style="font-size:.9rem;">average ({{ r.count }} rating{{ r.count|pluralize }}, 0–10 scale)</span></p>
+          {% else %}<p class="text-muted" style="margin:0;">No numeric ratings recorded.</p>{% endif %}
+        {% elif r.type == 'single_choice' %}
+          <table class="table"><tbody>
+            {% for c in r.choices %}
+              <tr><td style="width:40%;">{{ c.option }}</td><td><div class="progress" style="min-width:120px;"><div class="progress-bar" style="width:{% widthratio c.count response_count 100 %}%;"></div></div></td><td style="width:60px; text-align:right;">{{ c.count }}</td></tr>
+            {% endfor %}
+          </tbody></table>
+        {% else %}
+          {% if r.answers %}
+            <ul style="list-style:none; margin:0; padding:0;">
+              {% for a in r.answers %}
+                <li style="padding:.4rem 0; border-top:1px solid var(--border);">{{ a.text|linebreaksbr }}{% if a.who %} <span class="text-muted" style="font-size:.8rem;">— {{ a.who }}</span>{% endif %}</li>
+              {% endfor %}
+            </ul>
+          {% else %}<p class="text-muted" style="margin:0;">No text answers recorded.</p>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <a href="{% url 'hrm:survey_detail' survey.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to survey</a>
+{% endblock %}
