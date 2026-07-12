@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Surveys{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Surveys</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Communication · Surveys</span></div>
+    </div>
+    {% if is_admin %}
+      <div class="page-actions">
+        <a href="{% url 'hrm:survey_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Survey</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    {% if is_admin %}
+      <div class="card-body">
+        <form method="get" class="filter-bar">
+          <div class="form-group" style="flex:1; min-width:180px;">
+            <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title / description…">
+          </div>
+          <div class="form-group">
+            <select name="status" class="form-select" aria-label="Status">
+              <option value="">All statuses</option>
+              {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+          <a href="{% url 'hrm:survey_list' %}" class="btn btn-outline">Reset</a>
+        </form>
+      </div>
+    {% endif %}
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Status</th>{% if is_admin %}<th>Responses</th>{% endif %}<th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:survey_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}</td>
+              <td>
+                {% if obj.status == 'open' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+                {% if obj.is_anonymous %}<span class="badge badge-info">Anonymous</span>{% endif %}
+              </td>
+              {% if is_admin %}<td>{{ obj.response_count }}</td>{% endif %}
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:survey_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    {% if obj.status == 'draft' %}<a href="{% url 'hrm:survey_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                    <a href="{% url 'hrm:survey_results' obj.pk %}" class="btn-icon" title="Results"><i data-lucide="bar-chart-3"></i></a>
+                    {% if obj.status == 'draft' %}
+                      <form method="post" action="{% url 'hrm:survey_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this survey?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                    {% endif %}
+                  {% elif obj.status == 'open' and obj.pk not in responded_ids %}
+                    <a href="{% url 'hrm:survey_respond' obj.pk %}" class="btn btn-primary btn-sm"><i data-lucide="clipboard-list"></i> Take Survey</a>
+                  {% elif obj.pk in responded_ids %}
+                    <span class="badge badge-green">Responded</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No surveys</h3><p>{% if is_admin %}Create an engagement survey.{% else %}No surveys are open right now.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
