@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Headcount Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Headcount Report</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:hr_reports_index' %}">HR Reports</a><span class="sep">›</span><span>Headcount</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:hr_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="as_of">As of</label><input type="date" name="as_of" id="as_of" value="{{ as_of|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="date_from">Joins/exits from</label><input type="date" name="date_from" id="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="date_to">to</label><input type="date" name="date_to" id="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select">
+          <option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:headcount_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ active_count }}</div><div class="stat-label">Active Headcount</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="user-plus"></i></div><div class="stat-value">{{ joins }}</div><div class="stat-label">New Joins (range)</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="user-minus"></i></div><div class="stat-value">{{ exits }}</div><div class="stat-label">Exits (range)</div></div>
+    <div class="stat-card"><div class="stat-icon {% if net_change < 0 %}orange{% else %}green{% endif %}"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ net_change }}</div><div class="stat-label">Net Change</div></div>
+  </div>
+
+  {% if active_count or joins or exits %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Headcount Trend (12 months)</h2></div>
+    <div class="card-body"><canvas id="trendChart" height="90"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">By Department</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Department</th><th style="text-align:end;">Active</th></tr></thead><tbody>
+      {% for r in by_department %}<tr><td>{{ r.employment__org_unit__name|default:"Unassigned" }}</td><td style="text-align:end;">{{ r.count }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">By Designation (actual vs budgeted)</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Designation</th><th style="text-align:end;">Actual</th><th style="text-align:end;">Budgeted</th><th style="text-align:end;">Variance</th></tr></thead><tbody>
+      {% for r in by_designation %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.count }}</td><td style="text-align:end;">{% if r.budget != None %}{{ r.budget }}{% else %}—{% endif %}</td><td style="text-align:end;">{% if r.variance != None %}{% if r.variance > 0 %}<span class="badge badge-amber">+{{ r.variance }}</span>{% elif r.variance < 0 %}<span class="badge badge-info">{{ r.variance }}</span>{% else %}0{% endif %}{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">No data.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">By Employment Type</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Type</th><th style="text-align:end;">Active</th></tr></thead><tbody>
+      {% for r in by_type %}<tr><td>{{ r.employee_type|default:"—" }}</td><td style="text-align:end;">{{ r.count }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <script>
+    (function () {
+      var el = document.getElementById('trendChart');
+      if (!el || typeof Chart === 'undefined') return;
+      new Chart(el, {
+        type: 'line',
+        data: { labels: {{ trend_labels|safe }}, datasets: [{ label: 'Active Headcount', data: {{ trend_values|safe }}, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.10)', fill: true, tension: .3 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    })();
+  </script>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="users"></i><h3>No headcount data</h3><p>No employees match the current filters.</p></div></div></div>
+  {% endif %}
+{% endblock %}
