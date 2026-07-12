@@ -13666,7 +13666,8 @@ from .forms import ExpenseCategoryForm, ExpenseClaimForm, ExpenseClaimLineForm  
 
 @login_required
 def expensecategory_list(request):
-    return crud_list(request, ExpenseCategory.objects.filter(tenant=request.tenant),
+    return crud_list(request,
+                     ExpenseCategory.objects.filter(tenant=request.tenant).annotate(line_total=Count("claim_lines")),
                      "hrm/expenses/expensecategory/list.html", search_fields=["name", "code"],
                      filters=[("is_active", "is_active", False)])
 
