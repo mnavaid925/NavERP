@@ -369,6 +369,15 @@ before writing ANY new template with status/category badges, FIRST run that grep
 from a sibling template) — treat it as a mandatory pre-write step, not a pre-ship check.** The stale
 skill/CLAUDE.md semantic-name list is the trap; muscle-memory of "success/danger/warning" from other frameworks is
 the second trap.
+**RECURRED AGAIN in HRM 3.32 (2026-07-12), different class FAMILY:** shipped `<div class="stat-icon amber">` in
+`predictive.html` — `.stat-icon` only defines `blue/green/orange/purple/slate` (NO `amber`/`red`), so the icon
+rendered unstyled. **Generalized rule — this applies to EVERY theme.css modifier family, not just badges:** the
+design system uses a FIXED, colour-named palette per component and there is NO semantic/danger variant to fall back
+on. Before using any `badge-*`, `stat-icon <x>`, `text-*`, or other theme.css modifier in a new template, run
+`grep -oE '\.(badge|stat-icon|text)-?[a-z]+' static/css/theme.css | sort -u` (or copy the exact class off a sibling
+template) to confirm the class exists. Known-good sets: badges `badge-green/red/amber/info/muted/slate`; stat-icon
+`blue/green/orange/purple/slate`. Never invent `-success/-danger/-warning/-amber/-red` for a component family that
+doesn't define it.
 
 ## L34 — Tenant-admin seed password is `password` (NOT `password123` — the skills are stale) + persist sidebar scroll/expand across full-page nav
 Two things from a user-reported sidebar UX fix. **(a) Credentials:** the tenant admins (`admin_acme`/`admin_globex`)
