@@ -5170,3 +5170,627 @@ non-bulleted). README + SKILL.md updated; test counts refreshed to 5,669 HRM / 8
 
 **All four requested sub-modules (3.28 HR / 3.29 Attendance / 3.30 Leave / 3.31 Payroll Reports) are now BUILT,
 reviewed, and wired live.**
+
+---
+# Module 3 — HRM — Sub-module 3.32 Analytics Dashboard (hrm) — plan from research-hrm-3.32.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.31) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Unlike 3.28-3.31 (pure derived reports, zero models), 3.32 adds
+**2 new tenant-scoped models** (`HRDashboard` + `HRDashboardWidget`, new incremental migration `0046`) that mirror
+CRM 1.6's proven `AnalyticsDashboard`/`DashboardWidget` mechanic (`apps/crm/models.py:2741-2797`,
+`apps/crm/analytics.py`, `apps/crm/views.py:3998-4147`, `apps/crm/forms.py:767-803`,
+`templates/crm/analytics/dashboard/*.html`) **plus 3 derived, model-less, `@tenant_admin_required` views**
+(`executive_dashboard`, `predictive_analytics`, `benchmarking`) that reuse the 3.28-3.31 report helpers
+(`_report_period`, `_report_department`, `_dept_choices`, `_headcount_at`, `_tenure_band`, `_age_band`,
+`_month_end`, the `tiles = [{"label","value","url","icon"}]` KPI-tile pattern from `payroll_reports_index`/
+`hr_reports_index`). CRM 1.6's own history is instructive: its `dashboard_edit`/`dashboard_delete` have **no
+owner-based access gate** (any tenant user can edit/delete any tenant dashboard; only `is_shared`/`is_default`
+toggling is admin-gated via `_can_share_dashboards`) — a known simplification. 3.32 deliberately ships **stricter**
+than that precedent (owner-or-admin edit/delete gating, `PermissionDenied` on violation, mirroring the
+already-established HRM access-scope convention used throughout 3.18-3.27, e.g. `views.py:7993`
+`"You do not have access to this review."`) — flagged explicitly so it's not mistaken for a literal 1:1 copy.
+
+## 0. Two corrections to the task brief — read before writing code
+
+- [ ] **Choice-list constants live in `apps/hrm/models.py`, NOT `apps/hrm/analytics.py`.** CRM 1.6's actual,
+  working code places `ANALYTICS_RANGE_CHOICES`/`DASHBOARD_LAYOUT_CHOICES`/`WIDGET_CHART_CHOICES`/
+  `WIDGET_SIZE_CHOICES`/`WIDGET_METRIC_CHOICES` in `models.py` (`apps/crm/models.py:2664-2723`) — right next to
+  the model fields that use them as `choices=` — and its `analytics.py` docstring states the import direction
+  explicitly: *"this module imports models — models.py never imports this one (it owns only the field choice
+  lists). That one-way edge avoids a circular import."* If the 5 choice-list constants were defined in
+  `analytics.py` instead, `models.py` would need `from .analytics import WIDGET_METRIC_CHOICES` while
+  `analytics.py` needs `from .models import HRDashboard` — a circular import. **Put the 5 choice-list constants in
+  `apps/hrm/models.py`** (append near the top of the HRDashboard/HRDashboardWidget block); `apps/hrm/analytics.py`
+  imports them from `.models` and owns only the compute metadata (`WIDGET_METRICS` dict + resolvers +
+  `compute_widget`/`allowed_charts`), exactly mirroring CRM's real file split.
+- [ ] **`compute_widget()`'s result `"kind"` values are `"scalar"` / `"series"` / `"table"`, not `"kpi"`.** `"kpi"`
+  is a **`chart_type`** choice (how a scalar renders — KPI card vs. gauge), not the compute-result `kind` (CRM's
+  actual code: `apps/crm/analytics.py:301` `if meta["kind"] == "scalar":`, `templates/crm/analytics/dashboard/
+  detail.html:43` `{% elif r.kind == 'scalar' %}`). Use `kind="scalar"` for every KPI/gauge metric — don't invent
+  a `"kpi"` kind, the template's `{% elif r.kind == 'scalar' %}` branch (mirrored into the HRM template) depends
+  on the exact string.
+
+## 1. Models (apps/hrm/models.py — append near the end; new migration `0046`)
+
+- [ ] **Choice-list constants** (append before the `HRDashboard` class, mirror CRM `apps/crm/models.py:2664-2696`
+  verbatim for 3 of the 5; `ANALYTICS_RANGE_CHOICES` is HRM-specific because HR data is coarser-grained — payroll
+  cycles, monthly headcount/attrition — than CRM's activity-log cadence, so date buckets are wider):
+  ```python
+  ANALYTICS_RANGE_CHOICES = [
+      ("last_30", "Last 30 days"),
+      ("last_90", "Last 90 days"),
+      ("last_180", "Last 180 days"),
+      ("last_365", "Last 12 months"),
+      ("ytd", "Year to date"),
+      ("all", "All time"),
+  ]
+  DASHBOARD_LAYOUT_CHOICES = [("one", "Single column"), ("two", "Two columns"), ("three", "Three columns")]
+  WIDGET_CHART_CHOICES = [
+      ("kpi", "KPI Card"), ("gauge", "Gauge"), ("bar", "Bar Chart"), ("line", "Line Chart"),
+      ("pie", "Pie Chart"), ("doughnut", "Doughnut Chart"), ("table", "Table"),
+  ]
+  WIDGET_SIZE_CHOICES = [
+      ("small", "Small (quarter width)"), ("medium", "Medium (half width)"),
+      ("large", "Large (three-quarter width)"), ("full", "Full width"),
+  ]
+  ```
+  (verbatim copies of CRM's `DASHBOARD_LAYOUT_CHOICES`/`WIDGET_CHART_CHOICES`/`WIDGET_SIZE_CHOICES` — no reason to
+  diverge, the widget mechanic is domain-agnostic.)
+- [ ] **`WIDGET_METRIC_CHOICES`** — the 16-metric HR catalog (9 scalar / 6 series / 1 table), `(key, label)` pairs
+  in this exact grouping/order (full compute mapping is §2):
+  ```python
+  WIDGET_METRIC_CHOICES = [
+      # --- scalar (KPI card / gauge) ---
+      ("kpi_headcount", "KPI · Active Headcount (#)"),
+      ("kpi_attrition_rate", "KPI · Attrition Rate (%, annualized)"),
+      ("kpi_avg_tenure", "KPI · Avg Tenure (yrs)"),
+      ("kpi_gross_payroll", "KPI · Payroll Cost ($)"),
+      ("kpi_absenteeism_rate", "KPI · Absenteeism Rate (%)"),
+      ("kpi_open_reqs", "KPI · Open Requisitions (#)"),
+      ("kpi_pending_leave", "KPI · Pending Leave Requests (#)"),
+      ("kpi_gender_diversity", "KPI · Gender Diversity (% female)"),
+      ("kpi_avg_attrition_risk", "KPI · Avg Attrition Risk Score (0-100)"),
+      # --- series (bar / line / pie / doughnut) ---
+      ("headcount_trend", "Chart · Headcount Trend (12mo)"),
+      ("attrition_by_department", "Chart · Attrition by Department (#)"),
+      ("gender_split", "Chart · Gender Split (#)"),
+      ("leave_by_type", "Chart · Leave Days by Type"),
+      ("hiring_funnel", "Chart · Hiring Funnel (applications by stage)"),
+      ("payroll_cost_by_department", "Chart · Payroll Cost by Department ($)"),
+      # --- table ---
+      ("top_attrition_risk_employees", "Table · Top Attrition-Risk Employees"),
+  ]
+  ```
+- [ ] **`HRDashboard(TenantNumbered)`** — `NUMBER_PREFIX = "HRD"`. Fields: `name` (CharField 120),
+  `description` (TextField, blank), `owner` (FK `settings.AUTH_USER_MODEL`, `on_delete=SET_NULL`, null/blank,
+  `related_name="hrm_dashboards"`), `is_shared` (BooleanField, default False — visible tenant-wide when true —
+  drives *Custom Dashboards* bullet's "Shared/team dashboards"), `is_default` (BooleanField, default False — the
+  owner's landing dashboard), `layout` (CharField, choices `DASHBOARD_LAYOUT_CHOICES`, default `"two"`). Meta:
+  `ordering = ["-is_default", "name"]`; `unique_together = ("tenant", "number")`; `indexes = [
+  Index(fields=["tenant","owner"], name="hrm_hrdash_tnt_owner_idx"), Index(fields=["tenant","is_shared"],
+  name="hrm_hrdash_tnt_shared_idx")]`. `widget_count` property (`self.widgets.count()`). `__str__` = `f"{self
+  .number} · {self.name}"`. Drivers: research's "Per-user saved dashboard(s), one marked default" +
+  "Shared/team dashboards" (Custom Dashboards, Must/Should). Reuses `core.Tenant` (via `TenantNumbered`) — no
+  spine touch beyond tenant.
+- [ ] **`HRDashboardWidget(models.Model)`** — plain child row (not `TenantNumbered`, mirrors CRM's
+  `DashboardWidget`). Fields: `tenant` (FK `core.Tenant`, CASCADE, `related_name="+"`, `db_index=True`),
+  `dashboard` (FK `HRDashboard`, CASCADE, `related_name="widgets"`), `title` (CharField 120), `metric`
+  (CharField 40, choices `WIDGET_METRIC_CHOICES`, default `"kpi_headcount"`), `chart_type` (CharField 10, choices
+  `WIDGET_CHART_CHOICES`, default `"kpi"`), `date_range` (CharField 10, choices `ANALYTICS_RANGE_CHOICES`,
+  default `"last_90"`), `size` (CharField 10, choices `WIDGET_SIZE_CHOICES`, default `"medium"`), `target_value`
+  (DecimalField 14,2, null/blank — the optional goal for gauge/KPI progress, and the lightweight "vs target" input
+  the *Benchmarking* bullet's gauge widgets answer), `position` (PositiveIntegerField, default 0 — manual
+  ordering via up/down, the *Custom Dashboards* bullet's "Add/remove/resize/reorder" mechanic, simplified per the
+  research's explicit call to NOT build pixel drag-drop), `created_at`/`updated_at`. Meta: `ordering =
+  ["position", "id"]`; `indexes = [Index(fields=["tenant","dashboard"], name="hrm_hrwidget_tnt_dash_idx")]`.
+  `__str__` = `f"{self.title} ({self.get_chart_type_display()})"`. Drivers: research's "Widget catalog with fixed
+  metric choices, each computed live" + "Add/remove/resize/reorder" (Custom Dashboards, Must). Reuses nothing new
+  from the spine — a pure presentation-config row over existing HRM data.
+- [ ] `python manage.py makemigrations hrm` → single new file `0046_hrdashboard_hrdashboardwidget...py` (or
+  Django's auto-name) — confirm it contains exactly these 2 models, no unrelated field changes carried in from an
+  uncommitted edit elsewhere in `models.py`.
+
+## 2. `apps/hrm/analytics.py` (NEW module — the compute layer, mirrors `apps/crm/analytics.py`)
+
+- [ ] Module docstring states the widget result contract verbatim (adapted from CRM): scalar ->
+  `{kind:"scalar", value(float), display(str), max(float), pct(int 0-100)}`; series -> `{kind:"series",
+  labels[str], data[number]}`; table -> `{kind:"table", columns[str], rows[list]}`. Import direction: this module
+  imports `.models` (+ `apps.core.models.OrgUnit`); `models.py` never imports this module.
+- [ ] `range_bounds(key)` — HRM's date-window selector, **returns `(start_date, end_date)` as plain `date`
+  objects** (not datetimes, unlike CRM) because every HRM aggregation this pass filters `DateField`s
+  (`hired_on`, `actual_last_working_day`, `date`, `pay_date`, `start_date`) not a `created_at` timestamp; and
+  **`end_date` is always `timezone.localdate()`** (never `None`, unlike CRM's "up to now") to match `_report_period`'s
+  established "always a concrete `date_to`" contract:
+  ```python
+  def range_bounds(key):
+      today = timezone.localdate()
+      if key == "last_30": return today - timedelta(days=30), today
+      if key == "last_90": return today - timedelta(days=90), today
+      if key == "last_180": return today - timedelta(days=180), today
+      if key == "last_365": return today - timedelta(days=365), today
+      if key == "ytd": return date(today.year, 1, 1), today
+      return None, today  # "all"
+  ```
+- [ ] **3 shared helpers extracted from existing 3.28/3.29 view code** (small, behavior-preserving refactors —
+  each existing view calls the new helper instead of inlining the same math; the "where practical" qualifier from
+  research means these 3 self-contained blocks get extracted, the rest of the metrics build their own small
+  bounded queries that reuse the *shape*, not the literal code, per the note below):
+  - `_turnover_rate(tenant, date_from, date_to)` — extracted from `attrition_report`'s existing avg-headcount /
+    annualization math (`views.py:12123-12125`: `avg_hc = (_headcount_at(tenant, date_from) + _headcount_at(
+    tenant, date_to)) / 2`; `days = max(1, (date_to - date_from).days)`; `rate = round((seps_count / avg_hc) *
+    (365 / days) * 100, 1) if avg_hc else 0.0`) — takes the separations **count**, not the row list, so
+    `attrition_report` still does its own `SeparationCase` query/dept-filter for `rows`/`by_reason`/`by_tenure`
+    and just replaces its 3-line inline calc with `ctc["turnover"] = _turnover_rate(tenant, date_from, date_to)`
+    passing `len(rows)` implicitly via a `seps_count` **parameter** (signature:
+    `_turnover_rate(tenant, date_from, date_to, seps_count=None)` — computes `seps_count` itself via `.count()`
+    when not passed, so `kpi_attrition_rate`/`benchmarking` can call it standalone with zero extra params).
+    **Documented pre-existing simplification carried over unchanged:** `_headcount_at` in the denominator is
+    always **tenant-wide**, never department-filtered, even when the caller wants a per-department rate — this
+    was already true in `attrition_report` before 3.32 touches it; do not "fix" it as part of this extraction
+    (scope creep), just preserve it and note it in the docstring.
+  - `_headcount_trend_series(tenant, end_date, months=12)` — extracted from `headcount_report`'s bisect-based
+    trend block (`views.py:12083-12096`: sorted `hire_dates`/`sep_dates` + `bisect.bisect_right` per month-end via
+    `_month_end`), returns `(labels[str], values[int])`. `headcount_report` replaces its inline block with
+    `ctx["trend_labels"], ctx["trend_values"] = json.dumps(...), json.dumps(...)` fed from this helper's return
+    (same 2-query, no-N+1 shape — `bisect` import moves with the logic, or stays duplicated as a stdlib import in
+    both files, either is fine).
+  - `_present_absent_counts(tenant, date_from, date_to, dept=None)` — extracted from `absenteeism_report`'s
+    `_attendance_base` + status-count fold (`views.py:12451-12455`), returns `(absent_count, tracked_count)`.
+    `absenteeism_report` replaces its 2-line fold with `absent, tracked = _present_absent_counts(tenant,
+    date_from, date_to, dept)`. Note `_attendance_base` (`views.py:12312-12316`) itself stays in `views.py`
+    (it's a 3.29-scoped helper `attendance_summary_report`/`late_early_report`/`overtime_report` also use for
+    their own base querysets) — `_present_absent_counts` in `analytics.py` re-implements the same 4-line
+    `AttendanceRecord.objects.filter(...)` query independently rather than importing `_attendance_base` from
+    `views.py` (views.py already imports FROM analytics.py in the CRM precedent — the reverse import would be
+    circular). This is the one deliberate, documented exception to "no duplicated queries": a 4-line queryset
+    filter, not view logic.
+- [ ] **1 new heuristic (no 3.28-3.31 precedent — genuinely new for 3.32):**
+  `_attrition_risk_scores(tenant, dept=None)` — returns a list of `{employee, department_name, tenure_years,
+  absence_rate_pct, late_rate_pct, recent_leave_count, probation_flag, no_recent_review, score, band}` dicts, one
+  per **active** `EmployeeProfile` (`employment__status="active"`, dept-filtered when given). **Transparent,
+  documented, weighted-sum heuristic (0-100, higher = more risk) — explicitly NOT presented as ML** (research:
+  "near-universal... but MODEL COMPLEXITY varies... a weighted heuristic, NOT a trained ML model"):
+  - **Tenure (0-30 pts):** via `_tenure_band(days)` (reused verbatim): `"<1 yr"` → 30, `"1-2 yrs"` → 20,
+    `"3-5 yrs"` → 10, `"6-10 yrs"` → 5, `"10+ yrs"` → 0, `"Unknown"` → 15 (neutral — no `hired_on`).
+  - **Attendance (0-25 pts):** `min(25, round(absence_rate_pct * 0.8 + late_rate_pct * 0.4))` over the trailing
+    90 days. `absence_rate_pct`/`late_rate_pct` computed from **one batched query pass**, not per-employee:
+    `AttendanceRecord.objects.filter(tenant=tenant, date__gte=today-90d, date__lte=today)
+    .values("employee_id", "status").annotate(c=Count("id"))` folded into `{employee_id: {status: count}}` for
+    absence rate; late rate from a second bounded query
+    `.filter(check_in__isnull=False).select_related("shift").values("employee_id", "check_in",
+    "shift__start_time", "shift__grace_minutes")` (reuses `AttendanceRecord.is_late()`'s exact minutes-of-day
+    comparison, `models.py:1081-1088`, applied in Python over this ONE fetched list, not `.is_late()` called
+    per-row-per-query) folded into `{employee_id: {late_count, total_checked_in}}`.
+  - **Leave frequency/recency (0-20 pts):** `min(20, recent_leave_count * 4)` where `recent_leave_count` =
+    approved/pending `LeaveRequest` count with `start_date >= today-90d`, from ONE grouped query
+    (`.values("employee_id").annotate(c=Count("id"))` folded into a dict).
+  - **Probation proximity (0-15 pts):** from the already-`select_related`-fetched `EmployeeProfile` row (no
+    extra query) — `confirmed_on` is set → 0; else `probation_end_date` within 30 days (inclusive, not yet
+    passed) → 15; within 90 days → 8; else 0.
+  - **No recent completed review (0-10 pts):** ONE query,
+    `set(PerformanceReview.objects.filter(tenant=tenant, status__in=("shared","acknowledged"),
+    submitted_at__date__gte=today-365d).values_list("subject_id", flat=True).distinct())` — membership check in
+    the main Python loop (O(1) per employee, not a query per employee) → not in the set → +10.
+  - **Total = tenure + attendance + leave + probation + review-gap, capped at 100.** Bands (documented, used for
+    the badge color in both the widget table and `predictive_analytics`): `< 25` Low (`badge-green`), `25-49`
+    Medium (`badge-info`), `50-74` High (`badge-amber`), `>= 75` Critical (`badge-red`).
+  - **Query budget: 5 total queries regardless of tenant size** (active-employee base query with
+    `select_related("party","employment__org_unit")`, 2 attendance queries, 1 leave query, 1 review-set query) +
+    one bounded Python loop over the active-employee list — this is the module's one N+1 trap and MUST be
+    reviewed as such (performance-reviewer will check it, same as 3.31's cost-center fold).
+- [ ] **16 `_r_*(tenant, start, end)` resolvers** (each tenant-scoped, div-by-zero-guarded, returns the partial
+  dict per the kind contract — `compute_widget` adds `kind`/`max`/`pct`):
+  | metric key | kind | resolver source (exact aggregation) |
+  |---|---|---|
+  | `kpi_headcount` | scalar | `EmployeeProfile.objects.filter(tenant=tenant, employment__status="active").count()` — **snapshot, ignores `start`/`end`** (documented: headcount is point-in-time, not a range sum) |
+  | `kpi_attrition_rate` | scalar | `_turnover_rate(tenant, start or (end - 365d), end)` — `intrinsic_max=100` |
+  | `kpi_avg_tenure` | scalar | own small query: `EmployeeProfile.objects.filter(tenant=tenant, employment__status="active", employment__hired_on__isnull=False).values_list("employment__hired_on", flat=True)`, avg `(end - hired_on).days / 365.25` in Python — mirrors `diversity_report`'s `avg_tenure` shape without importing its combined loop |
+  | `kpi_gross_payroll` | scalar | `Payslip.objects.filter(tenant=tenant, cycle__pay_date__gte=start, cycle__pay_date__lte=end).aggregate(Sum("gross_pay"))` (all-time when `start` is `None`); if zero, fallback to `EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active").aggregate(Sum("annual_ctc_amount"))/12` (mirrors `cost_report`'s `is_estimate` fallback) — `format: money` |
+  | `kpi_absenteeism_rate` | scalar | `_present_absent_counts(tenant, start or (end-90d), end)` → `absent/tracked*100` — `intrinsic_max=100` |
+  | `kpi_open_reqs` | scalar | `JobRequisition.objects.filter(tenant=tenant, status__in=("approved","posted")).count()` — **snapshot** |
+  | `kpi_pending_leave` | scalar | `LeaveRequest.objects.filter(tenant=tenant, status="pending").count()` — **snapshot** |
+  | `kpi_gender_diversity` | scalar | female / active-total * 100 (one `.values("gender").annotate(Count)` query) — **snapshot** — `intrinsic_max=100` |
+  | `kpi_avg_attrition_risk` | scalar | `avg(s["score"] for s in _attrition_risk_scores(tenant))` — **snapshot** — `intrinsic_max=100` |
+  | `headcount_trend` | series | `_headcount_trend_series(tenant, end, months=12)` |
+  | `attrition_by_department` | series | `SeparationCase.objects.filter(tenant=tenant, actual_last_working_day__gte=start, actual_last_working_day__lte=end).values("employee__employment__org_unit__name").annotate(c=Count("id")).order_by("-c")` — null org_unit → `"Unassigned"` label |
+  | `gender_split` | series | active `EmployeeProfile` `.values("gender").annotate(c=Count("id"))`, labeled via `EmployeeProfile.GENDER_CHOICES` + `"Not specified"` for blank — **snapshot** |
+  | `leave_by_type` | series | `LeaveRequest.objects.filter(tenant=tenant, status="approved", start_date__gte=start, start_date__lte=end).values("leave_type__name").annotate(d=Sum("days")).order_by("-d")` |
+  | `hiring_funnel` | series | `JobApplication.objects.filter(tenant=tenant, applied_at__date__gte=start, applied_at__date__lte=end).values("stage").annotate(c=Count("id"))`, ordered per `APPLICATION_STAGE_CHOICES` |
+  | `payroll_cost_by_department` | series | `Payslip.objects.filter(tenant=tenant, cycle__pay_date__gte=start, cycle__pay_date__lte=end).values("employee__employment__org_unit__name").annotate(s=Sum("gross_pay")).order_by("-s")` |
+  | `top_attrition_risk_employees` | table | top 10 of `_attrition_risk_scores(tenant)` sorted by `score` desc; columns `["Employee","Department","Tenure (yrs)","Risk Score","Risk Band"]` |
+- [ ] `WIDGET_METRICS = {key: {"kind":..., "charts": SCALAR_CHARTS|SERIES_CHARTS|TABLE_CHARTS, "resolver": _r_*,
+  "intrinsic_max": <optional>}}` — `SCALAR_CHARTS = ["kpi","gauge"]`, `SERIES_CHARTS = ["bar","line","pie",
+  "doughnut"]`, `TABLE_CHARTS = ["table"]` (verbatim from CRM). `allowed_charts(metric)` + `compute_widget(widget)`
+  — **copy CRM's `compute_widget` body verbatim** (`apps/crm/analytics.py:293-307`): `start, end =
+  range_bounds(widget.date_range)`; `result = meta["resolver"](widget.tenant, start, end)`;
+  `result["kind"] = meta["kind"]`; if scalar, `max_v = target or intrinsic_max or (val if val>0 else 1)`,
+  `pct = min(100, round(val/max_v*100)) if max_v else 0`.
+
+## 3. Views (apps/hrm/views.py — append `# --- 3.32 Analytics Dashboard ---` banner after the 3.31 block)
+
+- [ ] Local imports at the top of the banner (mirrors the 3.26/3.27/3.31 `# noqa: E402` pattern):
+  `from .analytics import compute_widget` and `from .models import HRDashboard, HRDashboardWidget` (+
+  `from .forms import HRDashboardForm, HRDashboardWidgetForm`).
+- [ ] `_can_manage_hrdash(user, dashboard)` — `dashboard.owner_id == user.pk or user.is_superuser or
+  getattr(user, "is_tenant_admin", False)`. `_can_share_hrdash(user)` — `user.is_superuser or
+  getattr(user, "is_tenant_admin", False)` (mirrors CRM's `_can_share_dashboards`, gates the `is_shared`/
+  `is_default` fields in the form so a non-admin can't publish/default a dashboard tenant-wide).
+- [ ] `hr_dashboard_list(request)` — `@login_required`. `qs = HRDashboard.objects.filter(tenant=request.tenant)
+  .filter(Q(owner=request.user) | Q(is_shared=True)).select_related("owner")` (owner's own + tenant-shared,
+  never another user's private dashboard — the "owner's + shared" scoping the CRM precedent skips).
+  `crud_list(request, qs, "hrm/analytics/dashboard/list.html", search_fields=["name","number","description"],
+  filters=[("owner","owner_id",True)])` — `owners` choices = distinct owners of the VISIBLE queryset (not every
+  tenant user), so the filter dropdown never leaks the existence of another user's private dashboard.
+- [ ] `hr_dashboard_create(request)` — `@login_required`, `request.tenant is None` guard (redirect + message,
+  mirrors CRM). `form = HRDashboardForm(request.POST or None, tenant=request.tenant, can_share=
+  _can_share_hrdash(request.user))`; on valid, `obj.tenant = request.tenant; obj.owner = request.user; obj.save()`
+  (owner is ALWAYS the creator — never a form field, per §4's excluded fields). `write_audit_log(...,"create")`.
+  Redirect `hrm:hr_dashboard_detail`.
+- [ ] `hr_dashboard_detail(request, pk)` — `@login_required`. `obj = get_object_or_404(HRDashboard
+  .objects.select_related("owner"), pk=pk, tenant=request.tenant)` (tenant-scope only, 404 for cross-tenant);
+  THEN `if not (obj.is_shared or obj.owner_id == request.user.pk or user is admin): raise PermissionDenied(...)`
+  (403 for a same-tenant user peeking at someone else's private dashboard — mirrors the established
+  `PermissionDenied` access-scope convention, e.g. `views.py:7993`, NOT a 404). Compute every widget live:
+  `cols = {"one":1,"two":2,"three":3}.get(obj.layout, 2)`; `span_map = {"small":1,"medium":2,"large":3,
+  "full":cols}`; for `w in obj.widgets.filter(tenant=request.tenant)`: `result = compute_widget(w)`,
+  `rendered.append({"widget":w, "result":result, "span": min(span_map.get(w.size,1), cols)})`; when
+  `result["kind"]=="series"` and `w.chart_type in ("bar","line","pie","doughnut")`, append to `chart_configs`
+  (`{"id":w.pk,"type":w.chart_type,"labels":...,"data":...}`). Context: `obj`, `rendered_widgets`,
+  `chart_configs`, `cols`, `can_manage` (`_can_manage_hrdash(request.user, obj)` — template hides
+  Edit/Delete/Add-Widget/Move controls when False, read-only view for a non-owner viewing a shared dashboard).
+- [ ] `hr_dashboard_edit(request, pk)` / `hr_dashboard_delete(request, pk)` — `@login_required`,
+  `get_object_or_404(..., tenant=request.tenant)` then `if not _can_manage_hrdash(request.user, obj): raise
+  PermissionDenied("Only the dashboard owner or a tenant admin can edit this dashboard.")` (same message pattern
+  for delete). Delete is `@require_POST`, `crud_delete(..., success_url="hrm:hr_dashboard_list")` (after the
+  manage-check).
+- [ ] `hr_widget_create(request, dash_pk)` — `@login_required`. `dashboard = get_object_or_404(HRDashboard,
+  pk=dash_pk, tenant=request.tenant)`; `if not _can_manage_hrdash(request.user, dashboard): raise
+  PermissionDenied(...)` (adding a widget to someone else's dashboard is an edit). On valid POST:
+  `widget.tenant = request.tenant; widget.dashboard = dashboard; last = dashboard.widgets.order_by(
+  "-position").first(); widget.position = (last.position + 1) if last else 0; widget.save()`.
+- [ ] `hr_widget_edit(request, pk)` / `hr_widget_delete(request, pk)` — `@login_required`,
+  `get_object_or_404(HRDashboardWidget, pk=pk, tenant=request.tenant)`, then `_can_manage_hrdash(request.user,
+  widget.dashboard)` gate (403 on violation), redirect back to `hr_dashboard_detail` with `pk=widget.dashboard_id`.
+- [ ] `hr_widget_move(request, pk, direction)` — `@login_required`, `@require_POST`. `_can_manage_hrdash` gate,
+  then **copy CRM's exact position-swap/normalize algorithm verbatim** (`apps/crm/views.py:4128-4146`): fetch
+  `order = list(widget.dashboard.widgets.filter(tenant=request.tenant).order_by("position","id"))`, find `idx`,
+  swap with `idx±1` when in bounds, `bulk_update` only the rows whose `position` actually changed (ONE
+  statement, not N). URL pattern `analytics/widgets/<int:pk>/move/<str:direction>/`.
+- [ ] `executive_dashboard(request)` — `@tenant_admin_required`, `/hrm/analytics/executive/`. Filters:
+  `?department` (`_report_department`), period fixed to `_report_period(request)` for the trailing-window
+  metrics (defaults trailing 12 months, matching every other 3.28-3.31 index). **6 KPI tiles** (research's
+  curated strip: headcount, attrition %, open reqs, avg tenure, gross payroll, pending approvals), each
+  `{"label","value","url","icon"}` — 2 also carry a `"trend_labels"/"trend_values"` JSON pair for a sparkline
+  (kept to exactly 2 tiles to bound the query count, see below):
+  1. **Active Headcount** — dept-filtered active count; url `hrm:headcount_report`; sparkline = last 6 points of
+     `_headcount_trend_series(tenant, today, months=6)` (cheap, 2 queries total for the whole tile).
+  2. **Attrition Rate** (trailing 12mo, annualized) — `_turnover_rate(tenant, date_from, date_to)`; url
+     `hrm:attrition_report`; no sparkline.
+  3. **Open Requisitions** — dept-filtered `JobRequisition.objects.filter(status__in=("approved","posted"))
+     .count()`; url `hrm:hiring_report`; no sparkline.
+  4. **Avg Tenure** — same small query as `kpi_avg_tenure`'s resolver, dept-filtered; url `hrm:diversity_report`;
+     no sparkline.
+  5. **Gross Payroll Cost** (latest cycle — **not dept-filtered**, `PayrollCycle` totals are tenant-wide by
+     construction, document this) — `cycle.total_gross` for the latest `PayrollCycle`; url `hrm:cost_report`;
+     sparkline = last 6 of `reversed(cycles[:12])` (the exact slice `cost_report` already fetches, `views.py
+     :12241`) — 1 extra query (`PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date")[:12]`).
+  6. **Pending Approvals** — `LeaveRequest.objects.filter(tenant=tenant, status="pending").count() +
+     StatutoryReturn.objects.filter(tenant=tenant, status="pending", due_date__lt=today).count()` (2 counts
+     summed into 1 tile value); url `hrm:leave_reports_index`; no sparkline.
+  **Sparklines are deliberately limited to tiles 1 and 5** (the two whose monthly series is already a cheap,
+  existing query shape) to keep the page to a small, bounded query budget (~10 queries total) — matches the
+  research's own priority split (curated strip = Must, sparkline-per-tile = Should, not Must).
+  **Alerts/Exceptions section** (research: "overdue statutory filings, pending approvals, expiring probations,
+  upcoming contract ends" — the last is **not buildable**, no `contract_end_date` field exists on
+  `EmployeeProfile`/`core.Employment` this pass, dropped and noted under Deferred): list of `{"label","count",
+  "url","severity"}` — Overdue Statutory Returns (`due_date__lt=today, status="pending"`, url
+  `hrm:statutory_report`, severity `"red"` if count>0), Pending Leave Requests (`status="pending"`, url
+  `hrm:leave_trend_report`, severity `"amber"`), Expiring Probations (`probation_end_date__gte=today,
+  probation_end_date__lte=today+30d, confirmed_on__isnull=True`, count + url `hrm:employee_list`, severity
+  `"amber"`). Render `hrm/analytics/executive.html`.
+- [ ] `predictive_analytics(request)` — `@tenant_admin_required`, `/hrm/analytics/predictive/`. Filters:
+  `?department` (`_report_department`). **Attrition-risk section:** `risk_rows = _attrition_risk_scores(tenant,
+  dept)` sorted desc by `score`, sliced to the top 25 for the table (avoid an unbounded render on a large
+  tenant); summary strip = `avg_risk` (mean of ALL scores, not just the top 25), `band_counts` (`{"Low":n,
+  "Medium":n,"High":n,"Critical":n}` via `Counter` over the full list). `risk_by_department` = fold the SAME
+  full `risk_rows` list by `department_name` in Python into `{"name","count","avg_score","high_or_critical_count"}`
+  rows, sorted by `avg_score` desc (research: "segment/team-level... aggregation", Should). **Hiring-needs
+  projection section** (research: "headcount forecast", Must): for each `Designation` with `budgeted_headcount`
+  not null (tenant-scoped, dept-filtered via `Designation.department`), 3 pre-fetched grouped dicts (no N+1):
+  `filled_by_desig = EmployeeProfile.objects.filter(tenant=tenant, employment__status="active")
+  .values("designation_id").annotate(c=Count("id"))`, `exits_by_desig =
+  SeparationCase.objects.filter(tenant=tenant, actual_last_working_day__gte=today-365d,
+  actual_last_working_day__lte=today).values("employee__designation_id").annotate(c=Count("id"))`,
+  `open_reqs_by_desig = JobRequisition.objects.filter(tenant=tenant, status__in=("approved","posted"))
+  .values("designation_id").annotate(c=Count("id"))`. Per designation: `filled` (from dict, 0 default), `gap =
+  designation.budgeted_headcount - filled`, `trailing_exits` (from dict), `projected_next_q_exits =
+  round(trailing_exits / 4)` (**documented formula**: "at the current trailing-12-month run-rate, this many
+  exits are projected next quarter" — no annualized-rate math, avoids div-by-zero entirely), `open_reqs` (from
+  dict, informational, NOT summed into net — avoids double-counting a gap an open req may already cover,
+  documented in a template footnote), `net_hiring_need = max(0, gap) + projected_next_q_exits`. Table columns:
+  Designation, Department, Budgeted, Filled, Gap, Trailing 12mo Exits, Projected Next-Q Exits, Open Reqs, Net
+  Hiring Need. A "How risk scores are calculated" / "How the hiring-needs projection works" explainer box in the
+  template (transparency — research explicitly requires this NOT be presented as ML). Render
+  `hrm/analytics/predictive.html`.
+- [ ] `benchmarking(request)` — `@tenant_admin_required`, `/hrm/analytics/benchmarking/`. Filters: `?department`
+  (`_report_department`), `date_from`/`date_to` via `_report_period(request)` (defines the **current** period);
+  **prior period** = the immediately-preceding period of equal length: `period_days = (date_to -
+  date_from).days`; `prior_to = date_from - timedelta(days=1)`; `prior_from = prior_to -
+  timedelta(days=period_days)`. **4-row scorecard** (`headcount`, `attrition_rate`, `absenteeism_rate`,
+  `gross_payroll`), each row = `{"label","current","prior","delta","delta_pct","rag"}`:
+  - `headcount`: `_headcount_at(tenant, date_to)` vs `_headcount_at(tenant, prior_to)` — `rag` = `"info"`
+    always (more/fewer headcount isn't inherently good/bad without a target).
+  - `attrition_rate`: `_turnover_rate(tenant, date_from, date_to)` vs `_turnover_rate(tenant, prior_from,
+    prior_to)` — **down is good**: `rag = "green"` if `current <= prior`, `"amber"` if `current` up to 10%
+    relatively worse, else `"red"`.
+  - `absenteeism_rate`: `_present_absent_counts` current vs prior window — same down-is-good RAG thresholds as
+    attrition.
+  - `gross_payroll`: `Payslip` gross sum for cycles in each window — `rag = "info"` (no inherent direction).
+  **Optional vs-target override** (research's "current vs. target/goal", the lightweight substitute for a
+  persisted `target_value` since this derived view has no backing model): `?target_attrition_rate`/
+  `?target_absenteeism_rate` GET params, parsed via `float(x)` in a `try/except (TypeError, ValueError):
+  target = None` guard (never trust raw GET input into a bare `float()`); when present, that row's `rag`
+  is recomputed purely vs. target (within 5% → green, within 15% → amber, else red), **overriding** the
+  trend-based rag for that row only. **Pay-equity mini-table** (research: "gender pay gap, cost-per-department
+  vs. average", Should): from the **latest** `PayrollCycle` (not the date-range window — a single-cycle snapshot
+  is the honest unit for a per-employee average), `Payslip.objects.filter(tenant=tenant, cycle=latest_cycle)
+  .values("employee__gender", "employee__employment__org_unit__name").annotate(avg_gross=Avg("gross_pay"),
+  headcount=Count("employee_id", distinct=True))`, gender labeled via `GENDER_CHOICES` + `"Not specified"`,
+  dept `None` → `"Unassigned"`. Guard: no `PayrollCycle` rows → empty-state for this section only (scorecard
+  above still renders). Render `hrm/analytics/benchmarking.html`.
+- [ ] Every rate/percentage/average across all 3 derived views + all 16 widget resolvers is guarded against a
+  zero denominator (empty tenant, zero active employees, zero payslips in range, zero `PayrollCycle` rows, zero
+  `Designation` rows with a budget, `prior` period value of 0 for a `delta_pct`) — audit each before considering
+  a view/resolver done.
+
+## 4. Forms (apps/hrm/forms.py — append)
+
+- [ ] `HRDashboardForm(TenantModelForm)` — `Meta: model = HRDashboard; fields = ["name", "description",
+  "is_shared", "is_default", "layout"]` (**`owner` and `number` excluded** — owner is always `request.user` at
+  create time and immutable after, set in the view per §3, never user-choosable; `number` is system-assigned).
+  `__init__(self, *args, can_share=True, **kwargs)`: `if not can_share: self.fields.pop("is_shared", None);
+  self.fields.pop("is_default", None)` (mirrors CRM's `AnalyticsDashboardForm` gating exactly — a non-admin
+  can create/edit their own dashboard but can't publish it tenant-wide or make it everyone's default).
+- [ ] `HRDashboardWidgetForm(TenantModelForm)` — `Meta: model = HRDashboardWidget; fields = ["title", "metric",
+  "chart_type", "date_range", "size", "target_value"]` (`tenant`/`dashboard`/`position` excluded — set in the
+  view). `clean()` — **copy CRM's `DashboardWidgetForm.clean()` verbatim** (`apps/crm/forms.py:793-803`):
+  `from .analytics import WIDGET_METRICS, allowed_charts`; if `metric` and `chart_type` both present and
+  `metric in WIDGET_METRICS`, reject a `chart_type` not in `allowed_charts(metric)` with `self.add_error(
+  "chart_type", "This metric supports: " + ", ".join(ok) + ".")`.
+
+## 5. URLs (apps/hrm/urls.py — append after the 3.31 block, before the closing `]`)
+
+- [ ] New `# 3.32 Analytics Dashboard` comment block:
+  ```python
+  # 3.32 Analytics Dashboard
+  path("analytics/executive/", views.executive_dashboard, name="executive_dashboard"),
+  path("analytics/predictive/", views.predictive_analytics, name="predictive_analytics"),
+  path("analytics/benchmarking/", views.benchmarking, name="benchmarking"),
+  path("analytics/dashboards/", views.hr_dashboard_list, name="hr_dashboard_list"),
+  path("analytics/dashboards/add/", views.hr_dashboard_create, name="hr_dashboard_create"),
+  path("analytics/dashboards/<int:pk>/", views.hr_dashboard_detail, name="hr_dashboard_detail"),
+  path("analytics/dashboards/<int:pk>/edit/", views.hr_dashboard_edit, name="hr_dashboard_edit"),
+  path("analytics/dashboards/<int:pk>/delete/", views.hr_dashboard_delete, name="hr_dashboard_delete"),
+  path("analytics/dashboards/<int:dash_pk>/widgets/add/", views.hr_widget_create, name="hr_widget_create"),
+  path("analytics/widgets/<int:pk>/edit/", views.hr_widget_edit, name="hr_widget_edit"),
+  path("analytics/widgets/<int:pk>/delete/", views.hr_widget_delete, name="hr_widget_delete"),
+  path("analytics/widgets/<int:pk>/move/<str:direction>/", views.hr_widget_move, name="hr_widget_move"),
+  ```
+- [ ] Confirm no collision: `feedback_dashboard` (3.20, `feedback/dashboard/`) is a distinct path/name; no other
+  `analytics/` or `dashboard`-named route exists in `apps/hrm/urls.py` prior to this block.
+
+## 6. Navigation — apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.32"]` block (insert after the `"3.31"` entry), bullet text copied **verbatim** from
+  `NavERP.md:656-659`:
+  ```python
+  # 3.32 Analytics Dashboard — 2 new models (HRDashboard/HRDashboardWidget, mirrors CRM 1.6's Analytics
+  # Dashboard mechanic) + 3 derived @tenant_admin_required views. Custom Dashboards -> the CRUD list (any
+  # tenant user, @login_required); the other 3 bullets -> admin-only derived views.
+  "3.32": {
+      "Executive Dashboard": "hrm:executive_dashboard",     # bullet (curated KPI strip + alerts, admin-only)
+      "Custom Dashboards": "hrm:hr_dashboard_list",          # bullet (saved widget dashboards, owner's + shared)
+      "Predictive Analytics": "hrm:predictive_analytics",    # bullet (attrition-risk heuristic + hiring-needs projection, admin-only)
+      "Benchmarking": "hrm:benchmarking",                    # bullet (period-over-period + vs-target scorecard, admin-only)
+  },
+  ```
+- [ ] Confirm the sidebar Live/Coming-Soon logic (whatever gates on `LIVE_LINKS`) doesn't assume every entry is
+  `@tenant_admin_required` — `hr_dashboard_list` is reachable by any logged-in tenant user (matches how other
+  non-admin-gated HRM bullets already render, e.g. self-service 3.25/3.26 entries).
+
+## 7. Seeder (apps/hrm/management/commands/seed_hrm.py — extend, idempotent)
+
+- [ ] New `_seed_analytics(self, tenant, *, flush)`, called from `handle()` **after** `self._seed_communication(
+  tenant, flush=...)` (the current last call, 3.27) — append `self._seed_analytics(tenant, flush=options[
+  "flush"])` as the new final line of the `for tenant in tenants:` loop.
+  - Guard: `if HRDashboard.objects.filter(tenant=tenant).exists() and not flush: return` (skip if already
+    seeded, per the Seed Command Rules); `if flush: HRDashboard.objects.filter(tenant=tenant).delete()`
+    (cascades to widgets via `on_delete=CASCADE`).
+  - **Dashboard 1 — shared default "Executive Overview"**: `owner` = the tenant's admin user (reuse whatever
+    `admin_<slug>` lookup pattern the earlier `_seed_*` methods already use for `approver`/`issued_by` FKs),
+    `is_shared=True`, `is_default=True`, `layout="two"`. 5-6 widgets spanning chart types (no pixel-precise
+    placement needed, `position` = creation order): `kpi_headcount` (kpi), `kpi_attrition_rate` (gauge, with a
+    `target_value` e.g. `15.0` so the gauge has a meaningful fill), `headcount_trend` (line), `gender_split`
+    (doughnut), `attrition_by_department` (bar), `top_attrition_risk_employees` (table).
+  - **Dashboard 2 — private "My HR Snapshot"**: `owner` = a different tenant user if one exists (else same
+    admin), `is_shared=False`, `is_default=False`, `layout="one"`. 2-3 widgets: `kpi_open_reqs` (kpi),
+    `kpi_pending_leave` (kpi), `leave_by_type` (pie).
+  - Every `HRDashboardWidget.objects.get_or_create(tenant=tenant, dashboard=dash, title=..., defaults={...})`
+    (idempotent per the Seed Command Rules — never a bare `.create()`), `position` assigned sequentially only on
+    first creation.
+  - Reuses whatever `EmployeeProfile`/`PayrollCycle`/`LeaveRequest`/`SeparationCase` data 3.1-3.31's seeders
+    already created — **no new demo employees/payroll/leave data**, this seeder only creates the 2
+    `HRDashboard` rows + their widgets.
+
+## 8. Templates (templates/hrm/analytics/ — sub-module folder, then entity folders per the Template Folder
+   Structure rule; the 3 derived pages are standalone per rule 6, no entity folder)
+
+- [ ] `templates/hrm/analytics/dashboard/list.html` — mirror `templates/crm/analytics/dashboard/list.html`:
+  search + `owner` filter (`<select>` populated from the visible queryset's distinct owners,
+  `|stringformat:"d"` comparison), table columns Number/Name/Owner/Visibility (`badge-green` "Shared" /
+  `badge-muted` "Private")/Widgets/Layout/Actions, `is_default` → `badge-info` "Default" chip next to the name,
+  Actions column = view/edit/delete **only when `_can_manage_hrdash`-equivalent is true for that row** (pass a
+  per-row `can_manage` flag from the view, or compute `obj.owner_id == request.user.pk or ...` inline in the
+  template — prefer passing it from the view to keep the template dumb), else view-only. Empty-state: "No
+  dashboards yet."
+  - [ ] `templates/hrm/analytics/dashboard/form.html` — `HRDashboardForm` fields loop (standard `form-grid`
+    pattern per CRM's `dashboard/form.html`), breadcrumb Analytics › Dashboards › New/Edit.
+  - [ ] `templates/hrm/analytics/dashboard/detail.html` — mirror `templates/crm/analytics/dashboard/detail.html`
+    structure: header with Shared/Private + Default badges, `page-actions` (Add Widget / Edit / Delete —
+    **conditionally rendered on `can_manage`**, the CRM template shows them unconditionally, this is the
+    deliberate HRM tightening from §0), widget grid (`grid-template-columns: repeat({{ cols }}, ...)`, each card
+    `grid-column: span {{ item.span }}`), per-widget header = title + date-range badge + **move up/down (only
+    when `can_manage`)** + edit/delete icons (only when `can_manage`), body switches on `r.kind`: `"scalar"` →
+    `stat-value`/`stat-label` (+ progress-bar when `w.chart_type == "gauge"`), `"table"` → `<table>` with
+    `{% empty %}` empty-state, else (series) → `<canvas id="wchart{{ w.pk }}">` guarded by `{% if r.labels %}`.
+    `{{ chart_configs|json_script:"dash-charts" }}` at the bottom (Django's built-in, XSS-safe — matches CRM's
+    real template, NOT the `json.dumps()+|safe` pattern used elsewhere in HRM's own 3.28-3.31 report templates).
+    `extra_js` block: **guard `typeof Chart === 'undefined'` before calling `new Chart(...)`** (CRM's own
+    template omits this guard — HRM adds it, matching HRM's own established 3.28-3.31 convention and avoiding a
+    console error if `Chart.js` fails to load).
+  - [ ] `templates/hrm/analytics/widget/form.html` — mirror `templates/crm/analytics/widget/form.html`:
+    `HRDashboardWidgetForm` fields loop, breadcrumb Dashboards › {{ dashboard.name }} › Add/Edit Widget, a
+    static help line ("KPI metrics render as a card or gauge; chart metrics as bar/line/pie/doughnut; table
+    metrics as a table. A target value drives the gauge fill.").
+- [ ] `templates/hrm/analytics/executive.html` — standalone (rule 6): `?department` filter bar, 6 KPI tiles
+  (2 with an inline sparkline `<canvas>`, `Chart.js` line, tiny height, same `typeof Chart === 'undefined'`
+  guard), each tile links to its `url`. Alerts section: 3 rows with severity badge (`badge-red`/`badge-amber`)
+  + count + link. No `{% csrf_token %}` needed (GET-only).
+- [ ] `templates/hrm/analytics/predictive.html` — standalone: `?department` filter, summary strip (avg risk,
+  band-count chips using the 4 badge colors green/info/amber/red), risk table (top 25, columns Employee/
+  Department/Tenure/Score/Band badge), risk-by-department rollup table, hiring-needs projection table (9
+  columns per §3), a collapsible/inline "How this is calculated" explainer box quoting the weight breakdown
+  (30/25/20/15/10) and the projection formula in plain language — **mandatory, not optional**, per research's
+  "transparent... NOT ML" requirement.
+- [ ] `templates/hrm/analytics/benchmarking.html` — standalone: `?department`/`date_from`/`date_to` filter +
+  the 4 optional `?target_*` inputs (rendered as small number inputs in the filter bar, re-submitted like every
+  other active param), 4-row scorecard table (current/prior/delta/delta% columns + RAG badge:
+  `badge-green`/`badge-info`/`badge-amber`/`badge-red` — **never** `badge-success`/`-danger`/`-warning`, L33),
+  pay-equity mini-table (gender × department, avg gross, headcount) with its own empty-state when no
+  `PayrollCycle` exists.
+- [ ] All new templates: filter `<form method="get">` re-submits every active param; pk/FK `<select>`
+  comparisons use `|stringformat:"d"`; badge values match the exact model `CHOICES`/computed band strings with
+  an `{% else %}`/default fallback; `floatformat:1` for percentages/scores, `floatformat:2` for currency,
+  consistent with 3.28-3.31's existing templates.
+
+## 9. Admin (apps/hrm/admin.py)
+
+- [ ] `@admin.register(HRDashboard)` — `list_display = ("number", "name", "tenant", "owner", "is_shared",
+  "is_default", "widget_count")`, `list_filter = ("is_shared", "is_default", "layout")`, `search_fields =
+  ("number", "name")`.
+- [ ] `@admin.register(HRDashboardWidget)` — `list_display = ("title", "dashboard", "metric", "chart_type",
+  "size", "position")`, `list_filter = ("metric", "chart_type", "size")`. Optional: a `TabularInline` for
+  `HRDashboardWidget` on the `HRDashboard` admin page (nice-to-have, not required).
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations hrm` → exactly one new file (`0046_...py`), 2 new models only.
+- [ ] `python manage.py migrate` — clean apply.
+- [ ] `python manage.py seed_hrm` **twice** in a row — second run must be a no-op for `_seed_analytics`
+  (idempotent, per the Seed Command Rules) while the rest of the seeder's own idempotency (already proven
+  through 3.31) stays intact.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep, tenant admin login:
+  - `hrm:executive_dashboard` / `hrm:predictive_analytics` / `hrm:benchmarking` → 200, with and without
+    `?department=<valid>`, with a garbage/cross-tenant `?department` (silently ignored, never 500), with the
+    4 `?target_*` params on `benchmarking` (valid float, garbage string, cross-tenant/negative number — never
+    500).
+  - `hrm:hr_dashboard_list` → 200 for a tenant admin AND a plain employee (non-admin CAN reach this — only the
+    3 derived views are admin-gated); shows only owner's + shared dashboards.
+  - `hrm:hr_dashboard_create` → 200/302 create round-trip; `hrm:hr_dashboard_detail` on the 2 seeded dashboards
+    → 200, every widget renders without a 500 (KPI/gauge/series/table all present in the seed data).
+  - Widget CRUD (`hr_widget_create`/`_edit`/`_delete`/`_move` up+down) → 200/302, `position` reordering
+    persists.
+  - **Empty-tenant check**: a freshly-created tenant with zero HRM data (or the demo tenant before
+    `seed_hrm` runs) hitting all 3 derived views + a newly-created empty dashboard renders zero/empty-state
+    everywhere, never a 500 — this is the module's primary "never-500" risk given 16 resolvers × 3 derived
+    views all computing on live, possibly-empty data.
+  - No `{#`/`{% comment` leak markers in any rendered page.
+- [ ] **403 for non-admin** on the 3 derived views (`executive_dashboard`/`predictive_analytics`/
+  `benchmarking`) — a plain employee gets `PermissionDenied` (403).
+- [ ] **Owner/shared access control**: a second tenant user (not the owner, not admin) hitting
+  `hr_dashboard_detail`/`_edit`/`_delete`/widget CRUD on the PRIVATE seeded dashboard gets 403; the SAME user
+  CAN view (but not edit) the SHARED seeded dashboard; a tenant admin can edit/delete BOTH.
+- [ ] **Cross-tenant isolation (IDOR)**: a second tenant's `HRDashboard`/`HRDashboardWidget` pk → 404 (tenant
+  scope, via `get_object_or_404(..., tenant=request.tenant)`) for every dashboard/widget URL; a second tenant's
+  data never appears in any of the 16 widget resolvers' or 3 derived views' aggregates.
+- [ ] **No N+1**: `_attrition_risk_scores` stays at 5 queries + one Python loop regardless of active-employee
+  count (verify with `django-debug-toolbar`/`assertNumQueries` style check, not just eyeballing); `hr_dashboard_
+  detail` computing N widgets doesn't issue more than ~2-3 queries per widget (each resolver's own bounded
+  query count, not accidentally re-querying `dashboard.widgets` per widget).
+- [ ] Sidebar shows all 4 3.32 bullet entries as **Live** for a tenant-admin login; `Custom Dashboards` also
+  reachable (and shows data) for a plain employee login.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` ->
+  `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to check the §0 choice-constant placement (models.py, not analytics.py — a
+    circular-import smoke test: `python -c "import apps.hrm.models"` must not error) and the `"scalar"` kind
+    naming is used consistently (not `"kpi"`).
+  - Expect `performance-reviewer` to focus on `_attrition_risk_scores` (the 5-query budget) and
+    `hr_dashboard_detail` (N widgets, no accidental N+1 per widget).
+  - Expect `security-reviewer` to confirm: `@tenant_admin_required` on the 3 derived views; owner-or-admin
+    gating on every dashboard/widget write (`_can_manage_hrdash`); `is_shared`/`is_default` gated behind
+    `_can_share_hrdash` in the form (no privilege escalation via a crafted POST from a non-admin); the 4
+    `?target_*` GET params in `benchmarking` are parsed via a `try/except`, never a bare `float()` on raw input;
+    IDOR-safe `?department` resolution (reuses the already-hardened `_report_department`).
+  - Expect `test-writer` to cover: 403 for non-admin on the 3 derived views; owner-vs-shared-vs-other-tenant
+    access matrix for dashboards/widgets (create/read/update/delete × owner/admin/other-tenant-user/shared);
+    the `_attrition_risk_scores` heuristic against a hand-built fixture (known tenure/absence/leave/probation
+    inputs → an exact expected score); `compute_widget` for all 16 metrics on an empty tenant (zero everywhere,
+    never a 500) and on the seeded fixture (known aggregate values); the widget form's `clean()` chart/metric
+    mismatch rejection; `widget_move` position-swap correctness (up at top / down at bottom no-ops); the
+    benchmarking prior-period-window math (equal length, correct boundary) and the RAG threshold boundaries;
+    migration `0046` applies cleanly; seeder idempotency (`_seed_analytics` run twice → same row counts).
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.32 Analytics Dashboard (2 new tables + 3 derived views)`
+  section documenting `HRDashboard`/`HRDashboardWidget`, the `apps/hrm/analytics.py` module (16-metric catalog +
+  `compute_widget`), the 3 derived-view formulas (attrition-risk weights, hiring-needs projection, benchmarking
+  RAG thresholds), the owner/shared access model, the 3 extracted shared helpers (`_turnover_rate`/
+  `_headcount_trend_series`/`_present_absent_counts`) and which existing 3.28/3.29 views now call them, and the
+  seeder's 2 seeded dashboards; update `LIVE_LINKS` for `"3.32"`; update the Deferred section with this pass's
+  carried-forward deferrals.
+- [ ] README.md — add `/3.32` to the Module 3 header line + a bullet describing the 2 new models + 3 derived
+  views + the 16-metric widget catalog; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.32.md)
+
+- **True pixel drag-and-drop grid builder** (react-grid-layout style free resize/reposition) — replaced this
+  pass by `HRDashboardWidget.position` (move up/down) + `.size` (small/medium/large/full), matching the CRM 1.6
+  precedent; a real JS grid library is a distinct frontend investment for a later pass.
+- **Trained ML attrition/flight-risk model** — replaced this pass by the transparent, documented weighted
+  heuristic (`_attrition_risk_scores`) over tenure/absence/leave/probation/review-gap signals; a real ML
+  pipeline needs a data-science stack and historical-outcome training data NavERP doesn't have yet.
+- **External industry benchmark data feeds** (ADP DataCloud-style aggregated cross-employer data, Lattice/
+  Culture Amp survey-norm libraries) — no licensed external data source; replaced this pass by internal
+  period-over-period and vs-target comparisons only (`benchmarking`'s `?target_*` params).
+- **Persisted per-metric target storage** — this pass's `benchmarking` targets are request-scoped `?target_*`
+  GET params, not stored; a `TargetKPI` model (per-tenant, per-metric, per-period persisted goals) is a
+  reasonable later-pass upgrade once a real usage pattern emerges.
+- **Fine-grained dashboard sharing/permissions** (per-role visibility, per-widget permissions) — this pass ships
+  only owner + a single tenant-wide `is_shared` flag (mirrors CRM 1.6, tightened with owner/admin edit gating);
+  role-scoped sharing is a later pass.
+- **AI-generated narrative insights / natural-language query over dashboards** — needs an LLM integration layer;
+  out of scope for a single Django pass.
+- **Retention-intervention "what-if" simulation** — needs the ML model above as a prerequisite; deferred with
+  it.
+- **Skill-gap / succession-risk prediction** — overlaps 3.38 Talent Management & Succession Planning (not yet
+  built); deferred to that module rather than duplicated here.
+- **Top-performer compensation benchmarking tied to performance ratings** — needs a clean cross-link into 3.19
+  Performance Review data beyond the light "no recent review" risk signal already added; deferred as a
+  follow-up enhancement.
+- **Dashboard/report embedding into Slack/Teams/email digests** — external integration, deferred.
+- **Pre-built "designed" dashboard template gallery** (beyond the 1 seeded shared default) — a template-picker
+  UI is deferred; the seeded "Executive Overview" dashboard covers the "designed dashboard" need cheaply for
+  now.
+- **"Upcoming contract ends" alert** on the executive dashboard — no `contract_end_date` field exists on
+  `EmployeeProfile`/`core.Employment` this pass; would need a 3.1 model change, out of scope for a derived view.
+- **Per-department attrition-rate denominator** (fixing `_turnover_rate`'s tenant-wide `_headcount_at`
+  denominator to be dept-scoped when a department filter is active) — a pre-existing 3.28 simplification
+  carried over unchanged (§2); a genuine fix touches `attrition_report` behavior and belongs to a dedicated
+  3.28 follow-up, not bundled into this pass.
+
+## Review notes
+
+(filled in at the end)
