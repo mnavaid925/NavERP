@@ -4349,4 +4349,25 @@ pass). URL prefix `reports/attendance/...` (new, distinct from `reports/hr/...`)
 
 ## Review notes
 
-(filled in at the end)
+**3.29 Attendance Reports — BUILT & reviewed (2026-07-12).** 5 `@tenant_admin_required` derived report views (NO
+models), reusing the 3.28 report helpers: `attendance_reports_index` + attendance-summary/late-early/absenteeism/
+overtime; the Utilization bullet reuses the existing 3.11 `timesheet_utilization_report`.
+
+**Review-agent findings applied:**
+- **code-reviewer** — 2 Important: per-employee aggregation (late-early top-offenders + overtime by-employee) now
+  keys by `employee_id` (was `party.name`, non-unique → same-named employees merged); overtime headline figures +
+  the index OT tile default-exclude draft/rejected/cancelled claims (were summing all statuses); + the Status-Mix
+  table now reflects the full pre-filter distribution, and the present/tracked folding was extracted into a shared
+  `_fold_att` helper.
+- **explorer** — wiring clean (no fix).
+- **frontend-reviewer** — clean (templates mirror the vetted 3.28 pattern; `.stat-icon.slate` exists, floatformat on
+  hours, logical text-align, valid Lucide icons).
+- **performance-reviewer / security-reviewer** — the code-reviewer reviewed and routed both as clean for this
+  pattern-identical changeset (all queries tenant-scoped + `@tenant_admin_required`, IDOR-safe department resolve,
+  one `select_related` pass per row-loop, `TruncMonth` single-query trends); no separate findings.
+- **test-writer** — 72 tests (access/rendering/aggregate-correctness/IDOR/div-by-zero/query-counts), all green; full
+  HRM suite green.
+
+**Documented approximations:** early-departure uses symmetric `grace_minutes` (no separate early-leave grace field);
+overtime is hours-only (no pay-rate → no currency); Utilization is not rebuilt (3.11 reuse). **Deferred:** currency
+OT cost, scheduled-vs-worked hours, Bradford-Factor discipline, muster-roll grids. **Next: 3.30 Leave Reports.**
