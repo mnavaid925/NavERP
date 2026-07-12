@@ -13,7 +13,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.15 Statutory Compliance, 3.16 Tax & Investment, 3.17 Payout & Reports, 3.18 Goal Setting,
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
-3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports.** Reuses the
+3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -348,6 +348,24 @@ an empty report; `?department`/`?cycle` resolved against the tenant's own rows o
 `json.dumps`'d server-computed labels/values via `|safe` (no user input reaches the sink). Templates under
 `templates/hrm/reports/` (`hr_index.html` + `headcount/attrition/diversity/cost/hiring.html`).
 
+### 3.29 Attendance Reports (NO models — 5 derived read-only views) — `@tenant_admin_required`, reusing the
+3.28 report helpers (`_report_period`/`_report_department`/`_dept_choices`), templates under `templates/hrm/reports/`.
+Views (`apps/hrm/views.py`, `# --- 3.29 Attendance Reports ---`): `attendance_reports_index` (`/hrm/reports/
+attendance/`, KPI tiles — the Utilization tile links to the EXISTING 3.11 `hrm:timesheet_utilization_report`, not
+rebuilt) + `attendance_summary_report` (status breakdown; **attendance % = present-equivalent [present +
+regularized + ½·half_day] ÷ tracked [total − holiday − on_leave]**; by department; monthly trend), `late_early_report`
+(late-arrival [mirrors `AttendanceRecord.is_late()`'s minute-of-day boundary math inline] + early-departure
+[symmetric grace] counts + avg minutes; top-offenders + day-of-week — one `select_related` pass), `absenteeism_report`
+(absence rate = absent ÷ tracked; frequent-absentee list; monthly trend), `overtime_report` (total + pay-equivalent
+hours [`OvertimeRequest.overtime_pay_equivalent_hours` = hours × multiplier]; by employee/department; status mix;
+**hours only, no currency**). **Shared helper `_fold_att`** folds one (status, count) into a `{present, tracked}`
+accumulator — the single source of truth reused by the summary total / by-department / monthly-trend so they can't
+drift. **Gotchas:** per-employee dicts key by `employee_id` (not `party.name`, which isn't unique) so same-named
+employees stay distinct; `overtime_report` headline figures **default-exclude draft/rejected/cancelled** (an explicit
+`?status=` overrides), while the Status-Mix table always shows the FULL pre-filter distribution; monthly trends use a
+single `TruncMonth`-grouped query; every rate guards div-by-zero. Templates: `attendance_index.html` +
+`attendance_summary/late_early/absenteeism/overtime.html`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -490,6 +508,10 @@ an empty report; `?department`/`?cycle` resolved against the tenant's own rows o
   (`/hrm/reports/hr/`, landing) + `hrm:headcount_report` / `hrm:attrition_report` / `hrm:diversity_report` /
   `hrm:cost_report` / `hrm:hiring_report` (`/hrm/reports/hr/<name>/`). GET-filtered (`date_from`/`date_to`/
   `department`/`cycle`/`separation_type`); no POST/CRUD.
+- **Attendance Reports (3.29):** all `@tenant_admin_required`, read-only (no models). `hrm:attendance_reports_index`
+  (`/hrm/reports/attendance/`) + `hrm:attendance_summary_report` / `hrm:late_early_report` / `hrm:absenteeism_report`
+  / `hrm:overtime_report` (`/hrm/reports/attendance/<name>/`). GET-filtered (`date_from`/`date_to`/`department`, +
+  `status` on overtime); Utilization bullet reuses `hrm:timesheet_utilization_report` (3.11).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1004,6 +1026,9 @@ tenant and sees nothing.
 - 3.28 (all 5 bullets live): Headcount Report → `hrm:headcount_report`; Attrition Report → `hrm:attrition_report`;
   Diversity Report → `hrm:diversity_report`; Cost Reports → `hrm:cost_report`; Hiring Reports → `hrm:hiring_report`.
   `LIVE_LINKS["3.28"]`. The `hr_reports_index` landing hub is NOT a bullet (reached from each report's Back link).
+- 3.29 (all 5 bullets live): Attendance Summary → `hrm:attendance_summary_report`; Late/Early Departure →
+  `hrm:late_early_report`; Absenteeism Report → `hrm:absenteeism_report`; Overtime Report → `hrm:overtime_report`;
+  **Utilization Report → `hrm:timesheet_utilization_report`** (REUSE 3.11, not rebuilt). `LIVE_LINKS["3.29"]`.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -1147,7 +1172,7 @@ attachment` in production (project-wide WARNING).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
-upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk deferred to 3.36); 3.28 HR Reports is now **built** — 6 derived, admin-only report views (headcount/attrition/diversity/cost/hiring + index; NO models), next is 3.29 Attendance Reports),
+upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk deferred to 3.36); 3.28 HR Reports is now **built** — 6 derived, admin-only report views (headcount/attrition/diversity/cost/hiring + index; NO models); 3.29 Attendance Reports is now **built** — 5 derived report views (summary/late-early/absenteeism/overtime + index; Utilization reuses 3.11), next is 3.30 Leave Reports),
 timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), employee self-service portal, and a per-employee↔user link
 for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
