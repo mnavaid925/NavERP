@@ -56,7 +56,7 @@
             <td style="text-align:end;">{{ r.bonus_amount|floatformat:2 }}</td>
             <td style="text-align:end;">{{ r.total_deductions|floatformat:2 }}</td>
             <td style="text-align:end;"><strong>{{ r.net_pay|floatformat:2 }}</strong></td>
-            <td>{% if r.on_hold %}<span class="badge badge-danger">On hold</span>{% else %}<span class="badge badge-success">Released</span>{% endif %}</td>
+            <td>{% if r.on_hold %}<span class="badge badge-red">On hold</span>{% else %}<span class="badge badge-green">Released</span>{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>
