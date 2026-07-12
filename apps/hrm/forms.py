@@ -564,7 +564,9 @@ class AssetAllocationForm(TenantModelForm):
     # record lost/damaged; the Issue/Return actions own the issued↔returned transition + timestamps.
     class Meta:
         model = AssetAllocation
-        fields = ["program", "employee", "asset_name", "asset_category", "serial_number",
+        # `asset` (optional) links this issuance to a specific 3.33 register row — when set, saving
+        # this form syncs Asset.status/current_holder via AssetAllocation._sync_linked_asset().
+        fields = ["program", "employee", "asset", "asset_name", "asset_category", "serial_number",
                   "asset_tag", "status", "return_due_date", "notes"]
 
 
@@ -2445,4 +2447,49 @@ class HRDashboardWidgetForm(TenantModelForm):
             ok = allowed_charts(metric)
             if chart_type not in ok:
                 self.add_error("chart_type", "This metric supports: " + ", ".join(ok) + ".")
+        return cleaned
+
+
+from .models import Asset, AssetMaintenance  # noqa: E402  — 3.33 Asset Management
+
+
+class AssetForm(TenantModelForm):
+    """Central asset register. `current_holder` is excluded — it is system-managed by
+    AssetAllocation._sync_linked_asset() via the assign/return actions, never hand-edited. `status`
+    stays editable so HR can hand-correct it (an out-of-band edit here does NOT create an allocation)."""
+
+    class Meta:
+        model = Asset
+        fields = ["asset_tag", "name", "category", "manufacturer", "model_number", "serial_number",
+                  "status", "condition", "purchase_date", "purchase_cost", "currency", "warranty_expiry",
+                  "location", "depreciation_method", "useful_life_months", "salvage_value", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+    def clean(self):
+        cleaned = super().clean()
+        cost, salvage = cleaned.get("purchase_cost"), cleaned.get("salvage_value")
+        if cost is not None and salvage is not None and salvage > cost:
+            self.add_error("salvage_value", "Salvage value cannot exceed purchase cost.")
+        method = cleaned.get("depreciation_method")
+        if method and method != "none" and not cleaned.get("useful_life_months"):
+            self.add_error("useful_life_months",
+                           "Useful life (months) is required for this depreciation method.")
+        return cleaned
+
+
+class AssetMaintenanceForm(TenantModelForm):
+    class Meta:
+        model = AssetMaintenance
+        fields = ["asset", "maintenance_type", "status", "scheduled_date", "completed_date", "vendor",
+                  "cost", "contract_start", "contract_end", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+    def clean(self):
+        cleaned = super().clean()
+        sched, comp = cleaned.get("scheduled_date"), cleaned.get("completed_date")
+        if sched and comp and comp < sched:
+            self.add_error("completed_date", "Completed date cannot be before the scheduled date.")
+        cs, ce = cleaned.get("contract_start"), cleaned.get("contract_end")
+        if cs and ce and ce <= cs:
+            self.add_error("contract_end", "Contract end date must be after the contract start date.")
         return cleaned
