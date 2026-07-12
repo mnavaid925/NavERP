@@ -41,7 +41,7 @@
               <td>{{ obj.name }}{% if obj.is_default %} <span class="badge badge-info">Default</span>{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}-{% endif %}</td>
               <td>{% if obj.is_shared %}<span class="badge badge-green">Shared</span>{% else %}<span class="badge badge-muted">Private</span>{% endif %}</td>
-              <td style="text-align:end;">{{ obj.widget_count }}</td>
+              <td style="text-align:end;">{{ obj.widget_total }}</td>
               <td>{{ obj.get_layout_display }}</td>
               <td>
                 <div class="table-actions">
