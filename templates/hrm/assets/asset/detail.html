@@ -8,7 +8,7 @@
         {% if obj.status == 'assigned' %}<span class="badge badge-green">Assigned</span>{% elif obj.status == 'in_stock' %}<span class="badge badge-slate">In Stock</span>{% elif obj.status == 'in_repair' %}<span class="badge badge-amber">In Repair</span>{% elif obj.status == 'disposed' %}<span class="badge badge-red">Disposed</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
         {% if obj.is_under_warranty %}<span class="badge badge-green">Under Warranty</span>{% else %}<span class="badge badge-muted">No/Expired Warranty</span>{% endif %}
       </h1>
-      <div class="breadcrumb"><a href="{% url 'hrm:asset_list' %}">Asset Register</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:asset_list' %}">Asset Register</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
       <a href="{% url 'hrm:asset_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
@@ -50,7 +50,7 @@
   <div class="card"><div class="card-header"><h2 class="card-title">Lifecycle Actions</h2></div>
     <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
       {% if obj.status == 'in_stock' %}
-      <form method="post" action="{% url 'hrm:asset_assign' obj.pk %}" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:flex-end;">
+      <form method="post" action="{% url 'hrm:asset_assign' obj.pk %}" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:flex-end;" onsubmit="return confirm('Assign this asset to the selected employee?');">
         {% csrf_token %}
         <div class="form-group"><label class="form-label" for="assign_emp">Assign to</label>
           <select name="employee" id="assign_emp" class="form-select" required><option value="">Select employee</option>
