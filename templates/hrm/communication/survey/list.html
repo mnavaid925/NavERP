@@ -65,7 +65,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="5"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No surveys</h3><p>{% if is_admin %}Create an engagement survey.{% else %}No surveys are open right now.{% endif %}</p></div></td></tr>
+            <tr><td colspan="{% if is_admin %}5{% else %}4{% endif %}"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No surveys</h3><p>{% if is_admin %}Create an engagement survey.{% else %}No surveys are open right now.{% endif %}</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
