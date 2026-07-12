@@ -1298,3 +1298,22 @@ class SuggestionAdmin(admin.ModelAdmin):
                        "created_at", "updated_at")
     raw_id_fields = ("employee", "approver")
     list_select_related = ("employee__party", "approver", "tenant")
+
+
+from .models import HRDashboard, HRDashboardWidget  # 3.32 Analytics Dashboard
+
+
+@admin.register(HRDashboard)
+class HRDashboardAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "tenant", "owner", "is_shared", "is_default", "widget_count")
+    list_filter = ("is_shared", "is_default", "layout")
+    search_fields = ("number", "name")
+    raw_id_fields = ("owner",)
+
+
+@admin.register(HRDashboardWidget)
+class HRDashboardWidgetAdmin(admin.ModelAdmin):
+    list_display = ("title", "dashboard", "metric", "chart_type", "size", "position")
+    list_filter = ("metric", "chart_type", "size")
+    search_fields = ("title",)
+    raw_id_fields = ("dashboard",)
