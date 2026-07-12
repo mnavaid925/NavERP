@@ -27,9 +27,9 @@
   </div></div>
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar"></i></div><div class="stat-value">{{ totals.allocated }}</div><div class="stat-label">Allocated Days</div></div>
-    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ totals.used }}</div><div class="stat-label">Availed Days</div></div>
-    <div class="stat-card"><div class="stat-icon green"><i data-lucide="wallet"></i></div><div class="stat-value">{{ totals.balance }}</div><div class="stat-label">Balance Days</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar"></i></div><div class="stat-value">{{ totals.allocated|floatformat:1 }}</div><div class="stat-label">Allocated Days</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ totals.used|floatformat:1 }}</div><div class="stat-label">Availed Days</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="wallet"></i></div><div class="stat-value">{{ totals.balance|floatformat:1 }}</div><div class="stat-label">Balance Days</div></div>
   </div>
 
   {% if rows %}
