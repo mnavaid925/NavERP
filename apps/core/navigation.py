@@ -537,6 +537,18 @@ LIVE_LINKS = {
         "Asset Requests": "hrm:assetrequest_list",                          # bullet (new AssetRequest CRUD + workflow)
         "My Requests": "hrm:my_requests",                                   # extra (unified ESS hub over all five types)
     },
+    # 3.27 Communication Hub — the internal employee-comms surface. Announcements (audience-targeted
+    # admin posts), Birthday/Anniversary (a derived celebrations view, no model), Surveys (engagement
+    # surveys + responses), Suggestions (employee idea box, admin-reviewed). Help Desk is DEFERRED to
+    # the dedicated future 3.36 Helpdesk sub-module — its bullet points at the Suggestions box as the
+    # interim lightweight employee-query channel (so both "Help Desk" and "Suggestions" resolve here).
+    "3.27": {
+        "Announcements": "hrm:announcement_list",          # bullet (new Announcement CRUD + publish/pin/archive)
+        "Birthday/Anniversary": "hrm:celebrations",        # bullet (derived view, no model)
+        "Surveys": "hrm:survey_list",                      # bullet (new Survey + SurveyResponse engine)
+        "Suggestions": "hrm:suggestion_list",              # bullet (new Suggestion, clones the 3.26 workflow)
+        "Help Desk": "hrm:suggestion_list",                # bullet (DEFERRED to 3.36 Helpdesk — interim: Suggestions box)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
