@@ -964,4 +964,12 @@ urlpatterns = [
     path("reports/leave/liability/", views.leave_liability_report, name="leave_liability_report"),
     path("reports/leave/comp-off/", views.comp_off_report, name="comp_off_report"),
     path("reports/leave/trend/", views.leave_trend_report, name="leave_trend_report"),
+
+    # 3.31 Payroll Reports (derived, read-only, admin-only)
+    path("reports/payroll/", views.payroll_reports_index, name="payroll_reports_index"),
+    path("reports/payroll/salary-register/", views.salary_register_report, name="salary_register_report"),
+    path("reports/payroll/tax/", views.tax_report, name="tax_report"),
+    path("reports/payroll/statutory/", views.statutory_report, name="statutory_report"),
+    path("reports/payroll/ctc/", views.ctc_report, name="ctc_report"),
+    path("reports/payroll/cost-center/", views.cost_center_report, name="cost_center_report"),
 ]
