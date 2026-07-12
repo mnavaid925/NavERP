@@ -549,6 +549,16 @@ LIVE_LINKS = {
         "Suggestions": "hrm:suggestion_list",              # bullet (new Suggestion, clones the 3.26 workflow)
         "Help Desk": "hrm:suggestion_list",                # bullet (DEFERRED to 3.36 Helpdesk — interim: Suggestions box)
     },
+    # 3.28 HR Reports — derived, read-only, @tenant_admin_required aggregate pages (no models). The
+    # `hr_reports_index` landing hub is reachable from each report's Back link (not itself a bullet —
+    # NavERP.md 3.28 has exactly 5 report bullets, each deep-linking to its drill-in report).
+    "3.28": {
+        "Headcount Report": "hrm:headcount_report",   # bullet (active/new-joins/exits, dept/designation/type)
+        "Attrition Report": "hrm:attrition_report",   # bullet (SHRM annualized turnover, voluntary/involuntary, trend)
+        "Diversity Report": "hrm:diversity_report",   # bullet (gender/age/tenure demographics, dept cross-tab)
+        "Cost Reports": "hrm:cost_report",            # bullet (salary cost total + department-wise, CTC breakdown)
+        "Hiring Reports": "hrm:hiring_report",        # bullet (time-to-hire/fill, source mix, funnel, offer accept %)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
