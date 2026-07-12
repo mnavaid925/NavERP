@@ -14,7 +14,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
-3.30 Leave Reports.** Reuses the
+3.30 Leave Reports, 3.31 Payroll Reports.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -386,6 +386,31 @@ Python, since `used_db` is a subquery alias other annotations can't reference). 
 `is None` (not truthy) so a genuine 0/day rate still renders; only encashable leave types count toward liability
 value. Templates: `leave_index.html` + `leave_register/leave_liability/comp_off/leave_trend.html`.
 
+### 3.31 Payroll Reports (NO models — 6 derived read-only views) — `@tenant_admin_required`, aggregating the
+built payroll engine (3.13-3.16), templates under `templates/hrm/reports/`. Views (`apps/hrm/views.py`,
+`# --- 3.31 Payroll Reports ---`): `payroll_reports_index` (`/hrm/reports/payroll/`, KPI tiles: latest-cycle
+headcount/gross/net, pending Form 16, overdue statutory) + `salary_register_report` (per-`Payslip` earnings/
+deductions/net grid for a `?cycle` [default latest by `pay_date`, `cost_report`'s selector], totals footer +
+cycle-wide `PayslipLine` component-type breakdown; `?department`/`?on_hold`), `tax_report` (TDS summary from
+`TaxComputation` + declaration status funnel + `not_filed` count + section-wise declared/verified from
+`InvestmentDeclarationLine` + regime split + Form 16 linked/pending register linking `hrm:form16_partb` by
+**`TaxComputation.pk`**; `?financial_year`/`?department`/`?regime`), `statutory_report` (PF/ESI/PT/LWF register from
+`StatutoryReturn` — the two `tds_*` schemes are excluded, they live in `tax_report` — with a **masked** employee-ID
+coverage section [`masked_uan_number`/`masked_pf_number`/`masked_esi_number` ONLY, never raw]; `?scheme`/period/
+`?status`), `ctc_report` (structural annualized CTC per active `EmployeeSalaryStructure` + component-type mix chart
+via `SalaryStructureLine.resolved_amount(own_ctc)`; `?department`/`?grade`), `cost_center_report` (budget-vs-actual
+per `CostCenterProfile`; `?cost_center`/`?year`=`_report_year`). **New helpers:** `_fy_choices`/
+`_report_financial_year` (Indian FY is a `CharField` "2025-26", validated against the tenant's own set),
+`_cc_choices`/`_report_cost_center` (scoped to cost centres that HAVE a `CostCenterProfile`), `_grade_choices`/
+`_report_job_grade`. **Cost-centre attribution (the one non-obvious join):** `core.Employment.org_unit` is ALWAYS a
+department; the cost centre is reached via `hrm.DepartmentProfile.cost_center`. `cost_center_report` folds each
+employee's org unit into its department's mapped cost centre with a 3-query grouped shape (`dept_to_cc` map +
+`org_gross`/`org_employer` grouped aggregates, `Count("employee_id", distinct=True)` headcount) — spend resolving
+to no profiled cost centre lands in an **Unassigned** callout, never dropped. **Gotchas:** filter pk guards use
+`isdecimal()`+len-cap (not `isdigit()`, which accepts "²" that `int()` rejects → 500); `variance`/`variance_pct`
+are `None` (rendered "—") when `budget_annual` is None; `ctc_report` caches `SalaryStructureLine` per DISTINCT
+`template_id` (N+1-safe). Templates: `payroll_index.html` + `salary_register/tax/statutory/ctc/cost_center.html`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -537,6 +562,11 @@ value. Templates: `leave_index.html` + `leave_register/leave_liability/comp_off/
   (`/hrm/reports/leave/liability/`) / `hrm:comp_off_report` (`/hrm/reports/leave/comp-off/`) / `hrm:leave_trend_report`
   (`/hrm/reports/leave/trend/`). GET-filtered (`year` on register/liability; `date_from`/`date_to` on comp-off/trend;
   `department` + `leave_type` throughout); no POST/CRUD.
+- **Payroll Reports (3.31):** all `@tenant_admin_required`, read-only (no models). `hrm:payroll_reports_index`
+  (`/hrm/reports/payroll/`) + `hrm:salary_register_report` (`/hrm/reports/payroll/salary-register/`) /
+  `hrm:tax_report` (`.../tax/`) / `hrm:statutory_report` (`.../statutory/`) / `hrm:ctc_report` (`.../ctc/`) /
+  `hrm:cost_center_report` (`.../cost-center/`). GET-filtered (`cycle`/`on_hold`, `financial_year`/`regime`,
+  `scheme`/`status`/period, `grade`, `cost_center`/`year`, + `department` on most); no POST/CRUD.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1057,6 +1087,10 @@ tenant and sees nothing.
 - 3.30 (all 4 bullets live): Leave Register → `hrm:leave_register_report`; Leave Liability → `hrm:leave_liability_report`;
   Comp-off Report → `hrm:comp_off_report`; Leave Trend → `hrm:leave_trend_report`. `LIVE_LINKS["3.30"]`. The
   `leave_reports_index` landing hub is NOT a bullet (reached from each report's Back link).
+- 3.31 (all 4 bullets live): Salary Register → `hrm:salary_register_report`; Tax Reports → `hrm:tax_report`;
+  Statutory Reports → `hrm:statutory_report`; Cost Analysis → `hrm:ctc_report`. `LIVE_LINKS["3.31"]`. Neither the
+  `payroll_reports_index` hub NOR `cost_center_report` is a bullet — NavERP.md's single "Cost Analysis" bullet
+  covers both CTC views, so `cost_center_report` is reached from the hub + a cross-link on `ctc.html`.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
