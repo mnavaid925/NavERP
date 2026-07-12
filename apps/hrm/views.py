@@ -12016,7 +12016,6 @@ def hr_reports_index(request):
         attrition = round((seps_ytd / avg_hc) * (365 / days) * 100, 1) if avg_hc else 0.0
         female = active.filter(gender="female").count()
         gender_pct = round(female / active_count * 100, 1) if active_count else 0.0
-        month_start = _date(today.year, today.month, 1)
         latest_cycle = PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date").first()
         if latest_cycle is not None:
             mtd_cost = latest_cycle.total_gross
@@ -12043,10 +12042,9 @@ def hr_reports_index(request):
 def headcount_report(request):
     tenant = request.tenant
     today = timezone.localdate()
-    as_of = _parse_iso_date(request.GET.get("as_of", "")) or today
     date_from, date_to = _report_period(request)
     dept = _report_department(request, tenant)
-    ctx = {"as_of": as_of, "date_from": date_from, "date_to": date_to, "department": dept,
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
            "department_choices": _dept_choices(tenant), "active_count": 0, "joins": 0, "exits": 0,
            "net_change": 0, "by_department": [], "by_designation": [], "by_type": [],
            "trend_labels": "[]", "trend_values": "[]"}
@@ -12075,7 +12073,10 @@ def headcount_report(request):
                 "name": r["designation__name"] or "Unassigned", "count": r["count"], "budget": budget,
                 "variance": (r["count"] - budget) if budget is not None else None})
         ctx["by_designation"] = by_designation
-        ctx["by_type"] = list(active.values("employee_type").annotate(count=Count("id")).order_by("-count"))
+        type_labels = dict(EmployeeProfile.EMPLOYEE_TYPE_CHOICES)
+        ctx["by_type"] = [
+            {"name": type_labels.get(r["employee_type"], r["employee_type"] or "—"), "count": r["count"]}
+            for r in active.values("employee_type").annotate(count=Count("id")).order_by("-count")]
         labels, values = [], []
         for i in range(11, -1, -1):
             m_end = _month_end(today, i)
@@ -12088,7 +12089,6 @@ def headcount_report(request):
 @tenant_admin_required
 def attrition_report(request):
     tenant = request.tenant
-    today = timezone.localdate()
     date_from, date_to = _report_period(request)
     dept = _report_department(request, tenant)
     sep_type = (request.GET.get("separation_type") or "").strip()
@@ -12134,7 +12134,7 @@ def attrition_report(request):
         labels, values = [], []
         n_months = min(12, max(1, days // 30 + 1))
         for i in range(n_months - 1, -1, -1):
-            m_end = _month_end(today, i)
+            m_end = _month_end(date_to, i)  # anchor on the selected period end, not today
             m_start = _date(m_end.year, m_end.month, 1)
             labels.append(m_end.strftime("%b %Y"))
             values.append(sum(1 for r in rows if r.actual_last_working_day
@@ -12215,16 +12215,18 @@ def cost_report(request):
             ctx["total_cost"] = payslips.aggregate(t=Sum("gross_pay"))["t"] or 0
             ctx["headcount"] = payslips.count()
             ctx["avg_cost"] = round(ctx["total_cost"] / ctx["headcount"], 2) if ctx["headcount"] else 0
-            ctx["employer_cost"] = (PayslipLine.objects.filter(
-                payslip__cycle=cycle, payslip__tenant=tenant, contribution_side="employer")
-                .aggregate(t=Sum("amount"))["t"] or 0)
+            # Lines must honor the same ?department scope as the payslip totals above.
+            line_qs = PayslipLine.objects.filter(payslip__cycle=cycle, payslip__tenant=tenant)
+            if dept:
+                line_qs = line_qs.filter(payslip__employee__employment__org_unit=dept)
+            ctx["employer_cost"] = (line_qs.filter(contribution_side="employer")
+                                    .aggregate(t=Sum("amount"))["t"] or 0)
             ctx["by_department"] = list(payslips.values("employee__employment__org_unit__name")
                                         .annotate(total=Sum("gross_pay")).order_by("-total"))
+            comp_labels = dict(PayslipLine._meta.get_field("component_type").choices)
             ctx["by_component"] = [
-                {"name": dict(PayslipLine._meta.get_field("component_type").choices).get(r["component_type"], r["component_type"]),
-                 "total": r["total"]}
-                for r in PayslipLine.objects.filter(payslip__cycle=cycle, payslip__tenant=tenant)
-                .values("component_type").annotate(total=Sum("amount")).order_by("-total")]
+                {"name": comp_labels.get(r["component_type"], r["component_type"]), "total": r["total"]}
+                for r in line_qs.values("component_type").annotate(total=Sum("amount")).order_by("-total")]
             recent = list(cycles.order_by("pay_date"))[-12:]
             ctx["trend_labels"] = json.dumps([c.pay_date.strftime("%b %Y") for c in recent])
             ctx["trend_values"] = json.dumps([float(c.total_gross) for c in recent])
@@ -12265,14 +12267,17 @@ def hiring_report(request):
         hired = apps.filter(stage="hired", hired_on__gte=date_from, hired_on__lte=date_to)
         tth = [(a.hired_on - a.applied_at.date()).days for a in hired if a.hired_on and a.applied_at]
         ctx["avg_tth"] = round(sum(tth) / len(tth)) if tth else None
-        hired_ct = hired.count()
-        rejected_ct = apps.filter(stage="rejected").count()  # approximation (no stage-history table)
-        denom = hired_ct + rejected_ct
-        ctx["offer_accept"] = round(hired_ct / denom * 100, 1) if denom else None
+        # Offer-acceptance approximation (no stage-history ledger): both legs use the SAME window —
+        # applications submitted in the range that have since reached a terminal hired/rejected stage.
+        decided = apps.filter(applied_at__date__gte=date_from, applied_at__date__lte=date_to)
+        hired_dec = decided.filter(stage="hired").count()
+        rejected_dec = decided.filter(stage="rejected").count()
+        denom = hired_dec + rejected_dec
+        ctx["offer_accept"] = round(hired_dec / denom * 100, 1) if denom else None
+        source_labels = dict(apps.model._meta.get_field("source").choices)
         ctx["by_source"] = [
-            {"name": dict(apps.model._meta.get_field("source").choices).get(r["source"], r["source"]),
-             "count": r["count"]}
-            for r in apps.filter(stage="hired").values("source").annotate(count=Count("id")).order_by("-count")]
+            {"name": source_labels.get(r["source"], r["source"]), "count": r["count"]}
+            for r in hired.values("source").annotate(count=Count("id")).order_by("-count")]
         stage_counts = {r["stage"]: r["count"] for r in apps.values("stage").annotate(count=Count("id"))}
         applied_total = sum(stage_counts.values()) or 1
         ctx["funnel"] = [{"name": lbl, "count": stage_counts.get(code, 0),
