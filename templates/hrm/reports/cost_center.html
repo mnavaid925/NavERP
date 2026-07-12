@@ -57,6 +57,9 @@
       </tr></tfoot>
     </table></div>
   </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="building-2"></i><h3>No cost centres</h3><p>No <code>CostCenterProfile</code> rows exist for this tenant. Map departments to cost centres to see budget-vs-actual.</p></div></div></div>
+  {% endif %}
 
   {% if unassigned %}
   <div class="card"><div class="card-body">
@@ -66,8 +69,5 @@
       {{ unassigned.employer|floatformat:2 }} employer cost · {{ unassigned.hc }} employee{{ unassigned.hc|pluralize }}.
       Map the relevant departments to a cost centre to attribute it. (Excluded from the totals above.)</p>
   </div></div>
-  {% endif %}
-  {% else %}
-    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="building-2"></i><h3>No cost centres</h3><p>No <code>CostCenterProfile</code> rows exist for this tenant. Map departments to cost centres to see budget-vs-actual.</p></div></div></div>
   {% endif %}
 {% endblock %}
