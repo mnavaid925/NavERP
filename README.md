@@ -531,8 +531,9 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
 - **3.29 Attendance Reports** — **5 derived, read-only, `@tenant_admin_required` report views** (NO new models,
   reusing the 3.28 report helpers): `attendance_reports_index` + `attendance_summary_report` (status breakdown +
   attendance % = present-equivalent [present + regularized + ½·half-day] ÷ tracked-days [excludes holiday/on-leave],
-  by department, monthly trend), `late_early_report` (late-arrival [reusing `AttendanceRecord.is_late()`] +
-  early-departure counts + avg minutes, top-offenders, day-of-week pattern — one `select_related` pass),
+  by department, monthly trend), `late_early_report` (late-arrival [mirroring `AttendanceRecord.is_late()`'s
+  boundary math inline, to also get minute counts] + early-departure counts + avg minutes, top-offenders,
+  day-of-week pattern — one `select_related` pass),
   `absenteeism_report` (absence rate + frequent-absentee list + monthly trend), and `overtime_report` (total +
   pay-equivalent hours [`hours_claimed × multiplier`], by employee/department, status mix, trend — **hours only, no
   currency**, no pay-rate source). The **Utilization Report** bullet reuses the existing 3.11
