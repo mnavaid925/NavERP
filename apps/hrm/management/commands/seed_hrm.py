@@ -291,6 +291,7 @@ class Command(BaseCommand):
             self._seed_selfservice(tenant, flush=options["flush"])
             self._seed_requests(tenant, flush=options["flush"])
             self._seed_communication(tenant, flush=options["flush"])
+            self._seed_analytics(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -2912,3 +2913,54 @@ class Command(BaseCommand):
             f"{Survey.objects.filter(tenant=tenant).count()} surveys "
             f"({SurveyResponse.objects.filter(tenant=tenant).count()} responses), "
             f"{Suggestion.objects.filter(tenant=tenant).count()} suggestions."))
+
+    def _seed_analytics(self, tenant, *, flush):
+        """3.32 Analytics Dashboard - saved HRDashboards + their HRDashboardWidgets (runs after
+        3.27). Creates NO new employee/payroll/leave data - the widgets compute live over whatever
+        3.1-3.31's seeders already made. Two dashboards: a shared default "Executive Overview" and a
+        private "My HR Snapshot". Idempotent (skips when a dashboard already exists). ASCII-only."""
+        from apps.hrm.models import HRDashboard, HRDashboardWidget
+
+        if flush:
+            HRDashboard.objects.filter(tenant=tenant).delete()  # cascades to widgets
+        if HRDashboard.objects.filter(tenant=tenant).exists():
+            return  # already seeded
+
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        if not users:
+            return
+        admin = users[0]
+        other = users[1] if len(users) > 1 else admin
+
+        def _widgets(dash, specs):
+            for pos, (title, metric, chart, rng, size, target) in enumerate(specs):
+                HRDashboardWidget.objects.get_or_create(
+                    tenant=tenant, dashboard=dash, title=title,
+                    defaults={"metric": metric, "chart_type": chart, "date_range": rng,
+                              "size": size, "target_value": target, "position": pos})
+
+        d1 = HRDashboard.objects.create(
+            tenant=tenant, name="Executive Overview", owner=admin, is_shared=True, is_default=True,
+            layout="two", description="Leadership KPIs, headcount trend and attrition risk at a glance.")
+        _widgets(d1, [
+            ("Active Headcount", "kpi_headcount", "kpi", "all", "small", None),
+            ("Attrition Rate", "kpi_attrition_rate", "gauge", "last_365", "small", Decimal("15.0")),
+            ("Headcount Trend", "headcount_trend", "line", "last_365", "large", None),
+            ("Gender Split", "gender_split", "doughnut", "all", "medium", None),
+            ("Attrition by Department", "attrition_by_department", "bar", "last_365", "medium", None),
+            ("Top Attrition Risk", "top_attrition_risk_employees", "table", "all", "full", None),
+        ])
+
+        d2 = HRDashboard.objects.create(
+            tenant=tenant, name="My HR Snapshot", owner=other, is_shared=False, is_default=False,
+            layout="one", description="A personal snapshot of open work.")
+        _widgets(d2, [
+            ("Open Requisitions", "kpi_open_reqs", "kpi", "all", "medium", None),
+            ("Pending Leave", "kpi_pending_leave", "kpi", "all", "medium", None),
+            ("Leave by Type", "leave_by_type", "pie", "last_365", "large", None),
+        ])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Analytics seeded for '{tenant.name}': "
+            f"{HRDashboard.objects.filter(tenant=tenant).count()} dashboards, "
+            f"{HRDashboardWidget.objects.filter(tenant=tenant).count()} widgets."))
