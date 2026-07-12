@@ -4371,3 +4371,290 @@ overtime; the Utilization bullet reuses the existing 3.11 `timesheet_utilization
 **Documented approximations:** early-departure uses symmetric `grace_minutes` (no separate early-leave grace field);
 overtime is hours-only (no pay-rate → no currency); Utilization is not rebuilt (3.11 reuse). **Deferred:** currency
 OT cost, scheduled-vs-worked hours, Bradford-Factor discipline, muster-roll grids. **Next: 3.30 Leave Reports.**
+
+---
+# Module 3 — HRM — Sub-module 3.30 Leave Reports (hrm) — plan from research-hrm-3.30.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.29) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Same shape as 3.28/3.29: **derived, read-only,
+`@tenant_admin_required` report views — NO new models, NO migration, NO seeder.** Reuses `_report_period`,
+`_report_department`, `_dept_choices` (`apps/hrm/views.py:11932-11953`) verbatim for the two date-range-scoped
+views (comp-off, trend). The two `LeaveAllocation`-backed views (register, liability) are **year-scoped, not
+date-range-scoped** — `LeaveAllocation.year` has no start/end date — so they get a new `_report_year(request)`
+helper instead of `_report_period`. Reuses `_used_days_subquery()` (`apps/hrm/views.py:367-376`) exactly as
+`leaveallocation_list` already does (`apps/hrm/views.py:905-923`):
+`.annotate(used_days_db=_used_days_subquery()).annotate(balance_db=ExpressionWrapper(F("allocated_days") -
+F("used_days_db") - F("encashed_days"), output_field=_DEC))` — never the Python `@property` in a loop (N+1).
+Templates live in the existing flat `templates/hrm/reports/` folder; Chart.js + `TruncMonth` + `json.dumps`
+labels/values, same wiring as `attendance_summary.html`/`overtime.html`.
+
+## 1. Confirm NO new models — every source field/helper verified against apps/hrm/models.py + views.py
+
+- [ ] State in the commit message: **3.30 adds zero models, zero migrations, zero seed data.**
+- [ ] `LeaveType` (`apps/hrm/models.py:383-415`) confirmed fields: `name`, `code`, `is_paid`, `accrual_rule`/
+  `accrual_days`, `max_balance`, `max_carry_forward`, `encashable` (bool — the ONLY signal for "$-liability
+  eligible"), `is_active`. Seeded catalog (`seed_hrm.py:197-203` `LEAVE_TYPES`) confirmed = **Annual Leave
+  (AL, encashable=True), Sick Leave (SL, encashable=False), Casual Leave (CL, encashable=False), Unpaid Leave
+  (UPL, encashable=False)** — **no `code`/`name` contains "comp" anywhere in the seed** → the comp-off
+  `LeaveType` heuristic match (`Q(code__icontains="comp") | Q(name__icontains="comp")`) WILL return empty on
+  freshly-seeded demo data. `comp_off_report`'s "availed" panel MUST render its empty-state banner by default,
+  not silently show zero.
+- [ ] `LeaveAllocation` (`apps/hrm/models.py:418-474`) confirmed fields: `employee` FK, `leave_type` FK,
+  `year` (`PositiveSmallIntegerField`), `allocated_days`, `carried_forward` (`editable=False`),
+  `encashed_days` (`editable=False`), `status`. `used_days`/`balance` are `@property`s (lines 453-471) — the
+  docstring on the property (line 458-459) explicitly says list views should use `used_days_db`/`balance_db`
+  annotations via `_used_days_subquery()` instead. **CONFIRMED helper name: `_used_days_subquery()`**
+  (`apps/hrm/views.py:367`, a correlated `Subquery`/`Coalesce` keyed on `OuterRef("tenant"/"employee"/
+  "leave_type"/"year")`) — reuse verbatim, do not re-derive. `unique_together` includes `(tenant, employee,
+  leave_type, year)` so one row per employee×type×year — exactly the register grid's row shape.
+- [ ] `LeaveRequest` (`apps/hrm/models.py:477-536`) confirmed fields: `employee`, `leave_type`, `start_date`,
+  `end_date`, `days` (`editable=False`, holiday-excluded, recomputed in `save()`), `status`
+  (`draft/pending/approved/rejected/cancelled`). "Availed"/"taken" = `status="approved"` only, everywhere.
+- [ ] `LeaveEncashment` (`apps/hrm/models.py:539-...`) confirmed fields: `employee`, `leave_type`, `year`,
+  `days`, `rate_per_day` (user-entered, no default/lookup elsewhere), `amount` (recomputed in `save()` from
+  `days × rate_per_day`), `status`. This is the ONLY place a real per-day leave rate is ever recorded in
+  NavERP — the liability report's rate-fallback tier 1.
+- [ ] `OvertimeRequest` (`apps/hrm/models.py:716-775`) confirmed: **field is `payout_method`** (not
+  `payout`), `PAYOUT_CHOICES = [("pay","Pay"), ("comp_leave","Compensatory Leave")]` — comp-leave value is
+  the literal string `"comp_leave"`. `status` (`draft/pending/approved/rejected/cancelled`), `hours_claimed`
+  (`DecimalField`). **CONFIRMED `overtimerequest_approve()` (`apps/hrm/views.py:1636-1646`) only flips
+  `status → "approved"`** — it does NOT create/increment any `LeaveAllocation` row. There is no automatic
+  linkage from an approved comp-leave OT claim to a leave balance anywhere in the codebase — a real
+  functional gap, not just a naming one. `comp_off_report`'s "earned" panel is therefore
+  `OvertimeRequest.objects.filter(tenant=tenant, payout_method="comp_leave", status="approved")` and its
+  hours/est.-days figure is informational only, never reconciled against a real balance.
+- [ ] `EmployeeSalaryStructure` (`apps/hrm/models.py:3415-...`) confirmed: `annual_ctc_amount`, `status`
+  (`active`/`superseded`), `effective_from`/`effective_to` — the liability report's rate-fallback tier 2
+  (`annual_ctc_amount / 365`, labelled `is_estimate`).
+- [ ] **`EmployeeProfile.department` is a Python `@property`** (`apps/hrm/models.py:343`), **not a DB
+  column** — same recurring gotcha as 3.28/3.29. All department aggregates/filters across all 5 views MUST
+  use the real FK path `employee__employment__org_unit` (never `.values("employee__department")`).
+- [ ] Confirm no field/method gap forces a 500: everything the 5 views need exists; div-by-zero (empty
+  tenant, no `LeaveAllocation` rows for the selected year, no resolvable liability rate, no comp-off
+  `LeaveType`) is a **view-logic** guard/empty-state (§2), not a data gap.
+
+## 2. Views (apps/hrm/views.py) — new `# --- 3.30 Leave Reports ---` banner (append after the 3.29 block, current EOF at line 12516)
+
+- [ ] All 5 functions decorated `@tenant_admin_required`, `if tenant is not None:` guard pattern (superuser
+  `tenant=None` renders an empty/zero report, never `.filter(tenant=None)`).
+- [ ] New `_report_year(request)` helper (register + liability only): `raw =
+  (request.GET.get("year") or "").strip(); return int(raw) if raw.isdigit() else
+  timezone.localdate().year` — never `ValueError`s on a malformed `?year`.
+- [ ] New `_report_leave_type(request, tenant)` helper (trend only), mirroring `_report_department`'s
+  IDOR-safe pattern exactly: tenant-scoped, digit-checked pk, `LeaveType.objects.filter(tenant=tenant,
+  pk=int(pk)).first()`, else `None` — never trusts a raw cross-tenant pk.
+- [ ] Follow the **Filter Implementation Rules**: every `<select>` the templates need gets its choices passed
+  explicitly — `department_choices = _dept_choices(tenant)`, `leave_type_choices =
+  LeaveType.objects.filter(tenant=tenant, is_active=True).order_by("name")`, `year_choices` = distinct
+  `LeaveAllocation.objects.filter(tenant=tenant).values_list("year", flat=True).distinct().order_by("-year")`
+  (register + liability). FK/pk `<select>` comparisons use `|stringformat:"d"`; string fields use
+  `request.GET.x == value`.
+- [ ] `leave_reports_index(request)` — `/hrm/reports/leave/`. No filters. 5 KPI tiles (`{label, value, url}`,
+  mirrors `hr_reports_index`/`attendance_reports_index`): Leave Register (current-year allocation count or
+  avg balance), Leave Liability (current-year total days liability), Comp-off (current-period earned-days
+  estimate), Leave Trend (trailing-12-month approved-days total), + a 5th "On Leave Today" quick stat
+  (`LeaveRequest.objects.filter(tenant=tenant, status="approved", start_date__lte=today,
+  end_date__gte=today).count()` — cheap, no separate page, matches the research's "fold into the hub, don't
+  build a separate view" call). Render `hrm/reports/leave_index.html`.
+- [ ] `leave_register_report(request)` — `/hrm/reports/leave/register/`. Filters: `?year` (via
+  `_report_year`, default current year — **NOT `_report_period`**, `LeaveAllocation` has no date range),
+  `?department` (via `_report_department`). Query:
+  `LeaveAllocation.objects.filter(tenant=tenant, year=year).select_related("employee__party",
+  "employee__employment__org_unit", "leave_type")`, `.filter(employee__employment__org_unit=dept)` when set,
+  then `.annotate(used_days_db=_used_days_subquery()).annotate(balance_db=ExpressionWrapper(
+  F("allocated_days") - F("used_days_db") - F("encashed_days"), output_field=_DEC))` — **the DB annotation,
+  never per-row `.used_days`/`.balance` property access** (N+1 guard, code-reviewer will check this). Grid:
+  one row per `LeaveAllocation` (employee + leave_type), columns = allocated_days, carried_forward,
+  used_days_db, encashed_days, balance_db. Rollups: by leave_type (`.values("leave_type__name").annotate(...)`)
+  and by department. Render `hrm/reports/leave_register.html`.
+- [ ] `leave_liability_report(request)` — `/hrm/reports/leave/liability/`. Filters: `?year`, `?department`
+  (same resolution as register). Base query: same annotated `LeaveAllocation` queryset as register (reuse the
+  annotation, don't re-derive). Per row, resolve a rate via the **fallback chain** (implement as a small
+  helper, e.g. `_resolve_leave_rate(tenant, employee_id, leave_type_id)`):
+  1. Latest `LeaveEncashment.objects.filter(tenant=tenant, employee_id=employee_id,
+     leave_type_id=leave_type_id).order_by("-year", "-created_at").values_list("rate_per_day",
+     flat=True).first()` → source `"encashment"` if truthy/non-zero.
+  2. Else latest `EmployeeSalaryStructure.objects.filter(tenant=tenant, employee_id=employee_id,
+     status="active").order_by("-effective_from").values_list("annual_ctc_amount",
+     flat=True).first()` ÷ `Decimal("365")` → source `"estimate"` (`is_estimate=True` on the row).
+  3. Else rate = `None` → source `"none"`, row excluded from the `$` total but still counted in the days
+     total.
+  **Only rows where `leave_type.encashable is True` contribute to the `$` total** — non-encashable balances
+  (Sick/Casual per the seed) still appear in the days-based liability but are visually/numerically excluded
+  from currency. Guard: batch-resolve rates with at most one `LeaveEncashment` query + one
+  `EmployeeSalaryStructure` query per distinct (employee, leave_type) / employee pair, not N+1 (materialize
+  the annotated queryset once, group in Python — do NOT call `.filter().first()` inside the row loop for
+  every row; pull the relevant encashment/salary rows in one query each and index by employee/leave_type
+  first). Headline totals: total days liability (all types), total `$` liability (encashable + resolved-rate
+  rows only), data-quality line = count/% of rows with `source="none"`. Rollups: by department, by leave
+  type. Render `hrm/reports/leave_liability.html`.
+- [ ] `comp_off_report(request)` — `/hrm/reports/leave/comp-off/`. Filters: `_report_period` (date range on
+  `OvertimeRequest.date`), `?department` (via `_report_department`). **"Earned" panel**:
+  `OvertimeRequest.objects.filter(tenant=tenant, payout_method="comp_leave", status="approved",
+  date__range=(date_from, date_to))`, department via `employee__employment__org_unit` — count, total
+  `hours_claimed` (`Sum`), est. days (`hours_claimed / 8`, documented assumption in a code comment), by
+  employee, by department, monthly trend (`TruncMonth("date")`). **"Availed" panel**: resolve the tenant's
+  comp-off `LeaveType` via `LeaveType.objects.filter(tenant=tenant).filter(Q(code__icontains="comp") |
+  Q(name__icontains="comp")).first()`; if `None`, set an explicit `ctx["comp_off_type"] = None` /
+  `ctx["no_comp_off_type"] = True` flag and skip the availed query entirely (template renders the caveat
+  banner, not a silent zero); if found, `LeaveRequest.objects.filter(tenant=tenant,
+  leave_type=comp_off_type, status="approved", start_date__range=(date_from, date_to))` — days, by employee.
+  Net position table (earned est. days − availed days per employee), clearly labelled "estimate — not a
+  tracked balance". Render `hrm/reports/comp_off.html`.
+- [ ] `leave_trend_report(request)` — `/hrm/reports/leave/trend/`. Filters: `_report_period`, `?department`,
+  `?leave_type` (via the new `_report_leave_type`). Base: `LeaveRequest.objects.filter(tenant=tenant,
+  status="approved", start_date__range=(date_from, date_to))`, department/leave_type filters applied when
+  set. Monthly trend: `.annotate(m=TruncMonth("start_date")).values("m", "leave_type__name").annotate(
+  d=Sum("days"))` — **note the approximation in a code comment**: `days` is attributed whole to the request's
+  **start-month** (a request spanning a month boundary is not split), same simplification style as
+  `LeaveAllocation.used_days`'s year-boundary handling. Chart.js stacked-by-leave-type line/bar (`json.dumps`
+  labels/series per leave type, same pattern as `overtime_report`'s single-series trend generalized to
+  multi-series). By-department rollup (`employee__employment__org_unit`). Seasonality: group by
+  calendar-month-of-year only (`ExtractMonth("start_date")` or a Python `.month` bucket over the materialized
+  queryset), summed across all years in the selected range — Jan..Dec, second chart on the same page. Top-10
+  frequent leave-takers: `.values("employee_id", "employee__party__name").annotate(count=Count("id"),
+  days=Sum("days")).order_by("-days")[:10]` — mirrors `absenteeism_report`'s frequent-absentee pattern. Render
+  `hrm/reports/leave_trend.html`.
+- [ ] Every rate/percentage/average across all 5 views is guarded against a zero denominator (empty tenant,
+  zero allocations for the selected year, zero resolvable rates, zero OT claims) — audit each before
+  considering a view done.
+
+## 3. URLs (apps/hrm/urls.py) — append after the 3.29 block (after line 959 `reports/attendance/overtime/`, before the closing `]` at line 960)
+
+- [ ] New `# 3.30 Leave Reports` comment block:
+  ```python
+  # 3.30 Leave Reports (derived, read-only, admin-only)
+  path("reports/leave/", views.leave_reports_index, name="leave_reports_index"),
+  path("reports/leave/register/", views.leave_register_report, name="leave_register_report"),
+  path("reports/leave/liability/", views.leave_liability_report, name="leave_liability_report"),
+  path("reports/leave/comp-off/", views.comp_off_report, name="comp_off_report"),
+  path("reports/leave/trend/", views.leave_trend_report, name="leave_trend_report"),
+  ```
+- [ ] Confirm no path/name collision with `reports/hr/...` (3.28), `reports/attendance/...` (3.29), or the
+  existing 3.10 `leaveallocation_list`/`leaverequest_list`/`leaveencashment_list` CRUD URLs — distinct
+  `reports/leave/` segment, no clash.
+
+## 4. Navigation — apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.30"]` block (insert near the `"3.29"` entry), bullet text copied **verbatim** from
+  `NavERP.md:643-647`:
+  ```python
+  # 3.30 Leave Reports — derived, read-only, @tenant_admin_required (no models). leave_reports_index is
+  # the landing hub, not itself a bullet — same precedent as 3.28/3.29.
+  "3.30": {
+      "Leave Register": "hrm:leave_register_report",     # bullet (availed + balance grid, year/department)
+      "Leave Liability": "hrm:leave_liability_report",    # bullet (accrued days + $ liability, rate fallback chain)
+      "Comp-off Report": "hrm:comp_off_report",           # bullet (earned/availed, empty-state if no comp-off LeaveType)
+      "Leave Trend": "hrm:leave_trend_report",            # bullet (monthly/seasonal patterns, frequent takers)
+  },
+  ```
+
+## 5. Templates (templates/hrm/reports/)
+
+- [ ] `templates/hrm/reports/leave_index.html` — standalone landing page (sub-module root, no entity
+  folder), 5 `.stat-card` KPI tiles matching `hr_index.html`/`attendance_index.html`'s visual language, each
+  linking to its drill-in report (the "On Leave Today" tile has no dedicated page — no link, or link to
+  register report).
+- [ ] `templates/hrm/reports/leave_register.html` — filter bar (`year` `<select>` from `year_choices`,
+  `department` `<select>` reflecting `request.GET`), grid table (employee × leave_type rows: allocated,
+  carried_forward, used, encashed, balance — `floatformat:1` on all day figures), by-leave-type and
+  by-department rollup tables, `.empty-state` when zero `LeaveAllocation` rows for the selected year.
+- [ ] `templates/hrm/reports/leave_liability.html` — filter bar (`year`, `department`), headline stat-cards
+  (total days liability, total `$` liability, data-quality "N rows have no resolvable rate" line), row table
+  with a rate-source badge per row (`encashment` / `is_estimate` badge / "—" for `none`), by-department and
+  by-leave-type rollups, `.empty-state` when zero allocations.
+- [ ] `templates/hrm/reports/comp_off.html` — filter bar (`date_from`, `date_to`, `department`), "Earned"
+  panel (count, hours, est. days, by-employee, monthly trend chart), "Availed" panel — **OR** a prominent
+  caveat banner ("No comp-off leave type configured — create a `LeaveType` with code/name containing 'comp'
+  so availed comp-off leave can be reported") when `no_comp_off_type` is set, net-position table labelled
+  "estimate, not a tracked balance".
+- [ ] `templates/hrm/reports/leave_trend.html` — filter bar (`date_from`, `date_to`, `department`,
+  `leave_type` `<select>` from `leave_type_choices`), Chart.js monthly trend (stacked by leave type),
+  Chart.js month-of-year seasonality chart, by-department bar, top-10 frequent-leave-takers table,
+  `.empty-state` when zero approved `LeaveRequest` rows in range.
+- [ ] All 5 templates: filter `<form method="get">` re-submits every active param; `text-align:end` (logical,
+  not `right`) for numeric columns; `floatformat:1`/`:2` consistently on days/currency; `{% csrf_token %}`
+  n/a (GET-only, read-only pages, no POST forms); badge values match the exact rate-source strings used in
+  the view (`encashment`/`estimate`/`none`), with an `{% else %}`/default fallback.
+
+## 6. Admin
+
+- [ ] None — no new models, nothing to register in `apps/hrm/admin.py`.
+
+## 7. Verify
+
+- [ ] **No migration** — `python manage.py makemigrations hrm` produces **zero** changes.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep: `leave_reports_index` + all 4 drill-in `hrm:*_report`/`comp_off_report` URLs
+  return 200 for a tenant admin (a) with no query params (defaults), (b) with a full filter set (`year`/
+  `department`/`date_from`/`date_to`/`leave_type`), and (c) with odd/nonsensical values (a non-digit or
+  future/past-boundary `?year`, `date_from` after `date_to`, a non-digit or cross-tenant `?department`/
+  `?leave_type`) — must render an empty/zero report or empty-state, never 500. No `{#`/`{% comment` leak
+  markers in any rendered page.
+- [ ] **403 for non-admin**: a plain employee user hitting any of the 5 `hrm:*` leave-report URLs gets 403
+  (`@tenant_admin_required`).
+- [ ] **Cross-tenant isolation**: a second tenant's `LeaveAllocation`/`LeaveRequest`/`LeaveEncashment`/
+  `OvertimeRequest` data never appears in tenant A's totals; a `?department`/`?leave_type` belonging to
+  another tenant is silently ignored (falls back to "no filter"), never leaks that tenant's name — same
+  IDOR-prevention pattern as `_report_department`.
+- [ ] **Div-by-zero / empty-state guards**: an empty tenant (zero `LeaveAllocation`/`LeaveRequest` rows)
+  renders every report's `.empty-state`/zero KPIs, not a 500 — specifically: register/liability with zero
+  allocations for the selected year, liability with zero resolvable rates (all rows `source="none"`),
+  comp-off with no matching `LeaveType` (the caveat banner, verified on freshly-seeded demo data per §1),
+  trend with zero approved requests in range.
+- [ ] Sidebar shows all 4 3.30 bullet entries as **Live** for a tenant-admin login.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to check the register/liability grid uses `_used_days_subquery()`/DB annotations
+    (not per-row `.used_days`/`.balance` property access), the liability rate-resolution batches its
+    `LeaveEncashment`/`EmployeeSalaryStructure` lookups instead of querying inside the row loop, and the
+    `EmployeeProfile.department` property gotcha is avoided everywhere.
+  - Expect `performance-reviewer` to confirm no N+1 across all 5 views, especially the liability report's
+    per-row rate resolution and the trend report's month-of-year seasonality grouping.
+  - Expect `security-reviewer` to confirm `@tenant_admin_required` on all 5 views and IDOR-safe `department`/
+    `leave_type`/`year` resolution.
+  - Expect `test-writer` to cover: 403 for non-admin on every report URL; cross-tenant isolation; div-by-zero/
+    empty-state on an empty tenant; the register grid's allocated/used/carried/encashed/balance math on a
+    known fixture; the liability rate-fallback chain (encashment present → estimate fallback → no-rate,
+    each producing the right `source`); the encashable-only `$`-total exclusion; the comp-off empty-state on
+    seeded data (no comp-off `LeaveType`) AND the earned/availed panels once a comp-off `LeaveType` is added
+    in a test fixture; the trend month-attribution approximation and seasonality bucketing; filter
+    round-tripping (year/date-range/department/leave_type narrows results).
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.30 Leave Reports (0 new tables — derived views)`
+  section documenting the 5 routes, the year-vs-date-range filter split (register/liability use `?year` via
+  `_report_year`, comp-off/trend use `_report_period`), the `_used_days_subquery()` reuse, the liability
+  rate-fallback chain + `encashable`-only `$`-total rule, and the comp-off heuristic + data gap (no
+  auto-provisioned balance, no seeded comp-off `LeaveType`); update `LIVE_LINKS` for `"3.30"`; update the
+  Deferred section with this pass's carried-forward deferrals.
+- [ ] README.md — add `/3.30` to the Module 3 header line + a bullet describing the 5 reports + the
+  no-new-models note; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.30.md)
+
+- **Comp-off as a first-class, tracked balance** (a `LeaveType.is_comp_off` flag or auto-provisioning a
+  `LeaveAllocation` credit when a comp-leave `OvertimeRequest` is approved) — a 3.10/3.11 model/workflow
+  change, not a reports-only pass. Until then, the Comp-off Report stays heuristic/estimated.
+- **Comp-off expiry tracking** (lapses after 30-90 days) — needs a new date field, not derivable today.
+- **Statutory leave-register PDF/Excel export** — export infrastructure is a separate cross-cutting concern,
+  not specific to 3.30.
+- **GL posting of accrued leave liability** (SAP SuccessFactors precedent) — requires Module 2 Accounting
+  `JournalEntry` integration, out of scope for a derived HR report.
+- **Concurrent-absence peaks** ("how many people out on the same day") — a bounded O(days) sweep over
+  `LeaveRequest` overlaps; valuable but the most implementation-costly item in the research catalog; not
+  built this pass, revisit if requested.
+- **"On Leave Today" detail list** (who, not just a count) — the index tile computes the count only this
+  pass; a full list could later fold into the register report as a secondary panel.
+- **Bradford Factor absence-frequency scoring** — closer to 3.29 Absenteeism than 3.30 Leave Trend; not
+  recommended for this pass (same call as 3.29's todo).
+- **A real, stored per-employee/per-leave-type pay rate** (vs. this pass's `LeaveEncashment` →
+  `EmployeeSalaryStructure` fallback estimate) — needs 3.13 Payroll to expose a canonical daily rate; revisit
+  the Liability report's rate resolution once that exists.
+- **Predictive/AI seasonal forecasting** — belongs to 3.32 Analytics Dashboard, not a derived report in 3.30.
+
+## Review notes
+
+(filled in at the end)
