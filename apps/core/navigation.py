@@ -595,6 +595,17 @@ LIVE_LINKS = {
         "Predictive Analytics": "hrm:predictive_analytics",  # bullet (attrition-risk heuristic + hiring-needs projection, admin-only)
         "Benchmarking": "hrm:benchmarking",                  # bullet (period-over-period + vs-target scorecard, admin-only)
     },
+    # 3.33 Asset Management — 2 new models (Asset, AssetMaintenance) + a nullable AssetAllocation.asset FK.
+    # Asset Allocation deep-links into the register filtered to currently-assigned assets; Asset Return stays
+    # on the existing 3.3 AssetAllocation list (its own system of record) filtered to returned; Depreciation
+    # has no dedicated page — book value/accumulated depreciation are computed columns on the register itself.
+    "3.33": {
+        "Asset Register": "hrm:asset_list",                           # bullet (the central register)
+        "Asset Allocation": "hrm:asset_list?status=assigned",          # bullet (register filtered to assigned)
+        "Asset Return": "hrm:assetallocation_list?status=returned",    # bullet (existing 3.3 allocation list, filtered)
+        "Maintenance": "hrm:assetmaintenance_list",                    # bullet (service/repair/AMC/warranty records)
+        "Depreciation": "hrm:asset_list",                              # bullet (register w/ book-value column)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
