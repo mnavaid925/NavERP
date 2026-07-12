@@ -569,6 +569,18 @@ class AssetAllocationForm(TenantModelForm):
         fields = ["program", "employee", "asset", "asset_name", "asset_category", "serial_number",
                   "asset_tag", "status", "return_due_date", "notes"]
 
+    def clean(self):
+        cleaned = super().clean()
+        asset, status = cleaned.get("asset"), cleaned.get("status")
+        # Don't let an "issued" allocation link an asset that already has another active (issued)
+        # allocation — that would double-issue one register asset (bypassing the asset_assign guard).
+        if asset and status == "issued":
+            clash = asset.allocations.filter(status="issued").exclude(pk=self.instance.pk).exists()
+            if clash:
+                self.add_error("asset", "This asset already has an active (issued) allocation. "
+                                        "Return it before re-issuing.")
+        return cleaned
+
 
 class OrientationSessionForm(TenantModelForm):
     # SECURITY: `attendance_status` is excluded — it's advanced only by the mark-attended /
