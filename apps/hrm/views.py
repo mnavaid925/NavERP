@@ -13593,22 +13593,20 @@ def assetmaintenance_list(request):
 
 @login_required
 def assetmaintenance_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     asset_pk = (request.GET.get("asset") or "").strip()
     if request.method == "POST":
         form = AssetMaintenanceForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
-            obj.save()
-            # Only a repair takes the asset out of service.
-            if (obj.maintenance_type == "repair" and obj.status in ("scheduled", "in_progress")
-                    and obj.asset.status in ("in_stock", "assigned")):
-                obj.asset.status = "in_repair"
-                obj.asset.save(update_fields=["status", "updated_at"])
+            obj.save()  # AssetMaintenance.save() runs _sync_asset_status() atomically (repair in/out of service)
             write_audit_log(request.user, obj, "create")
             messages.success(request, "Maintenance record logged.")
             if asset_pk.isdecimal():
-                return redirect("hrm:asset_detail", pk=int(asset_pk))
+                return redirect("hrm:asset_detail", pk=obj.asset_id)
             return redirect("hrm:assetmaintenance_list")
     else:
         form = AssetMaintenanceForm(tenant=request.tenant,
@@ -13641,11 +13639,7 @@ def assetmaintenance_complete(request, pk):
     if obj.status in ("scheduled", "in_progress"):
         obj.status = "completed"
         obj.completed_date = obj.completed_date or timezone.localdate()
-        obj.save(update_fields=["status", "completed_date", "updated_at"])
-        # A completed repair returns the asset to service.
-        if obj.maintenance_type == "repair" and obj.asset.status == "in_repair":
-            obj.asset.status = "assigned" if obj.asset.current_holder_id else "in_stock"
-            obj.asset.save(update_fields=["status", "updated_at"])
+        obj.save(update_fields=["status", "completed_date", "updated_at"])  # save() returns a repaired asset to service
         write_audit_log(request.user, obj, "update", {"action": "complete"})
         messages.success(request, "Maintenance marked complete.")
     return redirect("hrm:assetmaintenance_detail", pk=obj.pk)
