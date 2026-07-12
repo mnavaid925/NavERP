@@ -12923,12 +12923,14 @@ def statutory_report(request):
         # DB form of StatutoryReturn.is_overdue — never call the Python @property in a loop.
         ctx["overdue"] = returns.filter(Q(status="pending") & Q(due_date__lt=today)).count()
         # Employee statutory coverage — render ONLY masked_*() identifiers (hard security rule).
-        idents = (EmployeeStatutoryIdentifier.objects.filter(tenant=tenant)
-                  .select_related("employee__party").order_by("employee__party__name"))
-        ctx["identifiers"] = list(idents)
-        ctx["coverage"] = {"pf": idents.filter(is_pf_applicable=True).count(),
-                           "esi": idents.filter(is_esi_applicable=True).count(),
-                           "total": idents.count()}
+        idents = list(EmployeeStatutoryIdentifier.objects.filter(tenant=tenant)
+                      .select_related("employee__party").order_by("employee__party__name"))
+        ctx["identifiers"] = idents
+        # Coverage counts derived from the already-materialized list — 0 extra queries (the table
+        # renders every identifier row unpaginated anyway, so it is all in memory here).
+        ctx["coverage"] = {"pf": sum(1 for i in idents if i.is_pf_applicable),
+                           "esi": sum(1 for i in idents if i.is_esi_applicable),
+                           "total": len(idents)}
     return render(request, "hrm/reports/statutory.html", ctx)
 
 
