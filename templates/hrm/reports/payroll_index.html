@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Payroll Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Payroll Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Payroll Reports</span></div>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-bottom:1rem;">Salary register, tax (TDS / Form 16), statutory (PF / ESI / PT) and cost analysis. Open a report to filter by cycle, financial year, scheme, department or cost centre.</p>
+
+  <div class="stat-grid">
+    {% for t in tiles %}
+      <a class="stat-card" href="{% url t.url %}">
+        <div class="stat-icon blue"><i data-lucide="{{ t.icon }}"></i></div>
+        <div class="stat-value">{{ t.value }}</div>
+        <div class="stat-label">{{ t.label }}</div>
+      </a>
+    {% empty %}
+      <div class="empty-state"><i data-lucide="wallet"></i><h3>No data yet</h3><p>Run a payroll cycle and set up tax / statutory data to populate these reports.</p></div>
+    {% endfor %}
+  </div>
+
+  <div class="card"><div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+    <a href="{% url 'hrm:salary_register_report' %}" class="btn btn-outline btn-sm"><i data-lucide="table"></i> Salary Register</a>
+    <a href="{% url 'hrm:tax_report' %}" class="btn btn-outline btn-sm"><i data-lucide="file-text"></i> Tax Reports</a>
+    <a href="{% url 'hrm:statutory_report' %}" class="btn btn-outline btn-sm"><i data-lucide="shield-check"></i> Statutory Reports</a>
+    <a href="{% url 'hrm:ctc_report' %}" class="btn btn-outline btn-sm"><i data-lucide="pie-chart"></i> CTC Analysis</a>
+    <a href="{% url 'hrm:cost_center_report' %}" class="btn btn-outline btn-sm"><i data-lucide="building-2"></i> Cost Centre</a>
+  </div></div>
+{% endblock %}
