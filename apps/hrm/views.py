@@ -13869,7 +13869,9 @@ def expenseclaim_cancel(request, pk):
 def expenseclaim_reimburse(request, pk):
     obj = get_object_or_404(ExpenseClaim, pk=pk, tenant=request.tenant)
     method = (request.POST.get("payment_method") or "").strip()
-    if obj.status != "approved":
+    if _is_own_hr_request(request, obj):
+        messages.error(request, "You cannot mark your own claim as reimbursed.")
+    elif obj.status != "approved":
         messages.error(request, "Only an approved claim can be marked reimbursed.")
     elif method not in dict(ExpenseClaim.PAYMENT_METHOD_CHOICES):
         messages.error(request, "Select a valid payment method.")
