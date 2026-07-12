@@ -27,6 +27,7 @@
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="repeat"></i></div><div class="stat-value">{{ earned_hours|floatformat:1 }}</div><div class="stat-label">Comp-off Earned (hrs)</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="list"></i></div><div class="stat-value">{{ earned_count }}</div><div class="stat-label">Earning Claims</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ availed_days|floatformat:1 }}</div><div class="stat-label">Comp-off Availed (days)</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar-days"></i></div><div class="stat-value">{{ availed_count }}</div><div class="stat-label">Availing Requests</div></div>
   </div>
   {% if not comp_types_configured %}<p class="text-muted" style="margin:-.5rem 0 1rem;"><i data-lucide="info"></i> No comp-off leave type is configured (a LeaveType whose name/code contains "comp"), so "availed" days can't be tallied — showing earned OT-comp-leave only.</p>{% endif %}
 
