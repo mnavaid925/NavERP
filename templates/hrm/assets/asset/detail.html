@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.name }}
+        {% if obj.status == 'assigned' %}<span class="badge badge-green">Assigned</span>{% elif obj.status == 'in_stock' %}<span class="badge badge-slate">In Stock</span>{% elif obj.status == 'in_repair' %}<span class="badge badge-amber">In Repair</span>{% elif obj.status == 'disposed' %}<span class="badge badge-red">Disposed</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.is_under_warranty %}<span class="badge badge-green">Under Warranty</span>{% else %}<span class="badge badge-muted">No/Expired Warranty</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:asset_list' %}">Asset Register</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:asset_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if obj.status != 'assigned' %}
+      <form method="post" action="{% url 'hrm:asset_delete' obj.pk %}" onsubmit="return confirm('Delete this asset?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Details</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="text-muted">Asset Tag</span><div>{{ obj.asset_tag|default:"-" }}</div></div>
+        <div><span class="text-muted">Category</span><div>{{ obj.get_category_display }}</div></div>
+        <div><span class="text-muted">Condition</span><div>{{ obj.get_condition_display }}</div></div>
+        <div><span class="text-muted">Manufacturer</span><div>{{ obj.manufacturer|default:"-" }}</div></div>
+        <div><span class="text-muted">Model</span><div>{{ obj.model_number|default:"-" }}</div></div>
+        <div><span class="text-muted">Serial Number</span><div>{{ obj.serial_number|default:"-" }}</div></div>
+        <div><span class="text-muted">Current Holder</span><div>{% if obj.current_holder %}{{ obj.current_holder.party.name }}{% else %}-{% endif %}</div></div>
+        <div><span class="text-muted">Location</span><div>{% if obj.location %}{{ obj.location.name }}{% else %}-{% endif %}</div></div>
+        <div><span class="text-muted">Warranty Expiry</span><div>{{ obj.warranty_expiry|date:"d M Y"|default:"-" }}</div></div>
+      </div>
+      {% if obj.notes %}<p class="text-muted" style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Depreciation</h2></div>
+    <div class="card-body">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ obj.purchase_cost|default:0|floatformat:2 }}</div><div class="stat-label">Purchase Cost</div></div>
+        <div class="stat-card"><div class="stat-icon orange"><i data-lucide="trending-down"></i></div><div class="stat-value">{{ obj.accumulated_depreciation|floatformat:2 }}</div><div class="stat-label">Accumulated Depreciation</div></div>
+        <div class="stat-card"><div class="stat-icon green"><i data-lucide="wallet"></i></div><div class="stat-value">{{ obj.current_book_value|floatformat:2 }}</div><div class="stat-label">Current Book Value</div></div>
+        <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar"></i></div><div class="stat-value">{{ obj.months_in_service }}</div><div class="stat-label">Months in Service</div></div>
+      </div>
+      <p class="text-muted" style="margin:.5rem 0 0;">Method: {{ obj.get_depreciation_method_display }}{% if obj.useful_life_months %} · Useful life {{ obj.useful_life_months }} months{% endif %}{% if obj.salvage_value %} · Salvage {{ obj.salvage_value|floatformat:2 }}{% endif %}.</p>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Lifecycle Actions</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+      {% if obj.status == 'in_stock' %}
+      <form method="post" action="{% url 'hrm:asset_assign' obj.pk %}" style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:flex-end;">
+        {% csrf_token %}
+        <div class="form-group"><label class="form-label" for="assign_emp">Assign to</label>
+          <select name="employee" id="assign_emp" class="form-select" required><option value="">Select employee</option>
+            {% for e in assignable_employees %}<option value="{{ e.pk }}">{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label" for="assign_due">Return due (optional)</label><input type="date" name="return_due_date" id="assign_due" class="form-input"></div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="user-check"></i> Assign</button>
+      </form>
+      <form method="post" action="{% url 'hrm:asset_retire' obj.pk %}" onsubmit="return confirm('Retire this asset?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Retire</button></form>
+      {% elif obj.status == 'assigned' %}
+      <form method="post" action="{% url 'hrm:asset_return' obj.pk %}" onsubmit="return confirm('Return this asset to stock?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="undo-2"></i> Return to Stock</button></form>
+      {% elif obj.status == 'in_repair' %}
+      <p class="text-muted" style="margin:0;">This asset is in repair — complete its open repair record to return it to service.</p>
+      <form method="post" action="{% url 'hrm:asset_retire' obj.pk %}" onsubmit="return confirm('Retire this asset?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Retire</button></form>
+      {% elif obj.status == 'retired' %}
+      <form method="post" action="{% url 'hrm:asset_dispose' obj.pk %}" onsubmit="return confirm('Dispose this asset? This is final.');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Dispose</button></form>
+      {% else %}
+      <p class="text-muted" style="margin:0;">No further lifecycle actions available for a disposed asset.</p>
+      {% endif %}
+      <a href="{% url 'hrm:assetmaintenance_create' %}?asset={{ obj.pk }}" class="btn btn-outline"><i data-lucide="wrench"></i> Log Maintenance</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Allocation History</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Allocation</th><th>Employee</th><th>Status</th><th>Issued</th><th>Returned</th></tr></thead>
+      <tbody>
+        {% for a in allocations %}
+          <tr><td>{{ a.number }}</td><td>{{ a.employee.party.name }}</td><td>{{ a.get_status_display }}</td><td>{{ a.issued_at|date:"d M Y"|default:"-" }}</td><td>{{ a.returned_at|date:"d M Y"|default:"-" }}</td></tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-muted">No allocation history.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Maintenance History</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Record</th><th>Type</th><th>Status</th><th>Scheduled</th><th>Completed</th><th>Vendor</th><th style="text-align:end;">Cost</th></tr></thead>
+      <tbody>
+        {% for m in maintenance_records %}
+          <tr><td><a href="{% url 'hrm:assetmaintenance_detail' m.pk %}">{{ m.number }}</a></td><td>{{ m.get_maintenance_type_display }}</td><td>{{ m.get_status_display }}</td><td>{{ m.scheduled_date|date:"d M Y" }}</td><td>{{ m.completed_date|date:"d M Y"|default:"-" }}</td><td>{{ m.vendor|default:"-" }}</td><td style="text-align:end;">{% if m.cost != None %}{{ m.cost|floatformat:2 }}{% else %}-{% endif %}</td></tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-muted">No maintenance records.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+{% endblock %}
