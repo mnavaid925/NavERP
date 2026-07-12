@@ -16,7 +16,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum)
+from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11921,6 +11921,7 @@ def suggestion_implement(request, pk):
 # company-wide salary / attrition / demographics, not an employee's own record. Every query is
 # tenant-scoped; rate calcs guard div-by-zero; ?department is resolved tenant-scoped (IDOR-safe).
 # =============================================================================================
+import bisect  # noqa: E402
 import json  # noqa: E402
 
 VOLUNTARY_SEPARATION_TYPES = {"resignation", "retirement", "contract_end"}
@@ -12077,11 +12078,19 @@ def headcount_report(request):
         ctx["by_type"] = [
             {"name": type_labels.get(r["employee_type"], r["employee_type"] or "—"), "count": r["count"]}
             for r in active.values("employee_type").annotate(count=Count("id")).order_by("-count")]
+        # 12-month headcount trend in 2 queries: sort all hire dates + per-employee first-separation
+        # dates once, then bisect per month (was ~24 COUNTs via _headcount_at called 12x).
+        hire_dates = sorted(EmployeeProfile.objects.filter(
+            tenant=tenant, employment__hired_on__isnull=False)
+            .values_list("employment__hired_on", flat=True))
+        sep_dates = sorted(SeparationCase.objects.filter(
+            tenant=tenant, actual_last_working_day__isnull=False).values("employee_id")
+            .annotate(first=Min("actual_last_working_day")).values_list("first", flat=True))
         labels, values = [], []
         for i in range(11, -1, -1):
             m_end = _month_end(today, i)
             labels.append(m_end.strftime("%b %Y"))
-            values.append(_headcount_at(tenant, m_end))
+            values.append(max(0, bisect.bisect_right(hire_dates, m_end) - bisect.bisect_right(sep_dates, m_end)))
         ctx["trend_labels"], ctx["trend_values"] = json.dumps(labels), json.dumps(values)
     return render(request, "hrm/reports/headcount.html", ctx)
 
@@ -12105,7 +12114,7 @@ def attrition_report(request):
             seps = seps.filter(employee__employment__org_unit=dept)
         if sep_type:
             seps = seps.filter(separation_type=sep_type)
-        seps = seps.select_related("employee__employment", "employee__party", "employee__employment__org_unit")
+        seps = seps.select_related("employee__employment", "employee__employment__org_unit")
         rows = list(seps)
         total = len(rows)
         ctx["separations"] = total
@@ -12203,10 +12212,10 @@ def cost_report(request):
            "avg_cost": 0, "employer_cost": 0, "by_department": [], "by_component": [],
            "trend_labels": "[]", "trend_values": "[]", "headcount": 0}
     if tenant is not None:
-        cycles = PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date")
+        cycles = list(PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date"))  # one query
         ctx["cycle_choices"] = cycles
         cycle_pk = (request.GET.get("cycle") or "").strip()
-        cycle = (cycles.filter(pk=int(cycle_pk)).first() if cycle_pk.isdigit() else None) or cycles.first()
+        cycle = next((c for c in cycles if str(c.pk) == cycle_pk), None) or (cycles[0] if cycles else None)
         ctx["cycle"] = cycle
         if cycle is not None:
             payslips = Payslip.objects.filter(tenant=tenant, cycle=cycle)
@@ -12227,7 +12236,7 @@ def cost_report(request):
             ctx["by_component"] = [
                 {"name": comp_labels.get(r["component_type"], r["component_type"]), "total": r["total"]}
                 for r in line_qs.values("component_type").annotate(total=Sum("amount")).order_by("-total")]
-            recent = list(cycles.order_by("pay_date"))[-12:]
+            recent = list(reversed(cycles[:12]))  # cycles is already sorted -pay_date; no extra query
             ctx["trend_labels"] = json.dumps([c.pay_date.strftime("%b %Y") for c in recent])
             ctx["trend_values"] = json.dumps([float(c.total_gross) for c in recent])
         else:
@@ -12256,9 +12265,9 @@ def hiring_report(request):
         if dept:
             reqs = reqs.filter(department=dept)
         ctx["open_reqs"] = reqs.filter(status__in=("approved", "posted")).count()
-        filled = reqs.filter(filled_at__isnull=False,
-                             filled_at__date__gte=date_from, filled_at__date__lte=date_to)
-        ctx["filled_reqs"] = filled.count()
+        filled = list(reqs.filter(filled_at__isnull=False,
+                                  filled_at__date__gte=date_from, filled_at__date__lte=date_to))
+        ctx["filled_reqs"] = len(filled)
         ttf = [(r.filled_at.date() - r.created_at.date()).days for r in filled if r.filled_at and r.created_at]
         ctx["avg_ttf"] = round(sum(ttf) / len(ttf)) if ttf else None
         apps = JobApplication.objects.filter(tenant=tenant)
