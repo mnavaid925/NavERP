@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Cost Centre Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cost Centre Report</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payroll_reports_index' %}">Payroll Reports</a><span class="sep">›</span><span>Cost Centre</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:payroll_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="cost_center">Cost centre</label>
+        <select name="cost_center" id="cost_center" class="form-select"><option value="">All cost centres</option>
+          {% for c in cost_center_choices %}<option value="{{ c.pk }}" {% if request.GET.cost_center == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="year">Budget year</label>
+        <input type="number" name="year" id="year" value="{{ budget_year }}" class="form-input" style="max-width:8rem;">
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:cost_center_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <p class="text-muted" style="margin:-.25rem 0 1rem;">Actual = gross payroll spend for cycles paid within FY {{ budget_year }}. On a single-cycle demo tenant this is one month, so a full-year budget will read as under-spent.</p>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="target"></i></div><div class="stat-value">{{ total_budget|floatformat:2 }}</div><div class="stat-label">Total Annual Budget</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="banknote"></i></div><div class="stat-value">{{ total_actual|floatformat:2 }}</div><div class="stat-label">Total Actual Spend</div></div>
+  </div>
+
+  {% if rows %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Budget vs Actual (FY {{ budget_year }})</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Cost Centre</th><th>Owner</th><th style="text-align:end;">Budget</th><th style="text-align:end;">Actual</th><th style="text-align:end;">Employer Cost</th><th style="text-align:end;">Headcount</th><th style="text-align:end;">Variance</th><th style="text-align:end;">Variance %</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.name }}{% if r.code %} <span class="text-muted">({{ r.code }})</span>{% endif %}{% if r.budget_mismatch %} <span class="badge badge-amber" title="Budget row is for FY {{ r.budget_year }}, not {{ budget_year }}">FY {{ r.budget_year }}</span>{% endif %}</td>
+            <td>{{ r.owner }}</td>
+            <td style="text-align:end;">{% if r.budget != None %}{{ r.budget|floatformat:2 }}{% else %}<span class="text-muted">no budget</span>{% endif %}</td>
+            <td style="text-align:end;">{{ r.actual|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.employer|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.headcount }}</td>
+            <td style="text-align:end;">{{ r.variance|floatformat:2 }}</td>
+            <td style="text-align:end;">{% if r.variance_pct != None %}{{ r.variance_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+        {% if unassigned %}
+          <tr>
+            <td colspan="3"><em class="text-muted">Unassigned (no cost-centre mapping)</em></td>
+            <td style="text-align:end;">{{ unassigned.gross|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ unassigned.employer|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ unassigned.hc }}</td>
+            <td style="text-align:end;">—</td>
+            <td style="text-align:end;">—</td>
+          </tr>
+        {% endif %}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="2"><strong>Totals</strong></td>
+        <td style="text-align:end;"><strong>{{ total_budget|floatformat:2 }}</strong></td>
+        <td style="text-align:end;" colspan="2"><strong>{{ total_actual|floatformat:2 }}</strong></td>
+        <td colspan="3"></td>
+      </tr></tfoot>
+    </table></div>
+  </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="building-2"></i><h3>No cost centres</h3><p>No <code>CostCenterProfile</code> rows exist for this tenant. Map departments to cost centres to see budget-vs-actual.</p></div></div></div>
+  {% endif %}
+{% endblock %}
