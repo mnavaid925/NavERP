@@ -1676,6 +1676,9 @@ class SeparationCase(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="hrm_sep_tenant_status_idx"),
             models.Index(fields=["tenant", "employee"], name="hrm_sep_tenant_emp_idx"),
             models.Index(fields=["tenant", "separation_type"], name="hrm_sep_tenant_type_idx"),
+            # actual_last_working_day is the primary date filter for the 3.28/3.32 attrition,
+            # headcount-trend and turnover queries (hit on every analytics-dashboard render).
+            models.Index(fields=["tenant", "actual_last_working_day"], name="hrm_sep_tenant_lwd_idx"),
         ]
 
     @property
