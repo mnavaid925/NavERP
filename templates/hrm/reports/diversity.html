@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Diversity Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Diversity Report</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:hr_reports_index' %}">HR Reports</a><span class="sep">›</span><span>Diversity</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:hr_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="as_of">As of</label><input type="date" name="as_of" id="as_of" value="{{ as_of|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:diversity_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ total }}</div><div class="stat-label">Active Employees</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="calendar"></i></div><div class="stat-value">{% if avg_age != None %}{{ avg_age }}{% else %}—{% endif %}</div><div class="stat-label">Avg Age</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock"></i></div><div class="stat-value">{% if avg_tenure != None %}{{ avg_tenure }} yr{% else %}—{% endif %}</div><div class="stat-label">Avg Tenure</div></div>
+  </div>
+
+  {% if total %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Gender Distribution</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Gender</th><th style="text-align:end;">Count</th><th style="text-align:end;">%</th></tr></thead><tbody>
+      {% for r in by_gender %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.count }}</td><td style="text-align:end;">{{ r.pct }}%</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Age Bands</h2></div><div class="card-body">
+    {% for r in by_age %}
+      <div style="display:flex; align-items:center; gap:.6rem; padding:.25rem 0;">
+        <span style="width:70px;">{{ r.name }}</span>
+        <div class="progress" style="flex:1;"><div class="progress-bar" style="width:{% widthratio r.count total 100 %}%;"></div></div>
+        <span style="width:40px; text-align:end;">{{ r.count }}</span>
+      </div>
+    {% endfor %}
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Tenure Bands</h2></div><div class="card-body">
+    {% for r in by_tenure %}
+      <div style="display:flex; align-items:center; gap:.6rem; padding:.25rem 0;">
+        <span style="width:70px;">{{ r.name }}</span>
+        <div class="progress" style="flex:1;"><div class="progress-bar" style="width:{% widthratio r.count total 100 %}%;"></div></div>
+        <span style="width:40px; text-align:end;">{{ r.count }}</span>
+      </div>
+    {% endfor %}
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Department × Gender</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Department</th>{% for g in genders %}<th style="text-align:end;">{{ g }}</th>{% endfor %}<th style="text-align:end;">Total</th></tr></thead><tbody>
+      {% for row in crosstab %}<tr><td>{{ row.dept }}</td>{% for c in row.counts %}<td style="text-align:end;">{{ c }}</td>{% endfor %}<td style="text-align:end;"><strong>{{ row.total }}</strong></td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="pie-chart"></i><h3>No active employees</h3><p>Nothing to analyze for the current filters.</p></div></div></div>
+  {% endif %}
+{% endblock %}
