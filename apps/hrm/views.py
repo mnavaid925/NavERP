@@ -17,7 +17,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import (Avg, Count, DecimalField, ExpressionWrapper, F, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum)
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, TruncMonth
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -12295,3 +12295,216 @@ def hiring_report(request):
         ctx["by_department"] = list(hired.values("requisition__department__name")
                                     .annotate(count=Count("id")).order_by("-count"))
     return render(request, "hrm/reports/hiring.html", ctx)
+
+
+# =============================================================================================
+# 3.29 Attendance Reports (derived, read-only — NO models). Reuse the 3.28 report helpers
+# (_report_period / _report_department / _dept_choices). @tenant_admin_required, tenant-scoped.
+# AttendanceRecord.employee -> EmployeeProfile -> employment (aggregate via employee__employment__
+# org_unit, never the .department @property). "Tracked days" excludes holiday/on_leave rows.
+# =============================================================================================
+_ATT_NON_WORKING = ("holiday", "on_leave")
+_DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _attendance_base(tenant, date_from, date_to, dept):
+    qs = AttendanceRecord.objects.filter(tenant=tenant, date__gte=date_from, date__lte=date_to)
+    if dept:
+        qs = qs.filter(employee__employment__org_unit=dept)
+    return qs
+
+
+@tenant_admin_required
+def attendance_reports_index(request):
+    tenant = request.tenant
+    tiles = []
+    if tenant is not None:
+        today = timezone.localdate()
+        start = today - timedelta(days=30)
+        counts = {r["status"]: r["count"] for r in _attendance_base(tenant, start, today, None)
+                  .values("status").annotate(count=Count("id"))}
+        total = sum(counts.values())
+        tracked = total - counts.get("holiday", 0) - counts.get("on_leave", 0)
+        present_equiv = counts.get("present", 0) + counts.get("regularized", 0) + 0.5 * counts.get("half_day", 0)
+        att_pct = round(present_equiv / tracked * 100, 1) if tracked else 0.0
+        absent_pct = round(counts.get("absent", 0) / tracked * 100, 1) if tracked else 0.0
+        ot_hours = (OvertimeRequest.objects.filter(tenant=tenant, date__gte=start, date__lte=today)
+                    .aggregate(h=Sum("hours_claimed"))["h"] or 0)
+        tiles = [
+            {"label": "Attendance % (30d)", "value": f"{att_pct}%", "url": "hrm:attendance_summary_report", "icon": "calendar-check"},
+            {"label": "Absence % (30d)", "value": f"{absent_pct}%", "url": "hrm:absenteeism_report", "icon": "user-x"},
+            {"label": "OT Hours (30d)", "value": f"{float(ot_hours):.1f}", "url": "hrm:overtime_report", "icon": "timer"},
+            {"label": "Late / Early", "value": "View", "url": "hrm:late_early_report", "icon": "clock"},
+            {"label": "Utilization", "value": "View", "url": "hrm:timesheet_utilization_report", "icon": "gauge"},
+        ]
+    return render(request, "hrm/reports/attendance_index.html", {"tiles": tiles})
+
+
+def _attendance_pe_tracked(counts):
+    """(present_equivalent, tracked) from a {status: count} dict."""
+    tracked = sum(counts.values()) - counts.get("holiday", 0) - counts.get("on_leave", 0)
+    pe = counts.get("present", 0) + counts.get("regularized", 0) + 0.5 * counts.get("half_day", 0)
+    return pe, tracked
+
+
+@tenant_admin_required
+def attendance_summary_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "status_rows": [], "total": 0, "tracked": 0,
+           "attendance_pct": 0.0, "by_department": [], "trend_labels": "[]", "trend_values": "[]"}
+    if tenant is not None:
+        base = _attendance_base(tenant, date_from, date_to, dept)
+        status_labels = dict(AttendanceRecord.STATUS_CHOICES)
+        counts = {r["status"]: r["count"] for r in base.values("status").annotate(count=Count("id"))}
+        total = sum(counts.values())
+        pe, tracked = _attendance_pe_tracked(counts)
+        ctx["total"], ctx["tracked"] = total, tracked
+        ctx["attendance_pct"] = round(pe / tracked * 100, 1) if tracked else 0.0
+        ctx["status_rows"] = [{"name": status_labels.get(s, s), "count": counts[s],
+                               "pct": round(counts[s] / total * 100, 1) if total else 0}
+                              for s in sorted(counts, key=lambda s: -counts[s])]
+        dept_data = {}
+        for r in base.values("employee__employment__org_unit__name", "status").annotate(count=Count("id")):
+            d = dept_data.setdefault(r["employee__employment__org_unit__name"] or "Unassigned",
+                                     {"present": 0.0, "tracked": 0})
+            if r["status"] not in _ATT_NON_WORKING:
+                d["tracked"] += r["count"]
+            if r["status"] in ("present", "regularized"):
+                d["present"] += r["count"]
+            elif r["status"] == "half_day":
+                d["present"] += 0.5 * r["count"]
+        ctx["by_department"] = sorted(
+            ({"name": k, "tracked": v["tracked"],
+              "attendance_pct": round(v["present"] / v["tracked"] * 100, 1) if v["tracked"] else 0}
+             for k, v in dept_data.items()), key=lambda x: -x["tracked"])
+        monthly = {}
+        for r in base.annotate(m=TruncMonth("date")).values("m", "status").annotate(count=Count("id")):
+            d = monthly.setdefault(r["m"], {"present": 0.0, "tracked": 0})
+            if r["status"] not in _ATT_NON_WORKING:
+                d["tracked"] += r["count"]
+            if r["status"] in ("present", "regularized"):
+                d["present"] += r["count"]
+            elif r["status"] == "half_day":
+                d["present"] += 0.5 * r["count"]
+        months = sorted(monthly)
+        ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
+        ctx["trend_values"] = json.dumps([round(monthly[m]["present"] / monthly[m]["tracked"] * 100, 1)
+                                          if monthly[m]["tracked"] else 0 for m in months])
+    return render(request, "hrm/reports/attendance_summary.html", ctx)
+
+
+@tenant_admin_required
+def late_early_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "considered": 0, "late_count": 0,
+           "early_count": 0, "avg_late_min": None, "avg_early_min": None, "top_late": [],
+           "dow_labels": json.dumps(_DOW_LABELS), "dow_late": "[]", "dow_early": "[]"}
+    if tenant is not None:
+        rows = list(_attendance_base(tenant, date_from, date_to, dept)
+                    .filter(check_in__isnull=False, shift__isnull=False)
+                    .select_related("shift", "employee__party"))
+        late_mins, early_mins = [], []
+        emp_late, dow_late, dow_early = {}, [0] * 7, [0] * 7
+        for r in rows:
+            sh = r.shift
+            if r.check_in and sh and sh.start_time:
+                lm = ((r.check_in.hour * 60 + r.check_in.minute)
+                      - (sh.start_time.hour * 60 + sh.start_time.minute + sh.grace_minutes))
+                if lm > 0:
+                    late_mins.append(lm)
+                    dow_late[r.date.weekday()] += 1
+                    emp_late[r.employee.party.name] = emp_late.get(r.employee.party.name, 0) + 1
+            if r.check_out and sh and sh.end_time:
+                em = ((sh.end_time.hour * 60 + sh.end_time.minute - sh.grace_minutes)
+                      - (r.check_out.hour * 60 + r.check_out.minute))
+                if em > 0:
+                    early_mins.append(em)
+                    dow_early[r.date.weekday()] += 1
+        ctx["considered"] = len(rows)
+        ctx["late_count"], ctx["early_count"] = len(late_mins), len(early_mins)
+        ctx["avg_late_min"] = round(sum(late_mins) / len(late_mins)) if late_mins else None
+        ctx["avg_early_min"] = round(sum(early_mins) / len(early_mins)) if early_mins else None
+        ctx["top_late"] = sorted(({"name": k, "count": v} for k, v in emp_late.items()),
+                                 key=lambda x: -x["count"])[:10]
+        ctx["dow_late"], ctx["dow_early"] = json.dumps(dow_late), json.dumps(dow_early)
+    return render(request, "hrm/reports/late_early.html", ctx)
+
+
+@tenant_admin_required
+def absenteeism_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "absent_days": 0, "tracked": 0,
+           "absence_rate": 0.0, "frequent": [], "trend_labels": "[]", "trend_values": "[]"}
+    if tenant is not None:
+        base = _attendance_base(tenant, date_from, date_to, dept)
+        counts = {r["status"]: r["count"] for r in base.values("status").annotate(count=Count("id"))}
+        tracked = sum(counts.values()) - counts.get("holiday", 0) - counts.get("on_leave", 0)
+        absent = counts.get("absent", 0)
+        ctx["absent_days"], ctx["tracked"] = absent, tracked
+        ctx["absence_rate"] = round(absent / tracked * 100, 1) if tracked else 0.0
+        ctx["frequent"] = [
+            {"name": r["employee__party__name"], "count": r["count"]}
+            for r in base.filter(status="absent").values("employee__party__name")
+            .annotate(count=Count("id")).order_by("-count")[:10]]
+        monthly = {}
+        for r in base.annotate(m=TruncMonth("date")).values("m", "status").annotate(count=Count("id")):
+            d = monthly.setdefault(r["m"], {"absent": 0, "tracked": 0})
+            if r["status"] not in _ATT_NON_WORKING:
+                d["tracked"] += r["count"]
+            if r["status"] == "absent":
+                d["absent"] += r["count"]
+        months = sorted(monthly)
+        ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
+        ctx["trend_values"] = json.dumps([round(monthly[m]["absent"] / monthly[m]["tracked"] * 100, 1)
+                                          if monthly[m]["tracked"] else 0 for m in months])
+    return render(request, "hrm/reports/absenteeism.html", ctx)
+
+
+@tenant_admin_required
+def overtime_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    status = (request.GET.get("status") or "").strip()
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept, "status": status,
+           "department_choices": _dept_choices(tenant), "status_choices": OvertimeRequest.STATUS_CHOICES,
+           "total_hours": 0, "pay_equiv_hours": 0, "claims": 0, "by_employee": [], "by_department": [],
+           "status_rows": [], "trend_labels": "[]", "trend_values": "[]"}
+    if tenant is not None:
+        base = OvertimeRequest.objects.filter(tenant=tenant, date__gte=date_from, date__lte=date_to)
+        if dept:
+            base = base.filter(employee__employment__org_unit=dept)
+        if status:
+            base = base.filter(status=status)
+        rows = list(base.select_related("employee__party", "employee__employment__org_unit"))
+        ctx["claims"] = len(rows)
+        ctx["total_hours"] = round(sum(float(r.hours_claimed or 0) for r in rows), 2)
+        ctx["pay_equiv_hours"] = round(sum(float(r.overtime_pay_equivalent_hours) for r in rows), 2)
+        emp, dep = {}, {}
+        for r in rows:
+            emp[r.employee.party.name] = emp.get(r.employee.party.name, 0) + float(r.hours_claimed or 0)
+            unit = (r.employee.employment.org_unit.name
+                    if (r.employee.employment and r.employee.employment.org_unit_id) else "Unassigned")
+            dep[unit] = dep.get(unit, 0) + float(r.hours_claimed or 0)
+        ctx["by_employee"] = sorted(({"name": k, "hours": round(v, 2)} for k, v in emp.items()),
+                                    key=lambda x: -x["hours"])[:15]
+        ctx["by_department"] = sorted(({"name": k, "hours": round(v, 2)} for k, v in dep.items()),
+                                      key=lambda x: -x["hours"])
+        status_labels = dict(OvertimeRequest.STATUS_CHOICES)
+        ctx["status_rows"] = [{"name": status_labels.get(r["status"], r["status"]), "count": r["count"]}
+                              for r in base.values("status").annotate(count=Count("id")).order_by("-count")]
+        monthly = {r["m"]: r["h"] for r in base.annotate(m=TruncMonth("date"))
+                   .values("m").annotate(h=Sum("hours_claimed"))}
+        months = sorted(monthly)
+        ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
+        ctx["trend_values"] = json.dumps([float(monthly[m] or 0) for m in months])
+    return render(request, "hrm/reports/overtime.html", ctx)
