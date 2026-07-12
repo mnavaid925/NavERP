@@ -159,7 +159,7 @@ def _present_absent_counts(tenant, date_from, date_to, dept=None):
     if dept is not None:
         qs = qs.filter(employee__employment__org_unit=dept)
     counts = {r["status"]: r["c"] for r in qs.values("status").annotate(c=Count("id"))}
-    tracked = sum(counts.values()) - counts.get("holiday", 0) - counts.get("on_leave", 0)
+    tracked = sum(counts.values()) - sum(counts.get(s, 0) for s in _ATT_NON_WORKING)
     return counts.get("absent", 0), tracked
 
 
@@ -217,7 +217,7 @@ def _attrition_risk_scores(tenant, dept=None):
         tenure_pts = _TENURE_POINTS[_tenure_band(tenure_days)]
 
         acounts = att.get(e.pk, {})
-        tracked = sum(acounts.values()) - acounts.get("holiday", 0) - acounts.get("on_leave", 0)
+        tracked = sum(acounts.values()) - sum(acounts.get(s, 0) for s in _ATT_NON_WORKING)
         absence_rate = round(acounts.get("absent", 0) / tracked * 100, 1) if tracked else 0.0
         lc = late.get(e.pk, {"late": 0, "total": 0})
         late_rate = round(lc["late"] / lc["total"] * 100, 1) if lc["total"] else 0.0
@@ -315,7 +315,7 @@ def _r_kpi_gender_diversity(tenant, start, end):
 def _r_kpi_avg_attrition_risk(tenant, start, end):
     scores = [s["score"] for s in _attrition_risk_scores(tenant)]
     avg = round(sum(scores) / len(scores), 1) if scores else 0.0
-    return {"value": float(avg), "display": _years(avg)}
+    return {"value": float(avg), "display": "{:.1f}".format(avg)}
 
 
 # --- series (bar / line / pie / doughnut) ----------------------------------
@@ -431,7 +431,8 @@ def compute_widget(widget):
     result["kind"] = meta["kind"]
     if meta["kind"] == "scalar":
         val = result.get("value") or 0
-        target = float(widget.target_value) if widget.target_value is not None else None
+        # Ignore a non-positive target (a negative gauge target would yield a negative pct).
+        target = float(widget.target_value) if (widget.target_value is not None and widget.target_value > 0) else None
         max_v = target or meta.get("intrinsic_max") or (val if val > 0 else 1)
         result["max"] = max_v
         result["pct"] = min(100, round(val / max_v * 100)) if max_v else 0
