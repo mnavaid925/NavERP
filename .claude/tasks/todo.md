@@ -3371,3 +3371,376 @@ only). Reuses the 3.25 ESS helpers verbatim (`_ss_child_*`, `_ss_scope`, `_can_m
 **Deferred (as scoped):** configurable multi-level approval chains, SLA auto-escalation, template-driven letter
 generation, e-signature, delivery-channel dispatch, notifications/watchers, software/license access requests,
 linking ID-card issuance into `AssetAllocation`. **Next unbuilt HRM sub-module: 3.27 Communication Hub.**
+
+---
+# Module 3 — HRM — Sub-module 3.27 Communication Hub (hrm) — plan from research-hrm-3.27.md, authoritative design C:\Users\user\.claude\plans\snug-knitting-rose.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.26) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Covers 4 of the 5 NavERP.md 3.27 bullets with real models
+(Announcements / Birthday-Anniversary / Surveys / Suggestions) + defers **Help Desk** to the future
+**3.36 Helpdesk** sub-module — the 3.27 "Help Desk" `LIVE_LINKS` entry points at `hrm:suggestion_list`
+as the interim lightweight query channel, with a code comment noting full ticketing lives in 3.36. Adds
+**4 new tenant-scoped models** + a **derived `celebrations` view (no model)**.
+
+Reuses (never duplicates): the ESS/viewer helpers already in `apps/hrm/views.py` — `_current_employee_profile`
+(7429), `_is_admin` (7754), `_require_own_profile` (10366), `_can_manage_own_child` (10377), `_ss_scope`
+(10386), `_ss_employees` (10397), `_ss_child_create`/`_ss_child_detail` (10457/10512) — plus, **critically**,
+the 3.26 **generic** shared workflow helpers `_hr_request_submit`/`_hr_request_cancel`/`_hr_request_approve`/
+`_hr_request_reject`/`_hr_request_edit`/`_hr_request_delete` + `_is_own_hr_request` (11006–11104), which take
+`(request, model, pk, ...)` and are already model-agnostic — `Suggestion` reuses all six **verbatim, zero
+edits**. `LearningPath.target_department`/`target_designation` (3.23, `apps/hrm/models.py:6307-6312`) is the
+audience-targeting precedent for `Announcement`. `org_chart` (`apps/hrm/views.py:661`) is the derived-view
+precedent for `celebrations` — same iterative/no-model/capped-queryset shape. No new core-spine entity;
+nothing posts to the GL.
+
+**IMPORTANT naming correction vs. the loose "reviewer/reviewed_at" phrasing in the research/design prose:**
+`_hr_request_approve`/`_hr_request_reject` **hard-code** `obj.approver = request.user` and
+`obj.approved_at = timezone.now()` (verified in `apps/hrm/views.py:11049-11085`) — they are NOT
+field-name-configurable. For "`Suggestion` reuses `_hr_request_*` verbatim" to be literally true (not just
+prose), `Suggestion`'s reviewer fields **must be named `approver`/`approved_at`**, exactly matching
+`DocumentRequest`/`IdCardRequest`/`AssetRequest`. Building it with `reviewer`/`reviewed_at` instead would
+silently break `suggestion_approve`/`suggestion_reject` (AttributeError) or force forking two helper
+functions for one model — the less elegant path. **Use `approver`/`approved_at`.**
+
+## Models (from research + the approved design)
+
+- [ ] **`Announcement`** [`ANN-`, `TenantNumbered`] — admin-authored company news/updates feed (Announcements
+  bullet).
+  - `title` — CharField(max_length=255)
+  - `body` — TextField (driver: Staffbase/Simpplr post body)
+  - `category` — CharField(max_length=15), choices `general`/`news`/`policy`/`event`/`it`/`hr`/`benefits`,
+    default `"general"` (driver: Simpplr categorization, BambooHR mixed-category widget)
+  - `audience_type` — CharField(max_length=15), choices `all`/`department`/`designation`, default `"all"`
+    (driver: Staffbase/Simpplr/Keka audience targeting; **copies the `LearningPath` 3.23 precedent**)
+  - `target_department` — FK `core.OrgUnit` (`on_delete=SET_NULL`, null/blank,
+    `limit_choices_to={"kind": "department"}`, `related_name="announcements"`) — same shape as
+    `LearningPath.target_department`
+  - `target_designation` — FK `hrm.Designation` (`on_delete=SET_NULL`, null/blank,
+    `related_name="announcements"`) — same shape as `LearningPath.target_designation`
+  - `is_pinned` — BooleanField, default `False` (driver: Zoho Connect "pin it up high", Keka)
+  - `status` — CharField(max_length=10), choices `draft`/`published`/`archived`, default `"draft"`
+    (driver: Staffbase editorial workflow, Simpplr draft/schedule/track)
+  - `published_at` — DateTimeField, null/blank, `editable=False` — **workflow-owned**, stamped only by
+    `announcement_publish`
+  - `expires_at` — DateField, null/blank (driver: Simpplr lifecycle/auto-hide)
+  - `author` — FK `settings.AUTH_USER_MODEL` (`on_delete=SET_NULL`, null/blank, `editable=False`,
+    `related_name="hrm_announcement_authored"`) — **workflow-owned**, set to `request.user` server-side on
+    create, never a form field (mirrors `DocumentRequest.approver` FK shape)
+  - `clean()`: raise `ValidationError` if `audience_type == "department"` and `target_department` is blank,
+    or `audience_type == "designation"` and `target_designation` is blank (matching-target-FK rule)
+  - `Meta.ordering = ["-is_pinned", "-published_at", "-created_at"]`; `unique_together = ("tenant", "number")`;
+    indexes `(tenant, status)` → `hrm_ann_tenant_status_idx`
+  - `__str__`: `f"{self.number} · {self.title}"` (fallback to `self.title` when unsaved)
+  - **Excluded from `AnnouncementForm`:** `tenant`, `number`, `status`, `author`, `published_at`
+
+- [ ] **`Survey`** [`SUR-`, `TenantNumbered`] — admin-authored engagement survey (Surveys bullet).
+  - `title` — CharField(max_length=255)
+  - `description` — TextField, blank=True
+  - `questions` — JSONField, list of `{"text": str, "type": "rating"|"text"|"single_choice", "options":
+    [...]}` (driver: Lattice/Culture Amp/Officevibe question-type taxonomy — matches the approved
+    structured-JSON build scope verbatim; a `rating` question with `min=0,max=10` covers the eNPS pattern
+    with no extra schema)
+  - `status` — CharField(max_length=10), choices `draft`/`open`/`closed`, default `"draft"`
+  - `is_anonymous` — BooleanField, default `False` (driver: Culture Amp Inclusion-vs-Engagement,
+    Officevibe anonymous-by-default — display-layer suppression in `survey_results`, `SurveyResponse.employee`
+    still stored for respond-once)
+  - `opens_at` / `closes_at` — DateField, null/blank (driver: Culture Amp/Officevibe response-window)
+  - `author` — FK `settings.AUTH_USER_MODEL` (`on_delete=SET_NULL`, null/blank, `editable=False`,
+    `related_name="hrm_survey_authored"`) — **workflow-owned**, set server-side on create
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes `(tenant, status)`
+    → `hrm_survey_tenant_status_idx`
+  - `__str__`: `f"{self.number} · {self.title}"`
+  - **Excluded from `SurveyForm`:** `tenant`, `number`, `status`, `author`
+
+- [ ] **`SurveyResponse`** (`TenantOwned`, no number prefix — child of `Survey`, no standalone CRUD) — one
+  employee's answers.
+  - `survey` — FK `Survey` (`on_delete=CASCADE`, `related_name="responses"`)
+  - `employee` — FK `hrm.EmployeeProfile` (`on_delete=CASCADE`, `related_name="survey_responses"`)
+  - `answers` — JSONField, `{"<question_index>": <answer>}` map mirroring `questions`
+  - `submitted_at` — DateTimeField, `auto_now_add=True`
+  - `Meta.ordering = ["-submitted_at"]`; `unique_together = ("survey", "employee")` — **respond-once**
+    (table-stakes across every survey leader surveyed); indexes `(tenant, survey)` →
+    `hrm_survresp_tenant_survey_idx`, `(tenant, employee)` → `hrm_survresp_tenant_emp_idx`
+  - `__str__`: `f"{self.survey} · {self.employee}"`
+  - No `SurveyResponseForm` / no CRUD urls — created only via `survey_respond`, read only via
+    `survey_results` aggregation (exempt from the CRUD-list rule, like `LearningPathItem`/`PayslipLine`).
+
+- [ ] **`Suggestion`** [`SUG-`, `TenantNumbered`] — employee idea box, admin-reviewed; **clones the 3.26
+  request lifecycle field-for-field** so `_hr_request_*` applies with zero modification (Suggestions bullet).
+  - `employee` — FK `hrm.EmployeeProfile` (`on_delete=CASCADE`, `related_name="suggestions"` — **named
+    `employee` so `_ss_scope`/`_can_manage_own_child`/`_is_own_hr_request` all work unmodified**)
+  - `title` — CharField(max_length=255)
+  - `body` — TextField
+  - `category` — CharField(max_length=20), choices `process`/`workplace`/`product`/`cost_saving`/
+    `wellbeing`/`other`, default `"other"` (driver: Qandle IdeaBox / Workhub / SuggestionOx category pattern)
+  - `is_anonymous` — BooleanField, default `False` (driver: SuggestionOx/Workhub/EngageWith anonymous
+    submission — display-layer suppression, `employee` FK still stored)
+  - `status` — CharField(max_length=10), choices `draft`/`pending`/`approved` (label **"Accepted"**)/
+    `rejected`/`cancelled`/`implemented`, default `"draft"`
+  - `OPEN_STATUSES = ("draft", "pending")` — exact 3.26 sibling constant
+  - `approver` — FK `settings.AUTH_USER_MODEL` (`on_delete=SET_NULL`, null/blank,
+    `related_name="hrm_suggestion_approvals"`) — **workflow-owned** (field name required by
+    `_hr_request_approve`/`_hr_request_reject`, see naming-correction note above)
+  - `approved_at` — DateTimeField, null/blank — **workflow-owned** (same reason)
+  - `decision_note` — TextField, blank — **workflow-owned** (set by `_hr_request_cancel`/`_hr_request_reject`)
+  - `implementation_note` — TextField, blank — **workflow-owned**, set only by `suggestion_implement`
+    (driver: Workhub "assign tasks, follow up" outcome tracking; mirrors `DocumentRequest.output_file`
+    tail-state pattern)
+  - `implemented_at` — DateTimeField, null/blank, `editable=False` — **workflow-owned**, set only by
+    `suggestion_implement` (`approved → implemented`)
+  - `Meta.ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+    `(tenant, employee, status)` → `hrm_sug_tenant_emp_status_idx` (matches the `DocumentRequest`/
+    `IdCardRequest`/`AssetRequest` sibling pattern), `(tenant, status)` → `hrm_sug_tenant_status_idx`
+  - `__str__`: `f"{self.number} · {self.employee} · {self.title}"`
+  - **Excluded from `SuggestionForm`:** `tenant`, `number`, `status`, `employee`, `approver`, `approved_at`,
+    `decision_note`, `implementation_note`, `implemented_at`
+
+- [ ] **Confirm `Celebrations` needs NO model** — pure derived read off `hrm.EmployeeProfile.date_of_birth`
+  (line 293) + `core.Employment.hired_on` (line 177, joined via `EmployeeProfile.employment`), computed
+  month/day-window in the view (mirrors `org_chart`'s no-table, capped-queryset, Python-bucketed shape).
+  Confirmed by every leader surveyed (BambooHR, greytHR, Darwinbox, SAP SuccessFactors all compute this as
+  a derived tile, never a stored record).
+
+Add all 4 new classes after `AssetRequest` (current end of `models.py`) under a new
+`# --- 3.27 Communication Hub ---` section-header comment stating what's reused (`EmployeeProfile`,
+`core.OrgUnit`, `hrm.Designation`, the 3.26 `_hr_request_*` helpers) and that Celebrations gets **no** model.
+
+## Backend (apps/hrm/)
+
+- [ ] **models.py** — add `Announcement`, `Survey`, `SurveyResponse`, `Suggestion` per the field lists above.
+- [ ] **migration** — `python manage.py makemigrations hrm` (expect `0045_announcement_survey_...`,
+  incrementing from `0044`); review the generated filename before applying.
+- [ ] **forms.py** — new `# --- 3.27 Communication Hub ---` section banner, then:
+  - `AnnouncementForm(TenantModelForm)` — fields `["title", "body", "category", "audience_type",
+    "target_department", "target_designation", "is_pinned", "expires_at"]`, `Textarea` widget on `body`;
+    `clean()` re-asserts the matching-target-FK rule (mirrors the model `clean()` so the form surfaces it
+    inline, not just on `full_clean()`).
+  - `SurveyForm(TenantModelForm)` — fields `["title", "description", "questions", "is_anonymous",
+    "opens_at", "closes_at"]`; `questions` widget = `Textarea`; `clean_questions()` parses the textarea as
+    JSON and validates it's a list of `{"text": str, "type": one of rating/text/single_choice, "options":
+    list (required when type=="single_choice")}` dicts, raising `ValidationError` with a specific message
+    per bad entry (index-numbered) rather than a generic "invalid JSON".
+  - `SuggestionForm(TenantModelForm)` — fields `["title", "body", "category", "is_anonymous"]`,
+    `Textarea` on `body` — mirrors `AssetRequestForm`'s shape exactly (employee resolved server-side by
+    `_ss_child_create`).
+  - The survey-respond page's dynamic form is **not** a `ModelForm** — built in the view as a plain
+    `forms.Form` subclass assembled field-by-field from `survey.questions` (rating → `ChoiceField`/
+    `IntegerField` 0–10, text → `CharField(widget=Textarea)`, single_choice → `ChoiceField(choices=
+    options)`), styled like the existing `_ThemedForm` base.
+- [ ] **views.py** — new `# --- 3.27 Communication Hub ---` section banner, then:
+  - `celebrations(request)` (`@login_required`) — mirrors `org_chart` (661): active employees
+    `select_related("party", "employment")`, `?window=` (default 30, cap e.g. 90) days-ahead, compute
+    upcoming birthdays (`date_of_birth` month/day, handling year-wrap) and work anniversaries
+    (`employment.hired_on` month/day + computed tenure-years), cap 500 employees, bucket in Python,
+    render `hrm/communication/celebrations.html`.
+  - **Announcement**: `announcement_list` (`@login_required` — base qs
+    `Announcement.objects.filter(tenant=request.tenant).select_related("target_department",
+    "target_designation", "author")`; if `_is_admin(request.user)`: full qs + `crud_list` filters
+    `status`/`category`/`audience_type`; else: `profile = _current_employee_profile(request)`, filter
+    `status="published"`, `Q(expires_at__isnull=True) | Q(expires_at__gte=today)`, and
+    `Q(audience_type="all") | Q(audience_type="department", target_department=<profile's org_unit>) |
+    Q(audience_type="designation", target_designation=profile.designation_id)`); `announcement_detail`
+    (`@login_required`, 403 for a non-admin whose audience doesn't match / not published); `announcement_create`/
+    `_edit`/`_delete` (`@tenant_admin_required`, `crud_create`/`crud_edit`/`crud_delete`, `author=request.user`
+    stamped server-side on create — never a form field); `announcement_publish` (`@tenant_admin_required
+    @require_POST`, `draft → published`, stamps `published_at=timezone.now()`); `announcement_archive`
+    (`@tenant_admin_required @require_POST`, `published → archived`).
+  - **Survey**: `survey_list`/`survey_detail` (`@login_required` — readable by every employee, not
+    admin-gated, so they can see open surveys to respond); `survey_create`/`_edit`/`_delete`
+    (`@tenant_admin_required`); `survey_open`/`survey_close` (`@tenant_admin_required @require_POST`,
+    `draft → open` / `open → closed`); `survey_respond` (`@login_required`: 404 unless `status="open"`;
+    block a second submission — `SurveyResponse.objects.filter(survey=survey, employee=profile).exists()`
+    → error redirect; render/validate the dynamic `forms.Form`, save `SurveyResponse(answers=...)`);
+    `survey_results` (`@tenant_admin_required`: aggregate `responses` — per-`rating` question average +
+    count, per-`single_choice` question frequency counts, per-`text` question the raw answer list;
+    **when `survey.is_anonymous`, never attach `response.employee` to the template context for text
+    answers** — display-layer suppression only, per the approved design).
+  - **Suggestion** (thin wrappers delegating to the shared 3.26 helpers, all `Suggestion`-typed):
+    `suggestion_list` (`@login_required`, `_ss_scope`-filtered qs `select_related("employee__party",
+    "approver")`, `crud_list` search `number`/`title`/`body` + filters `status`/`category`, `extra_context`
+    = `status_choices`, `category_choices` = `Suggestion.CATEGORY_CHOICES`, `employees` when admin);
+    `suggestion_detail` = `_ss_child_detail(request, Suggestion, pk, "hrm/communication/suggestion/detail.html",
+    select_related=("employee__party", "approver"))`; `suggestion_create` = `_ss_child_create(request,
+    SuggestionForm, "hrm/communication/suggestion/form.html", "hrm:suggestion_list")`; `suggestion_edit` =
+    `_hr_request_edit(request, Suggestion, pk, SuggestionForm, "hrm/communication/suggestion/form.html",
+    "hrm:suggestion_detail")`; `suggestion_delete` = `_hr_request_delete(request, Suggestion, pk,
+    "hrm:suggestion_list")`; `suggestion_submit` = `_hr_request_submit(request, Suggestion, pk,
+    "hrm:suggestion_detail")`; `suggestion_cancel` = `_hr_request_cancel(request, Suggestion, pk,
+    "hrm:suggestion_detail")`; `suggestion_approve` = `_hr_request_approve(request, Suggestion, pk,
+    "hrm:suggestion_detail")`; `suggestion_reject` = `_hr_request_reject(request, Suggestion, pk,
+    "hrm:suggestion_detail")` — all six **verbatim, no per-model overrides**, self-approval blocked by
+    `_is_own_hr_request` and reject requiring a non-blank `decision_note` for free. New
+    `suggestion_implement` (`@tenant_admin_required @require_POST`): `approved → implemented`, stamps
+    `implemented_at=timezone.now()`, optional `implementation_note` from POST, `write_audit_log(...,
+    {"action": "implement"})`.
+  - All list views follow the Filter Implementation Rules (CLAUDE.md): every `*_choices`/queryset the
+    template needs is passed explicitly in `extra_context`; string-field comparisons use
+    `request.GET.status == value`; FK/pk comparisons use `|stringformat:"d"`.
+- [ ] **urls.py** — append a `# 3.27 Communication Hub` block under the existing 3.26 block:
+  `celebrations/` (`celebrations`); `announcements/` + `add/` + `<int:pk>/{,edit/,delete/,publish/,
+  archive/}` (5 CRUD + 2 actions, names `announcement_*`); `surveys/` + `add/` + `<int:pk>/{,edit/,
+  delete/,open/,close/,respond/,results/}` (5 CRUD + 4 actions, names `survey_*`); `suggestions/` + `add/`
+  + `<int:pk>/{,edit/,delete/,submit/,cancel/,approve/,reject/,implement/}` (5 CRUD + 5 actions, names
+  `suggestion_*`) — mirrors the `document-requests/`/`asset-requests/` block shape exactly.
+- [ ] **admin.py** — register `AnnouncementAdmin`, `SurveyAdmin`, `SurveyResponseAdmin`, `SuggestionAdmin`
+  (`list_display`/`list_filter`/`search_fields` mirroring `DocumentRequestAdmin` et al.). **Repeat the
+  3.26 explorer-F1 fix from day one**: put every workflow-owned field in `readonly_fields` (`status`,
+  `published_at`, `author` on Announcement/Survey; `status`, `approver`, `approved_at`,
+  `implementation_note`, `implemented_at` on Suggestion) so `/admin/` can't bypass the publish/approve/
+  implement workflow (e.g. hand-editing a `Suggestion` to `implemented` with `approver=None`).
+- [ ] **seed_hrm.py** — new `_seed_communication(self, tenant, *, flush)` method, called from `handle()`
+  immediately after `self._seed_requests(tenant, flush=options["flush"])` (new last call in the per-tenant
+  loop):
+  - `if flush:` delete `Suggestion`, `SurveyResponse`, `Survey`, `Announcement` — filtered by `tenant`
+    (delete `SurveyResponse` before `Survey`/`EmployeeProfile` for a tidy explicit teardown, though CASCADE
+    makes ordering non-blocking).
+  - Idempotency guard: `if Announcement.objects.filter(tenant=tenant).exists():` → NOTICE + return.
+  - Reuse existing `EmployeeProfile` rows + `actor = get_user_model().objects.filter(tenant=tenant).first()`
+    (same style as `_seed_requests`).
+  - Demo data: 3 `Announcement`s (one `published`/`audience_type="all"`/`is_pinned=True`; one `published`/
+    `audience_type="department"` with a real `target_department`; one `draft`); 2 `Survey`s (one `status="open"`
+    with 2–3 `SurveyResponse`s from seeded employees covering all 3 question types, one `status="draft"`
+    with no responses); 3 `Suggestion`s spanning `pending`/`approved`/`implemented` (the `implemented` one
+    stamped `approver`/`approved_at`/`implementation_note`/`implemented_at`, seeded directly in its
+    end-state — matching `_seed_requests`'s convention, not replayed through the view actions).
+  - Insert `Suggestion, SurveyResponse, Survey, Announcement,` into the `_seed_tenant` flush teardown tuple
+    immediately before the existing 3.26 `AssetRequest, IdCardRequest, DocumentRequest,` line, with a
+    one-line ordering comment.
+  - ASCII-only `self.stdout.write(...)` (repeat of the 3.20/3.21/3.26 cp1252 bug — no arrows/em-dashes).
+  - Both `management/__init__.py` and `management/commands/__init__.py` already exist — no new dirs.
+
+## Wire-up
+
+- [ ] `config/settings.py` / `config/urls.py` — already wired for `apps.hrm`; no change needed.
+- [ ] `apps/core/navigation.py` — new `LIVE_LINKS["3.27"]` block placed immediately after the existing
+  `"3.26"` block, bullet text copied **verbatim** from `NavERP.md` 3.27 (lines 622–627):
+  ```python
+  "3.27": {
+      "Announcements": "hrm:announcement_list",         # bullet (new Announcement CRUD + publish/pin/archive)
+      "Birthday/Anniversary": "hrm:celebrations",        # bullet (derived view, no model)
+      "Surveys": "hrm:survey_list",                      # bullet (new Survey + SurveyResponse)
+      "Suggestions": "hrm:suggestion_list",               # bullet (new Suggestion, clones 3.26 workflow)
+      "Help Desk": "hrm:suggestion_list",                # bullet (DEFERRED to future 3.36 Helpdesk — interim: Suggestions box)
+  },
+  ```
+
+## Templates (templates/hrm/communication/)
+
+- [ ] `templates/hrm/communication/celebrations.html` — standalone sub-module-root page (derived, no
+  entity folder): `?window=` selector, two sections (Upcoming Birthdays / Upcoming Work Anniversaries),
+  each row shows name/department/date/days-away, empty-state when nothing in the window.
+- [ ] `templates/hrm/communication/announcement/{list,detail,form}.html` — list: filter bar (`status`,
+  `category`, `audience_type` — admin-only; employees see only their matching feed with no filter bar),
+  pinned rows visually distinguished, Actions column (view/edit/delete-POST+confirm+csrf +
+  publish/archive buttons gated by `status`+`is_admin`), pagination, empty-state. detail: body render,
+  audience/category/pin badges, Publish/Archive/Edit/Delete actions gated by `status`+`is_admin`. form:
+  create/edit shared (`is_edit` flag), `target_department`/`target_designation` fields shown/required only
+  when `audience_type` matches (progressive disclosure via a small inline script or just always-visible
+  with the `clean()` validation as the source of truth).
+- [ ] `templates/hrm/communication/survey/{list,detail,form,respond,results}.html` — list/detail visible
+  to all employees (filter bar admin-only), Actions column gated by `status`+`is_admin`
+  (Open/Close/Results for admins, "Take Survey" link for employees while `status="open"` and they haven't
+  responded yet — hide/disable if `SurveyResponse` already exists for them). `respond.html` renders the
+  dynamic per-question form. `results.html` shows per-question aggregates (bar/count table, no chart lib
+  needed), respecting `is_anonymous`.
+- [ ] `templates/hrm/communication/suggestion/{list,detail,form}.html` — same shape as
+  `templates/hrm/requests/documentrequest/*` (list: filter bar `status`/`category`, Actions
+  view/edit-if-open/submit/cancel/delete; detail: workflow buttons Submit/Cancel/Approve/Reject/Implement
+  gated by `status`+`is_admin`/ownership, `is_anonymous` suppresses the employee name in admin-facing
+  list/detail when set; form: create/edit shared).
+- [ ] All list/detail templates use exact model-choice values for badges with `{{ obj.get_<field>_display
+  }}` fallback (CLAUDE.md Badge rule); reject/cancel/implement action forms include the note textarea +
+  `{% csrf_token %}`.
+- [ ] `templates/hrm/hrm_overview.html` — add 1–2 `<a class="stat-card">` tiles into the existing
+  `.stat-grid` (mirrors the `pending_regularizations`/`pending_overtime` tiles at lines 27–30): e.g.
+  `stats.birthdays_this_month` → `{% url 'hrm:celebrations' %}` and `stats.pinned_announcements` →
+  `{% url 'hrm:announcement_list' %}?status=published`; extend the `stats` dict in `hrm_overview` (view,
+  line 381) with the two new counts (`EmployeeProfile.date_of_birth__month=today.month` count;
+  `Announcement.objects.filter(tenant=tenant, status="published", is_pinned=True)` count).
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` — review the generated file name/number (expect `0045_...`)
+  before applying.
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` — run **twice**; second run must be a no-op (NOTICE, zero new rows).
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep: every new `hrm:celebrations`, `hrm:announcement_*`, `hrm:survey_*`,
+  `hrm:suggestion_*` URL returns 200/302 (never 500); no `{#`/`{% comment` leak markers in rendered output;
+  a seeded record renders on every list/detail page.
+- [ ] **Cross-tenant IDOR**: `admin_acme` hitting an `admin_globex` announcement/survey/suggestion pk (any
+  action route: detail/edit/delete/publish/archive/open/close/respond/results/submit/cancel/approve/
+  reject/implement) → 404.
+- [ ] **Announcement audience filtering**: a plain employee's `announcement_list`/`_detail` shows only
+  `published`, un-expired rows whose audience matches them (`all`, or their own department, or their own
+  designation) — never a `draft`/`archived`/expired/other-audience row, even by direct-pk URL guess.
+- [ ] **Survey respond-once + anonymity**: a second `survey_respond` POST from the same employee on the
+  same survey is blocked (error, not a duplicate row or 500); `survey_respond` on a `draft`/`closed`
+  survey → blocked; `survey_results` on an `is_anonymous=True` survey never renders a respondent's name
+  next to their text answer.
+- [ ] **Suggestion workflow + self-approval block**: employee `draft → pending`
+  (`suggestion_submit`) → admin `suggestion_approve`/`suggestion_reject` → `suggestion_implement`
+  (`approved → implemented`); an admin who is also the requesting employee is blocked from
+  approving/rejecting their own row (`_is_own_hr_request`); a blank-note `suggestion_reject` POST is
+  rejected with an error, not a silent no-op.
+- [ ] `celebrations` renders upcoming birthdays + anniversaries for the seeded employees within the
+  default window; `?window=` param changes the result set without erroring on an out-of-range value.
+- [ ] Sidebar shows all 5 3.27 entries as **Live** (confirm via the rendered sidebar, not just the
+  `LIVE_LINKS` dict) — note "Help Desk" and "Suggestions" both point at `hrm:suggestion_list` by design.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit,
+  no `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `security-reviewer` to specifically probe: the `announcement_detail` audience-visibility gate
+    for a direct-pk guess by a non-matching employee; the `survey_respond` respond-once + open-window
+    guards; and the `Suggestion` self-approval block (confirm `approver`/`approved_at` naming actually
+    made verbatim `_hr_request_*` reuse work, not a silently-forked copy).
+  - Expect `performance-reviewer` to check `announcement_list`/`suggestion_list`/`survey_results` use
+    `select_related`/`prefetch_related` appropriately (no N+1 across `responses` aggregation in
+    `survey_results`, no N+1 on `target_department`/`target_designation`/`author` in `announcement_list`).
+  - Expect `test-writer` to cover: full CRUD × 4 models; `Announcement` audience-matrix (all/department/
+    designation × draft/published/archived/expired) as its own dedicated test block; `Survey` respond-once
+    + anonymity + open/closed-window guards; `Suggestion`'s full workflow chain + self-approval + reject-note
+    requirement (mirrors 3.26's weighting); `celebrations` date-window math (including year-wrap); cross-tenant
+    IDOR matrix on every action route.
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.27 Communication Hub (4 tables)` section (model
+  table + reuse notes, incl. the `approver`/`approved_at` naming-correction rationale), bump the
+  frontmatter/overview built-list + model count, add a "Communication Hub (3.27)" routes-list section,
+  document `_seed_communication(tenant)` in the seeder section, update the `LIVE_LINKS` section for
+  `"3.27"`, update the Deferred section with this pass's carried-forward deferrals. Commit as its own file.
+- [ ] README.md — add `/3.27` to the Module 3 header line + a new bullet describing the hub + 4 new
+  models + the Help-Desk-deferred-to-3.36 note; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.27.md)
+
+- **Announcement read receipts / mandatory-read tracking + reminder nudges** (Zoho Connect, Staffbase) —
+  needs a new `AnnouncementRead` join table + a reminder job; a 5th model, out of scope for this pass.
+- **Announcement reactions/comments/view-count social layer** (Zoho Connect, Keka, Darwinbox Vibe) — a
+  generic engagement layer better suited to a future cross-module "social" pass, not core comms.
+- **Multi-language/auto-translate announcements** (Zoho Connect) — external translation service integration.
+- **Email/push/digital-signage delivery fan-out for announcements** (BambooHR, Staffbase) — reuses existing
+  notification infra later; ships in-app-only this pass.
+- **Manager T-1 celebration reminder emails** (BambooHR) — a scheduled-job/notification concern layered on
+  the derived `celebrations` view; the underlying data already supports it.
+- **Employee-controlled "wish me on" privacy toggle** (greytHR) — a possible future `EmployeeProfile`
+  field, not needed for the first derived-view pass.
+- **Birthday/anniversary eCards, kudos/wish posting tied to celebrations** (BambooHR, greytHR, Darwinbox) —
+  NavERP already has `KudosBadge` (3.19/3.20); `celebrations` stays display-only.
+- **Survey minimum-group-size (k-anonymity) reporting threshold** (Culture Amp, Officevibe) — nice-to-have
+  refinement on top of the already-enforced identity-suppression rule.
+- **AI-summarized open-text survey feedback** (Workday Peakon Illuminate) — external AI service integration.
+- **Survey question templates / reusable libraries** (Culture Amp, Lattice) — the structured JSON
+  `questions` field already supports manual reuse; a dedicated template model is over-scope.
+- **Suggestion upvote/downvote and peer-support counts** (SuggestionOx, EngageWith, Qandle) — needs a new
+  `SuggestionVote` join table; natural v2 extension.
+- **Suggestion two-way anonymous follow-up threads** (SuggestionOx) — needs a comment/thread model.
+- **Suggestion-to-recognition auto-link on implementation** (Vantage Circle, Workhub) — could reuse
+  `KudosBadge` later via a manual cross-reference; not a new FK this pass.
+- **Help Desk (HR ticket system)** — fully deferred to the future dedicated **3.36 Helpdesk** sub-module
+  (Ticket Management, Categories, SLA, Knowledge Base, Satisfaction Survey) per NavERP.md; not designed here.
+
+## Review notes
+
+(filled in at the end)
