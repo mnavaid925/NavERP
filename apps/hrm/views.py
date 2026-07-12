@@ -12067,11 +12067,14 @@ def headcount_report(request):
         ctx["by_department"] = list(active.values("employment__org_unit__name")
                                     .annotate(count=Count("id")).order_by("-count"))
         budgets = {d.id: d.budgeted_headcount for d in Designation.objects.filter(tenant=tenant)}
-        ctx["by_designation"] = [
-            {"name": r["designation__name"] or "Unassigned", "count": r["count"],
-             "budget": budgets.get(r["designation__id"])}
-            for r in active.values("designation__id", "designation__name")
-            .annotate(count=Count("id")).order_by("-count")]
+        by_designation = []
+        for r in (active.values("designation__id", "designation__name")
+                  .annotate(count=Count("id")).order_by("-count")):
+            budget = budgets.get(r["designation__id"])
+            by_designation.append({
+                "name": r["designation__name"] or "Unassigned", "count": r["count"], "budget": budget,
+                "variance": (r["count"] - budget) if budget is not None else None})
+        ctx["by_designation"] = by_designation
         ctx["by_type"] = list(active.values("employee_type").annotate(count=Count("id")).order_by("-count"))
         labels, values = [], []
         for i in range(11, -1, -1):
