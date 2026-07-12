@@ -34,7 +34,7 @@
     <a class="stat-card" href="{% url 'hrm:objective_list' %}"><div class="stat-icon blue"><i data-lucide="target"></i></div><div class="stat-value">{{ stats.active_objectives }}</div><div class="stat-label">Active Objectives</div></a>
     <a class="stat-card" href="{% url 'hrm:performancereview_list' %}"><div class="stat-icon orange"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ stats.open_reviews }}</div><div class="stat-label">Open Reviews</div></a>
     <a class="stat-card" href="{% url 'hrm:celebrations' %}"><div class="stat-icon green"><i data-lucide="cake"></i></div><div class="stat-value">{{ stats.birthdays_this_month }}</div><div class="stat-label">Birthdays This Month</div></a>
-    <a class="stat-card" href="{% url 'hrm:announcement_list' %}"><div class="stat-icon blue"><i data-lucide="megaphone"></i></div><div class="stat-value">{{ stats.pinned_announcements }}</div><div class="stat-label">Pinned Announcements</div></a>
+    <a class="stat-card" href="{% url 'hrm:announcement_list' %}?status=published"><div class="stat-icon blue"><i data-lucide="megaphone"></i></div><div class="stat-value">{{ stats.pinned_announcements }}</div><div class="stat-label">Pinned Announcements</div></a>
   </div>
 
   <div class="card">
