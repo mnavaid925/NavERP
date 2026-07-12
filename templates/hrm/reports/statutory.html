@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Statutory Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Statutory Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:payroll_reports_index' %}">Payroll Reports</a><span class="sep">›</span><span>Statutory</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:payroll_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="scheme">Scheme</label>
+        <select name="scheme" id="scheme" class="form-select">
+          {% for value, label in scheme_choices %}<option value="{{ value }}" {% if scheme == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="date_from">From</label><input type="date" name="date_from" id="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="date_to">To</label><input type="date" name="date_to" id="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="status">Status</label>
+        <select name="status" id="status" class="form-select"><option value="">All statuses</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:statutory_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user"></i></div><div class="stat-value">{{ emp_total|floatformat:2 }}</div><div class="stat-label">Employee Contribution</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="landmark"></i></div><div class="stat-value">{{ empr_total|floatformat:2 }}</div><div class="stat-label">Employer Contribution</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="users"></i></div><div class="stat-value">{{ headcount_total }}</div><div class="stat-label">Covered (sum of returns)</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ overdue }}</div><div class="stat-label">Overdue Returns</div></div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Returns Register</h2></div>
+    {% if rows %}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Return</th><th>Period</th><th style="text-align:end;">Employee</th><th style="text-align:end;">Employer</th><th style="text-align:end;">Headcount</th><th>Due</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.number }}</td>
+            <td>{{ r.period_start|date:"d M" }}–{{ r.period_end|date:"d M Y" }}</td>
+            <td style="text-align:end;">{{ r.employee_contribution_total|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.employer_contribution_total|floatformat:2 }}</td>
+            <td style="text-align:end;">{{ r.headcount }}</td>
+            <td>{% if r.due_date %}{{ r.due_date|date:"d M Y" }}{% if r.is_overdue %} <span class="badge badge-danger">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if r.status == 'paid' %}<span class="badge badge-success">Paid</span>{% elif r.status == 'filed' %}<span class="badge badge-info">Filed</span>{% elif r.status == 'late' %}<span class="badge badge-danger">Late</span>{% else %}<span class="badge badge-warning">Pending</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+      <div class="card-body"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No returns</h3><p>No {{ scheme|upper }} returns match the selected period / status.</p></div></div>
+    {% endif %}
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Employee Statutory Coverage</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+      <span class="badge badge-info">PF applicable: {{ coverage.pf }}</span>
+      <span class="badge badge-info">ESI applicable: {{ coverage.esi }}</span>
+      <span class="badge badge-muted">With identifiers: {{ coverage.total }}</span>
+    </div>
+    {% if identifiers %}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Employee</th><th>UAN</th><th>PF No.</th><th>ESI No.</th><th>PT State</th><th>PF</th><th>ESI</th></tr></thead>
+      <tbody>
+        {% for i in identifiers %}
+          <tr>
+            <td>{{ i.employee.party.name }}</td>
+            <td><code>{{ i.masked_uan_number|default:"—" }}</code></td>
+            <td><code>{{ i.masked_pf_number|default:"—" }}</code></td>
+            <td><code>{{ i.masked_esi_number|default:"—" }}</code></td>
+            <td>{{ i.pt_state|default:"—" }}</td>
+            <td>{% if i.is_pf_applicable %}<span class="badge badge-success">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+            <td>{% if i.is_esi_applicable %}<span class="badge badge-success">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% endif %}
+  </div>
+{% endblock %}
