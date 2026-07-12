@@ -7334,3 +7334,112 @@ class Suggestion(TenantNumbered):
     def __str__(self):
         return (f"{self.number} · {self.employee} · {self.title}"
                 if self.number else self.title)
+
+
+# ---------------------------------------------------------------------------
+# 3.32 Analytics Dashboard — HRDashboard / HRDashboardWidget
+#
+# The saved custom-dashboard layer, mirroring CRM 1.6's AnalyticsDashboard/DashboardWidget: an
+# HRDashboard holds HRDashboardWidget tiles computed LIVE on render (apps/hrm/analytics.py
+# compute_widget) over the existing HRM data — nothing is stored. The 5 choice lists live HERE
+# (next to the fields that use them) so apps/hrm/analytics.py can import them without a circular
+# edge (analytics.py imports models; models.py never imports analytics.py).
+# ---------------------------------------------------------------------------
+ANALYTICS_RANGE_CHOICES = [
+    ("last_30", "Last 30 days"),
+    ("last_90", "Last 90 days"),
+    ("last_180", "Last 180 days"),
+    ("last_365", "Last 12 months"),
+    ("ytd", "Year to date"),
+    ("all", "All time"),
+]
+DASHBOARD_LAYOUT_CHOICES = [("one", "Single column"), ("two", "Two columns"), ("three", "Three columns")]
+WIDGET_CHART_CHOICES = [
+    ("kpi", "KPI Card"), ("gauge", "Gauge"), ("bar", "Bar Chart"), ("line", "Line Chart"),
+    ("pie", "Pie Chart"), ("doughnut", "Doughnut Chart"), ("table", "Table"),
+]
+WIDGET_SIZE_CHOICES = [
+    ("small", "Small (quarter width)"), ("medium", "Medium (half width)"),
+    ("large", "Large (three-quarter width)"), ("full", "Full width"),
+]
+WIDGET_METRIC_CHOICES = [
+    # --- scalar (KPI card / gauge) ---
+    ("kpi_headcount", "KPI - Active Headcount (#)"),
+    ("kpi_attrition_rate", "KPI - Attrition Rate (%, annualized)"),
+    ("kpi_avg_tenure", "KPI - Avg Tenure (yrs)"),
+    ("kpi_gross_payroll", "KPI - Payroll Cost ($)"),
+    ("kpi_absenteeism_rate", "KPI - Absenteeism Rate (%)"),
+    ("kpi_open_reqs", "KPI - Open Requisitions (#)"),
+    ("kpi_pending_leave", "KPI - Pending Leave Requests (#)"),
+    ("kpi_gender_diversity", "KPI - Gender Diversity (% female)"),
+    ("kpi_avg_attrition_risk", "KPI - Avg Attrition Risk Score (0-100)"),
+    # --- series (bar / line / pie / doughnut) ---
+    ("headcount_trend", "Chart - Headcount Trend (12mo)"),
+    ("attrition_by_department", "Chart - Attrition by Department (#)"),
+    ("gender_split", "Chart - Gender Split (#)"),
+    ("leave_by_type", "Chart - Leave Days by Type"),
+    ("hiring_funnel", "Chart - Hiring Funnel (applications by stage)"),
+    ("payroll_cost_by_department", "Chart - Payroll Cost by Department ($)"),
+    # --- table ---
+    ("top_attrition_risk_employees", "Table - Top Attrition-Risk Employees"),
+]
+
+
+class HRDashboard(TenantNumbered):
+    """A saved, per-user HR analytics dashboard (3.32). Holds HRDashboardWidget tiles computed
+    live on render. ``is_shared`` exposes it to the whole tenant; ``is_default`` marks the owner's
+    landing dashboard. Mirrors ``crm.AnalyticsDashboard``."""
+
+    NUMBER_PREFIX = "HRD"
+
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="hrm_dashboards")
+    is_shared = models.BooleanField(default=False)   # visible to the whole tenant, not just the owner
+    is_default = models.BooleanField(default=False)  # the owner's landing dashboard
+    layout = models.CharField(max_length=10, choices=DASHBOARD_LAYOUT_CHOICES, default="two")
+
+    class Meta:
+        ordering = ["-is_default", "name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "owner"], name="hrm_hrdash_tnt_owner_idx"),
+            models.Index(fields=["tenant", "is_shared"], name="hrm_hrdash_tnt_shared_idx"),
+        ]
+
+    @property
+    def widget_count(self):
+        return self.widgets.count()
+
+    def __str__(self):
+        return f"{self.number} · {self.name}"
+
+
+class HRDashboardWidget(models.Model):
+    """One tile on an ``HRDashboard`` (3.32). ``metric`` selects a read-only aggregation (see
+    ``apps/hrm/analytics.WIDGET_METRICS``); ``chart_type`` chooses how to render it (the form's
+    ``clean()`` enforces a chart the metric supports). A child row — it carries its own tenant FK +
+    timestamps and no human-readable number. ``target_value`` is an optional goal used by gauge/KPI
+    widgets (progress-to-target)."""
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+", db_index=True)
+    dashboard = models.ForeignKey("HRDashboard", on_delete=models.CASCADE, related_name="widgets")
+    title = models.CharField(max_length=120)
+    metric = models.CharField(max_length=40, choices=WIDGET_METRIC_CHOICES, default="kpi_headcount")
+    chart_type = models.CharField(max_length=10, choices=WIDGET_CHART_CHOICES, default="kpi")
+    date_range = models.CharField(max_length=10, choices=ANALYTICS_RANGE_CHOICES, default="last_90")
+    size = models.CharField(max_length=10, choices=WIDGET_SIZE_CHOICES, default="medium")
+    target_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)  # optional goal for gauge/KPI
+    position = models.PositiveIntegerField(default=0)  # manual ordering on the dashboard
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        indexes = [
+            models.Index(fields=["tenant", "dashboard"], name="hrm_hrwidget_tnt_dash_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.get_chart_type_display()})"
