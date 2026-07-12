@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Late / Early Departure{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Late / Early Departure</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:attendance_reports_index' %}">Attendance Reports</a><span class="sep">›</span><span>Late / Early</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:attendance_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="date_from">From</label><input type="date" name="date_from" id="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="date_to">To</label><input type="date" name="date_to" id="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:late_early_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ late_count }}</div><div class="stat-label">Late Arrivals</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="timer"></i></div><div class="stat-value">{% if avg_late_min != None %}{{ avg_late_min }}m{% else %}—{% endif %}</div><div class="stat-label">Avg Late By</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="log-out"></i></div><div class="stat-value">{{ early_count }}</div><div class="stat-label">Early Departures</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="timer"></i></div><div class="stat-value">{% if avg_early_min != None %}{{ avg_early_min }}m{% else %}—{% endif %}</div><div class="stat-label">Avg Early By</div></div>
+  </div>
+  <p class="text-muted" style="margin:-.5rem 0 1rem;">Computed from {{ considered }} shift-assigned check-ins (records with a shift + check-in only).</p>
+
+  {% if considered %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Late / Early by Day of Week</h2></div><div class="card-body"><canvas id="dowChart" height="80"></canvas></div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Top Late Arrivers</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Employee</th><th style="text-align:end;">Late days</th></tr></thead><tbody>
+      {% for r in top_late %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.count }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No late arrivals in range.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <script>
+    (function () {
+      var el = document.getElementById('dowChart');
+      if (!el || typeof Chart === 'undefined') return;
+      new Chart(el, {
+        type: 'bar',
+        data: { labels: {{ dow_labels|safe }}, datasets: [
+          { label: 'Late', data: {{ dow_late|safe }}, backgroundColor: '#f59e0b' },
+          { label: 'Early', data: {{ dow_early|safe }}, backgroundColor: '#64748b' }
+        ] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+    })();
+  </script>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="clock"></i><h3>No shift-assigned check-ins</h3><p>Late/early detection needs attendance records with a shift and a check-in time.</p></div></div></div>
+  {% endif %}
+{% endblock %}
