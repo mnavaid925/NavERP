@@ -14,7 +14,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
-3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard.** Reuses the
+3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -441,6 +441,34 @@ for chart data. Templates: `templates/hrm/analytics/dashboard/{list,detail,form}
 `analytics/widget/form.html` + standalone `analytics/{executive,predictive,benchmarking}.html`. Seeder:
 `_seed_analytics` (2 demo dashboards + 9 widgets, idempotent).
 
+### 3.33 Asset Management (2 NEW models + a patch to the existing AssetAllocation) — the HR-facing asset register
+the 3.3 `AssetAllocation` issuance rows now point at. **Models** (`apps/hrm/models.py`, migration `0048`):
+`Asset` (`TenantNumbered` `ASSET-`; asset_tag/name/category [reuses `AssetAllocation.ASSET_CATEGORY_CHOICES`]/
+manufacturer/model_number/serial_number/`status` [in_stock/assigned/in_repair/retired/disposed]/condition/
+purchase_date/purchase_cost/`currency` [accounting.Currency]/warranty_expiry/`location` [core.OrgUnit]/
+`current_holder` [EmployeeProfile, system-managed]/depreciation_method [none/straight_line/declining_balance]/
+useful_life_months/salvage_value; **computed depreciation properties** `months_in_service`/`accumulated_depreciation`
+[straight-line + declining-balance, div-by-zero guarded]/`current_book_value` [floored at salvage]/
+`is_under_warranty` — never stored) + `AssetMaintenance` (`TenantNumbered` `ASSETMNT-`; asset FK, maintenance_type
+[preventive/repair/amc/warranty_claim/inspection], status [scheduled/in_progress/completed/cancelled],
+scheduled/completed dates, vendor, cost, AMC contract_start/end). **THE sync (key gotcha):** `Asset.status`/
+`current_holder` are kept in step by TWO atomic `save()` overrides, NOT the views — `AssetAllocation.save()` →
+`_sync_linked_asset()` maps allocation status→asset (issued→assigned+holder, returned→in_stock, damaged→in_repair,
+lost→retired; **no-op when `asset_id is None`**, so every pre-3.33 row is untouched), and `AssetMaintenance.save()`
+→ `_sync_asset_status()` moves a REPAIR record's asset in/out of `in_repair` on any save path (create/edit/complete).
+The `AST-` prefix stays with `AssetAllocation` (Module 11 reserves it) — the register uses `ASSET-`. **Views**
+(`apps/hrm/views.py`, `# --- 3.33 Asset Management ---`, all `@login_required`, tenant-scoped): `Asset` CRUD +
+lifecycle POST actions `asset_assign` (locks the row `select_for_update` in an atomic block, creates a linked issued
+allocation → sync)/`asset_return`/`asset_retire`/`asset_dispose` (status-gated; delete blocked when
+assigned/in_repair) + `AssetMaintenance` CRUD + `assetmaintenance_complete` (delete blocks an active in-repair
+record). Forms: `AssetForm` (excludes current_holder; clean() salvage<=cost, useful_life required, no in_stock while
+an issued allocation is open), `AssetMaintenanceForm` (date-order + contract clean), `AssetAllocationForm` (gains
+`asset` + a double-issue-guard clean()). `LIVE_LINKS["3.33"]`: Asset Register→`asset_list`, Asset Allocation→
+`asset_list?status=assigned`, Asset Return→`assetallocation_list?status=returned` (the 3.3 list), Maintenance→
+`assetmaintenance_list`, Depreciation→`asset_list` (book-value column). Seeder `_seed_assets` (6 assets seeded
+in_stock so the allocation/repair sync actually fires). Templates: `templates/hrm/assets/asset/{list,detail,form}.html`
++ `assets/assetmaintenance/{list,detail,form}.html`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -601,6 +629,9 @@ for chart data. Templates: `templates/hrm/analytics/dashboard/{list,detail,form}
   (`/hrm/analytics/{executive,predictive,benchmarking}/`, `@tenant_admin_required`, GET) + dashboard CRUD
   `hrm:hr_dashboard_list`/`_create`/`_detail`/`_edit`/`_delete` (`/hrm/analytics/dashboards/...`) + widget
   `hrm:hr_widget_create`(dash_pk)/`_edit`/`_delete`/`_move`(pk,direction) (`@login_required`, owner-or-admin gated).
+- **Asset Management (3.33):** `hrm:asset_list`/`_create`/`_detail`/`_edit`/`_delete` (`/hrm/asset-register/...`) +
+  lifecycle `hrm:asset_assign`/`_return`/`_retire`/`_dispose` (pk, POST) + `hrm:assetmaintenance_list`/`_create`/
+  `_detail`/`_edit`/`_delete`/`_complete` (`/hrm/asset-maintenance/...`). All `@login_required`, tenant-scoped.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1128,6 +1159,10 @@ tenant and sees nothing.
 - 3.32 (all 4 bullets live): Executive Dashboard → `hrm:executive_dashboard`; Custom Dashboards →
   `hrm:hr_dashboard_list`; Predictive Analytics → `hrm:predictive_analytics`; Benchmarking → `hrm:benchmarking`.
   `LIVE_LINKS["3.32"]`. Custom Dashboards is `@login_required` (any tenant user); the other 3 are admin-only.
+- 3.33 (all 5 bullets live): Asset Register → `hrm:asset_list`; Asset Allocation → `hrm:asset_list?status=assigned`;
+  Asset Return → `hrm:assetallocation_list?status=returned` (the existing 3.3 allocation list, its system of record);
+  Maintenance → `hrm:assetmaintenance_list`; Depreciation → `hrm:asset_list` (book-value column, no dedicated page).
+  `LIVE_LINKS["3.33"]`. Two bullets deep-link to filtered slices; two reuse the register.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
