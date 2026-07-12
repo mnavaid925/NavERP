@@ -416,7 +416,9 @@ def hrm_overview(request):
         stats["open_reviews"] = PerformanceReview.objects.filter(
             tenant=tenant).exclude(status="acknowledged").count()
         # 3.27 communication hub — celebrations this month + pinned company announcements.
-        stats["birthdays_this_month"] = employees.filter(date_of_birth__month=today.month).count()
+        # Exclude terminated employees so the tile's population matches the celebrations page it links to.
+        stats["birthdays_this_month"] = (employees.exclude(employment__status="terminated")
+                                         .filter(date_of_birth__month=today.month).count())
         stats["pinned_announcements"] = Announcement.objects.filter(
             tenant=tenant, status="published", is_pinned=True).count()
         pending_requests = (LeaveRequest.objects.filter(tenant=tenant, status="pending")
