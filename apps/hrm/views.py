@@ -12329,6 +12329,7 @@ def attendance_reports_index(request):
         att_pct = round(present_equiv / tracked * 100, 1) if tracked else 0.0
         absent_pct = round(counts.get("absent", 0) / tracked * 100, 1) if tracked else 0.0
         ot_hours = (OvertimeRequest.objects.filter(tenant=tenant, date__gte=start, date__lte=today)
+                    .exclude(status__in=("draft", "rejected", "cancelled"))
                     .aggregate(h=Sum("hours_claimed"))["h"] or 0)
         tiles = [
             {"label": "Attendance % (30d)", "value": f"{att_pct}%", "url": "hrm:attendance_summary_report", "icon": "calendar-check"},
@@ -12345,6 +12346,18 @@ def _attendance_pe_tracked(counts):
     tracked = sum(counts.values()) - counts.get("holiday", 0) - counts.get("on_leave", 0)
     pe = counts.get("present", 0) + counts.get("regularized", 0) + 0.5 * counts.get("half_day", 0)
     return pe, tracked
+
+
+def _fold_att(acc, status, count):
+    """Fold one (status, count) into a `{present, tracked}` accumulator — the single source of truth
+    for 'tracked excludes holiday/on_leave' + 'present-equivalent = present + regularized + ½·half_day'
+    so the by-department / monthly-trend pivots can't drift from the top-level total."""
+    if status not in _ATT_NON_WORKING:
+        acc["tracked"] += count
+    if status in ("present", "regularized"):
+        acc["present"] += count
+    elif status == "half_day":
+        acc["present"] += 0.5 * count
 
 
 @tenant_admin_required
@@ -12368,27 +12381,15 @@ def attendance_summary_report(request):
                               for s in sorted(counts, key=lambda s: -counts[s])]
         dept_data = {}
         for r in base.values("employee__employment__org_unit__name", "status").annotate(count=Count("id")):
-            d = dept_data.setdefault(r["employee__employment__org_unit__name"] or "Unassigned",
-                                     {"present": 0.0, "tracked": 0})
-            if r["status"] not in _ATT_NON_WORKING:
-                d["tracked"] += r["count"]
-            if r["status"] in ("present", "regularized"):
-                d["present"] += r["count"]
-            elif r["status"] == "half_day":
-                d["present"] += 0.5 * r["count"]
+            _fold_att(dept_data.setdefault(r["employee__employment__org_unit__name"] or "Unassigned",
+                                           {"present": 0.0, "tracked": 0}), r["status"], r["count"])
         ctx["by_department"] = sorted(
             ({"name": k, "tracked": v["tracked"],
               "attendance_pct": round(v["present"] / v["tracked"] * 100, 1) if v["tracked"] else 0}
              for k, v in dept_data.items()), key=lambda x: -x["tracked"])
         monthly = {}
         for r in base.annotate(m=TruncMonth("date")).values("m", "status").annotate(count=Count("id")):
-            d = monthly.setdefault(r["m"], {"present": 0.0, "tracked": 0})
-            if r["status"] not in _ATT_NON_WORKING:
-                d["tracked"] += r["count"]
-            if r["status"] in ("present", "regularized"):
-                d["present"] += r["count"]
-            elif r["status"] == "half_day":
-                d["present"] += 0.5 * r["count"]
+            _fold_att(monthly.setdefault(r["m"], {"present": 0.0, "tracked": 0}), r["status"], r["count"])
         months = sorted(monthly)
         ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
         ctx["trend_values"] = json.dumps([round(monthly[m]["present"] / monthly[m]["tracked"] * 100, 1)
@@ -12419,7 +12420,8 @@ def late_early_report(request):
                 if lm > 0:
                     late_mins.append(lm)
                     dow_late[r.date.weekday()] += 1
-                    emp_late[r.employee.party.name] = emp_late.get(r.employee.party.name, 0) + 1
+                    e = emp_late.setdefault(r.employee_id, {"name": r.employee.party.name, "count": 0})
+                    e["count"] += 1
             if r.check_out and sh and sh.end_time:
                 em = ((sh.end_time.hour * 60 + sh.end_time.minute - sh.grace_minutes)
                       - (r.check_out.hour * 60 + r.check_out.minute))
@@ -12430,8 +12432,7 @@ def late_early_report(request):
         ctx["late_count"], ctx["early_count"] = len(late_mins), len(early_mins)
         ctx["avg_late_min"] = round(sum(late_mins) / len(late_mins)) if late_mins else None
         ctx["avg_early_min"] = round(sum(early_mins) / len(early_mins)) if early_mins else None
-        ctx["top_late"] = sorted(({"name": k, "count": v} for k, v in emp_late.items()),
-                                 key=lambda x: -x["count"])[:10]
+        ctx["top_late"] = sorted(emp_late.values(), key=lambda x: -x["count"])[:10]
         ctx["dow_late"], ctx["dow_early"] = json.dumps(dow_late), json.dumps(dow_early)
     return render(request, "hrm/reports/late_early.html", ctx)
 
@@ -12480,28 +12481,32 @@ def overtime_report(request):
            "total_hours": 0, "pay_equiv_hours": 0, "claims": 0, "by_employee": [], "by_department": [],
            "status_rows": [], "trend_labels": "[]", "trend_values": "[]"}
     if tenant is not None:
-        base = OvertimeRequest.objects.filter(tenant=tenant, date__gte=date_from, date__lte=date_to)
+        scoped = OvertimeRequest.objects.filter(tenant=tenant, date__gte=date_from, date__lte=date_to)
         if dept:
-            base = base.filter(employee__employment__org_unit=dept)
-        if status:
-            base = base.filter(status=status)
+            scoped = scoped.filter(employee__employment__org_unit=dept)
+        # Status Mix reflects the FULL distribution (before the status filter / default exclusion).
+        status_labels = dict(OvertimeRequest.STATUS_CHOICES)
+        ctx["status_rows"] = [{"name": status_labels.get(r["status"], r["status"]), "count": r["count"]}
+                              for r in scoped.values("status").annotate(count=Count("id")).order_by("-count")]
+        # Headline figures: the picked status, else exclude non-real claims (draft/rejected/cancelled)
+        # so a rejected/cancelled claim can't inflate the reported OT hours by default.
+        base = (scoped.filter(status=status) if status
+                else scoped.exclude(status__in=("draft", "rejected", "cancelled")))
         rows = list(base.select_related("employee__party", "employee__employment__org_unit"))
         ctx["claims"] = len(rows)
         ctx["total_hours"] = round(sum(float(r.hours_claimed or 0) for r in rows), 2)
         ctx["pay_equiv_hours"] = round(sum(float(r.overtime_pay_equivalent_hours) for r in rows), 2)
         emp, dep = {}, {}
         for r in rows:
-            emp[r.employee.party.name] = emp.get(r.employee.party.name, 0) + float(r.hours_claimed or 0)
+            e = emp.setdefault(r.employee_id, {"name": r.employee.party.name, "hours": 0.0})
+            e["hours"] += float(r.hours_claimed or 0)
             unit = (r.employee.employment.org_unit.name
                     if (r.employee.employment and r.employee.employment.org_unit_id) else "Unassigned")
             dep[unit] = dep.get(unit, 0) + float(r.hours_claimed or 0)
-        ctx["by_employee"] = sorted(({"name": k, "hours": round(v, 2)} for k, v in emp.items()),
+        ctx["by_employee"] = sorted(({"name": v["name"], "hours": round(v["hours"], 2)} for v in emp.values()),
                                     key=lambda x: -x["hours"])[:15]
         ctx["by_department"] = sorted(({"name": k, "hours": round(v, 2)} for k, v in dep.items()),
                                       key=lambda x: -x["hours"])
-        status_labels = dict(OvertimeRequest.STATUS_CHOICES)
-        ctx["status_rows"] = [{"name": status_labels.get(r["status"], r["status"]), "count": r["count"]}
-                              for r in base.values("status").annotate(count=Count("id")).order_by("-count")]
         monthly = {r["m"]: r["h"] for r in base.annotate(m=TruncMonth("date"))
                    .values("m").annotate(h=Sum("hours_claimed"))}
         months = sorted(monthly)
