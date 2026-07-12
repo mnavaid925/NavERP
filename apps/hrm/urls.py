@@ -907,4 +907,39 @@ urlpatterns = [
     path("asset-requests/<int:pk>/approve/", views.assetrequest_approve, name="assetrequest_approve"),
     path("asset-requests/<int:pk>/reject/", views.assetrequest_reject, name="assetrequest_reject"),
     path("asset-requests/<int:pk>/fulfill/", views.assetrequest_fulfill, name="assetrequest_fulfill"),
+
+    # 3.27 Communication Hub
+    path("celebrations/", views.celebrations, name="celebrations"),
+
+    # Announcements
+    path("announcements/", views.announcement_list, name="announcement_list"),
+    path("announcements/add/", views.announcement_create, name="announcement_create"),
+    path("announcements/<int:pk>/", views.announcement_detail, name="announcement_detail"),
+    path("announcements/<int:pk>/edit/", views.announcement_edit, name="announcement_edit"),
+    path("announcements/<int:pk>/delete/", views.announcement_delete, name="announcement_delete"),
+    path("announcements/<int:pk>/publish/", views.announcement_publish, name="announcement_publish"),
+    path("announcements/<int:pk>/archive/", views.announcement_archive, name="announcement_archive"),
+
+    # Surveys
+    path("surveys/", views.survey_list, name="survey_list"),
+    path("surveys/add/", views.survey_create, name="survey_create"),
+    path("surveys/<int:pk>/", views.survey_detail, name="survey_detail"),
+    path("surveys/<int:pk>/edit/", views.survey_edit, name="survey_edit"),
+    path("surveys/<int:pk>/delete/", views.survey_delete, name="survey_delete"),
+    path("surveys/<int:pk>/open/", views.survey_open, name="survey_open"),
+    path("surveys/<int:pk>/close/", views.survey_close, name="survey_close"),
+    path("surveys/<int:pk>/respond/", views.survey_respond, name="survey_respond"),
+    path("surveys/<int:pk>/results/", views.survey_results, name="survey_results"),
+
+    # Suggestions (idea box — employee submits, admin reviews)
+    path("suggestions/", views.suggestion_list, name="suggestion_list"),
+    path("suggestions/add/", views.suggestion_create, name="suggestion_create"),
+    path("suggestions/<int:pk>/", views.suggestion_detail, name="suggestion_detail"),
+    path("suggestions/<int:pk>/edit/", views.suggestion_edit, name="suggestion_edit"),
+    path("suggestions/<int:pk>/delete/", views.suggestion_delete, name="suggestion_delete"),
+    path("suggestions/<int:pk>/submit/", views.suggestion_submit, name="suggestion_submit"),
+    path("suggestions/<int:pk>/cancel/", views.suggestion_cancel, name="suggestion_cancel"),
+    path("suggestions/<int:pk>/approve/", views.suggestion_approve, name="suggestion_approve"),
+    path("suggestions/<int:pk>/reject/", views.suggestion_reject, name="suggestion_reject"),
+    path("suggestions/<int:pk>/implement/", views.suggestion_implement, name="suggestion_implement"),
 ]
