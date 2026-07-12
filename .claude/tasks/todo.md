@@ -4657,4 +4657,40 @@ labels/values, same wiring as `attendance_summary.html`/`overtime.html`.
 
 ## Review notes
 
-(filled in at the end)
+**3.30 Leave Reports — BUILT & reviewed (2026-07-12).** 5 `@tenant_admin_required` derived report views (NO
+models, NO migration, NO seed data), reusing the 3.28 report helpers (`_report_period`/`_report_department`/
+`_dept_choices`) + the 3.10 leave models. Views (`apps/hrm/views.py`, `# --- 3.30 Leave Reports ---`):
+`leave_reports_index`, `leave_register_report` (per-employee×type allocated/carried/availed/encashed/balance for a
+`?year`), `leave_liability_report` (encashable-only, balance>0; days × per-day rate → estimated value; rate =
+latest approved/paid encashment, else CTC÷365 estimate, else None), `comp_off_report` (OT-comp-leave earned vs
+comp-off leave availed), `leave_trend_report` (approved-leave days, by-type, top-takers, monthly TruncMonth trend).
+New helpers `_report_year`, `_leave_years`, `_annotated_allocations` (annotates `used_db` via the shared
+`_used_days_subquery()` — no per-row N+1), `_alloc_balance`. Templates: `leave_index.html` +
+`leave_register/leave_liability/comp_off/leave_trend.html`. `LIVE_LINKS["3.30"]` (4 bullets), README + SKILL.md
+updated.
+
+**Review-agent findings applied:**
+- **code-reviewer:** liability rate must come from approved/paid encashments only (`-year,-id` tiebreaker), and
+  `if rate is None` (not truthy) so a genuine 0/day rate is preserved.
+- **performance-reviewer:** dropped a `balance_db` annotation that double-inlined the correlated `used_db`
+  subquery (an F() alias can't reference a sibling subquery alias) — balance is derived in Python via
+  `_alloc_balance`; `_leave_years` uses `.order_by().values_list().distinct()` (not full-history pull); index
+  KPIs use `.aggregate()` not Python sum.
+- **explorer:** surfaced an orphaned `availed_count` context key (computed, never rendered) → added the
+  Availing-Requests stat-card to `comp_off.html`.
+- **frontend-reviewer:** added `|floatformat:1` to the KPI day-totals across register/liability/trend; the
+  liability rate cell uses `{% if r.rate is not None %}` so a real 0/day rate renders instead of an em-dash.
+- **test-writer:** `apps/hrm/tests/test_leave_reports.py` — 77 tests (access control, never-500, aggregate
+  correctness inc. `used_db == LeaveAllocation.used_days`, approved-over-rejected encashment rate, CTC/365
+  estimate fallback, comp-off earned-vs-availed gating, cross-tenant IDOR, div-by-zero KPIs, query-count
+  ceilings). Surfaced a real defect: `leave_trend_report.top_takers` grouped by `party.name` (merges same-named
+  employees) → fixed to key on `employee_id` like the sibling reports; the test now passes directly (xfail removed).
+- **security-reviewer:** clean, no exploitable findings. Applied its optional defensive hardening — the
+  `?leave_type=` filter in `leave_trend_report` now validates the pk against the tenant
+  (`LeaveType.objects.filter(tenant=tenant, pk=...).exists()`) before applying, mirroring `_report_department`.
+- **qa-smoke-tester:** covered by the throwaway `temp/` smoke sweep during the build (all 5 reports 200 for
+  admin, filters honored, no comment leak, cross-tenant rows ignored) + the pytest IDOR/access-control suite.
+
+**Next: 3.31 Payroll Reports** (Salary Register, Tax/TDS + Form 16, Statutory PF/ESI/PT, CTC cost analysis) —
+sources: PayrollCycle, Payslip, PayslipLine, TaxComputation, InvestmentDeclaration, StatutoryReturn,
+EmployeeStatutoryIdentifier, CostCenterProfile.
