@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Predictive Analytics{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Predictive Analytics</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Analytics</span><span class="sep">›</span><span>Predictive</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:executive_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Executive</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:predictive_analytics' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="activity"></i></div><div class="stat-value">{{ avg_risk|floatformat:1 }}</div><div class="stat-label">Avg Attrition Risk (0-100)</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="shield-check"></i></div><div class="stat-value">{{ band_counts.Low|default:0 }}</div><div class="stat-label">Low Risk</div></div>
+    <div class="stat-card"><div class="stat-icon amber"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ band_counts.High|default:0 }}</div><div class="stat-label">High Risk</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ band_counts.Critical|default:0 }}</div><div class="stat-label">Critical Risk</div></div>
+  </div>
+
+  {% if risk_rows %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Top Attrition-Risk Employees</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Employee</th><th>Department</th><th style="text-align:end;">Tenure (yrs)</th><th style="text-align:end;">Absence %</th><th style="text-align:end;">Score</th><th>Band</th></tr></thead>
+      <tbody>
+        {% for r in risk_rows %}
+          <tr>
+            <td>{{ r.employee }}</td>
+            <td>{{ r.department_name }}</td>
+            <td style="text-align:end;">{% if r.tenure_years != None %}{{ r.tenure_years|floatformat:1 }}{% else %}-{% endif %}</td>
+            <td style="text-align:end;">{{ r.absence_rate_pct|floatformat:1 }}%</td>
+            <td style="text-align:end;"><strong>{{ r.score }}</strong></td>
+            <td>{% if r.band == 'Low' %}<span class="badge badge-green">Low</span>{% elif r.band == 'Medium' %}<span class="badge badge-info">Medium</span>{% elif r.band == 'High' %}<span class="badge badge-amber">High</span>{% else %}<span class="badge badge-red">Critical</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Risk by Department</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Department</th><th style="text-align:end;">Employees</th><th style="text-align:end;">Avg Score</th><th style="text-align:end;">High/Critical</th></tr></thead>
+      <tbody>
+        {% for r in risk_by_department %}
+          <tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.count }}</td><td style="text-align:end;">{{ r.avg_score|floatformat:1 }}</td><td style="text-align:end;">{{ r.high_or_critical_count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="activity"></i><h3>No active employees</h3><p>No active employees match the current filter.</p></div></div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Hiring-Needs Projection</h2></div>
+    {% if hiring_rows %}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Designation</th><th>Department</th><th style="text-align:end;">Budgeted</th><th style="text-align:end;">Filled</th><th style="text-align:end;">Gap</th><th style="text-align:end;">12mo Exits</th><th style="text-align:end;">Proj. Next-Q Exits</th><th style="text-align:end;">Open Reqs</th><th style="text-align:end;">Net Hiring Need</th></tr></thead>
+      <tbody>
+        {% for r in hiring_rows %}
+          <tr>
+            <td>{{ r.designation }}</td><td>{{ r.department }}</td>
+            <td style="text-align:end;">{{ r.budgeted }}</td><td style="text-align:end;">{{ r.filled }}</td>
+            <td style="text-align:end;">{{ r.gap }}</td><td style="text-align:end;">{{ r.trailing_exits }}</td>
+            <td style="text-align:end;">{{ r.projected_exits }}</td><td style="text-align:end;">{{ r.open_reqs }}</td>
+            <td style="text-align:end;"><strong>{{ r.net_need }}</strong></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    <div class="card-body"><p class="text-muted" style="margin:0;">Open Reqs are shown for context and are NOT subtracted from Net Hiring Need (an open req may already be covering part of the gap).</p></div>
+    {% else %}
+      <div class="card-body"><div class="empty-state"><i data-lucide="target"></i><h3>No budgeted positions</h3><p>Set a budgeted headcount on designations to project hiring needs.</p></div></div>
+    {% endif %}
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">How these figures are calculated</h2></div>
+    <div class="card-body">
+      <p><strong>Attrition-risk score (0-100, higher = more risk)</strong> is a transparent weighted sum &mdash; <em>not</em> a machine-learning model:</p>
+      <ul>
+        <li><strong>Tenure (0-30):</strong> under 1 year scores highest (30); 10+ years scores 0.</li>
+        <li><strong>Attendance (0-25):</strong> from the trailing-90-day absence and late-arrival rates.</li>
+        <li><strong>Recent leave (0-20):</strong> frequency of leave requests in the last 90 days.</li>
+        <li><strong>Probation proximity (0-15):</strong> unconfirmed employees near their probation-end date.</li>
+        <li><strong>Review gap (0-10):</strong> no completed performance review in the last 12 months.</li>
+      </ul>
+      <p>Bands: <span class="badge badge-green">Low</span> under 25, <span class="badge badge-info">Medium</span> 25-49, <span class="badge badge-amber">High</span> 50-74, <span class="badge badge-red">Critical</span> 75+.</p>
+      <p><strong>Hiring-needs projection:</strong> Gap = Budgeted &minus; Filled. Projected Next-Quarter Exits = trailing-12-month exits &divide; 4 (current run-rate). Net Hiring Need = max(0, Gap) + Projected Next-Q Exits.</p>
+    </div>
+  </div>
+{% endblock %}
