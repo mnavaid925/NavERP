@@ -1284,6 +1284,7 @@ class SurveyResponseAdmin(admin.ModelAdmin):
     search_fields = ("survey__title", "employee__party__name")
     raw_id_fields = ("survey", "employee")
     readonly_fields = ("submitted_at",)
+    list_select_related = ("survey", "employee__party", "tenant")
 
 
 @admin.register(Suggestion)
@@ -1296,3 +1297,4 @@ class SuggestionAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "status", "approver", "approved_at", "implemented_at",
                        "created_at", "updated_at")
     raw_id_fields = ("employee", "approver")
+    list_select_related = ("employee__party", "approver", "tenant")
