@@ -16,7 +16,8 @@
         {% if is_admin and employees %}
           <div class="form-group">
             <label class="form-label" for="employee_pk">Employee <span class="req">*</span></label>
-            <select name="employee_pk" id="employee_pk" class="form-select">
+            <select name="employee_pk" id="employee_pk" class="form-select" required>
+              <option value="">-- Select employee --</option>
               {% for e in employees %}<option value="{{ e.pk }}" {% if target_employee and e.pk == target_employee.pk %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
             </select>
             <div class="form-help">Which employee this claim is for.</div>
