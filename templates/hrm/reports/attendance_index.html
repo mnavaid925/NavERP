@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Attendance Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Attendance Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Attendance Reports</span></div>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-bottom:1rem;">Attendance, lateness, absenteeism and overtime analytics (trailing 30 days on the tiles; open a report to filter by date range and department).</p>
+
+  <div class="stat-grid">
+    {% for t in tiles %}
+      <a class="stat-card" href="{% url t.url %}">
+        <div class="stat-icon blue"><i data-lucide="{{ t.icon }}"></i></div>
+        <div class="stat-value">{{ t.value }}</div>
+        <div class="stat-label">{{ t.label }}</div>
+      </a>
+    {% empty %}
+      <div class="empty-state"><i data-lucide="calendar-check"></i><h3>No data yet</h3><p>Seed attendance and overtime data to populate these reports.</p></div>
+    {% endfor %}
+  </div>
+
+  <div class="card"><div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+    <a href="{% url 'hrm:attendance_summary_report' %}" class="btn btn-outline btn-sm"><i data-lucide="calendar-check"></i> Summary</a>
+    <a href="{% url 'hrm:late_early_report' %}" class="btn btn-outline btn-sm"><i data-lucide="clock"></i> Late / Early</a>
+    <a href="{% url 'hrm:absenteeism_report' %}" class="btn btn-outline btn-sm"><i data-lucide="user-x"></i> Absenteeism</a>
+    <a href="{% url 'hrm:overtime_report' %}" class="btn btn-outline btn-sm"><i data-lucide="timer"></i> Overtime</a>
+    <a href="{% url 'hrm:timesheet_utilization_report' %}" class="btn btn-outline btn-sm"><i data-lucide="gauge"></i> Utilization</a>
+  </div></div>
+{% endblock %}
