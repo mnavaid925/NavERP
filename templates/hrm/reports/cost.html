@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Cost Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cost Report</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:hr_reports_index' %}">HR Reports</a><span class="sep">›</span><span>Cost</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:hr_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="cycle">Payroll cycle</label>
+        <select name="cycle" id="cycle" class="form-select">
+          {% if not cycle %}<option value="">— No payroll run —</option>{% endif %}
+          {% for c in cycle_choices %}<option value="{{ c.pk }}" {% if cycle and c.pk == cycle.pk %}selected{% endif %}>{{ c.number }} · {{ c.pay_date|date:"M Y" }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:cost_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  {% if is_estimate %}<div class="card"><div class="card-body"><p style="margin:0;"><span class="badge badge-amber">Estimated</span> No payroll run exists yet — figures are a monthly run-rate from active salary structures (CTC ÷ 12).</p></div></div>{% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ total_cost }}</div><div class="stat-label">Total {% if is_estimate %}Est. {% endif %}Cost</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="user"></i></div><div class="stat-value">{{ avg_cost }}</div><div class="stat-label">Avg Cost / Head</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="landmark"></i></div><div class="stat-value">{{ employer_cost }}</div><div class="stat-label">Employer Contributions</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="users"></i></div><div class="stat-value">{{ headcount }}</div><div class="stat-label">Employees</div></div>
+  </div>
+
+  {% if total_cost %}
+  {% if not is_estimate %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Cost Trend (recent cycles)</h2></div><div class="card-body"><canvas id="trendChart" height="90"></canvas></div></div>
+  <div class="card"><div class="card-header"><h2 class="card-title">Department-wise Cost</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Department</th><th style="text-align:end;">Gross Cost</th></tr></thead><tbody>
+      {% for r in by_department %}<tr><td>{{ r.employee__employment__org_unit__name|default:"Unassigned" }}</td><td style="text-align:end;">{{ r.total }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  <div class="card"><div class="card-header"><h2 class="card-title">CTC Component Breakdown</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Component</th><th style="text-align:end;">Amount</th></tr></thead><tbody>
+      {% for r in by_component %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.total }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  <script>
+    (function () {
+      var el = document.getElementById('trendChart');
+      if (!el || typeof Chart === 'undefined') return;
+      new Chart(el, {
+        type: 'line',
+        data: { labels: {{ trend_labels|safe }}, datasets: [{ label: 'Gross Cost', data: {{ trend_values|safe }}, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.10)', fill: true, tension: .3 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    })();
+  </script>
+  {% endif %}
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="banknote"></i><h3>No cost data</h3><p>No payroll run or active salary structures for this tenant.</p></div></div></div>
+  {% endif %}
+{% endblock %}
