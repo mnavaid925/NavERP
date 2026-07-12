@@ -2996,10 +2996,12 @@ class Command(BaseCommand):
                 defaults={"asset_category": asset.category, "status": "issued", "issued_at": timezone.now(),
                           "issued_by": actor, "serial_number": asset.serial_number, "asset_tag": asset.asset_tag})
 
+        # a1/a3 start in_stock — the linked issued AssetAllocation flips them to assigned via the
+        # save() sync (genuinely exercises _sync_linked_asset on seed data).
         a1 = Asset.objects.create(
             tenant=tenant, asset_tag="LT-0001", name="MacBook Pro 14-inch", category="laptop",
-            manufacturer="Apple", model_number="A2442", serial_number="C02FL0001XYZ", status="assigned",
-            condition="good", current_holder=e0, location=dept, purchase_date=today - 730 * day,
+            manufacturer="Apple", model_number="A2442", serial_number="C02FL0001XYZ", status="in_stock",
+            condition="good", location=dept, purchase_date=today - 730 * day,
             purchase_cost=Decimal("2499.00"), currency=usd, warranty_expiry=today + 365 * day,
             depreciation_method="straight_line", useful_life_months=36, salvage_value=Decimal("200.00"))
         _link_alloc(a1, e0)
@@ -3013,15 +3015,17 @@ class Command(BaseCommand):
 
         a3 = Asset.objects.create(
             tenant=tenant, asset_tag="PH-0001", name="iPhone 13", category="phone", manufacturer="Apple",
-            model_number="A2482", serial_number="IP13-0000123", status="assigned", condition="good",
-            current_holder=e1, purchase_date=today - 400 * day, purchase_cost=Decimal("699.00"), currency=usd,
+            model_number="A2482", serial_number="IP13-0000123", status="in_stock", condition="good",
+            purchase_date=today - 400 * day, purchase_cost=Decimal("699.00"), currency=usd,
             warranty_expiry=today - 35 * day, depreciation_method="declining_balance", useful_life_months=24,
             salvage_value=Decimal("50.00"))
         _link_alloc(a3, e1)
 
+        # a4 starts in_stock — the in-progress repair record flips it to in_repair via the
+        # AssetMaintenance save() sync.
         a4 = Asset.objects.create(
             tenant=tenant, asset_tag="PR-0001", name="HP Color LaserJet Printer", category="other",
-            manufacturer="HP", model_number="M454dw", serial_number="HP454-0007", status="in_repair",
+            manufacturer="HP", model_number="M454dw", serial_number="HP454-0007", status="in_stock",
             condition="fair", location=dept, purchase_date=today - 500 * day, purchase_cost=Decimal("650.00"),
             currency=usd, depreciation_method="straight_line", useful_life_months=60, salvage_value=Decimal("50.00"))
         AssetMaintenance.objects.get_or_create(
