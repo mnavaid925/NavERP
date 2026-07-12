@@ -34,7 +34,7 @@
     </dl>
     {% if is_admin %}
       <div class="card" style="margin-top:.8rem;"><div class="card-header"><h2 class="card-title">Questions</h2></div><div class="card-body">
-        <ol style="margin:0; padding-left:1.2rem;">
+        <ol style="margin:0; padding-inline-start:1.2rem;">
           {% for q in obj.questions %}<li style="margin-bottom:.3rem;">{{ q.text }} <span class="badge badge-slate">{{ q.type }}</span>{% if q.options %} <span class="text-muted">({{ q.options|join:", " }})</span>{% endif %}</li>{% endfor %}
         </ol>
       </div></div>
