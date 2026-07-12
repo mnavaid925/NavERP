@@ -7175,4 +7175,35 @@ Expense Categories, Expense Claims, Approval Workflow, Reimbursement, Policy Com
   frontend enhancement.
 
 ## Review notes
-(filled in at the end)
+
+**3.34 Expense Management — BUILT & reviewed (2026-07-13).** 3 new models (`ExpenseCategory`, `ExpenseClaim` [ECL-],
+`ExpenseClaimLine`, migration `0049`) — employee T&E claims with a 2-stage manager→finance approval workflow,
+receipt uploads, and a computed policy-compliance soft-flag. Own-vs-admin CRUD (`_ss_scope`/`_ss_child_*`) + 6
+bespoke workflow actions + inline draft-only lines. `_seed_expenses` (3 categories + 3 claims across the states),
+7 templates. README + SKILL.md updated; counts refreshed to 6,072 HRM / 8,719 project-wide.
+
+**Review-agent findings applied:**
+- **code-reviewer:** claim-detail Submit/Edit/Delete/Cancel buttons are status-gated only (not `is_own` — an admin
+  acting for an employee needs them; page-reachability already restricts to own-or-admin); the create-form employee
+  select got a required blank placeholder.
+- **explorer:** the category list now annotates `line_total` and gates the Delete button (matches the detail page +
+  the delete guard).
+- **frontend-reviewer:** clean; added a required blank placeholder to the reimburse payment-method select.
+- **performance-reviewer:** one Critical N+1 — `ExpenseClaim.total_amount` did `.lines.aggregate()` (bypassing the
+  list's `prefetch_related`, firing a SUM per row). Made it prefetch-cache-aware (sum in Python when cached, else one
+  aggregate) — verified 0 extra queries across a prefetched list.
+- **qa-smoke-tester:** 117/117 checks passed — full workflow, self-approval blocks, draft-only editing, receipt
+  upload/.exe reject, category delete guard, own-vs-admin scoping, cross-tenant IDOR. No code changes needed.
+- **security-reviewer:** no Critical/High. One Medium (segregation-of-duties): `expenseclaim_reimburse` lacked the
+  `_is_own_hr_request` self-block the other 3 workflow steps have — added it so an admin-claimant can't self-certify
+  their own payout. File-upload + MEDIA-serving caveats confirmed to match the existing project pattern (not new).
+- **test-writer:** `apps/hrm/tests/test_expenses.py` — 166 tests (policy math + None-guards, prefetch-aware
+  total_amount 0-extra-query assertion, the full 2-stage workflow + every stage-skip guard + the reject
+  stage-approver stamp, the self-approval block on all FOUR admin actions, draft-only editing, form clean() rules
+  incl. .exe receipt reject, category delete guard, cross-tenant IDOR, N+1 query ceiling). Surfaced a real bug I'd
+  introduced with the explorer fix: the category-list `.annotate(Count)` dropped `Meta.ordering` (GROUP BY) →
+  `UnorderedObjectListWarning` — fixed with `.order_by("name")` (mirroring `goalperiod_list`). All green.
+
+**Next: 3.35 Travel Management** (Travel Request, Booking Integration, Travel Policy, Travel Advance, Travel
+Settlement — coordinate with 3.34 Expense [settlement reuses the claim/line pattern] + the deferred mileage/per-diem
+and cash-advance items carried over from 3.34).
