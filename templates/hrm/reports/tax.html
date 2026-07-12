@@ -48,6 +48,12 @@
     </div>
   </div>
 
+  <div class="card"><div class="card-header"><h2 class="card-title">Tax Regime Split</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+      {% for r in by_regime %}<span class="badge badge-info">{{ r.name }}: {{ r.count }}</span>{% empty %}<span class="text-muted">No declarations in scope.</span>{% endfor %}
+    </div>
+  </div>
+
   <div class="card"><div class="card-header"><h2 class="card-title">TDS Summary</h2></div>
     <div class="table-wrap"><table class="table">
       <thead><tr><th>Employee</th><th>Regime</th><th>Type</th><th style="text-align:end;">Tax Payable</th><th style="text-align:end;">Paid YTD</th><th style="text-align:end;">Monthly TDS</th></tr></thead>
