@@ -25,7 +25,7 @@
         {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
         {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
       {% endif %}
-      {% if obj.is_pinned %}<span class="badge badge-warning">Pinned</span>{% endif %}
+      {% if obj.is_pinned %}<span class="badge badge-amber">Pinned</span>{% endif %}
     </div>
     <div>{{ obj.body|linebreaksbr }}</div>
     <p class="text-muted" style="margin-top:.8rem; font-size:.85rem;">
