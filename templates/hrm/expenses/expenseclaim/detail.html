@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.title }}
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% elif obj.status == 'submitted' %}<span class="badge badge-info">Submitted</span>{% elif obj.status == 'manager_approved' %}<span class="badge badge-amber">Manager Approved</span>{% elif obj.status == 'approved' %}<span class="badge badge-green">Approved</span>{% elif obj.status == 'reimbursed' %}<span class="badge badge-green">Reimbursed</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">Cancelled</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.has_violations %}<span class="badge badge-red">Policy Flagged</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:expenseclaim_list' %}">Expense Claims</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:expenseclaim_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Claims</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Claim #</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Employee</span><div>{{ obj.employee.party.name }}</div></div>
+      <div><span class="text-muted">Period</span><div>{% if obj.period_start %}{{ obj.period_start|date:"d M Y" }} - {{ obj.period_end|date:"d M Y"|default:"?" }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Total</span><div><strong>{{ obj.total_amount|floatformat:2 }}</strong> {% if obj.currency %}{{ obj.currency.code }}{% endif %}</div></div>
+      {% if obj.manager_approver %}<div><span class="text-muted">Manager Approver</span><div>{{ obj.manager_approver.get_full_name|default:obj.manager_approver.username }}</div></div>{% endif %}
+      {% if obj.finance_approver %}<div><span class="text-muted">Finance Approver</span><div>{{ obj.finance_approver.get_full_name|default:obj.finance_approver.username }}</div></div>{% endif %}
+      {% if obj.status == 'reimbursed' %}<div><span class="text-muted">Payment</span><div>{{ obj.get_payment_method_display }}{% if obj.payment_reference %} · {{ obj.payment_reference }}{% endif %}</div></div>{% endif %}
+    </div>
+    {% if obj.purpose %}<p class="text-muted" style="margin-top:1rem;">{{ obj.purpose|linebreaksbr }}</p>{% endif %}
+    {% if obj.status == 'rejected' and obj.rejection_reason %}<div class="form-error" style="margin-top:1rem;"><strong>Rejected:</strong> {{ obj.rejection_reason }}</div>{% endif %}
+  </div></div>
+
+  {% if obj.has_violations %}
+  <div class="card"><div class="card-body">
+    <p style="margin:0 0 .5rem;"><span class="badge badge-red">Policy Violations</span></p>
+    <ul style="margin:0;">
+      {% for l in lines %}{% if l.policy_violation %}<li>{{ l.category.name }} · {{ l.merchant|default:"-" }} · {{ l.amount|floatformat:2 }} — {{ l.violation_reason }}</li>{% endif %}{% endfor %}
+    </ul>
+  </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Expense Lines</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Category</th><th>Date</th><th>Merchant</th><th style="text-align:end;">Amount</th><th>Receipt</th><th>Policy</th>{% if obj.status == 'draft' %}<th class="table-actions">Actions</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for l in lines %}
+          <tr>
+            <td>{{ l.category.name }}</td>
+            <td>{{ l.expense_date|date:"d M Y" }}</td>
+            <td>{{ l.merchant|default:"-" }}</td>
+            <td style="text-align:end;">{{ l.amount|floatformat:2 }}</td>
+            <td>{% if l.receipt %}<a href="{{ l.receipt.url }}" target="_blank" rel="noopener">View</a>{% else %}<span class="text-muted">-</span>{% endif %}</td>
+            <td>{% if l.policy_violation %}<span class="badge badge-red" title="{{ l.violation_reason }}">Flagged</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</td>
+            {% if obj.status == 'draft' %}
+            <td><div class="table-actions">
+              <a href="{% url 'hrm:expenseclaimline_edit' l.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'hrm:expenseclaimline_delete' l.pk %}" onsubmit="return confirm('Remove this line?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+            </div></td>
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="{% if obj.status == 'draft' %}7{% else %}6{% endif %}" class="text-muted">No expense lines yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+
+  {% if line_form %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Add Line</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'hrm:expenseclaimline_add' obj.pk %}" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in line_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Line</button></div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-start;">
+      {% if obj.status == 'draft' and is_own %}
+        <form method="post" action="{% url 'hrm:expenseclaim_submit' obj.pk %}" onsubmit="return confirm('Submit this claim for approval?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button></form>
+        <a href="{% url 'hrm:expenseclaim_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:expenseclaim_delete' obj.pk %}" onsubmit="return confirm('Delete this draft claim?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'submitted' %}{% if is_own %}
+        <form method="post" action="{% url 'hrm:expenseclaim_cancel' obj.pk %}" onsubmit="return confirm('Cancel this claim?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Cancel Claim</button></form>
+      {% endif %}{% endif %}
+      {% if obj.status == 'submitted' and is_admin and not is_own %}
+        <form method="post" action="{% url 'hrm:expenseclaim_manager_approve' obj.pk %}" onsubmit="return confirm('Manager-approve this claim?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Manager Approve</button></form>
+      {% endif %}
+      {% if obj.status == 'manager_approved' and is_admin and not is_own %}
+        <form method="post" action="{% url 'hrm:expenseclaim_approve' obj.pk %}" onsubmit="return confirm('Finance-approve this claim?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve (Finance)</button></form>
+      {% endif %}
+      {% if obj.status == 'submitted' or obj.status == 'manager_approved' %}{% if is_admin and not is_own %}
+        <form method="post" action="{% url 'hrm:expenseclaim_reject' obj.pk %}" onsubmit="return confirm('Reject this claim?');" style="display:flex; gap:.5rem; align-items:flex-end;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="reject_reason">Rejection reason</label><input type="text" name="rejection_reason" id="reject_reason" class="form-input" required></div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject</button>
+        </form>
+      {% endif %}{% endif %}
+      {% if obj.status == 'approved' and is_admin %}
+        <form method="post" action="{% url 'hrm:expenseclaim_reimburse' obj.pk %}" onsubmit="return confirm('Mark this claim reimbursed?');" style="display:flex; gap:.5rem; align-items:flex-end; flex-wrap:wrap;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="pay_method">Payment method</label>
+            <select name="payment_method" id="pay_method" class="form-select" required>
+              {% for val, label in payment_method_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label" for="pay_ref">Reference</label><input type="text" name="payment_reference" id="pay_ref" class="form-input"></div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="banknote"></i> Mark Reimbursed</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
