@@ -559,6 +559,15 @@ LIVE_LINKS = {
         "Cost Reports": "hrm:cost_report",            # bullet (salary cost total + department-wise, CTC breakdown)
         "Hiring Reports": "hrm:hiring_report",        # bullet (time-to-hire/fill, source mix, funnel, offer accept %)
     },
+    # 3.29 Attendance Reports — derived, read-only, @tenant_admin_required (no models). The
+    # Utilization Report bullet REUSES the existing 3.11 timesheet_utilization_report (not rebuilt).
+    "3.29": {
+        "Attendance Summary": "hrm:attendance_summary_report",   # bullet (status breakdown + attendance %, trend)
+        "Late/Early Departure": "hrm:late_early_report",         # bullet (late/early counts + avg mins, top offenders)
+        "Absenteeism Report": "hrm:absenteeism_report",          # bullet (absence rate + frequent absentees, trend)
+        "Overtime Report": "hrm:overtime_report",                # bullet (OT hours + pay-equivalent hours, no currency)
+        "Utilization Report": "hrm:timesheet_utilization_report",  # bullet (REUSE 3.11 utilization report)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
