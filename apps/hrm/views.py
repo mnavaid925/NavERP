@@ -13077,7 +13077,8 @@ def _can_manage_hrdash(user, dashboard):
 @login_required
 def hr_dashboard_list(request):
     qs = (HRDashboard.objects.filter(tenant=request.tenant)
-          .filter(Q(owner=request.user) | Q(is_shared=True)).select_related("owner"))
+          .filter(Q(owner=request.user) | Q(is_shared=True)).select_related("owner")
+          .annotate(widget_total=Count("widgets")))  # avoid the widget_count property N+1 in the list
     # Owner filter dropdown lists only owners of VISIBLE dashboards (never leaks a private one's owner).
     owner_ids = set(qs.values_list("owner_id", flat=True))
     owners = _get_user_model().objects.filter(pk__in=owner_ids).order_by("username")
@@ -13387,9 +13388,9 @@ def benchmarking(request):
         # Headcount
         hc_cur, hc_prior = _headcount_at(tenant, date_to), _headcount_at(tenant, prior_to)
         hc_d, hc_dp = _delta(hc_cur, hc_prior)
-        # Attrition
-        at_cur = _turnover_rate(tenant, date_from, date_to)
-        at_prior = _turnover_rate(tenant, prior_from, prior_to)
+        # Attrition (reuse the headcounts already computed above to avoid re-querying _headcount_at)
+        at_cur = _turnover_rate(tenant, date_from, date_to, hc_to=hc_cur)
+        at_prior = _turnover_rate(tenant, prior_from, prior_to, hc_to=hc_prior)
         at_d, at_dp = _delta(at_cur, at_prior)
         t_att = _bench_target(request, "target_attrition_rate")
         at_rag = _vs_target_rag(at_cur, t_att) if t_att is not None else _down_good_rag(at_cur, at_prior)
