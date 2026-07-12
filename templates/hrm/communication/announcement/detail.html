@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if obj.is_pinned %}<i data-lucide="pin"></i> {% endif %}{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:announcement_list' %}">Announcements</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    {% if is_admin %}
+      <div class="page-actions">
+        <a href="{% url 'hrm:announcement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:announcement_delete' obj.pk %}" onsubmit="return confirm('Delete this announcement?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.6rem;">
+      <span class="badge badge-slate">{{ obj.get_category_display }}</span>
+      <span class="badge badge-info">{{ obj.get_audience_type_display }}{% if obj.audience_type == 'department' and obj.target_department %} · {{ obj.target_department.name }}{% elif obj.audience_type == 'designation' and obj.target_designation %} · {{ obj.target_designation.name }}{% endif %}</span>
+      {% if is_admin %}
+        {% if obj.status == 'published' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      {% endif %}
+      {% if obj.is_pinned %}<span class="badge badge-warning">Pinned</span>{% endif %}
+    </div>
+    <div>{{ obj.body|linebreaksbr }}</div>
+    <p class="text-muted" style="margin-top:.8rem; font-size:.85rem;">
+      {% if obj.published_at %}Published {{ obj.published_at|date:"Y-m-d H:i" }}{% else %}Not yet published{% endif %}
+      {% if is_admin and obj.author %} · by {{ obj.author.username }}{% endif %}
+      {% if obj.expires_at %} · expires {{ obj.expires_at|date:"Y-m-d" }}{% endif %}
+    </p>
+  </div></div>
+
+  {% if is_admin and obj.status != 'archived' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'hrm:announcement_publish' obj.pk %}" style="display:inline;" onsubmit="return confirm('Publish this announcement to its audience?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Publish</button>
+          </form>
+        {% elif obj.status == 'published' %}
+          <form method="post" action="{% url 'hrm:announcement_archive' obj.pk %}" style="display:inline;" onsubmit="return confirm('Archive this announcement?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:announcement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to announcements</a>
+{% endblock %}
