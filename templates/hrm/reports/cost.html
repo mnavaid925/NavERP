@@ -30,9 +30,9 @@
   {% if is_estimate %}<div class="card"><div class="card-body"><p style="margin:0;"><span class="badge badge-amber">Estimated</span> No payroll run exists yet — figures are a monthly run-rate from active salary structures (CTC ÷ 12).</p></div></div>{% endif %}
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ total_cost }}</div><div class="stat-label">Total {% if is_estimate %}Est. {% endif %}Cost</div></div>
-    <div class="stat-card"><div class="stat-icon green"><i data-lucide="user"></i></div><div class="stat-value">{{ avg_cost }}</div><div class="stat-label">Avg Cost / Head</div></div>
-    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="landmark"></i></div><div class="stat-value">{{ employer_cost }}</div><div class="stat-label">Employer Contributions</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ total_cost|floatformat:2 }}</div><div class="stat-label">Total {% if is_estimate %}Est. {% endif %}Cost</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="user"></i></div><div class="stat-value">{{ avg_cost|floatformat:2 }}</div><div class="stat-label">Avg Cost / Head</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="landmark"></i></div><div class="stat-value">{% if is_estimate %}—{% else %}{{ employer_cost|floatformat:2 }}{% endif %}</div><div class="stat-label">Employer Contributions</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="users"></i></div><div class="stat-value">{{ headcount }}</div><div class="stat-label">Employees</div></div>
   </div>
 
@@ -41,12 +41,12 @@
   <div class="card"><div class="card-header"><h2 class="card-title">Cost Trend (recent cycles)</h2></div><div class="card-body"><canvas id="trendChart" height="90"></canvas></div></div>
   <div class="card"><div class="card-header"><h2 class="card-title">Department-wise Cost</h2></div>
     <div class="table-wrap"><table class="table"><thead><tr><th>Department</th><th style="text-align:end;">Gross Cost</th></tr></thead><tbody>
-      {% for r in by_department %}<tr><td>{{ r.employee__employment__org_unit__name|default:"Unassigned" }}</td><td style="text-align:end;">{{ r.total }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
+      {% for r in by_department %}<tr><td>{{ r.employee__employment__org_unit__name|default:"Unassigned" }}</td><td style="text-align:end;">{{ r.total|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
     </tbody></table></div>
   </div>
   <div class="card"><div class="card-header"><h2 class="card-title">CTC Component Breakdown</h2></div>
     <div class="table-wrap"><table class="table"><thead><tr><th>Component</th><th style="text-align:end;">Amount</th></tr></thead><tbody>
-      {% for r in by_component %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.total }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
+      {% for r in by_component %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.total|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">No data.</td></tr>{% endfor %}
     </tbody></table></div>
   </div>
   <script>
