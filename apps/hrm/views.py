@@ -12711,3 +12711,321 @@ def leave_trend_report(request):
         ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
         ctx["trend_values"] = json.dumps([float(monthly[m] or 0) for m in months])
     return render(request, "hrm/reports/leave_trend.html", ctx)
+
+
+# =============================================================================================
+# 3.31 Payroll Reports (derived, read-only — NO models). Aggregate over the built payroll engine
+# (PayrollCycle/Payslip/PayslipLine/EmployeeSalaryStructure/TaxComputation/InvestmentDeclaration/
+# StatutoryReturn/EmployeeStatutoryIdentifier/CostCenterProfile). All @tenant_admin_required, every
+# query tenant-scoped, every rate guards div-by-zero, ?filters (cycle/department/financial_year/
+# scheme/status/grade/cost_center) resolved tenant-scoped (IDOR-safe). Statutory government IDs
+# (UAN/PF/ESI) are rendered ONLY via masked_*() — never the raw value.
+#
+# Cost-centre attribution (the one non-obvious join): core.Employment.org_unit is ALWAYS a
+# DEPARTMENT-kind OrgUnit; a cost centre is reached from a department via
+# hrm.DepartmentProfile.cost_center. Matching only a direct org_unit==cost_center would report zero
+# spend for every cost centre on the seeded data, so cost_center_report folds each employee's org
+# unit into its department's mapped cost centre (with a defensive direct-assignment branch).
+# =============================================================================================
+def _fy_choices(tenant):
+    """Distinct Indian financial years present on the tenant's tax declarations, newest first."""
+    if tenant is None:
+        return []
+    return sorted(
+        InvestmentDeclaration.objects.filter(tenant=tenant)
+        .order_by().values_list("financial_year", flat=True).distinct(),
+        reverse=True)
+
+
+def _report_financial_year(request, tenant):
+    """Resolve ?financial_year to one the tenant actually has (never trust an arbitrary string).
+    Returns (fy, choices); fy defaults to the latest present, or "" when the tenant has none yet."""
+    choices = _fy_choices(tenant)
+    fy = (request.GET.get("financial_year") or "").strip()
+    if fy in choices:
+        return fy, choices
+    return (choices[0] if choices else ""), choices
+
+
+def _cc_choices(tenant):
+    if tenant is None:
+        return OrgUnit.objects.none()
+    return OrgUnit.objects.filter(tenant=tenant, kind="cost_center").order_by("name")
+
+
+def _report_cost_center(request, tenant):
+    """Resolve ?cost_center to a tenant-scoped cost-centre OrgUnit, or None (IDOR-safe)."""
+    pk = (request.GET.get("cost_center") or "").strip()
+    if tenant is not None and pk.isdigit():
+        return OrgUnit.objects.filter(tenant=tenant, kind="cost_center", pk=int(pk)).first()
+    return None
+
+
+def _grade_choices(tenant):
+    if tenant is None:
+        return JobGrade.objects.none()
+    return JobGrade.objects.filter(tenant=tenant, is_active=True).order_by("level_order", "name")
+
+
+def _report_job_grade(request, tenant):
+    """Resolve ?grade to a tenant-scoped JobGrade, or None (IDOR-safe)."""
+    pk = (request.GET.get("grade") or "").strip()
+    if tenant is not None and pk.isdigit():
+        return JobGrade.objects.filter(tenant=tenant, pk=int(pk)).first()
+    return None
+
+
+@tenant_admin_required
+def payroll_reports_index(request):
+    tenant = request.tenant
+    tiles = []
+    if tenant is not None:
+        today = timezone.localdate()
+        cycle = PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date").first()
+        gross = float(cycle.total_gross) if cycle else 0
+        net = float(cycle.total_net) if cycle else 0
+        hc = cycle.headcount if cycle else 0
+        pending_form16 = TaxComputation.objects.filter(tenant=tenant, statutory_return__isnull=True).count()
+        overdue = StatutoryReturn.objects.filter(tenant=tenant, status="pending", due_date__lt=today).count()
+        tiles = [
+            {"label": "Latest Cycle Headcount", "value": hc, "url": "hrm:salary_register_report", "icon": "users"},
+            {"label": "Latest Cycle Gross", "value": f"{gross:,.0f}", "url": "hrm:salary_register_report", "icon": "wallet"},
+            {"label": "Latest Cycle Net", "value": f"{net:,.0f}", "url": "hrm:salary_register_report", "icon": "banknote"},
+            {"label": "Pending Form 16", "value": pending_form16, "url": "hrm:tax_report", "icon": "file-text"},
+            {"label": "Overdue Statutory", "value": overdue, "url": "hrm:statutory_report", "icon": "alert-triangle"},
+        ]
+    return render(request, "hrm/reports/payroll_index.html", {"tiles": tiles})
+
+
+@tenant_admin_required
+def salary_register_report(request):
+    tenant = request.tenant
+    dept = _report_department(request, tenant)
+    on_hold = (request.GET.get("on_hold") or "").strip() == "1"
+    ctx = {"department": dept, "department_choices": _dept_choices(tenant), "cycle": None,
+           "cycle_choices": PayrollCycle.objects.none(), "on_hold": on_hold, "rows": [],
+           "totals": {}, "by_component": []}
+    if tenant is not None:
+        cycles = list(PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date"))  # one query
+        ctx["cycle_choices"] = cycles
+        cycle_pk = (request.GET.get("cycle") or "").strip()
+        cycle = next((c for c in cycles if str(c.pk) == cycle_pk), None) or (cycles[0] if cycles else None)
+        ctx["cycle"] = cycle
+        if cycle is not None:
+            payslips = (Payslip.objects.filter(tenant=tenant, cycle=cycle)
+                        .select_related("employee__party", "employee__employment__org_unit")
+                        .order_by("employee__party__name"))
+            if dept:
+                payslips = payslips.filter(employee__employment__org_unit=dept)
+            if on_hold:
+                payslips = payslips.filter(on_hold=True)
+            ctx["rows"] = list(payslips)
+            ctx["totals"] = payslips.aggregate(
+                gross=Sum("gross_pay"), ded=Sum("total_deductions"), net=Sum("net_pay"),
+                arrears=Sum("arrears_amount"), bonus=Sum("bonus_amount"), lop=Sum("lop_amount"))
+            # Cycle-wide component-type breakdown honoring the same dept/on_hold scope — ONE query.
+            comp_labels = dict(PayslipLine._meta.get_field("component_type").choices)
+            line_qs = PayslipLine.objects.filter(payslip__tenant=tenant, payslip__cycle=cycle)
+            if dept:
+                line_qs = line_qs.filter(payslip__employee__employment__org_unit=dept)
+            if on_hold:
+                line_qs = line_qs.filter(payslip__on_hold=True)
+            ctx["by_component"] = [
+                {"name": comp_labels.get(r["component_type"], r["component_type"]),
+                 "type": r["component_type"], "total": r["total"]}
+                for r in line_qs.values("component_type").annotate(total=Sum("amount")).order_by("-total")]
+    return render(request, "hrm/reports/salary_register.html", ctx)
+
+
+@tenant_admin_required
+def tax_report(request):
+    tenant = request.tenant
+    dept = _report_department(request, tenant)
+    regime = (request.GET.get("regime") or "").strip()
+    fy, fy_choices = _report_financial_year(request, tenant)
+    ctx = {"department": dept, "department_choices": _dept_choices(tenant),
+           "financial_year": fy, "financial_year_choices": fy_choices, "regime": regime,
+           "rows": [], "total_payable": 0, "total_paid": 0, "avg_payable": 0, "by_regime": [],
+           "decl_status": [], "not_filed": 0, "by_section": []}
+    if tenant is not None and fy:
+        comps = (TaxComputation.objects.filter(tenant=tenant, financial_year=fy)
+                 .select_related("employee__party", "employee__employment__org_unit",
+                                 "declaration", "statutory_return")
+                 .order_by("employee__party__name"))
+        if dept:
+            comps = comps.filter(employee__employment__org_unit=dept)
+        if regime in ("old", "new"):
+            comps = comps.filter(declaration__regime_elected=regime)
+        rows = list(comps)
+        ctx["rows"] = rows  # reused by both the TDS table and the Form 16 register (statutory_return link)
+        agg = comps.aggregate(p=Sum("tax_payable"), y=Sum("tax_paid_ytd"))
+        ctx["total_payable"] = agg["p"] or 0
+        ctx["total_paid"] = agg["y"] or 0
+        ctx["avg_payable"] = round((agg["p"] or 0) / len(rows), 2) if rows else 0
+        regime_labels = dict(InvestmentDeclaration.REGIME_CHOICES)
+        ctx["by_regime"] = [
+            {"name": regime_labels.get(r["declaration__regime_elected"], r["declaration__regime_elected"] or "—"),
+             "count": r["c"]}
+            for r in comps.values("declaration__regime_elected").annotate(c=Count("id")).order_by("-c")]
+        # Declaration status funnel + "not filed" — tenant+FY scope (independent of dept/regime).
+        decls = InvestmentDeclaration.objects.filter(tenant=tenant, financial_year=fy)
+        status_labels = dict(InvestmentDeclaration.STATUS_CHOICES)
+        ctx["decl_status"] = [
+            {"name": status_labels.get(r["status"], r["status"]), "count": r["c"]}
+            for r in decls.values("status").annotate(c=Count("id")).order_by("status")]
+        ctx["not_filed"] = (EmployeeProfile.objects.filter(tenant=tenant)
+                            .exclude(pk__in=decls.values("employee_id")).count())
+        section_labels = dict(InvestmentDeclarationLine.SECTION_CODE_CHOICES)
+        ctx["by_section"] = [
+            {"name": section_labels.get(r["section_code"], r["section_code"]),
+             "declared": r["d"] or 0, "verified": r["v"] or 0}
+            for r in (InvestmentDeclarationLine.objects.filter(tenant=tenant, declaration__financial_year=fy)
+                      .values("section_code").annotate(d=Sum("declared_amount"), v=Sum("verified_amount"))
+                      .order_by("section_code"))]
+    return render(request, "hrm/reports/tax.html", ctx)
+
+
+@tenant_admin_required
+def statutory_report(request):
+    tenant = request.tenant
+    # Only the social-security schemes here; the two tds_* schemes belong to tax_report.
+    STAT_SCHEMES = [("pf", "Provident Fund"), ("esi", "ESI"),
+                    ("pt", "Professional Tax"), ("lwf", "Labour Welfare Fund")]
+    scheme = (request.GET.get("scheme") or "pf").strip()
+    if scheme not in {k for k, _ in STAT_SCHEMES}:
+        scheme = "pf"
+    date_from, date_to = _report_period(request)
+    status = (request.GET.get("status") or "").strip()
+    ctx = {"scheme": scheme, "scheme_choices": STAT_SCHEMES, "date_from": date_from,
+           "date_to": date_to, "status": status, "status_choices": StatutoryReturn.STATUS_CHOICES,
+           "rows": [], "emp_total": 0, "empr_total": 0, "headcount_total": 0, "overdue": 0,
+           "identifiers": [], "coverage": {"pf": 0, "esi": 0, "total": 0}}
+    if tenant is not None:
+        today = timezone.localdate()
+        returns = (StatutoryReturn.objects.filter(tenant=tenant, scheme=scheme,
+                                                  period_start__gte=date_from, period_start__lte=date_to)
+                   .select_related("cycle", "employee__party").order_by("-period_start"))
+        if status:
+            returns = returns.filter(status=status)
+        ctx["rows"] = list(returns)
+        agg = returns.aggregate(e=Sum("employee_contribution_total"),
+                                r=Sum("employer_contribution_total"), h=Sum("headcount"))
+        ctx["emp_total"] = agg["e"] or 0
+        ctx["empr_total"] = agg["r"] or 0
+        ctx["headcount_total"] = agg["h"] or 0  # sum of per-return snapshots, not a distinct-employee count
+        # DB form of StatutoryReturn.is_overdue — never call the Python @property in a loop.
+        ctx["overdue"] = returns.filter(Q(status="pending") & Q(due_date__lt=today)).count()
+        # Employee statutory coverage — render ONLY masked_*() identifiers (hard security rule).
+        idents = (EmployeeStatutoryIdentifier.objects.filter(tenant=tenant)
+                  .select_related("employee__party").order_by("employee__party__name"))
+        ctx["identifiers"] = list(idents)
+        ctx["coverage"] = {"pf": idents.filter(is_pf_applicable=True).count(),
+                           "esi": idents.filter(is_esi_applicable=True).count(),
+                           "total": idents.count()}
+    return render(request, "hrm/reports/statutory.html", ctx)
+
+
+@tenant_admin_required
+def ctc_report(request):
+    tenant = request.tenant
+    dept = _report_department(request, tenant)
+    grade = _report_job_grade(request, tenant)
+    ctx = {"department": dept, "department_choices": _dept_choices(tenant), "grade": grade,
+           "grade_choices": _grade_choices(tenant), "rows": [], "total_ctc": 0, "avg_ctc": 0,
+           "headcount": 0, "mix_labels": "[]", "mix_values": "[]"}
+    if tenant is not None:
+        structs = list(
+            EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+            .select_related("employee__party", "employee__employment__org_unit", "template__job_grade")
+            .filter(**({"employee__employment__org_unit": dept} if dept else {}))
+            .filter(**({"template__job_grade": grade} if grade else {})))
+        comp_labels = dict(PayComponent.COMPONENT_TYPE_CHOICES)
+        template_lines = {}   # template_id -> [SalaryStructureLine]; bounded by DISTINCT templates, not employees
+        component_totals = {}
+        rows = []
+        total = Decimal("0")
+        for s in structs:
+            ctc = s.annual_ctc_amount or Decimal("0")
+            total += ctc
+            grade_name = s.template.job_grade.name if (s.template_id and s.template.job_grade_id) else "—"
+            rows.append({"employee": s.employee.name,
+                         "department": s.employee.department.name if s.employee.department else "—",
+                         "grade": grade_name, "annual_ctc": ctc,
+                         "monthly": (ctc / Decimal("12")).quantize(Decimal("0.01"))})
+            tid = s.template_id
+            if tid is None:
+                continue
+            if tid not in template_lines:
+                template_lines[tid] = list(SalaryStructureLine.objects.filter(template_id=tid)
+                                           .select_related("pay_component"))
+            for line in template_lines[tid]:
+                ct = line.pay_component.component_type
+                component_totals[ct] = component_totals.get(ct, Decimal("0")) + line.resolved_amount(ctc)
+        ctx["rows"] = rows
+        ctx["headcount"] = len(structs)
+        ctx["total_ctc"] = total
+        ctx["avg_ctc"] = round(total / len(structs), 2) if structs else 0
+        mix = sorted(component_totals.items(), key=lambda kv: kv[1], reverse=True)
+        ctx["mix_labels"] = json.dumps([comp_labels.get(k, k) for k, _ in mix])
+        ctx["mix_values"] = json.dumps([float(v) for _, v in mix])
+    return render(request, "hrm/reports/ctc.html", ctx)
+
+
+@tenant_admin_required
+def cost_center_report(request):
+    tenant = request.tenant
+    cc = _report_cost_center(request, tenant)
+    budget_year = _report_year(request)   # reused verbatim — safe int default to the current year
+    ctx = {"cost_center": cc, "cost_center_choices": _cc_choices(tenant), "budget_year": budget_year,
+           "rows": [], "unassigned": None, "total_budget": 0, "total_actual": 0}
+    if tenant is not None:
+        # 3 grouped queries + a Python fold (no per-cost-centre N+1):
+        profiles = list(CostCenterProfile.objects.filter(tenant=tenant)
+                        .select_related("org_unit", "owner__party").order_by("org_unit__name"))
+        cc_ids = {p.org_unit_id for p in profiles}
+        dept_to_cc = dict(DepartmentProfile.objects.filter(tenant=tenant, cost_center__isnull=False)
+                          .values_list("org_unit_id", "cost_center_id"))
+        org_gross = {r["employee__employment__org_unit_id"]: r for r in
+                     (Payslip.objects.filter(tenant=tenant, cycle__pay_date__year=budget_year)
+                      .values("employee__employment__org_unit_id")
+                      .annotate(gross=Sum("gross_pay"), hc=Count("employee_id", distinct=True)))}
+        org_employer = {r["payslip__employee__employment__org_unit_id"]: r["employer"] for r in
+                        (PayslipLine.objects.filter(tenant=tenant,
+                                                    payslip__cycle__pay_date__year=budget_year,
+                                                    contribution_side="employer")
+                         .values("payslip__employee__employment__org_unit_id")
+                         .annotate(employer=Sum("amount")))}
+        cc_actual = {}   # cost-centre org_unit_id (with a profile) -> {gross, hc, employer}
+        unassigned = {"gross": Decimal("0"), "hc": 0, "employer": Decimal("0")}
+        for org_id, row in org_gross.items():
+            cc_id = org_id if org_id in cc_ids else dept_to_cc.get(org_id)
+            target = (cc_actual.setdefault(cc_id, {"gross": Decimal("0"), "hc": 0, "employer": Decimal("0")})
+                      if cc_id in cc_ids else unassigned)
+            target["gross"] += row["gross"] or Decimal("0")
+            target["hc"] += row["hc"] or 0
+            target["employer"] += org_employer.get(org_id) or Decimal("0")
+        if cc:
+            profiles = [p for p in profiles if p.org_unit_id == cc.pk]
+        rows = []
+        total_budget = Decimal("0")
+        total_actual = Decimal("0")
+        for p in profiles:
+            actual = cc_actual.get(p.org_unit_id, {"gross": Decimal("0"), "hc": 0, "employer": Decimal("0")})
+            budget = p.budget_annual or Decimal("0")
+            variance = budget - actual["gross"]
+            rows.append({
+                "name": p.org_unit.name, "code": p.code,
+                "owner": p.owner.name if p.owner_id else "—",
+                "budget": p.budget_annual, "budget_year": p.budget_year,
+                "actual": actual["gross"], "headcount": actual["hc"], "employer": actual["employer"],
+                "variance": variance,
+                "variance_pct": round(variance / budget * 100, 1) if budget else None,
+                "budget_mismatch": p.budget_year is not None and p.budget_year != budget_year})
+            total_budget += budget
+            total_actual += actual["gross"]
+        ctx["rows"] = rows
+        ctx["total_budget"] = total_budget
+        ctx["total_actual"] = total_actual
+        if not cc and (unassigned["gross"] or unassigned["employer"] or unassigned["hc"]):
+            ctx["unassigned"] = unassigned
+    return render(request, "hrm/reports/cost_center.html", ctx)
