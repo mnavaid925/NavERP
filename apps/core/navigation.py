@@ -606,6 +606,17 @@ LIVE_LINKS = {
         "Maintenance": "hrm:assetmaintenance_list",                    # bullet (service/repair/AMC/warranty records)
         "Depreciation": "hrm:asset_list",                              # bullet (register w/ book-value column)
     },
+    # 3.34 Expense Management — 3 new models (ExpenseCategory, ExpenseClaim, ExpenseClaimLine).
+    # Approval Workflow deep-links to the "submitted" awaiting-action queue (manager_approved rows are one
+    # status-dropdown click away); Reimbursement to the "approved" ready-to-pay queue; Policy Compliance to
+    # the category list (where the limits/thresholds are configured — violations surface as claim badges).
+    "3.34": {
+        "Expense Categories": "hrm:expensecategory_list",
+        "Expense Claims": "hrm:expenseclaim_list",
+        "Approval Workflow": "hrm:expenseclaim_list?status=submitted",
+        "Reimbursement": "hrm:expenseclaim_list?status=approved",
+        "Policy Compliance": "hrm:expensecategory_list",
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
