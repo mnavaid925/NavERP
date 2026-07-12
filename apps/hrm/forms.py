@@ -2486,6 +2486,12 @@ class AssetForm(TenantModelForm):
         if method and method != "none" and not cleaned.get("useful_life_months"):
             self.add_error("useful_life_months",
                            "Useful life (months) is required for this depreciation method.")
+        # Don't let a hand-edit set the asset back to in_stock while an issued allocation is still
+        # open (that would desync current_holder + allow a double-issue) — return it properly first.
+        if self.instance.pk and cleaned.get("status") == "in_stock":
+            if self.instance.allocations.filter(status="issued").exists():
+                self.add_error("status", "Return the active allocation before setting this asset "
+                                         "back to in-stock.")
         return cleaned
 
 
