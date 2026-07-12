@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Respond · {{ survey.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ survey.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:survey_list' %}">Surveys</a><span class="sep">›</span><a href="{% url 'hrm:survey_detail' survey.pk %}">{{ survey.number }}</a><span class="sep">›</span><span>Respond</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if survey.is_anonymous %}<p class="text-muted" style="margin-bottom:.6rem;"><i data-lucide="shield"></i> This survey is <strong>anonymous</strong> — your name is not shown with your answers.</p>{% endif %}
+    {% if survey.description %}<p style="margin-bottom:.8rem;">{{ survey.description|linebreaksbr }}</p>{% endif %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit Response</button>
+        <a href="{% url 'hrm:survey_detail' survey.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
