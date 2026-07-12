@@ -576,6 +576,16 @@ LIVE_LINKS = {
         "Comp-off Report": "hrm:comp_off_report",        # bullet (earned OT-comp-leave vs availed comp-off leave)
         "Leave Trend": "hrm:leave_trend_report",         # bullet (monthly leave-days by type/department, top takers)
     },
+    # 3.31 Payroll Reports — derived, read-only, @tenant_admin_required (no models).
+    # payroll_reports_index is the landing hub, not itself a bullet. cost_center_report has no direct
+    # bullet either (NavERP.md's single "Cost Analysis" bullet covers both ctc_report and
+    # cost_center_report) — reachable via the hub + a cross-link on ctc_report.html.
+    "3.31": {
+        "Salary Register": "hrm:salary_register_report",  # bullet (per-cycle earnings/deductions/net grid)
+        "Tax Reports": "hrm:tax_report",                   # bullet (TDS/regime split, declarations, Form 16 register)
+        "Statutory Reports": "hrm:statutory_report",       # bullet (PF/ESI/PT/LWF register, masked employee coverage)
+        "Cost Analysis": "hrm:ctc_report",                 # bullet (structural CTC breakdown; cost_center_report cross-linked)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
