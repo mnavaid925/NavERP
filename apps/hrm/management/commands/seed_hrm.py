@@ -293,6 +293,7 @@ class Command(BaseCommand):
             self._seed_communication(tenant, flush=options["flush"])
             self._seed_analytics(tenant, flush=options["flush"])
             self._seed_assets(tenant, flush=options["flush"])
+            self._seed_expenses(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -3054,3 +3055,73 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Assets seeded for '{tenant.name}': {Asset.objects.filter(tenant=tenant).count()} assets, "
             f"{AssetMaintenance.objects.filter(tenant=tenant).count()} maintenance records."))
+
+    def _seed_expenses(self, tenant, *, flush):
+        """3.34 Expense Management - categories with policy limits + claims spanning the workflow
+        (runs after 3.33). Some seeded lines deliberately violate policy (over-limit / missing
+        receipt) to exercise the flag. Receipts left blank (no real files). Idempotent. ASCII-only."""
+        from apps.hrm.models import ExpenseCategory, ExpenseClaim, ExpenseClaimLine, EmployeeProfile
+        from apps.accounting.models import Currency
+
+        if flush:
+            ExpenseClaim.objects.filter(tenant=tenant).delete()  # cascades lines
+            ExpenseCategory.objects.filter(tenant=tenant).delete()
+        if ExpenseCategory.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Expense data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:3])
+        if not emps:
+            return
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        usd = Currency.objects.filter(code="USD").first()
+        today = timezone.localdate()
+        now = timezone.now()
+        day = datetime.timedelta(days=1)
+
+        travel, _ = ExpenseCategory.objects.get_or_create(
+            tenant=tenant, name="Travel", defaults={"code": "TRAVEL", "per_claim_limit": Decimal("500.00"),
+            "monthly_limit": Decimal("2000.00"), "requires_receipt_above": Decimal("25.00")})
+        food, _ = ExpenseCategory.objects.get_or_create(
+            tenant=tenant, name="Food & Meals", defaults={"code": "FOOD", "per_claim_limit": Decimal("100.00"),
+            "requires_receipt_above": Decimal("20.00")})
+        hotel, _ = ExpenseCategory.objects.get_or_create(
+            tenant=tenant, name="Accommodation", defaults={"code": "HOTEL", "per_claim_limit": Decimal("300.00"),
+            "requires_receipt_above": Decimal("0.00")})
+
+        def _line(claim, category, date, merchant, amount):
+            ExpenseClaimLine.objects.get_or_create(
+                tenant=tenant, claim=claim, category=category, merchant=merchant,
+                defaults={"expense_date": date, "amount": amount})
+
+        c1, created1 = ExpenseClaim.objects.get_or_create(
+            tenant=tenant, employee=emps[0], title="Client site visit - Lahore",
+            defaults={"purpose": "Two-day client visit for the Q3 rollout.", "currency": usd,
+                      "period_start": today - 10 * day, "period_end": today - 8 * day, "status": "draft"})
+        if created1:
+            _line(c1, travel, today - 10 * day, "City Cabs", Decimal("45.00"))
+            _line(c1, food, today - 9 * day, "Cafe Aroma", Decimal("150.00"))  # over the 100 food limit
+
+        c2, created2 = ExpenseClaim.objects.get_or_create(
+            tenant=tenant, employee=emps[1 % len(emps)], title="Vendor conference - Karachi",
+            defaults={"purpose": "Annual vendor summit attendance.", "currency": usd, "status": "submitted"})
+        if created2:
+            _line(c2, hotel, today - 6 * day, "Grand Hotel", Decimal("280.00"))  # no receipt, threshold 0
+            _line(c2, travel, today - 7 * day, "Airline Co", Decimal("220.00"))
+
+        c3, created3 = ExpenseClaim.objects.get_or_create(
+            tenant=tenant, employee=emps[2 % len(emps)], title="Regional sales trip",
+            defaults={"purpose": "Monthly regional sales visits.", "currency": usd, "status": "reimbursed",
+                      "manager_approver": actor, "manager_approved_at": now - 5 * day,
+                      "finance_approver": actor, "approved_at": now - 3 * day, "payment_method": "bank_transfer",
+                      "payment_reference": "TXN-100294", "reimbursed_at": now - 1 * day})
+        if created3:
+            # Amounts kept under the Travel/Food receipt thresholds (25/20) so this fully-approved,
+            # reimbursed claim is genuinely violation-free (a clean demo of the happy path).
+            _line(c3, travel, today - 12 * day, "Fuel Station", Decimal("20.00"))
+            _line(c3, food, today - 12 * day, "Roadside Diner", Decimal("15.00"))
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Expenses seeded for '{tenant.name}': {ExpenseCategory.objects.filter(tenant=tenant).count()} "
+            f"categories, {ExpenseClaim.objects.filter(tenant=tenant).count()} claims, "
+            f"{ExpenseClaimLine.objects.filter(tenant=tenant).count()} lines."))
