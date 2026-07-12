@@ -62,7 +62,7 @@
           <tr>
             <td>{{ r.employee.party.name }}</td>
             <td>{% if r.declaration %}{{ r.declaration.get_regime_elected_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-            <td><span class="badge {% if r.computation_type == 'final' %}badge-success{% else %}badge-info{% endif %}">{{ r.get_computation_type_display }}</span></td>
+            <td><span class="badge {% if r.computation_type == 'final' %}badge-green{% else %}badge-info{% endif %}">{{ r.get_computation_type_display }}</span></td>
             <td style="text-align:end;">{{ r.tax_payable|floatformat:2 }}</td>
             <td style="text-align:end;">{{ r.tax_paid_ytd|floatformat:2 }}</td>
             <td style="text-align:end;">{{ r.monthly_tds_amount|floatformat:2 }}</td>
@@ -89,7 +89,7 @@
         {% for r in rows %}
           <tr>
             <td>{{ r.employee.party.name }}</td>
-            <td>{% if r.statutory_return_id %}<span class="badge badge-success">Linked · {{ r.statutory_return.get_status_display }}</span>{% else %}<span class="badge badge-warning">Pending link</span>{% endif %}</td>
+            <td>{% if r.statutory_return_id %}<span class="badge badge-green">Linked · {{ r.statutory_return.get_status_display }}</span>{% else %}<span class="badge badge-amber">Pending link</span>{% endif %}</td>
             <td style="text-align:end;">{{ r.tax_payable|floatformat:2 }}</td>
             <td style="text-align:end;"><a href="{% url 'hrm:form16_partb' pk=r.pk %}" class="btn btn-icon btn-sm" title="View Form 16 Part B"><i data-lucide="file-text"></i></a></td>
           </tr>
