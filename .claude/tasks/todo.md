@@ -4694,3 +4694,440 @@ updated.
 **Next: 3.31 Payroll Reports** (Salary Register, Tax/TDS + Form 16, Statutory PF/ESI/PT, CTC cost analysis) —
 sources: PayrollCycle, Payslip, PayslipLine, TaxComputation, InvestmentDeclaration, StatutoryReturn,
 EmployeeStatutoryIdentifier, CostCenterProfile.
+
+---
+# Module 3 — HRM — Sub-module 3.31 Payroll Reports (hrm) — plan from research-hrm-3.31.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.30) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Same shape as 3.28/3.29/3.30: **derived, read-only,
+`@tenant_admin_required` report views — NO new models, NO migration, NO seeder.** Reuses `_report_period`,
+`_report_department`, `_dept_choices` (`apps/hrm/views.py:11932-11953`) and `_report_year`
+(`apps/hrm/views.py:12524`, added in 3.30) verbatim. Three NEW small helpers are needed because 3.31's
+filter dimensions don't exist yet: `_report_financial_year`/`_fy_choices` (Indian FY is a `CharField` like
+`"2025-26"`, not an int — `_report_year` cannot be reused for it), `_report_cost_center`/`_cc_choices`
+(mirrors `_report_department`/`_dept_choices` but `kind="cost_center"` — `core.OrgUnit`,
+`apps/core/models.py:42-63`), and `_report_job_grade`/`_grade_choices` (`hrm.JobGrade`,
+`apps/hrm/models.py:110-130`). Templates live in the existing flat `templates/hrm/reports/` folder
+(standalone pages, no entity sub-folder — Template Folder Structure rule 6). `EmployeeProfile.department`
+is a Python `@property` (`apps/hrm/models.py:343`), **not a DB column** — same recurring gotcha as
+3.28-3.30: every department aggregate/filter across all 6 views MUST use `employee__employment__org_unit`.
+
+## 0. The one non-obvious join — cost-center attribution (read this before writing `cost_center_report`)
+
+- [ ] **Reject the research doc's stated v1 simplification.** `research-hrm-3.31.md` assumed employees are
+  matched to a cost center via `Employment.org_unit` pointing directly at the `core.OrgUnit(kind=
+  "cost_center")` node. **Confirmed false against the actual seed data**
+  (`apps/hrm/management/commands/seed_hrm.py:613-634`): `Employment.org_unit` is always set to a
+  **department**-kind `OrgUnit`; cost centers are separate `OrgUnit(kind="cost_center")` nodes that a
+  department maps to via **`hrm.DepartmentProfile.cost_center`** (`apps/hrm/models.py:183-185`, FK to
+  `core.OrgUnit` with `limit_choices_to={"kind": "cost_center"}`). Matching only direct
+  `employee__employment__org_unit=cc` would return **zero actual spend for every cost center on the
+  seeded demo tenant** — a silent-empty-report bug, not a passing simplification.
+- [ ] **Correct v1 join (defensive OR, in case a future tenant DOES assign an employee's `org_unit`
+  directly to a cost-center node):** an employee's cost center is `employee__employment__org_unit` when
+  that unit's `kind == "cost_center"`, else `employee__employment__org_unit`'s `DepartmentProfile.cost_center`
+  when the unit is a department with a mapped cost center, else unmapped ("Unassigned").
+- [ ] **Implementation shape (3 queries total for the whole report, not N+1 per cost center):**
+  1. `dept_to_cc = dict(DepartmentProfile.objects.filter(tenant=tenant, cost_center__isnull=False)
+     .values_list("org_unit_id", "cost_center_id"))` — one query, department OrgUnit id -> cost-center
+     OrgUnit id.
+  2. `org_totals = {row["employee__employment__org_unit_id"]: row for row in
+     Payslip.objects.filter(tenant=tenant, cycle__pay_date__year=budget_year)
+     .values("employee__employment__org_unit_id")
+     .annotate(gross=Sum("gross_pay"), headcount=Count("employee_id", distinct=True))}` — one query,
+     grouped by the employee's actual org unit (department OR direct cost-center assignment).
+  3. `employer_totals` — the same `.values(...).annotate(employer=Sum("amount"))` grouped query over
+     `PayslipLine.objects.filter(tenant=tenant, payslip__cycle__pay_date__year=budget_year,
+     contribution_side="employer")` keyed on `payslip__employee__employment__org_unit_id` — one query.
+  4. Fold in Python: for each `org_unit_id` key in `org_totals`, resolve `cc_id = org_unit_id if org_unit_id
+     in cc_ids else dept_to_cc.get(org_unit_id)` (`cc_ids` = the set of already-fetched
+     `CostCenterProfile.org_unit_id`s for this tenant) and accumulate into a `cc_id -> {gross, headcount,
+     employer}` dict; `org_unit_id`s that resolve to neither roll into an explicit "Unassigned" bucket
+     (rendered, not dropped) so spend is never silently lost.
+- [ ] **`headcount` MUST use `Count("employee_id", distinct=True)`**, never a raw row count — an employee
+  appears once per `PayrollCycle` within the budget year, so a naive `.count()` on the grouped queryset
+  double/triple-counts headcount across multi-cycle years (the employee_id-keyed aggregation gotcha for
+  this view).
+
+## 1. Confirm NO new models — every source field/helper verified against apps/hrm/models.py
+
+- [ ] State in the commit message: **3.31 adds zero models, zero migrations, zero seed data.**
+- [ ] `PayComponent` (`apps/hrm/models.py:3269-3339`): `component_type` (earning/statutory_deduction/
+  voluntary_deduction/reimbursement/variable), `contribution_side` (employee/employer/both) — the
+  component-mix grouping key for `ctc_report`.
+- [ ] `SalaryStructureTemplate`/`SalaryStructureLine` (`3342-3412`): `SalaryStructureLine.resolved_amount
+  (ctc=None)` — for `fixed_amount` lines returns the flat amount **regardless of the `ctc` arg**; for
+  `pct_*` lines returns `ctc * pct / 100` where `ctc` defaults to `template.annual_ctc_amount` but the
+  caller MUST pass the employee's own `EmployeeSalaryStructure.annual_ctc_amount` to get the
+  employee-specific breakdown (`ctc_report`'s whole point — same override `Payslip.recompute()` already
+  uses at `apps/hrm/models.py:3616-3620`).
+- [ ] `EmployeeSalaryStructure` (`3415-3460`): `annual_ctc_amount`, `status` (active/superseded — exactly
+  one active row per employee, enforced in `clean()`), `template` FK, `effective_from`. `ctc_report`'s
+  base queryset.
+- [ ] `PayrollCycle` (`3472-3551`): `period_start`/`period_end`/`pay_date`, `status` (draft/
+  pending_approval/approved/rejected/locked), derived `@property`s `headcount`/`total_gross`/
+  `total_deductions`/`total_net` (each memoized per-instance via `_totals()`, `3526-3548`) — safe for a
+  single "latest cycle" index tile (2 queries), never call these `@property`s inside a per-row loop.
+- [ ] `Payslip` (`3554-3673`): `cycle`/`employee` FK, `gross_pay`/`total_deductions`/`net_pay` (positive
+  magnitudes, `editable=False`, derived), `lop_days`/`lop_amount`, `arrears_amount`, `bonus_amount`,
+  `on_hold`/`hold_reason`. `unique_together = (tenant, cycle, employee)` — one row per employee per cycle,
+  exactly the Salary Register grid's row shape.
+- [ ] `PayslipLine` (`3676-3704`): `payslip` FK, `component_name`, `component_type` (PayComponent's 5
+  types + `arrears`/`bonus`/`lop`), `amount` (positive), `contribution_side` (snapshotted — employer-side
+  statutory contributions do NOT reduce `net_pay`, they're a company cost only). The register's optional
+  component-type breakdown and `cost_report`'s `employer_cost` pattern (`views.py:12231-12232`) both key
+  off this.
+- [ ] `EmployeeStatutoryIdentifier` (`3876-3922`): `uan_number`/`pf_number`/`esi_number` (raw — NEVER
+  render), `masked_uan_number()`/`masked_pf_number()`/`masked_esi_number()` (last-4 only — MUST be used by
+  `statutory_report`), `pt_state`, `is_pf_applicable`/`is_esi_applicable`. **WARNING (carried from
+  research): these are redacted from AuditLog too — the report template must call the masked_* methods,
+  never `.uan_number`/`.pf_number`/`.esi_number` directly.**
+- [ ] `StatutoryReturn` (`3925-...`): `scheme` (pf/esi/pt/**tds_24q/tds_form16**/lwf — `statutory_report`
+  uses only pf/esi/pt/lwf; the two `tds_*` schemes belong to `tax_report`, exclude them from
+  `statutory_report`'s scheme dropdown), `period_start`/`period_end`, `employee_contribution_total`/
+  `employer_contribution_total`/`headcount` (all `editable=False`, derived by `recompute()`), `due_date`,
+  `status` (pending/filed/paid/late), `@property is_overdue` (`status=="pending" and due_date <
+  today` — replicate as a DB `Q()` for any count/aggregate, never call the Python property in a loop).
+- [ ] `TaxRegimeConfig`/`TaxSlabBand` (`4120-4179`): rate master only — `tax_report` reads
+  `InvestmentDeclaration.regime_elected`/`TaxComputation`, not these directly.
+- [ ] `InvestmentDeclaration` (`4182-4224`): `employee`/`financial_year`/`regime_elected`
+  (old/new)/`status` (draft/submitted/locked). `unique_together = (tenant, employee, financial_year)`.
+- [ ] `InvestmentDeclarationLine` (`4227-4281`): `section_code` (80c/80d/80d_parents/hra/
+  24b_home_loan_interest/80ccd_1b_nps/lta/80e_education_loan/other_chapter_via), `declared_amount`,
+  `verified_amount` (nullable — `Sum()` ignores NULLs, guard the aggregate with `or 0` when ALL rows are
+  unverified), `@property effective_amount`.
+- [ ] `TaxComputation` (`4325-...`): `employee`/`declaration`/`financial_year` FK+denormalized copy,
+  `computation_type` (provisional/final), `tax_payable`/`tax_paid_ytd`/`monthly_tds_amount` (all
+  `editable=False`, derived), `statutory_return` FK (**set only after `link_form16()` runs** — null means
+  "not yet linked/pending Form 16"). `unique_together = (tenant, employee, financial_year)`.
+  **`form16_partb(pk)` (`apps/hrm/views.py:7003`, url `hrm:form16_partb`) takes a `TaxComputation.pk`, NOT
+  a `StatutoryReturn.pk`** — the Form 16 register's row link is `{% url 'hrm:form16_partb' pk=row.pk %}`
+  where `row` is the `TaxComputation` instance, confirmed against the view signature.
+- [ ] `CostCenterProfile` (`apps/hrm/models.py:219-251`): `org_unit` (1:1 to `core.OrgUnit(kind=
+  "cost_center")`), `budget_annual`, `budget_year`, `owner`. Seeded (`seed_hrm.py:613-624`) with
+  `budget_year=today.year` at seed time — so on freshly seeded data `_report_year`'s "current calendar
+  year" default matches; document that this drifts (silently, by design) once a real year passes without
+  re-seeding — the template's "no budget row for this FY" guard (below) covers it.
+- [ ] `core.OrgUnit` (`apps/core/models.py:42-63`): `kind` choices include `"cost_center"` alongside
+  `"department"`; self-referential `parent` (multi-level cost-center roll-up is explicitly deferred, §
+  Later passes, matching the research call).
+- [ ] `hrm.DepartmentProfile.cost_center` (`apps/hrm/models.py:183-185`) — the department-to-cost-center
+  mapping FK the §0 join depends on. `hrm.JobGrade` (`apps/hrm/models.py:110-130`) — `ctc_report`'s grade
+  filter, via `SalaryStructureTemplate.job_grade`.
+- [ ] Confirm no field/method gap forces a 500: everything the 6 views need exists; div-by-zero (empty
+  tenant, no `PayrollCycle` rows, no resolvable financial year, zero `StatutoryReturn` rows for the
+  selected scheme, zero active `EmployeeSalaryStructure` rows, zero `CostCenterProfile` rows) is a
+  **view-logic** guard/empty-state (§2), not a data gap.
+
+## 2. Views (apps/hrm/views.py) — new `# --- 3.31 Payroll Reports ---` banner (append after the 3.30 block)
+
+- [ ] All 6 functions decorated `@tenant_admin_required`, `if tenant is not None:` guard pattern
+  (superuser `tenant=None` renders an empty/zero report, never `.filter(tenant=None)`).
+- [ ] New `_fy_choices(tenant)` / `_report_financial_year(request, tenant)`: `_fy_choices` returns
+  `list(InvestmentDeclaration.objects.filter(tenant=tenant).values_list("financial_year", flat=True)
+  .distinct().order_by("-financial_year"))` (tenant `None` -> `[]`); `_report_financial_year` reads
+  `?financial_year`, returns it only if it's literally in `_fy_choices(tenant)` (never trusts an
+  arbitrary string), else the latest (`choices[0]`) or `""` when the tenant has none yet — mirrors
+  `_report_year`'s "safe default to latest, never crash on garbage input" contract but for a `CharField`
+  FY instead of an int year.
+- [ ] New `_cc_choices(tenant)` / `_report_cost_center(request, tenant)`: identical shape to
+  `_dept_choices`/`_report_department` (`views.py:11932-11943`) but `kind="cost_center"` — tenant-scoped,
+  digit-checked pk, `.filter(tenant=tenant, kind="cost_center", pk=int(pk)).first()` else `None`
+  (IDOR-safe, same pattern).
+- [ ] New `_grade_choices(tenant)` / `_report_job_grade(request, tenant)`: `JobGrade.objects.filter(
+  tenant=tenant, is_active=True).order_by("level_order", "name")`; resolver mirrors `_report_department`
+  (digit-checked, tenant-scoped `JobGrade.objects.filter(tenant=tenant, pk=int(pk)).first()`).
+- [ ] Follow the **Filter Implementation Rules**: every `<select>` the templates need gets its choices
+  passed explicitly — `department_choices = _dept_choices(tenant)`, `cycle_choices` (list, salary
+  register/cost analysis), `financial_year_choices = _fy_choices(tenant)`, `scheme_choices` (statutory,
+  pf/esi/pt/lwf only — exclude the two `tds_*` codes), `status_choices` (statutory: `StatutoryReturn
+  .STATUS_CHOICES`), `cost_center_choices = _cc_choices(tenant)`, `grade_choices = _grade_choices(tenant)`.
+  FK/pk `<select>` comparisons use `|stringformat:"d"`; string fields (`scheme`, `status`,
+  `financial_year`) use `request.GET.x == value`.
+- [ ] `payroll_reports_index(request)` — `/hrm/reports/payroll/`. No filters. KPI tiles (mirrors
+  `hr_reports_index`/`leave_reports_index`): latest `PayrollCycle` headcount/`total_gross`/`total_net`
+  (guard `cycle is None` — no cycles yet), pending Form 16 count (`TaxComputation.objects.filter(
+  tenant=tenant, statutory_return__isnull=True).count()`), overdue statutory returns count
+  (`StatutoryReturn.objects.filter(tenant=tenant, status="pending", due_date__lt=today).count()` — the DB
+  form of `is_overdue`, not the Python property in a loop). Links to **all 5** drill-in reports (including
+  `cost_center_report`, which has no direct sidebar bullet — see §4). Render
+  `hrm/reports/payroll_index.html`.
+- [ ] `salary_register_report(request)` — `/hrm/reports/payroll/salary-register/`. Filters: `?cycle`
+  (mirrors `cost_report`'s exact pattern, `views.py:12215-12219`: `cycles = list(PayrollCycle.objects
+  .filter(tenant=tenant).order_by("-pay_date"))`, `cycle = next((c for c in cycles if str(c.pk) ==
+  cycle_pk), None) or (cycles[0] if cycles else None)` — default to the latest cycle by `pay_date`),
+  `?department` (`_report_department`), `?on_hold` (`"1"` -> `.filter(on_hold=True)`). Base:
+  `Payslip.objects.filter(tenant=tenant, cycle=cycle).select_related("employee__party",
+  "employee__employment__org_unit").order_by("employee__party__name")`, department/on_hold filters
+  applied when set. Grid columns: employee, `gross_pay`, `total_deductions`, `net_pay`, `lop_days`/
+  `lop_amount`, `arrears_amount`, `bonus_amount`, `on_hold` badge. Totals footer:
+  `payslips.aggregate(gross=Sum("gross_pay"), ded=Sum("total_deductions"), net=Sum("net_pay"),
+  arrears=Sum("arrears_amount"), bonus=Sum("bonus_amount"), lop=Sum("lop_amount"))`. Optional
+  component-type breakdown (per research's "columns pivoted from PayslipLine, grouped by
+  component_type"): ONE query, `PayslipLine.objects.filter(payslip__in=payslips).values("payslip_id",
+  "component_type").annotate(total=Sum("amount"))`, folded in Python into a `{payslip_id: {type: total}}`
+  dict for O(1) per-row template lookup — **never** re-query `.lines` per payslip row (N+1 guard).
+  **Employee_id-keyed gotcha**: the breakdown dict MUST key on `payslip_id` (the grid's row key), not
+  `employee_id` — one `Payslip` = one row = one employee for THIS cycle, but keying on employee_id would
+  silently misalign if the same employee ever appeared via a different join. Guard: `cycle is None` (no
+  `PayrollCycle` rows yet) renders the empty-state, never a 500. Render
+  `hrm/reports/salary_register.html`.
+- [ ] `tax_report(request)` — `/hrm/reports/payroll/tax/`. Filters: `?financial_year` (via
+  `_report_financial_year`, default latest present), `?department` (`_report_department`), `?regime`
+  (`old`/`new`, matched against `declaration__regime_elected`). Three sections on one page:
+  (a) **TDS summary**: `TaxComputation.objects.filter(tenant=tenant, financial_year=fy)
+  .select_related("employee__party", "employee__employment__org_unit", "declaration")`, dept/regime
+  filters applied, columns = employee, `declaration.get_regime_elected_display`, `tax_payable`,
+  `tax_paid_ytd`, `monthly_tds_amount`, `computation_type`; KPIs `total_payable`/`total_paid_ytd`
+  (`Sum`, `or 0`), `avg_payable` (guard `headcount == 0`), regime split
+  (`.values("declaration__regime_elected").annotate(count=Count("id"))`).
+  (b) **Investment declaration status funnel**: `InvestmentDeclaration.objects.filter(tenant=tenant,
+  financial_year=fy).values("status").annotate(count=Count("id"))` (draft/submitted/locked) PLUS a
+  "not filed" count = `EmployeeProfile.objects.filter(tenant=tenant).exclude(pk__in=
+  InvestmentDeclaration.objects.filter(tenant=tenant, financial_year=fy).values("employee_id")).count()`
+  (one `exclude`/subquery, not a per-employee loop). Optional section-wise sub-table:
+  `InvestmentDeclarationLine.objects.filter(tenant=tenant, declaration__financial_year=fy)
+  .values("section_code").annotate(declared=Sum("declared_amount"), verified=Sum("verified_amount"))` —
+  `verified` can be `None` per row (`Sum` skips NULLs; guard the row-level display with `or 0`).
+  (c) **Form 16 filing-status register**: derive directly from the already-fetched `TaxComputation`
+  queryset for the FY (no separate `StatutoryReturn` query/date-parsing) — `.select_related(
+  "statutory_return")`; status = "Linked/Filed" when `statutory_return_id` is set (show
+  `statutory_return.get_status_display()`) else "Pending link"; each row links to
+  `{% url 'hrm:form16_partb' pk=row.pk %}` (confirmed `TaxComputation.pk`, §1). **Gotcha (from seed
+  data):** `seed_hrm.py` only creates ONE `InvestmentDeclaration`/`TaxComputation` for ONE employee at
+  FY `"2025-26"` — the TDS table and Form 16 register will show exactly 1 row and the "not filed" count
+  will be `total_employees - 1` on freshly seeded demo data; this is a sparse-but-correct render, not an
+  empty-state condition (no special-case needed, just don't assume >1 row when smoke-testing). Guard:
+  `fy == ""` (no `InvestmentDeclaration` rows exist yet for this tenant at all) renders the full
+  empty-state. Render `hrm/reports/tax.html`.
+- [ ] `statutory_report(request)` — `/hrm/reports/payroll/statutory/`. Filters: `?scheme` (default
+  `"pf"` — pf/esi/pt/lwf only, exclude `tds_24q`/`tds_form16`), `_report_period` (date range on
+  `period_start`), `?status` (`StatutoryReturn.STATUS_CHOICES`). Register query:
+  `StatutoryReturn.objects.filter(tenant=tenant, scheme=scheme, period_start__gte=date_from,
+  period_start__lte=date_to)`, status filter applied when set. KPIs: `employee_contribution_total`/
+  `employer_contribution_total` (`Sum`, `or 0`), `headcount_total` (`Sum("headcount")` — **document this
+  is a sum ACROSS periods/returns, not a distinct-employee count**, since `StatutoryReturn.headcount` is
+  itself a period snapshot), overdue count (`Q(status="pending") & Q(due_date__lt=today)` — the DB form
+  of `is_overdue`, never the Python property in a per-row loop). Employee-coverage section:
+  `EmployeeStatutoryIdentifier.objects.filter(tenant=tenant).select_related("employee__party")` —
+  `is_pf_applicable`/`is_esi_applicable` counts, and a drill-down table rendering ONLY
+  `masked_uan_number()`/`masked_pf_number()`/`masked_esi_number()`/`pt_state` (WARNING: never
+  `.uan_number`/`.pf_number`/`.esi_number` raw — this is the module's one hard security rule, flag in a
+  code comment). **Gotcha (from seed data):** `seed_hrm.py` generates only ONE `StatutoryReturn`
+  (`scheme="pf"`) — `?scheme=esi`/`pt`/`lwf` returns ZERO rows on freshly seeded demo data; the register
+  section MUST render its `.empty-state` cleanly for those schemes (not a caveat banner like 3.30's
+  comp-off — this is a legitimately-empty, not "not configured", condition — just don't 500 or show
+  misleading zeros as if data exists). Render `hrm/reports/statutory.html`.
+- [ ] `ctc_report(request)` — `/hrm/reports/payroll/ctc/`. Filters: `?department`
+  (`_report_department`), `?grade` (`_report_job_grade`, matched against
+  `template__job_grade`). Base: `EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+  .select_related("employee__party", "employee__employment__org_unit", "template__job_grade")`,
+  dept/grade filters applied. Grid columns: employee, department, job grade, `annual_ctc_amount`,
+  monthly equivalent (`annual_ctc_amount / 12`, computed in the view — never stored). KPIs:
+  `total_annual_ctc` (`Sum`, `or 0`), `headcount` (`.count()`), `avg_ctc` (guard `headcount == 0`).
+  **Component-type mix chart** (Chart.js, the research's explicit "buildable now" call): cache each
+  distinct `template_id`'s lines ONCE (`SalaryStructureLine.objects.filter(template_id=t)
+  .select_related("pay_component")`, keyed in a `{template_id: [lines]}` dict built by iterating the
+  distinct `template_id`s in the base queryset — bounded by the number of DISTINCT templates, not the
+  number of employees), then for each `EmployeeSalaryStructure` row call
+  `line.resolved_amount(row.annual_ctc_amount)` for every cached line and accumulate into
+  `component_totals[pay_component.component_type]` — **never** re-query `.lines` per employee (N+1
+  guard, this is the one Python-level loop in the module and it must be template-bounded, not
+  employee-bounded). `json.dumps()` the component-type labels/totals for the Chart.js pie/bar,
+  `{{ x|safe }}` in the template, guarded by `typeof Chart === 'undefined'`. Guard: zero active
+  structures for the filter renders the empty-state. Render `hrm/reports/ctc.html` — includes a
+  cross-link button to `cost_center_report` (§4, not in `LIVE_LINKS` directly).
+- [ ] `cost_center_report(request)` — `/hrm/reports/payroll/cost-center/`. Filters: `?cost_center`
+  (`_report_cost_center`), `?budget_year` (**reuse `_report_year(request)` verbatim** — it already
+  defaults safely to the current calendar year and digit-guards garbage input; no new year-parsing
+  helper needed). Implementation: the §0 three-query fold (`dept_to_cc`, `org_totals`,
+  `employer_totals`), then per `CostCenterProfile` row: `actual_gross` from the folded `org_totals`
+  (`0` if the cost center had no matched spend this year), `variance_amount = (profile.budget_annual or
+  0) - actual_gross`, `variance_pct = round(variance_amount / profile.budget_annual * 100, 1) if
+  profile.budget_annual else None` (guard: `None` renders "no budget set", not a `ZeroDivisionError`),
+  a "budget row is for FY {budget_year_of_row}, not the selected {budget_year}" caveat when
+  `profile.budget_year != budget_year` (silent mismatch is worse than a visible caveat — see §1's
+  `budget_year` drift note). Label the actual figure "actual spend, cycles within FY {budget_year}" (not
+  "actual annual") since on freshly seeded demo data there is only ONE `PayrollCycle`, so a full-year
+  budget-vs-one-month-actual comparison would otherwise read as misleadingly under-budget. Optional:
+  reuse `cost_report`'s 12-cycle trend-chart pattern (`views.py:12239-12241`) scoped to the selected cost
+  center's matched employees, if useful — not required. Guard: zero `CostCenterProfile` rows for the
+  tenant renders the empty-state. Render `hrm/reports/cost_center.html`.
+- [ ] Every rate/percentage/average across all 6 views is guarded against a zero denominator (empty
+  tenant, zero payslips for the selected cycle, zero declarations for the selected FY, zero returns for
+  the selected scheme, zero active salary structures, zero/`None` `budget_annual`) — audit each before
+  considering a view done.
+
+## 3. URLs (apps/hrm/urls.py) — append after the 3.30 block (after line 966 `reports/leave/trend/`, before the closing `]` at line 967)
+
+- [ ] New `# 3.31 Payroll Reports` comment block:
+  ```python
+  # 3.31 Payroll Reports (derived, read-only, admin-only)
+  path("reports/payroll/", views.payroll_reports_index, name="payroll_reports_index"),
+  path("reports/payroll/salary-register/", views.salary_register_report, name="salary_register_report"),
+  path("reports/payroll/tax/", views.tax_report, name="tax_report"),
+  path("reports/payroll/statutory/", views.statutory_report, name="statutory_report"),
+  path("reports/payroll/ctc/", views.ctc_report, name="ctc_report"),
+  path("reports/payroll/cost-center/", views.cost_center_report, name="cost_center_report"),
+  ```
+- [ ] Confirm no path/name collision with `reports/hr/...` (3.28), `reports/attendance/...` (3.29),
+  `reports/leave/...` (3.30), or the existing 3.13-3.17 CRUD URLs (`payrollcycle_list`,
+  `payslip_list`/`payslip_detail`, `taxcomputation_list`, `statutoryreturn_list`, `form16_partb`,
+  `payment_register`, etc.) — distinct `reports/payroll/` segment, no clash.
+
+## 4. Navigation — apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.31"]` block (insert near the `"3.30"` entry), bullet text copied **verbatim**
+  from `NavERP.md:649-653`. **Only 4 bullets exist in NavERP.md for 5 non-index views** — "Cost Analysis"
+  covers both `ctc_report` (CTC breakdown) and `cost_center_report` (cost-center budget-vs-actual) per
+  the research's own "Cost Analysis, part 1 / part 2" framing; `ctc_report` gets the sidebar bullet,
+  `cost_center_report` is reachable from `payroll_reports_index`'s hub tiles and a cross-link on
+  `ctc_report`'s page (same non-bullet precedent as `leave_reports_index`'s "On Leave Today" tile in
+  3.30):
+  ```python
+  # 3.31 Payroll Reports — derived, read-only, @tenant_admin_required (no models).
+  # payroll_reports_index is the landing hub, not itself a bullet. cost_center_report has no direct
+  # bullet either (NavERP.md's single "Cost Analysis" bullet covers both ctc_report and
+  # cost_center_report) — reachable via the hub + a cross-link on ctc_report.html.
+  "3.31": {
+      "Salary Register": "hrm:salary_register_report",   # bullet (per-cycle earnings/deductions/net grid)
+      "Tax Reports": "hrm:tax_report",                    # bullet (TDS/regime split, declarations, Form 16 register)
+      "Statutory Reports": "hrm:statutory_report",        # bullet (PF/ESI/PT/LWF register, masked employee coverage)
+      "Cost Analysis": "hrm:ctc_report",                  # bullet (structural CTC breakdown; cost_center_report cross-linked)
+  },
+  ```
+
+## 5. Templates (templates/hrm/reports/)
+
+- [ ] `templates/hrm/reports/payroll_index.html` — standalone landing page, KPI tiles matching
+  `hr_index.html`/`leave_index.html`'s visual language (latest-cycle headcount/gross/net, pending Form 16
+  count, overdue statutory count), 5 tiles/links into every drill-in report including
+  `cost_center_report` (which has no sidebar bullet — this hub is its primary entry point).
+- [ ] `templates/hrm/reports/salary_register.html` — filter bar (`cycle` `<select>` from `cycle_choices`
+  using `|stringformat:"d"`, `department` `<select>`, `on_hold` checkbox reflecting `request.GET`), grid
+  table (one row per `Payslip`: gross/deductions/net/lop/arrears/bonus, `on_hold` badge), totals footer
+  row, optional expandable component-type breakdown per row, `.empty-state` when no `PayrollCycle` exists
+  or the selected cycle has zero payslips.
+- [ ] `templates/hrm/reports/tax.html` — filter bar (`financial_year` `<select>` from
+  `financial_year_choices`, `department`, `regime` `<select>` old/new), three stacked sections (TDS
+  summary table + KPI stat-cards, declaration status funnel with a "not filed" count, Form 16 register
+  table with a status badge + `{% url 'hrm:form16_partb' pk=row.pk %}` link per linked row), optional
+  section-wise (80C/HRA/etc.) declared-vs-verified sub-table, `.empty-state` when no `financial_year`
+  choices exist for the tenant.
+- [ ] `templates/hrm/reports/statutory.html` — filter bar (`scheme` `<select>` limited to pf/esi/pt/lwf,
+  `date_from`/`date_to`, `status` `<select>`), register table (`StatutoryReturn` rows: contribution
+  totals, headcount, due date, overdue flag badge, status), employee-coverage section (PF/ESI applicable
+  counts + a masked-identifier table — `masked_uan_number()`/`masked_pf_number()`/`masked_esi_number()`
+  ONLY, never raw), `.empty-state` per scheme when zero returns (expected for esi/pt/lwf on fresh seed
+  data — render cleanly, not as an error).
+- [ ] `templates/hrm/reports/ctc.html` — filter bar (`department`, `grade` `<select>` from
+  `grade_choices` using `|stringformat:"d"`), KPI stat-cards (total annual CTC, avg CTC, headcount),
+  per-employee grid (department, grade, annual CTC, monthly equivalent), Chart.js component-type mix
+  chart (`json.dumps()` + `{{ x|safe }}`, `typeof Chart === 'undefined'` guard), a "View Cost Center
+  Report" cross-link button, `.empty-state` when zero active salary structures match the filter.
+- [ ] `templates/hrm/reports/cost_center.html` — filter bar (`cost_center` `<select>` from
+  `cost_center_choices`, `budget_year`), per-cost-center table (budget_annual, actual spend "cycles
+  within FY", headcount, employer cost, variance amount + `%`, an explicit "no budget set for FY {year}"
+  cell state and a "budget row is for a different FY" caveat where applicable), an "Unassigned" spend row
+  when any matched org unit resolves to neither a cost center nor a mapped department,
+  `.empty-state` when zero `CostCenterProfile` rows exist for the tenant.
+- [ ] All 6 templates: filter `<form method="get">` re-submits every active param; `text-align:end`
+  (logical, not `right`) for numeric columns; `floatformat:2` on currency, `floatformat:1` on
+  days/percentages consistently; `{% csrf_token %}` n/a (GET-only, read-only pages, no POST forms); badge
+  values match the exact model `CHOICES` strings used in the view, with an `{% else %}`/default fallback.
+
+## 6. Admin
+
+- [ ] None — no new models, nothing to register in `apps/hrm/admin.py`.
+
+## 7. Verify
+
+- [ ] **No migration** — `python manage.py makemigrations hrm` produces **zero** changes.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep: `payroll_reports_index` + all 5 drill-in `hrm:*_report`/`ctc_report`/
+  `cost_center_report` URLs return 200 for a tenant admin (a) with no query params (defaults), (b) with a
+  full filter set (`cycle`/`department`/`on_hold`/`financial_year`/`regime`/`scheme`/`status`/
+  `date_from`/`date_to`/`grade`/`cost_center`/`budget_year`), and (c) with odd/nonsensical values (a
+  non-digit or cross-tenant `?cycle`/`?department`/`?grade`/`?cost_center`, an unknown `?financial_year`
+  string, an unknown `?scheme`, `date_from` after `date_to`) — must render an empty/zero report or
+  empty-state, never 500. No `{#`/`{% comment` leak markers in any rendered page.
+- [ ] **403 for non-admin**: a plain employee user hitting any of the 6 `hrm:*` payroll-report URLs gets
+  403 (`@tenant_admin_required`).
+- [ ] **Cross-tenant isolation**: a second tenant's `Payslip`/`TaxComputation`/`InvestmentDeclaration`/
+  `StatutoryReturn`/`EmployeeSalaryStructure`/`CostCenterProfile` data never appears in tenant A's
+  totals; a `?cycle`/`?department`/`?grade`/`?cost_center` belonging to another tenant is silently
+  ignored (falls back to "no filter"/latest-default), never leaks that tenant's name or numbers — same
+  IDOR-prevention pattern as `_report_department`.
+- [ ] **Masked-ID leak check**: grep the rendered `statutory.html` output (and its view context) for the
+  raw `uan_number`/`pf_number`/`esi_number` values seeded in `seed_hrm.py` (`UAN0000000001`,
+  `MH/BAN/1234567/000/0001`, `3411000001`, etc.) — they must NEVER appear verbatim in the HTML; only the
+  `masked_*()` last-4 forms are allowed. This is a hard security check, not a style nit.
+- [ ] **Div-by-zero / empty-state guards**: an empty tenant (zero `PayrollCycle`/`EmployeeSalaryStructure`
+  rows) renders every report's `.empty-state`/zero KPIs, not a 500 — specifically: salary register with
+  no cycles, tax report with no `financial_year` choices, statutory report per-scheme (esi/pt/lwf
+  expected empty on fresh seed data), CTC report with zero active structures, cost-center report with
+  zero `CostCenterProfile` rows or a `None`/zero `budget_annual`.
+- [ ] Sidebar shows all 4 3.31 bullet entries as **Live** for a tenant-admin login.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit,
+  no `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` ->
+  `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to check the §0 cost-center fold uses the 3-query grouped shape (not a
+    per-cost-center loop), `ctc_report`'s component-mix caches lines per distinct `template_id` (not per
+    employee), and the `EmployeeProfile.department` property gotcha is avoided everywhere.
+  - Expect `performance-reviewer` to confirm no N+1 across all 6 views, especially §0's cost-center
+    attribution fold and `ctc_report`'s `resolved_amount()` loop.
+  - Expect `security-reviewer` to confirm `@tenant_admin_required` on all 6 views, IDOR-safe
+    `department`/`grade`/`cost_center`/`cycle` resolution, and — specifically for this sub-module — that
+    `statutory.html` never renders a raw UAN/PF/ESI number (the masked-ID leak check from §7).
+  - Expect `test-writer` to cover: 403 for non-admin on every report URL; cross-tenant isolation; the
+    masked-identifier leak check as an automated assertion (not just a manual grep); div-by-zero/
+    empty-state on an empty tenant; the salary register's totals-footer math on a known fixture; the
+    §0 cost-center attribution fold (direct assignment AND department-mapped AND unassigned cases, each
+    landing in the right bucket); the `ctc_report` component-mix totals against a hand-computed
+    `resolved_amount()` fixture; the Form 16 register's link/no-link split; filter round-tripping
+    (cycle/financial_year/scheme/department/grade/cost_center narrows results).
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.31 Payroll Reports (0 new tables — derived
+  views)` section documenting the 6 routes, the 3 new helpers (`_report_financial_year`/`_fy_choices`,
+  `_report_cost_center`/`_cc_choices`, `_report_job_grade`/`_grade_choices`), the §0 cost-center
+  attribution join (and why the research's naive direct-assignment assumption was rejected), the
+  masked-identifier rule, and the "Cost Analysis" single-bullet/two-view mapping; update `LIVE_LINKS` for
+  `"3.31"`; update the Deferred section with this pass's carried-forward deferrals.
+- [ ] README.md — add `/3.31` to the Module 3 header line (`README.md:265`) + a bullet describing the 6
+  reports + the no-new-models note; refresh HRM test counts (`README.md:544`/`781`) after `test-writer`
+  runs.
+
+## Later passes / deferred (carried over from research-hrm-3.31.md)
+
+- **Payroll journal / GL-mapped export** (Gusto Payroll Journal, Paycom GL Concierge, Rippling GL sync) —
+  belongs to `accounting.PayrollRun`/`JournalEntry` per the existing "HRM never posts a JournalEntry"
+  convention (`PayrollCycle.accounting_payroll_run`) — not an HRM report.
+- **Form 16 PDF/certificate generation** — already flagged deferred in the existing `form16_partb`
+  docstring ("PDF rendering deferred"); 3.31 only adds the aggregate filing-status register, not the PDF.
+- **TDS Form 24Q e-filing/FVU validation, PF ECR file generation, ESI/PT challan file generation** —
+  statutory e-filing/government-portal integrations — out of a single Django pass; the models already
+  store enough (`StatutoryReturn.registration_number_used`, `payment_reference`) to add the export later.
+- **Auto-pay/auto-file to government portals** (RazorpayX, Zoho Payroll) — external
+  integration/compliance-vendor API — later.
+- **Multi-entity/multi-country consolidated G2N report** (Deel) — NavERP payroll is single-tenant/
+  single-currency in this pass — deferred.
+- **Job/project-based labor costing** (Rippling job profitability via GL) — needs project-costing tie-in
+  from a later Accounting/Projects pass — deferred.
+- **Custom/drag-drop report builder, prebuilt-report library at scale** — this is NavERP's 3.32 Analytics
+  Dashboard territory, not 3.31 — explicitly out of this pass.
+- **Payroll reconciliation vs. bank/vendor data** (Workday Global Payroll Reconciliation) — NavERP has no
+  external payroll vendor/bank feed to reconcile against yet — deferred until a bank-feed integration
+  exists.
+- **Multi-level cost-center roll-up** (department children rolling up to a parent cost center via
+  `OrgUnit.parent`, or a cost center's own children) — v1 `cost_center_report` matches direct
+  department-to-cost-center mapping only (§0); documented as a known simplification, not silently
+  dropped.
+- **A proper per-`PayslipLine` scheme tag** (replacing `StatutoryReturn`'s v1 `component_name`-substring
+  keyword matching) — a 3.14/3.15 model change, out of scope for a derived report pass; `statutory_report`
+  inherits whatever `StatutoryReturn.recompute()` already produced.
+
+## Review notes
+
+(filled in at the end)
