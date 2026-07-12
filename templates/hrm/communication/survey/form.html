@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Survey{% else %}New Survey{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Survey{% else %}New Survey{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:survey_list' %}">Surveys</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <p class="text-muted" style="margin-bottom:.6rem;"><i data-lucide="info"></i> <strong>Questions</strong> is a JSON list. Each item needs a <code>text</code> and a <code>type</code> of <code>rating</code> (0–10 scale), <code>text</code> (free text), or <code>single_choice</code> (add an <code>options</code> list). The survey is created as a draft; open it to collect responses.</p>
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'hrm:survey_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
