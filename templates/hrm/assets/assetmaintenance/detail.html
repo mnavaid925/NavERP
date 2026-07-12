@@ -5,9 +5,9 @@
     <div>
       <h1 class="page-title">
         {{ obj.number }}
-        {% if obj.status == 'completed' %}<span class="badge badge-green">Completed</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-amber">In Progress</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-red">Cancelled</span>{% else %}<span class="badge badge-info">Scheduled</span>{% endif %}
+        {% if obj.status == 'completed' %}<span class="badge badge-green">Completed</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-amber">In Progress</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-red">Cancelled</span>{% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
       </h1>
-      <div class="breadcrumb"><a href="{% url 'hrm:assetmaintenance_list' %}">Maintenance</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:assetmaintenance_list' %}">Maintenance</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
     <div class="page-actions">
       {% if obj.status == 'scheduled' or obj.status == 'in_progress' %}
