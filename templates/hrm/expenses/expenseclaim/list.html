@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Expense Claims{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Expense Claims</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Expense Management</span><span class="sep">›</span><span>Claims</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:expensecategory_list' %}" class="btn btn-outline"><i data-lucide="tags"></i> Categories</a>
+      <a href="{% url 'hrm:expenseclaim_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Claim</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / title...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if is_admin %}
+        <div class="form-group">
+          <select name="employee" class="form-select"><option value="">All employees</option>
+            {% for e in employees %}<option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:expenseclaim_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Title</th><th>Status</th><th style="text-align:end;">Total</th><th>Policy</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:expenseclaim_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.title }}</td>
+              <td>{% if obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% elif obj.status == 'submitted' %}<span class="badge badge-info">Submitted</span>{% elif obj.status == 'manager_approved' %}<span class="badge badge-amber">Manager Approved</span>{% elif obj.status == 'approved' %}<span class="badge badge-green">Approved</span>{% elif obj.status == 'reimbursed' %}<span class="badge badge-green">Reimbursed</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">Cancelled</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td style="text-align:end;">{{ obj.total_amount|floatformat:2 }}</td>
+              <td>{% if obj.has_violations %}<span class="badge badge-red">Flagged</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:expenseclaim_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' %}
+                  <a href="{% url 'hrm:expenseclaim_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:expenseclaim_delete' obj.pk %}" onsubmit="return confirm('Delete this draft claim?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="receipt"></i><h3>No expense claims yet</h3><p>Create a claim, add expense lines with receipts, and submit it for approval.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
