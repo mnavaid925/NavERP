@@ -6,7 +6,11 @@
       <h1 class="page-title">Executive Dashboard</h1>
       <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Analytics</span><span class="sep">›</span><span>Executive</span></div>
     </div>
-    <div class="page-actions"><a href="{% url 'hrm:hr_dashboard_list' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Custom Dashboards</a></div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:predictive_analytics' %}" class="btn btn-outline"><i data-lucide="activity"></i> Predictive</a>
+      <a href="{% url 'hrm:benchmarking' %}" class="btn btn-outline"><i data-lucide="scale"></i> Benchmarking</a>
+      <a href="{% url 'hrm:hr_dashboard_list' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Custom Dashboards</a>
+    </div>
   </div>
 
   <div class="card"><div class="card-body">
