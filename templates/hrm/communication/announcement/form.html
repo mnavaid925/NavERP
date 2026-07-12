@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Announcement{% else %}New Announcement{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Announcement{% else %}New Announcement{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:announcement_list' %}">Announcements</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <p class="text-muted" style="margin-bottom:.6rem;">Set the audience to a Department or Designation to target the announcement; leave it on "All Employees" for a company-wide post.</p>
+      <div class="form-grid">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save as Draft</button>
+        <a href="{% url 'hrm:announcement_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
