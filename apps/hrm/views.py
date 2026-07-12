@@ -384,7 +384,8 @@ def hrm_overview(request):
              "present_today": 0, "absent_today": 0, "pending_regularizations": 0,
              "pending_encashments": 0, "pending_timesheets": 0, "pending_overtime": 0,
              "open_requisitions": 0, "active_applications": 0, "new_candidates": 0,
-             "active_objectives": 0, "open_reviews": 0}
+             "active_objectives": 0, "open_reviews": 0,
+             "birthdays_this_month": 0, "pinned_announcements": 0}
     pending_requests, upcoming_holidays = [], []
     if tenant is not None:
         today = timezone.localdate()
@@ -414,6 +415,10 @@ def hrm_overview(request):
         # 3.19 performance review — reviews not yet acknowledged (in flight).
         stats["open_reviews"] = PerformanceReview.objects.filter(
             tenant=tenant).exclude(status="acknowledged").count()
+        # 3.27 communication hub — celebrations this month + pinned company announcements.
+        stats["birthdays_this_month"] = employees.filter(date_of_birth__month=today.month).count()
+        stats["pinned_announcements"] = Announcement.objects.filter(
+            tenant=tenant, status="published", is_pinned=True).count()
         pending_requests = (LeaveRequest.objects.filter(tenant=tenant, status="pending")
                             .select_related("employee__party", "leave_type")
                             .order_by("start_date")[:10])
