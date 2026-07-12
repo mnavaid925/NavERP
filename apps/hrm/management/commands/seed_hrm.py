@@ -156,6 +156,12 @@ from apps.hrm.models import (  # 3.26 Request Management (Self-Service)
     DocumentRequest,
     IdCardRequest,
 )
+from apps.hrm.models import (  # 3.27 Communication Hub
+    Announcement,
+    Suggestion,
+    Survey,
+    SurveyResponse,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -284,6 +290,7 @@ class Command(BaseCommand):
             self._seed_trainingadmin(tenant, flush=options["flush"])
             self._seed_selfservice(tenant, flush=options["flush"])
             self._seed_requests(tenant, flush=options["flush"])
+            self._seed_communication(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -319,6 +326,10 @@ class Command(BaseCommand):
                           # 3.26: request models (employee CASCADE; AssetRequest.allocation is
                           # SET_NULL vs AssetAllocation — order-agnostic) — wipe the requests before the
                           # 3.25 block for a tidy explicit teardown on --flush.
+                          # 3.27: communication rows (SurveyResponse before Survey/EmployeeProfile;
+                          # all employee/survey FKs CASCADE, so order-agnostic — listed for a tidy
+                          # explicit teardown before the 3.26 block).
+                          Suggestion, SurveyResponse, Survey, Announcement,
                           AssetRequest, IdCardRequest, DocumentRequest,
                           # 3.25: EmployeeInfoChangeRequest (SET_NULL content_type/requested_by/
                           # reviewed_by, no PROTECT dependents) + the 3 child tables (EmergencyContact/
@@ -2805,3 +2816,99 @@ class Command(BaseCommand):
             f"{DocumentRequest.objects.filter(tenant=tenant).count()} document requests, "
             f"{IdCardRequest.objects.filter(tenant=tenant).count()} ID card requests, "
             f"{AssetRequest.objects.filter(tenant=tenant).count()} asset requests."))
+
+    def _seed_communication(self, tenant, *, flush):
+        """3.27 Communication Hub - internal comms (runs after 3.26). Adds Announcements (all/
+        department/pinned), Surveys (one open with responses from seeded employees, one draft), and
+        Suggestions across the workflow states. Reuses existing EmployeeProfiles - creates NO new
+        person rows. Rows are seeded directly in their end-states (the implemented Suggestion carries
+        its stamps rather than replaying the view actions), matching the seeder's convention.
+        ASCII-only stdout (cp1252 bug)."""
+        if flush:
+            Suggestion.objects.filter(tenant=tenant).delete()
+            SurveyResponse.objects.filter(tenant=tenant).delete()
+            Survey.objects.filter(tenant=tenant).delete()
+            Announcement.objects.filter(tenant=tenant).delete()
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("party__name"))
+        if len(emps) < 2:
+            self.stdout.write(self.style.NOTICE(
+                f"Not enough employees for '{tenant.name}' - skipping communication seed."))
+            return
+        if Announcement.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.NOTICE(
+                f"Communication data already exists for '{tenant.name}'. Use --flush to re-seed."))
+            return
+
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        now = timezone.now()
+        today = timezone.localdate()
+        a_department = OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("name").first()
+
+        # --- Announcements (published all-audience + pinned / department-targeted / draft) ---
+        Announcement.objects.create(
+            tenant=tenant, title="Welcome to the new Communication Hub",
+            body="Announcements, surveys, celebrations and the suggestion box now live here. "
+                 "Check in regularly for company news and to share your ideas.",
+            category="news", audience_type="all", is_pinned=True, status="published",
+            published_at=now, author=actor)
+        if a_department is not None:
+            Announcement.objects.create(
+                tenant=tenant, title=f"{a_department.name}: quarterly town hall",
+                body="A reminder that the departmental town hall is scheduled for next week. "
+                     "Agenda and joining details to follow.",
+                category="event", audience_type="department", target_department=a_department,
+                status="published", published_at=now, author=actor,
+                expires_at=today + datetime.timedelta(days=30))
+        Announcement.objects.create(
+            tenant=tenant, title="Draft: updated leave policy (pending review)",
+            body="A revised leave policy is being finalized. This draft is not yet visible to employees.",
+            category="policy", audience_type="all", status="draft", author=actor)
+
+        # --- Surveys (one open with responses, one draft) ---
+        questions = [
+            {"text": "How likely are you to recommend us as a place to work?", "type": "rating"},
+            {"text": "What is one thing we could improve?", "type": "text"},
+            {"text": "Preferred work mode?", "type": "single_choice",
+             "options": ["Remote", "Hybrid", "Onsite"]},
+        ]
+        open_survey = Survey.objects.create(
+            tenant=tenant, title="Q3 Employee Engagement Pulse",
+            description="A short pulse survey - your feedback helps shape how we work.",
+            questions=questions, status="open", is_anonymous=True,
+            opens_at=today, closes_at=today + datetime.timedelta(days=14), author=actor)
+        SurveyResponse.objects.create(
+            tenant=tenant, survey=open_survey, employee=emps[0],
+            answers={"0": "9", "1": "More flexible hours.", "2": "Hybrid"})
+        SurveyResponse.objects.create(
+            tenant=tenant, survey=open_survey, employee=emps[1],
+            answers={"0": "7", "1": "Better onboarding.", "2": "Remote"})
+        Survey.objects.create(
+            tenant=tenant, title="Annual Culture Survey (draft)",
+            description="Being prepared for the annual review cycle.",
+            questions=[{"text": "How connected do you feel to the company mission?", "type": "rating"}],
+            status="draft", is_anonymous=False, author=actor)
+
+        # --- Suggestions (pending / accepted / implemented) ---
+        Suggestion.objects.create(
+            tenant=tenant, employee=emps[1], title="Add a quiet focus room",
+            body="A bookable quiet room would help with deep-focus work.",
+            category="workplace", status="pending")
+        Suggestion.objects.create(
+            tenant=tenant, employee=emps[0], title="Standardize the PR review checklist",
+            body="A shared checklist would make code reviews more consistent.",
+            category="process", status="approved", approver=actor, approved_at=now,
+            decision_note="Great idea - accepted, rolling out this quarter.")
+        Suggestion.objects.create(
+            tenant=tenant, employee=emps[0], title="Reusable water bottles for new hires",
+            body="Cut down on single-use plastic in the office.",
+            category="wellbeing", status="implemented", approver=actor, approved_at=now,
+            decision_note="Accepted.", implementation_note="Added to the onboarding welcome kit.",
+            implemented_at=now)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Communication seeded for '{tenant.name}': "
+            f"{Announcement.objects.filter(tenant=tenant).count()} announcements, "
+            f"{Survey.objects.filter(tenant=tenant).count()} surveys "
+            f"({SurveyResponse.objects.filter(tenant=tenant).count()} responses), "
+            f"{Suggestion.objects.filter(tenant=tenant).count()} suggestions."))
