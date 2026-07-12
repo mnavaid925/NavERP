@@ -13,7 +13,8 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.15 Statutory Compliance, 3.16 Tax & Investment, 3.17 Payout & Reports, 3.18 Goal Setting,
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
-3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports.** Reuses the
+3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
+3.30 Leave Reports.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -366,6 +367,25 @@ employees stay distinct; `overtime_report` headline figures **default-exclude dr
 single `TruncMonth`-grouped query; every rate guards div-by-zero. Templates: `attendance_index.html` +
 `attendance_summary/late_early/absenteeism/overtime.html`.
 
+### 3.30 Leave Reports (NO models — 5 derived read-only views) — `@tenant_admin_required`, reusing the 3.28
+report helpers (`_report_period`/`_report_department`/`_dept_choices`) + the 3.10 leave models, templates under
+`templates/hrm/reports/`. Views (`apps/hrm/views.py`, `# --- 3.30 Leave Reports ---`): `leave_reports_index`
+(`/hrm/reports/leave/`, KPI tiles) + `leave_register_report` (per-employee×type allocated/carried/**availed**/
+encashed/**balance** for a `?year`; totals), `leave_liability_report` (encashable-only, balance>0 rows; days ×
+per-day rate → estimated value; **rate priority** = latest approved/paid `LeaveEncashment.rate_per_day`, else
+**estimated** annual-CTC÷365 from the active `EmployeeSalaryStructure` [`is_estimate`/`est` badge], else `None`),
+`comp_off_report` (comp-off **earned** hrs from `OvertimeRequest(payout_method="comp_leave", approved)` vs
+**availed** days against a comp-off-named `LeaveType`; `comp_types_configured` gates the availed tally),
+`leave_trend_report` (approved-leave days over a `?date_from`/`?date_to` window; by-type; **top takers**; monthly
+`TruncMonth` trend). **Key helpers:** `_report_year` (int(?year) or current), `_leave_years` (distinct alloc years
+∪ current, via `.order_by().values_list().distinct()`), `_annotated_allocations` (annotates `used_db` via the
+shared `_used_days_subquery()` correlated subquery — NOT the per-row `.used_days` @property, avoids N+1;
+`select_related` party/leave_type/org_unit), `_alloc_balance(a)` = `allocated − used_db − encashed` (computed in
+Python, since `used_db` is a subquery alias other annotations can't reference). **Gotchas:** per-employee dicts
+(`top_takers`, comp-off `by_employee`) key by `employee_id` (not `party.name`, non-unique); liability rate uses
+`is None` (not truthy) so a genuine 0/day rate still renders; only encashable leave types count toward liability
+value. Templates: `leave_index.html` + `leave_register/leave_liability/comp_off/leave_trend.html`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -512,6 +532,11 @@ single `TruncMonth`-grouped query; every rate guards div-by-zero. Templates: `at
   (`/hrm/reports/attendance/`) + `hrm:attendance_summary_report` / `hrm:late_early_report` / `hrm:absenteeism_report`
   / `hrm:overtime_report` (`/hrm/reports/attendance/<name>/`). GET-filtered (`date_from`/`date_to`/`department`, +
   `status` on overtime); Utilization bullet reuses `hrm:timesheet_utilization_report` (3.11).
+- **Leave Reports (3.30):** all `@tenant_admin_required`, read-only (no models). `hrm:leave_reports_index`
+  (`/hrm/reports/leave/`) + `hrm:leave_register_report` (`/hrm/reports/leave/register/`) / `hrm:leave_liability_report`
+  (`/hrm/reports/leave/liability/`) / `hrm:comp_off_report` (`/hrm/reports/leave/comp-off/`) / `hrm:leave_trend_report`
+  (`/hrm/reports/leave/trend/`). GET-filtered (`year` on register/liability; `date_from`/`date_to` on comp-off/trend;
+  `department` + `leave_type` throughout); no POST/CRUD.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1029,6 +1054,9 @@ tenant and sees nothing.
 - 3.29 (all 5 bullets live): Attendance Summary → `hrm:attendance_summary_report`; Late/Early Departure →
   `hrm:late_early_report`; Absenteeism Report → `hrm:absenteeism_report`; Overtime Report → `hrm:overtime_report`;
   **Utilization Report → `hrm:timesheet_utilization_report`** (REUSE 3.11, not rebuilt). `LIVE_LINKS["3.29"]`.
+- 3.30 (all 4 bullets live): Leave Register → `hrm:leave_register_report`; Leave Liability → `hrm:leave_liability_report`;
+  Comp-off Report → `hrm:comp_off_report`; Leave Trend → `hrm:leave_trend_report`. `LIVE_LINKS["3.30"]`. The
+  `leave_reports_index` landing hub is NOT a bullet (reached from each report's Back link).
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
