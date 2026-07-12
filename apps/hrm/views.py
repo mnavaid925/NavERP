@@ -12513,3 +12513,188 @@ def overtime_report(request):
         ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
         ctx["trend_values"] = json.dumps([float(monthly[m] or 0) for m in months])
     return render(request, "hrm/reports/overtime.html", ctx)
+
+
+# =============================================================================================
+# 3.30 Leave Reports (derived, read-only — NO models). LeaveAllocation.used_days/balance are
+# derived; annotate via _used_days_subquery() (one SQL pass, no per-row @property N+1). Comp-off
+# has no dedicated model: "earned" = OvertimeRequest(payout_method="comp_leave"), "availed" = leave
+# against a comp-off LeaveType (name/code icontains "comp") — with an empty-state when none exist.
+# =============================================================================================
+def _report_year(request):
+    y = (request.GET.get("year") or "").strip()
+    return int(y) if y.isdigit() else timezone.localdate().year
+
+
+def _leave_years(tenant, year):
+    return sorted(set(LeaveAllocation.objects.filter(tenant=tenant).values_list("year", flat=True)) | {year},
+                  reverse=True)
+
+
+def _annotated_allocations(tenant, year):
+    return (LeaveAllocation.objects.filter(tenant=tenant, year=year)
+            .annotate(used_db=_used_days_subquery())
+            .annotate(balance_db=ExpressionWrapper(
+                F("allocated_days") - F("used_db") - F("encashed_days"), output_field=_DEC))
+            .select_related("employee__party", "leave_type", "employee__employment__org_unit"))
+
+
+@tenant_admin_required
+def leave_reports_index(request):
+    tenant = request.tenant
+    tiles = []
+    if tenant is not None:
+        today = timezone.localdate()
+        year = today.year
+        rows = list(_annotated_allocations(tenant, year).values("allocated_days", "used_db"))
+        total_alloc = sum(float(r["allocated_days"] or 0) for r in rows)
+        total_used = sum(float(r["used_db"] or 0) for r in rows)
+        on_leave = LeaveRequest.objects.filter(tenant=tenant, status="approved",
+                                               start_date__lte=today, end_date__gte=today).count()
+        pending = LeaveRequest.objects.filter(tenant=tenant, status="pending").count()
+        tiles = [
+            {"label": f"Allocated ({year})", "value": f"{total_alloc:.1f}d", "url": "hrm:leave_register_report", "icon": "calendar"},
+            {"label": f"Availed ({year})", "value": f"{total_used:.1f}d", "url": "hrm:leave_register_report", "icon": "calendar-check"},
+            {"label": "On Leave Today", "value": on_leave, "url": "hrm:leave_trend_report", "icon": "plane"},
+            {"label": "Pending Requests", "value": pending, "url": "hrm:leave_trend_report", "icon": "clock"},
+            {"label": "Leave Liability", "value": "View", "url": "hrm:leave_liability_report", "icon": "landmark"},
+        ]
+    return render(request, "hrm/reports/leave_index.html", {"tiles": tiles})
+
+
+@tenant_admin_required
+def leave_register_report(request):
+    tenant = request.tenant
+    year = _report_year(request)
+    dept = _report_department(request, tenant)
+    ctx = {"year": year, "department": dept, "department_choices": _dept_choices(tenant),
+           "year_choices": [year], "rows": [], "totals": {"allocated": 0, "used": 0, "balance": 0}}
+    if tenant is not None:
+        qs = _annotated_allocations(tenant, year)
+        if dept:
+            qs = qs.filter(employee__employment__org_unit=dept)
+        rows = [{"employee": a.employee.party.name, "leave_type": a.leave_type.name,
+                 "allocated": a.allocated_days, "carried": a.carried_forward,
+                 "used": a.used_db, "encashed": a.encashed_days, "balance": a.balance_db} for a in qs]
+        rows.sort(key=lambda r: (r["employee"], r["leave_type"]))
+        ctx["rows"] = rows
+        ctx["totals"] = {"allocated": round(sum(float(r["allocated"] or 0) for r in rows), 1),
+                         "used": round(sum(float(r["used"] or 0) for r in rows), 1),
+                         "balance": round(sum(float(r["balance"] or 0) for r in rows), 1)}
+        ctx["year_choices"] = _leave_years(tenant, year)
+    return render(request, "hrm/reports/leave_register.html", ctx)
+
+
+@tenant_admin_required
+def leave_liability_report(request):
+    tenant = request.tenant
+    year = _report_year(request)
+    dept = _report_department(request, tenant)
+    ctx = {"year": year, "department": dept, "department_choices": _dept_choices(tenant),
+           "year_choices": [year], "rows": [], "liability_days": 0, "liability_value": 0,
+           "is_estimate": False}
+    if tenant is not None:
+        qs = _annotated_allocations(tenant, year).filter(leave_type__encashable=True)
+        if dept:
+            qs = qs.filter(employee__employment__org_unit=dept)
+        # rate fallback: latest per-(employee,type) encashment rate, else CTC/365 estimate, else days-only.
+        enc_rates = {}
+        for e in LeaveEncashment.objects.filter(tenant=tenant).order_by("employee_id", "leave_type_id", "-year"):
+            enc_rates.setdefault((e.employee_id, e.leave_type_id), e.rate_per_day)
+        ctc = {s.employee_id: (s.annual_ctc_amount / Decimal("365"))
+               for s in EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+               if s.annual_ctc_amount}
+        rows, total_days, total_value, any_estimate = [], Decimal("0"), Decimal("0"), False
+        for a in qs:
+            bal = a.balance_db or Decimal("0")
+            if bal <= 0:
+                continue
+            estimate = False
+            rate = enc_rates.get((a.employee_id, a.leave_type_id))
+            if not rate:
+                rate = ctc.get(a.employee_id)
+                estimate = rate is not None
+            value = (bal * rate) if rate else None
+            any_estimate = any_estimate or estimate
+            total_days += bal
+            if value is not None:
+                total_value += value
+            rows.append({"employee": a.employee.party.name, "leave_type": a.leave_type.name,
+                         "balance": bal, "rate": rate, "value": value, "estimate": estimate})
+        rows.sort(key=lambda r: -(float(r["value"]) if r["value"] else 0))
+        ctx["rows"] = rows
+        ctx["liability_days"] = round(float(total_days), 1)
+        ctx["liability_value"] = round(float(total_value), 2)
+        ctx["is_estimate"] = any_estimate
+        ctx["year_choices"] = _leave_years(tenant, year)
+    return render(request, "hrm/reports/leave_liability.html", ctx)
+
+
+@tenant_admin_required
+def comp_off_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "earned_hours": 0, "earned_count": 0,
+           "availed_days": 0, "availed_count": 0, "by_employee": [], "comp_types_configured": False}
+    if tenant is not None:
+        earned = OvertimeRequest.objects.filter(
+            tenant=tenant, payout_method="comp_leave", status="approved",
+            date__gte=date_from, date__lte=date_to)
+        if dept:
+            earned = earned.filter(employee__employment__org_unit=dept)
+        earned_rows = list(earned.select_related("employee__party"))
+        ctx["earned_count"] = len(earned_rows)
+        ctx["earned_hours"] = round(sum(float(r.hours_claimed or 0) for r in earned_rows), 2)
+        comp_types = LeaveType.objects.filter(tenant=tenant).filter(
+            Q(code__icontains="comp") | Q(name__icontains="comp"))
+        ctx["comp_types_configured"] = comp_types.exists()
+        if comp_types.exists():
+            availed = LeaveRequest.objects.filter(
+                tenant=tenant, status="approved", leave_type__in=comp_types,
+                start_date__gte=date_from, start_date__lte=date_to)
+            if dept:
+                availed = availed.filter(employee__employment__org_unit=dept)
+            ctx["availed_count"] = availed.count()
+            ctx["availed_days"] = round(float(availed.aggregate(t=Sum("days"))["t"] or 0), 2)
+        emp = {}
+        for r in earned_rows:
+            e = emp.setdefault(r.employee_id, {"name": r.employee.party.name, "hours": 0.0})
+            e["hours"] += float(r.hours_claimed or 0)
+        ctx["by_employee"] = sorted(({"name": v["name"], "hours": round(v["hours"], 2)} for v in emp.values()),
+                                    key=lambda x: -x["hours"])[:15]
+    return render(request, "hrm/reports/comp_off.html", ctx)
+
+
+@tenant_admin_required
+def leave_trend_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ltype = (request.GET.get("leave_type") or "").strip()
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "leave_type": ltype,
+           "leave_type_choices": (LeaveType.objects.filter(tenant=tenant, is_active=True).order_by("name")
+                                  if tenant is not None else LeaveType.objects.none()),
+           "total_days": 0, "requests": 0, "by_type": [], "top_takers": [],
+           "trend_labels": "[]", "trend_values": "[]"}
+    if tenant is not None:
+        base = LeaveRequest.objects.filter(tenant=tenant, status="approved",
+                                           start_date__gte=date_from, start_date__lte=date_to)
+        if dept:
+            base = base.filter(employee__employment__org_unit=dept)
+        if ltype.isdigit():
+            base = base.filter(leave_type_id=int(ltype))
+        ctx["requests"] = base.count()
+        ctx["total_days"] = round(float(base.aggregate(t=Sum("days"))["t"] or 0), 1)
+        ctx["by_type"] = [{"name": r["leave_type__name"], "days": round(float(r["d"] or 0), 1)}
+                          for r in base.values("leave_type__name").annotate(d=Sum("days")).order_by("-d")]
+        ctx["top_takers"] = [{"name": r["employee__party__name"], "days": round(float(r["d"] or 0), 1)}
+                             for r in base.values("employee__party__name").annotate(d=Sum("days")).order_by("-d")[:10]]
+        monthly = {r["m"]: r["d"] for r in base.annotate(m=TruncMonth("start_date"))
+                   .values("m").annotate(d=Sum("days"))}
+        months = sorted(monthly)
+        ctx["trend_labels"] = json.dumps([m.strftime("%b %Y") for m in months])
+        ctx["trend_values"] = json.dumps([float(monthly[m] or 0) for m in months])
+    return render(request, "hrm/reports/leave_trend.html", ctx)
