@@ -261,6 +261,7 @@ html.dark .search-item:hover, html.dark .search-item.active { background: rgba(5
 .stat-icon.orange { background: var(--warn-bg);  color: var(--warn); }
 .stat-icon.purple { background: var(--info-bg);  color: var(--info); }
 .stat-icon.blue   { background: var(--brand-100);color: var(--brand-700); }
+.stat-icon.slate  { background: var(--slate-bg); color: var(--slate); }
 .stat-card .stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
 .stat-card .stat-label { color: var(--text-muted); font-size: .85rem; }
 
