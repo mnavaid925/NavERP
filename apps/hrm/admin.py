@@ -1336,3 +1336,38 @@ class AssetMaintenanceAdmin(admin.ModelAdmin):
     list_filter = ("maintenance_type", "status")
     search_fields = ("number", "vendor", "asset__name")
     raw_id_fields = ("asset",)
+
+
+from .models import ExpenseCategory, ExpenseClaim, ExpenseClaimLine  # 3.34 Expense Management
+
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "tenant", "per_claim_limit", "monthly_limit", "requires_receipt_above", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name", "code")
+
+
+class ExpenseClaimLineInline(admin.TabularInline):
+    model = ExpenseClaimLine
+    extra = 0
+    raw_id_fields = ("category",)
+
+
+@admin.register(ExpenseClaim)
+class ExpenseClaimAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "tenant", "employee", "status", "manager_approver", "finance_approver")
+    list_filter = ("status", "payment_method")
+    search_fields = ("number", "title")
+    raw_id_fields = ("employee", "manager_approver", "finance_approver", "currency")
+    readonly_fields = ("number", "manager_approver", "manager_approved_at", "finance_approver",
+                       "approved_at", "reimbursed_at")
+    inlines = [ExpenseClaimLineInline]
+
+
+@admin.register(ExpenseClaimLine)
+class ExpenseClaimLineAdmin(admin.ModelAdmin):
+    list_display = ("claim", "category", "expense_date", "merchant", "amount")
+    list_filter = ("category",)
+    search_fields = ("merchant", "description")
+    raw_id_fields = ("claim", "category")
