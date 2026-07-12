@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:survey_list' %}">Surveys</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if is_admin and obj.status == 'draft' %}
+        <a href="{% url 'hrm:survey_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:survey_delete' obj.pk %}" onsubmit="return confirm('Delete this survey?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+      {% if not is_admin and obj.status == 'open' and not has_responded %}
+        <a href="{% url 'hrm:survey_respond' obj.pk %}" class="btn btn-primary"><i data-lucide="clipboard-list"></i> Take Survey</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.6rem;">
+      {% if obj.status == 'open' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+      {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+      {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      {% if obj.is_anonymous %}<span class="badge badge-info">Anonymous</span>{% endif %}
+      {% if has_responded %}<span class="badge badge-green">You've responded</span>{% endif %}
+    </div>
+    {% if obj.description %}<p>{{ obj.description|linebreaksbr }}</p>{% endif %}
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Questions</dt><dd>{{ obj.questions|length }}</dd></div>
+      {% if is_admin %}<div class="detail-item"><dt>Responses</dt><dd>{{ obj.response_count }}</dd></div>{% endif %}
+      <div class="detail-item"><dt>Opens</dt><dd>{{ obj.opens_at|date:"Y-m-d"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Closes</dt><dd>{{ obj.closes_at|date:"Y-m-d"|default:"—" }}</dd></div>
+    </dl>
+    {% if is_admin %}
+      <div class="card" style="margin-top:.8rem;"><div class="card-header"><h2 class="card-title">Questions</h2></div><div class="card-body">
+        <ol style="margin:0; padding-left:1.2rem;">
+          {% for q in obj.questions %}<li style="margin-bottom:.3rem;">{{ q.text }} <span class="badge badge-slate">{{ q.type }}</span>{% if q.options %} <span class="text-muted">({{ q.options|join:", " }})</span>{% endif %}</li>{% endfor %}
+        </ol>
+      </div></div>
+    {% endif %}
+  </div></div>
+
+  {% if is_admin %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Workflow</h2></div>
+      <div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'hrm:survey_open' obj.pk %}" style="display:inline;" onsubmit="return confirm('Open this survey for responses?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Open</button></form>
+        {% elif obj.status == 'open' %}
+          <form method="post" action="{% url 'hrm:survey_close' obj.pk %}" style="display:inline;" onsubmit="return confirm('Close this survey?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="square"></i> Close</button></form>
+        {% endif %}
+        <a href="{% url 'hrm:survey_results' obj.pk %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> View Results</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'hrm:survey_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to surveys</a>
+{% endblock %}
