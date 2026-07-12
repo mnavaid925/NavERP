@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -540,9 +540,26 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `timesheet_utilization_report`. Monthly trends use a single `TruncMonth`-grouped query; every rate guards
   div-by-zero. Currency OT cost, scheduled-vs-worked hours, Bradford-Factor discipline, and muster-roll grids are
   deferred.
+- **3.30 Leave Reports** — **5 derived, read-only, `@tenant_admin_required` report views** (NO new models, reusing
+  the 3.28 helpers + the 3.10 leave models): `leave_reports_index` + `leave_register_report` (per-employee×type
+  allocated/carried/availed/encashed/balance for a `?year`), `leave_liability_report` (encashable-only, balance>0;
+  days × per-day rate → value; rate = latest approved/paid encashment, else annual-CTC÷365 estimate, else none),
+  `comp_off_report` (OT-comp-leave earned vs comp-off-leave availed), `leave_trend_report` (approved-leave days,
+  by-type, top-takers, monthly trend). Availed-days are annotated via a correlated subquery (`used_db`, no per-row
+  N+1); per-employee dicts key on `employee_id`, not the non-unique display name.
+- **3.31 Payroll Reports** — **6 derived, read-only, `@tenant_admin_required` report views** (NO new models,
+  aggregating the 3.13-3.16 payroll engine): `payroll_reports_index` + `salary_register_report` (per-`Payslip`
+  earnings/deductions/net grid for a `?cycle` + component-type breakdown), `tax_report` (TDS summary from
+  `TaxComputation`, investment-declaration funnel, section-wise declared/verified, regime split, Form 16
+  linked/pending register → `form16_partb`), `statutory_report` (PF/ESI/PT/LWF register from `StatutoryReturn` +
+  **masked** UAN/PF/ESI employee-coverage), `ctc_report` (structural annualized CTC from active
+  `EmployeeSalaryStructure` + component-type mix chart), and `cost_center_report` (budget-vs-actual per
+  `CostCenterProfile`, attributing each employee's department to its mapped cost centre via
+  `DepartmentProfile.cost_center`, unmapped spend surfaced in an **Unassigned** callout). GL posting, Form 16 PDF,
+  statutory e-filing (ECR/24Q), and multi-level cost-centre roll-up are deferred.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
-(**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **5,669-test** HRM suite
+(**8,316 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -776,7 +793,7 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **6,485 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **8,316 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
   **Accounting 212**, **HRM 3,838**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
