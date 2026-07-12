@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Leave Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Leave Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Leave Reports</span></div>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-bottom:1rem;">Leave register, liability, comp-off and trend analytics. Open a report to filter by year / date range and department.</p>
+
+  <div class="stat-grid">
+    {% for t in tiles %}
+      <a class="stat-card" href="{% url t.url %}">
+        <div class="stat-icon blue"><i data-lucide="{{ t.icon }}"></i></div>
+        <div class="stat-value">{{ t.value }}</div>
+        <div class="stat-label">{{ t.label }}</div>
+      </a>
+    {% empty %}
+      <div class="empty-state"><i data-lucide="calendar"></i><h3>No data yet</h3><p>Seed leave allocations and requests to populate these reports.</p></div>
+    {% endfor %}
+  </div>
+
+  <div class="card"><div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+    <a href="{% url 'hrm:leave_register_report' %}" class="btn btn-outline btn-sm"><i data-lucide="table"></i> Register</a>
+    <a href="{% url 'hrm:leave_liability_report' %}" class="btn btn-outline btn-sm"><i data-lucide="landmark"></i> Liability</a>
+    <a href="{% url 'hrm:comp_off_report' %}" class="btn btn-outline btn-sm"><i data-lucide="repeat"></i> Comp-off</a>
+    <a href="{% url 'hrm:leave_trend_report' %}" class="btn btn-outline btn-sm"><i data-lucide="trending-up"></i> Trend</a>
+  </div></div>
+{% endblock %}
