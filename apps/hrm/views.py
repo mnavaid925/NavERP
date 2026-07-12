@@ -12701,7 +12701,8 @@ def leave_trend_report(request):
         ctx["by_type"] = [{"name": r["leave_type__name"], "days": round(float(r["d"] or 0), 1)}
                           for r in base.values("leave_type__name").annotate(d=Sum("days")).order_by("-d")]
         ctx["top_takers"] = [{"name": r["employee__party__name"], "days": round(float(r["d"] or 0), 1)}
-                             for r in base.values("employee__party__name").annotate(d=Sum("days")).order_by("-d")[:10]]
+                             for r in base.values("employee_id", "employee__party__name")
+                             .annotate(d=Sum("days")).order_by("-d")[:10]]
         monthly = {r["m"]: r["d"] for r in base.annotate(m=TruncMonth("start_date"))
                    .values("m").annotate(d=Sum("days"))}
         months = sorted(monthly)
