@@ -957,4 +957,11 @@ urlpatterns = [
     path("reports/attendance/late-early/", views.late_early_report, name="late_early_report"),
     path("reports/attendance/absenteeism/", views.absenteeism_report, name="absenteeism_report"),
     path("reports/attendance/overtime/", views.overtime_report, name="overtime_report"),
+
+    # 3.30 Leave Reports (derived, read-only, admin-only)
+    path("reports/leave/", views.leave_reports_index, name="leave_reports_index"),
+    path("reports/leave/register/", views.leave_register_report, name="leave_register_report"),
+    path("reports/leave/liability/", views.leave_liability_report, name="leave_liability_report"),
+    path("reports/leave/comp-off/", views.comp_off_report, name="comp_off_report"),
+    path("reports/leave/trend/", views.leave_trend_report, name="leave_trend_report"),
 ]
