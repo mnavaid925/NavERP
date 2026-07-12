@@ -31,7 +31,7 @@
         <div class="stat-icon blue"><i data-lucide="{{ t.icon }}"></i></div>
         <div class="stat-value">{{ t.value }}</div>
         <div class="stat-label">{{ t.label }}</div>
-        {% if t.trend_values %}<canvas class="exec-spark" height="36" data-labels='{{ t.trend_labels }}' data-values='{{ t.trend_values }}'></canvas>{% endif %}
+        {% if t.trend_values %}<canvas class="exec-spark" style="display:block;width:100%;height:36px;margin-top:.5rem;" data-labels='{{ t.trend_labels }}' data-values='{{ t.trend_values }}'></canvas>{% endif %}
       </a>
     {% empty %}
       <div class="empty-state"><i data-lucide="gauge"></i><h3>No data yet</h3><p>Seed HRM data to populate the executive dashboard.</p></div>
@@ -74,7 +74,8 @@
         data: { labels: labels, datasets: [{ data: values, borderColor: '#2563eb',
                  backgroundColor: 'rgba(37,99,235,.12)', fill: true, tension: 0.3,
                  pointRadius: 0, borderWidth: 2 }] },
-        options: { responsive: false, plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false }, tooltip: { enabled: false } },
                    scales: { x: { display: false }, y: { display: false } } }
       });
     });
