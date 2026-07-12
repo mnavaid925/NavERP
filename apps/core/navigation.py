@@ -568,6 +568,14 @@ LIVE_LINKS = {
         "Overtime Report": "hrm:overtime_report",                # bullet (OT hours + pay-equivalent hours, no currency)
         "Utilization Report": "hrm:timesheet_utilization_report",  # bullet (REUSE 3.11 utilization report)
     },
+    # 3.30 Leave Reports — derived, read-only, @tenant_admin_required (no models). Leave balance is
+    # derived (allocated − used − encashed via _used_days_subquery). Comp-off has no first-class model.
+    "3.30": {
+        "Leave Register": "hrm:leave_register_report",   # bullet (employee×type grid: allocated/used/balance)
+        "Leave Liability": "hrm:leave_liability_report", # bullet (encashable balance × rate, CTC/365 estimate fallback)
+        "Comp-off Report": "hrm:comp_off_report",        # bullet (earned OT-comp-leave vs availed comp-off leave)
+        "Leave Trend": "hrm:leave_trend_report",         # bullet (monthly leave-days by type/department, top takers)
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
