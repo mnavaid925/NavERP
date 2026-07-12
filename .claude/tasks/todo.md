@@ -5793,4 +5793,43 @@ already-established HRM access-scope convention used throughout 3.18-3.27, e.g. 
 
 ## Review notes
 
-(filled in at the end)
+**3.32 Analytics Dashboard — BUILT & reviewed (2026-07-12).** 2 new models (`HRDashboard` +
+`HRDashboardWidget`, migration `0046`) mirroring CRM 1.6's `AnalyticsDashboard`/`DashboardWidget`, a new
+`apps/hrm/analytics.py` compute layer (16-metric catalog + `compute_widget` + the transparent 5-query
+`_attrition_risk_scores` heuristic), 3 derived `@tenant_admin_required` views (`executive_dashboard`,
+`predictive_analytics`, `benchmarking`), forms, urls, nav (`LIVE_LINKS["3.32"]`), admin, `_seed_analytics` (2 demo
+dashboards + 9 widgets), and 7 templates. The choice-list constants live in `models.py` (circular-import
+avoidance); `analytics.py` is self-contained (own `_month_end`/`_tenure_band`/`_headcount_at`) to avoid a
+views<->analytics cycle. Dashboard CRUD is owner-or-admin gated (stricter than the CRM precedent, which has none).
+README + SKILL.md updated; test counts refreshed to 5,754 HRM / 8,401 project-wide.
+
+**Review-agent findings applied:**
+- **code-reviewer:** fixed a `stat-icon amber` (undefined — L33 family) → purple/orange; used the `_ATT_NON_WORKING`
+  constant instead of hardcoded literals; `compute_widget` now ignores a non-positive gauge target; the avg-risk
+  KPI formats its score directly (not via `_years`).
+- **explorer:** dropped the orphaned `date_from`/`date_to` from `executive_dashboard`'s ctx; rendered the
+  computed-but-unshown `Medium` risk-band card; added Predictive + Benchmarking cross-links to the executive hub.
+- **frontend-reviewer:** the executive-tile sparkline is now responsive (100% width / 36px) instead of `responsive:
+  false` (which rendered at 300px and overflowed narrow tiles). Otherwise praised the Chart.js guard + owner-gating
+  as improvements over the CRM source.
+- **performance-reviewer:** `hr_dashboard_list` annotates `widget_total` (no per-row `widget_count` query);
+  `_turnover_rate` accepts a precomputed `hc_to` so `benchmarking` avoids 4 redundant `_headcount_at` queries;
+  added a `SeparationCase(tenant, actual_last_working_day)` index (migration `0047`) — the hot column for all the
+  3.28/3.32 attrition/headcount/turnover queries. Confirmed `_attrition_risk_scores` holds its 5-query budget (no
+  N+1) and the hiring-needs projection uses 3 grouped dicts.
+- **qa-smoke-tester:** 63/63 assertions passed (3 derived views across 14 param variants, both seeded dashboards'
+  detail with every widget computing, full CRUD round-trip, widget-form validation, non-admin 403 / owner-gating,
+  cross-tenant IDOR 404, superuser empty, idempotent seed) — no code changes needed.
+- **security-reviewer:** no exploitable issues ("cleanest sub-module reviewed to date") — tenant isolation,
+  owner-or-admin gating, no privilege escalation via the form (is_shared/is_default dropped for non-admins, owner
+  never form-bound), autoescaped templates + `json_script`, CSRF on POST mutations all confirmed. Applied its one
+  robustness nit: `_bench_target` now rejects non-finite (`nan`/`inf`) target floats.
+- **test-writer:** `apps/hrm/tests/test_analytics_dashboard.py` — 85 tests (access control, ownership/authorization
+  incl. private-dashboard 403 + privilege-escalation guard, compute_widget scalar/series/table + unknown-metric +
+  target<=0, widget-form metric×chart_type validation, `_attrition_risk_scores` 4-band math + <=6-query bound,
+  `hr_widget_move` normalization, derived-view aggregates, cross-tenant isolation, empty-tenant div-by-zero, CSRF,
+  query-count ceilings incl. list-does-not-grow-with-dashboard-count). All green; full HRM suite (5,754) green.
+
+**Next: 3.33 Asset Management** (Asset Register/Allocation/Return/Maintenance/Depreciation — note the existing
+onboarding `AssetAllocation` + `AssetRequest` to coordinate with, and that `apps/assets` [Module 11] doesn't exist
+yet).
