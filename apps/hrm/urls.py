@@ -950,4 +950,11 @@ urlpatterns = [
     path("reports/hr/diversity/", views.diversity_report, name="diversity_report"),
     path("reports/hr/cost/", views.cost_report, name="cost_report"),
     path("reports/hr/hiring/", views.hiring_report, name="hiring_report"),
+
+    # 3.29 Attendance Reports (derived, read-only, admin-only)
+    path("reports/attendance/", views.attendance_reports_index, name="attendance_reports_index"),
+    path("reports/attendance/summary/", views.attendance_summary_report, name="attendance_summary_report"),
+    path("reports/attendance/late-early/", views.late_early_report, name="late_early_report"),
+    path("reports/attendance/absenteeism/", views.absenteeism_report, name="absenteeism_report"),
+    path("reports/attendance/overtime/", views.overtime_report, name="overtime_report"),
 ]
