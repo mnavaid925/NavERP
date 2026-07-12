@@ -11641,7 +11641,10 @@ def announcement_archive(request, pk):
 # ---- Surveys --------------------------------------------------------------------------------
 @login_required
 def survey_list(request):
-    qs = Survey.objects.filter(tenant=request.tenant).annotate(response_count=Count("responses"))
+    # Explicit order_by — annotate() drops the Meta ordering, so pagination needs one (avoids the
+    # UnorderedObjectListWarning + inconsistent pages).
+    qs = (Survey.objects.filter(tenant=request.tenant)
+          .annotate(response_count=Count("responses")).order_by("-created_at"))
     is_admin = _is_admin(request.user)
     if not is_admin:
         qs = qs.filter(status__in=("open", "closed"))  # employees don't see drafts
