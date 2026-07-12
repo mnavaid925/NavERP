@@ -14,8 +14,7 @@
 
   {% if response_count == 0 %}
     <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No responses yet</h3><p>Results appear here as employees respond.</p></div></div></div>
-  {% endif %}
-
+  {% else %}
   {% for r in results %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">{{ forloop.counter }}. {{ r.text }}</h2><span class="badge badge-slate">{{ r.type }}</span></div>
@@ -24,11 +23,14 @@
           {% if r.average is not None %}<p style="font-size:1.4rem; margin:0;"><strong>{{ r.average }}</strong> <span class="text-muted" style="font-size:.9rem;">average ({{ r.count }} rating{{ r.count|pluralize }}, 0–10 scale)</span></p>
           {% else %}<p class="text-muted" style="margin:0;">No numeric ratings recorded.</p>{% endif %}
         {% elif r.type == 'single_choice' %}
-          <table class="table"><tbody>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>Option</th><th>Distribution</th><th style="text-align:end;">Count</th></tr></thead>
+            <tbody>
             {% for c in r.choices %}
-              <tr><td style="width:40%;">{{ c.option }}</td><td><div class="progress" style="min-width:120px;"><div class="progress-bar" style="width:{% widthratio c.count response_count 100 %}%;"></div></div></td><td style="width:60px; text-align:right;">{{ c.count }}</td></tr>
+              <tr><td style="width:40%;">{{ c.option }}</td><td><div class="progress" style="min-width:120px;"><div class="progress-bar" style="width:{% widthratio c.count response_count 100 %}%;"></div></div></td><td style="width:60px; text-align:end;">{{ c.count }}</td></tr>
             {% endfor %}
-          </tbody></table>
+            </tbody>
+          </table></div>
         {% else %}
           {% if r.answers %}
             <ul style="list-style:none; margin:0; padding:0;">
@@ -41,6 +43,7 @@
       </div>
     </div>
   {% endfor %}
+  {% endif %}
 
   <a href="{% url 'hrm:survey_detail' survey.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to survey</a>
 {% endblock %}
