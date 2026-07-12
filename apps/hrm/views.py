@@ -7,6 +7,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
   * the leave-request workflow actions (submit / approve / reject / cancel),
   * delete guards on records that anchor others (active employee, in-use leave type/shift).
 """
+import math
 import secrets
 from datetime import date as _date, timedelta
 from decimal import Decimal
@@ -13348,10 +13349,14 @@ def predictive_analytics(request):
 
 
 def _bench_target(request, key):
-    """Parse an optional ?target_* float, never trusting raw GET into a bare float()."""
+    """Parse an optional ?target_* float, never trusting raw GET into a bare float(). Rejects
+    non-finite values (nan/inf slip past float() and would drive a nonsensical RAG comparison)."""
     try:
         raw = request.GET.get(key)
-        return float(raw) if raw not in (None, "") else None
+        if raw in (None, ""):
+            return None
+        v = float(raw)
+        return v if math.isfinite(v) else None
     except (TypeError, ValueError):
         return None
 
