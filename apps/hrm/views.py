@@ -11914,3 +11914,367 @@ def suggestion_implement(request, pk):
     write_audit_log(request.user, obj, "update", {"action": "implement"})
     messages.success(request, f"Suggestion {obj.number} marked implemented.")
     return redirect("hrm:suggestion_detail", pk=obj.pk)
+
+
+# =============================================================================================
+# 3.28 HR Reports (derived, read-only — NO models). All @tenant_admin_required: these aggregate
+# company-wide salary / attrition / demographics, not an employee's own record. Every query is
+# tenant-scoped; rate calcs guard div-by-zero; ?department is resolved tenant-scoped (IDOR-safe).
+# =============================================================================================
+import json  # noqa: E402
+
+VOLUNTARY_SEPARATION_TYPES = {"resignation", "retirement", "contract_end"}
+TENURE_BANDS = ["<1 yr", "1-2 yrs", "3-5 yrs", "6-10 yrs", "10+ yrs", "Unknown"]
+AGE_BANDS = ["<25", "25-34", "35-44", "45-54", "55-64", "65+", "Unknown"]
+
+
+def _dept_choices(tenant):
+    if tenant is None:
+        return OrgUnit.objects.none()
+    return OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("name")
+
+
+def _report_department(request, tenant):
+    """Resolve ?department to a tenant-scoped department OrgUnit, or None (never trust the raw pk)."""
+    pk = (request.GET.get("department") or "").strip()
+    if tenant is not None and pk.isdigit():
+        return OrgUnit.objects.filter(tenant=tenant, kind="department", pk=int(pk)).first()
+    return None
+
+
+def _report_period(request):
+    """(date_from, date_to) from ?date_from/?date_to, defaulting to the trailing 12 months."""
+    today = timezone.localdate()
+    date_to = _parse_iso_date(request.GET.get("date_to", "")) or today
+    date_from = _parse_iso_date(request.GET.get("date_from", "")) or (date_to - timedelta(days=365))
+    if date_from > date_to:  # a nonsensical range yields an empty (not crashing) report
+        date_from = date_to
+    return date_from, date_to
+
+
+def _month_end(today, months_ago):
+    """Last calendar day of the month `months_ago` months before `today` (no calendar import)."""
+    total = today.year * 12 + (today.month - 1) - months_ago
+    y, m = divmod(total, 12)
+    m += 1
+    nxt = _date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)
+    return nxt - timedelta(days=1)
+
+
+def _age(dob, as_of):
+    if not dob:
+        return None
+    return as_of.year - dob.year - ((as_of.month, as_of.day) < (dob.month, dob.day))
+
+
+def _tenure_band(days):
+    if days is None:
+        return "Unknown"
+    years = days / 365.25
+    if years < 1:
+        return "<1 yr"
+    if years < 3:
+        return "1-2 yrs"
+    if years < 6:
+        return "3-5 yrs"
+    if years < 11:
+        return "6-10 yrs"
+    return "10+ yrs"
+
+
+def _age_band(years):
+    if years is None:
+        return "Unknown"
+    for cut, label in ((25, "<25"), (35, "25-34"), (45, "35-44"), (55, "45-54"), (65, "55-64")):
+        if years < cut:
+            return label
+    return "65+"
+
+
+def _headcount_at(tenant, as_of):
+    """Approx active headcount as of a date: hired on/before the date minus anyone separated by it."""
+    hired = EmployeeProfile.objects.filter(tenant=tenant, employment__hired_on__lte=as_of).count()
+    separated = (SeparationCase.objects.filter(tenant=tenant, actual_last_working_day__lte=as_of)
+                 .values("employee_id").distinct().count())
+    return max(0, hired - separated)
+
+
+@tenant_admin_required
+def hr_reports_index(request):
+    """HR Reports landing — 5 KPI tiles linking to each drill-in report (trailing-12-month basis)."""
+    tenant = request.tenant
+    today = timezone.localdate()
+    tiles = []
+    if tenant is not None:
+        active = EmployeeProfile.objects.filter(tenant=tenant, employment__status="active")
+        active_count = active.count()
+        year_start = _date(today.year, 1, 1)
+        seps_ytd = SeparationCase.objects.filter(
+            tenant=tenant, actual_last_working_day__gte=year_start, actual_last_working_day__lte=today).count()
+        avg_hc = (_headcount_at(tenant, year_start) + active_count) / 2 or 0
+        days = max(1, (today - year_start).days)
+        attrition = round((seps_ytd / avg_hc) * (365 / days) * 100, 1) if avg_hc else 0.0
+        female = active.filter(gender="female").count()
+        gender_pct = round(female / active_count * 100, 1) if active_count else 0.0
+        month_start = _date(today.year, today.month, 1)
+        latest_cycle = PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date").first()
+        if latest_cycle is not None:
+            mtd_cost = latest_cycle.total_gross
+        else:
+            annual = (EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+                      .aggregate(t=Sum("annual_ctc_amount"))["t"] or 0)
+            mtd_cost = round(annual / 12, 2)
+        filled = JobRequisition.objects.filter(
+            tenant=tenant, filled_at__isnull=False, filled_at__date__gte=today - timedelta(days=365))
+        ttf = [(r.filled_at.date() - r.created_at.date()).days for r in filled if r.filled_at and r.created_at]
+        avg_ttf = round(sum(ttf) / len(ttf)) if ttf else None
+        tiles = [
+            {"label": "Active Headcount", "value": active_count, "url": "hrm:headcount_report", "icon": "users"},
+            {"label": "Attrition (YTD, annualized)", "value": f"{attrition}%", "url": "hrm:attrition_report", "icon": "user-minus"},
+            {"label": "Female %", "value": f"{gender_pct}%", "url": "hrm:diversity_report", "icon": "pie-chart"},
+            {"label": "Latest Payroll Cost", "value": mtd_cost, "url": "hrm:cost_report", "icon": "banknote"},
+            {"label": "Avg Time-to-Fill", "value": (f"{avg_ttf} days" if avg_ttf is not None else "—"),
+             "url": "hrm:hiring_report", "icon": "user-plus"},
+        ]
+    return render(request, "hrm/reports/hr_index.html", {"tiles": tiles})
+
+
+@tenant_admin_required
+def headcount_report(request):
+    tenant = request.tenant
+    today = timezone.localdate()
+    as_of = _parse_iso_date(request.GET.get("as_of", "")) or today
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"as_of": as_of, "date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "active_count": 0, "joins": 0, "exits": 0,
+           "net_change": 0, "by_department": [], "by_designation": [], "by_type": [],
+           "trend_labels": "[]", "trend_values": "[]"}
+    if tenant is not None:
+        active = EmployeeProfile.objects.filter(tenant=tenant, employment__status="active")
+        if dept:
+            active = active.filter(employment__org_unit=dept)
+        ctx["active_count"] = active.count()
+        joins = EmployeeProfile.objects.filter(
+            tenant=tenant, employment__hired_on__gte=date_from, employment__hired_on__lte=date_to)
+        exits = SeparationCase.objects.filter(
+            tenant=tenant, actual_last_working_day__gte=date_from, actual_last_working_day__lte=date_to)
+        if dept:
+            joins = joins.filter(employment__org_unit=dept)
+            exits = exits.filter(employee__employment__org_unit=dept)
+        ctx["joins"], ctx["exits"] = joins.count(), exits.count()
+        ctx["net_change"] = ctx["joins"] - ctx["exits"]
+        ctx["by_department"] = list(active.values("employment__org_unit__name")
+                                    .annotate(count=Count("id")).order_by("-count"))
+        budgets = {d.id: d.budgeted_headcount for d in Designation.objects.filter(tenant=tenant)}
+        ctx["by_designation"] = [
+            {"name": r["designation__name"] or "Unassigned", "count": r["count"],
+             "budget": budgets.get(r["designation__id"])}
+            for r in active.values("designation__id", "designation__name")
+            .annotate(count=Count("id")).order_by("-count")]
+        ctx["by_type"] = list(active.values("employee_type").annotate(count=Count("id")).order_by("-count"))
+        labels, values = [], []
+        for i in range(11, -1, -1):
+            m_end = _month_end(today, i)
+            labels.append(m_end.strftime("%b %Y"))
+            values.append(_headcount_at(tenant, m_end))
+        ctx["trend_labels"], ctx["trend_values"] = json.dumps(labels), json.dumps(values)
+    return render(request, "hrm/reports/headcount.html", ctx)
+
+
+@tenant_admin_required
+def attrition_report(request):
+    tenant = request.tenant
+    today = timezone.localdate()
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    sep_type = (request.GET.get("separation_type") or "").strip()
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept, "separation_type": sep_type,
+           "department_choices": _dept_choices(tenant),
+           "separation_type_choices": SeparationCase.SEPARATION_TYPE_CHOICES,
+           "separations": 0, "turnover": 0.0, "voluntary_pct": 0.0, "involuntary_pct": 0.0,
+           "retention": 100.0, "by_department": [], "by_reason": [], "by_tenure": [],
+           "trend_labels": "[]", "trend_values": "[]"}
+    if tenant is not None:
+        seps = SeparationCase.objects.filter(
+            tenant=tenant, actual_last_working_day__gte=date_from, actual_last_working_day__lte=date_to)
+        if dept:
+            seps = seps.filter(employee__employment__org_unit=dept)
+        if sep_type:
+            seps = seps.filter(separation_type=sep_type)
+        seps = seps.select_related("employee__employment", "employee__party", "employee__employment__org_unit")
+        rows = list(seps)
+        total = len(rows)
+        ctx["separations"] = total
+        avg_hc = (_headcount_at(tenant, date_from) + _headcount_at(tenant, date_to)) / 2
+        days = max(1, (date_to - date_from).days)
+        ctx["turnover"] = round((total / avg_hc) * (365 / days) * 100, 1) if avg_hc else 0.0
+        ctx["retention"] = round(100 - ctx["turnover"], 1)
+        vol = sum(1 for r in rows if r.separation_type in VOLUNTARY_SEPARATION_TYPES)
+        ctx["voluntary_pct"] = round(vol / total * 100, 1) if total else 0.0
+        ctx["involuntary_pct"] = round((total - vol) / total * 100, 1) if total else 0.0
+        dept_counts, reason_counts, tenure_counts = {}, {}, {b: 0 for b in TENURE_BANDS}
+        for r in rows:
+            emp = r.employee
+            unit = emp.employment.org_unit.name if (emp.employment and emp.employment.org_unit_id) else "Unassigned"
+            dept_counts[unit] = dept_counts.get(unit, 0) + 1
+            reason = r.get_exit_reason_display() if r.exit_reason else "Unspecified"
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            hired = emp.employment.hired_on if emp.employment else None
+            days_t = (r.actual_last_working_day - hired).days if (hired and r.actual_last_working_day) else None
+            tenure_counts[_tenure_band(days_t)] += 1
+        ctx["by_department"] = sorted(({"name": k, "count": v} for k, v in dept_counts.items()),
+                                      key=lambda x: -x["count"])
+        ctx["by_reason"] = sorted(({"name": k, "count": v} for k, v in reason_counts.items()),
+                                  key=lambda x: -x["count"])
+        ctx["by_tenure"] = [{"name": b, "count": tenure_counts[b]} for b in TENURE_BANDS if tenure_counts[b]]
+        labels, values = [], []
+        n_months = min(12, max(1, days // 30 + 1))
+        for i in range(n_months - 1, -1, -1):
+            m_end = _month_end(today, i)
+            m_start = _date(m_end.year, m_end.month, 1)
+            labels.append(m_end.strftime("%b %Y"))
+            values.append(sum(1 for r in rows if r.actual_last_working_day
+                              and m_start <= r.actual_last_working_day <= m_end))
+        ctx["trend_labels"], ctx["trend_values"] = json.dumps(labels), json.dumps(values)
+    return render(request, "hrm/reports/attrition.html", ctx)
+
+
+@tenant_admin_required
+def diversity_report(request):
+    tenant = request.tenant
+    today = timezone.localdate()
+    as_of = _parse_iso_date(request.GET.get("as_of", "")) or today
+    dept = _report_department(request, tenant)
+    ctx = {"as_of": as_of, "department": dept, "department_choices": _dept_choices(tenant),
+           "total": 0, "avg_age": None, "avg_tenure": None, "by_gender": [], "by_age": [],
+           "by_tenure": [], "crosstab": [], "genders": []}
+    if tenant is not None:
+        active = (EmployeeProfile.objects.filter(tenant=tenant, employment__status="active")
+                  .select_related("employment", "employment__org_unit"))
+        if dept:
+            active = active.filter(employment__org_unit=dept)
+        rows = list(active)
+        total = len(rows)
+        ctx["total"] = total
+        gender_counts, age_counts = {}, {b: 0 for b in AGE_BANDS}
+        tenure_counts, crosstab = {b: 0 for b in TENURE_BANDS}, {}
+        ages, tenures, gender_labels = [], [], {g: lbl for g, lbl in EmployeeProfile.GENDER_CHOICES}
+        gender_order = []
+        for e in rows:
+            glabel = gender_labels.get(e.gender, "Not Specified") if e.gender else "Not Specified"
+            gender_counts[glabel] = gender_counts.get(glabel, 0) + 1
+            if glabel not in gender_order:
+                gender_order.append(glabel)
+            age = _age(e.date_of_birth, as_of)
+            if age is not None:
+                ages.append(age)
+            age_counts[_age_band(age)] += 1
+            hired = e.employment.hired_on if e.employment else None
+            td = (as_of - hired).days if hired else None
+            if td is not None:
+                tenures.append(td)
+            tenure_counts[_tenure_band(td)] += 1
+            unit = e.employment.org_unit.name if (e.employment and e.employment.org_unit_id) else "Unassigned"
+            crosstab.setdefault(unit, {}).setdefault(glabel, 0)
+            crosstab[unit][glabel] += 1
+        ctx["avg_age"] = round(sum(ages) / len(ages), 1) if ages else None
+        ctx["avg_tenure"] = round(sum(tenures) / len(tenures) / 365.25, 1) if tenures else None
+        ctx["genders"] = gender_order
+        ctx["by_gender"] = [{"name": g, "count": gender_counts[g],
+                             "pct": round(gender_counts[g] / total * 100, 1) if total else 0}
+                            for g in gender_order]
+        ctx["by_age"] = [{"name": b, "count": age_counts[b]} for b in AGE_BANDS if age_counts[b]]
+        ctx["by_tenure"] = [{"name": b, "count": tenure_counts[b]} for b in TENURE_BANDS if tenure_counts[b]]
+        ctx["crosstab"] = [{"dept": u, "counts": [crosstab[u].get(g, 0) for g in gender_order],
+                            "total": sum(crosstab[u].values())} for u in sorted(crosstab)]
+    return render(request, "hrm/reports/diversity.html", ctx)
+
+
+@tenant_admin_required
+def cost_report(request):
+    tenant = request.tenant
+    dept = _report_department(request, tenant)
+    ctx = {"department": dept, "department_choices": _dept_choices(tenant), "cycle": None,
+           "cycle_choices": PayrollCycle.objects.none(), "is_estimate": False, "total_cost": 0,
+           "avg_cost": 0, "employer_cost": 0, "by_department": [], "by_component": [],
+           "trend_labels": "[]", "trend_values": "[]", "headcount": 0}
+    if tenant is not None:
+        cycles = PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date")
+        ctx["cycle_choices"] = cycles
+        cycle_pk = (request.GET.get("cycle") or "").strip()
+        cycle = (cycles.filter(pk=int(cycle_pk)).first() if cycle_pk.isdigit() else None) or cycles.first()
+        ctx["cycle"] = cycle
+        if cycle is not None:
+            payslips = Payslip.objects.filter(tenant=tenant, cycle=cycle)
+            if dept:
+                payslips = payslips.filter(employee__employment__org_unit=dept)
+            ctx["total_cost"] = payslips.aggregate(t=Sum("gross_pay"))["t"] or 0
+            ctx["headcount"] = payslips.count()
+            ctx["avg_cost"] = round(ctx["total_cost"] / ctx["headcount"], 2) if ctx["headcount"] else 0
+            ctx["employer_cost"] = (PayslipLine.objects.filter(
+                payslip__cycle=cycle, payslip__tenant=tenant, contribution_side="employer")
+                .aggregate(t=Sum("amount"))["t"] or 0)
+            ctx["by_department"] = list(payslips.values("employee__employment__org_unit__name")
+                                        .annotate(total=Sum("gross_pay")).order_by("-total"))
+            ctx["by_component"] = [
+                {"name": dict(PayslipLine._meta.get_field("component_type").choices).get(r["component_type"], r["component_type"]),
+                 "total": r["total"]}
+                for r in PayslipLine.objects.filter(payslip__cycle=cycle, payslip__tenant=tenant)
+                .values("component_type").annotate(total=Sum("amount")).order_by("-total")]
+            recent = list(cycles.order_by("pay_date"))[-12:]
+            ctx["trend_labels"] = json.dumps([c.pay_date.strftime("%b %Y") for c in recent])
+            ctx["trend_values"] = json.dumps([float(c.total_gross) for c in recent])
+        else:
+            annual = (EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+                      .aggregate(t=Sum("annual_ctc_amount"))["t"] or 0)
+            hc = EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active").count()
+            if annual:
+                ctx["is_estimate"] = True
+                ctx["total_cost"] = round(annual / 12, 2)
+                ctx["headcount"] = hc
+                ctx["avg_cost"] = round(ctx["total_cost"] / hc, 2) if hc else 0
+    return render(request, "hrm/reports/cost.html", ctx)
+
+
+@tenant_admin_required
+def hiring_report(request):
+    tenant = request.tenant
+    date_from, date_to = _report_period(request)
+    dept = _report_department(request, tenant)
+    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
+           "department_choices": _dept_choices(tenant), "open_reqs": 0, "filled_reqs": 0,
+           "avg_ttf": None, "avg_tth": None, "offer_accept": None, "by_source": [], "funnel": [],
+           "by_department": []}
+    if tenant is not None:
+        reqs = JobRequisition.objects.filter(tenant=tenant)
+        if dept:
+            reqs = reqs.filter(department=dept)
+        ctx["open_reqs"] = reqs.filter(status__in=("approved", "posted")).count()
+        filled = reqs.filter(filled_at__isnull=False,
+                             filled_at__date__gte=date_from, filled_at__date__lte=date_to)
+        ctx["filled_reqs"] = filled.count()
+        ttf = [(r.filled_at.date() - r.created_at.date()).days for r in filled if r.filled_at and r.created_at]
+        ctx["avg_ttf"] = round(sum(ttf) / len(ttf)) if ttf else None
+        apps = JobApplication.objects.filter(tenant=tenant)
+        if dept:
+            apps = apps.filter(requisition__department=dept)
+        hired = apps.filter(stage="hired", hired_on__gte=date_from, hired_on__lte=date_to)
+        tth = [(a.hired_on - a.applied_at.date()).days for a in hired if a.hired_on and a.applied_at]
+        ctx["avg_tth"] = round(sum(tth) / len(tth)) if tth else None
+        hired_ct = hired.count()
+        rejected_ct = apps.filter(stage="rejected").count()  # approximation (no stage-history table)
+        denom = hired_ct + rejected_ct
+        ctx["offer_accept"] = round(hired_ct / denom * 100, 1) if denom else None
+        ctx["by_source"] = [
+            {"name": dict(apps.model._meta.get_field("source").choices).get(r["source"], r["source"]),
+             "count": r["count"]}
+            for r in apps.filter(stage="hired").values("source").annotate(count=Count("id")).order_by("-count")]
+        stage_counts = {r["stage"]: r["count"] for r in apps.values("stage").annotate(count=Count("id"))}
+        applied_total = sum(stage_counts.values()) or 1
+        ctx["funnel"] = [{"name": lbl, "count": stage_counts.get(code, 0),
+                          "pct": round(stage_counts.get(code, 0) / applied_total * 100, 1)}
+                         for code, lbl in APPLICATION_STAGE_CHOICES if stage_counts.get(code)]
+        ctx["by_department"] = list(hired.values("requisition__department__name")
+                                    .annotate(count=Count("id")).order_by("-count"))
+    return render(request, "hrm/reports/hiring.html", ctx)
