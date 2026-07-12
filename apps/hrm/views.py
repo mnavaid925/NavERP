@@ -12694,7 +12694,9 @@ def leave_trend_report(request):
                                            start_date__gte=date_from, start_date__lte=date_to)
         if dept:
             base = base.filter(employee__employment__org_unit=dept)
-        if ltype.isdigit():
+        if ltype.isdigit() and LeaveType.objects.filter(tenant=tenant, pk=int(ltype)).exists():
+            # Validate the leave-type pk belongs to this tenant before filtering (IDOR-safe,
+            # mirrors _report_department's ownership check) — a foreign pk is ignored, not applied.
             base = base.filter(leave_type_id=int(ltype))
         ctx["requests"] = base.count()
         ctx["total_days"] = round(float(base.aggregate(t=Sum("days"))["t"] or 0), 1)
