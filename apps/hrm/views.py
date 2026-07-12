@@ -12031,7 +12031,7 @@ def hr_reports_index(request):
             {"label": "Active Headcount", "value": active_count, "url": "hrm:headcount_report", "icon": "users"},
             {"label": "Attrition (YTD, annualized)", "value": f"{attrition}%", "url": "hrm:attrition_report", "icon": "user-minus"},
             {"label": "Female %", "value": f"{gender_pct}%", "url": "hrm:diversity_report", "icon": "pie-chart"},
-            {"label": "Latest Payroll Cost", "value": mtd_cost, "url": "hrm:cost_report", "icon": "banknote"},
+            {"label": "Latest Payroll Cost", "value": f"{mtd_cost:,.0f}", "url": "hrm:cost_report", "icon": "banknote"},
             {"label": "Avg Time-to-Fill", "value": (f"{avg_ttf} days" if avg_ttf is not None else "—"),
              "url": "hrm:hiring_report", "icon": "user-plus"},
         ]
