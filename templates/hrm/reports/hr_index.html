@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}HR Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">HR Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>HR Reports</span></div>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-bottom:1rem;">Company-wide HR analytics on a trailing-12-month basis. Open a report to filter by date range and department.</p>
+
+  <div class="stat-grid">
+    {% for t in tiles %}
+      <a class="stat-card" href="{% url t.url %}">
+        <div class="stat-icon blue"><i data-lucide="{{ t.icon }}"></i></div>
+        <div class="stat-value">{{ t.value }}</div>
+        <div class="stat-label">{{ t.label }}</div>
+      </a>
+    {% empty %}
+      <div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No data yet</h3><p>Seed employee, payroll and recruiting data to populate these reports.</p></div>
+    {% endfor %}
+  </div>
+
+  <div class="card"><div class="card-body" style="display:flex; flex-wrap:wrap; gap:.5rem;">
+    <a href="{% url 'hrm:headcount_report' %}" class="btn btn-outline btn-sm"><i data-lucide="users"></i> Headcount</a>
+    <a href="{% url 'hrm:attrition_report' %}" class="btn btn-outline btn-sm"><i data-lucide="user-minus"></i> Attrition</a>
+    <a href="{% url 'hrm:diversity_report' %}" class="btn btn-outline btn-sm"><i data-lucide="pie-chart"></i> Diversity</a>
+    <a href="{% url 'hrm:cost_report' %}" class="btn btn-outline btn-sm"><i data-lucide="banknote"></i> Cost</a>
+    <a href="{% url 'hrm:hiring_report' %}" class="btn btn-outline btn-sm"><i data-lucide="user-plus"></i> Hiring</a>
+  </div></div>
+{% endblock %}
