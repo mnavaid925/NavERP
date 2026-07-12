@@ -13244,10 +13244,9 @@ def hr_widget_move(request, pk, direction):
 @tenant_admin_required
 def executive_dashboard(request):
     tenant = request.tenant
-    date_from, date_to = _report_period(request)
+    date_from, date_to = _report_period(request)  # drives the attrition-window calc below
     dept = _report_department(request, tenant)
-    ctx = {"date_from": date_from, "date_to": date_to, "department": dept,
-           "department_choices": _dept_choices(tenant), "tiles": [], "alerts": []}
+    ctx = {"department": dept, "department_choices": _dept_choices(tenant), "tiles": [], "alerts": []}
     if tenant is not None:
         today = timezone.localdate()
         active = EmployeeProfile.objects.filter(tenant=tenant, employment__status="active")
