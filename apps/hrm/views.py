@@ -13436,3 +13436,216 @@ def benchmarking(request):
                     "department": r["employee__employment__org_unit__name"] or "Unassigned",
                     "avg_gross": r["avg_gross"] or 0, "headcount": r["headcount"]})
     return render(request, "hrm/analytics/benchmarking.html", ctx)
+
+
+# =============================================================================================
+# 3.33 Asset Management — Asset register (full CRUD + lifecycle) + AssetMaintenance (full CRUD).
+# Asset<->AssetAllocation status/current_holder sync lives ENTIRELY in AssetAllocation.save()
+# (_sync_linked_asset), so the assign/return actions here just create/update an allocation. Only a
+# "repair" maintenance record moves the asset in/out of "in_repair". @login_required (master-data
+# CRUD is not admin-gated here, matching the AssetAllocation/Designation convention).
+# =============================================================================================
+from .models import Asset, AssetMaintenance  # noqa: E402
+from .forms import AssetForm, AssetMaintenanceForm  # noqa: E402
+
+
+@login_required
+def asset_list(request):
+    return crud_list(
+        request,
+        Asset.objects.filter(tenant=request.tenant).select_related("location", "current_holder__party", "currency"),
+        "hrm/assets/asset/list.html",
+        search_fields=["number", "asset_tag", "name", "serial_number"],
+        filters=[("status", "status", False), ("category", "category", False),
+                 ("location", "location_id", True), ("current_holder", "current_holder_id", True)],
+        extra_context={"status_choices": Asset.STATUS_CHOICES,
+                       "category_choices": AssetAllocation.ASSET_CATEGORY_CHOICES,
+                       "locations": OrgUnit.objects.filter(tenant=request.tenant, kind="department").order_by("name"),
+                       "holders": EmployeeProfile.objects.filter(tenant=request.tenant)
+                       .select_related("party").order_by("party__name")},
+    )
+
+
+@login_required
+def asset_create(request):
+    return crud_create(request, form_class=AssetForm, template="hrm/assets/asset/form.html",
+                       success_url="hrm:asset_list")
+
+
+@login_required
+def asset_detail(request, pk):
+    obj = get_object_or_404(
+        Asset.objects.select_related("location", "current_holder__party", "currency"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/assets/asset/detail.html", {
+        "obj": obj,
+        "allocations": obj.allocations.select_related("employee__party", "issued_by").order_by("-issued_at"),
+        "maintenance_records": obj.maintenance_records.order_by("-scheduled_date"),
+        "assignable_employees": (EmployeeProfile.objects.filter(tenant=request.tenant)
+                                 .select_related("party").order_by("party__name")),
+    })
+
+
+@login_required
+def asset_edit(request, pk):
+    return crud_edit(request, model=Asset, pk=pk, form_class=AssetForm,
+                     template="hrm/assets/asset/form.html", success_url="hrm:asset_list")
+
+
+@login_required
+@require_POST
+def asset_delete(request, pk):
+    obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
+    if obj.status == "assigned":
+        messages.error(request, "Return this asset before deleting it.")
+        return redirect("hrm:asset_detail", pk=obj.pk)
+    return crud_delete(request, model=Asset, pk=pk, success_url="hrm:asset_list")
+
+
+@login_required
+@require_POST
+def asset_assign(request, pk):
+    obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
+    if obj.status != "in_stock":
+        messages.error(request, "Only an in-stock asset can be assigned.")
+        return redirect("hrm:asset_detail", pk=obj.pk)
+    emp_pk = (request.POST.get("employee") or "").strip()
+    employee = None
+    if emp_pk.isdecimal():
+        employee = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first()
+    if employee is None:
+        messages.error(request, "Select a valid employee to assign this asset to.")
+        return redirect("hrm:asset_detail", pk=obj.pk)
+    return_due = parse_date((request.POST.get("return_due_date") or "").strip() or "")
+    notes = (request.POST.get("notes") or "").strip()
+    with transaction.atomic():
+        allocation = AssetAllocation.objects.create(
+            tenant=request.tenant, employee=employee, asset=obj, asset_name=obj.name,
+            asset_category=obj.category, serial_number=obj.serial_number, asset_tag=obj.asset_tag,
+            status="issued", issued_at=timezone.now(), issued_by=request.user,
+            return_due_date=return_due, notes=notes)  # .save() syncs obj.status/current_holder
+    write_audit_log(request.user, obj, "update",
+                    {"action": "assign", "employee": str(employee), "allocation": allocation.number})
+    messages.success(request, f"Asset assigned to {employee}.")
+    return redirect("hrm:asset_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def asset_return(request, pk):
+    obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
+    allocation = (obj.allocations.filter(tenant=request.tenant, status="issued")
+                  .order_by("-issued_at").first())
+    if allocation is None:
+        messages.error(request, "This asset has no active allocation to return.")
+        return redirect("hrm:asset_detail", pk=obj.pk)
+    allocation.status = "returned"
+    allocation.returned_at = timezone.now()
+    allocation.save(update_fields=["status", "returned_at", "updated_at"])  # syncs obj back to in_stock
+    write_audit_log(request.user, obj, "update", {"action": "return", "allocation": allocation.number})
+    messages.success(request, "Asset returned to stock.")
+    return redirect("hrm:asset_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def asset_retire(request, pk):
+    obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
+    if obj.status not in ("in_stock", "in_repair"):
+        messages.error(request, "Return or repair-complete this asset before retiring it.")
+        return redirect("hrm:asset_detail", pk=obj.pk)
+    obj.status = "retired"
+    obj.current_holder = None
+    obj.save(update_fields=["status", "current_holder", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "retire"})
+    messages.success(request, "Asset retired.")
+    return redirect("hrm:asset_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def asset_dispose(request, pk):
+    obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
+    if obj.status != "retired":
+        messages.error(request, "Only a retired asset can be disposed.")
+        return redirect("hrm:asset_detail", pk=obj.pk)
+    obj.status = "disposed"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "dispose"})
+    messages.success(request, "Asset disposed.")
+    return redirect("hrm:asset_detail", pk=obj.pk)
+
+
+@login_required
+def assetmaintenance_list(request):
+    return crud_list(
+        request,
+        AssetMaintenance.objects.filter(tenant=request.tenant).select_related("asset"),
+        "hrm/assets/assetmaintenance/list.html",
+        search_fields=["number", "vendor", "asset__name"],
+        filters=[("status", "status", False), ("maintenance_type", "maintenance_type", False),
+                 ("asset", "asset_id", True)],
+        extra_context={"status_choices": AssetMaintenance.STATUS_CHOICES,
+                       "type_choices": AssetMaintenance.TYPE_CHOICES,
+                       "assets": Asset.objects.filter(tenant=request.tenant).order_by("name")},
+    )
+
+
+@login_required
+def assetmaintenance_create(request):
+    asset_pk = (request.GET.get("asset") or "").strip()
+    if request.method == "POST":
+        form = AssetMaintenanceForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.save()
+            # Only a repair takes the asset out of service.
+            if (obj.maintenance_type == "repair" and obj.status in ("scheduled", "in_progress")
+                    and obj.asset.status in ("in_stock", "assigned")):
+                obj.asset.status = "in_repair"
+                obj.asset.save(update_fields=["status", "updated_at"])
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Maintenance record logged.")
+            if asset_pk.isdecimal():
+                return redirect("hrm:asset_detail", pk=int(asset_pk))
+            return redirect("hrm:assetmaintenance_list")
+    else:
+        form = AssetMaintenanceForm(tenant=request.tenant,
+                                    initial={"asset": asset_pk if asset_pk.isdecimal() else None})
+    return render(request, "hrm/assets/assetmaintenance/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def assetmaintenance_detail(request, pk):
+    obj = get_object_or_404(AssetMaintenance.objects.select_related("asset"), pk=pk, tenant=request.tenant)
+    return render(request, "hrm/assets/assetmaintenance/detail.html", {"obj": obj})
+
+
+@login_required
+def assetmaintenance_edit(request, pk):
+    return crud_edit(request, model=AssetMaintenance, pk=pk, form_class=AssetMaintenanceForm,
+                     template="hrm/assets/assetmaintenance/form.html", success_url="hrm:assetmaintenance_list")
+
+
+@login_required
+@require_POST
+def assetmaintenance_delete(request, pk):
+    return crud_delete(request, model=AssetMaintenance, pk=pk, success_url="hrm:assetmaintenance_list")
+
+
+@login_required
+@require_POST
+def assetmaintenance_complete(request, pk):
+    obj = get_object_or_404(AssetMaintenance.objects.select_related("asset"), pk=pk, tenant=request.tenant)
+    if obj.status in ("scheduled", "in_progress"):
+        obj.status = "completed"
+        obj.completed_date = obj.completed_date or timezone.localdate()
+        obj.save(update_fields=["status", "completed_date", "updated_at"])
+        # A completed repair returns the asset to service.
+        if obj.maintenance_type == "repair" and obj.asset.status == "in_repair":
+            obj.asset.status = "assigned" if obj.asset.current_holder_id else "in_stock"
+            obj.asset.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, "Maintenance marked complete.")
+    return redirect("hrm:assetmaintenance_detail", pk=obj.pk)
