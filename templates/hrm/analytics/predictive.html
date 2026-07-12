@@ -24,6 +24,7 @@
   <div class="stat-grid">
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="activity"></i></div><div class="stat-value">{{ avg_risk|floatformat:1 }}</div><div class="stat-label">Avg Attrition Risk (0-100)</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="shield-check"></i></div><div class="stat-value">{{ band_counts.Low|default:0 }}</div><div class="stat-label">Low Risk</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="minus-circle"></i></div><div class="stat-value">{{ band_counts.Medium|default:0 }}</div><div class="stat-label">Medium Risk</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ band_counts.High|default:0 }}</div><div class="stat-label">High Risk</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ band_counts.Critical|default:0 }}</div><div class="stat-label">Critical Risk</div></div>
   </div>
