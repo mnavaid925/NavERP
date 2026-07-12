@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:expensecategory_list' %}">Expense Categories</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:expensecategory_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if line_count == 0 %}
+      <form method="post" action="{% url 'hrm:expensecategory_delete' obj.pk %}" onsubmit="return confirm('Delete this category?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Code</span><div>{{ obj.code|default:"-" }}</div></div>
+      <div><span class="text-muted">Per-Claim Limit</span><div>{% if obj.per_claim_limit != None %}{{ obj.per_claim_limit|floatformat:2 }}{% else %}No limit{% endif %}</div></div>
+      <div><span class="text-muted">Monthly Limit</span><div>{% if obj.monthly_limit != None %}{{ obj.monthly_limit|floatformat:2 }}{% else %}No limit{% endif %}</div></div>
+      <div><span class="text-muted">Receipt Required Above</span><div>{% if obj.requires_receipt_above != None %}{{ obj.requires_receipt_above|floatformat:2 }}{% else %}Never{% endif %}</div></div>
+      <div><span class="text-muted">GL Account Hint</span><div>{% if obj.gl_account_hint %}{{ obj.gl_account_hint }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Used By</span><div>{{ line_count }} expense line{{ line_count|pluralize }}</div></div>
+    </div>
+    {% if obj.description %}<p class="text-muted" style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+    {% if line_count %}<p class="form-help" style="margin-top:1rem;">This category is referenced by existing expense lines, so it can't be deleted — deactivate it instead.</p>{% endif %}
+  </div></div>
+{% endblock %}
