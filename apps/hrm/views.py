@@ -11496,12 +11496,14 @@ def celebrations(request):
     window = max(1, min(window, 90))
     CAP = 500
     today = timezone.localdate()
-    birthdays, anniversaries = [], []
+    birthdays, anniversaries, capped = [], [], False
     if tenant is not None:
         emps = list(
             EmployeeProfile.objects.filter(tenant=tenant)
             .exclude(employment__status="terminated")
-            .select_related("party", "employment", "employment__org_unit")[:CAP])
+            .select_related("party", "employment", "employment__org_unit")[:CAP + 1])
+        capped = len(emps) > CAP  # surface the truncation instead of silently dropping employees
+        emps = emps[:CAP]
         for e in emps:
             dept = e.employment.org_unit.name if (e.employment_id and e.employment.org_unit_id) else "—"
             if e.date_of_birth:
@@ -11520,6 +11522,7 @@ def celebrations(request):
         anniversaries.sort(key=lambda r: r["days"])
     return render(request, "hrm/communication/celebrations.html", {
         "birthdays": birthdays, "anniversaries": anniversaries, "window": window,
+        "capped": capped, "cap": CAP,
     })
 
 
@@ -11542,8 +11545,10 @@ def _announcement_targets(request, obj):
 
 @login_required
 def announcement_list(request):
-    qs = (Announcement.objects.filter(tenant=request.tenant)
-          .select_related("target_department", "target_designation", "author"))
+    # The list template renders no FK objects (only local fields + a status/pin badge); the audience
+    # filter uses target_*_id in WHERE, not the related objects — so no select_related is needed here
+    # (announcement_detail does its own select_related for the fields it shows).
+    qs = Announcement.objects.filter(tenant=request.tenant)
     is_admin = _is_admin(request.user)
     if is_admin:
         extra = {"is_admin": True,
