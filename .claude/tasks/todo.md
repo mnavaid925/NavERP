@@ -5833,3 +5833,637 @@ README + SKILL.md updated; test counts refreshed to 5,754 HRM / 8,401 project-wi
 **Next: 3.33 Asset Management** (Asset Register/Allocation/Return/Maintenance/Depreciation — note the existing
 onboarding `AssetAllocation` + `AssetRequest` to coordinate with, and that `apps/assets` [Module 11] doesn't exist
 yet).
+
+---
+# Module 3 — HRM — Sub-module 3.33 Asset Management (hrm) — plan from research-hrm-3.33.md (2026-07-13)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.32) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Unlike 3.28-3.32, this is a **full CRUD** sub-module: **2 new
+tenant-scoped models** (`Asset`, `AssetMaintenance`, new incremental migration `0048`) **plus a 1-field additive
+patch** to the existing `AssetAllocation` (`asset` FK, nullable — fulfils `AssetAllocation`'s own long-standing code
+NOTE, `apps/hrm/models.py:1511-1513`). Coordinates with 3 pieces of already-built code: `AssetAllocation` (3.3,
+`NUMBER_PREFIX="AST"`, full issue/return lifecycle), `AssetRequest` (3.26, request→approve→fulfil-into-
+`AssetAllocation`), and `ClearanceItem.mark_cleared` (3.4 offboarding, already flips a linked `AssetAllocation` to
+`returned` on clearance). NavERP.md 3.33 bullets (verbatim, `NavERP.md:661-666`): Asset Register, Asset Allocation,
+Asset Return, Maintenance, Depreciation.
+
+## 0. Corrections / decisions — read before writing code
+
+- [ ] **URL prefix collision:** `AssetAllocation` already owns the `assets/` URL prefix
+  (`apps/hrm/urls.py:289-295`: `assets/`, `assets/add/`, `assets/<int:pk>/`, …). The new `Asset` register CANNOT
+  reuse `assets/` — use **`asset-register/`** for `Asset` CRUD + lifecycle actions and **`asset-maintenance/`** for
+  `AssetMaintenance` CRUD (url **names** don't collide either way — `asset_list` != `assetallocation_list` — only
+  the path prefix does).
+- [ ] **Prefix collision (already flagged by research):** `AssetAllocation.NUMBER_PREFIX = "AST"` and NavERP.md
+  conceptually reserves `AST-` for Module 11's future `assets.Asset`. The new register model here is `hrm.Asset`
+  with `NUMBER_PREFIX = "ASSET"` (→ `ASSET-00001`) — never `AST`. `AssetMaintenance` is `NUMBER_PREFIX = "ASSETMNT"`
+  (→ `ASSETMNT-00001`).
+- [ ] **THE Asset<->AssetAllocation sync decision (do not scatter this across views):** sync lives in **ONE place —
+  an `AssetAllocation.save()` override** that calls a small `_sync_linked_asset()` helper whenever `self.asset_id`
+  is set, mapping `self.status` → `(Asset.status, Asset.current_holder)`:
+  `"issued"` → `("assigned", self.employee)`; `"returned"` → `("in_stock", None)`; `"damaged"` → `("in_repair",
+  None)`; `"lost"` → `("retired", None)`; `"pending"` → no-op. This is a deliberate **improvement over** the task
+  brief's suggestion to hook the sync into "the AssetAllocation issue/return views or the new Asset detail
+  assign/return actions" — a `save()` override transitively covers **all four** existing/new call sites
+  (`assetallocation_issue`, `assetallocation_return`, `clearanceitem_mark_cleared`, and the new `asset_assign`/
+  `asset_return`) **plus** direct edits via `AssetAllocationForm`/admin, with **zero line changes** required inside
+  `assetallocation_issue`/`assetallocation_return`/`clearanceitem_mark_cleared` (they already call `.save(
+  update_fields=[...])`, which now transparently triggers the sync). Guarded so it's a no-op when `asset_id` is
+  `None` (every pre-3.33 `AssetAllocation` row and every `assetrequest_fulfill`-created row, which still doesn't
+  pick a specific register row this pass — see Later passes) — **existing `AssetAllocation` behavior for rows
+  without an `asset` FK is 100% unchanged.**
+- [ ] **Maintenance↔Asset.status sync (new, no precedent to follow):** ONLY `maintenance_type="repair"` moves the
+  asset in and out of service — `assetmaintenance_create` flips `Asset.status → "in_repair"` when creating a
+  `status in ("scheduled","in_progress")` repair record for an asset currently `in_stock`/`assigned` (remembers
+  nothing extra — `current_holder` is left untouched so a repaired asset returns to its prior holder);
+  `assetmaintenance_complete` flips it back to `"assigned"` (if `current_holder` is still set) or `"in_stock"`
+  (else) — but only when `maintenance_type == "repair"` and the asset is currently `"in_repair"`. Preventive/
+  inspection/AMC/warranty-claim records do **not** change `Asset.status` (documented scope: they don't
+  categorically take equipment out of service the way an active repair does).
+- [ ] **`vendor_name` on `Asset` (research suggested, task brief's field list omits it) — deliberately NOT added**
+  this pass to match the exact field list scoped for this build; `AssetMaintenance.vendor` already covers the
+  service-vendor need. Noted under Later passes.
+
+## 1. Models (apps/hrm/models.py — append near AssetAllocation; new migration `0048`)
+
+- [ ] **`Asset(TenantNumbered)`** — `NUMBER_PREFIX = "ASSET"`. The central register (Asset Register bullet).
+  ```python
+  class Asset(TenantNumbered):
+      NUMBER_PREFIX = "ASSET"
+
+      STATUS_CHOICES = [
+          ("in_stock", "In Stock"), ("assigned", "Assigned"), ("in_repair", "In Repair"),
+          ("retired", "Retired"), ("disposed", "Disposed"),
+      ]
+      CONDITION_CHOICES = [
+          ("new", "New"), ("good", "Good"), ("fair", "Fair"), ("poor", "Poor"), ("damaged", "Damaged"),
+      ]
+      DEPRECIATION_METHOD_CHOICES = [
+          ("none", "No Depreciation"), ("straight_line", "Straight Line"),
+          ("declining_balance", "Declining Balance (20%/yr)"),
+      ]
+
+      asset_tag = models.CharField(max_length=100, blank=True, db_index=True)
+      name = models.CharField(max_length=255)
+      # Reuses AssetAllocation.ASSET_CATEGORY_CHOICES verbatim — same taxonomy AssetRequest already follows.
+      category = models.CharField(max_length=30, choices=AssetAllocation.ASSET_CATEGORY_CHOICES, default="other")
+      manufacturer = models.CharField(max_length=120, blank=True)
+      model_number = models.CharField(max_length=120, blank=True)
+      serial_number = models.CharField(max_length=100, blank=True)
+      status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="in_stock")
+      condition = models.CharField(max_length=10, choices=CONDITION_CHOICES, default="good")
+      purchase_date = models.DateField(null=True, blank=True)
+      purchase_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_assets")
+      warranty_expiry = models.DateField(null=True, blank=True)
+      location = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_assets")
+      # Denormalized convenience pointer — kept in sync by AssetAllocation.save()'s _sync_linked_asset(), never
+      # hand-edited directly by a user (excluded from AssetForm, see §3).
+      current_holder = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name="assets_held")
+      depreciation_method = models.CharField(max_length=20, choices=DEPRECIATION_METHOD_CHOICES, default="none")
+      useful_life_months = models.PositiveIntegerField(null=True, blank=True)
+      salvage_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+                                          default=Decimal("0"))
+      notes = models.TextField(blank=True)
+
+      class Meta:
+          ordering = ["-created_at"]
+          unique_together = ("tenant", "number")
+          indexes = [
+              models.Index(fields=["tenant", "status"], name="hrm_asset_tnt_status_idx"),
+              models.Index(fields=["tenant", "category"], name="hrm_asset_tnt_category_idx"),
+              models.Index(fields=["tenant", "current_holder"], name="hrm_asset_tnt_holder_idx"),
+          ]
+
+      def __str__(self):
+          return f"{self.number} - {self.name}" if self.number else self.name
+
+      # ---- Depreciation (computed, NEVER stored — Depreciation bullet) ----
+      @property
+      def months_in_service(self):
+          """Whole months from purchase_date to today. 0 if no purchase_date or purchase_date is in the future."""
+          if not self.purchase_date:
+              return 0
+          today = timezone.localdate()
+          if today <= self.purchase_date:
+              return 0
+          months = (today.year - self.purchase_date.year) * 12 + (today.month - self.purchase_date.month)
+          if today.day < self.purchase_date.day:
+              months -= 1
+          return max(0, months)
+
+      @property
+      def accumulated_depreciation(self):
+          """Straight-line: (cost - salvage) * min(months_in_service, useful_life) / useful_life.
+          Declining-balance: documented simplification — a fixed 20%/yr (1.667%/mo) reducing-balance rate,
+          compounded monthly via a closed-form power (cost * (1 - rate)**months), floored at salvage. Both
+          branches are div-by-zero guarded: no purchase_cost, method="none", or useful_life_months
+          None/0 -> Decimal("0")."""
+          if not self.purchase_cost or self.depreciation_method == "none" or not self.useful_life_months:
+              return Decimal("0")
+          cost = self.purchase_cost
+          salvage = self.salvage_value or Decimal("0")
+          depreciable = max(Decimal("0"), cost - salvage)
+          months = min(self.months_in_service, self.useful_life_months)
+          if self.depreciation_method == "straight_line":
+              monthly = depreciable / Decimal(self.useful_life_months)
+              return (monthly * months).quantize(Decimal("0.01"))
+          if self.depreciation_method == "declining_balance":
+              rate = Decimal("0.20") / Decimal("12")
+              book = cost * ((Decimal("1") - rate) ** months)
+              book = max(book, salvage)
+              return (cost - book).quantize(Decimal("0.01"))
+          return Decimal("0")
+
+      @property
+      def current_book_value(self):
+          """cost - accumulated_depreciation, floored at salvage_value (never negative, never below salvage)."""
+          if not self.purchase_cost:
+              return Decimal("0")
+          salvage = self.salvage_value or Decimal("0")
+          value = self.purchase_cost - self.accumulated_depreciation
+          return max(value, salvage).quantize(Decimal("0.01"))
+
+      @property
+      def is_under_warranty(self):
+          return bool(self.warranty_expiry and self.warranty_expiry >= timezone.localdate())
+  ```
+  Drivers: Asset Register (tag/name/serial/manufacturer/model — table-stakes across all 10 surveyed leaders),
+  lifecycle `status` (ServiceNow ITAM / EZOfficeInventory availability-calendar pattern), `current_holder`+
+  `location` (Snipe-IT/Asset Panda/GoCodes — denormalized for fast lookup, reuses `core.OrgUnit` not a new
+  locations table), `condition` (Keka "update the Asset Condition" at assignment), `depreciation_method`/
+  `useful_life_months`/`salvage_value` + the 3 computed properties (Freshservice/EZOfficeInventory/ManageEngine
+  AssetExplorer depreciation consensus — per the research's explicit decision, NO stored `DepreciationEntry`
+  ledger this pass). Reuses `core.OrgUnit` (location), `hrm.EmployeeProfile` (current_holder),
+  `accounting.Currency` (currency, mirrors `TrainingSession.currency`, `apps/hrm/models.py:6139`) — adds no new
+  spine entity.
+- [ ] **`AssetMaintenance(TenantNumbered)`** — `NUMBER_PREFIX = "ASSETMNT"`. Maintenance bullet (preventive/
+  repair/AMC/warranty-claim/inspection collapsed into one type-discriminated model per the research's explicit
+  "keeps 3.33 to the ~3-4-model budget" call).
+  ```python
+  class AssetMaintenance(TenantNumbered):
+      NUMBER_PREFIX = "ASSETMNT"
+
+      TYPE_CHOICES = [
+          ("preventive", "Preventive"), ("repair", "Repair"),
+          ("amc", "AMC (Annual Maintenance Contract)"), ("warranty_claim", "Warranty Claim"),
+          ("inspection", "Inspection"),
+      ]
+      STATUS_CHOICES = [
+          ("scheduled", "Scheduled"), ("in_progress", "In Progress"),
+          ("completed", "Completed"), ("cancelled", "Cancelled"),
+      ]
+
+      asset = models.ForeignKey("hrm.Asset", on_delete=models.CASCADE, related_name="maintenance_records")
+      maintenance_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="preventive")
+      status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="scheduled")
+      scheduled_date = models.DateField()
+      completed_date = models.DateField(null=True, blank=True)
+      vendor = models.CharField(max_length=255, blank=True)
+      cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      # AMC / warranty-claim contract window (blank for preventive/repair/inspection).
+      contract_start = models.DateField(null=True, blank=True)
+      contract_end = models.DateField(null=True, blank=True)
+      notes = models.TextField(blank=True)
+
+      class Meta:
+          ordering = ["-scheduled_date"]
+          unique_together = ("tenant", "number")
+          indexes = [
+              models.Index(fields=["tenant", "asset"], name="hrm_astmnt_tnt_asset_idx"),
+              models.Index(fields=["tenant", "status"], name="hrm_astmnt_tnt_status_idx"),
+          ]
+
+      def __str__(self):
+          return f"{self.number} - {self.asset.name} ({self.get_maintenance_type_display()})"
+  ```
+  Drivers: maintenance-ticket fields (EZOfficeInventory "notes and service details such as costs, maintenance
+  dates, and associated vendors"), AMC = a row with `maintenance_type="amc"` + `contract_start`/`contract_end`
+  (general AMC-software consensus — SafetyCulture/Makula survey, no separate contract model), warranty-claim =
+  same model with `maintenance_type="warranty_claim"` (Freshservice/ManageEngine). Maintenance/service history =
+  just `asset.maintenance_records.all()` ordered by date, no extra model. Reuses `hrm.Asset` only — no spine
+  touch.
+- [ ] **Patch `AssetAllocation`** (`apps/hrm/models.py:1473-1526`) — add the field, replace the NOTE comment, add
+  the sync override:
+  ```python
+  asset = models.ForeignKey("hrm.Asset", on_delete=models.SET_NULL, null=True, blank=True,
+                            related_name="allocations")
+  # (replaces the old "NOTE: a nullable FK to assets.Asset... Stubbed for now." comment)
+
+  def save(self, *args, **kwargs):
+      super().save(*args, **kwargs)
+      if self.asset_id:
+          self._sync_linked_asset()
+
+  def _sync_linked_asset(self):
+      """Mirror this allocation's status onto Asset.status/current_holder — the SINGLE sync point for
+      issue (assetallocation_issue), return (assetallocation_return, clearanceitem_mark_cleared), a
+      lost/damaged correction, and the new Asset-detail assign/return actions. None of those call sites
+      need to call this explicitly — they already .save() the allocation, which now transparently
+      triggers it. No-op when asset_id is None (every pre-3.33 row)."""
+      asset = self.asset
+      mapping = {"issued": ("assigned", self.employee_id), "returned": ("in_stock", None),
+                 "damaged": ("in_repair", None), "lost": ("retired", None)}
+      if self.status not in mapping:
+          return
+      new_status, new_holder_id = mapping[self.status]
+      if asset.status != new_status or asset.current_holder_id != new_holder_id:
+          asset.status = new_status
+          asset.current_holder_id = new_holder_id
+          asset.save(update_fields=["status", "current_holder", "updated_at"])
+  ```
+  Additive/nullable — zero behavior change for any existing `AssetAllocation` row (`asset_id` is `None` until a
+  user explicitly links one via the (now-extended) `AssetAllocationForm` or the new `asset_assign` action).
+- [ ] `python manage.py makemigrations hrm` → one new file (Django auto-names, likely
+  `0048_asset_assetmaintenance_assetallocation_asset...py`) — confirm exactly 2 new models + 1 new field on
+  `AssetAllocation`, no unrelated changes.
+
+## 2. Views (apps/hrm/views.py — append `# --- 3.33 Asset Management ---` banner after the 3.32 block)
+
+- [ ] **`Asset` full CRUD**, `@login_required` throughout (mirrors the sibling `AssetAllocation`/`Designation`/
+  `JobGrade` convention — master-data CRUD in this codebase is NOT admin-gated; only privileged workflow actions
+  like `assetrequest_reject`/`assetrequest_fulfill` are `@tenant_admin_required`):
+  - `asset_list(request)` — `crud_list(request, Asset.objects.filter(tenant=request.tenant)
+    .select_related("location", "current_holder__party", "currency"), "hrm/assets/asset/list.html",
+    search_fields=["number","asset_tag","name","serial_number"], filters=[("status","status",False),
+    ("category","category",False), ("location","location_id",True), ("current_holder","current_holder_id",True)],
+    extra_context={"status_choices": Asset.STATUS_CHOICES, "category_choices":
+    AssetAllocation.ASSET_CATEGORY_CHOICES, "locations": OrgUnit.objects.filter(tenant=request.tenant),
+    "holders": EmployeeProfile.objects.filter(tenant=request.tenant).select_related("party")
+    .order_by("party__name")})`.
+  - `asset_create(request)` — `crud_create(request, form_class=AssetForm, template="hrm/assets/asset/form.html",
+    success_url="hrm:asset_list")`.
+  - `asset_detail(request, pk)` — `get_object_or_404(Asset.objects.select_related("location",
+    "current_holder__party", "currency"), pk=pk, tenant=request.tenant)`; context adds `allocations =
+    obj.allocations.select_related("employee__party", "issued_by").order_by("-issued_at")` and
+    `maintenance_records = obj.maintenance_records.order_by("-scheduled_date")`. Depreciation panel reads
+    `obj.accumulated_depreciation`/`obj.current_book_value`/`obj.is_under_warranty`/`obj.months_in_service`
+    directly (no extra context keys needed — they're model properties). Render `hrm/assets/asset/detail.html`.
+  - `asset_edit(request, pk)` — `crud_edit(request, model=Asset, pk=pk, form_class=AssetForm,
+    template="hrm/assets/asset/form.html", success_url="hrm:asset_list")`.
+  - `asset_delete(request, pk)` — `@require_POST`. Guard: `if obj.status == "assigned": messages.error(...);
+    return redirect("hrm:asset_detail", pk=obj.pk)` (mirrors `assetallocation_delete`'s "return before delete"
+    guard) — then `crud_delete(request, model=Asset, pk=pk, success_url="hrm:asset_list")`.
+- [ ] **`Asset` lifecycle actions** (all `@login_required` `@require_POST`, all redirect to `hrm:asset_detail`):
+  - `asset_assign(request, pk)` — `obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)`; if
+    `obj.status != "in_stock"`: error "Only an in-stock asset can be assigned." + redirect. Else read
+    `employee = get_object_or_404(EmployeeProfile, pk=request.POST.get("employee"), tenant=request.tenant)`
+    (wrapped so a missing/invalid pk becomes a friendly error, not a 500 — mirrors the try/except-around-int
+    pattern used elsewhere for POST pk fields), `return_due_date = parse_date(request.POST.get(
+    "return_due_date", "").strip() or "")` (already-imported `django.utils.dateparse.parse_date`, `views.py:25`),
+    `notes = request.POST.get("notes", "").strip()`. `with transaction.atomic(): allocation =
+    AssetAllocation.objects.create(tenant=request.tenant, program=None, employee=employee, asset=obj,
+    asset_name=obj.name, asset_category=obj.category, serial_number=obj.serial_number, asset_tag=obj.asset_tag,
+    status="issued", issued_at=timezone.now(), issued_by=request.user, return_due_date=return_due_date,
+    notes=notes)` — `.create()` calls `.save()`, which transparently flips `obj.status`/`current_holder` via
+    §1's override. `write_audit_log(request.user, obj, "update", {"action":"assign","employee":str(employee),
+    "allocation":allocation.number})`.
+  - `asset_return(request, pk)` — `allocation = obj.allocations.filter(tenant=request.tenant, status="issued")
+    .order_by("-issued_at").first()`; no active allocation → error + redirect. Else `allocation.status =
+    "returned"; allocation.returned_at = timezone.now(); allocation.save(update_fields=["status","returned_at",
+    "updated_at"])` (sync fires automatically). `write_audit_log(..., {"action":"return","allocation":
+    allocation.number})`.
+  - `asset_retire(request, pk)` — only from `status in ("in_stock","in_repair")` (else error "Return or
+    repair-complete this asset before retiring it."); sets `status="retired"`.
+  - `asset_dispose(request, pk)` — only from `status == "retired"` (else error); sets `status="disposed"`.
+- [ ] **`AssetMaintenance` full CRUD**, `@login_required`:
+  - `assetmaintenance_list(request)` — `crud_list(..., AssetMaintenance.objects.filter(tenant=request.tenant)
+    .select_related("asset"), "hrm/assets/assetmaintenance/list.html", search_fields=["number","vendor"],
+    filters=[("status","status",False), ("maintenance_type","maintenance_type",False),
+    ("asset","asset_id",True)], extra_context={"status_choices": AssetMaintenance.STATUS_CHOICES,
+    "type_choices": AssetMaintenance.TYPE_CHOICES, "assets": Asset.objects.filter(tenant=request.tenant)})`.
+  - `assetmaintenance_create(request)` — **custom view** (not `crud_create`, to honor `?asset=<pk>` per the
+    `InterviewForm`/`JobApplicationForm` `initial={...}` precedent, `views.py:4354-4357`/`4759-4760`): on GET,
+    `form = AssetMaintenanceForm(tenant=request.tenant, initial={"asset": request.GET.get("asset") or None})`;
+    on valid POST, `obj = form.save(commit=False); obj.tenant = request.tenant; obj.save()`; **then** the §0
+    repair-status sync: `if obj.maintenance_type == "repair" and obj.status in ("scheduled","in_progress") and
+    obj.asset.status in ("in_stock","assigned"): obj.asset.status = "in_repair"; obj.asset.save(update_fields=
+    ["status","updated_at"])`. Redirect to `hrm:asset_detail` (pk=`request.GET.get("asset")`) when arriving from
+    an asset's page, else `hrm:assetmaintenance_list`. Template `hrm/assets/assetmaintenance/form.html`.
+  - `assetmaintenance_detail(request, pk)` — `get_object_or_404(AssetMaintenance.objects.select_related(
+    "asset"), pk=pk, tenant=request.tenant)`, render `hrm/assets/assetmaintenance/detail.html`.
+  - `assetmaintenance_edit(request, pk)` — `crud_edit(..., form_class=AssetMaintenanceForm,
+    template="hrm/assets/assetmaintenance/form.html", success_url="hrm:assetmaintenance_list")`.
+  - `assetmaintenance_delete(request, pk)` — `@require_POST`, `crud_delete(...,
+    success_url="hrm:assetmaintenance_list")`.
+  - `assetmaintenance_complete(request, pk)` — `@require_POST`. If `obj.status in ("scheduled","in_progress")`:
+    `obj.status = "completed"; obj.completed_date = obj.completed_date or timezone.localdate();
+    obj.save(update_fields=["status","completed_date","updated_at"])`; **then** the §0 repair-status sync back:
+    `if obj.maintenance_type == "repair" and obj.asset.status == "in_repair": obj.asset.status = "assigned" if
+    obj.asset.current_holder_id else "in_stock"; obj.asset.save(update_fields=["status","updated_at"])`.
+    `write_audit_log(...)`. Redirect `hrm:assetmaintenance_detail`.
+- [ ] Every list view tenant-scoped + follows the Filter Implementation Rules (status_choices/category_choices/
+  FK querysets all passed explicitly; `|stringformat:"d"` for FK filters in the templates).
+
+## 3. Forms (apps/hrm/forms.py — append)
+
+- [ ] `AssetForm(TenantModelForm)`:
+  ```python
+  class AssetForm(TenantModelForm):
+      # `current_holder` excluded — system-managed by AssetAllocation._sync_linked_asset() via the
+      # assign/return actions, never hand-edited (mirrors AssetAllocation's own issued_at/issued_by/returned_at
+      # exclusion pattern). `status` stays editable so HR can hand-correct it (same rationale as
+      # AssetAllocationForm's own "status stays editable" comment) — an out-of-band edit here does NOT
+      # itself create/update an AssetAllocation row.
+      class Meta:
+          model = Asset
+          fields = ["asset_tag", "name", "category", "manufacturer", "model_number", "serial_number",
+                    "status", "condition", "purchase_date", "purchase_cost", "currency", "warranty_expiry",
+                    "location", "depreciation_method", "useful_life_months", "salvage_value", "notes"]
+          widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+      def clean(self):
+          cleaned = super().clean()
+          cost, salvage = cleaned.get("purchase_cost"), cleaned.get("salvage_value")
+          if cost is not None and salvage is not None and salvage > cost:
+              self.add_error("salvage_value", "Salvage value cannot exceed purchase cost.")
+          method = cleaned.get("depreciation_method")
+          if method and method != "none" and not cleaned.get("useful_life_months"):
+              self.add_error("useful_life_months",
+                             "Useful life (months) is required for this depreciation method.")
+          return cleaned
+  ```
+- [ ] `AssetMaintenanceForm(TenantModelForm)`:
+  ```python
+  class AssetMaintenanceForm(TenantModelForm):
+      class Meta:
+          model = AssetMaintenance
+          fields = ["asset", "maintenance_type", "status", "scheduled_date", "completed_date", "vendor",
+                    "cost", "contract_start", "contract_end", "notes"]
+          widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+      def clean(self):
+          cleaned = super().clean()
+          sched, comp = cleaned.get("scheduled_date"), cleaned.get("completed_date")
+          if sched and comp and comp < sched:
+              self.add_error("completed_date", "Completed date cannot be before the scheduled date.")
+          cs, ce = cleaned.get("contract_start"), cleaned.get("contract_end")
+          if cs and ce and ce <= cs:
+              self.add_error("contract_end", "Contract end date must be after the contract start date.")
+          return cleaned
+  ```
+- [ ] **Patch `AssetAllocationForm`** (`apps/hrm/forms.py:561-568`) — add `"asset"` to `Meta.fields` (tenant-scoped
+  automatically by `TenantModelForm.__init__`, `apps/core/forms.py:46-49`, since `Asset` has a `tenant` field):
+  `fields = ["program", "employee", "asset", "asset_name", "asset_category", "serial_number", "asset_tag",
+  "status", "return_due_date", "notes"]`. Update the class docstring/comment to note `asset` is optional (links
+  this issuance to a specific register row — when set, saving this form now syncs `Asset.status`/
+  `current_holder` per §1's override).
+
+## 4. URLs (apps/hrm/urls.py — append after the 3.32 block, before the closing `]`)
+
+- [ ] New `# 3.33 Asset Management` comment block (path prefixes `asset-register/`/`asset-maintenance/` — NOT
+  `assets/`, already owned by `AssetAllocation`, see §0):
+  ```python
+  # 3.33 Asset Management
+  path("asset-register/", views.asset_list, name="asset_list"),
+  path("asset-register/add/", views.asset_create, name="asset_create"),
+  path("asset-register/<int:pk>/", views.asset_detail, name="asset_detail"),
+  path("asset-register/<int:pk>/edit/", views.asset_edit, name="asset_edit"),
+  path("asset-register/<int:pk>/delete/", views.asset_delete, name="asset_delete"),
+  path("asset-register/<int:pk>/assign/", views.asset_assign, name="asset_assign"),
+  path("asset-register/<int:pk>/return/", views.asset_return, name="asset_return"),
+  path("asset-register/<int:pk>/retire/", views.asset_retire, name="asset_retire"),
+  path("asset-register/<int:pk>/dispose/", views.asset_dispose, name="asset_dispose"),
+  path("asset-maintenance/", views.assetmaintenance_list, name="assetmaintenance_list"),
+  path("asset-maintenance/add/", views.assetmaintenance_create, name="assetmaintenance_create"),
+  path("asset-maintenance/<int:pk>/", views.assetmaintenance_detail, name="assetmaintenance_detail"),
+  path("asset-maintenance/<int:pk>/edit/", views.assetmaintenance_edit, name="assetmaintenance_edit"),
+  path("asset-maintenance/<int:pk>/delete/", views.assetmaintenance_delete, name="assetmaintenance_delete"),
+  path("asset-maintenance/<int:pk>/complete/", views.assetmaintenance_complete, name="assetmaintenance_complete"),
+  ```
+- [ ] Confirm no path OR name collision against the existing `assets/...` (`AssetAllocation`) and
+  `asset-requests/...` (`AssetRequest`) blocks.
+
+## 5. Navigation — apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.33"]` block (insert after `"3.32"`), bullet text verbatim from `NavERP.md:661-666`.
+  **Deliberately reuses two existing pages** (mirrors the precedent set by 3.3's own "Onboarding Tasks"/"Welcome
+  Kit" both → `hrm:onboardingprogram_list`, and 3.5's filtered-slice pattern) rather than building a dedicated
+  page for every bullet — the register IS the depreciation report, and Return's system of record stays
+  `AssetAllocation`:
+  ```python
+  # 3.33 Asset Management — 2 new models (Asset, AssetMaintenance) + a nullable AssetAllocation.asset FK.
+  # Asset Allocation deep-links into the register filtered to currently-assigned assets; Asset Return stays on
+  # the existing 3.3 AssetAllocation list (its own system of record) filtered to returned; Depreciation has no
+  # dedicated page — book value/accumulated depreciation are computed columns on the register itself.
+  "3.33": {
+      "Asset Register": "hrm:asset_list",                          # bullet (the central register)
+      "Asset Allocation": "hrm:asset_list?status=assigned",         # bullet (register filtered to assigned)
+      "Asset Return": "hrm:assetallocation_list?status=returned",   # bullet (existing 3.3 allocation list, filtered)
+      "Maintenance": "hrm:assetmaintenance_list",                   # bullet (service/repair/AMC/warranty records)
+      "Depreciation": "hrm:asset_list",                             # bullet (register w/ book-value column, no dedicated page)
+  },
+  ```
+
+## 6. Seeder (apps/hrm/management/commands/seed_hrm.py — extend, idempotent)
+
+- [ ] New `_seed_assets(self, tenant, *, flush)`, called from `handle()` **after** `self._seed_analytics(tenant,
+  flush=options["flush"])` (currently the last call, 3.32) — append `self._seed_assets(tenant,
+  flush=options["flush"])` as the new final line of the `for tenant in tenants:` loop.
+  - Guard: `if flush: Asset.objects.filter(tenant=tenant).delete()` (cascades to `AssetMaintenance` via CASCADE;
+    unlinks any `AssetAllocation.asset` via SET_NULL — does NOT delete the allocations themselves).
+    `if Asset.objects.filter(tenant=tenant).exists(): return`.
+  - `emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:4])`;
+    guard `if not emps: return`. `dept = OrgUnit.objects.filter(tenant=tenant, kind="department").first()`;
+    `actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()`; `usd =
+    Currency.objects.filter(code="USD").first()` (global master).
+  - **6 assets spanning every status/category so the register + depreciation panel are non-trivial to look at:**
+    1. `"MacBook Pro 14-inch"` (laptop) — `status="assigned"`, `current_holder=emps[0]`, `location=dept`,
+       `purchase_date=`~2 years ago, `purchase_cost=2499.00`, `currency=usd`, `warranty_expiry=`~1 year out,
+       `depreciation_method="straight_line"`, `useful_life_months=36`, `salvage_value=200.00` — **then**
+       `AssetAllocation.objects.get_or_create(tenant=tenant, employee=emps[0], asset=a1, asset_name=a1.name,
+       defaults={"asset_category":"laptop","status":"issued","issued_at":timezone.now(),"issued_by":actor,
+       "serial_number":a1.serial_number,"asset_tag":a1.asset_tag})` (its `.save()` syncs `a1` — redundant with
+       the explicit `current_holder=emps[0]` above but proves the sync path end-to-end).
+    2. `"Dell Latitude 5420"` (laptop) — `status="in_stock"`, `condition="new"`, `purchase_cost=1200.00`,
+       `depreciation_method="straight_line"`, `useful_life_months=36`, `salvage_value=100.00` — no allocation.
+    3. `"iPhone 13"` (phone) — `status="assigned"`, `current_holder=emps[1]` (fallback `emps[0]` if only 1
+       employee seeded), `purchase_cost=699.00`, `depreciation_method="declining_balance"`,
+       `useful_life_months=24`, `salvage_value=50.00` — + a linked issued `AssetAllocation` (same
+       `get_or_create` pattern as #1).
+    4. `"HP Color LaserJet Printer"` (other) — `status="in_repair"`, `condition="fair"`, `purchase_cost=650.00`,
+       `depreciation_method="straight_line"`, `useful_life_months=60`, `salvage_value=50.00` — + `AssetMaintenance
+       .objects.get_or_create(tenant=tenant, asset=a4, maintenance_type="repair", defaults={"status":
+       "in_progress","scheduled_date":`~3 days ago`,"vendor":"CityTech Repairs","cost":85.00,"notes":"Paper feed
+       jam + fuser unit replacement."})`.
+    5. `"Toyota Hiace Delivery Van"` (vehicle) — `status="retired"`, `condition="poor"`, `purchase_date=`~6 years
+       ago, `purchase_cost=28000.00`, `depreciation_method="straight_line"`, `useful_life_months=60`,
+       `salvage_value=3000.00` — `months_in_service` (72) > `useful_life_months` (60), so
+       `current_book_value` computes exactly to the `3000.00` salvage floor (proves the floor-at-salvage guard on
+       real seed data, per the brief's "non-trivial book value" ask).
+    6. `"Server Room AC Unit"` (other) — `status="in_stock"`, no depreciation inputs (method="none") — + an AMC
+       `AssetMaintenance.objects.get_or_create(tenant=tenant, asset=a6, maintenance_type="amc",
+       defaults={"status":"scheduled","scheduled_date":`~1 month out`,"vendor":"CoolAir Services","cost":
+       400.00,"contract_start":`this year, Jan 1`,"contract_end":`next year, Dec 31`,"notes":"Quarterly HVAC
+       preventive service contract."})`.
+  - Every `Asset`/`AssetAllocation`/`AssetMaintenance` write uses `.get_or_create(...)` or an existence check
+    per the Seed Command Rules — never a bare `.create()` inside a loop without a prior guard.
+  - `self.stdout.write(self.style.SUCCESS(f"Assets seeded for '{tenant.name}': {Asset.objects.filter(
+    tenant=tenant).count()} assets, {AssetMaintenance.objects.filter(tenant=tenant).count()} maintenance
+    records."))`.
+
+## 7. Templates (templates/hrm/assets/ — sub-module folder, then entity folders per the Template Folder
+   Structure rule)
+
+- [ ] `templates/hrm/assets/asset/list.html` — filter bar (`q` + `status`/`category`/`location`/`current_holder`
+  dropdowns, FK options `|stringformat:"d"` compared against `request.GET.location`/`request.GET.current_holder`),
+  table columns Number/Name/Category/Status badge/Condition/Current Holder/Location/Book Value/Actions. Status
+  badges: `in_stock`→`badge-slate`, `assigned`→`badge-green`, `in_repair`→`badge-amber`, `retired`→`badge-muted`,
+  `disposed`→`badge-red`, `{% else %}` fallback to `obj.get_status_display`. Book Value column =
+  `{{ obj.current_book_value|floatformat:2 }}`. Actions column = view/edit/delete (delete POST+confirm+csrf,
+  hidden/disabled when `status == "assigned"` per the delete guard). Empty-state: "No assets registered yet."
+- [ ] `templates/hrm/assets/asset/form.html` — `AssetForm` fields loop (standard `form-grid`), breadcrumb Asset
+  Management › Asset Register › New/Edit. No `current_holder` field (excluded, §3).
+- [ ] `templates/hrm/assets/asset/detail.html` — header (name, number, status/condition badges,
+  `{% if obj.is_under_warranty %}badge-green "Under Warranty"{% else %}badge-muted "Warranty Expired/None"{% endif
+  %}`); register fields grid (tag/serial/manufacturer/model/location/current holder); **Depreciation panel**
+  (purchase cost, method, useful life, salvage value, `months_in_service`, `accumulated_depreciation`,
+  `current_book_value` — all `floatformat:2` for money, plain int for months); **Actions sidebar**: Assign form
+  (employee `<select>` + optional return-due-date, POSTs to `asset_assign`, shown only when `status=="in_stock"`),
+  Return button (POSTs to `asset_return`, confirm dialog, shown only when `status=="assigned"`), Retire/Dispose
+  buttons (POST+confirm, gated by status per §2), Edit/Delete, Back to List; **Allocation history** table
+  (`allocations` — employee/status/issued_at/returned_at, empty-state "No allocation history."); **Maintenance
+  history** table (`maintenance_records` — type/status/scheduled_date/completed_date/vendor/cost, a "Log
+  Maintenance" button linking `{% url 'hrm:assetmaintenance_create' %}?asset={{ obj.pk }}`, empty-state "No
+  maintenance records.").
+- [ ] `templates/hrm/assets/assetmaintenance/list.html` — filter bar (`q` + `status`/`maintenance_type`/`asset`
+  dropdowns), table columns Number/Asset (links to `asset_detail`)/Type/Status badge/Scheduled/Completed/
+  Vendor/Cost/Actions. Status badges: `scheduled`→`badge-info`, `in_progress`→`badge-amber`,
+  `completed`→`badge-green`, `cancelled`→`badge-muted`, `{% else %}` fallback. Actions = view/edit/delete +
+  "Complete" POST button (confirm, shown only when `status in ("scheduled","in_progress")`). Empty-state: "No
+  maintenance records yet."
+- [ ] `templates/hrm/assets/assetmaintenance/form.html` — `AssetMaintenanceForm` fields loop, breadcrumb Asset
+  Management › Maintenance › New/Edit; when arriving via `?asset=<pk>` show a "For: {{ asset.name }}" banner
+  above the form (pass `asset` in context when the GET param resolves to a real tenant-scoped `Asset`).
+- [ ] `templates/hrm/assets/assetmaintenance/detail.html` — fields grid + contract window (only rendered when
+  `maintenance_type=="amc"` and `contract_start`/`contract_end` set) + Actions sidebar (Edit/Delete/Complete
+  [conditional]/Back to List) + a link back to the parent `asset_detail`.
+- [ ] **Badge classes are `badge-green/red/amber/info/muted/slate`, stat-icon `blue/green/orange/purple/slate` —
+  grep `static/css/theme.css` first, do NOT invent `badge-success`/`stat-icon amber` (L33, recurred 3x already —
+  this is now a MANDATORY pre-write grep step).**
+- [ ] All new templates: filter `<form method="get">` re-submits every active param; FK `<select>` comparisons
+  use `|stringformat:"d"`; badge values match the exact model `CHOICES` strings with an `{% else %}` fallback.
+
+## 8. Admin (apps/hrm/admin.py)
+
+- [ ] `@admin.register(Asset)` — `list_display = ("number", "name", "tenant", "category", "status", "condition",
+  "current_holder", "location")`, `list_filter = ("status", "category", "condition", "depreciation_method")`,
+  `search_fields = ("number", "name", "asset_tag", "serial_number")`.
+- [ ] `@admin.register(AssetMaintenance)` — `list_display = ("number", "asset", "maintenance_type", "status",
+  "scheduled_date", "completed_date", "vendor")`, `list_filter = ("maintenance_type", "status")`,
+  `search_fields = ("number", "vendor")`.
+
+## 9. Verify
+
+- [ ] `python manage.py makemigrations hrm` → exactly one new file (`0048_...py`): 2 new models +
+  `AssetAllocation.asset`, nothing else.
+- [ ] `python manage.py migrate` — clean apply.
+- [ ] `python manage.py seed_hrm` **twice** in a row — second run is a no-op for `_seed_assets` (idempotent, per
+  the Seed Command Rules) and doesn't duplicate the linked `AssetAllocation`/`AssetMaintenance` rows.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] **Re-run the pre-existing asset-adjacent test files to prove the additive patch didn't break anything:**
+  `apps/hrm/tests/test_onboarding.py`, `test_offboarding.py`, `test_requests_models.py`,
+  `test_requests_views.py`, `test_requests_security.py` — all still green (they exercise `AssetAllocation`/
+  `AssetRequest`/`ClearanceItem.mark_cleared` without ever setting `asset`, so `_sync_linked_asset()` should be a
+  no-op throughout and every assertion should be untouched).
+- [ ] `temp/` smoke sweep, tenant admin login:
+  - `hrm:asset_list` / `hrm:assetmaintenance_list` → 200, with and without each filter combination
+    (`status`/`category`/`location`/`current_holder` on assets; `status`/`maintenance_type`/`asset` on
+    maintenance), with a garbage/cross-tenant FK filter value (silently ignored, never 500).
+  - Full CRUD round-trip for both `Asset` and `AssetMaintenance` (create → detail → edit → delete) → 200/302.
+  - `asset_assign` on an `in_stock` asset → 302, `Asset.status=="assigned"`, `current_holder` set, a new
+    `AssetAllocation(status="issued", asset=<that asset>)` exists; retrying `asset_assign` on the now-`assigned`
+    asset → error message, no state change.
+  - `asset_return` → 302, `Asset.status=="in_stock"`, `current_holder is None`, the allocation's
+    `status=="returned"`/`returned_at` set.
+  - `asset_retire`/`asset_dispose` status-transition guards (wrong starting status → error, no change; right
+    starting status → 302 + new status).
+  - `assetmaintenance_create?asset=<pk>` pre-fills + redirects back to `asset_detail`; creating a `repair` record
+    flips the asset to `in_repair`; `assetmaintenance_complete` on that record flips it back to `assigned` (if
+    still held) or `in_stock`.
+  - Depreciation panel renders on `asset_detail` for all 6 seeded assets without a 500, including the fully-
+    depreciated retired van (`current_book_value == salvage_value`) and the `depreciation_method="none"` AC unit
+    (`accumulated_depreciation == 0`).
+  - `assetallocation_edit` with the new `asset` field set to a tenant asset → saving triggers the sync (no code
+    change needed in that view — proves the `save()` override, not a view-level call, is doing the work).
+  - Cross-tenant IDOR: a second tenant's `Asset`/`AssetMaintenance` pk on every url → 404.
+  - No `{#`/`{% comment` leak markers in any rendered page.
+- [ ] Sidebar shows all 5 `3.33` bullets as **Live** for a tenant login (`Asset Register`, `Asset Allocation`,
+  `Asset Return`, `Maintenance`, `Depreciation`).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` ->
+  `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to check the `AssetAllocation.save()` override for recursion/redundant-write safety
+    and that `Asset.STATUS_CHOICES`/`AssetMaintenance.STATUS_CHOICES` values used in templates match exactly.
+  - Expect `performance-reviewer` to check `asset_list`'s `select_related` covers `location`/`current_holder__
+    party`/`currency` (no N+1 across the list), and that `_sync_linked_asset()`'s extra `Asset` fetch+save per
+    `AssetAllocation.save()` is acceptable (low-frequency HR writes, not a hot path).
+  - Expect `security-reviewer` to confirm tenant scoping on every new view + the cross-tenant `employee`/`asset`
+    pk lookups inside `asset_assign`/`assetmaintenance_create` use `get_object_or_404(..., tenant=request.tenant)`
+    (never a bare `.get(pk=...)` that could leak or 500 on a cross-tenant id), and that `AssetForm`/
+    `AssetMaintenanceForm` never expose a system-managed field (`current_holder`, `number`, `tenant`).
+  - Expect `test-writer` to cover: full CRUD for both models; the `_sync_linked_asset()` mapping for all 4
+    statuses (issued/returned/damaged/lost) plus the no-op cases (pending, `asset_id is None`); `asset_assign`/
+    `asset_return`/`asset_retire`/`asset_dispose` status-guard matrix; the repair-record `Asset.status` round-trip
+    (`in_stock`/`assigned` → `in_repair` → back); the depreciation formulas against hand-computed fixtures
+    (straight-line partial + fully-depreciated-at-salvage, declining-balance, `method="none"`/no
+    `useful_life_months` div-by-zero guards); `AssetForm`/`AssetMaintenanceForm` `clean()` validations; migration
+    `0048` applies cleanly; seeder idempotency; cross-tenant IDOR on every new url; confirm the 5 pre-existing
+    asset-adjacent test files still pass unmodified.
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.33 Asset Management (2 new tables + 1 patched field)`
+  section documenting `Asset`/`AssetMaintenance`, the depreciation formulas, the `AssetAllocation.save()` sync
+  override (and why it lives there, not in the views), the repair-status maintenance sync, the seeded 6 assets,
+  the `LIVE_LINKS["3.33"]` mapping (including the 2 reused-page bullets), and the `asset-register`/
+  `asset-maintenance` URL prefixes (vs. `AssetAllocation`'s pre-existing `assets/`).
+- [ ] README.md — add `/3.33` to the Module 3 header line + a bullet describing the 2 new models + the
+  Asset<->AssetAllocation sync mechanism + computed depreciation; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.33.md)
+
+- **Barcode/QR label generation + scan-to-check-in/out** (GoCodes, Snipe-IT, EZOfficeInventory, Zoho
+  AssetExplorer) — `asset_tag` is the seed field; label rendering + a scan endpoint ship later.
+- **Software license management / SaaS subscription tracking** (Zoho AssetExplorer, Snipe-IT, ManageEngine
+  AssetExplorer) — belongs to Module 11.18 ITAM, not HR-facing 3.33.
+- **Network/agent-based hardware+software discovery** (ManageEngine AssetExplorer, ServiceNow ITAM, Zoho
+  AssetExplorer) — enterprise IT-ops feature, out of scope for an HR module entirely.
+- **Full CMMS work-order dispatch** with mobile push, meter/IoT-triggered PM, parts consumption (UpKeep,
+  ServiceNow ITAM) — Module 11 CMMS territory; `AssetMaintenance` covers record-keeping, not live dispatch.
+- **Asset-manager scoped permissions** (by location/department/business unit, Keka) — a permissions/role layer
+  on top of existing tenant+role infrastructure, not a new model; candidate for a later permissions pass.
+- **Damage charge-back to employee via payroll deduction** (Keka) — needs HRM 3.34 Expense/payroll wiring;
+  `condition` is tracked on `Asset` now, charge-back logic ships later.
+- **Depreciation schedule ledger + GL posting** (`DepreciationEntry`, `JournalEntry`/`GLAccount` postings) — the
+  research's explicit decision: derived computed properties only this pass; revisit when Module 2 Accounting
+  integration or Module 11's enterprise depreciation model is scoped.
+- **Sum-of-years-digits depreciation method** (Freshservice) — only straight-line + declining-balance shipped
+  this pass; a 3rd method is a small additive `DEPRECIATION_METHOD_CHOICES` entry + formula branch later.
+- **`vendor_name` / purchase-vendor tracking on `Asset`** (research suggested, e.g. optional `core.Party` FK) —
+  omitted this pass to match the exact field list scoped for this build; `AssetMaintenance.vendor` already
+  covers service-vendor tracking.
+- **Custom/dynamic fields per asset category** (Snipe-IT "Asset Models", Asset Panda "Smart Forms") — EAV-style
+  flexibility; `notes` covers the near-term need.
+- **Reservation/availability calendar for assets** (EZOfficeInventory) — not core to the register/allocation/
+  maintenance/depreciation bullets.
+- **Expiry/renewal email alerts** for warranty/AMC/license dates (Snipe-IT, ManageEngine AssetExplorer, general
+  AMC tools) — the date fields ship now (`warranty_expiry`, `contract_end`, `is_under_warranty`); the
+  notification/digest job is a later cross-module scheduling concern.
+- **`assetrequest_fulfill` linking to a specific `Asset` register row** — it still creates an ad-hoc
+  `AssetAllocation` with `asset=None` (category/name only, no register pick) this pass; a later enhancement could
+  let HR pick an available `in_stock` `Asset` of the matching category at fulfil time.
+- **Condition-at-assignment auto-capture** — `Asset.condition` exists and is hand-set on the register, but
+  `asset_assign` doesn't yet prompt for/snapshot condition-at-checkout separately from the register's current
+  value (Keka's "update the Asset Condition" at checkout); a small follow-up.
+- **Migration/coordination with Module 11 Asset Management System** (`apps/assets`, not yet built) — when
+  Module 11 lands, its enterprise `Asset` (prefix `AST-`) should absorb or link to `hrm.Asset` (`ASSET-` prefix)
+  the same way `AssetAllocation` was designed to eventually point at it; note this in the eventual Module 11
+  research pass so the two registers don't duplicate.
+
+## Review notes
+
+(filled in at the end)
