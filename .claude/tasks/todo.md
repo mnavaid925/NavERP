@@ -3775,3 +3775,309 @@ to the future 3.36 Helpdesk (its `LIVE_LINKS` bullet → the Suggestions box int
 manager reminders, survey k-anonymity threshold / AI summaries / templates, suggestion voting / threads / recognition
 auto-link, and the full **Help Desk ticketing system → the dedicated 3.36 Helpdesk sub-module**. **Next unbuilt HRM
 sub-module: 3.28 HR Reports.**
+
+---
+# Module 3 — HRM — Sub-module 3.28 HR Reports (hrm) — plan from research-hrm-3.28.md (2026-07-12)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.27) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** This is a **derived-view, read-only reporting sub-module** —
+**NO new models, NO migration, NO seeder** — mirroring `apps/accounting/views.py`'s `trial_balance`/
+`ap_aging`/`balance_sheet` (`accounting/reports/*.html`) and, closer to home, HRM's own existing derived
+reports `timesheet_utilization_report`/`project_time_report` (`apps/hrm/views.py:1678-1699`, rendered from
+`templates/hrm/timetracking/utilization_report.html`) and `org_chart`/`celebrations` (no-model, capped,
+Python-bucketed views). All 6 report views read data that already exists via `seed_hrm` — nothing new to
+seed.
+
+**Sensitivity decision (stated, not left implicit):** these 6 reports aggregate **company-wide** salary,
+attrition, and demographic data (gender, age, exit reasons, department-level pay) — not an individual
+employee's own record. Unlike `timesheet_utilization_report` (per-employee operational data, `@login_required`
+only), 3.28 mirrors the privileged-action precedent already used elsewhere in `apps/hrm/views.py` (leave
+approval, encashment approval, payroll-cycle approval — all `@tenant_admin_required`, imported from
+`apps.core.decorators`). **All 6 views use `@tenant_admin_required`, not `@login_required`.** A regular
+employee hitting any `hrm:*_report` URL gets a 403 (`PermissionDenied`), same as every other admin-only HRM
+action route.
+
+## 1. Confirm NO new models / migration / seeder — source fields verified against the codebase
+
+- [ ] State in the PR/commit message: **3.28 adds zero models, zero migrations, zero seed data** — pure
+  aggregation views over existing tenant-scoped rows.
+- [ ] **Headcount Report** reads: `core.Employment` (`party`, `org_unit` FK `core.OrgUnit`, `hired_on`,
+  `status` ∈ active/on_leave/terminated — `apps/core/models.py:167-188`); `hrm.EmployeeProfile`
+  (`employment` OneToOne, `designation` FK `hrm.Designation`, `employee_type` — `apps/hrm/models.py:257-345`,
+  `.department` is a **Python property**, not a DB column — see gotcha below); `hrm.Designation
+  .budgeted_headcount` (`apps/hrm/models.py:147`); `hrm.SeparationCase.actual_last_working_day`
+  (`apps/hrm/models.py:1648-1657`, for excluding/counting exits). **All fields confirmed to exist —
+  no gaps.**
+- [ ] **Attrition Report** reads: `hrm.SeparationCase` (`employee` FK `EmployeeProfile`, `separation_type`,
+  `exit_reason`, `actual_last_working_day`, `status` — `apps/hrm/models.py:1599-1705`) + `core.Employment`
+  (active-count denominator for the SHRM annualized-turnover formula). **Voluntary/involuntary is a Python
+  mapping constant** (`resignation`/`retirement`/`contract_end` → voluntary; `termination`/`layoff`/
+  `deceased` → involuntary — no such field exists on the model, confirmed by reading
+  `SEPARATION_TYPE_CHOICES`). **All fields confirmed — no gaps.**
+- [ ] **Diversity Report** reads: `hrm.EmployeeProfile.gender` (`GENDER_CHOICES` —
+  male/female/other/prefer_not_to_say, line 270-275) + `.date_of_birth` (line 293); `core.Employment
+  .hired_on`/`.org_unit`. **All fields confirmed — no gaps.**
+- [ ] **Cost Report** reads: `hrm.Payslip` (`gross_pay`, `net_pay`, `total_deductions`, `employee`,
+  `cycle` FK `PayrollCycle` — `apps/hrm/models.py:3554-3673`) + `hrm.PayslipLine` (`component_type`,
+  `contribution_side`, `amount` — line 3676-3704) for a chosen `PayrollCycle`; fallback when the tenant
+  has **no** `PayrollCycle` yet: `hrm.EmployeeSalaryStructure.annual_ctc_amount` (status="active") ÷ 12 as
+  a "current run-rate" proxy (line 3415-3460). **All fields confirmed — no gaps.**
+- [ ] **Hiring Report** reads: `hrm.JobRequisition` (`created_at` via `TenantOwned`, `posted_at`,
+  `filled_at`, `department`/`cost_center` FK `core.OrgUnit`, `hiring_manager`/`recruiter` FK
+  `EmployeeProfile`, `headcount`, `status` — `apps/hrm/models.py:2169-2298`); `hrm.JobApplication`
+  (`stage`, `source`, `applied_at`, `stage_changed_at`, `hired_on`, `requisition`, `candidate` —
+  line 2569-2609); `hrm.CandidateProfile.source` (`CANDIDATE_SOURCE_CHOICES` — line 2482-2537). **All
+  fields confirmed — no gaps** (both `JobApplication.source` and `CandidateProfile.source` exist; use
+  `JobApplication.source` as the primary source-of-hire field since it's per-application/per-hire).
+- [ ] **Gotcha to encode in every view that touches `EmployeeProfile.department`/`.manager`**:
+  these are **Python `@property`s** derived from `self.employment.org_unit`/`.manager`
+  (`apps/hrm/models.py:342-349`), **not DB columns** — never `EmployeeProfile.objects.filter(department=x)`
+  or `.values("department")`; always aggregate through `employment__org_unit` (a real FK path) or resolve
+  in Python. This is the exact gotcha called out in the 3.21 plan (line 25-29 above) — it applies here too
+  and is the single most likely cause of a report 500 if missed.
+- [ ] No field gaps degrade any report to a 500 — everything above already exists; div-by-zero (empty
+  tenant, zero average headcount, zero total hires) is a **view-logic** guard (see §2), not a data gap.
+
+## 2. Views (apps/hrm/views.py) — new `# --- 3.28 HR Reports ---` banner (append after the 3.27 block, ~line 11916 = current EOF)
+
+- [ ] All 6 functions decorated `@tenant_admin_required` (imported already: `from apps.core.decorators
+  import tenant_admin_required`, `apps/hrm/views.py:31`). Follow the `if tenant is not None:` guard
+  pattern from `trial_balance`/`timesheet_utilization_report` (superuser has `tenant=None` — never
+  `.filter(tenant=None)`; render an empty report instead of a crash).
+- [ ] Shared filter helpers: reuse `_parse_iso_date` (`apps/hrm/views.py:359-364`) for `?date_from`/
+  `?date_to`/`?as_of`; a small **new** `_default_period()` helper returning `(today - 365 days, today)`
+  when both are blank (the research's "trailing 12 months / YTD default" — pick trailing-12-months as the
+  single consistent default across all 5 reports so the index tiles and the drill-in report agree).
+  `?department=<OrgUnit pk>` parsed via `int(request.GET.get("department") or 0) or None`, validated with
+  `OrgUnit.objects.filter(tenant=tenant, kind="department", pk=department_id).first()` (never trust the
+  raw pk into a filter without tenant-scoping it first — this is the IDOR-prevention pattern already used
+  elsewhere in the file).
+- [ ] `hr_reports_index(request)` — `/hrm/reports/hr/`. No filters (optional single `?as_of` passed through
+  to child report links). 5 KPI tiles, each a `{label, value, url}` dict:
+  current active headcount (`Employment.objects.filter(tenant=tenant, status="active").count()`),
+  YTD annualized attrition % (reuse the attrition-calc helper below over Jan-1→today), gender split
+  (`EmployeeProfile` gender counts as a %), MTD salary cost (current-month `Payslip` sum, fallback CTC
+  run-rate), avg time-to-fill days (`JobRequisition` with `filled_at` in the last 12 months). Render
+  `hrm/reports/hr_index.html`.
+- [ ] `headcount_report(request)` — KPIs: total active headcount as-of `?as_of` (default today),
+  new joins in `?date_from`/`?date_to` (`Employment.hired_on` between range), exits in range
+  (`SeparationCase.actual_last_working_day` between range, `status` in the completed/terminal set), net
+  change (joins − exits), actual-vs-budgeted headcount (group `EmployeeProfile` by `designation`, compare
+  `count()` to `designation.budgeted_headcount`, `None` budget renders as "—" not `0`). Tables: by
+  department (`Employment.objects.values("org_unit__name").annotate(count=Count("id"))`, active only,
+  filtered by `?department` when set), by designation, by employment type. Chart: trailing-12-month
+  headcount trend — iterate the last 12 month-end dates, `Employment.filter(status="active", hired_on__lte=
+  month_end).count()` minus terminations before that date (or simpler: count `Employment` rows whose
+  `hired_on <= month_end` and not yet exited by `month_end` via a `SeparationCase` join) — keep this O(12)
+  queries, not O(employees). Render `hrm/reports/headcount.html`.
+- [ ] `attrition_report(request)` — KPIs: total separations in period
+  (`SeparationCase.objects.filter(tenant=tenant, actual_last_working_day__range=(date_from, date_to))`),
+  annualized turnover % = `separations / avg_headcount * 100` where `avg_headcount = (headcount_at_start +
+  headcount_at_end) / 2` (**guard `avg_headcount == 0` → 0%, not a `ZeroDivisionError`**; annualize when
+  the period spans < 365 days per the SHRM note: `rate * (365 / period_days)`), voluntary % / involuntary %
+  (Python mapping constant `VOLUNTARY_SEPARATION_TYPES = {"resignation", "retirement", "contract_end"}`
+  applied to `separation_type`), retention % = `100 - turnover%`. Tables: by department (join
+  `employee__employment__org_unit`), by exit reason (`exit_reason` — exclude blank with an "Unspecified"
+  bucket), by tenure band at exit (`actual_last_working_day - employee.employment.hired_on`, Python-bucketed
+  into `<1yr/1-2/3-5/6-10/10+`, resolved via a single `.select_related("employee__employment")` pass — no
+  per-row query). Chart: monthly separations trend over the period. Filters: `date_from`/`date_to`
+  (default trailing 12 months), `department`, `separation_type`. Render `hrm/reports/attrition.html`.
+- [ ] `diversity_report(request)` — KPIs: gender split % (`EmployeeProfile.objects.filter(tenant=tenant,
+  employment__status="active").values("gender").annotate(count=Count("id"))`, blank gender bucketed as
+  "Not Specified"), avg age (Python-computed from `date_of_birth`, `None` DOBs excluded from both the avg
+  and the age-band table — **guard zero-count division**), avg tenure (from `employment__hired_on`, same
+  guard). Tables/charts: age-band distribution (`<25, 25-34, 35-44, 45-54, 55-64, 65+`, Python-bucketed —
+  resolve once via `.select_related("employment")`, no query-per-employee), tenure-band distribution
+  (same 5 bands as attrition, from `hired_on`), department × gender cross-tab (`.values("employment__org_unit
+  __name", "gender").annotate(count=Count("id"))`, pivoted into a dict-of-dicts in Python for the table).
+  Filters: `department`, `as_of` (defaults today; active employees only). Render
+  `hrm/reports/diversity.html`.
+- [ ] `cost_report(request)` — `?cycle=<PayrollCycle pk>` selects the payroll period (default: latest
+  `PayrollCycle.objects.filter(tenant=tenant).order_by("-pay_date").first()`; when **no** cycle exists,
+  fall back to `EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
+  .aggregate(Sum("annual_ctc_amount"))` ÷ 12 as the run-rate figure and set a template flag
+  `is_estimate=True` so the page visibly labels it "Estimated (no payroll run yet)" rather than presenting
+  a fake actual). KPIs: total salary cost (period), avg cost per employee (**guard headcount == 0**),
+  employer-contribution cost (`PayslipLine.objects.filter(payslip__cycle=cycle, contribution_side=
+  "employer").aggregate(Sum("amount"))`). Tables: department-wise cost (`Payslip.objects.filter(cycle=cycle)
+  .values("employee__employment__org_unit__name").annotate(total=Sum("gross_pay"))`), CTC component
+  breakdown (`PayslipLine.objects.filter(payslip__cycle=cycle).values("component_type")
+  .annotate(total=Sum("amount"))`, labelled via `get_component_type_display`). Chart: monthly cost trend —
+  last N `PayrollCycle`s ordered by `pay_date`, each cycle's `total_gross` property (already exists,
+  `apps/hrm/models.py:3538-3540` — reuse it, don't re-sum). Filters: `cycle`, `department`. Render
+  `hrm/reports/cost.html`.
+- [ ] `hiring_report(request)` — KPIs: open requisitions (`JobRequisition.objects.filter(tenant=tenant,
+  status__in=("approved", "posted")).count()`), filled requisitions in period (`filled_at__range`),
+  avg time-to-fill days (`filled_at - created_at` averaged in Python over filled reqs in range — **guard
+  empty queryset → None/"—", not a ZeroDivisionError**), avg time-to-hire days (`JobApplication.hired_on -
+  applied_at` over `stage="hired"` applications in range), offer acceptance rate (`hired` count ÷
+  (`hired` + `rejected`-after-`offer`-stage count) — approximate via `stage="hired"` vs `stage="rejected"`
+  with `rejection_reason` present after having reached `offer`; document the approximation in a code
+  comment since NavERP has no stage-history table, only the current `stage`). Tables: source-of-hire mix
+  (`JobApplication.objects.filter(stage="hired").values("source").annotate(count=Count("id"))`), funnel
+  conversion (`JobApplication.objects.filter(tenant=tenant).values("stage").annotate(count=Count("id"))`
+  ordered per `APPLICATION_STAGE_CHOICES`, with a `%` of `applied` total per stage), hires by department
+  (`requisition__department__name`). Filters: `date_from`/`date_to` (against `JobRequisition.created_at`),
+  `department`. Render `hrm/reports/hiring.html`.
+- [ ] Every view follows the **Filter Implementation Rules**: pass `department_choices =
+  OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("name")` (and any other
+  dropdown queryset/`*_CHOICES` constant the template needs) explicitly in the context — never assume the
+  template can reach it; FK/pk `<select>` comparisons in templates use `|stringformat:"d"`, string-field
+  comparisons use `request.GET.status == value` (n/a here — no status filters, but `separation_type`/
+  `source` follow the same string-compare rule).
+
+## 3. URLs (apps/hrm/urls.py) — append after the existing 3.27 block (after line 944 `suggestion_implement`, before the closing `]` at line 945)
+
+- [ ] New `# 3.28 HR Reports` comment block:
+  ```python
+  # 3.28 HR Reports
+  path("reports/hr/", views.hr_reports_index, name="hr_reports_index"),
+  path("reports/hr/headcount/", views.headcount_report, name="headcount_report"),
+  path("reports/hr/attrition/", views.attrition_report, name="attrition_report"),
+  path("reports/hr/diversity/", views.diversity_report, name="diversity_report"),
+  path("reports/hr/cost/", views.cost_report, name="cost_report"),
+  path("reports/hr/hiring/", views.hiring_report, name="hiring_report"),
+  ```
+- [ ] Confirm no name collision with the existing `reports/utilization/`/`reports/project-time/` (3.24
+  Training Administration namespace uses a bare `reports/` prefix too — verify `reports/hr/` doesn't
+  collide; it doesn't, distinct path segment).
+
+## 4. Navigation — `apps/core/navigation.py`
+
+- [ ] New `LIVE_LINKS["3.28"]` block (insert anywhere before the closing `}` at line 604 — this file's
+  dict is not strictly numerically ordered, e.g. `"3.27"` at line 545 is followed by `"3.5"` at line 552),
+  bullet text copied **verbatim** from `NavERP.md` lines 629-634:
+  ```python
+  "3.28": {
+      "Headcount Report": "hrm:headcount_report",   # bullet (active/new-joins/exits, dept/designation/type breakdown)
+      "Attrition Report": "hrm:attrition_report",   # bullet (SHRM annualized turnover, voluntary/involuntary, trend)
+      "Diversity Report": "hrm:diversity_report",   # bullet (gender/age/tenure demographics, dept cross-tab)
+      "Cost Reports": "hrm:cost_report",            # bullet (salary cost total + department-wise, CTC breakdown)
+      "Hiring Reports": "hrm:hiring_report",        # bullet (time-to-hire/fill, source mix, funnel, offer accept %)
+  },
+  ```
+  (`hr_reports_index` is the landing hub — intentionally not itself a `LIVE_LINKS` entry since NavERP.md's
+  3.28 has exactly 5 bullets, each mapped to its drill-in report; the index is reachable from each report
+  page's "Back to HR Reports" link and, optionally, a `hrm_overview.html` tile.)
+
+## 5. Templates (templates/hrm/reports/)
+
+- [ ] `templates/hrm/reports/hr_index.html` — standalone landing page (sub-module root, no entity folder —
+  Template Folder Structure rule 6, same tier as `templates/hrm/hrm_overview.html`). 5 KPI tiles (`.stat-card`
+  pattern, each linking to its report), matches the existing `hrm_overview.html` `.stat-grid` visual
+  language.
+- [ ] `templates/hrm/reports/headcount.html` — filter bar (`as_of`, `date_from`, `date_to`, `department`
+  `<select>` reflecting `request.GET`, `department_choices` from context), 4-5 KPI stat-cards, 3
+  breakdown `.table`s (department / designation / employment type, each with a budgeted-vs-actual column
+  on the designation table), a Chart.js line chart (`<canvas id="headcount-trend">`, base.html already
+  loads `chart.js@4.4.1` — `apps/../templates/base.html:28` — new `<script>` block feeding the 12-point
+  series passed as a JSON-safe context var, e.g. `{{ trend_labels|safe }}`/`{{ trend_values|safe }}` via
+  `json.dumps` in the view, mirroring how `crm/analytics/dashboard/detail.html` wires its canvas), `.empty-state`
+  when the tenant has zero employees.
+- [ ] `templates/hrm/reports/attrition.html` — filter bar (`date_from`, `date_to`, `department`,
+  `separation_type` `<select>` — `SeparationCase.SEPARATION_TYPE_CHOICES` passed as context), KPI cards
+  (turnover %, voluntary %, involuntary %, retention %), 3 breakdown tables (department / exit reason /
+  tenure band), Chart.js bar or line for the monthly trend, `.empty-state` when zero separations in range.
+- [ ] `templates/hrm/reports/diversity.html` — filter bar (`department`, `as_of`), KPI cards (gender split
+  %, avg age, avg tenure), age-band + tenure-band tables (simple CSS bar-width `<div>` per row — no need
+  for Chart.js on a single-series distribution), department × gender cross-tab `.table` (departments as
+  rows, genders as columns), `.empty-state` when zero active employees.
+- [ ] `templates/hrm/reports/cost.html` — filter bar (`cycle` `<select>` of `PayrollCycle.objects.filter
+  (tenant=tenant).order_by("-pay_date")`, `department`), a visible "Estimated (no payroll run yet)" badge
+  when `is_estimate`, KPI cards (total cost, avg per employee, employer-contribution cost), 2 tables
+  (department-wise, CTC component breakdown), Chart.js line for the monthly cost trend across cycles,
+  `.empty-state` when no `PayrollCycle` and no active `EmployeeSalaryStructure` exist either.
+- [ ] `templates/hrm/reports/hiring.html` — filter bar (`date_from`, `date_to`, `department`), KPI cards
+  (open reqs, filled reqs, avg time-to-fill days, avg time-to-hire days, offer acceptance %), 3 tables
+  (source-of-hire mix, funnel-by-stage with % of `applied`, hires by department), `.empty-state` when zero
+  requisitions/applications in range.
+- [ ] Every report template's filter `<form method="get">` re-submits all params (hidden inputs or a
+  single form wrapping the whole filter bar) so pagination/links preserve the active filter — mirrors the
+  existing list-page filter-bar pattern project-wide.
+- [ ] Optional (nice-to-have, only if time allows per the research): a "Export CSV" button per report —
+  `?export=csv` branch in the same view function returning `HttpResponse(..., content_type="text/csv")` via
+  `csv.writer`, reusing the same filtered queryset/rows already computed (no duplicate query).
+
+## 6. Admin
+
+- [ ] None — no new models, nothing to register in `apps/hrm/admin.py`.
+
+## 7. Verify
+
+- [ ] **No migration** — confirm `python manage.py makemigrations hrm` produces **zero** changes (models.py
+  untouched); if it proposes anything, that's a signal 3.28 accidentally touched a model — stop and check.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep: `hr_reports_index` + all 5 `hrm:*_report` URLs return 200 for a tenant admin
+  (a) with no query params (defaults apply), (b) with a full filter set (`date_from`/`date_to`/`department`/
+  `cycle`/`separation_type`), and (c) with an out-of-range/nonsensical date (`date_from` after `date_to`,
+  or a far-future `as_of`) — must render an empty/zero report, never 500. No `{#`/`{% comment` leak markers
+  in any rendered report page.
+- [ ] **403 for non-admin**: a plain (non-tenant-admin) employee user hitting any of the 6 `hrm:*_report`
+  URLs gets 403 (`@tenant_admin_required`), confirming the sensitivity decision in §0 is actually enforced,
+  not just documented.
+- [ ] **Cross-tenant isolation**: seed (or reuse) a second tenant with different headcount/salary/attrition
+  data; confirm `admin_acme`'s report totals never include `admin_globex` rows (spot-check the headcount
+  KPI and the cost-report total against each tenant's own seeded data — not just "doesn't error").
+  A `?department=<pk>` belonging to the *other* tenant must be silently ignored (falls back to
+  "no department filter"), never leak that tenant's OrgUnit name or filter cross-tenant data — this is the
+  IDOR-prevention pattern from §2 (department resolved via `OrgUnit.objects.filter(tenant=tenant, ...)`).
+- [ ] **Div-by-zero guards**: create/seed-flush an empty tenant with **zero** employees and confirm every
+  report renders its `.empty-state`/zero KPIs instead of a 500 (`avg_headcount==0` in attrition,
+  `headcount==0` in cost's avg-per-employee, `filled_count==0` in hiring's avg-time-to-fill, `total==0` in
+  diversity's avg-age/avg-tenure).
+- [ ] Sidebar shows all 5 3.28 entries as **Live** (confirm via the rendered sidebar for a tenant-admin
+  login, not just the `LIVE_LINKS` dict — and confirm a *non*-admin login does NOT show them as broken
+  links that 403 when clicked; either hide the 3.28 links from non-admins in the sidebar template or accept
+  the 403 landing page — decide and note which during build).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to check the `EmployeeProfile.department`/`.manager` property gotcha (§1) is
+    actually avoided (no `.filter(department=...)`/`.values("department")` anywhere in the 6 views) and
+    that every rate/average calculation has a zero-denominator guard.
+  - Expect `performance-reviewer` to flag any O(employees) Python loop that should be an `.annotate()`/
+    `.aggregate()` instead (especially the headcount trend and tenure/age-band bucketing — confirm they're
+    O(1) queries + one Python pass, not N+1).
+  - Expect `security-reviewer` to confirm the `@tenant_admin_required` gate on all 6 views and the
+    tenant-scoped `department`/`cycle` FK resolution (no raw pk trusted into a cross-tenant filter).
+  - Expect `test-writer` to cover: 403 for non-admin on every report URL; cross-tenant isolation on
+    headcount/cost totals; div-by-zero on an empty tenant; the SHRM annualized-turnover formula's math on a
+    known fixture; filter-param round-tripping (department/cycle/date range narrows the result set
+    correctly).
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.28 HR Reports (0 new tables — derived views)`
+  section documenting the 6 routes, the source models/fields each report reads, the `@tenant_admin_required`
+  sensitivity decision, and the `EmployeeProfile.department` property gotcha; update the `LIVE_LINKS`
+  section for `"3.28"`; update the Deferred section with this pass's carried-forward deferrals.
+- [ ] README.md — add `/3.28` to the Module 3 header line + a bullet describing the 5 reports + the
+  no-new-models note; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.28.md)
+
+- **FTE (fractional headcount)** — needs a new FTE-fraction field on `Employment`/`EmployeeProfile`; not
+  present today. Defer until a real part-time/FTE-weighting need surfaces.
+- **Race/ethnicity, disability, veteran-status representation (EEO-1 categories)** — no field exists;
+  adding one is sensitive PII and should follow the encryption pattern already used for `national_id`/
+  `passport_number`. Defer to a dedicated EEO-compliance pass, not this reporting pass.
+- **Pay-equity / compensation-gap analysis** (regression-adjusted gaps) — beyond a single aggregation view;
+  candidate for a future analytics-specific pass.
+- **Attrition-risk prediction (ML)** — needs a trained model + historical feature pipeline; explicitly out
+  of scope for a derived-view Django pass (NavERP.md 3.32 Analytics Dashboard already earmarks "Predictive
+  Analytics" separately).
+- **True actuals-based cost-per-hire (ANSI/SHRM)** — NavERP has no recruiting-spend ledger (job-board/agency
+  fees); only `JobRequisition.hiring_cost_budget` (a budget estimate) exists. A rough budgeted-CPH proxy
+  could be added later; real CPH needs a future recruiting-expense model — not included this pass.
+- **Industry benchmarking** (ADP DataCloud-style) — requires an external aggregated-data feed; out of scope.
+- **Regrettable vs. non-regrettable attrition** (perf-rating-linked) — a real but secondary cross-join to
+  `hrm.PerformanceReview`; nice-to-have, addable later without a schema change.
+- **Custom drag-and-drop dashboard builder** — reserved for the future 3.32 Analytics Dashboard, not 3.28.
+- **Overtime cost analysis, leave liability, statutory reports** — belong to sibling sub-modules 3.29
+  Attendance Reports / 3.30 Leave Reports / 3.31 Payroll Reports; only a light CTC-component breakdown is
+  in scope here under Cost Reports.
+- **CSV export** — flagged as a nice-to-have in §5 above; build only if time allows in this pass, otherwise
+  carries to a later pass.
+
+## Review notes
+(filled in at the end)
