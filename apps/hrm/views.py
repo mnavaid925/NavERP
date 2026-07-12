@@ -11430,3 +11430,436 @@ def my_requests(request):
     return render(request, "hrm/requests/my_requests.html", {
         "tiles": tiles, "is_admin": _is_admin(request.user), "profile": profile,
     })
+
+
+# =============================================================================================
+# 3.27 Communication Hub
+# =============================================================================================
+# Announcements (admin-authored, audience-targeted), a derived Celebrations view (no model),
+# Surveys (admin authors + employees respond once), and Suggestions (employee idea box, admin
+# reviewed — reuses the 3.26 _hr_request_* helpers verbatim). Help Desk is deferred to 3.36.
+from .models import (  # noqa: E402  — 3.27 Communication Hub
+    Announcement,
+    Suggestion,
+    Survey,
+    SurveyResponse,
+)
+from .forms import (  # noqa: E402  — 3.27 Communication Hub
+    AnnouncementForm,
+    SuggestionForm,
+    SurveyForm,
+    build_survey_response_form,
+)
+
+
+# ---- Celebrations (Birthday/Anniversary — derived, no model) --------------------------------
+def _next_occurrence(d, today):
+    """The next date on/after `today` that lands on d's month/day (Feb-29 falls back to Mar-1)."""
+    for year in (today.year, today.year + 1):
+        try:
+            candidate = _date(year, d.month, d.day)
+        except ValueError:  # Feb 29 in a non-leap year
+            candidate = _date(year, 3, 1)
+        if candidate >= today:
+            return candidate
+    return today
+
+
+def _days_until(d, today):
+    return (_next_occurrence(d, today) - today).days
+
+
+def _is_number(v):
+    try:
+        float(v)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+@login_required
+def celebrations(request):
+    """Upcoming birthdays + work anniversaries — DERIVED (no model) from EmployeeProfile.date_of_birth
+    and core.Employment.hired_on, mirroring org_chart's no-table, capped, Python-bucketed shape."""
+    tenant = request.tenant
+    try:
+        window = int(request.GET.get("window", 30))
+    except (TypeError, ValueError):
+        window = 30
+    window = max(1, min(window, 90))
+    CAP = 500
+    today = timezone.localdate()
+    birthdays, anniversaries = [], []
+    if tenant is not None:
+        emps = list(
+            EmployeeProfile.objects.filter(tenant=tenant)
+            .exclude(employment__status="terminated")
+            .select_related("party", "employment", "employment__org_unit")[:CAP])
+        for e in emps:
+            dept = e.employment.org_unit.name if (e.employment_id and e.employment.org_unit_id) else "—"
+            if e.date_of_birth:
+                days = _days_until(e.date_of_birth, today)
+                if days <= window:
+                    birthdays.append({"emp": e, "dept": dept,
+                                      "date": _next_occurrence(e.date_of_birth, today), "days": days})
+            hired = e.employment.hired_on if e.employment_id else None
+            if hired and hired <= today:
+                occ = _next_occurrence(hired, today)
+                days = (occ - today).days
+                years = occ.year - hired.year
+                if days <= window and years >= 1:
+                    anniversaries.append({"emp": e, "dept": dept, "date": occ, "days": days, "years": years})
+        birthdays.sort(key=lambda r: r["days"])
+        anniversaries.sort(key=lambda r: r["days"])
+    return render(request, "hrm/communication/celebrations.html", {
+        "birthdays": birthdays, "anniversaries": anniversaries, "window": window,
+    })
+
+
+# ---- Announcements --------------------------------------------------------------------------
+def _announcement_targets(request, obj):
+    """Is this published announcement targeted at the viewer? all → everyone; department/designation →
+    the viewer's own department/designation only (a viewer with no profile matches only `all`)."""
+    if obj.audience_type == "all":
+        return True
+    profile = _current_employee_profile(request)
+    if profile is None:
+        return False
+    if obj.audience_type == "department":
+        dept_id = profile.employment.org_unit_id if profile.employment_id else None
+        return dept_id is not None and obj.target_department_id == dept_id
+    if obj.audience_type == "designation":
+        return profile.designation_id is not None and obj.target_designation_id == profile.designation_id
+    return False
+
+
+@login_required
+def announcement_list(request):
+    qs = (Announcement.objects.filter(tenant=request.tenant)
+          .select_related("target_department", "target_designation", "author"))
+    is_admin = _is_admin(request.user)
+    if is_admin:
+        extra = {"is_admin": True,
+                 "status_choices": Announcement.STATUS_CHOICES,
+                 "category_choices": Announcement.CATEGORY_CHOICES,
+                 "audience_type_choices": Announcement.AUDIENCE_TYPE_CHOICES}
+        filters = [("status", "status", False), ("category", "category", False),
+                   ("audience_type", "audience_type", False)]
+        return crud_list(request, qs, "hrm/communication/announcement/list.html",
+                         search_fields=("number", "title", "body"), filters=filters, extra_context=extra)
+    # Employee feed: only published, un-expired announcements targeted at the viewer.
+    today = timezone.localdate()
+    qs = qs.filter(status="published").filter(Q(expires_at__isnull=True) | Q(expires_at__gte=today))
+    profile = _current_employee_profile(request)
+    dept_id = profile.employment.org_unit_id if (profile and profile.employment_id) else None
+    desig_id = profile.designation_id if profile else None
+    qs = qs.filter(
+        Q(audience_type="all")
+        | Q(audience_type="department", target_department_id=dept_id)
+        | Q(audience_type="designation", target_designation_id=desig_id))
+    return crud_list(request, qs, "hrm/communication/announcement/list.html",
+                     search_fields=("number", "title", "body"), extra_context={"is_admin": False})
+
+
+@login_required
+def announcement_detail(request, pk):
+    obj = get_object_or_404(
+        Announcement.objects.select_related("target_department", "target_designation", "author"),
+        pk=pk, tenant=request.tenant)
+    if not _is_admin(request.user):
+        today = timezone.localdate()
+        published_ok = obj.status == "published" and (obj.expires_at is None or obj.expires_at >= today)
+        if not published_ok or not _announcement_targets(request, obj):
+            raise PermissionDenied("This announcement isn't available to you.")
+    return render(request, "hrm/communication/announcement/detail.html",
+                  {"obj": obj, "is_admin": _is_admin(request.user)})
+
+
+@tenant_admin_required
+def announcement_create(request):
+    if request.method == "POST":
+        form = AnnouncementForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.author = request.user  # stamped server-side, never a form field
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Announcement {obj.number} created.")
+            return redirect("hrm:announcement_detail", pk=obj.pk)
+    else:
+        form = AnnouncementForm(tenant=request.tenant)
+    return render(request, "hrm/communication/announcement/form.html", {"form": form, "is_edit": False})
+
+
+@tenant_admin_required
+def announcement_edit(request, pk):
+    return crud_edit(request, model=Announcement, pk=pk, form_class=AnnouncementForm,
+                     template="hrm/communication/announcement/form.html", success_url="hrm:announcement_list")
+
+
+@tenant_admin_required
+@require_POST
+def announcement_delete(request, pk):
+    return crud_delete(request, model=Announcement, pk=pk, success_url="hrm:announcement_list")
+
+
+@tenant_admin_required
+@require_POST
+def announcement_publish(request, pk):
+    obj = get_object_or_404(Announcement, pk=pk, tenant=request.tenant)
+    if obj.status == "draft":
+        obj.status = "published"
+        obj.published_at = timezone.now()
+        obj.save(update_fields=["status", "published_at", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "publish"})
+        messages.success(request, f"Announcement {obj.number} published.")
+    else:
+        messages.error(request, "Only a draft announcement can be published.")
+    return redirect("hrm:announcement_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def announcement_archive(request, pk):
+    obj = get_object_or_404(Announcement, pk=pk, tenant=request.tenant)
+    if obj.status == "published":
+        obj.status = "archived"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "archive"})
+        messages.success(request, f"Announcement {obj.number} archived.")
+    else:
+        messages.error(request, "Only a published announcement can be archived.")
+    return redirect("hrm:announcement_detail", pk=obj.pk)
+
+
+# ---- Surveys --------------------------------------------------------------------------------
+@login_required
+def survey_list(request):
+    qs = Survey.objects.filter(tenant=request.tenant).annotate(response_count=Count("responses"))
+    is_admin = _is_admin(request.user)
+    if not is_admin:
+        qs = qs.filter(status__in=("open", "closed"))  # employees don't see drafts
+    extra = {"is_admin": is_admin, "status_choices": Survey.STATUS_CHOICES}
+    profile = _current_employee_profile(request)
+    extra["responded_ids"] = set(
+        SurveyResponse.objects.filter(tenant=request.tenant, employee=profile).values_list("survey_id", flat=True)
+    ) if profile is not None else set()
+    filters = [("status", "status", False)] if is_admin else []
+    return crud_list(request, qs, "hrm/communication/survey/list.html",
+                     search_fields=("number", "title", "description"), filters=filters, extra_context=extra)
+
+
+@login_required
+def survey_detail(request, pk):
+    survey = get_object_or_404(
+        Survey.objects.annotate(response_count=Count("responses")), pk=pk, tenant=request.tenant)
+    is_admin = _is_admin(request.user)
+    if not is_admin and survey.status == "draft":
+        raise PermissionDenied("This survey isn't available yet.")
+    profile = _current_employee_profile(request)
+    has_responded = bool(profile) and SurveyResponse.objects.filter(
+        tenant=request.tenant, survey=survey, employee=profile).exists()
+    return render(request, "hrm/communication/survey/detail.html",
+                  {"obj": survey, "is_admin": is_admin, "has_responded": has_responded})
+
+
+@tenant_admin_required
+def survey_create(request):
+    if request.method == "POST":
+        form = SurveyForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.author = request.user
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Survey {obj.number} created.")
+            return redirect("hrm:survey_detail", pk=obj.pk)
+    else:
+        form = SurveyForm(tenant=request.tenant)
+    return render(request, "hrm/communication/survey/form.html", {"form": form, "is_edit": False})
+
+
+@tenant_admin_required
+def survey_edit(request, pk):
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    if survey.status != "draft":
+        messages.error(request, "Only a draft survey can be edited (it has no responses yet).")
+        return redirect("hrm:survey_detail", pk=survey.pk)
+    return crud_edit(request, model=Survey, pk=pk, form_class=SurveyForm,
+                     template="hrm/communication/survey/form.html", success_url="hrm:survey_list")
+
+
+@tenant_admin_required
+@require_POST
+def survey_delete(request, pk):
+    return crud_delete(request, model=Survey, pk=pk, success_url="hrm:survey_list")
+
+
+@tenant_admin_required
+@require_POST
+def survey_open(request, pk):
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    if survey.status != "draft":
+        messages.error(request, "Only a draft survey can be opened.")
+    elif not survey.questions:
+        messages.error(request, "Add at least one question before opening the survey.")
+    else:
+        survey.status = "open"
+        survey.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, survey, "update", {"action": "open"})
+        messages.success(request, f"Survey {survey.number} is now open for responses.")
+    return redirect("hrm:survey_detail", pk=survey.pk)
+
+
+@tenant_admin_required
+@require_POST
+def survey_close(request, pk):
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    if survey.status == "open":
+        survey.status = "closed"
+        survey.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, survey, "update", {"action": "close"})
+        messages.success(request, f"Survey {survey.number} is now closed.")
+    else:
+        messages.error(request, "Only an open survey can be closed.")
+    return redirect("hrm:survey_detail", pk=survey.pk)
+
+
+@login_required
+def survey_respond(request, pk):
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    profile, redirect_resp = _require_own_profile(request)
+    if redirect_resp:
+        return redirect_resp
+    if survey.status != "open":
+        messages.error(request, "This survey isn't open for responses.")
+        return redirect("hrm:survey_detail", pk=survey.pk)
+    if SurveyResponse.objects.filter(tenant=request.tenant, survey=survey, employee=profile).exists():
+        messages.info(request, "You've already responded to this survey.")
+        return redirect("hrm:survey_detail", pk=survey.pk)
+    form_class = build_survey_response_form(survey.questions)
+    if request.method == "POST":
+        form = form_class(request.POST)
+        if form.is_valid():
+            answers = {str(i): form.cleaned_data.get(f"q_{i}") for i in range(len(survey.questions or []))}
+            SurveyResponse.objects.create(tenant=request.tenant, survey=survey, employee=profile, answers=answers)
+            write_audit_log(request.user, survey, "update", {"action": "respond"})
+            messages.success(request, "Thanks — your response was recorded.")
+            return redirect("hrm:survey_detail", pk=survey.pk)
+    else:
+        form = form_class()
+    return render(request, "hrm/communication/survey/respond.html", {"survey": survey, "form": form})
+
+
+@tenant_admin_required
+def survey_results(request, pk):
+    survey = get_object_or_404(Survey, pk=pk, tenant=request.tenant)
+    responses = list(survey.responses.select_related("employee__party"))
+    results = []
+    for idx, q in enumerate(survey.questions or []):
+        key, qtype = str(idx), q.get("type")
+        entry = {"text": q.get("text", ""), "type": qtype}
+        if qtype == "rating":
+            nums = [float(r.answers.get(key)) for r in responses
+                    if r.answers and _is_number(r.answers.get(key))]
+            entry["average"] = round(sum(nums) / len(nums), 2) if nums else None
+            entry["count"] = len(nums)
+        elif qtype == "single_choice":
+            counts = {}
+            for r in responses:
+                v = (r.answers or {}).get(key)
+                if v:
+                    counts[v] = counts.get(v, 0) + 1
+            entry["choices"] = [{"option": o, "count": counts.get(o, 0)} for o in (q.get("options") or [])]
+        else:  # text — when anonymous, never attach the respondent's identity
+            entry["answers"] = [
+                {"text": (r.answers or {}).get(key),
+                 "who": (None if survey.is_anonymous else r.employee.party.name)}
+                for r in responses if (r.answers or {}).get(key)]
+        results.append(entry)
+    return render(request, "hrm/communication/survey/results.html",
+                  {"survey": survey, "results": results, "response_count": len(responses)})
+
+
+# ---- Suggestions (employee idea box — reuses the 3.26 _hr_request_* helpers verbatim) --------
+@login_required
+def suggestion_list(request):
+    qs = _ss_scope(request, Suggestion.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "approver"))
+    is_admin = _is_admin(request.user)
+    extra = {"is_admin": is_admin,
+             "status_choices": Suggestion.STATUS_CHOICES,
+             "category_choices": Suggestion.CATEGORY_CHOICES}
+    filters = [("status", "status", False), ("category", "category", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/communication/suggestion/list.html",
+                     search_fields=("number", "title", "body"), filters=filters, extra_context=extra)
+
+
+@login_required
+def suggestion_create(request):
+    return _ss_child_create(request, SuggestionForm,
+                            "hrm/communication/suggestion/form.html", "hrm:suggestion_list")
+
+
+@login_required
+def suggestion_detail(request, pk):
+    return _ss_child_detail(request, Suggestion, pk, "hrm/communication/suggestion/detail.html",
+                            select_related=("employee__party", "approver"))
+
+
+@login_required
+def suggestion_edit(request, pk):
+    return _hr_request_edit(request, Suggestion, pk, SuggestionForm,
+                            "hrm/communication/suggestion/form.html", "hrm:suggestion_detail")
+
+
+@login_required
+@require_POST
+def suggestion_delete(request, pk):
+    return _hr_request_delete(request, Suggestion, pk, "hrm:suggestion_list")
+
+
+@login_required
+@require_POST
+def suggestion_submit(request, pk):
+    return _hr_request_submit(request, Suggestion, pk, "hrm:suggestion_detail")
+
+
+@login_required
+@require_POST
+def suggestion_cancel(request, pk):
+    return _hr_request_cancel(request, Suggestion, pk, "hrm:suggestion_detail")
+
+
+@tenant_admin_required
+@require_POST
+def suggestion_approve(request, pk):
+    return _hr_request_approve(request, Suggestion, pk, "hrm:suggestion_detail")
+
+
+@tenant_admin_required
+@require_POST
+def suggestion_reject(request, pk):
+    return _hr_request_reject(request, Suggestion, pk, "hrm:suggestion_detail")
+
+
+@tenant_admin_required
+@require_POST
+def suggestion_implement(request, pk):
+    """approved -> implemented; stamps implemented_at + an optional implementation_note."""
+    obj = get_object_or_404(Suggestion, pk=pk, tenant=request.tenant)
+    if obj.status != "approved":
+        messages.error(request, "Only an accepted suggestion can be marked implemented.")
+        return redirect("hrm:suggestion_detail", pk=obj.pk)
+    obj.status = "implemented"
+    obj.implemented_at = timezone.now()
+    obj.implementation_note = (request.POST.get("implementation_note") or "").strip()[:2000]
+    obj.save(update_fields=["status", "implemented_at", "implementation_note", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "implement"})
+    messages.success(request, f"Suggestion {obj.number} marked implemented.")
+    return redirect("hrm:suggestion_detail", pk=obj.pk)
