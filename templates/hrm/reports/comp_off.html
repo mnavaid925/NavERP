@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Comp-off Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Comp-off Report</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:leave_reports_index' %}">Leave Reports</a><span class="sep">›</span><span>Comp-off</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:leave_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="date_from">From</label><input type="date" name="date_from" id="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="date_to">To</label><input type="date" name="date_to" id="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:comp_off_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="repeat"></i></div><div class="stat-value">{{ earned_hours|floatformat:1 }}</div><div class="stat-label">Comp-off Earned (hrs)</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="list"></i></div><div class="stat-value">{{ earned_count }}</div><div class="stat-label">Earning Claims</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ availed_days|floatformat:1 }}</div><div class="stat-label">Comp-off Availed (days)</div></div>
+  </div>
+  {% if not comp_types_configured %}<p class="text-muted" style="margin:-.5rem 0 1rem;"><i data-lucide="info"></i> No comp-off leave type is configured (a LeaveType whose name/code contains "comp"), so "availed" days can't be tallied — showing earned OT-comp-leave only.</p>{% endif %}
+
+  {% if earned_count %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Comp-off Earned by Employee</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Employee</th><th style="text-align:end;">Hours earned</th></tr></thead><tbody>
+      {% for r in by_employee %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.hours|floatformat:1 }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="repeat"></i><h3>No comp-off earned</h3><p>No overtime claims taken as compensatory leave match the current filters.</p></div></div></div>
+  {% endif %}
+{% endblock %}
