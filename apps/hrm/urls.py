@@ -986,4 +986,21 @@ urlpatterns = [
     path("analytics/widgets/<int:pk>/edit/", views.hr_widget_edit, name="hr_widget_edit"),
     path("analytics/widgets/<int:pk>/delete/", views.hr_widget_delete, name="hr_widget_delete"),
     path("analytics/widgets/<int:pk>/move/<str:direction>/", views.hr_widget_move, name="hr_widget_move"),
+
+    # 3.33 Asset Management (asset-register/ + asset-maintenance/ — assets/ is already AssetAllocation's)
+    path("asset-register/", views.asset_list, name="asset_list"),
+    path("asset-register/add/", views.asset_create, name="asset_create"),
+    path("asset-register/<int:pk>/", views.asset_detail, name="asset_detail"),
+    path("asset-register/<int:pk>/edit/", views.asset_edit, name="asset_edit"),
+    path("asset-register/<int:pk>/delete/", views.asset_delete, name="asset_delete"),
+    path("asset-register/<int:pk>/assign/", views.asset_assign, name="asset_assign"),
+    path("asset-register/<int:pk>/return/", views.asset_return, name="asset_return"),
+    path("asset-register/<int:pk>/retire/", views.asset_retire, name="asset_retire"),
+    path("asset-register/<int:pk>/dispose/", views.asset_dispose, name="asset_dispose"),
+    path("asset-maintenance/", views.assetmaintenance_list, name="assetmaintenance_list"),
+    path("asset-maintenance/add/", views.assetmaintenance_create, name="assetmaintenance_create"),
+    path("asset-maintenance/<int:pk>/", views.assetmaintenance_detail, name="assetmaintenance_detail"),
+    path("asset-maintenance/<int:pk>/edit/", views.assetmaintenance_edit, name="assetmaintenance_edit"),
+    path("asset-maintenance/<int:pk>/delete/", views.assetmaintenance_delete, name="assetmaintenance_delete"),
+    path("asset-maintenance/<int:pk>/complete/", views.assetmaintenance_complete, name="assetmaintenance_complete"),
 ]
