@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -565,9 +565,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   attrition-risk heuristic — tenure/attendance/leave/probation/review-gap, *not* ML — plus a hiring-needs
   projection), and `benchmarking` (period-over-period RAG scorecard with optional vs-target override + a
   pay-equity table). A true drag-drop grid, trained ML models, and external industry-benchmark feeds are deferred.
+- **3.33 Asset Management** — the HR-facing asset register the 3.3 `AssetAllocation` issuance rows now point at:
+  **2 new models** — `Asset` (`ASSET-`; tag/serial/category/status lifecycle [in_stock/assigned/in_repair/retired/
+  disposed] + **computed straight-line/declining-balance depreciation** book value, floored at salvage) and
+  `AssetMaintenance` (`ASSETMNT-`; preventive/repair/AMC/warranty-claim/inspection with contract windows) — plus a
+  nullable `AssetAllocation.asset` FK. Asset↔allocation status/holder stay in step via two atomic `save()`-override
+  syncs (no-op for pre-3.33 rows), and a "repair" record moves its asset in/out of service. Full CRUD + lifecycle
+  actions (assign/return/retire/dispose, `select_for_update`-guarded) + maintenance CRUD. Barcode/QR, software-license
+  management, CMMS work orders, depreciation GL posting, and the Module 11 enterprise `assets.Asset` migration are deferred.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **5,754-test** HRM suite
-(**8,401 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **5,906-test** HRM suite
+(**8,553 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -801,7 +809,7 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **8,401 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **8,553 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
   **Accounting 212**, **HRM 3,838**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
