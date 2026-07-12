@@ -5130,4 +5130,43 @@ is a Python `@property` (`apps/hrm/models.py:343`), **not a DB column** — same
 
 ## Review notes
 
-(filled in at the end)
+**3.31 Payroll Reports — BUILT & reviewed (2026-07-12).** 6 `@tenant_admin_required` derived report views (NO
+models, NO migration, NO seed data), aggregating the built payroll engine (3.13-3.16). Views
+(`apps/hrm/views.py`, `# --- 3.31 Payroll Reports ---`): `payroll_reports_index`, `salary_register_report`
+(per-`Payslip` grid for a `?cycle` + component breakdown + totals footer), `tax_report` (TDS summary,
+declaration funnel, `not_filed`, section-wise declared/verified, regime split, Form 16 register →
+`hrm:form16_partb` by `TaxComputation.pk`), `statutory_report` (PF/ESI/PT/LWF register + **masked** UAN/PF/ESI
+coverage), `ctc_report` (structural CTC + component-type mix chart via `SalaryStructureLine.resolved_amount(own_ctc)`),
+`cost_center_report` (budget-vs-actual; the `DepartmentProfile.cost_center` 3-query attribution fold + Unassigned
+callout). New helpers `_fy_choices`/`_report_financial_year`, `_cc_choices`/`_report_cost_center` (profiled CCs
+only), `_grade_choices`/`_report_job_grade`. `LIVE_LINKS["3.31"]` (4 bullets; hub + `cost_center_report`
+non-bulleted). README + SKILL.md updated; test counts refreshed to 5,669 HRM / 8,316 project-wide.
+
+**Review-agent findings applied:**
+- **code-reviewer:** `_cc_choices`/`_report_cost_center` scoped to cost centres that HAVE a `CostCenterProfile`
+  (a profile-less CC was selectable but drove a misleading empty state hiding real spend); `variance`/
+  `variance_pct` are `None` when `budget_annual` is None; the Unassigned row moved out of the totalled table so
+  the `<tfoot>` reconciles.
+- **explorer:** wired the orphaned `by_regime` aggregate into `tax.html` (a "Tax Regime Split" card); moved the
+  `cost_center.html` Unassigned callout outside `{% if rows %}` so it renders when a tenant has zero
+  `CostCenterProfile` rows.
+- **frontend-reviewer:** fixed a recurring L33 badge-class regression across tax/salary_register/statutory
+  (`badge-success`/`-danger`/`-warning` → `badge-green`/`-red`/`-amber`); `pt_state` uses `get_pt_state_display`.
+- **performance-reviewer:** `statutory_report` coverage counts computed from the already-materialized identifier
+  list (3 `.count()` round trips → 0). Confirmed no N+1 across all 6 views (cost-centre fold = 3 grouped queries;
+  `ctc_report` caches `SalaryStructureLine` per distinct `template_id`).
+- **qa-smoke-tester:** all 7 assertions passed (6 reports 200 for admin across param variants, no leaks, 403 for
+  non-admin, cross-tenant IDOR ignored, masked IDs safe, superuser empty) — no code changes needed.
+- **security-reviewer:** no Critical/High. Hardened numeric filter parsing (`isdigit()` → `isdecimal()` + len cap;
+  `'²'.isdigit()` is True but `int('²')` 500s) across `_report_department`/`_report_year`/`_report_cost_center`/
+  `_report_job_grade` (and the 3.30 `?leave_type` guard); added explicit `tenant=` to `ctc_report`'s
+  `SalaryStructureLine` lookup (defense-in-depth). Confirmed tenant isolation, admin gating, masked IDs, and the
+  Chart.js `|safe` (json.dumps of fixed labels + numbers) all clean.
+- **test-writer:** `apps/hrm/tests/test_payroll_reports.py` — 113 tests (access control, never-500 incl. the
+  `?department=²` isdecimal regression guard, aggregate correctness, the `resolved_amount(own_ctc)` per-employee
+  regression lock, the cost-centre attribution fold + Unassigned + distinct-employee headcount, the masked-ID
+  leak assertion, cross-tenant IDOR, empty-tenant KPIs, query-count ceilings). All green; full HRM suite (5,669)
+  green, zero regressions.
+
+**All four requested sub-modules (3.28 HR / 3.29 Attendance / 3.30 Leave / 3.31 Payroll Reports) are now BUILT,
+reviewed, and wired live.**
