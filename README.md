@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -528,6 +528,17 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `EmployeeProfile` aggregation goes through `employment__org_unit` (department/manager are `@property`, not columns).
   Trends render via the Chart.js already loaded in `base.html`. FTE/EEO PII fields, true cost-per-hire, attrition-risk
   ML, and the drag-drop dashboard builder (3.32) are deferred.
+- **3.29 Attendance Reports** — **5 derived, read-only, `@tenant_admin_required` report views** (NO new models,
+  reusing the 3.28 report helpers): `attendance_reports_index` + `attendance_summary_report` (status breakdown +
+  attendance % = present-equivalent [present + regularized + ½·half-day] ÷ tracked-days [excludes holiday/on-leave],
+  by department, monthly trend), `late_early_report` (late-arrival [reusing `AttendanceRecord.is_late()`] +
+  early-departure counts + avg minutes, top-offenders, day-of-week pattern — one `select_related` pass),
+  `absenteeism_report` (absence rate + frequent-absentee list + monthly trend), and `overtime_report` (total +
+  pay-equivalent hours [`hours_claimed × multiplier`], by employee/department, status mix, trend — **hours only, no
+  currency**, no pay-rate source). The **Utilization Report** bullet reuses the existing 3.11
+  `timesheet_utilization_report`. Monthly trends use a single `TruncMonth`-grouped query; every rate guards
+  div-by-zero. Currency OT cost, scheduled-vs-worked hours, Bradford-Factor discipline, and muster-roll grids are
+  deferred.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
