@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.name }}
+        {% if obj.is_default %}<span class="badge badge-info">Default</span>{% endif %}
+        {% if obj.is_shared %}<span class="badge badge-green">Shared</span>{% else %}<span class="badge badge-muted">Private</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hr_dashboard_list' %}">Dashboards</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    {% if can_manage %}
+    <div class="page-actions">
+      <a href="{% url 'hrm:hr_widget_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Widget</a>
+      <a href="{% url 'hrm:hr_dashboard_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:hr_dashboard_delete' obj.pk %}" onsubmit="return confirm('Delete this dashboard and its widgets?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if obj.description %}<div class="card"><div class="card-body text-muted">{{ obj.description|linebreaksbr }}</div></div>{% endif %}
+
+  {% if rendered_widgets %}
+    <div style="display:grid; grid-template-columns: repeat({{ cols }}, minmax(200px,1fr)); gap:1rem; align-items:start;">
+      {% for item in rendered_widgets %}
+        {% with w=item.widget r=item.result %}
+        <div class="card mb-0" style="grid-column: span {{ item.span }};">
+          <div class="card-header">
+            <h3 class="card-title">{{ w.title }}</h3>
+            <div class="flex items-center gap-2">
+              <span class="badge badge-muted">{{ w.get_date_range_display }}</span>
+              {% if can_manage %}
+                <form method="post" action="{% url 'hrm:hr_widget_move' w.pk 'up' %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Move up"><i data-lucide="arrow-up"></i></button></form>
+                <form method="post" action="{% url 'hrm:hr_widget_move' w.pk 'down' %}">{% csrf_token %}<button class="btn-icon" type="submit" title="Move down"><i data-lucide="arrow-down"></i></button></form>
+                <a href="{% url 'hrm:hr_widget_edit' w.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:hr_widget_delete' w.pk %}" onsubmit="return confirm('Remove this widget?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form>
+              {% endif %}
+            </div>
+          </div>
+          <div class="card-body">
+            {% if r.error %}
+              <p class="text-muted">{{ r.error }}</p>
+            {% elif r.kind == 'scalar' %}
+              <div class="stat-value">{{ r.display }}</div>
+              <div class="stat-label">{{ w.get_metric_display }}</div>
+              {% if w.chart_type == 'gauge' %}
+                <div class="progress" style="margin-top:.75rem;"><div class="progress-bar" style="width: {{ r.pct }}%;"></div></div>
+                <div class="stat-label" style="margin-top:.25rem;">{{ r.pct }}% of target{% if w.target_value %} ({{ w.target_value|floatformat:0 }}){% endif %}</div>
+              {% endif %}
+            {% elif r.kind == 'table' %}
+              <div class="table-wrap"><table class="table">
+                <thead><tr>{% for c in r.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                  {% for row in r.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                  {% empty %}<tr><td colspan="{{ r.columns|length }}"><div class="empty-state"><p>No data for this range.</p></div></td></tr>{% endfor %}
+                </tbody>
+              </table></div>
+            {% else %}
+              {% if r.labels %}<canvas id="wchart{{ w.pk }}" height="160"></canvas>{% else %}<p class="text-muted">No data for this range.</p>{% endif %}
+            {% endif %}
+          </div>
+        </div>
+        {% endwith %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="layout-dashboard"></i>
+        <h3>No widgets yet</h3>
+        <p>Add KPI cards, charts, gauges and tables of live HR data.</p>
+        {% if can_manage %}<a href="{% url 'hrm:hr_widget_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Widget</a>{% endif %}
+      </div>
+    </div></div>
+  {% endif %}
+
+  {{ chart_configs|json_script:"dash-charts" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    if (typeof Chart === 'undefined') return;
+    function J(id) { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return []; } }
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"];
+    (J("dash-charts") || []).forEach(function (c) {
+      var el = document.getElementById("wchart" + c.id);
+      if (!el || !c.labels.length) return;
+      var pie = (c.type === "pie" || c.type === "doughnut");
+      var ds = pie
+        ? [{ data: c.data, backgroundColor: palette }]
+        : [{ label: "", data: c.data, backgroundColor: c.type === "line" ? "rgba(37,99,235,.15)" : blue,
+             borderColor: blue, borderRadius: 6, fill: c.type === "line", tension: 0.3 }];
+      new Chart(el, {
+        type: c.type,
+        data: { labels: c.labels, datasets: ds },
+        options: { plugins: { legend: { display: pie, position: "bottom" } },
+                   scales: pie ? {} : { y: { beginAtZero: true } } }
+      });
+    });
+  })();
+</script>
+{% endblock %}
