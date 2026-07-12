@@ -2511,3 +2511,57 @@ class AssetMaintenanceForm(TenantModelForm):
         if cs and ce and ce <= cs:
             self.add_error("contract_end", "Contract end date must be after the contract start date.")
         return cleaned
+
+
+from .models import ExpenseCategory, ExpenseClaim, ExpenseClaimLine  # noqa: E402  — 3.34 Expense Management
+
+
+class ExpenseCategoryForm(TenantModelForm):
+    class Meta:
+        model = ExpenseCategory
+        fields = ["name", "code", "description", "per_claim_limit", "monthly_limit",
+                  "requires_receipt_above", "gl_account_hint", "is_active"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 3})}
+
+    def clean(self):
+        cleaned = super().clean()
+        for f in ("per_claim_limit", "monthly_limit", "requires_receipt_above"):
+            v = cleaned.get(f)
+            if v is not None and v < 0:
+                self.add_error(f, "Must be zero or greater.")
+        return cleaned
+
+
+class ExpenseClaimForm(TenantModelForm):
+    # status / approvers / timestamps / payment are workflow-owned (set by the action views);
+    # employee is resolved server-side by _ss_child_create/_ss_child_edit, not on the form.
+    class Meta:
+        model = ExpenseClaim
+        fields = ["title", "purpose", "period_start", "period_end", "currency"]
+        widgets = {"purpose": forms.Textarea(attrs={"rows": 3})}
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("period_start"), cleaned.get("period_end")
+        if start and end and end < start:
+            self.add_error("period_end", "Period end cannot be before period start.")
+        return cleaned
+
+
+class ExpenseClaimLineForm(TenantModelForm):
+    # claim / tenant are set by the view; multipart for the receipt upload.
+    class Meta:
+        model = ExpenseClaimLine
+        fields = ["category", "expense_date", "merchant", "description", "amount", "receipt"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get("amount")
+        if amount is not None and amount <= 0:
+            raise forms.ValidationError("Amount must be greater than zero.")
+        return amount
+
+    def clean_receipt(self):
+        return _validate_upload(self.cleaned_data.get("receipt"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Receipt")
