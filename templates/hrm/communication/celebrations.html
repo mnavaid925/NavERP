@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Celebrations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Celebrations</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Communication · Celebrations</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="get" style="display:flex; gap:.4rem; align-items:center;">
+        <label class="form-label" for="window" style="margin:0;">Window</label>
+        <select name="window" id="window" class="form-select" onchange="this.form.submit()">
+          <option value="7" {% if window == 7 %}selected{% endif %}>Next 7 days</option>
+          <option value="14" {% if window == 14 %}selected{% endif %}>Next 14 days</option>
+          <option value="30" {% if window == 30 %}selected{% endif %}>Next 30 days</option>
+          <option value="60" {% if window == 60 %}selected{% endif %}>Next 60 days</option>
+          <option value="90" {% if window == 90 %}selected{% endif %}>Next 90 days</option>
+        </select>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title"><i data-lucide="cake"></i> Upcoming Birthdays</h2><span class="badge badge-info">{{ birthdays|length }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>In</th></tr></thead>
+        <tbody>
+          {% for r in birthdays %}
+            <tr>
+              <td class="fw-600">{{ r.emp.party.name }}</td>
+              <td>{{ r.dept }}</td>
+              <td>{{ r.date|date:"D, M j" }}</td>
+              <td>{% if r.days == 0 %}<span class="badge badge-green">Today</span>{% else %}{{ r.days }} day{{ r.days|pluralize }}{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="cake"></i><h3>No birthdays in this window</h3><p>Try a longer window.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title"><i data-lucide="party-popper"></i> Upcoming Work Anniversaries</h2><span class="badge badge-info">{{ anniversaries|length }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>Years</th><th>In</th></tr></thead>
+        <tbody>
+          {% for r in anniversaries %}
+            <tr>
+              <td class="fw-600">{{ r.emp.party.name }}</td>
+              <td>{{ r.dept }}</td>
+              <td>{{ r.date|date:"D, M j" }}</td>
+              <td><span class="badge badge-slate">{{ r.years }} yr{{ r.years|pluralize }}</span></td>
+              <td>{% if r.days == 0 %}<span class="badge badge-green">Today</span>{% else %}{{ r.days }} day{{ r.days|pluralize }}{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="party-popper"></i><h3>No work anniversaries in this window</h3><p>Try a longer window.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
