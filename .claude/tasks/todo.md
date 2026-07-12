@@ -4080,4 +4080,28 @@ action route.
   carries to a later pass.
 
 ## Review notes
-(filled in at the end)
+
+**3.28 HR Reports — BUILT & reviewed (2026-07-12).** 6 `@tenant_admin_required` derived report views (NO
+models/migration/seeder): `hr_reports_index` + headcount/attrition/diversity/cost/hiring, `templates/hrm/reports/`,
+`LIVE_LINKS["3.28"]`. All aggregate over the existing spine.
+
+**Review-agent findings applied:**
+- **code-reviewer** — 5 correctness fixes: cost employer_cost/by_component now honor `?department`; hiring
+  source-of-hire uses the date-range-scoped `hired` set; offer-acceptance computes both legs over the same
+  applied_at window; attrition trend anchors on `date_to` (not today); dropped the dead `as_of` control on
+  headcount + employment-type display label.
+- **explorer** — wiring clean (no fix).
+- **frontend-reviewer** — added the missing `.stat-icon.slate` CSS rule (also fixed 3 pre-existing offenders);
+  `floatformat:2` on cost currency + "—" for employer contributions in estimate mode; thousands-separator on the
+  index payroll-cost tile.
+- **performance-reviewer** — headcount trend 24→2 queries (bisect over sorted hire/first-sep dates); cost
+  materializes PayrollCycle once; hiring materializes `filled` once; dropped an unused attrition join.
+- **qa-smoke-tester** — 7/7 checks PASS (403 non-admin ×6, cross-tenant isolation, IDOR-safe department,
+  div-by-zero on an empty tenant); no code change.
+- **security-reviewer** — no findings (admin-gated, tenant-scoped, IDOR-safe, no `|safe` XSS, no injection).
+- **test-writer** — 95 tests (access/rendering/aggregate-correctness/IDOR/div-by-zero/query-counts), all green.
+
+**Documented approximations (intentional, pinned by tests):** attrition avg-headcount denominator is tenant-wide
+even under a `?department` filter (only the numerator narrows); the hiring funnel is not date-scoped (only source/
+time-to-hire/offer-accept are). **Deferred:** FTE/EEO PII fields, true cost-per-hire, attrition-risk ML,
+benchmarking, CSV export, and the 3.32 dashboard builder. **Next unbuilt HRM sub-module: 3.29 Attendance Reports.**
