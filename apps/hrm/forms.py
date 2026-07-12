@@ -2406,3 +2406,43 @@ def build_survey_response_form(questions):
             fields[f"q_{i}"] = forms.CharField(label=label, required=False,
                                                widget=forms.Textarea(attrs={"rows": 2}))
     return type("SurveyResponseForm", (_ThemedForm,), fields)
+
+
+from .models import HRDashboard, HRDashboardWidget  # noqa: E402  — 3.32 Analytics Dashboard
+
+
+class HRDashboardForm(TenantModelForm):
+    """A saved HR analytics dashboard. ``is_shared`` (publish tenant-wide) and ``is_default``
+    (the owner's landing dashboard) are only offered to tenant admins — for a regular user the
+    fields are dropped so the model defaults stand (no privilege escalation via the form). ``owner``
+    is never a form field: it is always set to the creating user in the view."""
+
+    class Meta:
+        model = HRDashboard
+        fields = ["name", "description", "is_shared", "is_default", "layout"]
+
+    def __init__(self, *args, can_share=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not can_share:
+            self.fields.pop("is_shared", None)
+            self.fields.pop("is_default", None)
+
+
+class HRDashboardWidgetForm(TenantModelForm):
+    """Widget tile editor. ``dashboard``/``tenant``/``position`` are set in the view. ``clean()``
+    rejects a chart type the chosen metric can't render (e.g. a table metric drawn as a line)."""
+
+    class Meta:
+        model = HRDashboardWidget
+        fields = ["title", "metric", "chart_type", "date_range", "size", "target_value"]
+
+    def clean(self):
+        from .analytics import WIDGET_METRICS, allowed_charts
+        cleaned = super().clean()
+        metric = cleaned.get("metric")
+        chart_type = cleaned.get("chart_type")
+        if metric and chart_type and metric in WIDGET_METRICS:
+            ok = allowed_charts(metric)
+            if chart_type not in ok:
+                self.add_error("chart_type", "This metric supports: " + ", ".join(ok) + ".")
+        return cleaned
