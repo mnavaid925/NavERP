@@ -13496,8 +13496,8 @@ def asset_edit(request, pk):
 @require_POST
 def asset_delete(request, pk):
     obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
-    if obj.status == "assigned":
-        messages.error(request, "Return this asset before deleting it.")
+    if obj.status in ("assigned", "in_repair"):
+        messages.error(request, "Return this asset or complete its repair before deleting it.")
         return redirect("hrm:asset_detail", pk=obj.pk)
     return crud_delete(request, model=Asset, pk=pk, success_url="hrm:asset_list")
 
@@ -13505,20 +13505,21 @@ def asset_delete(request, pk):
 @login_required
 @require_POST
 def asset_assign(request, pk):
-    obj = get_object_or_404(Asset, pk=pk, tenant=request.tenant)
-    if obj.status != "in_stock":
-        messages.error(request, "Only an in-stock asset can be assigned.")
-        return redirect("hrm:asset_detail", pk=obj.pk)
     emp_pk = (request.POST.get("employee") or "").strip()
-    employee = None
-    if emp_pk.isdecimal():
-        employee = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first()
-    if employee is None:
-        messages.error(request, "Select a valid employee to assign this asset to.")
-        return redirect("hrm:asset_detail", pk=obj.pk)
     return_due = parse_date((request.POST.get("return_due_date") or "").strip() or "")
     notes = (request.POST.get("notes") or "").strip()
+    # Lock the asset row for the check-and-create so two concurrent assigns can't both pass the
+    # in-stock check and double-issue one asset (TOCTOU).
     with transaction.atomic():
+        obj = get_object_or_404(Asset.objects.select_for_update(), pk=pk, tenant=request.tenant)
+        if obj.status != "in_stock":
+            messages.error(request, "Only an in-stock asset can be assigned.")
+            return redirect("hrm:asset_detail", pk=obj.pk)
+        employee = (EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first()
+                    if emp_pk.isdecimal() else None)
+        if employee is None:
+            messages.error(request, "Select a valid employee to assign this asset to.")
+            return redirect("hrm:asset_detail", pk=obj.pk)
         allocation = AssetAllocation.objects.create(
             tenant=request.tenant, employee=employee, asset=obj, asset_name=obj.name,
             asset_category=obj.category, serial_number=obj.serial_number, asset_tag=obj.asset_tag,
@@ -13629,6 +13630,13 @@ def assetmaintenance_edit(request, pk):
 @login_required
 @require_POST
 def assetmaintenance_delete(request, pk):
+    obj = get_object_or_404(AssetMaintenance.objects.select_related("asset"), pk=pk, tenant=request.tenant)
+    # Deleting the active repair that put the asset "in_repair" would strand it there (delete()
+    # doesn't run the save()-sync) — require completing/cancelling the repair first.
+    if (obj.maintenance_type == "repair" and obj.status in ("scheduled", "in_progress")
+            and obj.asset.status == "in_repair"):
+        messages.error(request, "Complete or cancel this repair first — the asset is currently in repair.")
+        return redirect("hrm:assetmaintenance_detail", pk=obj.pk)
     return crud_delete(request, model=AssetMaintenance, pk=pk, success_url="hrm:assetmaintenance_list")
 
 
