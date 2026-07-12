@@ -14,7 +14,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement, 3.22 Training Management,
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
-3.30 Leave Reports, 3.31 Payroll Reports.** Reuses the
+3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -411,6 +411,36 @@ to no profiled cost centre lands in an **Unassigned** callout, never dropped. **
 are `None` (rendered "—") when `budget_annual` is None; `ctc_report` caches `SalaryStructureLine` per DISTINCT
 `template_id` (N+1-safe). Templates: `payroll_index.html` + `salary_register/tax/statutory/ctc/cost_center.html`.
 
+### 3.32 Analytics Dashboard (2 NEW models + 3 derived views) — the dashboard layer over the 3.28-3.31 reports,
+mirroring CRM 1.6's `AnalyticsDashboard`/`DashboardWidget`. **Models** (`apps/hrm/models.py`, migration `0046`):
+`HRDashboard` (`TenantNumbered` `HRD-`; name/description/`owner` [FK User]/`is_shared`/`is_default`/`layout`
+[one/two/three]; `widget_count` prop) + `HRDashboardWidget` (plain child row: tenant, dashboard FK, title,
+`metric` [16-metric `WIDGET_METRIC_CHOICES`], `chart_type` [kpi/gauge/bar/line/pie/doughnut/table], `date_range`,
+`size`, `target_value`, `position`). **The 5 widget choice-list constants live in `models.py`** (next to the
+fields) so `apps/hrm/analytics.py` imports them without a circular edge. **`apps/hrm/analytics.py`** (NEW compute
+layer, mirrors `apps/crm/analytics.py`): `range_bounds(key)` (date windows, end always today); self-contained
+`_month_end`/`_tenure_band`/`_headcount_at` (kept here to avoid a views<->analytics cycle — views imports analytics,
+never the reverse); shared derived helpers `_turnover_rate(…, seps_count=None, hc_to=None)` /
+`_headcount_trend_series` / `_present_absent_counts` (also imported by the derived views); the transparent 5-query
+`_attrition_risk_scores(tenant, dept)` heuristic (tenure/attendance/leave/probation/review-gap weighted sum 0-100 +
+Low/Medium/High/Critical bands, NO N+1); 16 `_r_*` resolvers; the `WIDGET_METRICS` registry (module-level assert
+keeps it in sync with `WIDGET_METRIC_CHOICES`); `allowed_charts(metric)`; `compute_widget(widget)` returning
+`{"kind": "scalar"|"series"|"table", …}` (`kind` is NOT `"kpi"` — that's a chart_type; a non-positive target is
+ignored). **Views** (`apps/hrm/views.py`, `# --- 3.32 Analytics Dashboard ---`): dashboard CRUD `hr_dashboard_list`
+(owner's + shared, `widget_total` annotated to avoid the `widget_count` N+1)/`_create` (owner set server-side)/
+`_detail` (live widget compute; `PermissionDenied` for a non-owner opening a private dashboard, 404 cross-tenant)/
+`_edit`/`_delete` + `hr_widget_create`/`_edit`/`_delete`/`_move` (position-swap `bulk_update`), all `@login_required`
++ **owner-or-admin gated for writes** (`_can_manage_hrdash`; `_can_share_hrdash` gates the is_shared/is_default form
+fields); plus 3 `@tenant_admin_required` derived views `executive_dashboard` (6 KPI tiles [2 sparklines] + alerts),
+`predictive_analytics` (attrition-risk table + dept rollup + hiring-needs projection [budgeted vs filled vs
+trailing/projected exits], with a mandatory "how it's calculated" explainer — NOT ML), `benchmarking`
+(period-over-period RAG scorecard + optional `?target_*` override [`_bench_target` guards float/nan] + latest-cycle
+pay-equity table). **Gotchas:** `stat-icon` variants are only blue/green/orange/purple/slate (no amber/red — L33);
+badges `badge-green/red/amber/info/muted/slate`; Chart.js guarded `typeof Chart === 'undefined'`; `json_script`
+for chart data. Templates: `templates/hrm/analytics/dashboard/{list,detail,form}.html` +
+`analytics/widget/form.html` + standalone `analytics/{executive,predictive,benchmarking}.html`. Seeder:
+`_seed_analytics` (2 demo dashboards + 9 widgets, idempotent).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -567,6 +597,10 @@ are `None` (rendered "—") when `budget_annual` is None; `ctc_report` caches `S
   `hrm:tax_report` (`.../tax/`) / `hrm:statutory_report` (`.../statutory/`) / `hrm:ctc_report` (`.../ctc/`) /
   `hrm:cost_center_report` (`.../cost-center/`). GET-filtered (`cycle`/`on_hold`, `financial_year`/`regime`,
   `scheme`/`status`/period, `grade`, `cost_center`/`year`, + `department` on most); no POST/CRUD.
+- **Analytics Dashboard (3.32):** `hrm:executive_dashboard`/`predictive_analytics`/`benchmarking`
+  (`/hrm/analytics/{executive,predictive,benchmarking}/`, `@tenant_admin_required`, GET) + dashboard CRUD
+  `hrm:hr_dashboard_list`/`_create`/`_detail`/`_edit`/`_delete` (`/hrm/analytics/dashboards/...`) + widget
+  `hrm:hr_widget_create`(dash_pk)/`_edit`/`_delete`/`_move`(pk,direction) (`@login_required`, owner-or-admin gated).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1091,6 +1125,9 @@ tenant and sees nothing.
   Statutory Reports → `hrm:statutory_report`; Cost Analysis → `hrm:ctc_report`. `LIVE_LINKS["3.31"]`. Neither the
   `payroll_reports_index` hub NOR `cost_center_report` is a bullet — NavERP.md's single "Cost Analysis" bullet
   covers both CTC views, so `cost_center_report` is reached from the hub + a cross-link on `ctc.html`.
+- 3.32 (all 4 bullets live): Executive Dashboard → `hrm:executive_dashboard`; Custom Dashboards →
+  `hrm:hr_dashboard_list`; Predictive Analytics → `hrm:predictive_analytics`; Benchmarking → `hrm:benchmarking`.
+  `LIVE_LINKS["3.32"]`. Custom Dashboards is `@login_required` (any tenant user); the other 3 are admin-only.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
