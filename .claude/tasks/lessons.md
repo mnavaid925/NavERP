@@ -362,6 +362,13 @@ skill/CLAUDE.md's semantic-name list (it's stale). Quick check before shipping b
 `grep -n '\.badge-' static/css/theme.css` to confirm the real class names. (The skill/CLAUDE.md class list should be
 corrected to the colour names in a docs pass.) Related: L13 (agents invent utility classes that don't exist) — same
 root cause, verify the class exists in theme.css before using it.
+**RECURRED in HRM 3.31 (2026-07-12):** shipped `badge-success`/`-danger`/`-warning` again across
+tax/salary_register/statutory report templates — frontend-reviewer caught 11 occurrences. The lesson existed but
+the `grep -n '\.badge-' static/css/theme.css` check was NOT run before writing the templates. **Hardened rule:
+before writing ANY new template with status/category badges, FIRST run that grep (or copy a badge line verbatim
+from a sibling template) — treat it as a mandatory pre-write step, not a pre-ship check.** The stale
+skill/CLAUDE.md semantic-name list is the trap; muscle-memory of "success/danger/warning" from other frameworks is
+the second trap.
 
 ## L34 — Tenant-admin seed password is `password` (NOT `password123` — the skills are stale) + persist sidebar scroll/expand across full-page nav
 Two things from a user-reported sidebar UX fix. **(a) Credentials:** the tenant admins (`admin_acme`/`admin_globex`)
