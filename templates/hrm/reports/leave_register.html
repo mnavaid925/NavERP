@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Leave Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Leave Register</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:leave_reports_index' %}">Leave Reports</a><span class="sep">›</span><span>Register</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:leave_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="year">Year</label>
+        <select name="year" id="year" class="form-select">
+          {% for y in year_choices %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:leave_register_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar"></i></div><div class="stat-value">{{ totals.allocated }}</div><div class="stat-label">Allocated Days</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ totals.used }}</div><div class="stat-label">Availed Days</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="wallet"></i></div><div class="stat-value">{{ totals.balance }}</div><div class="stat-label">Balance Days</div></div>
+  </div>
+
+  {% if rows %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Register ({{ year }})</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Employee</th><th>Leave Type</th><th style="text-align:end;">Allocated</th><th style="text-align:end;">Carried</th><th style="text-align:end;">Availed</th><th style="text-align:end;">Encashed</th><th style="text-align:end;">Balance</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr><td>{{ r.employee }}</td><td>{{ r.leave_type }}</td>
+            <td style="text-align:end;">{{ r.allocated|floatformat:1 }}</td>
+            <td style="text-align:end;">{{ r.carried|floatformat:1 }}</td>
+            <td style="text-align:end;">{{ r.used|floatformat:1 }}</td>
+            <td style="text-align:end;">{{ r.encashed|floatformat:1 }}</td>
+            <td style="text-align:end;"><strong>{{ r.balance|floatformat:1 }}</strong></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="table"></i><h3>No leave allocations</h3><p>No allocations for {{ year }} match the current filters.</p></div></div></div>
+  {% endif %}
+{% endblock %}
