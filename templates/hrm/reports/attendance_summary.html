@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Attendance Summary{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Attendance Summary</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:attendance_reports_index' %}">Attendance Reports</a><span class="sep">›</span><span>Summary</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:attendance_reports_index' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Reports</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group"><label class="form-label" for="date_from">From</label><input type="date" name="date_from" id="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="date_to">To</label><input type="date" name="date_to" id="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="department">Department</label>
+        <select name="department" id="department" class="form-select"><option value="">All departments</option>
+          {% for d in department_choices %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'hrm:attendance_summary_report' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ attendance_pct }}%</div><div class="stat-label">Attendance %</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ total }}</div><div class="stat-label">Records</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar-days"></i></div><div class="stat-value">{{ tracked }}</div><div class="stat-label">Tracked Days</div></div>
+  </div>
+
+  {% if total %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Monthly Attendance % Trend</h2></div><div class="card-body"><canvas id="trendChart" height="90"></canvas></div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Status Breakdown</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th style="text-align:end;">Days</th><th style="text-align:end;">%</th></tr></thead><tbody>
+      {% for r in status_rows %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.count }}</td><td style="text-align:end;">{{ r.pct }}%</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  <div class="card"><div class="card-header"><h2 class="card-title">By Department</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Department</th><th style="text-align:end;">Tracked Days</th><th style="text-align:end;">Attendance %</th></tr></thead><tbody>
+      {% for r in by_department %}<tr><td>{{ r.name }}</td><td style="text-align:end;">{{ r.tracked }}</td><td style="text-align:end;">{{ r.attendance_pct }}%</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <script>
+    (function () {
+      var el = document.getElementById('trendChart');
+      if (!el || typeof Chart === 'undefined') return;
+      new Chart(el, {
+        type: 'line',
+        data: { labels: {{ trend_labels|safe }}, datasets: [{ label: 'Attendance %', data: {{ trend_values|safe }}, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.10)', fill: true, tension: .3 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+      });
+    })();
+  </script>
+  {% else %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>No attendance records</h3><p>No records match the current filters.</p></div></div></div>
+  {% endif %}
+{% endblock %}
