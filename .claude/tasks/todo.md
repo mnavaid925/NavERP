@@ -6499,3 +6499,680 @@ HRM / 8,553 project-wide.
 
 **Next: 3.34 Expense Management** (Expense Categories, Claims with receipts, multi-level Approval Workflow,
 Reimbursement, Policy Compliance — coordinate with CRM 1.7 expenses + the payroll reimbursement path).
+
+---
+# Module 3 — HRM — Sub-module 3.34 Expense Management (hrm) — plan from research-hrm-3.34.md (2026-07-13)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.33) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Full CRUD sub-module: **3 new tenant-scoped models**
+(`ExpenseCategory`, `ExpenseClaim`, `ExpenseClaimLine`, new incremental migration `0049`) — a claim approval
+workflow + receipt uploads + a policy-compliance soft-flag. NavERP.md 3.34 bullets (verbatim, `NavERP.md:668-673`):
+Expense Categories, Expense Claims, Approval Workflow, Reimbursement, Policy Compliance. Distinct from
+`crm.Expense` (1.7, `NUMBER_PREFIX="EXP"`, a deal/project cost) and from `hrm.PayComponent(component_type=
+"reimbursement")`/`FinalSettlement.reimbursement_amount` (3.13/3.17 payroll payout mechanics, not touched here).
+
+## 0. Corrections / decisions — read before writing code
+
+- [ ] **Prefix:** `ExpenseClaim.NUMBER_PREFIX = "ECL"` — confirmed no collision against any existing HRM prefix
+  (`apps/hrm/models.py` currently has no `"ECL"`) and deliberately distinct from `crm.Expense`'s `"EXP"` so the two
+  claim series never look interchangeable in the UI.
+- [ ] **The `_hr_request_*` helpers are NOT reused verbatim for `ExpenseClaim` — write 6 bespoke
+  `expenseclaim_*` action views instead, following the same shape.** `_hr_request_submit` hardcodes the target
+  status literal `"pending"`; `_hr_request_approve`/`_hr_request_reject` hardcode a single `approver`/
+  `approved_at` field pair and check `obj.status == "pending"`; `_hr_request_cancel` hardcodes writing
+  `obj.decision_note`. `ExpenseClaim` has a **2-stage** machine (`submitted` -> `manager_approved` -> `approved`)
+  with **two** approver/timestamp pairs (`manager_approver`/`manager_approved_at`, `finance_approver`/
+  `approved_at`) and a `rejection_reason` field (not `decision_note`) — none of that fits the generic helpers'
+  hardcoded assumptions. What IS reused verbatim: `_can_manage_own_child` (ownership gate), `_is_own_hr_request`
+  (self-approval gate — works unmodified since `ExpenseClaim.employee` is the same shape it already checks),
+  `_ss_scope`/`_ss_employees`/`_ss_child_create` (list scoping + the admin-picks-employee create flow, identical
+  to how `Suggestion`/`AssetRequest` already use them), `_is_admin`, and `write_audit_log`.
+- [ ] **`OPEN_STATUSES = ("draft", "submitted")`** on `ExpenseClaim` — used only by `expenseclaim_cancel`'s gate
+  (cancel is allowed from draft or submitted, per the brief). **Edit/Delete are stricter than `OPEN_STATUSES`** —
+  they hard-check `status == "draft"` directly (bespoke, not the generic `_hr_request_edit`/`_delete`, which would
+  incorrectly also allow editing a `submitted` claim). Document this divergence inline in both view docstrings.
+- [ ] **Reject stamps whichever stage's approver pair is "next"** — since there's no separate `rejected_by` field:
+  rejecting a `submitted` claim stamps `manager_approver`/`manager_approved_at` (the reviewer who made *a*
+  decision at that stage, even though the decision was reject); rejecting a `manager_approved` claim stamps
+  `finance_approver`/`approved_at`. Both branches also set `status="rejected"` + `rejection_reason`.
+- [ ] **`ExpenseClaimLine.category` FK uses `on_delete=PROTECT`** (not `SET_NULL`) — a category referenced by
+  any line can't be deleted at the DB layer at all, which is a
+  *stronger* guarantee than the CRUD-Completeness "block delete if lines reference it" view-level guard alone.
+  `expensecategory_delete` still does the friendly existence pre-check first (`ExpenseClaimLine.objects.filter(
+  tenant=..., category=obj).exists()`) so the user gets a clean message instead of a raw `ProtectedError`/500.
+- [ ] **`ExpenseCategory.monthly_limit` is stored but NOT enforced by an automated rollup this pass** — a
+  monthly-spend check needs a cross-claim aggregate query (all of an employee's `ExpenseClaimLine`s in a category
+  within the current month), which is meaningfully heavier than the two per-line comparisons below; the field
+  ships now (admin can see/set it) and the rollup enforcement is explicitly deferred (see Later passes).
+  `ExpenseClaimLine.policy_violation` this pass checks ONLY `category.per_claim_limit` (per-line amount) and
+  `category.requires_receipt_above` (receipt-presence) — exactly the two comparisons detailed in §1.
+- [ ] **`has_violations`/`total_amount`/`line_count` on `ExpenseClaim` are pure `@property`s, recomputed from
+  `self.lines.all()` on every access (no stored/stale column)** — this means every view that renders a claim (or
+  a list of claims) MUST `.prefetch_related("lines__category")` (list) or `.prefetch_related("lines__category")`
+  (detail) to avoid N+1; call this out explicitly in §2 and expect `performance-reviewer` to check it.
+- [ ] **Navigation bullet-to-page mapping (decide + document, mirrors 3.33's reused-page precedent):**
+  "Approval Workflow" -> `expenseclaim_list?status=submitted` (the single most useful "awaiting action" slice —
+  `crud_list`'s filter is an exact-match, single-value filter, so it can't natively express "submitted OR
+  manager_approved"; `manager_approved` rows are one click away via the status dropdown on the same list).
+  "Reimbursement" -> `expenseclaim_list?status=approved` (the "ready to pay" queue). "Policy Compliance" ->
+  `expensecategory_list` (where the limits/thresholds that DRIVE the policy engine are configured — violations
+  themselves surface as badges directly on the claim list/detail, no dedicated violations page this pass).
+- [ ] **Receipt upload reuses `ALLOWED_ONBOARDING_DOC_EXTENSIONS`/`MAX_ONBOARDING_DOC_BYTES`** (`{".pdf", ".doc",
+  ".docx", ".jpg", ".jpeg", ".png"}`, 10 MB) verbatim via `_validate_upload` — no new allowlist constants, per
+  the research's "reuse `InvestmentProof`'s pattern" recommendation (its `.doc`/`.docx` entries are harmless
+  extras for a receipt; still blocks `.exe`/oversize).
+
+## 1. Models (apps/hrm/models.py — append after `AssetMaintenance`; new migration `0049`)
+
+- [ ] **`ExpenseCategory(TenantOwned)`** — small config master (Expense Categories bullet), no numbering, like
+  `LeaveType`/`PayComponent`.
+  ```python
+  class ExpenseCategory(TenantOwned):
+      """3.34 expense taxonomy (Travel/Food/Accommodation/...) + the per-category policy limits that
+      ExpenseClaimLine.policy_violation checks against. gl_account_hint is a coding HINT only — no
+      GL posting happens from this module (that's an accounting-integration later pass)."""
+
+      name = models.CharField(max_length=100)
+      code = models.CharField(max_length=20, blank=True)
+      description = models.TextField(blank=True)
+      per_claim_limit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+          help_text="Max amount for a single expense line in this category. Blank = no limit.")
+      monthly_limit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+          help_text="Max total per employee per month in this category. Not enforced automatically this pass.")
+      requires_receipt_above = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+          help_text="A line above this amount must have a receipt attached. Blank = never required.")
+      gl_account_hint = models.ForeignKey("accounting.GLAccount", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="hrm_expense_category_hints")
+      is_active = models.BooleanField(default=True)
+
+      class Meta:
+          ordering = ["name"]
+          unique_together = ("tenant", "name")
+          indexes = [models.Index(fields=["tenant", "is_active"], name="hrm_expcat_tnt_active_idx")]
+
+      def __str__(self):
+          return f"{self.name} ({self.code})" if self.code else self.name
+  ```
+  Drivers: category master (3.34.1, all 12 leaders), `per_claim_limit`/`monthly_limit` (Zoho Expense/Fyle
+  limit-rule research), `requires_receipt_above` (SAP Concur/Emburse receipt-threshold research),
+  `gl_account_hint` (Ramp/Concur/Zoho GL-coding research). Reuses `accounting.GLAccount` (hint FK, no posting) —
+  adds no new spine entity.
+- [ ] **`ExpenseClaim(TenantNumbered)`** — `NUMBER_PREFIX = "ECL"`. The claim header + 2-stage approval machine
+  (Expense Claims + Approval Workflow + Reimbursement bullets).
+  ```python
+  class ExpenseClaim(TenantNumbered):
+      """3.34 employee T&E claim header. Lean 2-stage status machine (draft -> submitted ->
+      manager_approved -> approved -> reimbursed; rejected/cancelled reachable from the open stages) —
+      see the module docstring/§0 for why this does NOT reuse _hr_request_* verbatim.
+      total_amount/line_count/has_violations are properties recomputed from .lines.all() — callers
+      MUST prefetch "lines__category" to avoid N+1 (see §0)."""
+
+      NUMBER_PREFIX = "ECL"
+
+      STATUS_CHOICES = [
+          ("draft", "Draft"),
+          ("submitted", "Submitted"),
+          ("manager_approved", "Manager Approved"),
+          ("approved", "Approved (Finance)"),
+          ("reimbursed", "Reimbursed"),
+          ("rejected", "Rejected"),
+          ("cancelled", "Cancelled"),
+      ]
+      OPEN_STATUSES = ("draft", "submitted")  # cancel-eligible; edit/delete are stricter (draft only, §0)
+      PAYMENT_METHOD_CHOICES = [
+          ("bank_transfer", "Bank Transfer"),
+          ("cash", "Cash"),
+          ("payroll", "Payroll"),
+          ("other", "Other"),
+      ]
+
+      employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="expense_claims")
+      title = models.CharField(max_length=255)
+      purpose = models.TextField(blank=True, help_text="Why this expense was incurred (trip name, project, etc).")
+      period_start = models.DateField(null=True, blank=True)
+      period_end = models.DateField(null=True, blank=True)
+      currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_expense_claims")
+      status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+      manager_approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                           blank=True, related_name="hrm_expenseclaim_manager_approvals")
+      manager_approved_at = models.DateTimeField(null=True, blank=True)
+      finance_approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                           blank=True, related_name="hrm_expenseclaim_finance_approvals")
+      approved_at = models.DateTimeField(null=True, blank=True)  # finance-stage decision timestamp
+      rejection_reason = models.TextField(blank=True)  # also reused to hold an optional cancel note (§0)
+      payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
+      payment_reference = models.CharField(max_length=100, blank=True)
+      reimbursed_at = models.DateTimeField(null=True, blank=True)
+
+      class Meta:
+          ordering = ["-created_at"]
+          unique_together = ("tenant", "number")
+          indexes = [
+              models.Index(fields=["tenant", "employee", "status"], name="hrm_expclaim_tnt_emp_st_idx"),
+              models.Index(fields=["tenant", "status"], name="hrm_expclaim_tnt_status_idx"),
+          ]
+
+      def __str__(self):
+          return f"{self.number} - {self.title}" if self.number else self.title
+
+      @property
+      def total_amount(self):
+          return self.lines.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+      @property
+      def line_count(self):
+          return len(self.lines.all()) if hasattr(self, "_prefetched_objects_cache") and \
+              "lines" in self._prefetched_objects_cache else self.lines.count()
+
+      @property
+      def has_violations(self):
+          return any(line.policy_violation for line in self.lines.all())
+  ```
+  Drivers: header+lines (3.34.2, all 12), the 2-stage `status` machine (3.34.3 "Multi-level design decision" —
+  the research's explicit lean-2-stage recommendation, `manager_approver`/`finance_approver` mirroring how
+  `LeaveRequest` reuses one `approver` field, just twice), `payment_method`/`payment_reference`/`reimbursed_at`
+  (3.34.4, all 12). Reuses `hrm.EmployeeProfile`, `accounting.Currency` (record-keeping only, no FX conversion) —
+  adds no new spine entity beyond the claim/line tables themselves.
+  - [ ] `line_count` note: the ternary above is a micro-optimization so a prefetched `.lines.all()` isn't
+        re-queried by `.count()`; if this reads as over-engineered at build time, `self.lines.count()` alone is
+        also acceptable — either is fine, but prefer the prefetch-aware version since `has_violations` already
+        forces `.lines.all()` to be evaluated on the same request.
+- [ ] **`ExpenseClaimLine(TenantOwned)`** — the line items + the policy soft-flag (Expense Claims + Policy
+  Compliance bullets).
+  ```python
+  class ExpenseClaimLine(TenantOwned):
+      """One expense line on a claim. policy_violation/violation_reason are COMPUTED (never stored) —
+      always current, no stale-flag risk. Editable only while the parent claim is status='draft'
+      (enforced in the views, not here — a model-level lock would fight admin data-fixes)."""
+
+      claim = models.ForeignKey("hrm.ExpenseClaim", on_delete=models.CASCADE, related_name="lines")
+      category = models.ForeignKey("hrm.ExpenseCategory", on_delete=models.PROTECT, related_name="claim_lines")
+      expense_date = models.DateField()
+      merchant = models.CharField(max_length=255, blank=True)
+      description = models.TextField(blank=True)
+      amount = models.DecimalField(max_digits=12, decimal_places=2)
+      # WARNING: extension allowlist + size cap enforced in ExpenseClaimLineForm.clean_receipt (shared
+      # _validate_upload, ALLOWED_ONBOARDING_DOC_EXTENSIONS/MAX_ONBOARDING_DOC_BYTES). Keep MEDIA_ROOT
+      # outside the web root and serve with Content-Disposition: attachment + X-Content-Type-Options:
+      # nosniff in production (mirrors InvestmentProof/EmployeeDocument).
+      receipt = models.FileField(upload_to="hrm/expense_receipts/%Y/%m/", null=True, blank=True)
+
+      class Meta:
+          ordering = ["expense_date", "id"]
+          indexes = [models.Index(fields=["tenant", "claim"], name="hrm_expline_tnt_claim_idx")]
+
+      def __str__(self):
+          cat = self.category.name if self.category_id else "Uncategorized"
+          return f"{self.claim.number if self.claim_id else '?'} - {cat} - {self.amount}"
+
+      def _policy_check(self):
+          """(violation: bool, reason: str) — both comparisons None-guarded so a category with no
+          limits set, or a line with no amount yet, never flags. Exact comparisons:
+            * amount > category.per_claim_limit  (per-claim amount-limit check, 3.34.5)
+            * amount > category.requires_receipt_above and not receipt  (receipt-threshold check, 3.34.5)
+          `monthly_limit` is intentionally NOT checked here — see §0 (deferred rollup)."""
+          if not self.category_id or self.amount is None:
+              return False, ""
+          cat = self.category
+          reasons = []
+          if cat.per_claim_limit is not None and self.amount > cat.per_claim_limit:
+              reasons.append(f"Exceeds per-claim limit of {cat.per_claim_limit}")
+          if cat.requires_receipt_above is not None and self.amount > cat.requires_receipt_above \
+                  and not self.receipt:
+              reasons.append(f"Receipt required above {cat.requires_receipt_above}")
+          return bool(reasons), "; ".join(reasons)
+
+      @property
+      def policy_violation(self):
+          return self._policy_check()[0]
+
+      @property
+      def violation_reason(self):
+          return self._policy_check()[1]
+  ```
+  Drivers: receipt attachment per line (3.34.2, all 12 — reuses the `InvestmentProof`/`_validate_upload`
+  pattern), the two 3.34.5 Must-priority checks named explicitly in the research ("per-category/per-claim
+  amount-limit check" + "receipt-required-threshold enforcement"), both implemented as computed properties per
+  the research's "soft flag surfaced to the approver, not a submission-blocking hard rule" decision (warn mode,
+  not block mode — configurable block mode is deferred). `category` uses `on_delete=PROTECT` (§0) so a category
+  with claim history can never be silently orphaned.
+- [ ] `python manage.py makemigrations hrm` -> one new file (`0049_expensecategory_expenseclaim_expenseclaimline...
+  py` — Django auto-names): exactly 3 new models, nothing else.
+
+## 2. Views (apps/hrm/views.py — append `# --- 3.34 Expense Management ---` banner after the 3.33 block)
+
+- [ ] **`ExpenseCategory` CRUD** — list is `@login_required` (read access for everyone, mirrors `LeaveType`/
+  master-data read conventions); create/edit/delete are `@tenant_admin_required` (category master is
+  admin-config, mirrors how `LeaveType`/`Designation` writes are gated):
+  - `expensecategory_list(request)` — `crud_list(request, ExpenseCategory.objects.filter(tenant=request.tenant),
+    "hrm/expenses/expensecategory/list.html", search_fields=["name", "code"],
+    filters=[("is_active", "is_active", False)], extra_context={})`. Filter Implementation Rules: template's
+    Active/Inactive `<select>` posts `value="True"`/`value="False"` literal strings (matches `crud_list`'s
+    `{"True": True, "False": False}` mapping).
+  - `expensecategory_create(request)` — `@tenant_admin_required`. `crud_create(request,
+    form_class=ExpenseCategoryForm, template="hrm/expenses/expensecategory/form.html",
+    success_url="hrm:expensecategory_list")`.
+  - `expensecategory_detail(request, pk)` — `@login_required`. `crud_detail(request, model=ExpenseCategory,
+    pk=pk, template="hrm/expenses/expensecategory/detail.html",
+    extra_context={"line_count": ExpenseClaimLine.objects.filter(tenant=request.tenant,
+    category_id=pk).count()})`.
+  - `expensecategory_edit(request, pk)` — `@tenant_admin_required`. `crud_edit(request, model=ExpenseCategory,
+    pk=pk, form_class=ExpenseCategoryForm, template="hrm/expenses/expensecategory/form.html",
+    success_url="hrm:expensecategory_list")`.
+  - `expensecategory_delete(request, pk)` — `@tenant_admin_required` `@require_POST`. Guard: `if
+    ExpenseClaimLine.objects.filter(tenant=request.tenant, category_id=pk).exists(): messages.error(request,
+    "This category is used by existing expense lines and can't be deleted."); return redirect(
+    "hrm:expensecategory_detail", pk=pk)` — else `crud_delete(request, model=ExpenseCategory, pk=pk,
+    success_url="hrm:expensecategory_list")`. (The `on_delete=PROTECT` FK is the DB-level backstop; this is the
+    friendly pre-check per §0.)
+- [ ] **`ExpenseClaim` CRUD** (`@login_required` throughout; own-vs-admin scoping via `_ss_scope`/
+  `_can_manage_own_child`, identical convention to 3.25/3.26):
+  - `expenseclaim_list(request)` — `qs = _ss_scope(request, ExpenseClaim.objects.filter(tenant=request.tenant)
+    .select_related("employee__party", "currency").prefetch_related("lines__category"))`. `is_admin =
+    _is_admin(request.user)`. `crud_list(request, qs, "hrm/expenses/expenseclaim/list.html",
+    search_fields=["number", "title"], filters=[("status", "status", False), ("employee", "employee_id",
+    is_admin)], extra_context={"status_choices": ExpenseClaim.STATUS_CHOICES, "is_admin": is_admin,
+    "employees": _ss_employees(request) if is_admin else None})`. (When `is_admin` is False the `employee`
+    filter tuple's `is_int` flag is `False` too so a spoofed `?employee=` GET param on a non-admin's request is
+    harmlessly ignored by `crud_list`'s int-guard rather than leaking cross-employee rows — `_ss_scope` is the
+    real enforcement boundary regardless.)
+  - `expenseclaim_create(request)` — `_ss_child_create(request, ExpenseClaimForm,
+    "hrm/expenses/expenseclaim/form.html", "hrm:expenseclaim_list")` (reused verbatim — an employee creates
+    for themselves, an admin may target `?employee=<id>`, exactly the Suggestion/AssetRequest precedent).
+  - `expenseclaim_detail(request, pk)` — bespoke (extra workflow context beyond `_ss_child_detail`):
+    ```python
+    obj = get_object_or_404(
+        ExpenseClaim.objects.select_related("employee__party", "currency", "manager_approver", "finance_approver")
+        .prefetch_related("lines__category"),
+        pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This claim belongs to another employee.")
+    ```
+    context: `obj`, `lines=obj.lines.all()` (already prefetched), `is_admin=_is_admin(request.user)`,
+    `is_own=_is_own_hr_request(request, obj)`, `line_form=ExpenseClaimLineForm(tenant=request.tenant) if
+    obj.status == "draft" else None`, `payment_method_choices=ExpenseClaim.PAYMENT_METHOD_CHOICES`. Render
+    `hrm/expenses/expenseclaim/detail.html`.
+  - `expenseclaim_edit(request, pk)` — bespoke: ownership check via `_can_manage_own_child`, THEN `if
+    obj.status != "draft": messages.error(...); return redirect("hrm:expenseclaim_detail", pk=obj.pk)` (checked
+    BEFORE calling `_ss_child_edit` so a decided claim is never opened for edit) — else delegate to
+    `_ss_child_edit(request, ExpenseClaim, pk, ExpenseClaimForm, "hrm/expenses/expenseclaim/form.html",
+    "hrm:expenseclaim_detail")`.
+  - `expenseclaim_delete(request, pk)` — `@require_POST`, same ownership-then-`status == "draft"` guard, else
+    `_ss_child_delete(request, ExpenseClaim, pk, "hrm:expenseclaim_list")`.
+- [ ] **`ExpenseClaim` workflow actions** — all `@require_POST`, all redirect to `hrm:expenseclaim_detail`. Exact
+  transitions + role/decorator:
+  - `expenseclaim_submit(request, pk)` — `@login_required`. Gate: `_can_manage_own_child` (owner or admin).
+    `if obj.status != "draft"`: error "Only a draft claim can be submitted." `elif obj.line_count == 0`: error
+    "Add at least one expense line before submitting." `else`: `status="draft"->"submitted"`,
+    `save(update_fields=["status", "updated_at"])`, `write_audit_log(..., {"action": "submit"})`.
+  - `expenseclaim_manager_approve(request, pk)` — `@tenant_admin_required`. Self-approval blocked via
+    `_is_own_hr_request(request, obj)`. `if obj.status != "submitted"`: error "Only a submitted claim can
+    receive manager approval." `else`: `status->"manager_approved"`, stamp `manager_approver=request.user`,
+    `manager_approved_at=timezone.now()`, `save(update_fields=["status", "manager_approver",
+    "manager_approved_at", "updated_at"])`, `write_audit_log(..., {"action": "manager_approve"})`.
+  - `expenseclaim_approve(request, pk)` — `@tenant_admin_required` (finance approval). Self-approval blocked via
+    `_is_own_hr_request`. `if obj.status != "manager_approved"`: error "Only a manager-approved claim can
+    receive finance approval." `else`: `status->"approved"`, stamp `finance_approver=request.user`,
+    `approved_at=timezone.now()`, `save(update_fields=[...])`, `write_audit_log(..., {"action": "approve"})`.
+  - `expenseclaim_reject(request, pk)` — `@tenant_admin_required`. Self-approval blocked via
+    `_is_own_hr_request`. `reason = request.POST.get("rejection_reason", "").strip()`; no reason -> error "A
+    reason is required to reject a claim." `if obj.status not in ("submitted", "manager_approved")`: error
+    "Only a submitted or manager-approved claim can be rejected." Else `status->"rejected"`,
+    `rejection_reason=reason[:2000]`, PLUS stamp the stage-appropriate approver pair (§0: `submitted` ->
+    `manager_approver`/`manager_approved_at`; `manager_approved` -> `finance_approver`/`approved_at`),
+    `write_audit_log(..., {"action": "reject"})`.
+  - `expenseclaim_cancel(request, pk)` — `@login_required`. Gate: `_can_manage_own_child` (owner or admin). `if
+    obj.status not in ExpenseClaim.OPEN_STATUSES` (`draft`/`submitted`): error "Only a draft or submitted claim
+    can be cancelled." Else `status->"cancelled"`, optional `rejection_reason =
+    request.POST.get("rejection_reason", "").strip()[:2000]` (reused field for a cancel note, §0),
+    `write_audit_log(..., {"action": "cancel"})`.
+  - `expenseclaim_reimburse(request, pk)` — `@tenant_admin_required`. `if obj.status != "approved"`: error "Only
+    an approved claim can be marked reimbursed." Else validate `method = request.POST.get("payment_method",
+    "").strip()` is one of `ExpenseClaim.PAYMENT_METHOD_CHOICES` (else error "Select a valid payment method."),
+    `status->"reimbursed"`, `payment_method=method`, `payment_reference=request.POST.get("payment_reference",
+    "").strip()[:100]`, `reimbursed_at=timezone.now()`, `save(update_fields=[...])`,
+    `write_audit_log(..., {"action": "reimburse"})`.
+- [ ] **`ExpenseClaimLine` inline CRUD** (all editing blocked once the claim leaves draft — checked on every
+  action, not just add):
+  - `expenseclaimline_add(request, claim_pk)` — `@login_required` `@require_POST`.
+    `claim = get_object_or_404(ExpenseClaim, pk=claim_pk, tenant=request.tenant)`; ownership via
+    `_can_manage_own_child(request, claim)`; `if claim.status != "draft"`: error "Lines can only be added while
+    the claim is a draft." Else `form = ExpenseClaimLineForm(request.POST, request.FILES,
+    instance=ExpenseClaimLine(tenant=request.tenant, claim=claim), tenant=request.tenant)` (multipart —
+    `request.FILES` for `receipt`); valid -> `form.save()`, `write_audit_log(request.user, claim, "update",
+    {"action": "line_add"})`; invalid -> flash the field errors. Always redirect
+    `hrm:expenseclaim_detail`, pk=claim.pk`.
+  - `expenseclaimline_edit(request, pk)` — `@login_required`. `line =
+    get_object_or_404(ExpenseClaimLine.objects.select_related("claim"), pk=pk, tenant=request.tenant)`;
+    ownership via `_can_manage_own_child(request, line.claim)`; `if line.claim.status != "draft"`: error "Lines
+    can only be edited while the claim is a draft." GET renders `hrm/expenses/expenseclaimline/form.html`
+    (`form`, `obj=line`, `claim=line.claim`, `is_edit=True`); valid POST saves + redirects to
+    `hrm:expenseclaim_detail`.
+  - `expenseclaimline_delete(request, pk)` — `@login_required` `@require_POST`. Same ownership +
+    `status == "draft"` guard, then `line.delete()`, `write_audit_log(request.user, line.claim, "update",
+    {"action": "line_delete"})`, redirect to `hrm:expenseclaim_detail`.
+- [ ] Every list view tenant-scoped; every list follows the Filter Implementation Rules (`status_choices`/
+  `employees` explicitly passed; FK filters `|stringformat:"d"` in templates).
+
+## 3. Forms (apps/hrm/forms.py — append)
+
+- [ ] `ExpenseCategoryForm(TenantModelForm)`:
+  ```python
+  class ExpenseCategoryForm(TenantModelForm):
+      class Meta:
+          model = ExpenseCategory
+          fields = ["name", "code", "description", "per_claim_limit", "monthly_limit",
+                    "requires_receipt_above", "gl_account_hint", "is_active"]
+          widgets = {"description": forms.Textarea(attrs={"rows": 3})}
+
+      def clean(self):
+          cleaned = super().clean()
+          for f in ("per_claim_limit", "monthly_limit", "requires_receipt_above"):
+              v = cleaned.get(f)
+              if v is not None and v < 0:
+                  self.add_error(f, "Must be zero or greater.")
+          return cleaned
+  ```
+  (`gl_account_hint` queryset auto-scoped to the tenant by `TenantModelForm.__init__` since `GLAccount` has a
+  `tenant` field — same mechanism the 3.33 `AssetForm.currency` patch relies on.)
+- [ ] `ExpenseClaimForm(TenantModelForm)` — workflow fields (status/approvers/timestamps/payment) excluded,
+  `employee` resolved server-side by `_ss_child_create`/`_ss_child_edit`, not on the form:
+  ```python
+  class ExpenseClaimForm(TenantModelForm):
+      class Meta:
+          model = ExpenseClaim
+          fields = ["title", "purpose", "period_start", "period_end", "currency"]
+          widgets = {"purpose": forms.Textarea(attrs={"rows": 3})}
+
+      def clean(self):
+          cleaned = super().clean()
+          start, end = cleaned.get("period_start"), cleaned.get("period_end")
+          if start and end and end < start:
+              self.add_error("period_end", "Period end cannot be before period start.")
+          return cleaned
+  ```
+- [ ] `ExpenseClaimLineForm(TenantModelForm)` — multipart (`receipt`), `claim`/`tenant` excluded (set by the
+  view, mirrors `SalaryStructureLineForm`/`InvestmentDeclarationLineForm`):
+  ```python
+  class ExpenseClaimLineForm(TenantModelForm):
+      class Meta:
+          model = ExpenseClaimLine
+          fields = ["category", "expense_date", "merchant", "description", "amount", "receipt"]
+          widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+      def clean_amount(self):
+          amount = self.cleaned_data.get("amount")
+          if amount is not None and amount <= 0:
+              raise forms.ValidationError("Amount must be greater than zero.")
+          return amount
+
+      def clean_receipt(self):
+          return _validate_upload(self.cleaned_data.get("receipt"),
+                                  allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                  max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Receipt")
+  ```
+  (`category` queryset auto-scoped to the tenant, same mechanism as above.)
+
+## 4. URLs (apps/hrm/urls.py — append after the 3.33 block, before the closing `]`)
+
+- [ ] New `# 3.34 Expense Management` comment block:
+  ```python
+  # 3.34 Expense Management
+  path("expense-categories/", views.expensecategory_list, name="expensecategory_list"),
+  path("expense-categories/add/", views.expensecategory_create, name="expensecategory_create"),
+  path("expense-categories/<int:pk>/", views.expensecategory_detail, name="expensecategory_detail"),
+  path("expense-categories/<int:pk>/edit/", views.expensecategory_edit, name="expensecategory_edit"),
+  path("expense-categories/<int:pk>/delete/", views.expensecategory_delete, name="expensecategory_delete"),
+  path("expense-claims/", views.expenseclaim_list, name="expenseclaim_list"),
+  path("expense-claims/add/", views.expenseclaim_create, name="expenseclaim_create"),
+  path("expense-claims/<int:pk>/", views.expenseclaim_detail, name="expenseclaim_detail"),
+  path("expense-claims/<int:pk>/edit/", views.expenseclaim_edit, name="expenseclaim_edit"),
+  path("expense-claims/<int:pk>/delete/", views.expenseclaim_delete, name="expenseclaim_delete"),
+  path("expense-claims/<int:pk>/submit/", views.expenseclaim_submit, name="expenseclaim_submit"),
+  path("expense-claims/<int:pk>/manager-approve/", views.expenseclaim_manager_approve,
+       name="expenseclaim_manager_approve"),
+  path("expense-claims/<int:pk>/approve/", views.expenseclaim_approve, name="expenseclaim_approve"),
+  path("expense-claims/<int:pk>/reject/", views.expenseclaim_reject, name="expenseclaim_reject"),
+  path("expense-claims/<int:pk>/cancel/", views.expenseclaim_cancel, name="expenseclaim_cancel"),
+  path("expense-claims/<int:pk>/reimburse/", views.expenseclaim_reimburse, name="expenseclaim_reimburse"),
+  path("expense-claims/<int:claim_pk>/lines/add/", views.expenseclaimline_add, name="expenseclaimline_add"),
+  path("expense-lines/<int:pk>/edit/", views.expenseclaimline_edit, name="expenseclaimline_edit"),
+  path("expense-lines/<int:pk>/delete/", views.expenseclaimline_delete, name="expenseclaimline_delete"),
+  ```
+- [ ] Confirm no path/name collision against any existing block (`expense-` prefix is new to `apps/hrm/urls.py`).
+
+## 5. Navigation — apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.34"]` block (insert after `"3.33"`), bullet text verbatim from `NavERP.md:668-673`,
+  mapping decisions per §0:
+  ```python
+  # 3.34 Expense Management — 3 new models (ExpenseCategory, ExpenseClaim, ExpenseClaimLine).
+  # Approval Workflow deep-links to the "submitted" queue (the single most useful awaiting-action slice —
+  # manager_approved rows are one status-dropdown click away on the same list). Reimbursement deep-links to
+  # the "approved" (ready-to-pay) queue. Policy Compliance has no dedicated violations page this pass — it
+  # points at the category list where the limits/thresholds are configured; violations surface as badges
+  # directly on the claim list/detail.
+  "3.34": {
+      "Expense Categories": "hrm:expensecategory_list",
+      "Expense Claims": "hrm:expenseclaim_list",
+      "Approval Workflow": "hrm:expenseclaim_list?status=submitted",
+      "Reimbursement": "hrm:expenseclaim_list?status=approved",
+      "Policy Compliance": "hrm:expensecategory_list",
+  },
+  ```
+
+## 6. Seeder (apps/hrm/management/commands/seed_hrm.py — extend, idempotent)
+
+- [ ] New `_seed_expenses(self, tenant, *, flush)`, called from `handle()` **after** `self._seed_assets(tenant,
+  flush=options["flush"])` (currently the last call, 3.33) — append `self._seed_expenses(tenant,
+  flush=options["flush"])` as the new final line of the `for tenant in tenants:` loop.
+  - Guard: `if flush: ExpenseClaim.objects.filter(tenant=tenant).delete()` (cascades to `ExpenseClaimLine`);
+    `ExpenseCategory.objects.filter(tenant=tenant).delete()`. `if
+    ExpenseCategory.objects.filter(tenant=tenant).exists():` print the standard "already exists, use --flush"
+    warning and `return`.
+  - `emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:3])`;
+    guard `if not emps: return`. `actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()`;
+    `usd = Currency.objects.filter(code="USD").first()`.
+  - **3 categories** (Travel/Food/Accommodation, with limits + receipt thresholds so the policy flag is
+    exercisable), each via `ExpenseCategory.objects.get_or_create(tenant=tenant, name=..., defaults={...})`:
+    1. `"Travel"` — `code="TRAVEL"`, `per_claim_limit=500.00`, `monthly_limit=2000.00`,
+       `requires_receipt_above=25.00`.
+    2. `"Food & Meals"` — `code="FOOD"`, `per_claim_limit=100.00`, `requires_receipt_above=20.00`.
+    3. `"Accommodation"` — `code="HOTEL"`, `per_claim_limit=300.00`, `requires_receipt_above=0.00` (any amount
+       needs a receipt — deliberately exercises the "missing receipt" flag on the seeded hotel line below).
+  - **3 claims spanning the workflow states**, each via `ExpenseClaim.objects.get_or_create(tenant=tenant,
+    employee=..., title=..., defaults={...})` (title is the natural idempotency key — no `.create()` in a bare
+    loop, per the Seed Command Rules), `receipt` left blank on every seeded line (no real files, per the brief):
+    1. **DRAFT**, `emps[0]`, `"Client site visit - Lahore"`, `purpose="Two-day client visit for the Q3
+       rollout."`, `currency=usd`, `period_start`/`period_end` ~10/~8 days ago — 2 lines: Travel/City
+       Cabs/45.00 (in policy), Food/Cafe Aroma/150.00 (**over** the 100.00 food `per_claim_limit` -> exercises
+       `policy_violation`).
+    2. **SUBMITTED**, `emps[1 % len(emps)]`, `"Vendor conference - Karachi"`, `purpose="Annual vendor summit
+       attendance."`, `currency=usd` — 2 lines: Accommodation/Grand Hotel/280.00 (no receipt, category
+       `requires_receipt_above=0.00` -> exercises the missing-receipt flag), Travel/Airline Co/220.00 (in
+       policy).
+    3. **REIMBURSED** (full workflow demonstrated), `emps[2 % len(emps)]`, `"Regional sales trip"`,
+       `purpose="Monthly regional sales visits."`, `currency=usd`, `manager_approver=actor`,
+       `manager_approved_at`=~5 days ago, `finance_approver=actor`, `approved_at`=~3 days ago,
+       `payment_method="bank_transfer"`, `payment_reference="TXN-100294"`, `reimbursed_at`=~1 day ago — 2 lines,
+       both in policy: Travel/Fuel Station/60.00, Food/Roadside Diner/35.00.
+  - Every `ExpenseCategory`/`ExpenseClaim` write uses `.get_or_create(...)`; `ExpenseClaimLine` rows are only
+    created `if created` (i.e. guarded by the parent claim's own `get_or_create` `created` flag) so a second run
+    doesn't duplicate lines under an already-existing claim.
+  - `self.stdout.write(self.style.SUCCESS(f"Expenses seeded for '{tenant.name}': {ExpenseCategory.objects.filter(
+    tenant=tenant).count()} categories, {ExpenseClaim.objects.filter(tenant=tenant).count()} claims,
+    {ExpenseClaimLine.objects.filter(tenant=tenant).count()} lines."))`.
+
+## 7. Templates (templates/hrm/expenses/ — sub-module folder, then entity folders per the Template Folder
+   Structure rule)
+
+- [ ] `templates/hrm/expenses/expensecategory/list.html` — filter bar (`q` + Active/Inactive `<select>` with
+  `value="True"`/`"False"`), table columns Name/Code/Per-Claim Limit/Monthly Limit/Receipt Threshold/GL
+  Hint/Active badge/Actions (view/edit/delete — delete POST+confirm+csrf). Active badge: `is_active`->
+  `badge-green` "Active", else `badge-muted` "Inactive". Empty-state: "No expense categories yet."
+- [ ] `templates/hrm/expenses/expensecategory/form.html` — `ExpenseCategoryForm` fields loop, breadcrumb Expense
+  Management › Expense Categories › New/Edit.
+- [ ] `templates/hrm/expenses/expensecategory/detail.html` — fields grid (limits/thresholds/GL hint/active) +
+  `line_count` note ("Used by N expense line(s)") + Actions sidebar (Edit, Delete [disabled/hidden when
+  `line_count > 0`, with a tooltip explaining why], Back to List).
+- [ ] `templates/hrm/expenses/expenseclaim/list.html` — filter bar (`q` + `status` dropdown always, `employee`
+  dropdown only `{% if is_admin %}`, FK compared `|stringformat:"d"`), table columns Number/Employee/Title/
+  Status badge/Total (`{{ obj.total_amount|floatformat:2 }}`)/Violations (`{% if obj.has_violations
+  %}badge-red "Flagged"{% endif %}`)/Created/Actions (view always; edit/delete only `{% if obj.status ==
+  "draft" %}`). Status badges (exact `STATUS_CHOICES` values, `{% else %}` fallback to `get_status_display`):
+  `draft`, `submitted`, `manager_approved`, `approved`, `reimbursed`, `rejected`, `cancelled` — **grep
+  `static/css/theme.css` first (L33 — mandatory) and pick from the real `badge-green/red/amber/info/muted/slate`
+  palette**, do not invent new badge classes. Empty-state: "No expense claims yet."
+- [ ] `templates/hrm/expenses/expenseclaim/form.html` — `ExpenseClaimForm` fields loop; `{% if is_admin and
+  employees %}` an employee `<select>` (mirrors the 3.25/3.26 `target_employee`/`employees` context contract);
+  breadcrumb Expense Management › Expense Claims › New/Edit. `enctype="multipart/form-data"` (per the brief,
+  for consistency with the line form even though the header itself has no file field).
+- [ ] `templates/hrm/expenses/expenseclaim/detail.html` — header (title, number, status badge, employee,
+  period, `total_amount`); **policy violations callout** (`{% if obj.has_violations %}` a red/amber box listing
+  each flagged line's `merchant`/`amount`/`violation_reason`); **lines table** (category/expense_date/merchant/
+  amount/receipt link-or-"—"/violation badge per line/Actions [edit/delete, only `{% if obj.status == "draft"
+  %}`]); **add-line panel** (`line_form`, POSTs to `expenseclaimline_add`, `enctype="multipart/form-data"`,
+  shown only `{% if obj.status == "draft" %}`); **workflow action buttons**, each its own POST form + csrf +
+  confirm, gated by status AND role:
+  - `{% if obj.status == "draft" and is_own %}` Submit, Edit, Delete.
+  - `{% if obj.status in "draft submitted" and is_own %}` Cancel (optional `rejection_reason` textarea).
+  - `{% if obj.status == "submitted" and is_admin and not is_own %}` Manager Approve, Reject (reject requires a
+    `rejection_reason` textarea, client-side `required`).
+  - `{% if obj.status == "manager_approved" and is_admin and not is_own %}` Approve (Finance), Reject.
+  - `{% if obj.status == "approved" and is_admin %}` Reimburse form (`payment_method` `<select>` from
+    `payment_method_choices` + `payment_reference` text input).
+  - Always: Back to List.
+- [ ] `templates/hrm/expenses/expenseclaimline/form.html` — `ExpenseClaimLineForm` fields loop,
+  `enctype="multipart/form-data"`, shows the current `obj.receipt` link when editing, breadcrumb Expense
+  Management › Expense Claims › {{ claim.number }} › Edit Line, a "Back to Claim" link to
+  `{% url 'hrm:expenseclaim_detail' claim.pk %}`.
+- [ ] **Badge classes are `badge-green/red/amber/info/muted/slate`, stat-icon `blue/green/orange/purple/slate` —
+  grep `static/css/theme.css` FIRST, do NOT invent `badge-success`/`stat-icon amber` (L33, recurred 3x already —
+  mandatory pre-write grep step).**
+- [ ] All new templates: filter `<form method="get">` re-submits every active param; FK `<select>` comparisons
+  use `|stringformat:"d"`; badge values match the exact model `CHOICES` strings with an `{% else %}` fallback.
+
+## 8. Admin (apps/hrm/admin.py)
+
+- [ ] `@admin.register(ExpenseCategory)` — `list_display = ("name", "code", "tenant", "per_claim_limit",
+  "monthly_limit", "requires_receipt_above", "is_active")`, `list_filter = ("is_active",)`,
+  `search_fields = ("name", "code")`, `raw_id_fields = ("gl_account_hint",)`.
+- [ ] `@admin.register(ExpenseClaim)` — `list_display = ("number", "employee", "tenant", "status",
+  "payment_method", "reimbursed_at")`, `list_filter = ("status", "payment_method")`,
+  `search_fields = ("number", "title", "employee__party__name")`, `raw_id_fields = ("employee", "currency",
+  "manager_approver", "finance_approver")`, `readonly_fields = ("manager_approver", "manager_approved_at",
+  "finance_approver", "approved_at", "reimbursed_at")` (workflow-stamped, not hand-editable from admin either).
+- [ ] `@admin.register(ExpenseClaimLine)` — `list_display = ("claim", "category", "expense_date", "amount",
+  "tenant")`, `list_filter = ("category",)`, `search_fields = ("claim__number", "merchant")`,
+  `raw_id_fields = ("claim", "category")`.
+
+## 9. Verify
+
+- [ ] `python manage.py makemigrations hrm` -> exactly one new file (`0049_...py`): 3 new models, nothing else.
+- [ ] `python manage.py migrate` — clean apply.
+- [ ] `python manage.py seed_hrm` **twice** in a row — second run is a no-op for `_seed_expenses` (idempotent,
+  per the Seed Command Rules), no duplicated categories/claims/lines.
+- [ ] `python manage.py check` — zero errors/warnings.
+- [ ] `temp/` smoke sweep, tenant admin login:
+  - `hrm:expensecategory_list` / `hrm:expenseclaim_list` -> 200, with and without each filter (`is_active` on
+    categories; `status`/`employee` on claims), with a garbage/cross-tenant FK filter value (silently ignored,
+    never 500).
+  - Full CRUD round-trip for `ExpenseCategory` (create -> detail -> edit -> delete) -> 200/302; delete blocked
+    with a friendly message (not a 500) when a line references the category.
+  - Full CRUD round-trip for `ExpenseClaim` while `draft` (create -> detail -> edit -> delete) -> 200/302; edit/
+    delete both 403/redirect-with-error once the claim leaves `draft` (test at `submitted` and `approved`).
+  - `ExpenseClaimLine` add/edit/delete via `expenseclaimline_add`/`_edit`/`_delete` -> 200/302 while the parent
+    claim is `draft`; all three blocked (error message, no state change) once the claim is `submitted`+.
+  - Receipt upload: a `.pdf`/`.png` accepted; a renamed `.exe` and an oversized (>10MB) file both rejected with
+    a `ValidationError` message, not a 500.
+  - Full workflow round-trip on one seeded/created claim: `draft` -> `expenseclaim_submit` -> `submitted` ->
+    `expenseclaim_manager_approve` -> `manager_approved` -> `expenseclaim_approve` -> `approved` ->
+    `expenseclaim_reimburse` -> `reimbursed`; each step 302 + the right status/approver/timestamp fields
+    stamped; `expenseclaim_reimburse` requires `status == "approved"` (retry at any earlier status -> error, no
+    change).
+  - Self-approval blocked: an admin who IS the claim's `employee` gets an error (no status change) from both
+    `expenseclaim_manager_approve` and `expenseclaim_approve`.
+  - `expenseclaim_reject` at `submitted` and at `manager_approved` both -> `rejected` + the right stage's
+    approver pair stamped each time; rejecting with no `rejection_reason` -> error, no change.
+  - `expenseclaim_cancel` from `draft` and from `submitted` -> `cancelled`; from `manager_approved`/`approved`/
+    `reimbursed` -> error, no change.
+  - Policy violation computed correctly: the seeded over-limit Food line and the seeded no-receipt Accommodation
+    line both render `policy_violation == True` with the exact expected `violation_reason` text; an in-policy
+    line renders `policy_violation == False`.
+  - Own-vs-admin claim scoping: a plain employee's `expenseclaim_list` shows only their own claims; an admin's
+    shows all tenant claims plus the `employee` filter.
+  - Cross-tenant IDOR: a second tenant's `ExpenseCategory`/`ExpenseClaim`/`ExpenseClaimLine` pk on every url ->
+    404 (or `PermissionDenied` for the ownership-gated claim/line views, never a leak).
+  - No `{#`/`{% comment` leak markers in any rendered page.
+- [ ] Sidebar shows all 5 `3.34` bullets as **Live** for a tenant login (`Expense Categories`, `Expense Claims`,
+  `Approval Workflow`, `Reimbursement`, `Policy Compliance`).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` ->
+  `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to check the `expenseclaim_reject` stage-branch logic (right approver pair stamped
+    for each starting status) and that `ExpenseClaimLine._policy_check()` is called (not duplicated) by both
+    `policy_violation`/`violation_reason`.
+  - Expect `performance-reviewer` to check `expenseclaim_list`/`_detail` both `.prefetch_related("lines__
+    category")` (per §0 — `total_amount`/`has_violations` are properties that walk `.lines.all()` on every
+    render) and that `expensecategory_list` needs no such prefetch (no derived per-row aggregate there).
+  - Expect `security-reviewer` to confirm every new view's tenant scoping, that `expenseclaimline_add/_edit/
+    _delete` re-check `line.claim.tenant == request.tenant` (via the `tenant=request.tenant` filter on the
+    `ExpenseClaimLine`/`ExpenseClaim` lookups) so a cross-tenant claim pk can't be used to smuggle a line onto
+    someone else's claim, and that `ExpenseClaimForm`/`ExpenseClaimLineForm` never expose a workflow-owned field
+    (`status`, `manager_approver`, `finance_approver`, `payment_method`, etc).
+  - Expect `test-writer` to cover: full CRUD for all 3 models; the complete 7-status workflow matrix (every
+    legal transition + every illegal-transition guard); self-approval blocks at both approval stages; reject's
+    stage-dependent approver stamping; `_policy_check()` against hand-computed fixtures (over-limit, missing-
+    receipt, both-clear, category with no limits set — None-guard); receipt upload allow/reject; migration
+    `0049` applies cleanly; seeder idempotency; own-vs-admin list scoping; cross-tenant IDOR on every new url.
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.34 Expense Management (3 new tables)` section
+  documenting `ExpenseCategory`/`ExpenseClaim`/`ExpenseClaimLine`, the 2-stage approval machine (and why it's 6
+  bespoke `expenseclaim_*` views rather than a reuse of `_hr_request_*`), the computed `policy_violation`/
+  `violation_reason`/`has_violations`/`total_amount` properties + the prefetch requirement, the seeded 3
+  categories + 3 claims, and the `LIVE_LINKS["3.34"]` mapping.
+- [ ] README.md — add `/3.34` to the Module 3 header line + a bullet describing the 3 new models + the 2-stage
+  approval workflow + the computed policy-compliance flag; refresh HRM test counts after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.34.md)
+
+- **Receipt OCR / SmartScan-style auto-extraction** (Expensify, SAP Concur, Happay, Pleo, Brex) — external
+  AI/OCR service integration, not a single Django pass.
+- **Corporate-card transaction feed + auto-reconciliation** (Ramp, Brex, Pleo, Airbase, Concur) — needs a
+  card-issuer API integration.
+- **Mileage auto-calculation (map-based) and a dedicated per-diem engine** (Rydoo) — belongs with 3.35 Travel
+  Management, not duplicated in 3.34.
+- **Cash advance linked to / offset against a claim** (SAP Concur, Rydoo, Happay) — NavERP.md scopes "Travel
+  Advance"/"Travel Settlement" to 3.35, not 3.34; cross-sub-module coordination point, not built here.
+- **Duplicate-expense detection** (Fyle) — a same-employee/date/amount/merchant query could be added later.
+- **Multi-currency FX conversion** (Expensify/Zoho/Concur) — v1 only stores a `currency` FK for record-keeping;
+  live conversion deferred.
+- **`ExpenseCategory.monthly_limit` automated rollup enforcement** (Zoho Expense) — the field ships now; the
+  cross-claim aggregate check that would actually flag a monthly-limit breach is deferred (§0).
+- **Configurable warn-vs-block enforcement mode** (Zoho Expense's admin toggle) — v1 always soft-flags.
+- **Rule-based / N-level / conditional approval routing** (by amount, department, violation count) — Zoho
+  Expense, Airbase, Navan, Ramp Policy Agent — v1 ships the lean fixed 2-stage manager-then-finance machine; a
+  dynamic approval-step model is a later enhancement if a tenant needs more than 2 levels.
+- **Auto-approve in-policy / under-threshold claims** (Brex, Emburse, Ramp Policy Agent) — deferred automation;
+  v1 always routes to a human.
+- **Reimbursement batch/payment-run bundling** (SAP Concur, Zoho Expense) — deferred AP-style batching.
+- **Payroll-payout integration** — pushing `ExpenseClaim.total_amount` into
+  `PayComponent(component_type="reimbursement")`/`FinalSettlement.reimbursement_amount` — explicitly deferred;
+  3.34 only tracks the claim's own `payment_reference`/`reimbursed_at`.
+- **AI/OCR fraud & policy audit** (Concur Detect & Audit, Ramp Policy Agent, Happay Smart Audit) — integration/
+  later.
+- **Department/branch/cost-center-specific policy limit overrides** (Zoho Expense) — v1 ships one tenant-wide
+  limit set per category.
+- **GL posting / journal entry creation from a reimbursed claim** — `gl_account_hint` is a coding hint only;
+  actual `JournalEntry`/`JournalLine` posting is an accounting-module integration.
+- **Approver edits/approves individual lines, not just the whole claim** (Emburse Certify) — deferred.
+- **Delegate / backup approver** (SAP Concur, Zoho Expense) — deferred.
+- **Line-level approval / itemized-split UX polish** — already achievable today with multiple
+  `ExpenseClaimLine` rows on one claim (no schema change needed); a guided "split this receipt" UX is a later
+  frontend enhancement.
+
+## Review notes
+(filled in at the end)
