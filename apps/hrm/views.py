@@ -12597,9 +12597,12 @@ def leave_liability_report(request):
         qs = _annotated_allocations(tenant, year).filter(leave_type__encashable=True)
         if dept:
             qs = qs.filter(employee__employment__org_unit=dept)
-        # rate fallback: latest per-(employee,type) encashment rate, else CTC/365 estimate, else days-only.
+        # rate fallback: latest APPROVED/PAID per-(employee,type) encashment rate, else CTC/365 estimate,
+        # else days-only. Only real (approved/paid) encashments set an authoritative rate; a stable
+        # -year, -id ordering + setdefault picks the most recent one (never a draft/rejected rate).
         enc_rates = {}
-        for e in LeaveEncashment.objects.filter(tenant=tenant).order_by("employee_id", "leave_type_id", "-year"):
+        for e in (LeaveEncashment.objects.filter(tenant=tenant, status__in=("approved", "paid"))
+                  .order_by("employee_id", "leave_type_id", "-year", "-id")):
             enc_rates.setdefault((e.employee_id, e.leave_type_id), e.rate_per_day)
         ctc = {s.employee_id: (s.annual_ctc_amount / Decimal("365"))
                for s in EmployeeSalaryStructure.objects.filter(tenant=tenant, status="active")
@@ -12611,7 +12614,7 @@ def leave_liability_report(request):
                 continue
             estimate = False
             rate = enc_rates.get((a.employee_id, a.leave_type_id))
-            if not rate:
+            if rate is None:  # a genuine 0 encashment rate is honored; only a missing rate falls back
                 rate = ctc.get(a.employee_id)
                 estimate = rate is not None
             value = (bal * rate) if rate else None
