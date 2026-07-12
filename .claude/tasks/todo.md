@@ -3743,4 +3743,35 @@ Add all 4 new classes after `AssetRequest` (current end of `models.py`) under a 
 
 ## Review notes
 
-(filled in at the end)
+**3.27 Communication Hub — BUILT & reviewed (2026-07-12).** As-built matches the plan: 4 new models
+(`Announcement` ANN-, `Survey` SUR- + `SurveyResponse`, `Suggestion` SUG-) + a derived `celebrations` view (no
+model). Announcement audience targeting reuses the `LearningPath` 3.23 precedent; Suggestion clones the 3.26 request
+lifecycle field-for-field (`employee` + `approver`/`approved_at`) so the `_hr_request_*` helpers apply verbatim.
+Migration 0045. 12 templates under `templates/hrm/communication/` + 2 `hrm_overview` stat-cards. Help Desk deferred
+to the future 3.36 Helpdesk (its `LIVE_LINKS` bullet → the Suggestions box interim). Scope confirmed with the user
+(Full hub) before building.
+
+**Review-agent findings applied:**
+- **code-reviewer** — **Critical**: `survey_delete` lacked a view-level status guard (a direct POST could delete an
+  open survey + CASCADE its responses) → now draft-only; `announcement_create`/`survey_create` lacked the
+  `request.tenant is None` guard (superuser → IntegrityError 500) → added. **Important**: the announcement employee
+  audience `Q` null-matched a `SET_NULL`'d target → now skips the clause when the viewer's id is None (consistent
+  with `_announcement_targets`); `survey_respond` respond-once was check-then-create → wrapped in
+  `try/except IntegrityError`. **Minor**: overview pinned tile → `?status=published`.
+- **explorer** — all wiring consistent; aligned the `birthdays_this_month` tile to exclude terminated employees
+  (matching the celebrations page).
+- **frontend-reviewer** — `badge-warning` → `badge-amber` (invented class, lesson L33); survey-list empty-row
+  colspan adjusts for the admin-only column; survey-results gates the per-question cards on `response_count`, wraps
+  the choice table in `.table-wrap` + `<thead>`, uses logical `text-align:end`; logical `padding-inline-start`.
+- **performance-reviewer** — no N+1; celebrations `capped` indicator (org_chart parity); dropped unused
+  announcement-list joins; `list_select_related` on the two new admins.
+- **qa-smoke-tester** — 98 assertions PASSED end-to-end (created + cleaned up throwaway linked employee users to
+  verify the audience feed, survey respond-once, and the self-approval guard); no code changes needed.
+- **security-reviewer** — no Critical/High/Medium; **Low**: audience-scoped the overview "Pinned Announcements" tile
+  for non-admins (was an aggregate-count disclosure of other-audience announcements).
+- **test-writer** — 280 tests (models/views/security), all green; full HRM suite still green.
+
+**Deferred (as scoped):** read receipts / mandatory-read tracking, reactions/comments, delivery fan-out (email/push),
+manager reminders, survey k-anonymity threshold / AI summaries / templates, suggestion voting / threads / recognition
+auto-link, and the full **Help Desk ticketing system → the dedicated 3.36 Helpdesk sub-module**. **Next unbuilt HRM
+sub-module: 3.28 HR Reports.**
