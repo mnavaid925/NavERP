@@ -1317,3 +1317,22 @@ class HRDashboardWidgetAdmin(admin.ModelAdmin):
     list_filter = ("metric", "chart_type", "size")
     search_fields = ("title",)
     raw_id_fields = ("dashboard",)
+
+
+from .models import Asset, AssetMaintenance  # 3.33 Asset Management
+
+
+@admin.register(Asset)
+class AssetAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "tenant", "category", "status", "condition", "current_holder")
+    list_filter = ("status", "category", "condition", "depreciation_method")
+    search_fields = ("number", "asset_tag", "name", "serial_number")
+    raw_id_fields = ("current_holder", "location", "currency")
+
+
+@admin.register(AssetMaintenance)
+class AssetMaintenanceAdmin(admin.ModelAdmin):
+    list_display = ("number", "asset", "maintenance_type", "status", "scheduled_date", "completed_date", "vendor")
+    list_filter = ("maintenance_type", "status")
+    search_fields = ("number", "vendor", "asset__name")
+    raw_id_fields = ("asset",)
