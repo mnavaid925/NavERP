@@ -1995,3 +1995,123 @@ def asset_request_b(db, tenant_b, employee_b):
         justification="Needed for tenant B field work.",
     )
 
+
+# ------------------------------------------------------------------ 3.27 Communication Hub fixtures
+@pytest.fixture
+def announcement_a(db, tenant_a, admin_user):
+    """A draft, all-audience Announcement for tenant_a, authored by admin_user."""
+    from apps.hrm.models import Announcement
+    return Announcement.objects.create(
+        tenant=tenant_a, title="Office Closure Notice", body="The office will be closed on Friday.",
+        author=admin_user,
+    )
+
+
+@pytest.fixture
+def announcement_b(db, tenant_b, admin_b):
+    """A draft Announcement belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import Announcement
+    return Announcement.objects.create(
+        tenant=tenant_b, title="Office Closure Notice B", body="Body B.", author=admin_b,
+    )
+
+
+@pytest.fixture
+def published_announcement_a(db, announcement_a):
+    """announcement_a flipped to published (all-audience) — the employee-feed baseline case."""
+    from django.utils import timezone as tz
+    announcement_a.status = "published"
+    announcement_a.published_at = tz.now()
+    announcement_a.save(update_fields=["status", "published_at"])
+    return announcement_a
+
+
+@pytest.fixture
+def dept_announcement_a(db, tenant_a, admin_user, dept_a):
+    """A published, department-targeted Announcement for tenant_a — audience = dept_a."""
+    from django.utils import timezone as tz
+    from apps.hrm.models import Announcement
+    return Announcement.objects.create(
+        tenant=tenant_a, title="Engineering All-Hands", body="Mandatory all-hands Friday.",
+        audience_type="department", target_department=dept_a, author=admin_user,
+        status="published", published_at=tz.now(),
+    )
+
+
+@pytest.fixture
+def desig_announcement_a(db, tenant_a, admin_user, designation_a):
+    """A published, designation-targeted Announcement for tenant_a — audience = designation_a."""
+    from django.utils import timezone as tz
+    from apps.hrm.models import Announcement
+    return Announcement.objects.create(
+        tenant=tenant_a, title="Engineer Training", body="New training available for engineers.",
+        audience_type="designation", target_designation=designation_a, author=admin_user,
+        status="published", published_at=tz.now(),
+    )
+
+
+@pytest.fixture
+def survey_questions():
+    """A representative 3-question list: rating / text / single_choice (mirrors SurveyForm's
+    placeholder example)."""
+    return [
+        {"text": "How likely are you to recommend us?", "type": "rating"},
+        {"text": "What should we improve?", "type": "text"},
+        {"text": "Preferred work mode?", "type": "single_choice", "options": ["Remote", "Hybrid", "Onsite"]},
+    ]
+
+
+@pytest.fixture
+def survey_a(db, tenant_a, admin_user, survey_questions):
+    """A draft Survey for tenant_a with a 3-question set, authored by admin_user."""
+    from apps.hrm.models import Survey
+    return Survey.objects.create(
+        tenant=tenant_a, title="Engagement Pulse Q3", questions=survey_questions, author=admin_user,
+    )
+
+
+@pytest.fixture
+def open_survey_a(db, survey_a):
+    """survey_a flipped to open — for respond/close/results tests."""
+    survey_a.status = "open"
+    survey_a.save(update_fields=["status"])
+    return survey_a
+
+
+@pytest.fixture
+def survey_b(db, tenant_b, admin_b, survey_questions):
+    """A draft Survey belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import Survey
+    return Survey.objects.create(
+        tenant=tenant_b, title="Engagement Pulse Q3 B", questions=survey_questions, author=admin_b,
+    )
+
+
+@pytest.fixture
+def survey_response_a(db, tenant_a, open_survey_a, employee_a):
+    """employee_a's SurveyResponse on open_survey_a."""
+    from apps.hrm.models import SurveyResponse
+    return SurveyResponse.objects.create(
+        tenant=tenant_a, survey=open_survey_a, employee=employee_a,
+        answers={"0": "9", "1": "More parking", "2": "Remote"},
+    )
+
+
+@pytest.fixture
+def suggestion_a(db, tenant_a, employee_a):
+    """A draft Suggestion for employee_a, tenant_a."""
+    from apps.hrm.models import Suggestion
+    return Suggestion.objects.create(
+        tenant=tenant_a, employee=employee_a, title="Add a bike rack",
+        body="A bike rack near the east entrance would help commuters.", category="workplace",
+    )
+
+
+@pytest.fixture
+def suggestion_b(db, tenant_b, employee_b):
+    """A draft Suggestion belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import Suggestion
+    return Suggestion.objects.create(
+        tenant=tenant_b, employee=employee_b, title="Add a bike rack B", body="Body B.",
+    )
+
