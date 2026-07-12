@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -515,6 +515,19 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   bullet, **Help Desk**, is deferred to the dedicated future **3.36 Helpdesk** sub-module (its sidebar entry points
   at the Suggestions box interim). Read receipts, reactions, delivery fan-out, survey k-anonymity, voting, and the
   full ticketing system are deferred.
+- **3.28 HR Reports** — the core HR analytics surface, built as **6 derived, read-only, `@tenant_admin_required`
+  report views** (NO new models — pure tenant-scoped aggregates over the existing spine, mirroring accounting's
+  `trial_balance`/`ap_aging`): an `hr_reports_index` landing hub + `headcount_report` (active/joins/exits by
+  department/designation[+budgeted]/type, 12-month trend), `attrition_report` (SHRM annualized turnover with
+  voluntary/involuntary split, by department/exit-reason/tenure-band, monthly trend), `diversity_report`
+  (gender/age-band/tenure-band distributions + a department × gender cross-tab), `cost_report` (per-`PayrollCycle`
+  gross + employer-contribution cost, department-wise + CTC-component breakdown, cross-cycle trend, with an
+  `EmployeeSalaryStructure` CTC/12 run-rate fallback flagged as *Estimated* when no payroll run exists), and
+  `hiring_report` (time-to-fill/time-to-hire, source-of-hire mix, application funnel, offer-acceptance approximation,
+  hires by department). Every rate guards div-by-zero, `?department` is resolved tenant-scoped (IDOR-safe), and
+  `EmployeeProfile` aggregation goes through `employment__org_unit` (department/manager are `@property`, not columns).
+  Trends render via the Chart.js already loaded in `base.html`. FTE/EEO PII fields, true cost-per-hire, attrition-risk
+  ML, and the drag-drop dashboard builder (3.32) are deferred.
 
 Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **3,838-test** HRM suite
 (**6,485 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
