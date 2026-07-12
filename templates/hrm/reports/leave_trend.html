@@ -29,7 +29,7 @@
   </div></div>
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ total_days }}</div><div class="stat-label">Leave Days Taken</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ total_days|floatformat:1 }}</div><div class="stat-label">Leave Days Taken</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="list"></i></div><div class="stat-value">{{ requests }}</div><div class="stat-label">Approved Requests</div></div>
   </div>
 
