@@ -12527,16 +12527,23 @@ def _report_year(request):
 
 
 def _leave_years(tenant, year):
-    return sorted(set(LeaveAllocation.objects.filter(tenant=tenant).values_list("year", flat=True)) | {year},
-                  reverse=True)
+    years = (LeaveAllocation.objects.filter(tenant=tenant)
+             .order_by().values_list("year", flat=True).distinct())  # SELECT DISTINCT, no join
+    return sorted(set(years) | {year}, reverse=True)
 
 
 def _annotated_allocations(tenant, year):
+    # Annotate used-days once (the correlated subquery); balance is derived in Python from used_db at the
+    # call sites — annotating balance_db too would re-inline the whole subquery a 2nd time per row. Drop the
+    # inherited Meta ordering (an unused DB join+sort — callers re-sort or just aggregate).
     return (LeaveAllocation.objects.filter(tenant=tenant, year=year)
             .annotate(used_db=_used_days_subquery())
-            .annotate(balance_db=ExpressionWrapper(
-                F("allocated_days") - F("used_db") - F("encashed_days"), output_field=_DEC))
-            .select_related("employee__party", "leave_type", "employee__employment__org_unit"))
+            .select_related("employee__party", "leave_type", "employee__employment__org_unit")
+            .order_by())
+
+
+def _alloc_balance(a):
+    return (a.allocated_days or Decimal("0")) - (a.used_db or Decimal("0")) - (a.encashed_days or Decimal("0"))
 
 
 @tenant_admin_required
@@ -12546,9 +12553,9 @@ def leave_reports_index(request):
     if tenant is not None:
         today = timezone.localdate()
         year = today.year
-        rows = list(_annotated_allocations(tenant, year).values("allocated_days", "used_db"))
-        total_alloc = sum(float(r["allocated_days"] or 0) for r in rows)
-        total_used = sum(float(r["used_db"] or 0) for r in rows)
+        agg = _annotated_allocations(tenant, year).aggregate(a=Sum("allocated_days"), u=Sum("used_db"))
+        total_alloc = float(agg["a"] or 0)
+        total_used = float(agg["u"] or 0)
         on_leave = LeaveRequest.objects.filter(tenant=tenant, status="approved",
                                                start_date__lte=today, end_date__gte=today).count()
         pending = LeaveRequest.objects.filter(tenant=tenant, status="pending").count()
@@ -12575,7 +12582,7 @@ def leave_register_report(request):
             qs = qs.filter(employee__employment__org_unit=dept)
         rows = [{"employee": a.employee.party.name, "leave_type": a.leave_type.name,
                  "allocated": a.allocated_days, "carried": a.carried_forward,
-                 "used": a.used_db, "encashed": a.encashed_days, "balance": a.balance_db} for a in qs]
+                 "used": a.used_db, "encashed": a.encashed_days, "balance": _alloc_balance(a)} for a in qs]
         rows.sort(key=lambda r: (r["employee"], r["leave_type"]))
         ctx["rows"] = rows
         ctx["totals"] = {"allocated": round(sum(float(r["allocated"] or 0) for r in rows), 1),
@@ -12609,7 +12616,7 @@ def leave_liability_report(request):
                if s.annual_ctc_amount}
         rows, total_days, total_value, any_estimate = [], Decimal("0"), Decimal("0"), False
         for a in qs:
-            bal = a.balance_db or Decimal("0")
+            bal = _alloc_balance(a)
             if bal <= 0:
                 continue
             estimate = False
