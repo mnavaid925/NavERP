@@ -12750,14 +12750,21 @@ def _report_financial_year(request, tenant):
 def _cc_choices(tenant):
     if tenant is None:
         return OrgUnit.objects.none()
-    return OrgUnit.objects.filter(tenant=tenant, kind="cost_center").order_by("name")
+    # Only cost centres that HAVE a CostCenterProfile — the report renders profile rows, so offering
+    # a profile-less cost centre would filter to a misleading empty result (its spend actually lands
+    # in the Unassigned callout of the unfiltered view).
+    return OrgUnit.objects.filter(tenant=tenant, kind="cost_center",
+                                  cost_center_profile__isnull=False).order_by("name")
 
 
 def _report_cost_center(request, tenant):
-    """Resolve ?cost_center to a tenant-scoped cost-centre OrgUnit, or None (IDOR-safe)."""
+    """Resolve ?cost_center to a tenant-scoped, PROFILED cost-centre OrgUnit, or None (IDOR-safe). A
+    profile-less / garbage / cross-tenant pk resolves to None -> the report shows all cost centres
+    (so that spend surfaces in the Unassigned callout) rather than a misleading empty state."""
     pk = (request.GET.get("cost_center") or "").strip()
     if tenant is not None and pk.isdigit():
-        return OrgUnit.objects.filter(tenant=tenant, kind="cost_center", pk=int(pk)).first()
+        return OrgUnit.objects.filter(tenant=tenant, kind="cost_center",
+                                      cost_center_profile__isnull=False, pk=int(pk)).first()
     return None
 
 
@@ -13011,15 +13018,18 @@ def cost_center_report(request):
         total_actual = Decimal("0")
         for p in profiles:
             actual = cc_actual.get(p.org_unit_id, {"gross": Decimal("0"), "hc": 0, "employer": Decimal("0")})
+            has_budget = p.budget_annual is not None
             budget = p.budget_annual or Decimal("0")
-            variance = budget - actual["gross"]
+            # No budget set -> variance/variance_pct are None (rendered "—"), not a phantom negative
+            # against a zero budget sitting next to a "no budget" cell.
+            variance = (p.budget_annual - actual["gross"]) if has_budget else None
             rows.append({
                 "name": p.org_unit.name, "code": p.code,
                 "owner": p.owner.name if p.owner_id else "—",
                 "budget": p.budget_annual, "budget_year": p.budget_year,
                 "actual": actual["gross"], "headcount": actual["hc"], "employer": actual["employer"],
                 "variance": variance,
-                "variance_pct": round(variance / budget * 100, 1) if budget else None,
+                "variance_pct": round(variance / budget * 100, 1) if (has_budget and budget) else None,
                 "budget_mismatch": p.budget_year is not None and p.budget_year != budget_year})
             total_budget += budget
             total_actual += actual["gross"]
