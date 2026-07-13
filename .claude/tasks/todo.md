@@ -8058,3 +8058,259 @@ bullets), seeded (`_seed_travel`: 2 policies + 4 trips across the states, idempo
   + `nosniff`), not new to 3.35.
 - GDS/corporate-booking-tool integration, multi-leg itineraries, real-time fare shopping, per-diem auto-calc, mileage,
   and multiple/topped-up advances remain deferred (see "Later passes" above).
+
+---
+# Module 3 — HRM — Sub-module 3.36 Helpdesk (hrm) — plan from research-helpdesk.md (2026-07-13)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.35) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Full CRUD sub-module: **4 new tenant-scoped models**
+(`HelpdeskCategory`, `HelpdeskSLAPolicy`, `HelpdeskTicket`, `KnowledgeArticle`; new incremental migration
+`0051`), mirroring `apps/crm`'s `Case`/`SlaPolicy`/`KnowledgeArticle` pattern with `hrm.EmployeeProfile` as the
+requester anchor. NavERP.md 3.36 bullets (verbatim, `NavERP.md:682-687`): Ticket Management, Ticket Categories,
+SLA Management, Knowledge Base, Satisfaction Survey. 3.27 Communication Hub's "Help Desk" bullet (deferred here,
+`apps/hrm/models.py:7191`) re-points from `hrm:suggestion_list` to `hrm:ticket_list`.
+
+## 0. Decisions — read before writing code
+
+- [ ] **Prefixes:** `HelpdeskSLAPolicy.NUMBER_PREFIX = "HSLA"`, `HelpdeskTicket.NUMBER_PREFIX = "TKT"`,
+  `KnowledgeArticle.NUMBER_PREFIX = "KBA"` — none collide with any existing `apps/hrm` `NUMBER_PREFIX` (checked
+  the full list). `HelpdeskCategory` is `TenantOwned` (no prefix), like `ExpenseCategory`/`TravelPolicy`.
+- [ ] **`HelpdeskTicket.employee` FK is named `employee`, not `requester`** — specifically so the existing
+  self-service helpers apply verbatim: `_ss_scope` (list-scoping, `apps/hrm/views.py:10407`),
+  `_can_manage_own_child` (own-or-admin gate, `:10398`), `_ss_child_create` (create-on-behalf-of via
+  `?employee=`, `:10478`), `_ss_employees` (admin employee picker, `:10418`).
+- [ ] **Ticket workflow is bespoke** (`ticket_assign/_start/_resolve/_close/_reopen/_feedback`), **NOT**
+  `_hr_request_*` — a ticket is agent-worked (assign → start → resolve → close, with reopen), not a single
+  approve/reject authorization, per the research's explicit framing. Added a 7th action, **`ticket_cancel`**,
+  beyond the 6 the research named, so the `cancelled` status choice is actually reachable (employee cancels their
+  own open ticket, or admin) — a documented deviation, gated like `_can_manage_own_child` but bespoke.
+  `KnowledgeArticle` gets **no** bespoke publish/archive actions — `status` stays a plain form field, mirroring
+  `crm.KnowledgeArticleForm` (full CRUD only, no extra workflow).
+- [ ] **`HelpdeskTicket.save()` mirrors `crm.Case.save()` exactly** for system-only fields (never on the form):
+  `resolved_at` set once when `status` enters `resolved`/`closed`, cleared on reopen; `closed_at` set once when
+  `status` enters `closed`/`cancelled`, cleared on reopen; `first_response_due`/`resolution_due` computed once
+  from `sla_policy.targets_for(priority)` anchored at `created_at`, guarded so a normal edit skips the extra
+  `sla_policy` SELECT. New vs. `crm.Case`: on first save, auto-default `assignee` from
+  `category.default_assignee` and `sla_policy` from `category.default_sla_policy` (else the tenant's
+  `is_default` `HelpdeskSLAPolicy`) — only when the ticket doesn't already carry one (category-based
+  auto-routing, research "buildable now").
+- [ ] **`first_responded_at`** is stamped by `ticket_start` (no `TicketComment` thread this pass — deferred — so
+  "first response" = the agent beginning work, not a reply). Feeds `is_response_overdue` the same shape as
+  `crm.Case.is_response_overdue`.
+- [ ] **Migration:** `python manage.py makemigrations hrm` → expected `0051_helpdeskcategory_...py` (`0050` was
+  3.35's, confirmed via `apps/hrm/migrations/` listing).
+
+## 1. Models (apps/hrm/models.py — append after `TravelBooking`; new migration `0051`)
+
+- [ ] **`HelpdeskCategory`** `[TenantOwned, no prefix]` — reuses `core.OrgUnit(kind="department")`.
+  - `name` (CharField), `description` (TextField, blank)
+  - `department` → `core.OrgUnit` (SET_NULL, null/blank; form scopes to `kind="department"`) — driver:
+    "Category → department routing"
+  - `default_assignee` → `settings.AUTH_USER_MODEL` (SET_NULL, null/blank) — driver: "Category → default agent
+    routing"
+  - `default_sla_policy` → `"hrm.HelpdeskSLAPolicy"` (SET_NULL, null/blank) — driver: "Per-category SLA
+    override"
+  - `is_active` (BooleanField, default True)
+  - Meta: `ordering=["name"]`; `unique_together=("tenant","name")`; index `(tenant, is_active)`
+  - Doubles as the `KnowledgeArticle` taxonomy (no second KB-category table) — driver: "KB categorization"
+- [ ] **`HelpdeskSLAPolicy`** `[TenantNumbered, "HSLA"]` — field-for-field mirror of `crm.SlaPolicy`.
+  - `name`, `description` (blank), `is_active` (default True), `is_default` (default False)
+  - `response_low/medium/high/critical` (PositiveSmallIntegerField, hours; defaults 48/24/8/2)
+  - `resolution_low/medium/high/critical` (PositiveSmallIntegerField, hours; defaults 240/120/48/8)
+  - `targets_for(priority)` → `(response_hours, resolution_hours)` — same contract as `crm.SlaPolicy.targets_for`
+  - Meta: `ordering=["-is_default","name"]`; `unique_together=("tenant","number")`; indexes `(tenant,is_active)`,
+    `(tenant,is_default)` — driver: "SLA policy: per-priority first-response + resolution time targets"
+- [ ] **`HelpdeskTicket`** `[TenantNumbered, "TKT"]` — the ticket header; Ticket Management + SLA Management
+    (consumer side) + Satisfaction Survey all converge here, mirroring `crm.Case` (no satellite tables).
+  - `employee` → `hrm.EmployeeProfile` (CASCADE, `related_name="helpdesk_tickets"`) — driver: "Requester/raised-by
+    identity"
+  - `category` → `HelpdeskCategory` (SET_NULL, null/blank) — driver: "Ticket categories"
+  - `subject` (CharField 255), `description` (TextField)
+  - `priority`: `low/medium/high/critical` (default `medium`) — driver: "Ticket priority"
+  - `status`: `new/open/in_progress/waiting/resolved/closed/cancelled` (default `new`);
+    `OPEN_STATUSES = ["new","open","in_progress","waiting"]` — driver: "Ticket raise/track/resolve lifecycle"
+  - `origin`: `portal/email/phone/chat/walk_in` (default `portal`) — driver: "Ticket origin/channel"
+  - `assignee` → `settings.AUTH_USER_MODEL` (SET_NULL, null/blank, auto-defaulted in `save()`) — driver: "Agent
+    assignment"
+  - `sla_policy` → `HelpdeskSLAPolicy` (SET_NULL, null/blank, auto-defaulted in `save()`) — driver: "SLA
+    due-date computation"
+  - `first_response_due`, `first_responded_at`, `resolution_due`, `resolved_at`, `closed_at` (DateTimeField
+    null/blank, `editable=False`, system-set in `save()`/actions) — driver: "SLA due-date computation + breach
+    flag"
+  - `resolution_notes` (TextField, blank; set by `ticket_resolve`) — driver: "Resolution note/closing summary"
+  - `satisfaction_rating` (PositiveSmallIntegerField null/blank, `validators=[MinValueValidator(1),
+    MaxValueValidator(5)]`), `satisfaction_comment` (TextField, blank), `satisfaction_at` (DateTimeField
+    null/blank) — all set only by `ticket_feedback` — driver: "Post-resolution satisfaction survey (CSAT)"
+  - Properties: `is_open`, `is_response_overdue`, `is_resolution_overdue` (mirror `crm.Case` exactly)
+  - Meta: `ordering=["-created_at"]`; `unique_together=("tenant","number")`; indexes `(tenant,status)`,
+    `(tenant,priority)`, `(tenant,employee,status)`, `(tenant,created_at)`
+- [ ] **`KnowledgeArticle`** `[TenantNumbered, "KBA"]` — internal-only KB (no `public_token`/visibility split,
+    trimmed from `crm.KnowledgeArticle`).
+  - `title` (CharField 255)
+  - `category` → `HelpdeskCategory` (SET_NULL, null/blank) — driver: "KB categorization" (reuses ticket taxonomy)
+  - `body` (TextField)
+  - `status`: `draft/published/archived` (default `draft`) — driver: "Draft/Published/Archived article lifecycle"
+  - `owner` → `settings.AUTH_USER_MODEL` (SET_NULL, null/blank)
+  - `view_count` (PositiveIntegerField default 0, incremented in `knowledgearticle_detail`), `helpful_count`
+    (PositiveIntegerField default 0, incremented by a `knowledgearticle_helpful` POST) — driver: "Article view
+    counters / helpful voting" (trimmed: no `not_helpful_count`, no `public_token`)
+  - Meta: `ordering=["-created_at"]`; `unique_together=("tenant","number")`; indexes `(tenant,status)`,
+    `(tenant,category)`
+
+## 2. Forms (apps/hrm/forms.py)
+
+- [ ] `HelpdeskCategoryForm(TenantModelForm)` — fields: `name, description, department, default_assignee,
+  default_sla_policy, is_active`; `__init__` scopes `department` to `OrgUnit(tenant, kind="department")`,
+  `default_assignee` to tenant Users, `default_sla_policy` to `HelpdeskSLAPolicy(tenant, is_active=True)` —
+  mirrors `TravelRequestForm`'s queryset-narrowing `__init__`.
+- [ ] `HelpdeskSLAPolicyForm(TenantModelForm)` — fields: `name, description, is_active, is_default,
+  response_low, response_medium, response_high, response_critical, resolution_low, resolution_medium,
+  resolution_high, resolution_critical` (exact clone of `crm.SlaPolicyForm`'s field list).
+- [ ] `HelpdeskTicketForm(TenantModelForm)` — fields: `category, subject, description, priority, origin` ONLY —
+  `employee` resolved server-side via `_ss_child_create`; `status`/`assignee`/`sla_policy`/all `*_due`/`*_at`/
+  `resolution_notes`/`satisfaction_*` excluded (system/action-set — `# WARNING` comment matching `CaseForm`'s).
+- [ ] `TicketAssignForm` — field: `assignee` (queryset = tenant Users).
+- [ ] `TicketResolveForm` — field: `resolution_notes` (required, Textarea).
+- [ ] `TicketFeedbackForm` — fields: `satisfaction_rating` (1–5 select), `satisfaction_comment` (optional
+  Textarea).
+- [ ] `KnowledgeArticleForm(TenantModelForm)` — fields: `title, category, body, status, owner`; `view_count`/
+  `helpful_count` excluded (system-set).
+
+## 3. Views (apps/hrm/views.py — append `# --- 3.36 Helpdesk ---` banner after the 3.35 block)
+
+- [ ] `HelpdeskCategory` CRUD — `ticketcategory_list/_create/_detail/_edit/_delete` — list `@login_required`
+  (read for all), create/edit/delete `@tenant_admin_required` (config master, mirrors `TravelPolicy`).
+- [ ] `HelpdeskSLAPolicy` CRUD — `helpdesksla_list/_create/_detail/_edit/_delete` — same read-all/write-admin
+  split.
+- [ ] `HelpdeskTicket` CRUD:
+  - `ticket_list` — `crud_list` over `_ss_scope(request, HelpdeskTicket.objects.filter(tenant=request.tenant))`,
+    `search_fields=["subject","description","number","employee__party__name"]`,
+    `filters=[("status","status",False), ("priority","priority",False), ("category","category_id",True),
+    ("assignee","assignee_id",True)]`, plus two GET-only flags applied to the queryset before pagination:
+    `?sla=breached` → `status__in=OPEN_STATUSES` AND (`Q(first_response_due__lt=now,
+    first_responded_at__isnull=True) | Q(resolution_due__lt=now)`); `?rated=1` →
+    `satisfaction_rating__isnull=False`. Pass `status_choices`, `priority_choices`, `categories`, `assignees`
+    (tenant Users) in context per the Filter Implementation Rules.
+  - `ticket_create` — `_ss_child_create(request, HelpdeskTicketForm, ...)`.
+  - `ticket_detail` — `_can_manage_own_child` gate for view; `extra_context={"assign_form", "resolve_form",
+    "feedback_form"}`.
+  - `ticket_edit`/`ticket_delete` — `_can_manage_own_child` gate, only while `status == "new"` (before any agent
+    action — narrower than `OPEN_STATUSES` on purpose, so an in-progress ticket's subject/description can't be
+    rewritten out from under the assigned agent).
+- [ ] Bespoke ticket actions (all POST-only, redirect to `ticket_detail`):
+  - `ticket_assign(pk)` — `@tenant_admin_required`; `TicketAssignForm` sets `assignee`; bumps `status`
+    `new → open`.
+  - `ticket_start(pk)` — `@tenant_admin_required`; `status → in_progress`; stamps `first_responded_at` if unset.
+  - `ticket_resolve(pk)` — `@tenant_admin_required`; requires `TicketResolveForm.resolution_notes`;
+    `status → resolved`.
+  - `ticket_close(pk)` — `@tenant_admin_required`; gated `status == "resolved"`; `status → closed`.
+  - `ticket_reopen(pk)` — `@tenant_admin_required`; gated `status in ("resolved","closed")`; `status → open`
+    (clears `resolved_at`/`closed_at` via `save()`).
+  - `ticket_cancel(pk)` — `_can_manage_own_child` gate (employee-or-admin); gated `status in OPEN_STATUSES`;
+    `status → cancelled`.
+  - `ticket_feedback(pk)` — `_can_manage_own_child` gate (only the requester or admin); gated
+    `status in ("resolved","closed")`; `TicketFeedbackForm` sets `satisfaction_rating`/`_comment`/`_at`.
+- [ ] `KnowledgeArticle` CRUD — `knowledgearticle_list` (`search_fields=["title","body"]`,
+  `filters=[("status","status",False), ("category","category_id",True)]`); `knowledgearticle_create/_edit/
+  _delete` `@tenant_admin_required` (authoring is admin-only); `knowledgearticle_detail` `@login_required`
+  (increments `view_count` on GET); `knowledgearticle_helpful(pk)` — POST-only, `@login_required`, increments
+  `helpful_count`, redirects back to detail.
+
+## 4. URLs (apps/hrm/urls.py — append after the 3.35 travel-request block, `app_name = "hrm"`)
+
+- [ ] `ticket-categories/`, `.../add/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/` →
+  `ticketcategory_*`
+- [ ] `sla-policies/` (same 5) → `helpdesksla_*`
+- [ ] `tickets/` (same 5) → `ticket_*`, plus `tickets/<int:pk>/assign|start|resolve|close|reopen|cancel|feedback/`
+  → `ticket_assign/_start/_resolve/_close/_reopen/_cancel/_feedback`
+- [ ] `knowledge-base/` (same 5) → `knowledgearticle_*`, plus `knowledge-base/<int:pk>/helpful/` →
+  `knowledgearticle_helpful`
+
+## 5. Admin (apps/hrm/admin.py)
+
+- [ ] Register `HelpdeskCategory`, `HelpdeskSLAPolicy`, `HelpdeskTicket`, `KnowledgeArticle` — `list_display`/
+  `list_filter`/`search_fields` mirroring `TravelPolicyAdmin`/`TravelRequestAdmin` (tenant, status/priority
+  filters, number/subject/title search).
+
+## 6. Migration
+
+- [ ] `python manage.py makemigrations hrm` → single new file (expected `0051_...py`).
+
+## 7. Templates (templates/hrm/helpdesk/<entity>/{list,detail,form}.html)
+
+- [ ] `helpdesk/ticketcategory/{list,detail,form}.html`
+- [ ] `helpdesk/helpdesksla/{list,detail,form}.html`
+- [ ] `helpdesk/ticket/{list,detail,form}.html` — list: filter bar (status, priority, category, assignee,
+  `sla=breached` toggle, `rated=1` toggle) reflecting `request.GET`; Actions column (view/edit/delete +
+  status-conditional Assign/Start/Resolve/Close/Reopen/Cancel/Feedback buttons, each a POST form + `{% csrf_token
+  %}` + confirm where destructive); detail: SLA due countdown + breach badges, CSAT panel, `resolution_notes`.
+- [ ] `helpdesk/knowledgearticle/{list,detail,form}.html` — list: status/category filter bar; detail:
+  `view_count`/`helpful_count`, "Mark Helpful" POST button.
+
+## 8. Wire-up
+
+- [ ] No `settings.py` / `config/urls.py` changes (existing `apps/hrm` app).
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["3.36"]`: `"Ticket Management": "hrm:ticket_list"`,
+  `"Ticket Categories": "hrm:ticketcategory_list"`, `"SLA Management": "hrm:helpdesksla_list"`,
+  `"Knowledge Base": "hrm:knowledgearticle_list"`, `"Satisfaction Survey": "hrm:ticket_list?rated=1"`.
+- [ ] `apps/core/navigation.py` — re-point `LIVE_LINKS["3.27"]["Help Desk"]` from `"hrm:suggestion_list"` to
+  `"hrm:ticket_list"`; update the preceding comment block to drop the "deferred to 3.36" framing now that it's
+  built.
+
+## 9. Seeder (apps/hrm/management/commands/seed_hrm.py — new `_seed_helpdesk(tenant, flush)`, called after
+   `_seed_travel`)
+
+- [ ] Guard: `if not emps: return` (reuse the tenant's existing `EmployeeProfile`s); idempotent —
+  `if HelpdeskCategory.objects.filter(tenant=tenant).exists(): print(...); return`; `--flush` cascades
+  `HelpdeskTicket`/`KnowledgeArticle`/`HelpdeskCategory`/`HelpdeskSLAPolicy` deletes, matching `_seed_travel`'s
+  shape.
+- [ ] 4 categories: **HR, IT, Admin, Facilities** (matches the NavERP.md bullet text verbatim) — `get_or_create`
+  on `(tenant, name)`, each linked to an `OrgUnit(kind="department")` where one exists, a `default_assignee`, and
+  a `default_sla_policy`.
+- [ ] 2 SLA policies: "Standard Support" (`is_default=True`) + "Priority IT" (tighter response/resolution hours)
+  — `get_or_create` on `(tenant, name)`.
+- [ ] 6–7 tickets across employees/categories spanning every status (new, open, in_progress, waiting, resolved,
+  closed, cancelled) — `get_or_create` on `(tenant, employee, subject)`; at least one **open** ticket seeded with
+  `first_response_due`/`resolution_due` forced into the past (exercises `?sla=breached`); the resolved/closed
+  ones carry `resolution_notes` + `satisfaction_rating` (exercises `?rated=1`).
+- [ ] 3–4 `KnowledgeArticle` rows across draft/published/archived, category-linked — `get_or_create` on
+  `(tenant, title)`.
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations hrm` then `migrate`
+- [ ] `python manage.py seed_hrm` ×2 (idempotent, second run prints "already exists")
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every `hrm:ticket*`/`ticketcategory*`/`helpdesksla*`/`knowledgearticle*` URL 200/302,
+  checked both as a tenant admin AND as a non-admin employee (self-service scoping via `_ss_scope`); no
+  `{#`/`{% comment` leaks; cross-tenant ticket/category/SLA-policy/article pk → 404 (IDOR)
+- [ ] Sidebar: 3.36 Helpdesk shows Live with all 5 bullets clickable; 3.27's "Help Desk" bullet now also
+  resolves live to the ticket list.
+
+## 11. Close-out
+
+- [ ] code-reviewer → apply findings → commit
+- [ ] explorer → apply findings → commit
+- [ ] frontend-reviewer → apply findings → commit
+- [ ] performance-reviewer → apply findings → commit
+- [ ] qa-smoke-tester → apply findings → commit
+- [ ] security-reviewer → apply findings → commit
+- [ ] test-writer → `apps/hrm/tests/test_helpdesk.py` → commit
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add a `### 3.36 Helpdesk` section (models, URLs, seeder, gotchas)
+- [ ] Update README (module/sub-module/test counts)
+
+## Later passes / deferred (carried from research-helpdesk.md)
+
+- `TicketComment` (multi-turn public reply + internal-note thread, mirrors `crm.CaseComment`)
+- Automated round-robin/load-based/skill-based ticket routing (Freshdesk Omniroute-style)
+- Multi-level SLA-breach escalation notifications (needs a scheduled job + notification channel)
+- Business-hours-aware SLA clocks (24×7 calendar-hour math only, matches `crm.SlaPolicy`'s own deferral)
+- KB helpful/not-helpful voting split, public unauthenticated article token (`crm.KnowledgeArticle` precedent,
+  skipped — internal-only KB)
+- CSAT/SLA analytics dashboard (avg CSAT trend, escalation counts, resolution-time chart)
+- "Create KB article from resolved ticket" convenience action
+- AI-assisted triage/auto-categorization/virtual-agent chatbot/AI-generated KB drafts
+- Dedicated Employee Center portal chrome (ships as normal authenticated pages this pass)
+
+## Review notes
+(filled in at the end)
