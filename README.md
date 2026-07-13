@@ -49,8 +49,8 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
-management — goals, reviews, continuous feedback, and performance improvement — 21 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **6,485 passing tests**.
+management — goals, reviews, continuous feedback, and performance improvement — 35 of 41 sub-modules). The remaining
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **8,895 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -582,9 +582,18 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   reimburse — each self-approval-blocked for an admin acting on their own claim), inline draft-only line editing, and
   receipt validation (extension allowlist + size cap). OCR, corporate-card reconciliation, mileage/per-diem, cash
   advances, multi-currency FX, N-level routing, the payroll-payout integration, and GL posting are deferred.
+- **3.35 Travel Management** — trip authorization with a travel advance and post-trip settlement: **3 new models** —
+  `TravelPolicy` (per-job-grade class-of-travel + daily/hotel/advance-percent caps, scoped domestic/international/both),
+  `TravelRequest` (`TRV-`; a single-approver machine draft→pending→approved/rejected/cancelled then approved→completed
+  — reusing the shared request-workflow helpers verbatim — plus advance request/approve/pay and a computed
+  net-settlement), and `TravelBooking` (flight/hotel/cab lines with a **document upload** and a computed **out-of-policy**
+  flag driven by the policy's class-rank + hotel-per-night caps). Full own-vs-admin CRUD, the advance actions
+  (approve capped at the policy percent + maker-checker self-block; idempotent mark-paid), and **Generate Settlement**
+  that spins up a linked 3.34 `ExpenseClaim` (atomic + idempotent). Corporate-booking-tool (GDS) integration,
+  multi-leg itineraries, real-time fare shopping, and per-diem auto-calc are deferred.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,072-test** HRM suite
-(**8,719 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,248-test** HRM suite
+(**8,895 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
@@ -818,7 +827,7 @@ python -m pytest apps/tenants    # one app
 python -m pytest -k webhook -v   # by keyword
 ```
 
-- **8,719 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
+- **8,895 tests** run under **`config.settings_test`** (SQLite in-memory) via `pytest.ini` — they **never** touch
   the MySQL dev database. Per-module suites: **core 118**, **accounts 95**, **tenants 108**, **CRM 2,114**,
   **Accounting 212**, **HRM 3,838**.
 - Coverage spans: model invariants & `__str__`, form validation, full CRUD via the test client, **multi-tenant
