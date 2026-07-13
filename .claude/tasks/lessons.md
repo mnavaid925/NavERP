@@ -398,3 +398,28 @@ active `.active` highlight server-rendered so it's always fresh. First-visit fal
 sidebar. Lives in `static/js/app.js` (bump the `?v=` cache-buster in `base.html`, L15). Verified in the preview:
 scroll (500px) + a manually-opened extra module both survived navigating between 3.20 pages, active highlight moved
 correctly, zero console errors.
+
+## L35 — A hand-parsed POSTed `Decimal` amount needs a FULL guard chain, not just try/except-around-the-parse + an elif-with-`else`-fallthrough
+Found by the code-reviewer + security-reviewer on the SAME action — HRM 3.35 `travelrequest_approve_advance`
+(`apps/hrm/views.py`), which reads `advance_approved` straight from `request.POST`, `Decimal(raw)`, then validates.
+Two independent bug classes hid in the "parse then compare" shape, and both recur any time a view manually parses a
+numeric decision/approval input (advance approval, manual price override, ad-hoc quantity, discount %, etc.) instead
+of going through a `forms.DecimalField`:
+- **(a) `try/except (InvalidOperation, ...)` only guards the PARSE, not the later comparisons.** `Decimal("NaN")`,
+  `"nan"`, `"sNaN"` all parse **successfully** — then the very next `if amount < 0:` raises `decimal.InvalidOperation`
+  (NaN is unordered), producing an **unhandled 500**. `Decimal("Infinity")` parses too. **Rule:** immediately after a
+  successful `Decimal(raw)`, reject non-finite values before ANY ordering comparison:
+  `if not amount.is_finite(): <friendly error>; return`. Also cap magnitude against the field's `max_digits` ceiling
+  (e.g. `>= Decimal("10000000000")` for `max_digits=12, decimal_places=2`) so an oversized value hits a friendly
+  message, not a DB `DataError` on `save()`.
+- **(b) A validation `elif` chain whose bounds are all conditional on optional data silently APPROVES when every
+  bound is None.** The cap was `elif obj.advance_requested is not None and amount > obj.advance_requested: ...` then
+  `elif obj.policy and ... and amount > cap: ...` → when `advance_requested is None` AND no policy cap applied, both
+  elifs were false, so control fell to the `else` and approved **any** typed amount, unbounded. **Rule:** when a
+  numeric input is only meaningful given some prerequisite (a requested amount, a configured cap), make the missing
+  prerequisite an EXPLICIT rejection branch (`elif obj.advance_requested is None: <error "nothing was requested">`),
+  never let it fall through to the success `else`. Think "what does each guard do when its data is absent?"
+**Best fix long-term:** prefer a `forms.DecimalField(max_digits=..., decimal_places=..., min_value=0)` (which rejects
+NaN/Inf/overflow for free) over hand-parsing `request.POST`; when a bespoke action truly needs raw parsing, apply the
+`is_finite()` + magnitude-cap + explicit-None-branch trio. Covered now by `test_travel.py` (NaN/Infinity/garbage →
+no 500; %-cap boundary 800.00 vs 800.01; `advance_requested is None` → rejected; `>= 1e10` → rejected).
