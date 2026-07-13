@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Salary Benchmarks{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Salary Benchmarks</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Compensation</span><span class="sep">›</span><span>Benchmarks</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:benefitplan_list' %}" class="btn btn-outline"><i data-lucide="heart-pulse"></i> Benefit Plans</a>
+      <a href="{% url 'hrm:equitygrant_list' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Equity</a>
+      {% if is_admin %}<a href="{% url 'hrm:salarybenchmark_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Benchmark</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search region / grade / designation...">
+        </div>
+        <div class="form-group">
+          <select name="source" class="form-select"><option value="">All sources</option>
+            {% for val, label in source_choices %}<option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="job_grade" class="form-select"><option value="">All grades</option>
+            {% for g in job_grades %}<option value="{{ g.pk }}" {% if request.GET.job_grade == g.pk|stringformat:"d" %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="designation" class="form-select"><option value="">All designations</option>
+            {% for d in designations %}<option value="{{ d.pk }}" {% if request.GET.designation == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:salarybenchmark_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Scope</th><th>Source</th><th>Region</th><th style="text-align:end;">P25</th><th style="text-align:end;">P50</th><th style="text-align:end;">P75</th><th style="text-align:end;">P90</th><th>Survey</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:salarybenchmark_detail' obj.pk %}" class="fw-600">{% if obj.designation %}{{ obj.designation.name }}{% elif obj.job_grade %}{{ obj.job_grade.name }}{% else %}General{% endif %}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_source_display }}</span></td>
+              <td>{{ obj.region|default:"-" }}</td>
+              <td style="text-align:end;">{% if obj.percentile_25 != None %}{{ obj.percentile_25|floatformat:0 }}{% else %}-{% endif %}</td>
+              <td style="text-align:end;">{% if obj.percentile_50 != None %}{{ obj.percentile_50|floatformat:0 }}{% else %}-{% endif %}</td>
+              <td style="text-align:end;">{% if obj.percentile_75 != None %}{{ obj.percentile_75|floatformat:0 }}{% else %}-{% endif %}</td>
+              <td style="text-align:end;">{% if obj.percentile_90 != None %}{{ obj.percentile_90|floatformat:0 }}{% else %}-{% endif %}</td>
+              <td>{% if obj.survey_date %}{{ obj.survey_date|date:"M Y" }}{% else %}-{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:salarybenchmark_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                {% if is_admin %}
+                <a href="{% url 'hrm:salarybenchmark_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:salarybenchmark_delete' obj.pk %}" onsubmit="return confirm('Delete this benchmark?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                {% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No benchmarks yet</h3><p>Load market salary percentiles per grade/designation to check pay against the market.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
