@@ -539,15 +539,14 @@ LIVE_LINKS = {
     },
     # 3.27 Communication Hub — the internal employee-comms surface. Announcements (audience-targeted
     # admin posts), Birthday/Anniversary (a derived celebrations view, no model), Surveys (engagement
-    # surveys + responses), Suggestions (employee idea box, admin-reviewed). Help Desk is DEFERRED to
-    # the dedicated future 3.36 Helpdesk sub-module — its bullet points at the Suggestions box as the
-    # interim lightweight employee-query channel (so both "Help Desk" and "Suggestions" resolve here).
+    # surveys + responses), Suggestions (employee idea box, admin-reviewed). Help Desk now resolves to
+    # the dedicated 3.36 Helpdesk ticket list (built) — no longer the interim Suggestions box.
     "3.27": {
         "Announcements": "hrm:announcement_list",          # bullet (new Announcement CRUD + publish/pin/archive)
         "Birthday/Anniversary": "hrm:celebrations",        # bullet (derived view, no model)
         "Surveys": "hrm:survey_list",                      # bullet (new Survey + SurveyResponse engine)
         "Suggestions": "hrm:suggestion_list",              # bullet (new Suggestion, clones the 3.26 workflow)
-        "Help Desk": "hrm:suggestion_list",                # bullet (DEFERRED to 3.36 Helpdesk — interim: Suggestions box)
+        "Help Desk": "hrm:ticket_list",                    # bullet (now live — 3.36 Helpdesk tickets)
     },
     # 3.28 HR Reports — derived, read-only, @tenant_admin_required aggregate pages (no models). The
     # `hr_reports_index` landing hub is reachable from each report's Back link (not itself a bullet —
@@ -627,6 +626,20 @@ LIVE_LINKS = {
         "Travel Policy": "hrm:travelpolicy_list",
         "Travel Advance": "hrm:travelrequest_list?status=approved",
         "Travel Settlement": "hrm:travelrequest_list?status=completed",
+    },
+    # 3.36 Helpdesk — the employee HR/IT/Admin/Facilities service desk. Ticket Management -> the central
+    # ticket register; Ticket Categories -> the routing taxonomy (doubling as the KB taxonomy); SLA
+    # Management -> the per-priority response/resolution target catalog (where SLAs are defined);
+    # Knowledge Base -> the internal FAQ/self-help repository; Satisfaction Survey -> the CSAT-rated
+    # tickets (?rated=1). An extra "SLA Breaches" leaf deep-links to open tickets past their SLA
+    # (?sla=breached) — most-specific-match keeps it distinct from the bare Ticket Management list.
+    "3.36": {
+        "Ticket Management": "hrm:ticket_list",
+        "Ticket Categories": "hrm:helpdeskcategory_list",
+        "SLA Management": "hrm:helpdesksla_list",
+        "Knowledge Base": "hrm:knowledgearticle_list",
+        "Satisfaction Survey": "hrm:ticket_list?rated=1",
+        "SLA Breaches": "hrm:ticket_list?sla=breached",
     },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
