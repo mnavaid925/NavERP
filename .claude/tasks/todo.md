@@ -8312,5 +8312,37 @@ SLA Management, Knowledge Base, Satisfaction Survey. 3.27 Communication Hub's "H
 - AI-assisted triage/auto-categorization/virtual-agent chatbot/AI-generated KB drafts
 - Dedicated Employee Center portal chrome (ships as normal authenticated pages this pass)
 
-## Review notes
-(filled in at the end)
+## Review notes — 3.36 Helpdesk (as-built, 2026-07-14)
+
+**Delivered:** 4 tenant-scoped models (migrations `0051`+`0052`) — `HelpdeskSLAPolicy` (`HSLA-`),
+`HelpdeskCategory`, `HelpdeskTicket` (`TKT-`), `KnowledgeArticle` (`KBA-`) + forms, function-based CRUD views,
+8 bespoke ticket lifecycle actions (assign/start/waiting/resolve/close/reopen/cancel/feedback), the
+`?sla=breached`/`?rated=1` filters, 12 templates, admin, an idempotent `_seed_helpdesk`, `LIVE_LINKS["3.36"]`
+(all 5 bullets + an SLA-breach leaf) + the 3.27 "Help Desk" re-point, and a 43-test suite.
+
+**Design decisions vs the plan:** `HelpdeskCategory.department` is a CHOICES field
+(hr/it/admin/facilities/finance/other) rather than a `core.OrgUnit` FK — maps the NavERP.md fixed taxonomy
+directly, no seeded OrgUnit rows needed. Ticket url-name stem is `ticket_*` (not `helpdeskticket_*`). SLA due
+timestamps are stamped once at creation (frozen — editing the category does NOT re-derive sla_policy/assignee;
+documented). CSAT is inline on the ticket (no separate survey model), requester-only after resolved/closed.
+
+**Review agents (run in parallel to collect findings, then applied + committed):**
+- **code-reviewer** — found & fixed a missing status guard on `ticket_assign` (a crafted admin POST could
+  reassign a closed/cancelled ticket) + a KB status-badge `get_status_display` fallback; confirmed tenant
+  scoping airtight and the other six lifecycle gates correct.
+- **security-reviewer** — no vulnerabilities (tenant isolation, auth, CSRF, XSS, IDOR, mass-assignment all verified).
+- **frontend-reviewer** — clean; fixed an RTL-unsafe margin, added hidden `?sla`/`?rated` inputs so the
+  deep-links survive a filter submit, and made the ticket-detail action cards exhaustive (no empty card on cancelled).
+- **performance-reviewer** — added 4 indexes matching the sibling `crm.Case`/`crm.KnowledgeArticle`
+  ((tenant,-created_at), (tenant,priority), (tenant,sla_policy), (tenant,-updated_at)); confirmed select_related
+  covers every rendered FK and the `?sla=breached`/`?rated=1` filters run in SQL.
+- **explorer** — all wiring checks pass (29 routes ↔ 29 views, 12 templates, LIVE_LINKS, admin, seeder dispatch).
+- **qa-smoke-tester** — expanded to 39 tests (URL sweep, CRUD cycles, comment-leak scan, per-endpoint IDOR),
+  all green under `settings_test`; seed idempotency confirmed (2 SLA policies, 4 categories, 8 tickets incl. a
+  forced breach, 4 KB articles; re-run no-op; `--flush` works).
+- **test-writer** — added the assign-guard regression test + 3 N+1 query-count guards → **43 tests, all green**.
+
+**Verify:** `manage.py check` clean; migrations `0051`+`0052` apply; all 29 URLs reverse; 43/43 tests pass.
+
+**Deferred (carried forward):** comment thread, auto round-robin routing, multi-level escalation, business-hours
+SLA clocks, KB voting/public portal, CSAT analytics dashboard, ticket→KB conversion, AI triage.
