@@ -295,6 +295,7 @@ class Command(BaseCommand):
             self._seed_assets(tenant, flush=options["flush"])
             self._seed_expenses(tenant, flush=options["flush"])
             self._seed_travel(tenant, flush=options["flush"])
+            self._seed_helpdesk(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -3219,3 +3220,105 @@ class Command(BaseCommand):
             f"Travel seeded for '{tenant.name}': {TravelPolicy.objects.filter(tenant=tenant).count()} policies, "
             f"{TravelRequest.objects.filter(tenant=tenant).count()} requests, "
             f"{TravelBooking.objects.filter(tenant=tenant).count()} bookings."))
+
+    def _seed_helpdesk(self, tenant, *, flush):
+        """3.36 Helpdesk - 2 SLA policies + HR/IT/Admin/Facilities categories + tickets across every
+        status (incl. a forced SLA breach and CSAT-rated resolved/closed tickets) + KB articles. Runs
+        after 3.35. Idempotent (guarded on HelpdeskTicket existence). ASCII-only."""
+        from apps.hrm.models import (HelpdeskSLAPolicy, HelpdeskCategory, HelpdeskTicket,
+                                     KnowledgeArticle, EmployeeProfile)
+
+        if flush:
+            HelpdeskTicket.objects.filter(tenant=tenant).delete()
+            KnowledgeArticle.objects.filter(tenant=tenant).delete()
+            HelpdeskCategory.objects.filter(tenant=tenant).delete()
+            HelpdeskSLAPolicy.objects.filter(tenant=tenant).delete()
+        if HelpdeskTicket.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Helpdesk data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:4])
+        if not emps:
+            return
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        now = timezone.now()
+        day = datetime.timedelta(days=1)
+        hour = datetime.timedelta(hours=1)
+
+        std, _ = HelpdeskSLAPolicy.objects.get_or_create(
+            tenant=tenant, name="Standard Support",
+            defaults={"description": "Default response/resolution targets.", "is_default": True})
+        prio, _ = HelpdeskSLAPolicy.objects.get_or_create(
+            tenant=tenant, name="Priority Support",
+            defaults={"urgent_response_hours": 1, "urgent_resolution_hours": 2,
+                      "high_response_hours": 2, "high_resolution_hours": 8,
+                      "medium_response_hours": 4, "medium_resolution_hours": 24,
+                      "low_response_hours": 8, "low_resolution_hours": 48})
+
+        cats = {}
+        for name, dept, pol in [("IT Support", "it", prio), ("HR Queries", "hr", std),
+                                ("Facilities", "facilities", std), ("Admin Requests", "admin", std)]:
+            cats[dept], _ = HelpdeskCategory.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"department": dept, "default_sla_policy": pol, "default_assignee": actor,
+                          "description": f"{name} tickets."})
+
+        def _ticket(emp, subject, desc, cat, priority, status, **extra):
+            defaults = {"description": desc, "category": cat, "priority": priority, "status": status,
+                        "sla_policy": cat.default_sla_policy, "assignee": actor}
+            defaults.update(extra)
+            return HelpdeskTicket.objects.get_or_create(
+                tenant=tenant, employee=emp, subject=subject, defaults=defaults)
+
+        _ticket(emps[0], "Laptop won't boot", "My laptop shows a black screen after the update.",
+                cats["it"], "high", "new")
+        _ticket(emps[1 % len(emps)], "Payslip access issue", "I can't download my last payslip.",
+                cats["hr"], "medium", "open")
+        _ticket(emps[2 % len(emps)], "AC not working in Bay 3", "The air conditioning is down on the 2nd floor.",
+                cats["facilities"], "medium", "in_progress", first_responded_at=now - 2 * hour)
+        _ticket(emps[0], "New monitor request", "Requesting a second monitor for my workstation.",
+                cats["admin"], "low", "waiting", first_responded_at=now - 5 * hour)
+        _ticket(emps[1 % len(emps)], "VPN keeps disconnecting", "The VPN drops every few minutes.",
+                cats["it"], "high", "resolved",
+                first_responded_at=now - 20 * hour, resolved_at=now - 2 * hour,
+                resolution_notes="Reissued the VPN profile; connection is stable now.",
+                satisfaction_rating=5, satisfaction_comment="Fast fix, thanks!", satisfaction_at=now - hour)
+        _ticket(emps[2 % len(emps)], "ID card replacement", "Lost my access card.",
+                cats["admin"], "low", "closed",
+                first_responded_at=now - 3 * day, resolved_at=now - 2 * day, closed_at=now - 1 * day,
+                resolution_notes="New card issued at reception.",
+                satisfaction_rating=3, satisfaction_comment="Took a little while.", satisfaction_at=now - 1 * day)
+        _ticket(emps[0], "Duplicate software request", "Please ignore, raised by mistake.",
+                cats["it"], "low", "cancelled", closed_at=now - 4 * hour)
+
+        # Forced SLA breach: open + overdue. Create, then push the due timestamps into the past so the
+        # computed sla_state resolves to 'breached' (exercises the ?sla=breached deep-link).
+        br, created = _ticket(emps[3 % len(emps)], "Email outage", "Cannot send or receive email.",
+                              cats["it"], "urgent", "open")
+        if created:
+            HelpdeskTicket.objects.filter(pk=br.pk).update(
+                first_response_due=now - 3 * hour, resolution_due=now - 1 * hour, first_responded_at=None)
+
+        for title, dept, status, summary, body, tags, views, helpful, pub_days in [
+            ("How to reset your VPN password", "it", "published", "Step-by-step VPN password reset.",
+             "1. Open the self-service portal.\n2. Choose 'Reset VPN password'.\n3. Follow the emailed link.",
+             "vpn, password, network", 42, 15, 10),
+            ("Applying for leave", "hr", "published", "How to submit a leave request.",
+             "Go to Leave > Apply, pick the type and dates, then submit for approval.",
+             "leave, hr, time off", 88, 30, 20),
+            ("Booking a meeting room", "facilities", "published", "Reserve a meeting room.",
+             "Use the front-desk calendar or email facilities to reserve a room.",
+             "facilities, rooms", 12, 4, 5),
+            ("Expense reimbursement policy (draft)", "admin", "draft", "Draft policy pending review.",
+             "Submit receipts within 30 days via the Expense module.", "expense, policy", 0, 0, None),
+        ]:
+            defaults = {"category": cats[dept], "status": status, "owner": actor, "summary": summary,
+                        "body": body, "tags": tags, "view_count": views, "helpful_count": helpful}
+            if pub_days is not None:
+                defaults["published_at"] = now - pub_days * day
+            KnowledgeArticle.objects.get_or_create(tenant=tenant, title=title, defaults=defaults)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Helpdesk seeded for '{tenant.name}': {HelpdeskCategory.objects.filter(tenant=tenant).count()} categories, "
+            f"{HelpdeskTicket.objects.filter(tenant=tenant).count()} tickets, "
+            f"{KnowledgeArticle.objects.filter(tenant=tenant).count()} KB articles."))
