@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">{{ obj.title }}
-        {% if is_admin %}{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">Archived</span>{% endif %}{% endif %}
+        {% if is_admin %}{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}{% endif %}
       </h1>
       <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:knowledgearticle_list' %}">Knowledge Base</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
@@ -30,6 +30,6 @@
   <div class="card"><div class="card-body" style="display:flex; gap:1rem; align-items:center;">
     <span class="text-muted">Was this article helpful?</span>
     <form method="post" action="{% url 'hrm:knowledgearticle_helpful' obj.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="thumbs-up"></i> Yes, this helped</button></form>
-    {% if is_admin %}<form method="post" action="{% url 'hrm:knowledgearticle_delete' obj.pk %}" onsubmit="return confirm('Delete this article?');" style="margin-left:auto;">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>{% endif %}
+    {% if is_admin %}<form method="post" action="{% url 'hrm:knowledgearticle_delete' obj.pk %}" onsubmit="return confirm('Delete this article?');" style="margin-inline-start:auto;">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>{% endif %}
   </div></div>
 {% endblock %}
