@@ -14083,7 +14083,11 @@ def travelrequest_approve_advance(request, pk):
         return redirect("hrm:travelrequest_detail", pk=obj.pk)
     if amount < 0:
         messages.error(request, "Amount must be zero or greater.")
-    elif obj.advance_requested is not None and amount > obj.advance_requested:
+    elif amount >= Decimal("10000000000"):
+        messages.error(request, "Amount is too large.")
+    elif obj.advance_requested is None:
+        messages.error(request, "No advance was requested for this trip, so none can be approved.")
+    elif amount > obj.advance_requested:
         messages.error(request, f"Cannot approve more than the requested advance of {obj.advance_requested}.")
     elif (obj.policy_id and obj.policy.advance_percent_limit is not None and obj.estimated_cost is not None
           and amount > (obj.policy.advance_percent_limit / Decimal("100")) * obj.estimated_cost):
