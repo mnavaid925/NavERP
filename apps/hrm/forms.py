@@ -2626,6 +2626,10 @@ class TravelRequestForm(TenantModelForm):
                 self.add_error("advance_requested", "Must be zero or greater.")
             elif cost is not None and advance > cost:
                 self.add_error("advance_requested", "Cannot request an advance larger than the estimated cost.")
+        policy, trip_type = cleaned.get("policy"), cleaned.get("trip_type")
+        if policy and trip_type and policy.trip_type != "both" and policy.trip_type != trip_type:
+            self.add_error("policy", f"This policy applies to {policy.get_trip_type_display()} trips, "
+                                     f"not this {dict(TravelRequest.TRIP_TYPE_CHOICES).get(trip_type, trip_type)} one.")
         return cleaned
 
 
