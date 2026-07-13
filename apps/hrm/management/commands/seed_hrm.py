@@ -294,6 +294,7 @@ class Command(BaseCommand):
             self._seed_analytics(tenant, flush=options["flush"])
             self._seed_assets(tenant, flush=options["flush"])
             self._seed_expenses(tenant, flush=options["flush"])
+            self._seed_travel(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -3125,3 +3126,96 @@ class Command(BaseCommand):
             f"Expenses seeded for '{tenant.name}': {ExpenseCategory.objects.filter(tenant=tenant).count()} "
             f"categories, {ExpenseClaim.objects.filter(tenant=tenant).count()} claims, "
             f"{ExpenseClaimLine.objects.filter(tenant=tenant).count()} lines."))
+
+    def _seed_travel(self, tenant, *, flush):
+        """3.35 Travel Management - policies + trip requests across the workflow (runs after 3.34). Some
+        seeded bookings deliberately breach policy (class/hotel) to exercise out_of_policy. The completed
+        trip generates a linked settlement ExpenseClaim. Documents left blank. Idempotent. ASCII-only."""
+        from apps.hrm.models import (TravelPolicy, TravelRequest, TravelBooking, EmployeeProfile,
+                                      ExpenseClaim, JobGrade)
+        from apps.accounting.models import Currency
+
+        if flush:
+            TravelRequest.objects.filter(tenant=tenant).delete()  # cascades bookings
+            TravelPolicy.objects.filter(tenant=tenant).delete()
+        if TravelPolicy.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Travel data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:3])
+        if not emps:
+            return
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        usd = Currency.objects.filter(code="USD").first()
+        top_grade = JobGrade.objects.filter(tenant=tenant).order_by("-level_order").first()
+        today = timezone.localdate()
+        now = timezone.now()
+        day = datetime.timedelta(days=1)
+
+        dom, _ = TravelPolicy.objects.get_or_create(
+            tenant=tenant, name="Standard Domestic",
+            defaults={"job_grade": None, "trip_type": "domestic", "travel_class": "economy",
+                      "daily_allowance_limit": Decimal("50.00"), "hotel_limit_per_night": Decimal("120.00"),
+                      "advance_percent_limit": Decimal("70.00")})
+        intl, _ = TravelPolicy.objects.get_or_create(
+            tenant=tenant, name="Executive International",
+            defaults={"job_grade": top_grade, "trip_type": "international", "travel_class": "business",
+                      "daily_allowance_limit": Decimal("150.00"), "hotel_limit_per_night": Decimal("300.00"),
+                      "advance_percent_limit": Decimal("80.00")})
+
+        def _book(trip, btype, vendor, cls, cost, depart=None, ret=None):
+            TravelBooking.objects.get_or_create(
+                tenant=tenant, travel_request=trip, booking_type=btype, vendor=vendor,
+                defaults={"travel_class": cls, "cost": cost, "depart_date": depart, "return_date": ret})
+
+        t1, c1 = TravelRequest.objects.get_or_create(
+            tenant=tenant, employee=emps[0], title="Client visit - Islamabad",
+            defaults={"trip_type": "domestic", "origin": "Lahore", "destination": "Islamabad", "policy": dom,
+                      "purpose": "Client meeting for the Q3 rollout.", "estimated_cost": Decimal("300.00"),
+                      "currency": usd, "start_date": today + 5 * day, "end_date": today + 9 * day, "status": "draft"})
+        if c1:
+            _book(t1, "flight", "Blue Air", "economy", Decimal("180.00"), today + 5 * day, today + 9 * day)
+
+        t2, c2 = TravelRequest.objects.get_or_create(
+            tenant=tenant, employee=emps[1 % len(emps)], title="Regional sales trip - Karachi",
+            defaults={"trip_type": "domestic", "origin": "Lahore", "destination": "Karachi", "policy": dom,
+                      "purpose": "Monthly regional sales visits.", "estimated_cost": Decimal("500.00"),
+                      "advance_requested": Decimal("300.00"), "currency": usd,
+                      "start_date": today + 3 * day, "end_date": today + 6 * day, "status": "pending"})
+        if c2:
+            _book(t2, "flight", "Blue Air", "business", Decimal("260.00"), today + 3 * day, today + 6 * day)
+            _book(t2, "hotel", "City Inn", "", Decimal("150.00"), today + 3 * day, today + 4 * day)
+
+        t3, c3 = TravelRequest.objects.get_or_create(
+            tenant=tenant, employee=emps[2 % len(emps)], title="Annual conference - Dubai",
+            defaults={"trip_type": "international", "origin": "Lahore", "destination": "Dubai", "policy": intl,
+                      "purpose": "Annual industry conference.", "estimated_cost": Decimal("2000.00"),
+                      "advance_requested": Decimal("1500.00"), "currency": usd, "status": "approved",
+                      "approver": actor, "approved_at": now - 10 * day, "advance_approved": Decimal("1400.00"),
+                      "advance_paid_at": now - 8 * day, "advance_reference": "TXN-TRV-5521",
+                      "start_date": today - 5 * day, "end_date": today - 1 * day})
+        if c3:
+            _book(t3, "flight", "Gulf Wings", "business", Decimal("900.00"), today - 5 * day, today - 1 * day)
+            _book(t3, "hotel", "Marina Suites", "", Decimal("250.00"), today - 5 * day, today - 1 * day)
+
+        t4, c4 = TravelRequest.objects.get_or_create(
+            tenant=tenant, employee=emps[0], title="Vendor summit - Dubai",
+            defaults={"trip_type": "international", "origin": "Lahore", "destination": "Dubai", "policy": intl,
+                      "purpose": "Annual vendor summit.", "estimated_cost": Decimal("1200.00"),
+                      "advance_requested": Decimal("800.00"), "currency": usd, "status": "completed",
+                      "approver": actor, "approved_at": now - 20 * day, "advance_approved": Decimal("800.00"),
+                      "advance_paid_at": now - 18 * day, "advance_reference": "TXN-TRV-4410",
+                      "start_date": today - 15 * day, "end_date": today - 12 * day})
+        if c4:
+            _book(t4, "flight", "Gulf Wings", "business", Decimal("850.00"), today - 15 * day, today - 12 * day)
+            claim, _ = ExpenseClaim.objects.get_or_create(
+                tenant=tenant, employee=emps[0], title="Travel settlement - Dubai",
+                defaults={"purpose": t4.purpose, "period_start": t4.start_date, "period_end": t4.end_date,
+                          "currency": usd, "status": "draft"})
+            t4.settlement_claim = claim
+            t4.save(update_fields=["settlement_claim"])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Travel seeded for '{tenant.name}': {TravelPolicy.objects.filter(tenant=tenant).count()} policies, "
+            f"{TravelRequest.objects.filter(tenant=tenant).count()} requests, "
+            f"{TravelBooking.objects.filter(tenant=tenant).count()} bookings."))
