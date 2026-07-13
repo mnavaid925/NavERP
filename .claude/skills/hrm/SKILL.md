@@ -15,7 +15,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
 3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management,
-3.34 Expense Management, 3.35 Travel Management.** Reuses the
+3.34 Expense Management, 3.35 Travel Management, 3.36 Helpdesk.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -318,7 +318,7 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
 
 **Request flow:** an employee opens **`my_requests`** (the hub, scoped to their OWN rows via `_require_own_profile` + `employee=profile`; redirects to `hrm_overview` for a user with no profile) showing open/total counts + 5 recent rows across all five request types → creates a request (`<model>_create`, defaults `status="draft"`, employee set server-side by `_ss_child_create`) → **`_submit`** (draft→pending) → a tenant admin **approves**/**rejects** (`@tenant_admin_required @require_POST`; reject requires `decision_note`) → the admin **fulfils/issues** the terminal action. **Self-approval guard:** `_is_own_hr_request` blocks an admin who is the requesting employee from approving/rejecting their own request. Five shared workflow helpers `_hr_request_submit/_cancel/_approve/_reject/_edit/_delete` back all three models (edit/delete gated to `OPEN_STATUSES`, **ownership checked before status** so no cross-employee status oracle). **Gotchas:** reuses `_ss_child_create/_edit/_detail/_delete`, `_ss_scope`, `_can_manage_own_child` verbatim (the hub itself scopes to `employee=profile` directly, NOT `_ss_scope`, so an admin sees only their own on the hub); `_ss_child_detail` now also passes `is_own` (used to hide the self-approval buttons on the viewer's own row); admin `readonly_fields` lock `status` so `/admin/` can't bypass the lifecycle; models carry a `(tenant,employee,status)` + `(tenant,status)` index (matching `LeaveRequest`); cross-tenant IDOR→404, cross-employee→403. **Deferred:** configurable multi-level approval chains, SLA auto-escalation, template-driven letter generation, e-signature, notifications, software/license access requests.
 
-### 3.27 Communication Hub (4 tables + a derived view) — the internal employee-communications surface. FOUR new models + a **derived Celebrations view** (Birthday/Anniversary — NO model, mirrors `org_chart`, computed off `EmployeeProfile.date_of_birth` + `core.Employment.hired_on`). Reuses the 3.25/3.26 ESS helpers (`_current_employee_profile`, `_ss_scope`, `_ss_child_create`/`_detail`, and the 3.26 `_hr_request_*` workflow helpers **verbatim** for `Suggestion`), and the `LearningPath` 3.23 audience-targeting precedent (`target_department` FK `core.OrgUnit` `kind=department` + `target_designation` FK `hrm.Designation`). The 5th NavERP.md bullet (**Help Desk**) is DEFERRED to the dedicated future **3.36 Helpdesk** — its `LIVE_LINKS` bullet points at `hrm:suggestion_list` as the interim query channel. Posts no GL.
+### 3.27 Communication Hub (4 tables + a derived view) — the internal employee-communications surface. FOUR new models + a **derived Celebrations view** (Birthday/Anniversary — NO model, mirrors `org_chart`, computed off `EmployeeProfile.date_of_birth` + `core.Employment.hired_on`). Reuses the 3.25/3.26 ESS helpers (`_current_employee_profile`, `_ss_scope`, `_ss_child_create`/`_detail`, and the 3.26 `_hr_request_*` workflow helpers **verbatim** for `Suggestion`), and the `LearningPath` 3.23 audience-targeting precedent (`target_department` FK `core.OrgUnit` `kind=department` + `target_designation` FK `hrm.Designation`). The 5th NavERP.md bullet (**Help Desk**) resolves to the now-built **3.36 Helpdesk** — its `LIVE_LINKS` bullet points at `hrm:ticket_list` (the ticket queue). Posts no GL.
 
 | Model | Number | Key fields | Notes |
 |---|---|---|---|
@@ -526,6 +526,40 @@ Settlement→`?status=completed`. Seeder `_seed_travel` (2 policies + 4 trips: d
 `templates/hrm/travel/{travelpolicy,travelrequest}/{list,detail,form}.html` + `travel/travelbooking/form.html`. Tests:
 `apps/hrm/tests/test_travel.py` (176).
 
+### 3.36 Helpdesk (4 tables) — employee HR/IT/Admin/Facilities service desk. **Models**
+(`apps/hrm/models.py`, migrations `0051`+`0052`): `HelpdeskSLAPolicy` (`TenantNumbered`, `HSLA-`; per-priority
+response/resolution hour targets `urgent/high/medium/low_{response,resolution}_hours` + `targets_for(priority)`
+[medium fallback], `is_active`/`is_default` — a **field-for-field mirror of `crm.SlaPolicy`**), `HelpdeskCategory`
+(`TenantOwned`, **not** auto-numbered; `name`, `department` [hr/it/admin/facilities/finance/other], `description`,
+`default_assignee`→auth `User`, `default_sla_policy`→`HelpdeskSLAPolicy`, `is_active` — the routing taxonomy that
+**doubles as the KB taxonomy**; a new ticket inherits its `default_sla_policy`+`default_assignee`), `HelpdeskTicket`
+(`TenantNumbered`, `TKT-`; the requester FK is named **`employee`→`hrm.EmployeeProfile`** so it reuses
+`_ss_scope`/`_can_manage_own_child`, `subject`, `description`, `category`, `priority` [low/medium/high/urgent],
+`status` [new/open/in_progress/waiting/resolved/closed/cancelled], `OPEN_STATUSES=(new,open,in_progress,waiting)`,
+`assignee`→auth `User`, `sla_policy`, `first_response_due`/`resolution_due` **stamped ONCE in `save()`** from
+`sla_policy.targets_for(priority)` anchored at creation [mirrors `crm.Case.save`, frozen thereafter],
+`first_responded_at`/`resolved_at`/`closed_at`, `resolution_notes`, inline **CSAT** `satisfaction_rating`
+[1–5]/`satisfaction_comment`/`satisfaction_at`; **COMPUTED, never stored:** `is_open`, `first_response_breached`,
+`resolution_breached`, `is_breached`, `sla_state` [ok/at_risk/breached/closed], `age_days`), `KnowledgeArticle`
+(`TenantNumbered`, `KBA-`; `title`, `category`→`HelpdeskCategory`, `summary`, `body`, `tags`, `status`
+[draft/published/archived], `owner`→auth `User`, `view_count`/`helpful_count`, `published_at` — **internal-only, no
+public portal token** [trimmed from `crm.KnowledgeArticle`]). **Views** (`apps/hrm/views.py`, `# 3.36 Helpdesk`):
+`HelpdeskSLAPolicy`/`HelpdeskCategory` catalog CRUD (list/detail `@login_required`, writes `@tenant_admin_required`,
+delete-guarded when referenced by tickets). `HelpdeskTicket` own-vs-admin CRUD (`ticket_create` inherits the
+category's SLA policy + assignee; `ticket_edit`/`ticket_delete` reuse `_hr_request_edit`/`_hr_request_delete`) +
+**bespoke lifecycle actions** `ticket_assign` (admin-only, status-guarded — no reassign of closed/cancelled) /
+`ticket_start` / `ticket_waiting` / `ticket_resolve` (note required) / `ticket_close` / `ticket_reopen` /
+`ticket_cancel` (requester) / `ticket_feedback` (requester CSAT after resolved/closed). List filters `?sla=breached`
+(open + past response/resolution due, computed in the ORM) and `?rated=1` (has CSAT). `KnowledgeArticle` CRUD
+(writes `@tenant_admin_required`; non-admins see only `published`; `_detail` bumps `view_count` via `F()`;
+`knowledgearticle_helpful` bumps `helpful_count`). **Core-spine reuse:** requester =
+`core.Party`→`hrm.EmployeeProfile`; assignee/owner = auth `User`; tenant-scoped; posts no GL. **Gotcha:** the ticket
+url-name stem is **`ticket_*`** (not `helpdeskticket_*`) though the model is `HelpdeskTicket` and the template folder
+is `helpdeskticket/`. Seeder `_seed_helpdesk` (dispatched right after `_seed_travel`) — 2 SLA policies
+(Standard/Priority), 4 categories (HR/IT/Admin/Facilities), ~8 tickets across every status incl. a forced SLA breach
++ CSAT-rated resolved/closed, 4 KB articles; idempotent (guarded on `HelpdeskTicket.exists()`). Templates:
+`templates/hrm/helpdesk/{helpdeskslapolicy,helpdeskcategory,helpdeskticket,knowledgearticle}/{list,detail,form}.html`.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -663,7 +697,7 @@ Settlement→`?status=completed`. Seeder `_seed_travel` (2 policies + 4 trips: d
   `_detail` login-gated (drafts admin-only), **`_create`/`_edit`(draft)/`_delete`(draft)/`_open`/`_close`/`_results`
   `@tenant_admin_required`**, `_respond` `@login_required` (once, only while open); `hrm:suggestion_*` — same
   own-or-admin CRUD + `_submit`/`_cancel` + **`_approve`/`_reject`/`_implement` `@tenant_admin_required`** (reuses the
-  3.26 `_hr_request_*` helpers; `_implement` approved→implemented). "Help Desk" reuses `hrm:suggestion_list` (→ 3.36).
+  3.26 `_hr_request_*` helpers; `_implement` approved→implemented). "Help Desk" now resolves to `hrm:ticket_list` (3.36 Helpdesk, built).
 - **HR Reports (3.28):** all `@tenant_admin_required`, read-only (no models). `hrm:hr_reports_index`
   (`/hrm/reports/hr/`, landing) + `hrm:headcount_report` / `hrm:attrition_report` / `hrm:diversity_report` /
   `hrm:cost_report` / `hrm:hiring_report` (`/hrm/reports/hr/<name>/`). GET-filtered (`date_from`/`date_to`/
@@ -699,6 +733,14 @@ Settlement→`?status=completed`. Seeder `_seed_travel` (2 policies + 4 trips: d
   `hrm:travelrequest_generate_settlement` (`/hrm/travel-requests/...`) + inline `hrm:travelbooking_add`(trip_pk)/`_edit`/
   `_delete` (`/hrm/travel-bookings/...`). All `@login_required`, tenant-scoped; approve/reject/advance actions
   `@tenant_admin_required` + maker-checker self-blocked.
+- **Helpdesk (3.36):** `hrm:helpdesksla_list`/`_create`/`_detail`/`_edit`/`_delete` (`/hrm/helpdesk/sla-policies/...`,
+  writes admin-only) + `hrm:helpdeskcategory_list`/`_create`/`_detail`/`_edit`/`_delete`
+  (`/hrm/helpdesk/categories/...`, writes admin-only) + `hrm:ticket_list`/`_create`/`_detail`/`_edit`/`_delete`
+  + lifecycle `hrm:ticket_assign`/`_start`/`_waiting`/`_resolve`/`_close`/`_reopen`/`_cancel`/`_feedback`
+  (`/hrm/helpdesk/tickets/...`) + `hrm:knowledgearticle_list`/`_create`/`_detail`/`_edit`/`_delete`/`_helpful`
+  (`/hrm/helpdesk/knowledge-base/...`). All `@login_required`, tenant-scoped; writes `@tenant_admin_required`. **NOTE**
+  the ticket url-name stem is **`ticket_*`** (not `helpdeskticket_*`) though the model is `HelpdeskTicket` and the
+  template folder is `helpdeskticket/`.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1207,8 +1249,8 @@ tenant and sees nothing.
   + extra My Requests → `hrm:my_requests` (the ESS hub over all five). `LIVE_LINKS["3.26"]`.
 - 3.27 (all 5 bullets live): Announcements → `hrm:announcement_list`; Birthday/Anniversary → `hrm:celebrations`
   (derived, no model); Surveys → `hrm:survey_list`; Suggestions → `hrm:suggestion_list`; **Help Desk →
-  `hrm:suggestion_list`** (deferred to the future 3.36 Helpdesk — interim: the Suggestions box, so both bullets
-  resolve there). `LIVE_LINKS["3.27"]`. Two `hrm_overview` stat-cards were added (Birthdays This Month →
+  `hrm:ticket_list`** (re-pointed to the now-built 3.36 Helpdesk ticket queue; the Suggestions bullet keeps
+  `hrm:suggestion_list`). `LIVE_LINKS["3.27"]`. Two `hrm_overview` stat-cards were added (Birthdays This Month →
   `hrm:celebrations`; Pinned Announcements → `hrm:announcement_list?status=published`).
 - 3.28 (all 5 bullets live): Headcount Report → `hrm:headcount_report`; Attrition Report → `hrm:attrition_report`;
   Diversity Report → `hrm:diversity_report`; Cost Reports → `hrm:cost_report`; Hiring Reports → `hrm:hiring_report`.
@@ -1238,6 +1280,10 @@ tenant and sees nothing.
   Travel Advance → `hrm:travelrequest_list?status=approved` (advance is approved/paid on an approved trip); Travel
   Settlement → `hrm:travelrequest_list?status=completed` (Generate Settlement spins up a linked 3.34 `ExpenseClaim`).
   `LIVE_LINKS["3.35"]`.
+- 3.36 (all 5 bullets live): Ticket Management → `hrm:ticket_list`; Ticket Categories → `hrm:helpdeskcategory_list`;
+  SLA Management → `hrm:helpdesksla_list`; Knowledge Base → `hrm:knowledgearticle_list`; Satisfaction Survey →
+  `hrm:ticket_list?rated=1`; + extra SLA Breaches → `hrm:ticket_list?sla=breached`. `LIVE_LINKS["3.36"]`. The 3.27
+  "Help Desk" bullet was also re-pointed from `hrm:suggestion_list` to `hrm:ticket_list`.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
@@ -1381,7 +1427,7 @@ attachment` in production (project-wide WARNING).
 Salary structure + payroll/payslip (FK into `accounting.PayrollRun`, do NOT duplicate GL), plus
 `JobRequisition` follow-ons (condition-based approval routing, approval delegation, re-approval on salary change,
 external job-board posting, AI JD generation, internal career portal, `is_replacement_for`→`EmployeeProfile` FK
-upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk deferred to 3.36); 3.28 HR Reports is now **built** — 6 derived, admin-only report views (headcount/attrition/diversity/cost/hiring + index; NO models); 3.29 Attendance Reports is now **built** — 5 derived report views (summary/late-early/absenteeism/overtime + index; Utilization reuses 3.11), next is 3.30 Leave Reports),
+upgrade, evergreen auto-reopen), (the Performance-Management cluster — 3.18 Goal Setting, 3.19 Performance Review, 3.20 Continuous Feedback, 3.21 Performance Improvement — is now **built**; 3.22 Training Management + 3.23 Learning Management (LMS) + 3.24 Training Administration are now **built** — the training cluster (3.22 ILT + 3.23 LMS + 3.24 Admin) is complete; 3.25 Personal Information (Self-Service) is now **built** — the ESS self-service layer; 3.26 Request Management (Self-Service) is now **built** — the employee request portal (Document/IdCard/Asset requests + a My Requests hub; Leave/Attendance-Regularization reuse 3.10/3.9); 3.27 Communication Hub is now **built** — announcements (audience-targeted) + surveys + suggestions + a derived celebrations view (Help Desk now resolves to the built 3.36 Helpdesk); 3.28 HR Reports is now **built** — 6 derived, admin-only report views (headcount/attrition/diversity/cost/hiring + index; NO models); 3.29 Attendance Reports is now **built** — 5 derived report views (summary/late-early/absenteeism/overtime + index; Utilization reuses 3.11), next is 3.30 Leave Reports),
 timesheets (3.11, coordinate with `accounting.Project`),
 statutory/tax (3.13–3.17), employee self-service portal, and a per-employee↔user link
 for ownership-scoped leave actions (currently any tenant member can submit/cancel; approve/reject are admin-only).
