@@ -7985,3 +7985,244 @@ class TravelBooking(TenantOwned):
     @property
     def out_of_policy_reason(self):
         return self._policy_check()[1]
+
+
+# ---------------------------------------------------------------------------
+# 3.36 Helpdesk — the employee HR/IT/Admin/Facilities service desk. Categories
+# (routing taxonomy, doubling as the KB taxonomy) carry a default assignee + default
+# SLA policy; SLA policies hold per-priority response/resolution hour targets
+# (mirrors crm.SlaPolicy); tickets are agent-worked (assign/start/resolve/close/
+# reopen/feedback — NOT the single-approver _hr_request_* machine) with SLA due
+# timestamps stamped once in save() and breach/at-risk COMPUTED (mirrors crm.Case);
+# post-resolution CSAT is captured inline (no separate survey model, like crm.Case).
+# The requester FK is named ``employee`` so tickets reuse the self-service helpers
+# (_ss_scope / _can_manage_own_child). KnowledgeArticle is an internal-only FAQ/
+# self-help repository (no public portal token). Reuses the unified spine: requester
+# = core.Party -> hrm.EmployeeProfile; assignee/owner = auth User; tenant-scoped.
+# ---------------------------------------------------------------------------
+class HelpdeskSLAPolicy(TenantNumbered):
+    """Per-priority response/resolution hour targets (``HSLA-#####``) — a field-for-field mirror of
+    ``crm.SlaPolicy``. A new ticket copies its category's ``default_sla_policy`` and ``save()`` stamps
+    the ticket's due timestamps from ``targets_for(priority)``. Calendar-hours this pass (not
+    business-hours clocks — deferred). The catalog row is editable; a ticket's stamped dues never move."""
+
+    NUMBER_PREFIX = "HSLA"
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    urgent_response_hours = models.PositiveIntegerField(default=1)
+    urgent_resolution_hours = models.PositiveIntegerField(default=4)
+    high_response_hours = models.PositiveIntegerField(default=4)
+    high_resolution_hours = models.PositiveIntegerField(default=24)
+    medium_response_hours = models.PositiveIntegerField(default=8)
+    medium_resolution_hours = models.PositiveIntegerField(default=48)
+    low_response_hours = models.PositiveIntegerField(default=24)
+    low_resolution_hours = models.PositiveIntegerField(default=96)
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_hsla_tnt_active_idx"),
+            models.Index(fields=["tenant", "is_default"], name="hrm_hsla_tnt_default_idx"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def targets_for(self, priority):
+        """``(response_hours, resolution_hours)`` for a ``HelpdeskTicket`` priority (medium fallback)."""
+        return {
+            "urgent": (self.urgent_response_hours, self.urgent_resolution_hours),
+            "high": (self.high_response_hours, self.high_resolution_hours),
+            "medium": (self.medium_response_hours, self.medium_resolution_hours),
+            "low": (self.low_response_hours, self.low_resolution_hours),
+        }.get(priority, (self.medium_response_hours, self.medium_resolution_hours))
+
+
+class HelpdeskCategory(TenantOwned):
+    """Ticket routing taxonomy (HR / IT / Admin / Facilities / …) that also serves as the knowledge-base
+    taxonomy. Carries the ``default_assignee`` + ``default_sla_policy`` a new ticket in this category
+    inherits. Small per-tenant catalog identified by name — not auto-numbered."""
+
+    DEPARTMENT_CHOICES = [
+        ("hr", "Human Resources"),
+        ("it", "IT"),
+        ("admin", "Administration"),
+        ("facilities", "Facilities"),
+        ("finance", "Finance"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=100)
+    department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default="hr")
+    description = models.TextField(blank=True)
+    default_assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                         null=True, blank=True, related_name="hrm_helpdesk_categories")
+    default_sla_policy = models.ForeignKey("hrm.HelpdeskSLAPolicy", on_delete=models.SET_NULL,
+                                           null=True, blank=True, related_name="categories")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["department", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_hdcat_tnt_active_idx"),
+            models.Index(fields=["tenant", "department"], name="hrm_hdcat_tnt_dept_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_department_display()})"
+
+
+class HelpdeskTicket(TenantNumbered):
+    """An employee helpdesk ticket (``TKT-#####``). Agent-worked lifecycle (new -> open -> in_progress
+    -> waiting -> resolved -> closed, + cancelled) driven by bespoke action views — NOT the
+    single-approver ``_hr_request_*`` machine (a ticket is worked, not authorized). The requester FK is
+    named ``employee`` so the ticket reuses ``_ss_scope`` / ``_can_manage_own_child`` verbatim. SLA due
+    timestamps are stamped once in ``save()`` from the policy's per-priority targets (mirrors
+    ``crm.Case.save``); breach / at-risk / age are COMPUTED, never stored. Post-resolution CSAT
+    (``satisfaction_*``) is captured inline via the feedback action — no separate survey model."""
+
+    NUMBER_PREFIX = "TKT"
+
+    PRIORITY_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("urgent", "Urgent")]
+    STATUS_CHOICES = [
+        ("new", "New"),
+        ("open", "Open"),
+        ("in_progress", "In Progress"),
+        ("waiting", "Waiting on Requester"),
+        ("resolved", "Resolved"),
+        ("closed", "Closed"),
+        ("cancelled", "Cancelled"),
+    ]
+    # Statuses in which the ticket is still being worked (requester may edit/cancel; SLA clock live).
+    OPEN_STATUSES = ("new", "open", "in_progress", "waiting")
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                 related_name="helpdesk_tickets")  # the requester
+    subject = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.ForeignKey("hrm.HelpdeskCategory", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="tickets")
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="new")
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_helpdesk_assigned")
+    sla_policy = models.ForeignKey("hrm.HelpdeskSLAPolicy", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="tickets")
+    first_response_due = models.DateTimeField(null=True, blank=True)
+    resolution_due = models.DateTimeField(null=True, blank=True)
+    first_responded_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    resolution_notes = models.TextField(blank=True)
+    # Inline CSAT — set by the requester through the feedback action after resolution (never on the agent form).
+    satisfaction_rating = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    satisfaction_comment = models.TextField(blank=True)
+    satisfaction_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_tkt_tnt_status_idx"),
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_tkt_emp_status_idx"),
+            models.Index(fields=["tenant", "assignee"], name="hrm_tkt_tnt_assignee_idx"),
+            models.Index(fields=["tenant", "category"], name="hrm_tkt_tnt_cat_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.subject}" if self.number else self.subject
+
+    def save(self, *args, **kwargs):
+        # Stamp the SLA due timestamps once, from the policy's per-priority targets, anchored at
+        # creation time (each computed independently while still blank — mirrors crm.Case.save()).
+        if self.sla_policy_id and (self.first_response_due is None or self.resolution_due is None):
+            anchor = self.created_at or timezone.now()
+            resp_h, res_h = self.sla_policy.targets_for(self.priority)
+            if resp_h and self.first_response_due is None:
+                self.first_response_due = anchor + timedelta(hours=resp_h)
+            if res_h and self.resolution_due is None:
+                self.resolution_due = anchor + timedelta(hours=res_h)
+        return super().save(*args, **kwargs)
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+    @property
+    def first_response_breached(self):
+        """Open, past the first-response deadline, and no agent has responded yet."""
+        return bool(self.first_response_due and self.first_responded_at is None
+                    and self.is_open and self.first_response_due < timezone.now())
+
+    @property
+    def resolution_breached(self):
+        """Open and past the resolution deadline."""
+        return bool(self.resolution_due and self.is_open and self.resolution_due < timezone.now())
+
+    @property
+    def is_breached(self):
+        return self.first_response_breached or self.resolution_breached
+
+    @property
+    def sla_state(self):
+        """``ok`` / ``at_risk`` / ``breached`` / ``closed`` for the list SLA badge. ``at_risk`` = still
+        open, not breached, and within the last 25% of the resolution window."""
+        if not self.is_open:
+            return "closed"
+        if self.is_breached:
+            return "breached"
+        if self.resolution_due:
+            now = timezone.now()
+            anchor = self.created_at or now
+            total = (self.resolution_due - anchor).total_seconds()
+            remaining = (self.resolution_due - now).total_seconds()
+            if total > 0 and remaining <= 0.25 * total:
+                return "at_risk"
+        return "ok"
+
+    @property
+    def age_days(self):
+        """Whole days from creation to close/resolve/now."""
+        end = self.closed_at or self.resolved_at or timezone.now()
+        return max(0, (end - (self.created_at or end)).days)
+
+
+class KnowledgeArticle(TenantNumbered):
+    """Internal knowledge-base FAQ / self-help article (``KBA-#####``). Categorized by
+    ``HelpdeskCategory``; draft -> published -> archived lifecycle. ``view_count`` / ``helpful_count``
+    are engagement counters bumped by the read / mark-helpful actions (never hand-edited on the form).
+    Internal-only — no public portal token (trimmed from ``crm.KnowledgeArticle``)."""
+
+    NUMBER_PREFIX = "KBA"
+
+    STATUS_CHOICES = [("draft", "Draft"), ("published", "Published"), ("archived", "Archived")]
+
+    title = models.CharField(max_length=255)
+    category = models.ForeignKey("hrm.HelpdeskCategory", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="articles")
+    summary = models.CharField(max_length=500, blank=True)
+    body = models.TextField()
+    tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated keywords for search.")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="hrm_kb_articles")
+    view_count = models.PositiveIntegerField(default=0)
+    helpful_count = models.PositiveIntegerField(default=0)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_kba_tnt_status_idx"),
+            models.Index(fields=["tenant", "category"], name="hrm_kba_tnt_cat_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.title}" if self.number else self.title
