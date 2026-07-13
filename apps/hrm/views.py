@@ -13961,7 +13961,8 @@ def travelpolicy_list(request):
                      TravelPolicy.objects.filter(tenant=request.tenant).select_related("job_grade"),
                      "hrm/travel/travelpolicy/list.html", search_fields=["name"],
                      filters=[("is_active", "is_active", False), ("job_grade", "job_grade_id", True)],
-                     extra_context={"job_grades": JobGrade.objects.filter(tenant=request.tenant, is_active=True)
+                     extra_context={"is_admin": _is_admin(request.user),
+                                    "job_grades": JobGrade.objects.filter(tenant=request.tenant, is_active=True)
                                     .order_by("level_order", "name")})
 
 
@@ -13974,8 +13975,9 @@ def travelpolicy_create(request):
 @login_required
 def travelpolicy_detail(request, pk):
     return crud_detail(request, model=TravelPolicy, pk=pk, template="hrm/travel/travelpolicy/detail.html",
-                       extra_context={"request_count": TravelRequest.objects.filter(
-                           tenant=request.tenant, policy_id=pk).count()})
+                       extra_context={"is_admin": _is_admin(request.user),
+                                      "request_count": TravelRequest.objects.filter(
+                                          tenant=request.tenant, policy_id=pk).count()})
 
 
 @tenant_admin_required
@@ -14081,6 +14083,10 @@ def travelrequest_approve_advance(request, pk):
     try:
         amount = Decimal(raw)
     except (InvalidOperation, TypeError, ValueError):
+        messages.error(request, "Enter a valid advance amount.")
+        return redirect("hrm:travelrequest_detail", pk=obj.pk)
+    # Decimal("NaN")/"Infinity" parse fine; ordering comparisons on NaN raise InvalidOperation (500).
+    if not amount.is_finite():
         messages.error(request, "Enter a valid advance amount.")
         return redirect("hrm:travelrequest_detail", pk=obj.pk)
     if amount < 0:
