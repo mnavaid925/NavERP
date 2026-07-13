@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Helpdesk SLA Policies{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">SLA Policies</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Helpdesk</span><span class="sep">›</span><span>SLA Policies</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:ticket_list' %}" class="btn btn-outline"><i data-lucide="life-buoy"></i> Tickets</a>
+      <a href="{% url 'hrm:helpdeskcategory_list' %}" class="btn btn-outline"><i data-lucide="tags"></i> Categories</a>
+      {% if is_admin %}<a href="{% url 'hrm:helpdesksla_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New SLA Policy</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search policies...">
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select"><option value="">All statuses</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:helpdesksla_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Urgent (Resp/Res)</th><th>High</th><th>Medium</th><th>Low</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:helpdesksla_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.name }}{% if obj.is_default %} <span class="badge badge-info">Default</span>{% endif %}</td>
+              <td>{{ obj.urgent_response_hours }}h / {{ obj.urgent_resolution_hours }}h</td>
+              <td>{{ obj.high_response_hours }}h / {{ obj.high_resolution_hours }}h</td>
+              <td>{{ obj.medium_response_hours }}h / {{ obj.medium_resolution_hours }}h</td>
+              <td>{{ obj.low_response_hours }}h / {{ obj.low_resolution_hours }}h</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:helpdesksla_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                {% if is_admin %}
+                <a href="{% url 'hrm:helpdesksla_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:helpdesksla_delete' obj.pk %}" onsubmit="return confirm('Delete this SLA policy?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                {% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="timer"></i><h3>No SLA policies yet</h3><p>Define response &amp; resolution targets per priority, then attach them to categories.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
