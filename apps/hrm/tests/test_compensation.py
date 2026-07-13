@@ -78,6 +78,13 @@ def grant_a(db, tenant_a, employee_a):
 
 # ---- tenant_b (IDOR) ----
 @pytest.fixture
+def benchmark_b(db, tenant_b):
+    from apps.hrm.models import SalaryBenchmark
+    return SalaryBenchmark.objects.create(
+        tenant=tenant_b, source="internal", region="EU", survey_date=TODAY)
+
+
+@pytest.fixture
 def plan_b(db, tenant_b):
     from apps.hrm.models import BenefitPlan
     return BenefitPlan.objects.create(tenant=tenant_b, name="Plan B", plan_type="dental")
@@ -166,6 +173,29 @@ def test_full_url_sweep(client_a, benchmark_a, plan_a, enrollment_a, grant_a, em
         assert client_a.get(reverse(name, args=args) + qs).status_code == 200, name
 
 
+def test_template_comment_leak_scan(client_a, benchmark_a, plan_a, enrollment_a, grant_a, employee_a):
+    """The 12 list+detail+form pages (4 entities x 3) must never leak a Django template comment
+    ({# ... #} or {% comment %}) into the rendered HTML."""
+    targets = [
+        ("hrm:salarybenchmark_list", [], ""), ("hrm:salarybenchmark_detail", [benchmark_a.pk], ""),
+        ("hrm:salarybenchmark_create", [], ""),
+        ("hrm:benefitplan_list", [], ""), ("hrm:benefitplan_detail", [plan_a.pk], ""),
+        ("hrm:benefitplan_create", [], ""),
+        ("hrm:employeebenefitenrollment_list", [], ""),
+        ("hrm:employeebenefitenrollment_detail", [enrollment_a.pk], ""),
+        ("hrm:employeebenefitenrollment_create", [], f"?employee={employee_a.pk}"),
+        ("hrm:equitygrant_list", [], ""), ("hrm:equitygrant_detail", [grant_a.pk], ""),
+        ("hrm:equitygrant_create", [], ""),
+    ]
+    assert len(targets) == 12
+    for name, args, qs in targets:
+        resp = client_a.get(reverse(name, args=args) + qs)
+        assert resp.status_code == 200, name
+        html = resp.content.decode()
+        assert "{#" not in html, f"template comment leak ('{{#') in {name}"
+        assert "{% comment" not in html, f"template comment leak ('{{% comment') in {name}"
+
+
 def test_benefitplan_create_and_delete_guard(client_a, tenant_a, plan_a, enrollment_a):
     from apps.hrm.models import BenefitPlan
     # create
@@ -179,6 +209,59 @@ def test_benefitplan_create_and_delete_guard(client_a, tenant_a, plan_a, enrollm
     resp = client_a.post(reverse("hrm:benefitplan_delete", args=[plan_a.pk]))
     assert resp.status_code == 302
     assert BenefitPlan.objects.filter(pk=plan_a.pk).exists()
+
+
+def test_salarybenchmark_full_crud(client_a, tenant_a):
+    from apps.hrm.models import SalaryBenchmark
+    # create
+    resp = client_a.post(reverse("hrm:salarybenchmark_create"), {
+        "source": "radford", "region": "EMEA",
+        "percentile_25": "60000", "percentile_50": "75000",
+        "percentile_75": "90000", "percentile_90": "110000",
+        "survey_date": TODAY.isoformat(), "notes": "Test benchmark"})
+    assert resp.status_code == 302
+    obj = SalaryBenchmark.objects.get(tenant=tenant_a, region="EMEA")
+    assert obj.source == "radford"
+    # edit
+    resp = client_a.post(reverse("hrm:salarybenchmark_edit", args=[obj.pk]), {
+        "source": "radford", "region": "EMEA-Updated",
+        "percentile_25": "60000", "percentile_50": "75000",
+        "percentile_75": "90000", "percentile_90": "110000",
+        "survey_date": TODAY.isoformat(), "notes": "Updated notes"})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.region == "EMEA-Updated"
+    assert obj.notes == "Updated notes"
+    # delete
+    resp = client_a.post(reverse("hrm:salarybenchmark_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not SalaryBenchmark.objects.filter(pk=obj.pk).exists()
+
+
+def test_equitygrant_full_crud(client_a, tenant_a, employee_a):
+    from apps.hrm.models import EquityGrant
+    # create
+    resp = client_a.post(reverse("hrm:equitygrant_create"), {
+        "employee": employee_a.pk, "grant_type": "nso", "grant_date": TODAY.isoformat(),
+        "shares_granted": "2000", "vesting_start_date": TODAY.isoformat(),
+        "cliff_months": "12", "vesting_duration_months": "48", "vesting_frequency": "quarterly",
+        "status": "active"})
+    assert resp.status_code == 302
+    obj = EquityGrant.objects.get(tenant=tenant_a, employee=employee_a, grant_type="nso")
+    assert obj.shares_granted == 2000
+    # edit
+    resp = client_a.post(reverse("hrm:equitygrant_edit", args=[obj.pk]), {
+        "employee": employee_a.pk, "grant_type": "nso", "grant_date": TODAY.isoformat(),
+        "shares_granted": "2500", "vesting_start_date": TODAY.isoformat(),
+        "cliff_months": "12", "vesting_duration_months": "48", "vesting_frequency": "quarterly",
+        "status": "active"})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.shares_granted == 2500
+    # delete
+    resp = client_a.post(reverse("hrm:equitygrant_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not EquityGrant.objects.filter(pk=obj.pk).exists()
 
 
 def test_enrollment_create_defaults_contributions(client_a, employee_a, plan_a):
@@ -201,6 +284,46 @@ def test_enrollment_lifecycle(client_a, enrollment_a):
     client_a.post(reverse("hrm:employeebenefitenrollment_terminate", args=[enrollment_a.pk]))
     e.refresh_from_db()
     assert e.status == "terminated"
+
+
+def test_enrollment_edit_while_pending(client_a, enrollment_a, plan_a):
+    """_hr_request_edit: a still-open (pending) enrollment can be edited."""
+    resp = client_a.post(reverse("hrm:employeebenefitenrollment_edit", args=[enrollment_a.pk]), {
+        "plan": plan_a.pk, "election_choice": "opt_in", "coverage_tier": "employee_only",
+        "effective_from": enrollment_a.effective_from.isoformat(),
+        "employee_contribution": "120", "employer_contribution": "400", "notes": "edited"})
+    assert resp.status_code == 302
+    enrollment_a.refresh_from_db()
+    assert enrollment_a.coverage_tier == "employee_only"
+    assert enrollment_a.notes == "edited"
+    assert enrollment_a.status == "pending"
+
+
+def test_enrollment_delete_while_pending(client_a, enrollment_a):
+    """_hr_request_delete: a still-open (pending) enrollment can be deleted."""
+    from apps.hrm.models import EmployeeBenefitEnrollment
+    resp = client_a.post(reverse("hrm:employeebenefitenrollment_delete", args=[enrollment_a.pk]))
+    assert resp.status_code == 302
+    assert not EmployeeBenefitEnrollment.objects.filter(pk=enrollment_a.pk).exists()
+
+
+def test_enrollment_edit_delete_blocked_when_not_pending(client_a, enrollment_a, plan_a):
+    """Once decided (enrolled), OPEN_STATUSES = ("pending",) locks out edit/delete."""
+    from apps.hrm.models import EmployeeBenefitEnrollment
+    client_a.post(reverse("hrm:employeebenefitenrollment_enroll", args=[enrollment_a.pk]))
+    enrollment_a.refresh_from_db()
+    assert enrollment_a.status == "enrolled"
+
+    resp = client_a.post(reverse("hrm:employeebenefitenrollment_edit", args=[enrollment_a.pk]), {
+        "plan": plan_a.pk, "election_choice": "opt_in", "coverage_tier": "employee_only",
+        "effective_from": enrollment_a.effective_from.isoformat()})
+    assert resp.status_code == 302
+    enrollment_a.refresh_from_db()
+    assert enrollment_a.coverage_tier == "family"  # unchanged — edit was blocked
+
+    resp = client_a.post(reverse("hrm:employeebenefitenrollment_delete", args=[enrollment_a.pk]))
+    assert resp.status_code == 302
+    assert EmployeeBenefitEnrollment.objects.filter(pk=enrollment_a.pk).exists()  # not deleted
 
 
 def test_record_exercise_and_guard(client_a, grant_a):
@@ -241,7 +364,16 @@ def test_grant_cross_employee_idor_403(other_employee_client, grant_a):
     assert other_employee_client.get(reverse("hrm:equitygrant_detail", args=[grant_a.pk])).status_code == 403
 
 
-def test_multitenant_idor_404(client_a, plan_b, enrollment_b, grant_b):
+def test_multitenant_idor_404(client_a, benchmark_b, plan_b, enrollment_b, grant_b):
+    assert client_a.get(reverse("hrm:salarybenchmark_detail", args=[benchmark_b.pk])).status_code == 404
     assert client_a.get(reverse("hrm:benefitplan_detail", args=[plan_b.pk])).status_code == 404
     assert client_a.get(reverse("hrm:employeebenefitenrollment_detail", args=[enrollment_b.pk])).status_code == 404
     assert client_a.get(reverse("hrm:equitygrant_detail", args=[grant_b.pk])).status_code == 404
+
+
+def test_multitenant_idor_lifecycle_post_404(client_a, enrollment_b):
+    """A tenant-A admin can't drive tenant-B's enrollment lifecycle by pk-guessing."""
+    from apps.hrm.models import EmployeeBenefitEnrollment
+    resp = client_a.post(reverse("hrm:employeebenefitenrollment_enroll", args=[enrollment_b.pk]))
+    assert resp.status_code == 404
+    assert EmployeeBenefitEnrollment.objects.get(pk=enrollment_b.pk).status == "pending"
