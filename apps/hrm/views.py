@@ -14225,3 +14225,480 @@ def travelbooking_delete(request, pk):
     write_audit_log(request.user, booking.travel_request, "update", {"action": "booking_delete"})
     messages.success(request, "Booking removed.")
     return redirect("hrm:travelrequest_detail", pk=trip_pk)
+
+
+# ============================================================================
+# 3.36 Helpdesk — SLA policies + categories (admin catalogs), tickets (agent-worked
+# lifecycle + CSAT), and the internal knowledge base. Tickets reuse the self-service
+# scope/ownership helpers via their ``employee`` (requester) FK; the lifecycle actions
+# are bespoke (a ticket is worked, not single-approver-authorized).
+# ============================================================================
+from .models import (  # noqa: E402  — 3.36 Helpdesk
+    HelpdeskCategory, HelpdeskSLAPolicy, HelpdeskTicket, KnowledgeArticle)
+from .forms import (  # noqa: E402  — 3.36 Helpdesk
+    HelpdeskCategoryForm, HelpdeskSLAPolicyForm, HelpdeskTicketForm, KnowledgeArticleForm)
+
+
+# ---- Helpdesk SLA policies (admin-managed catalog) --------------------------------------------
+@login_required
+def helpdesksla_list(request):
+    qs = HelpdeskSLAPolicy.objects.filter(tenant=request.tenant)
+    return crud_list(request, qs, "hrm/helpdesk/helpdeskslapolicy/list.html",
+                     search_fields=["number", "name", "description"],
+                     filters=[("is_active", "is_active", False)],
+                     extra_context={"is_admin": _is_admin(request.user)})
+
+
+@tenant_admin_required
+def helpdesksla_create(request):
+    return crud_create(request, form_class=HelpdeskSLAPolicyForm,
+                       template="hrm/helpdesk/helpdeskslapolicy/form.html", success_url="hrm:helpdesksla_list")
+
+
+@login_required
+def helpdesksla_detail(request, pk):
+    return crud_detail(request, model=HelpdeskSLAPolicy, pk=pk,
+                       template="hrm/helpdesk/helpdeskslapolicy/detail.html",
+                       extra_context={"is_admin": _is_admin(request.user),
+                                      "category_count": HelpdeskCategory.objects.filter(
+                                          tenant=request.tenant, default_sla_policy_id=pk).count(),
+                                      "ticket_count": HelpdeskTicket.objects.filter(
+                                          tenant=request.tenant, sla_policy_id=pk).count()})
+
+
+@tenant_admin_required
+def helpdesksla_edit(request, pk):
+    return crud_edit(request, model=HelpdeskSLAPolicy, pk=pk, form_class=HelpdeskSLAPolicyForm,
+                     template="hrm/helpdesk/helpdeskslapolicy/form.html", success_url="hrm:helpdesksla_list")
+
+
+@tenant_admin_required
+@require_POST
+def helpdesksla_delete(request, pk):
+    if HelpdeskTicket.objects.filter(tenant=request.tenant, sla_policy_id=pk).exists():
+        messages.error(request, "This SLA policy is used by existing tickets and can't be deleted.")
+        return redirect("hrm:helpdesksla_detail", pk=pk)
+    return crud_delete(request, model=HelpdeskSLAPolicy, pk=pk, success_url="hrm:helpdesksla_list")
+
+
+# ---- Helpdesk categories (admin-managed routing + KB taxonomy) --------------------------------
+@login_required
+def helpdeskcategory_list(request):
+    qs = (HelpdeskCategory.objects.filter(tenant=request.tenant)
+          .select_related("default_assignee", "default_sla_policy"))
+    return crud_list(request, qs, "hrm/helpdesk/helpdeskcategory/list.html",
+                     search_fields=["name", "description"],
+                     filters=[("department", "department", False), ("is_active", "is_active", False)],
+                     extra_context={"is_admin": _is_admin(request.user),
+                                    "department_choices": HelpdeskCategory.DEPARTMENT_CHOICES})
+
+
+@tenant_admin_required
+def helpdeskcategory_create(request):
+    return crud_create(request, form_class=HelpdeskCategoryForm,
+                       template="hrm/helpdesk/helpdeskcategory/form.html", success_url="hrm:helpdeskcategory_list")
+
+
+@login_required
+def helpdeskcategory_detail(request, pk):
+    return crud_detail(request, model=HelpdeskCategory, pk=pk,
+                       template="hrm/helpdesk/helpdeskcategory/detail.html",
+                       select_related=("default_assignee", "default_sla_policy"),
+                       extra_context={"is_admin": _is_admin(request.user),
+                                      "ticket_count": HelpdeskTicket.objects.filter(
+                                          tenant=request.tenant, category_id=pk).count(),
+                                      "article_count": KnowledgeArticle.objects.filter(
+                                          tenant=request.tenant, category_id=pk).count()})
+
+
+@tenant_admin_required
+def helpdeskcategory_edit(request, pk):
+    return crud_edit(request, model=HelpdeskCategory, pk=pk, form_class=HelpdeskCategoryForm,
+                     template="hrm/helpdesk/helpdeskcategory/form.html", success_url="hrm:helpdeskcategory_list")
+
+
+@tenant_admin_required
+@require_POST
+def helpdeskcategory_delete(request, pk):
+    if HelpdeskTicket.objects.filter(tenant=request.tenant, category_id=pk).exists():
+        messages.error(request, "This category is used by existing tickets and can't be deleted.")
+        return redirect("hrm:helpdeskcategory_detail", pk=pk)
+    return crud_delete(request, model=HelpdeskCategory, pk=pk, success_url="hrm:helpdeskcategory_list")
+
+
+# ---- Helpdesk tickets -------------------------------------------------------------------------
+def _ticket_is_agent(request, obj):
+    """A ticket 'agent' = a tenant admin or the ticket's current assignee."""
+    return _is_admin(request.user) or (obj.assignee_id is not None and obj.assignee_id == request.user.id)
+
+
+def _ticket_can_view(request, obj):
+    """The requester (own), an admin, or the assignee may view a ticket."""
+    return _can_manage_own_child(request, obj) or _ticket_is_agent(request, obj)
+
+
+def _ticket_mark_first_response(obj):
+    """Stamp first_responded_at on the first agent touch (start/waiting/resolve) if not already set."""
+    if obj.first_responded_at is None:
+        obj.first_responded_at = timezone.now()
+
+
+@login_required
+def ticket_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, HelpdeskTicket.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "category", "assignee", "sla_policy"))
+    # SLA-breach deep-link (?sla=breached): open + past resolution due, OR open + unanswered past
+    # first-response due. Computed in ORM here (the properties can't be filtered on).
+    if request.GET.get("sla", "").strip() == "breached":
+        now = timezone.now()
+        qs = qs.filter(Q(status__in=HelpdeskTicket.OPEN_STATUSES) & (
+            Q(resolution_due__lt=now)
+            | (Q(first_responded_at__isnull=True) & Q(first_response_due__lt=now))))
+    # Satisfaction-survey deep-link (?rated=1): tickets with a CSAT rating captured.
+    if request.GET.get("rated", "").strip() == "1":
+        qs = qs.filter(satisfaction_rating__isnull=False)
+    extra = {"status_choices": HelpdeskTicket.STATUS_CHOICES,
+             "priority_choices": HelpdeskTicket.PRIORITY_CHOICES,
+             "categories": HelpdeskCategory.objects.filter(tenant=request.tenant, is_active=True)
+             .order_by("department", "name"),
+             "is_admin": is_admin}
+    filters = [("status", "status", False), ("priority", "priority", False), ("category", "category_id", True)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        filters.append(("assignee", "assignee_id", True))
+        extra["employees"] = _ss_employees(request)
+        extra["agents"] = _get_user_model().objects.filter(tenant=request.tenant).order_by("username")
+    return crud_list(request, qs, "hrm/helpdesk/helpdeskticket/list.html",
+                     search_fields=["number", "subject", "description", "employee__party__name"],
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def ticket_create(request):
+    """Raise a ticket. A non-admin raises for THEMSELVES; an admin may target ``?employee=<id>`` (GET)
+    or ``employee_pk`` (POST). The chosen category's default SLA policy + assignee are inherited, and
+    ``save()`` stamps the SLA due timestamps from the policy's per-priority targets."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    target = own
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            target = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    if target is None:
+        messages.error(request, "Select an employee to raise this ticket for.")
+        return redirect("hrm:ticket_list")
+    if request.method == "POST":
+        form = HelpdeskTicketForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.employee = target
+            obj.status = "new"
+            if obj.category_id:
+                obj.sla_policy = obj.category.default_sla_policy
+                obj.assignee = obj.category.default_assignee
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Ticket {obj.number} raised.")
+            return redirect("hrm:ticket_detail", pk=obj.pk)
+    else:
+        form = HelpdeskTicketForm(tenant=request.tenant)
+    return render(request, "hrm/helpdesk/helpdeskticket/form.html", {
+        "form": form, "is_edit": False, "is_admin": is_admin,
+        "target_employee": target, "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def ticket_detail(request, pk):
+    obj = get_object_or_404(
+        HelpdeskTicket.objects.select_related("employee__party", "category", "sla_policy", "assignee"),
+        pk=pk, tenant=request.tenant)
+    if not _ticket_can_view(request, obj):
+        raise PermissionDenied("This ticket belongs to another employee.")
+    is_admin = _is_admin(request.user)
+    profile = _current_employee_profile(request)
+    is_own = profile is not None and obj.employee_id == profile.pk
+    return render(request, "hrm/helpdesk/helpdeskticket/detail.html", {
+        "obj": obj, "is_admin": is_admin, "is_agent": _ticket_is_agent(request, obj), "is_own": is_own,
+        "agents": (_get_user_model().objects.filter(tenant=request.tenant).order_by("username")
+                   if is_admin else None),
+        "rating_range": [1, 2, 3, 4, 5]})
+
+
+@login_required
+def ticket_edit(request, pk):
+    # Requester (or admin) may edit the subject/description/category/priority while the ticket is open.
+    return _hr_request_edit(request, HelpdeskTicket, pk, HelpdeskTicketForm,
+                            "hrm/helpdesk/helpdeskticket/form.html", "hrm:ticket_detail")
+
+
+@login_required
+@require_POST
+def ticket_delete(request, pk):
+    return _hr_request_delete(request, HelpdeskTicket, pk, "hrm:ticket_list")
+
+
+@login_required
+@require_POST
+def ticket_assign(request, pk):
+    """Assign / reassign to a tenant user — admin only. A 'new' ticket becomes 'open'."""
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not _is_admin(request.user):
+        messages.error(request, "Only an administrator can assign tickets.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    assignee_id = (request.POST.get("assignee") or "").strip()
+    assignee = None
+    if assignee_id.isdigit():
+        assignee = _get_user_model().objects.filter(tenant=request.tenant, pk=int(assignee_id)).first()
+    if assignee is None:
+        messages.error(request, "Select a valid assignee.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.assignee = assignee
+    fields = ["assignee", "updated_at"]
+    if obj.status == "new":
+        obj.status = "open"
+        fields.append("status")
+    obj.save(update_fields=fields)
+    write_audit_log(request.user, obj, "update", {"action": "assign", "assignee": assignee.get_username()})
+    messages.success(request, f"Ticket {obj.number} assigned to {assignee.get_username()}.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_start(request, pk):
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not _ticket_is_agent(request, obj):
+        messages.error(request, "Only the assignee or an administrator can work this ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status not in ("new", "open", "waiting"):
+        messages.error(request, "Only a new, open, or waiting ticket can be moved to In Progress.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.status = "in_progress"
+    if obj.assignee_id is None:
+        obj.assignee = request.user
+    _ticket_mark_first_response(obj)
+    obj.save(update_fields=["status", "assignee", "first_responded_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "start"})
+    messages.success(request, f"Ticket {obj.number} is now in progress.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_waiting(request, pk):
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not _ticket_is_agent(request, obj):
+        messages.error(request, "Only the assignee or an administrator can update this ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status not in ("open", "in_progress"):
+        messages.error(request, "Only an open or in-progress ticket can be set to waiting.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.status = "waiting"
+    _ticket_mark_first_response(obj)
+    obj.save(update_fields=["status", "first_responded_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "waiting"})
+    messages.success(request, f"Ticket {obj.number} is waiting on the requester.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_resolve(request, pk):
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not _ticket_is_agent(request, obj):
+        messages.error(request, "Only the assignee or an administrator can resolve this ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status not in HelpdeskTicket.OPEN_STATUSES:
+        messages.error(request, "Only an open ticket can be resolved.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    notes = (request.POST.get("resolution_notes") or "").strip()
+    if not notes:
+        messages.error(request, "A resolution note is required to resolve a ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.status = "resolved"
+    obj.resolution_notes = notes[:5000]
+    obj.resolved_at = timezone.now()
+    _ticket_mark_first_response(obj)
+    if obj.assignee_id is None:
+        obj.assignee = request.user
+    obj.save(update_fields=["status", "resolution_notes", "resolved_at", "first_responded_at",
+                            "assignee", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "resolve"})
+    messages.success(request, f"Ticket {obj.number} resolved.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_close(request, pk):
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not (_can_manage_own_child(request, obj) or _ticket_is_agent(request, obj)):
+        messages.error(request, "You can't close this ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status in ("closed", "cancelled"):
+        messages.error(request, "This ticket is already closed.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.status = "closed"
+    obj.closed_at = timezone.now()
+    if obj.resolved_at is None:
+        obj.resolved_at = obj.closed_at
+    obj.save(update_fields=["status", "closed_at", "resolved_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "close"})
+    messages.success(request, f"Ticket {obj.number} closed.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_reopen(request, pk):
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not (_can_manage_own_child(request, obj) or _ticket_is_agent(request, obj)):
+        messages.error(request, "You can't reopen this ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status not in ("resolved", "closed"):
+        messages.error(request, "Only a resolved or closed ticket can be reopened.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.status = "open"
+    obj.resolved_at = None
+    obj.closed_at = None
+    obj.save(update_fields=["status", "resolved_at", "closed_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reopen"})
+    messages.success(request, f"Ticket {obj.number} reopened.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_cancel(request, pk):
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only cancel your own tickets.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status not in HelpdeskTicket.OPEN_STATUSES:
+        messages.error(request, "Only an open ticket can be cancelled.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.status = "cancelled"
+    obj.closed_at = timezone.now()
+    obj.save(update_fields=["status", "closed_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "cancel"})
+    messages.success(request, f"Ticket {obj.number} cancelled.")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def ticket_feedback(request, pk):
+    """Requester-only CSAT (1-5 + comment) after resolution/closure — the Satisfaction Survey bullet."""
+    obj = get_object_or_404(HelpdeskTicket, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (profile is not None and obj.employee_id == profile.pk):
+        messages.error(request, "Only the requester can rate this ticket.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    if obj.status not in ("resolved", "closed"):
+        messages.error(request, "You can rate a ticket only after it's resolved.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    rating = (request.POST.get("satisfaction_rating") or "").strip()
+    if rating not in ("1", "2", "3", "4", "5"):
+        messages.error(request, "Select a rating from 1 to 5.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
+    obj.satisfaction_rating = int(rating)
+    obj.satisfaction_comment = (request.POST.get("satisfaction_comment") or "").strip()[:2000]
+    obj.satisfaction_at = timezone.now()
+    obj.save(update_fields=["satisfaction_rating", "satisfaction_comment", "satisfaction_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "feedback", "rating": obj.satisfaction_rating})
+    messages.success(request, "Thanks for your feedback!")
+    return redirect("hrm:ticket_detail", pk=obj.pk)
+
+
+# ---- Knowledge base (internal FAQ / self-help) ------------------------------------------------
+@login_required
+def knowledgearticle_list(request):
+    is_admin = _is_admin(request.user)
+    qs = KnowledgeArticle.objects.filter(tenant=request.tenant).select_related("category", "owner")
+    # Non-admins get the self-help view: only PUBLISHED articles. Admins/authors see every status.
+    if not is_admin:
+        qs = qs.filter(status="published")
+    return crud_list(request, qs, "hrm/helpdesk/knowledgearticle/list.html",
+                     search_fields=["number", "title", "summary", "body", "tags"],
+                     filters=[("status", "status", False), ("category", "category_id", True)],
+                     extra_context={"is_admin": is_admin,
+                                    "status_choices": KnowledgeArticle.STATUS_CHOICES,
+                                    "categories": HelpdeskCategory.objects.filter(tenant=request.tenant)
+                                    .order_by("department", "name")})
+
+
+@tenant_admin_required
+def knowledgearticle_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = KnowledgeArticleForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.owner = request.user
+            if obj.status == "published" and obj.published_at is None:
+                obj.published_at = timezone.now()
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Article {obj.number} created.")
+            return redirect("hrm:knowledgearticle_detail", pk=obj.pk)
+    else:
+        form = KnowledgeArticleForm(tenant=request.tenant)
+    return render(request, "hrm/helpdesk/knowledgearticle/form.html", {"form": form, "is_edit": False})
+
+
+@login_required
+def knowledgearticle_detail(request, pk):
+    obj = get_object_or_404(KnowledgeArticle.objects.select_related("category", "owner"),
+                            pk=pk, tenant=request.tenant)
+    is_admin = _is_admin(request.user)
+    if obj.status != "published" and not is_admin:
+        raise PermissionDenied("This article isn't published.")
+    # Count a read with a cheap atomic increment (not audited).
+    KnowledgeArticle.objects.filter(pk=obj.pk).update(view_count=F("view_count") + 1)
+    obj.view_count += 1
+    return render(request, "hrm/helpdesk/knowledgearticle/detail.html", {"obj": obj, "is_admin": is_admin})
+
+
+@tenant_admin_required
+def knowledgearticle_edit(request, pk):
+    obj = get_object_or_404(KnowledgeArticle, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = KnowledgeArticleForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if obj.status == "published" and obj.published_at is None:
+                obj.published_at = timezone.now()
+            obj.save()
+            write_audit_log(request.user, obj, "update", changes=_changed(form))
+            messages.success(request, "Article updated.")
+            return redirect("hrm:knowledgearticle_detail", pk=obj.pk)
+    else:
+        form = KnowledgeArticleForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/helpdesk/knowledgearticle/form.html", {"form": form, "obj": obj, "is_edit": True})
+
+
+@tenant_admin_required
+@require_POST
+def knowledgearticle_delete(request, pk):
+    return crud_delete(request, model=KnowledgeArticle, pk=pk, success_url="hrm:knowledgearticle_list")
+
+
+@login_required
+@require_POST
+def knowledgearticle_helpful(request, pk):
+    """Any employee can mark a published article helpful (bumps the counter; internal deflection metric)."""
+    obj = get_object_or_404(KnowledgeArticle, pk=pk, tenant=request.tenant)
+    if obj.status != "published" and not _is_admin(request.user):
+        raise PermissionDenied("This article isn't published.")
+    KnowledgeArticle.objects.filter(pk=obj.pk).update(helpful_count=F("helpful_count") + 1)
+    messages.success(request, "Thanks for the feedback!")
+    return redirect("hrm:knowledgearticle_detail", pk=obj.pk)
