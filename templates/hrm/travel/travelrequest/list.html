@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Travel Requests{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Travel Requests</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Travel Management</span><span class="sep">›</span><span>Requests</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:travelpolicy_list' %}" class="btn btn-outline"><i data-lucide="shield"></i> Policies</a>
+      <a href="{% url 'hrm:travelrequest_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Trip</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / destination...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="trip_type" class="form-select"><option value="">All types</option>
+            {% for val, label in trip_type_choices %}<option value="{{ val }}" {% if request.GET.trip_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if is_admin %}
+        <div class="form-group">
+          <select name="employee" class="form-select"><option value="">All employees</option>
+            {% for e in employees %}<option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:travelrequest_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Destination</th><th>Type</th><th>Status</th><th>Dates</th><th style="text-align:end;">Est. Cost</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:travelrequest_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.destination }}</td>
+              <td>{{ obj.get_trip_type_display }}</td>
+              <td>{% if obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% elif obj.status == 'pending' %}<span class="badge badge-amber">Pending</span>{% elif obj.status == 'approved' %}<span class="badge badge-info">Approved</span>{% elif obj.status == 'completed' %}<span class="badge badge-green">Completed</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">Cancelled</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{{ obj.start_date|date:"d M" }}–{{ obj.end_date|date:"d M Y" }}</td>
+              <td style="text-align:end;">{% if obj.estimated_cost != None %}{{ obj.estimated_cost|floatformat:2 }}{% else %}-{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:travelrequest_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'pending' %}
+                  <a href="{% url 'hrm:travelrequest_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:travelrequest_delete' obj.pk %}" onsubmit="return confirm('Delete this trip?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="plane"></i><h3>No travel requests yet</h3><p>Raise a trip request, add bookings, request an advance, and settle it after travel.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
