@@ -14707,3 +14707,294 @@ def knowledgearticle_helpful(request, pk):
     KnowledgeArticle.objects.filter(pk=obj.pk).update(helpful_count=F("helpful_count") + 1)
     messages.success(request, "Thanks for the feedback!")
     return redirect("hrm:knowledgearticle_detail", pk=obj.pk)
+
+
+# ============================================================================
+# 3.37 Compensation & Benefits — SalaryBenchmark + BenefitPlan (admin catalogs),
+# EmployeeBenefitEnrollment (own-vs-admin self-service election + admin
+# enroll/waive/terminate), and EquityGrant (admin-issued, own-vs-admin visibility,
+# + a bespoke record-exercise action). Vesting is computed on the model.
+# ============================================================================
+from .models import (  # noqa: E402  — 3.37 Compensation & Benefits
+    SalaryBenchmark, BenefitPlan, EmployeeBenefitEnrollment, EquityGrant)
+from .forms import (  # noqa: E402  — 3.37 Compensation & Benefits
+    SalaryBenchmarkForm, BenefitPlanForm, EmployeeBenefitEnrollmentForm, EquityGrantForm)
+
+
+# ---- Salary benchmarks (admin catalog) --------------------------------------------------------
+@login_required
+def salarybenchmark_list(request):
+    qs = (SalaryBenchmark.objects.filter(tenant=request.tenant)
+          .select_related("job_grade", "designation", "currency"))
+    return crud_list(request, qs, "hrm/compensation/salarybenchmark/list.html",
+                     search_fields=["region", "job_grade__name", "designation__name", "notes"],
+                     filters=[("source", "source", False), ("job_grade", "job_grade_id", True),
+                              ("designation", "designation_id", True)],
+                     extra_context={"is_admin": _is_admin(request.user),
+                                    "source_choices": SalaryBenchmark.SOURCE_CHOICES,
+                                    "job_grades": JobGrade.objects.filter(tenant=request.tenant, is_active=True)
+                                    .order_by("level_order", "name"),
+                                    "designations": Designation.objects.filter(tenant=request.tenant)
+                                    .order_by("name")})
+
+
+@tenant_admin_required
+def salarybenchmark_create(request):
+    return crud_create(request, form_class=SalaryBenchmarkForm,
+                       template="hrm/compensation/salarybenchmark/form.html",
+                       success_url="hrm:salarybenchmark_list")
+
+
+@login_required
+def salarybenchmark_detail(request, pk):
+    obj = get_object_or_404(
+        SalaryBenchmark.objects.select_related("job_grade", "designation", "currency"),
+        pk=pk, tenant=request.tenant)
+    # Illustrative compa-ratio: the linked designation's midpoint band vs this survey's median.
+    band_mid = obj.designation.mid_salary if obj.designation_id else None
+    return render(request, "hrm/compensation/salarybenchmark/detail.html", {
+        "obj": obj, "is_admin": _is_admin(request.user), "band_mid": band_mid,
+        "band_compa_ratio": obj.compa_ratio(band_mid) if band_mid else None})
+
+
+@tenant_admin_required
+def salarybenchmark_edit(request, pk):
+    return crud_edit(request, model=SalaryBenchmark, pk=pk, form_class=SalaryBenchmarkForm,
+                     template="hrm/compensation/salarybenchmark/form.html",
+                     success_url="hrm:salarybenchmark_list")
+
+
+@tenant_admin_required
+@require_POST
+def salarybenchmark_delete(request, pk):
+    return crud_delete(request, model=SalaryBenchmark, pk=pk, success_url="hrm:salarybenchmark_list")
+
+
+# ---- Benefit plans (admin catalog) ------------------------------------------------------------
+@login_required
+def benefitplan_list(request):
+    qs = BenefitPlan.objects.filter(tenant=request.tenant).select_related("currency")
+    return crud_list(request, qs, "hrm/compensation/benefitplan/list.html",
+                     search_fields=["name", "provider"],
+                     filters=[("plan_type", "plan_type", False), ("is_active", "is_active", False)],
+                     extra_context={"is_admin": _is_admin(request.user),
+                                    "plan_type_choices": BenefitPlan.PLAN_TYPE_CHOICES})
+
+
+@tenant_admin_required
+def benefitplan_create(request):
+    return crud_create(request, form_class=BenefitPlanForm,
+                       template="hrm/compensation/benefitplan/form.html", success_url="hrm:benefitplan_list")
+
+
+@login_required
+def benefitplan_detail(request, pk):
+    return crud_detail(request, model=BenefitPlan, pk=pk, template="hrm/compensation/benefitplan/detail.html",
+                       select_related=("currency",),
+                       extra_context={"is_admin": _is_admin(request.user),
+                                      "enrollment_count": EmployeeBenefitEnrollment.objects.filter(
+                                          tenant=request.tenant, plan_id=pk).count()})
+
+
+@tenant_admin_required
+def benefitplan_edit(request, pk):
+    return crud_edit(request, model=BenefitPlan, pk=pk, form_class=BenefitPlanForm,
+                     template="hrm/compensation/benefitplan/form.html", success_url="hrm:benefitplan_list")
+
+
+@tenant_admin_required
+@require_POST
+def benefitplan_delete(request, pk):
+    if EmployeeBenefitEnrollment.objects.filter(tenant=request.tenant, plan_id=pk).exists():
+        messages.error(request, "This plan has employee enrollments and can't be deleted.")
+        return redirect("hrm:benefitplan_detail", pk=pk)
+    return crud_delete(request, model=BenefitPlan, pk=pk, success_url="hrm:benefitplan_list")
+
+
+# ---- Employee benefit enrollments (own-vs-admin self-service) ---------------------------------
+@login_required
+def employeebenefitenrollment_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, EmployeeBenefitEnrollment.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "plan"))
+    extra = {"status_choices": EmployeeBenefitEnrollment.STATUS_CHOICES, "is_admin": is_admin,
+             "plans": BenefitPlan.objects.filter(tenant=request.tenant, is_active=True)
+             .order_by("plan_type", "name")}
+    filters = [("status", "status", False), ("plan", "plan_id", True)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/compensation/employeebenefitenrollment/list.html",
+                     search_fields=["number", "plan__name", "employee__party__name"],
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def employeebenefitenrollment_create(request):
+    """Elect a benefit. A non-admin elects for THEMSELVES; an admin may target ?employee=<id>/employee_pk.
+    Contributions default from the plan when left blank."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    target = own
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            target = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    if target is None:
+        messages.error(request, "Select an employee to enroll.")
+        return redirect("hrm:employeebenefitenrollment_list")
+    if request.method == "POST":
+        form = EmployeeBenefitEnrollmentForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.employee = target
+            obj.status = "pending"
+            if obj.plan_id and obj.employee_contribution is None:
+                obj.employee_contribution = obj.plan.employee_cost_monthly
+            if obj.plan_id and obj.employer_contribution is None:
+                obj.employer_contribution = obj.plan.employer_cost_monthly
+            try:
+                obj.save()
+            except IntegrityError:
+                messages.error(request, "An enrollment for this plan and effective date already exists.")
+                return redirect("hrm:employeebenefitenrollment_list")
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Enrollment {obj.number} submitted.")
+            return redirect("hrm:employeebenefitenrollment_detail", pk=obj.pk)
+    else:
+        form = EmployeeBenefitEnrollmentForm(tenant=request.tenant)
+    return render(request, "hrm/compensation/employeebenefitenrollment/form.html", {
+        "form": form, "is_edit": False, "is_admin": is_admin,
+        "target_employee": target, "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def employeebenefitenrollment_detail(request, pk):
+    return _ss_child_detail(request, EmployeeBenefitEnrollment, pk,
+                            "hrm/compensation/employeebenefitenrollment/detail.html",
+                            select_related=("employee__party", "plan__currency", "decided_by"))
+
+
+@login_required
+def employeebenefitenrollment_edit(request, pk):
+    return _hr_request_edit(request, EmployeeBenefitEnrollment, pk, EmployeeBenefitEnrollmentForm,
+                            "hrm/compensation/employeebenefitenrollment/form.html",
+                            "hrm:employeebenefitenrollment_detail")
+
+
+@login_required
+@require_POST
+def employeebenefitenrollment_delete(request, pk):
+    return _hr_request_delete(request, EmployeeBenefitEnrollment, pk, "hrm:employeebenefitenrollment_list")
+
+
+def _enrollment_decide(request, pk, new_status, ok_from, message):
+    """Shared admin transition for the benefit-enrollment lifecycle (enroll/waive/terminate)."""
+    obj = get_object_or_404(EmployeeBenefitEnrollment, pk=pk, tenant=request.tenant)
+    if obj.status not in ok_from:
+        messages.error(request, f"This enrollment can't be {message} from its current status.")
+        return redirect("hrm:employeebenefitenrollment_detail", pk=obj.pk)
+    obj.status = new_status
+    obj.decided_by = request.user
+    fields = ["status", "decided_by", "updated_at"]
+    if new_status == "enrolled":
+        obj.enrolled_at = timezone.now()
+        fields.append("enrolled_at")
+    obj.save(update_fields=fields)
+    write_audit_log(request.user, obj, "update", {"action": message})
+    messages.success(request, f"Enrollment {obj.number} {message}.")
+    return redirect("hrm:employeebenefitenrollment_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def employeebenefitenrollment_enroll(request, pk):
+    return _enrollment_decide(request, pk, "enrolled", ("pending",), "enrolled")
+
+
+@tenant_admin_required
+@require_POST
+def employeebenefitenrollment_waive(request, pk):
+    return _enrollment_decide(request, pk, "waived", ("pending", "enrolled"), "waived")
+
+
+@tenant_admin_required
+@require_POST
+def employeebenefitenrollment_terminate(request, pk):
+    return _enrollment_decide(request, pk, "terminated", ("enrolled",), "terminated")
+
+
+# ---- Equity grants (admin-issued, own-vs-admin visibility) ------------------------------------
+@login_required
+def equitygrant_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, EquityGrant.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "currency"))
+    extra = {"status_choices": EquityGrant.STATUS_CHOICES, "grant_type_choices": EquityGrant.GRANT_TYPE_CHOICES,
+             "is_admin": is_admin}
+    filters = [("status", "status", False), ("grant_type", "grant_type", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/compensation/equitygrant/list.html",
+                     search_fields=["number", "employee__party__name"],
+                     filters=filters, extra_context=extra)
+
+
+@tenant_admin_required
+def equitygrant_create(request):
+    return crud_create(request, form_class=EquityGrantForm,
+                       template="hrm/compensation/equitygrant/form.html", success_url="hrm:equitygrant_list")
+
+
+@login_required
+def equitygrant_detail(request, pk):
+    obj = get_object_or_404(EquityGrant.objects.select_related("employee__party", "currency"),
+                            pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This grant belongs to another employee.")
+    return render(request, "hrm/compensation/equitygrant/detail.html", {
+        "obj": obj, "is_admin": _is_admin(request.user)})
+
+
+@tenant_admin_required
+def equitygrant_edit(request, pk):
+    return crud_edit(request, model=EquityGrant, pk=pk, form_class=EquityGrantForm,
+                     template="hrm/compensation/equitygrant/form.html", success_url="hrm:equitygrant_list")
+
+
+@tenant_admin_required
+@require_POST
+def equitygrant_delete(request, pk):
+    return crud_delete(request, model=EquityGrant, pk=pk, success_url="hrm:equitygrant_list")
+
+
+@tenant_admin_required
+@require_POST
+def equitygrant_record_exercise(request, pk):
+    """Record an exercise/release of vested shares (admin). Guards against exercising more than the
+    currently exercisable (vested − already-exercised) amount."""
+    obj = get_object_or_404(EquityGrant, pk=pk, tenant=request.tenant)
+    if obj.status in ("cancelled", "expired"):
+        messages.error(request, "A cancelled or expired grant can't be exercised.")
+        return redirect("hrm:equitygrant_detail", pk=obj.pk)
+    raw = (request.POST.get("shares") or "").strip()
+    if not raw.isdigit() or int(raw) <= 0:
+        messages.error(request, "Enter a positive number of shares to exercise.")
+        return redirect("hrm:equitygrant_detail", pk=obj.pk)
+    shares = int(raw)
+    if shares > obj.exercisable_shares:
+        messages.error(request, f"Only {obj.exercisable_shares} vested share(s) are currently exercisable.")
+        return redirect("hrm:equitygrant_detail", pk=obj.pk)
+    obj.exercised_shares += shares
+    obj.last_exercised_at = timezone.now()
+    if obj.exercised_shares >= obj.shares_granted:
+        obj.status = "exercised"
+    obj.save(update_fields=["exercised_shares", "last_exercised_at", "status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "record_exercise", "shares": shares})
+    messages.success(request, f"Recorded exercise of {shares} share(s) on {obj.number}.")
+    return redirect("hrm:equitygrant_detail", pk=obj.pk)
