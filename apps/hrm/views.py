@@ -14451,6 +14451,11 @@ def ticket_assign(request, pk):
     if not _is_admin(request.user):
         messages.error(request, "Only an administrator can assign tickets.")
         return redirect("hrm:ticket_detail", pk=obj.pk)
+    # Status guard mirrors the template (the Assign form is hidden on closed/cancelled tickets) so a
+    # crafted POST can't reassign a finished ticket.
+    if obj.status in ("closed", "cancelled"):
+        messages.error(request, "A closed or cancelled ticket can't be reassigned.")
+        return redirect("hrm:ticket_detail", pk=obj.pk)
     assignee_id = (request.POST.get("assignee") or "").strip()
     assignee = None
     if assignee_id.isdigit():
