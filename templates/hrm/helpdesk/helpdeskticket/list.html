@@ -19,6 +19,9 @@
   <div class="card">
     <div class="card-body">
       <form method="get" class="filter-bar">
+        {# Preserve the SLA-breach / rated deep-link params across a filter submit (a GET form replaces the whole query string). #}
+        {% if request.GET.sla %}<input type="hidden" name="sla" value="{{ request.GET.sla }}">{% endif %}
+        {% if request.GET.rated %}<input type="hidden" name="rated" value="{{ request.GET.rated }}">{% endif %}
         <div class="form-group" style="flex:1; min-width:200px;">
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / subject / requester...">
         </div>
