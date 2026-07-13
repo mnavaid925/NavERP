@@ -641,6 +641,18 @@ LIVE_LINKS = {
         "Satisfaction Survey": "hrm:ticket_list?rated=1",
         "SLA Breaches": "hrm:ticket_list?sla=breached",
     },
+    # 3.37 Compensation & Benefits — 4 of the 6 NavERP.md bullets are live; Compensation Planning
+    # (merit/promotion cycles) and a formal monetary Rewards & Recognition are deferred (peer kudos
+    # already ship in 3.20 Feedback/KudosBadge), so those two bullets stay roadmap placeholders.
+    # Salary Benchmarking -> market-percentile catalog; Benefits Administration -> the benefit-plan
+    # catalog; Flexible Benefits -> the opt-in/opt-out enrollment elections; Stock/ESOP Management ->
+    # the equity-grant register (computed cliff/graded vesting).
+    "3.37": {
+        "Salary Benchmarking": "hrm:salarybenchmark_list",
+        "Benefits Administration": "hrm:benefitplan_list",
+        "Flexible Benefits": "hrm:employeebenefitenrollment_list",
+        "Stock/ESOP Management": "hrm:equitygrant_list",
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
