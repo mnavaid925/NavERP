@@ -1371,3 +1371,37 @@ class ExpenseClaimLineAdmin(admin.ModelAdmin):
     list_filter = ("category",)
     search_fields = ("merchant", "description")
     raw_id_fields = ("claim", "category")
+
+
+from .models import TravelPolicy, TravelRequest, TravelBooking  # 3.35 Travel Management
+
+
+@admin.register(TravelPolicy)
+class TravelPolicyAdmin(admin.ModelAdmin):
+    list_display = ("name", "tenant", "job_grade", "trip_type", "travel_class", "advance_percent_limit", "is_active")
+    list_filter = ("is_active", "trip_type", "travel_class")
+    search_fields = ("name",)
+    raw_id_fields = ("job_grade",)
+
+
+class TravelBookingInline(admin.TabularInline):
+    model = TravelBooking
+    extra = 0
+
+
+@admin.register(TravelRequest)
+class TravelRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "tenant", "employee", "trip_type", "destination", "status")
+    list_filter = ("status", "trip_type")
+    search_fields = ("number", "title", "origin", "destination")
+    raw_id_fields = ("employee", "policy", "currency", "approver", "settlement_claim")
+    readonly_fields = ("number", "approver", "approved_at", "advance_approved", "advance_paid_at", "settlement_claim")
+    inlines = [TravelBookingInline]
+
+
+@admin.register(TravelBooking)
+class TravelBookingAdmin(admin.ModelAdmin):
+    list_display = ("travel_request", "booking_type", "vendor", "reference", "cost")
+    list_filter = ("booking_type",)
+    search_fields = ("vendor", "reference")
+    raw_id_fields = ("travel_request",)
