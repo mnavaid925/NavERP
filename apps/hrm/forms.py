@@ -2734,3 +2734,126 @@ class KnowledgeArticleForm(TenantModelForm):
         if self.tenant is not None and "category" in self.fields:
             self.fields["category"].queryset = (
                 HelpdeskCategory.objects.filter(tenant=self.tenant).order_by("department", "name"))
+
+
+from .models import (  # noqa: E402  — 3.37 Compensation & Benefits
+    SalaryBenchmark, BenefitPlan, EmployeeBenefitEnrollment, EquityGrant)
+
+
+def _scope_currency(form):
+    """Scope a form's ``currency`` field to active currencies (the GLOBAL master isn't tenant-scoped, so
+    TenantModelForm's auto-scoper skips it)."""
+    if "currency" in form.fields:
+        from apps.accounting.models import Currency
+        form.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
+
+
+class SalaryBenchmarkForm(TenantModelForm):
+    class Meta:
+        model = SalaryBenchmark
+        fields = ["job_grade", "designation", "source", "region", "currency",
+                  "percentile_25", "percentile_50", "percentile_75", "percentile_90", "survey_date", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _scope_currency(self)
+        if self.tenant is not None and "job_grade" in self.fields:
+            self.fields["job_grade"].queryset = (
+                JobGrade.objects.filter(tenant=self.tenant, is_active=True).order_by("level_order", "name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        # Percentiles should be non-negative and non-decreasing (P25 <= P50 <= P75 <= P90) when present.
+        seq = [("percentile_25", "P25"), ("percentile_50", "P50"),
+               ("percentile_75", "P75"), ("percentile_90", "P90")]
+        prev_field, prev_val = None, None
+        for field, label in seq:
+            v = cleaned.get(field)
+            if v is not None and v < 0:
+                self.add_error(field, "Must be zero or greater.")
+            elif v is not None and prev_val is not None and v < prev_val:
+                self.add_error(field, f"{label} cannot be less than the lower percentile.")
+            if v is not None:
+                prev_field, prev_val = field, v
+        return cleaned
+
+
+class BenefitPlanForm(TenantModelForm):
+    class Meta:
+        model = BenefitPlan
+        fields = ["name", "plan_type", "provider", "is_flex_credit_eligible", "flex_credit_amount",
+                  "employer_cost_monthly", "employee_cost_monthly", "currency", "coverage_tier_options",
+                  "enrollment_window_start", "enrollment_window_end", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _scope_currency(self)
+
+    def clean(self):
+        cleaned = super().clean()
+        for f in ("flex_credit_amount", "employer_cost_monthly", "employee_cost_monthly"):
+            v = cleaned.get(f)
+            if v is not None and v < 0:
+                self.add_error(f, "Must be zero or greater.")
+        start, end = cleaned.get("enrollment_window_start"), cleaned.get("enrollment_window_end")
+        if start and end and end < start:
+            self.add_error("enrollment_window_end", "Window end cannot be before the start.")
+        return cleaned
+
+
+class EmployeeBenefitEnrollmentForm(TenantModelForm):
+    # employee is resolved server-side by _ss_child_create; status/enrolled_at/decided_by are workflow-set.
+    class Meta:
+        model = EmployeeBenefitEnrollment
+        fields = ["plan", "election_choice", "coverage_tier", "effective_from", "effective_to",
+                  "employee_contribution", "employer_contribution", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "plan" in self.fields:
+            self.fields["plan"].queryset = (
+                BenefitPlan.objects.filter(tenant=self.tenant, is_active=True).order_by("plan_type", "name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("effective_from"), cleaned.get("effective_to")
+        if start and end and end < start:
+            self.add_error("effective_to", "Effective-to cannot be before effective-from.")
+        for f in ("employee_contribution", "employer_contribution"):
+            v = cleaned.get(f)
+            if v is not None and v < 0:
+                self.add_error(f, "Must be zero or greater.")
+        return cleaned
+
+
+class EquityGrantForm(TenantModelForm):
+    # Admin-issued to a chosen employee; exercised_shares/last_exercised_at set by the record-exercise action.
+    class Meta:
+        model = EquityGrant
+        fields = ["employee", "grant_type", "grant_date", "shares_granted", "exercise_price",
+                  "fair_market_value_at_grant", "currency", "vesting_start_date", "cliff_months",
+                  "vesting_duration_months", "vesting_frequency", "status", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _scope_currency(self)
+        if self.tenant is not None and "employee" in self.fields:
+            self.fields["employee"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party").order_by("party__name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        shares = cleaned.get("shares_granted")
+        if shares is not None and shares <= 0:
+            self.add_error("shares_granted", "Must be greater than zero.")
+        cliff, dur = cleaned.get("cliff_months"), cleaned.get("vesting_duration_months")
+        if cliff is not None and dur is not None and cliff > dur:
+            self.add_error("cliff_months", "The cliff cannot be longer than the total vesting duration.")
+        for f in ("exercise_price", "fair_market_value_at_grant"):
+            v = cleaned.get(f)
+            if v is not None and v < 0:
+                self.add_error(f, "Must be zero or greater.")
+        return cleaned
