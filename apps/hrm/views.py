@@ -13996,9 +13996,10 @@ def travelpolicy_delete(request, pk):
 @login_required
 def travelrequest_list(request):
     is_admin = _is_admin(request.user)
+    # list.html only renders employee.party.name (+ scalar fields); trim to match — no bookings/policy/
+    # currency/approver/settlement_claim on this page, so drop the dead prefetch + unused joins.
     qs = _ss_scope(request, TravelRequest.objects.filter(tenant=request.tenant)
-                   .select_related("employee__party", "policy", "currency", "approver", "settlement_claim")
-                   .prefetch_related("bookings"))
+                   .select_related("employee__party"))
     return crud_list(request, qs, "hrm/travel/travelrequest/list.html",
                      search_fields=["number", "title", "origin", "destination"],
                      filters=[("status", "status", False), ("trip_type", "trip_type", False),
@@ -14018,7 +14019,8 @@ def travelrequest_create(request):
 def travelrequest_detail(request, pk):
     obj = get_object_or_404(
         TravelRequest.objects.select_related("employee__party", "policy", "currency", "approver",
-                                             "settlement_claim").prefetch_related("bookings"),
+                                             "settlement_claim")
+        .prefetch_related("bookings", "settlement_claim__lines"),
         pk=pk, tenant=request.tenant)
     if not _can_manage_own_child(request, obj):
         raise PermissionDenied("This trip belongs to another employee.")
