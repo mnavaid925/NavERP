@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.plan.name }}
+        {% if obj.status == 'enrolled' %}<span class="badge badge-green">Enrolled</span>{% elif obj.status == 'pending' %}<span class="badge badge-amber">Pending</span>{% elif obj.status == 'terminated' %}<span class="badge badge-red">Terminated</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employeebenefitenrollment_list' %}">Enrollments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:employeebenefitenrollment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Enrollments</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Number</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Employee</span><div>{{ obj.employee.party.name }}</div></div>
+      <div><span class="text-muted">Plan</span><div>{{ obj.plan.name }} ({{ obj.plan.get_plan_type_display }})</div></div>
+      <div><span class="text-muted">Election</span><div>{{ obj.get_election_choice_display }}</div></div>
+      <div><span class="text-muted">Coverage Tier</span><div>{{ obj.coverage_tier|default:"-" }}</div></div>
+      <div><span class="text-muted">Effective</span><div>{{ obj.effective_from|date:"d M Y" }}{% if obj.effective_to %} – {{ obj.effective_to|date:"d M Y" }}{% endif %}</div></div>
+      <div><span class="text-muted">Employee Contribution</span><div>{% if obj.employee_contribution != None %}{{ obj.employee_contribution|floatformat:2 }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Employer Contribution</span><div>{% if obj.employer_contribution != None %}{{ obj.employer_contribution|floatformat:2 }}{% else %}-{% endif %}</div></div>
+      {% if obj.enrolled_at %}<div><span class="text-muted">Enrolled At</span><div>{{ obj.enrolled_at|date:"d M Y" }}</div></div>{% endif %}
+      {% if obj.decided_by %}<div><span class="text-muted">Decided By</span><div>{{ obj.decided_by.get_full_name|default:obj.decided_by.username }}</div></div>{% endif %}
+    </div>
+    {% if obj.notes %}<p class="text-muted" style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-start;">
+      {% if obj.is_open %}
+        {% if is_own or is_admin %}<a href="{% url 'hrm:employeebenefitenrollment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+        {% if is_own or is_admin %}<form method="post" action="{% url 'hrm:employeebenefitenrollment_delete' obj.pk %}" onsubmit="return confirm('Delete this enrollment?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>{% endif %}
+      {% endif %}
+      {% if is_admin %}
+        {% if obj.status == 'pending' %}<form method="post" action="{% url 'hrm:employeebenefitenrollment_enroll' obj.pk %}" onsubmit="return confirm('Enroll this election?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Enroll</button></form>{% endif %}
+        {% if obj.status == 'pending' or obj.status == 'enrolled' %}<form method="post" action="{% url 'hrm:employeebenefitenrollment_waive' obj.pk %}" onsubmit="return confirm('Waive this election?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Waive</button></form>{% endif %}
+        {% if obj.status == 'enrolled' %}<form method="post" action="{% url 'hrm:employeebenefitenrollment_terminate' obj.pk %}" onsubmit="return confirm('Terminate this enrollment?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Terminate</button></form>{% endif %}
+      {% endif %}
+      {% if not obj.is_open and not is_admin %}<span class="text-muted">This enrollment is {{ obj.get_status_display|lower }}.</span>{% endif %}
+    </div>
+  </div>
+{% endblock %}
