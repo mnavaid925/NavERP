@@ -8389,6 +8389,7 @@ class EmployeeBenefitEnrollment(TenantNumbered):
             models.Index(fields=["tenant", "employee", "status"], name="hrm_ben_emp_status_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_ben_tnt_status_idx"),
             models.Index(fields=["tenant", "plan"], name="hrm_ben_tnt_plan_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_ben_tnt_created_idx"),
         ]
 
     def __str__(self):
@@ -8451,6 +8452,7 @@ class EquityGrant(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "employee", "status"], name="hrm_esop_emp_status_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_esop_tnt_status_idx"),
+            models.Index(fields=["tenant", "-grant_date"], name="hrm_esop_tnt_grant_idx"),
         ]
 
     def __str__(self):
