@@ -296,6 +296,7 @@ class Command(BaseCommand):
             self._seed_expenses(tenant, flush=options["flush"])
             self._seed_travel(tenant, flush=options["flush"])
             self._seed_helpdesk(tenant, flush=options["flush"])
+            self._seed_compensation(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -3322,3 +3323,95 @@ class Command(BaseCommand):
             f"Helpdesk seeded for '{tenant.name}': {HelpdeskCategory.objects.filter(tenant=tenant).count()} categories, "
             f"{HelpdeskTicket.objects.filter(tenant=tenant).count()} tickets, "
             f"{KnowledgeArticle.objects.filter(tenant=tenant).count()} KB articles."))
+
+    def _seed_compensation(self, tenant, *, flush):
+        """3.37 Compensation & Benefits - salary benchmarks + benefit plans + a few enrollments across
+        statuses + equity grants (one past-cliff partially-vested RSU, one fresh pre-cliff ISO). Runs after
+        3.36. Idempotent (guarded on BenefitPlan existence). ASCII-only."""
+        from apps.hrm.models import (SalaryBenchmark, BenefitPlan, EmployeeBenefitEnrollment, EquityGrant,
+                                     EmployeeProfile, JobGrade, Designation)
+        from apps.accounting.models import Currency
+
+        if flush:
+            EmployeeBenefitEnrollment.objects.filter(tenant=tenant).delete()
+            EquityGrant.objects.filter(tenant=tenant).delete()
+            SalaryBenchmark.objects.filter(tenant=tenant).delete()
+            BenefitPlan.objects.filter(tenant=tenant).delete()
+        if BenefitPlan.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Compensation data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:3])
+        if not emps:
+            return
+        usd = Currency.objects.filter(code="USD").first()
+        today = timezone.localdate()
+        now = timezone.now()
+        day = datetime.timedelta(days=1)
+        grade = JobGrade.objects.filter(tenant=tenant).order_by("level_order").first()
+        desig = Designation.objects.filter(tenant=tenant).order_by("id").first()
+
+        SalaryBenchmark.objects.get_or_create(
+            tenant=tenant, source="payscale", region="US-National", designation=desig,
+            defaults={"job_grade": grade, "currency": usd, "percentile_25": Decimal("70000"),
+                      "percentile_50": Decimal("85000"), "percentile_75": Decimal("100000"),
+                      "percentile_90": Decimal("120000"), "survey_date": today - 90 * day})
+        SalaryBenchmark.objects.get_or_create(
+            tenant=tenant, source="mercer", region="APAC", designation=None,
+            defaults={"job_grade": grade, "currency": usd, "percentile_25": Decimal("40000"),
+                      "percentile_50": Decimal("52000"), "percentile_75": Decimal("65000"),
+                      "percentile_90": Decimal("80000"), "survey_date": today - 120 * day})
+
+        medical, _ = BenefitPlan.objects.get_or_create(
+            tenant=tenant, name="Premium Medical PPO",
+            defaults={"plan_type": "medical", "provider": "BlueCross", "employer_cost_monthly": Decimal("400"),
+                      "employee_cost_monthly": Decimal("120"), "currency": usd,
+                      "coverage_tier_options": "employee_only,employee_spouse,family", "is_active": True})
+        dental, _ = BenefitPlan.objects.get_or_create(
+            tenant=tenant, name="Dental Basic",
+            defaults={"plan_type": "dental", "provider": "DeltaDental", "employer_cost_monthly": Decimal("30"),
+                      "employee_cost_monthly": Decimal("10"), "currency": usd,
+                      "coverage_tier_options": "employee_only,family", "is_active": True})
+        flex, _ = BenefitPlan.objects.get_or_create(
+            tenant=tenant, name="Wellness Flex Allowance",
+            defaults={"plan_type": "wellness", "provider": "Internal", "is_flex_credit_eligible": True,
+                      "flex_credit_amount": Decimal("500"), "employer_cost_monthly": Decimal("50"),
+                      "employee_cost_monthly": Decimal("0"), "currency": usd,
+                      "coverage_tier_options": "employee_only", "is_active": True})
+        retire, _ = BenefitPlan.objects.get_or_create(
+            tenant=tenant, name="401(k) Match",
+            defaults={"plan_type": "retirement", "provider": "Fidelity", "employer_cost_monthly": Decimal("200"),
+                      "employee_cost_monthly": Decimal("200"), "currency": usd,
+                      "coverage_tier_options": "employee_only", "is_active": True})
+
+        def _enroll(emp, plan, election, tier, status, eff_off):
+            EmployeeBenefitEnrollment.objects.get_or_create(
+                tenant=tenant, employee=emp, plan=plan, effective_from=today - eff_off * day,
+                defaults={"election_choice": election, "coverage_tier": tier, "status": status,
+                          "employee_contribution": plan.employee_cost_monthly,
+                          "employer_contribution": plan.employer_cost_monthly,
+                          "enrolled_at": (now if status == "enrolled" else None)})
+
+        _enroll(emps[0], medical, "opt_in", "family", "enrolled", 60)
+        _enroll(emps[0], flex, "opt_in", "employee_only", "pending", 5)
+        _enroll(emps[1 % len(emps)], dental, "opt_in", "employee_only", "enrolled", 90)
+        _enroll(emps[2 % len(emps)], retire, "opt_out", "employee_only", "waived", 30)
+
+        EquityGrant.objects.get_or_create(
+            tenant=tenant, employee=emps[0], grant_type="rsu", grant_date=today - 550 * day,
+            defaults={"shares_granted": 4800, "currency": usd, "vesting_start_date": today - 550 * day,
+                      "cliff_months": 12, "vesting_duration_months": 48, "vesting_frequency": "monthly",
+                      "fair_market_value_at_grant": Decimal("10.0000"), "status": "active"})
+        EquityGrant.objects.get_or_create(
+            tenant=tenant, employee=emps[1 % len(emps)], grant_type="iso", grant_date=today - 90 * day,
+            defaults={"shares_granted": 2000, "currency": usd, "exercise_price": Decimal("5.0000"),
+                      "fair_market_value_at_grant": Decimal("5.0000"), "vesting_start_date": today - 90 * day,
+                      "cliff_months": 12, "vesting_duration_months": 48, "vesting_frequency": "monthly",
+                      "status": "active"})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Compensation seeded for '{tenant.name}': "
+            f"{SalaryBenchmark.objects.filter(tenant=tenant).count()} benchmarks, "
+            f"{BenefitPlan.objects.filter(tenant=tenant).count()} plans, "
+            f"{EmployeeBenefitEnrollment.objects.filter(tenant=tenant).count()} enrollments, "
+            f"{EquityGrant.objects.filter(tenant=tenant).count()} grants."))
