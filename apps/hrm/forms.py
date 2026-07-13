@@ -2804,10 +2804,11 @@ class BenefitPlanForm(TenantModelForm):
 
 class EmployeeBenefitEnrollmentForm(TenantModelForm):
     # employee is resolved server-side by _ss_child_create; status/enrolled_at/decided_by are workflow-set.
+    # employee_contribution/employer_contribution are DERIVED from the plan in the view — never user-editable
+    # (employer_contribution is employer money; a self-service enrollee must not be able to set it).
     class Meta:
         model = EmployeeBenefitEnrollment
-        fields = ["plan", "election_choice", "coverage_tier", "effective_from", "effective_to",
-                  "employee_contribution", "employer_contribution", "notes"]
+        fields = ["plan", "election_choice", "coverage_tier", "effective_from", "effective_to", "notes"]
         widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
 
     def __init__(self, *args, **kwargs):
@@ -2821,10 +2822,6 @@ class EmployeeBenefitEnrollmentForm(TenantModelForm):
         start, end = cleaned.get("effective_from"), cleaned.get("effective_to")
         if start and end and end < start:
             self.add_error("effective_to", "Effective-to cannot be before effective-from.")
-        for f in ("employee_contribution", "employer_contribution"):
-            v = cleaned.get(f)
-            if v is not None and v < 0:
-                self.add_error(f, "Must be zero or greater.")
         return cleaned
 
 
