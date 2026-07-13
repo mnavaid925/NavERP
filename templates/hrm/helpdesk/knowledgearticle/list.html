@@ -44,7 +44,7 @@
               <td><a href="{% url 'hrm:knowledgearticle_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.title|truncatechars:60 }}</td>
               <td>{% if obj.category %}{{ obj.category.name }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
-              {% if is_admin %}<td>{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">Archived</span>{% endif %}</td>{% endif %}
+              {% if is_admin %}<td>{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}</td>{% endif %}
               <td style="text-align:end;">{{ obj.view_count }}</td>
               <td style="text-align:end;">{{ obj.helpful_count }}</td>
               <td><div class="table-actions">
