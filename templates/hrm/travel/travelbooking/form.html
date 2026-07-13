@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Edit Booking{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Edit Booking</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:travelrequest_list' %}">Travel Requests</a><span class="sep">›</span><a href="{% url 'hrm:travelrequest_detail' travel_request.pk %}">{{ travel_request.number }}</a><span class="sep">›</span><span>Edit Booking</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% if obj.document %}<p class="form-help">Current document: <a href="{{ obj.document.url }}" target="_blank" rel="noopener">View</a> (upload a new file to replace it).</p>{% endif %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'hrm:travelrequest_detail' travel_request.pk %}" class="btn btn-outline">Back to Trip</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
