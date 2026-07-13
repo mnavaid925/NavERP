@@ -15,7 +15,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
 3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management,
-3.34 Expense Management.** Reuses the
+3.34 Expense Management, 3.35 Travel Management.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -492,6 +492,40 @@ Reimbursement→`?status=approved`, Policy Compliance→`expensecategory_list`. 
 3 claims across the states). Templates: `templates/hrm/expenses/{expensecategory,expenseclaim}/{list,detail,form}.html`
 + `expenses/expenseclaimline/form.html`.
 
+### 3.35 Travel Management (3 NEW models) — trip authorization + travel advance + post-trip settlement. **Models**
+(`apps/hrm/models.py`, migration `0050`): `TravelPolicy` (`TenantOwned`; `job_grade` [SET_NULL, blank=all grades],
+`trip_type` scope `domestic/international/both`, `travel_class`, `daily_allowance_limit`/`hotel_limit_per_night`/
+`advance_percent_limit` caps — these **drive** `TravelBooking.out_of_policy` + cap advance approval), `TravelRequest`
+(`TRV-`; single-approver machine `draft→pending→approved/rejected/cancelled` then `approved→completed`, `OPEN_STATUSES
+=("draft","pending")`, `employee`/`approver`/`approved_at`/`decision_note` **exactly matching the `_hr_request_*`
+shape**; advance fields `advance_requested`/`_approved`/`_paid_at`/`_reference`; `settlement_claim` FK→`ExpenseClaim`
+[SET_NULL]; **computed** `net_settlement` = settlement_claim.total_amount − advance_approved [None when no claim;
+positive = payable to employee, negative = recoverable]), `TravelBooking` (`travel_request` [CASCADE, related_name
+`bookings`], `booking_type` flight/hotel/cab/train/other, `travel_class`, `cost`, `document` FileField [reuses
+`_validate_upload`]; **computed** `out_of_policy`/`out_of_policy_reason` via `_policy_check()` — flight class-rank vs
+policy [`_TRAVEL_CLASS_RANK`], hotel cost/nights vs `hotel_limit_per_night` [nights=1 fallback when dates missing → no
+ZeroDivisionError], all None-guarded [no policy / missing fields → False]). **Views** (`apps/hrm/views.py`, `# --- 3.35
+Travel Management ---`): `TravelPolicy` CRUD (list/detail `@login_required` + pass `is_admin` to gate the Edit/Delete
+buttons; writes `@tenant_admin_required`; delete guarded when requests reference it). `TravelRequest` own-vs-admin CRUD
+(`_ss_scope`/`_ss_child_*`/`_can_manage_own_child`) + **6 lifecycle wrappers reusing `_hr_request_submit/_cancel/
+_approve/_reject/_edit/_delete` VERBATIM** + **4 bespoke actions**: `travelrequest_approve_advance` (`@tenant_admin_required`,
+self-blocked, status must be `approved`, parses the amount safely — rejects non-finite [NaN/Inf via `is_finite()`],
+negative, ≥1e10 [DecimalField max_digits=12 ceiling], amount>requested, and >policy % cap [both None-guarded]),
+`_mark_advance_paid` (self-blocked, needs an approved advance, **idempotent** via `advance_paid_at`),
+`_generate_settlement` (own-or-admin, approved/completed only, `transaction.atomic()`, **idempotent** via
+`settlement_claim_id`, creates a draft `ExpenseClaim` for the trip's employee), `_complete` (approved→completed).
+Inline `travelbooking_add/_edit/_delete` (multipart document, OPEN_STATUSES only). **Gotchas:** the `_hr_request_*`
+reuse requires the exact `employee`/`status`/`OPEN_STATUSES`/`approver`/`approved_at`/`decision_note` field shape (any
+drift silently breaks a helper); `TravelRequestForm` cross-checks that a chosen policy's `trip_type` (unless `both`)
+matches the request's `trip_type`; `travelrequest_detail` prefetches `bookings` + `settlement_claim__lines` (so
+`net_settlement`/`total_amount` are cache hits, not per-render aggregates); `travelrequest_list` deliberately trims to
+`select_related("employee__party")` only (list renders nothing else). `LIVE_LINKS["3.35"]`: Travel Request→`travelrequest_list`,
+Booking Integration→`travelrequest_list`, Travel Policy→`travelpolicy_list`, Travel Advance→`?status=approved`, Travel
+Settlement→`?status=completed`. Seeder `_seed_travel` (2 policies + 4 trips: draft / pending-with-2-out-of-policy-bookings
+/ approved-with-advance / completed-with-generated-settlement). Templates:
+`templates/hrm/travel/{travelpolicy,travelrequest}/{list,detail,form}.html` + `travel/travelbooking/form.html`. Tests:
+`apps/hrm/tests/test_travel.py` (176).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -659,6 +693,12 @@ Reimbursement→`?status=approved`, Policy Compliance→`expensecategory_list`. 
   (`/hrm/expense-categories/...`, writes admin-only) + `hrm:expenseclaim_list`/`_create`/`_detail`/`_edit`/`_delete`
   + workflow `hrm:expenseclaim_submit`/`_manager_approve`/`_approve`/`_reject`/`_cancel`/`_reimburse`
   (`/hrm/expense-claims/...`) + inline `hrm:expenseclaimline_add`(claim_pk)/`_edit`/`_delete` (`/hrm/expense-lines/...`).
+- **Travel Management (3.35):** `hrm:travelpolicy_list`/`_create`/`_detail`/`_edit`/`_delete` (`/hrm/travel-policies/...`,
+  writes admin-only) + `hrm:travelrequest_list`/`_create`/`_detail`/`_edit`/`_delete` + workflow `hrm:travelrequest_submit`/
+  `_cancel`/`_approve`/`_reject`/`_complete` + advance `hrm:travelrequest_approve_advance`/`_mark_advance_paid` + settlement
+  `hrm:travelrequest_generate_settlement` (`/hrm/travel-requests/...`) + inline `hrm:travelbooking_add`(trip_pk)/`_edit`/
+  `_delete` (`/hrm/travel-bookings/...`). All `@login_required`, tenant-scoped; approve/reject/advance actions
+  `@tenant_admin_required` + maker-checker self-blocked.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1193,6 +1233,11 @@ tenant and sees nothing.
 - 3.34 (all 5 bullets live): Expense Categories → `hrm:expensecategory_list`; Expense Claims → `hrm:expenseclaim_list`;
   Approval Workflow → `hrm:expenseclaim_list?status=submitted`; Reimbursement → `hrm:expenseclaim_list?status=approved`;
   Policy Compliance → `hrm:expensecategory_list` (limits config; violations surface as claim badges). `LIVE_LINKS["3.34"]`.
+- 3.35 (all 5 bullets live): Travel Request → `hrm:travelrequest_list`; Booking Integration → `hrm:travelrequest_list`
+  (bookings live inline on each trip's detail — no standalone booking list); Travel Policy → `hrm:travelpolicy_list`;
+  Travel Advance → `hrm:travelrequest_list?status=approved` (advance is approved/paid on an approved trip); Travel
+  Settlement → `hrm:travelrequest_list?status=completed` (Generate Settlement spins up a linked 3.34 `ExpenseClaim`).
+  `LIVE_LINKS["3.35"]`.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
