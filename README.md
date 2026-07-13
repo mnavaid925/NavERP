@@ -49,8 +49,8 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
-management — goals, reviews, continuous feedback, and performance improvement — 35 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **8,895 passing tests**.
+management — goals, reviews, continuous feedback, and performance improvement — 36 of 41 sub-modules). The remaining
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **8,938 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -512,9 +512,8 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   (draft→pending→approved[Accepted]/rejected/cancelled + an `implemented` tail), with the same self-approval guard;
   and **Celebrations** — a derived view (no model, mirrors `org_chart`) of upcoming birthdays
   (`EmployeeProfile.date_of_birth`) + work anniversaries (`core.Employment.hired_on`) within a `?window=`. The 5th
-  bullet, **Help Desk**, is deferred to the dedicated future **3.36 Helpdesk** sub-module (its sidebar entry points
-  at the Suggestions box interim). Read receipts, reactions, delivery fan-out, survey k-anonymity, voting, and the
-  full ticketing system are deferred.
+  bullet, **Help Desk**, now resolves to the dedicated **3.36 Helpdesk** sub-module (its sidebar entry points at
+  the live ticket list). Read receipts, reactions, delivery fan-out, survey k-anonymity, and voting are deferred.
 - **3.28 HR Reports** — the core HR analytics surface, built as **6 derived, read-only, `@tenant_admin_required`
   report views** (NO new models — pure tenant-scoped aggregates over the existing spine, mirroring accounting's
   `trial_balance`/`ap_aging`): an `hr_reports_index` landing hub + `headcount_report` (active/joins/exits by
@@ -591,9 +590,23 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   (approve capped at the policy percent + maker-checker self-block; idempotent mark-paid), and **Generate Settlement**
   that spins up a linked 3.34 `ExpenseClaim` (atomic + idempotent). Corporate-booking-tool (GDS) integration,
   multi-leg itineraries, real-time fare shopping, and per-diem auto-calc are deferred.
+- **3.36 Helpdesk** — the employee HR/IT/Admin/Facilities service desk. **4 new models** (`apps/hrm/models.py`,
+  migrations `0051`+`0052`): `HelpdeskSLAPolicy` (`HSLA-`; per-priority response/resolution hour targets +
+  `targets_for(priority)`, a mirror of `crm.SlaPolicy`), `HelpdeskCategory` (HR/IT/Admin/Facilities routing +
+  KB taxonomy, carrying the default assignee + default SLA policy a new ticket inherits), `HelpdeskTicket`
+  (`TKT-`; requester `employee` FK reuses `_ss_scope`/`_can_manage_own_child`; an **agent-worked** lifecycle
+  new→open→in_progress→waiting→resolved→closed [+cancelled] via bespoke assign/start/waiting/resolve/close/
+  reopen/cancel/feedback actions — NOT the single-approver `_hr_request_*` machine; SLA due timestamps stamped
+  once in `save()` [mirrors `crm.Case`] with **computed** breach / `sla_state`; inline **CSAT**
+  [`satisfaction_rating`/comment, no separate survey model]), and `KnowledgeArticle` (`KBA-`; internal-only
+  FAQ/self-help, draft→published→archived, view/helpful counters). `LIVE_LINKS["3.36"]` maps all 5 bullets
+  (Ticket Management→`ticket_list`, Ticket Categories→`helpdeskcategory_list`, SLA Management→`helpdesksla_list`,
+  Knowledge Base→`knowledgearticle_list`, Satisfaction Survey→`ticket_list?rated=1`) + an SLA-breach deep-link
+  (`ticket_list?sla=breached`); the 3.27 "Help Desk" bullet is re-pointed here. A comment thread, auto-routing/
+  escalation, business-hours SLA clocks, KB voting/public portal, and a CSAT analytics dashboard are deferred.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,248-test** HRM suite
-(**8,895 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,291-test** HRM suite
+(**8,938 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
