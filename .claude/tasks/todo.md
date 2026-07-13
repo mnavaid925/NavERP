@@ -8001,6 +8001,60 @@ explicit recommendation.
   `settlement_claim.reimbursed_at` remain plain timestamps until Module 2 Accounting / 3.30 payroll integration
   picks this up.
 
-## Review notes
+## Review notes — 3.35 Travel Management (as-built)
 
-(filled in at the end)
+**Scope delivered.** 3 new models (`TravelPolicy`, `TravelRequest`, `TravelBooking`; migration `0050`) with full
+CRUD, a single-approver workflow reusing `_hr_request_submit/_cancel/_approve/_reject/_edit/_delete` **verbatim**,
+4 bespoke advance/settlement actions, inline bookings with document upload, and two computed properties
+(`out_of_policy`, `net_settlement`). Wired into `urls.py`/`admin.py`/`navigation.py` (`LIVE_LINKS["3.35"]`, all 5
+bullets), seeded (`_seed_travel`: 2 policies + 4 trips across the states, idempotent), and covered by
+`apps/hrm/tests/test_travel.py` (**176 tests**). HRM suite 6,072 → **6,248**; project 8,719 → **8,895**.
+
+**Design decisions.**
+- **`_hr_request_*` verbatim reuse** — `TravelRequest` was given the exact field shape the shared helpers assume
+  (`employee`/`status`/`OPEN_STATUSES=("draft","pending")`/`approver`/`approved_at`/`decision_note`), so submit/
+  cancel/approve/reject/edit/delete are one-line wrappers. code-reviewer confirmed no field-shape drift.
+- **Advance + settlement are bespoke** on top of an approved trip: `approve_advance` (policy-percent-capped),
+  `mark_advance_paid` (idempotent), `generate_settlement` (atomic, idempotent, creates a linked 3.34 `ExpenseClaim`),
+  `complete`. Settlement reuses the `ExpenseClaim` engine rather than a new model — `net_settlement` = claim total −
+  approved advance (positive = payable to employee, negative = recoverable).
+- **`out_of_policy`** computed on `TravelBooking` from the parent trip's policy (class-rank + hotel-per-night, nights=1
+  fallback, fully None-guarded) — no stored flag, no per-booking query (reverse-FK prefetch caches the
+  `select_related("policy")` parent).
+
+**Module Creation Sequence — agent findings applied.**
+1. **code-reviewer** — *Important:* `approve_advance` approved an unbounded amount when `advance_requested is None`
+   and no policy cap applied (elif chain fell through to `else`); oversized values would also raise a DB `DataError`.
+   Fixed: reject when no advance was requested + reject amounts ≥ 1e10 (the `max_digits=12` ceiling). *Minor:* the
+   policy dropdown didn't cross-check trip scope — added a `TravelRequestForm.clean()` rule that a policy whose
+   `trip_type` isn't `both` must match the request's `trip_type`. (Committed `ee891587`, `cdf0b626`.)
+2. **explorer** — all cross-file wiring (url names, `LIVE_LINKS`, view→template context, model attributes, admin,
+   seeder) internally consistent; only gap was the missing test suite (→ test-writer). No code changes.
+3. **frontend-reviewer** — clean bill of health: no multi-line `{# #}` leak, every `badge-*`/`stat-icon` class defined
+   in theme.css (no L33 recurrence), filter rules correct (`|stringformat:"d"` on the employee pk), badge values match
+   choices with a `get_status_display` fallback. No changes.
+4. **performance-reviewer** — *Important:* `travelrequest_list` chained `prefetch_related("bookings")` + 4 unused
+   `select_related` joins the list template never renders — the prefetch fired a wasted 2nd query per load. Trimmed to
+   `select_related("employee__party")`. *Minor:* `travelrequest_detail` ran `settlement_claim.total_amount`'s line
+   aggregate twice — added `settlement_claim__lines` to the prefetch. (Committed `f9f77a90`.)
+5. **qa-smoke-tester** — 18/18 URLs 200/302, no template leaks, seed idempotent, out-of-policy + net_settlement render
+   correctly. No changes.
+6. **security-reviewer** — *Medium:* `Decimal("NaN")` parses without raising, but the later ordering comparisons raise
+   `InvalidOperation` → an unhandled 500; added an `amount.is_finite()` guard right after parsing. *Low:*
+   `travelpolicy_list/detail` showed Edit/Delete to non-admins (backend already 403'd via `@tenant_admin_required`) —
+   passed `is_admin` and gated the buttons. IDOR/CSRF/mass-assignment/XSS/upload all confirmed secure. (Committed
+   `e232e95c`, `954b50eb`, `e186c885`.)
+7. **test-writer** — authored `test_travel.py` (176, all green first run): model invariants, form validation, the full
+   workflow, the advance %-cap/NaN/idempotency edges, IDOR 404 + non-owner 403, maker-checker self-block, and a
+   `django_assert_max_num_queries` guard on the trimmed list. No product bugs found. (Committed `ec30a126`.)
+
+**Known deferrals / accepted risk.**
+- The `generate_settlement`/`mark_advance_paid` idempotency guards are check-then-act without `select_for_update()`
+  (a narrow same-user double-submit race). Left as-is: this is the identical shape used across all ~40 sibling HRM
+  workflow actions — a `select_for_update` here would be inconsistent churn, not a 3.35 fix. Flagged for a future
+  project-wide pass if the pattern is ever hardened.
+- Booking document validation is extension-allowlist + size-cap only (no magic-byte sniffing) — a documented,
+  repo-wide pattern (see the `# WARNING` on the `document` field about serving with `Content-Disposition: attachment`
+  + `nosniff`), not new to 3.35.
+- GDS/corporate-booking-tool integration, multi-leg itineraries, real-time fare shopping, per-diem auto-calc, mileage,
+  and multiple/topped-up advances remain deferred (see "Later passes" above).
