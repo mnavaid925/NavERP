@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Travel Policies{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Travel Policies</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Travel Management</span><span class="sep">›</span><span>Policies</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:travelrequest_list' %}" class="btn btn-outline"><i data-lucide="plane"></i> Travel Requests</a>
+      <a href="{% url 'hrm:travelpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Policy</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name...">
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select"><option value="">All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="job_grade" class="form-select"><option value="">All grades</option>
+            {% for g in job_grades %}<option value="{{ g.pk }}" {% if request.GET.job_grade == g.pk|stringformat:"d" %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:travelpolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Job Grade</th><th>Scope</th><th>Class</th><th style="text-align:end;">Daily</th><th style="text-align:end;">Hotel/Night</th><th style="text-align:end;">Advance %</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:travelpolicy_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>{% if obj.job_grade %}{{ obj.job_grade.name }}{% else %}All grades{% endif %}</td>
+              <td>{{ obj.get_trip_type_display }}</td>
+              <td>{{ obj.get_travel_class_display }}</td>
+              <td style="text-align:end;">{% if obj.daily_allowance_limit != None %}{{ obj.daily_allowance_limit|floatformat:2 }}{% else %}-{% endif %}</td>
+              <td style="text-align:end;">{% if obj.hotel_limit_per_night != None %}{{ obj.hotel_limit_per_night|floatformat:2 }}{% else %}-{% endif %}</td>
+              <td style="text-align:end;">{% if obj.advance_percent_limit != None %}{{ obj.advance_percent_limit|floatformat:0 }}%{% else %}-{% endif %}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'hrm:travelpolicy_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'hrm:travelpolicy_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'hrm:travelpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="shield"></i><h3>No travel policies yet</h3><p>Define travel class + daily/hotel/advance limits per job grade.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
