@@ -48,6 +48,7 @@
             <tr>
               <td><a href="{% url 'hrm:equitygrant_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.employee.party.name }}</td>
+              {# grant_type abbreviations (ISO/NSO/RSU/ESPP) are the canonical, compact labels here; the detail page shows the full get_grant_type_display #}
               <td><span class="badge badge-info">{{ obj.grant_type|upper }}</span></td>
               <td style="text-align:end;">{{ obj.shares_granted }}</td>
               <td style="text-align:end;">{{ obj.vested_shares }} ({{ obj.vested_percent }}%)</td>
