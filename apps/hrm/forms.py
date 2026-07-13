@@ -2565,3 +2565,89 @@ class ExpenseClaimLineForm(TenantModelForm):
         return _validate_upload(self.cleaned_data.get("receipt"),
                                 allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
                                 max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Receipt")
+
+
+from .models import TravelPolicy, TravelRequest, TravelBooking  # noqa: E402  — 3.35 Travel Management
+
+
+class TravelPolicyForm(TenantModelForm):
+    class Meta:
+        model = TravelPolicy
+        fields = ["name", "job_grade", "trip_type", "travel_class", "daily_allowance_limit",
+                  "hotel_limit_per_night", "advance_percent_limit", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "job_grade" in self.fields:
+            self.fields["job_grade"].queryset = (
+                JobGrade.objects.filter(tenant=self.tenant, is_active=True).order_by("level_order", "name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        for f in ("daily_allowance_limit", "hotel_limit_per_night"):
+            v = cleaned.get(f)
+            if v is not None and v < 0:
+                self.add_error(f, "Must be zero or greater.")
+        pct = cleaned.get("advance_percent_limit")
+        if pct is not None and not (0 <= pct <= 100):
+            self.add_error("advance_percent_limit", "Must be between 0 and 100.")
+        return cleaned
+
+
+class TravelRequestForm(TenantModelForm):
+    # status/approver/approved_at/decision_note/advance_approved/advance_paid_at/advance_reference/
+    # settlement_claim are workflow-set; employee is resolved server-side by _ss_child_create.
+    class Meta:
+        model = TravelRequest
+        fields = ["title", "trip_type", "origin", "destination", "purpose", "start_date", "end_date",
+                  "policy", "estimated_cost", "currency", "advance_requested"]
+        widgets = {"purpose": forms.Textarea(attrs={"rows": 3})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "policy" in self.fields:
+            self.fields["policy"].queryset = (
+                TravelPolicy.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+        if self.tenant is not None and "currency" in self.fields:
+            from apps.accounting.models import Currency
+            self.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_date"), cleaned.get("end_date")
+        if start and end and end < start:
+            self.add_error("end_date", "End date cannot be before start date.")
+        cost = cleaned.get("estimated_cost")
+        if cost is not None and cost < 0:
+            self.add_error("estimated_cost", "Must be zero or greater.")
+        advance = cleaned.get("advance_requested")
+        if advance is not None:
+            if advance < 0:
+                self.add_error("advance_requested", "Must be zero or greater.")
+            elif cost is not None and advance > cost:
+                self.add_error("advance_requested", "Cannot request an advance larger than the estimated cost.")
+        return cleaned
+
+
+class TravelBookingForm(TenantModelForm):
+    # travel_request/tenant are set by the view; multipart for the document.
+    class Meta:
+        model = TravelBooking
+        fields = ["booking_type", "vendor", "reference", "depart_date", "return_date", "travel_class",
+                  "cost", "document", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def clean(self):
+        cleaned = super().clean()
+        depart, ret = cleaned.get("depart_date"), cleaned.get("return_date")
+        if depart and ret and ret < depart:
+            self.add_error("return_date", "Return/check-out date cannot be before the depart/check-in date.")
+        cost = cleaned.get("cost")
+        if cost is not None and cost < 0:
+            self.add_error("cost", "Must be zero or greater.")
+        return cleaned
+
+    def clean_document(self):
+        return _validate_upload(self.cleaned_data.get("document"),
+                                allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Booking Document")
