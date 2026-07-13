@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="badge badge-info">{{ obj.get_department_display }}</span>
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:helpdeskcategory_list' %}">Categories</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:helpdeskcategory_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Categories</a>
+      {% if is_admin %}<a href="{% url 'hrm:helpdeskcategory_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Department</span><div>{{ obj.get_department_display }}</div></div>
+      <div><span class="text-muted">Default Assignee</span><div>{% if obj.default_assignee %}{{ obj.default_assignee.get_full_name|default:obj.default_assignee.username }}{% else %}Unassigned{% endif %}</div></div>
+      <div><span class="text-muted">Default SLA Policy</span><div>{% if obj.default_sla_policy %}<a href="{% url 'hrm:helpdesksla_detail' obj.default_sla_policy.pk %}">{{ obj.default_sla_policy.name }}</a>{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Tickets</span><div>{{ ticket_count }}</div></div>
+      <div><span class="text-muted">KB Articles</span><div>{{ article_count }}</div></div>
+    </div>
+    {% if obj.description %}<p class="text-muted" style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  {% if is_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; gap:1rem;">
+      <a href="{% url 'hrm:helpdeskcategory_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'hrm:ticket_list' %}?category={{ obj.pk }}" class="btn btn-outline"><i data-lucide="life-buoy"></i> View Tickets</a>
+      <form method="post" action="{% url 'hrm:helpdeskcategory_delete' obj.pk %}" onsubmit="return confirm('Delete this category?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
