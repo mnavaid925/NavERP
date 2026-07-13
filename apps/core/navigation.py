@@ -617,6 +617,17 @@ LIVE_LINKS = {
         "Reimbursement": "hrm:expenseclaim_list?status=approved",
         "Policy Compliance": "hrm:expensecategory_list",
     },
+    # 3.35 Travel Management — 3 new models (TravelPolicy, TravelRequest, TravelBooking); settlement reuses
+    # hrm.ExpenseClaim (3.34). Booking Integration has no standalone page (bookings are inline rows under a
+    # trip) so it deep-links to the request list. Travel Advance -> "approved" (advance actions actionable);
+    # Travel Settlement -> "completed" (the closed-loop slice) — both one status-dropdown click from the list.
+    "3.35": {
+        "Travel Request": "hrm:travelrequest_list",
+        "Booking Integration": "hrm:travelrequest_list",
+        "Travel Policy": "hrm:travelpolicy_list",
+        "Travel Advance": "hrm:travelrequest_list?status=approved",
+        "Travel Settlement": "hrm:travelrequest_list?status=completed",
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
