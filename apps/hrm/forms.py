@@ -2655,3 +2655,82 @@ class TravelBookingForm(TenantModelForm):
         return _validate_upload(self.cleaned_data.get("document"),
                                 allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
                                 max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Booking Document")
+
+
+from .models import (  # noqa: E402  — 3.36 Helpdesk
+    HelpdeskCategory, HelpdeskSLAPolicy, HelpdeskTicket, KnowledgeArticle)
+
+# The per-priority (response, resolution) hour-field pairs on HelpdeskSLAPolicy — used by the form's
+# clean() so a resolution target can never be shorter than its own response target.
+_SLA_HOUR_PAIRS = [
+    ("urgent_response_hours", "urgent_resolution_hours", "Urgent"),
+    ("high_response_hours", "high_resolution_hours", "High"),
+    ("medium_response_hours", "medium_resolution_hours", "Medium"),
+    ("low_response_hours", "low_resolution_hours", "Low"),
+]
+
+
+class HelpdeskSLAPolicyForm(TenantModelForm):
+    class Meta:
+        model = HelpdeskSLAPolicy
+        fields = ["name", "description",
+                  "urgent_response_hours", "urgent_resolution_hours",
+                  "high_response_hours", "high_resolution_hours",
+                  "medium_response_hours", "medium_resolution_hours",
+                  "low_response_hours", "low_resolution_hours",
+                  "is_active", "is_default"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def clean(self):
+        cleaned = super().clean()
+        for resp_f, res_f, label in _SLA_HOUR_PAIRS:
+            resp, res = cleaned.get(resp_f), cleaned.get(res_f)
+            if resp is not None and resp < 1:
+                self.add_error(resp_f, "Must be at least 1 hour.")
+            if res is not None and res < 1:
+                self.add_error(res_f, "Must be at least 1 hour.")
+            if resp is not None and res is not None and res < resp:
+                self.add_error(res_f, f"{label} resolution target cannot be shorter than its response target.")
+        return cleaned
+
+
+class HelpdeskCategoryForm(TenantModelForm):
+    class Meta:
+        model = HelpdeskCategory
+        fields = ["name", "department", "description", "default_assignee", "default_sla_policy", "is_active"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "default_sla_policy" in self.fields:
+            self.fields["default_sla_policy"].queryset = (
+                HelpdeskSLAPolicy.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+
+
+class HelpdeskTicketForm(TenantModelForm):
+    # status / assignee / sla_policy / all timestamps / CSAT are workflow-owned (set by the action
+    # views); employee (the requester) is resolved server-side by _ss_child_create.
+    class Meta:
+        model = HelpdeskTicket
+        fields = ["subject", "description", "category", "priority"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 4})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "category" in self.fields:
+            self.fields["category"].queryset = (
+                HelpdeskCategory.objects.filter(tenant=self.tenant, is_active=True).order_by("department", "name"))
+
+
+class KnowledgeArticleForm(TenantModelForm):
+    # owner / view_count / helpful_count / published_at are set by the view / actions.
+    class Meta:
+        model = KnowledgeArticle
+        fields = ["title", "category", "summary", "body", "tags", "status"]
+        widgets = {"summary": forms.Textarea(attrs={"rows": 2}), "body": forms.Textarea(attrs={"rows": 10})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "category" in self.fields:
+            self.fields["category"].queryset = (
+                HelpdeskCategory.objects.filter(tenant=self.tenant).order_by("department", "name"))
