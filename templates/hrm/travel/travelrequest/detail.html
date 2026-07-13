@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.title }}
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% elif obj.status == 'pending' %}<span class="badge badge-amber">Pending</span>{% elif obj.status == 'approved' %}<span class="badge badge-info">Approved</span>{% elif obj.status == 'completed' %}<span class="badge badge-green">Completed</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">Cancelled</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:travelrequest_list' %}">Travel Requests</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:travelrequest_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Trips</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Trip #</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Employee</span><div>{{ obj.employee.party.name }}</div></div>
+      <div><span class="text-muted">Type</span><div>{{ obj.get_trip_type_display }}</div></div>
+      <div><span class="text-muted">Route</span><div>{{ obj.origin }} → {{ obj.destination }}</div></div>
+      <div><span class="text-muted">Dates</span><div>{{ obj.start_date|date:"d M Y" }} – {{ obj.end_date|date:"d M Y" }}</div></div>
+      <div><span class="text-muted">Estimated Cost</span><div>{% if obj.estimated_cost != None %}{{ obj.estimated_cost|floatformat:2 }}{% endif %} {% if obj.currency %}{{ obj.currency.code }}{% endif %}</div></div>
+      <div><span class="text-muted">Policy</span><div>{% if obj.policy %}{{ obj.policy.name }}{% else %}-{% endif %}</div></div>
+      {% if obj.approver %}<div><span class="text-muted">Approver</span><div>{{ obj.approver.get_full_name|default:obj.approver.username }}</div></div>{% endif %}
+    </div>
+    {% if obj.purpose %}<p class="text-muted" style="margin-top:1rem;">{{ obj.purpose|linebreaksbr }}</p>{% endif %}
+    {% if obj.status == 'rejected' and obj.decision_note %}<div class="form-error" style="margin-top:1rem;"><strong>Rejected:</strong> {{ obj.decision_note }}</div>{% endif %}
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Bookings</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Type</th><th>Vendor</th><th>Reference</th><th>Dates</th><th>Class</th><th style="text-align:end;">Cost</th><th>Policy</th>{% if obj.status == 'draft' or obj.status == 'pending' %}<th class="table-actions">Actions</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for b in bookings %}
+          <tr>
+            <td>{{ b.get_booking_type_display }}</td>
+            <td>{{ b.vendor }}</td>
+            <td>{{ b.reference|default:"-" }}</td>
+            <td>{% if b.depart_date %}{{ b.depart_date|date:"d M" }}{% if b.return_date %}–{{ b.return_date|date:"d M" }}{% endif %}{% else %}-{% endif %}</td>
+            <td>{% if b.travel_class %}{{ b.get_travel_class_display }}{% else %}-{% endif %}</td>
+            <td style="text-align:end;">{% if b.cost != None %}{{ b.cost|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td>{% if b.out_of_policy %}<span class="badge badge-amber" title="{{ b.out_of_policy_reason }}">Out of Policy</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</td>
+            {% if obj.status == 'draft' or obj.status == 'pending' %}
+            <td><div class="table-actions">
+              <a href="{% url 'hrm:travelbooking_edit' b.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'hrm:travelbooking_delete' b.pk %}" onsubmit="return confirm('Remove this booking?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+            </div></td>
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="{% if obj.status == 'draft' or obj.status == 'pending' %}8{% else %}7{% endif %}" class="text-muted">No bookings recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+
+  {% if booking_form %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Add Booking</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'hrm:travelbooking_add' obj.pk %}" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in booking_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Booking</button></div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Travel Advance</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="text-muted">Requested</span><div>{% if obj.advance_requested != None %}{{ obj.advance_requested|floatformat:2 }}{% else %}-{% endif %}</div></div>
+        <div><span class="text-muted">Approved</span><div>{% if obj.advance_approved != None %}{{ obj.advance_approved|floatformat:2 }}{% else %}-{% endif %}</div></div>
+        <div><span class="text-muted">Paid</span><div>{% if obj.advance_paid_at %}{{ obj.advance_paid_at|date:"d M Y" }}{% if obj.advance_reference %} · {{ obj.advance_reference }}{% endif %}{% else %}Not paid{% endif %}</div></div>
+      </div>
+      {% if obj.status == 'approved' and is_admin and not is_own %}
+        <form method="post" action="{% url 'hrm:travelrequest_approve_advance' obj.pk %}" style="display:flex; gap:.5rem; align-items:flex-end; margin-top:1rem;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="adv_amt">Approve advance amount</label><input type="number" step="0.01" name="advance_approved" id="adv_amt" class="form-input" value="{{ obj.advance_requested|default:'' }}" required></div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="badge-dollar-sign"></i> Approve Advance</button>
+        </form>
+      {% endif %}
+      {% if obj.advance_approved and not obj.advance_paid_at and is_admin and not is_own %}
+        <form method="post" action="{% url 'hrm:travelrequest_mark_advance_paid' obj.pk %}" onsubmit="return confirm('Mark the advance as paid?');" style="display:flex; gap:.5rem; align-items:flex-end; margin-top:.5rem;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="adv_ref">Payment reference</label><input type="text" name="advance_reference" id="adv_ref" class="form-input"></div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="banknote"></i> Mark Advance Paid</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Settlement</h2></div>
+    <div class="card-body">
+      {% if obj.settlement_claim %}
+        <p style="margin:0 0 .5rem;">Settlement claim: <a href="{% url 'hrm:expenseclaim_detail' obj.settlement_claim.pk %}" class="fw-600">{{ obj.settlement_claim.number }}</a> ({{ obj.settlement_claim.get_status_display }})</p>
+        {% if net_settlement != None %}
+          {% if net_settlement > 0 %}<span class="badge badge-green">Payable to employee: {{ net_settlement|floatformat:2 }}</span>
+          {% elif net_settlement < 0 %}<span class="badge badge-amber">Recoverable from employee: {{ net_settlement|floatformat:2 }}</span>
+          {% else %}<span class="badge badge-muted">Fully settled (net 0.00)</span>{% endif %}
+          <p class="form-help" style="margin-top:.5rem;">Net = settlement claim total ({{ obj.settlement_claim.total_amount|floatformat:2 }}) − approved advance ({{ obj.advance_approved|default:0|floatformat:2 }}).</p>
+        {% endif %}
+      {% elif obj.status == 'approved' or obj.status == 'completed' %}
+        <p class="text-muted" style="margin:0 0 .5rem;">No settlement generated yet.</p>
+        <form method="post" action="{% url 'hrm:travelrequest_generate_settlement' obj.pk %}" onsubmit="return confirm('Generate an expense-claim settlement for this trip?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="file-plus"></i> Generate Settlement</button></form>
+      {% else %}
+        <p class="text-muted" style="margin:0;">A settlement can be generated once the trip is approved.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-start;">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:travelrequest_submit' obj.pk %}" onsubmit="return confirm('Submit this trip for approval?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button></form>
+        <a href="{% url 'hrm:travelrequest_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:travelrequest_delete' obj.pk %}" onsubmit="return confirm('Delete this trip?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+      {% if obj.status == 'draft' or obj.status == 'pending' %}
+        <form method="post" action="{% url 'hrm:travelrequest_cancel' obj.pk %}" onsubmit="return confirm('Cancel this trip?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Cancel</button></form>
+      {% endif %}
+      {% if obj.status == 'pending' and is_admin and not is_own %}
+        <form method="post" action="{% url 'hrm:travelrequest_approve' obj.pk %}" onsubmit="return confirm('Approve this trip?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button></form>
+        <form method="post" action="{% url 'hrm:travelrequest_reject' obj.pk %}" onsubmit="return confirm('Reject this trip?');" style="display:flex; gap:.5rem; align-items:flex-end;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="dec_note">Rejection reason</label><input type="text" name="decision_note" id="dec_note" class="form-input" required></div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'approved' %}
+        <form method="post" action="{% url 'hrm:travelrequest_complete' obj.pk %}" onsubmit="return confirm('Mark this trip completed?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Mark Completed</button></form>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
