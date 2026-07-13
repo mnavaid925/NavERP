@@ -8233,3 +8233,270 @@ class KnowledgeArticle(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} - {self.title}" if self.number else self.title
+
+
+# ---------------------------------------------------------------------------
+# 3.37 Compensation & Benefits — builds ON TOP of the 3.13 salary spine
+# (PayComponent/SalaryStructureTemplate/EmployeeSalaryStructure) + the 3.2
+# Designation salary bands, never duplicating them. Four new tables cover 4 of the
+# 6 NavERP.md bullets: SalaryBenchmark (external market percentile data → compa-ratio),
+# BenefitPlan (the benefits catalog incl. flex-credit) + EmployeeBenefitEnrollment
+# (per-employee opt-in/opt-out elections), and EquityGrant (ISO/NSO/RSU/ESPP/phantom
+# grants with COMPUTED vesting/exercisable — never a stored balance, mirroring
+# LeaveAllocation/TravelBooking). Compensation Planning (merit/promotion cycles) and
+# a formal monetary RecognitionAward are DEFERRED (peer kudos already live in 3.20
+# Feedback/KudosBadge). Money reuses accounting.Currency; GL/payroll posting is owned
+# by accounting.PayrollRun — this sub-module posts no JournalEntry.
+# ---------------------------------------------------------------------------
+class SalaryBenchmark(TenantOwned):
+    """External market-salary reference data (P25/P50/P75/P90) keyed to a job grade and/or designation,
+    from an internal or purchased survey. Drives compa-ratio checks against the 3.13 EmployeeSalaryStructure
+    / 3.2 Designation bands. Small per-tenant catalog (not auto-numbered). A blank job_grade/designation
+    means 'applies broadly'."""
+
+    SOURCE_CHOICES = [
+        ("internal", "Internal Survey"),
+        ("payscale", "Payscale"),
+        ("mercer", "Mercer"),
+        ("radford", "Radford"),
+        ("other", "Other"),
+    ]
+
+    job_grade = models.ForeignKey("hrm.JobGrade", on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="salary_benchmarks")
+    designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="salary_benchmarks")
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="internal")
+    region = models.CharField(max_length=100, blank=True, help_text="e.g. US-National, APAC, EMEA.")
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_salary_benchmarks")
+    percentile_25 = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    percentile_50 = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    percentile_75 = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    percentile_90 = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    survey_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-survey_date", "id"]
+        indexes = [
+            models.Index(fields=["tenant", "job_grade"], name="hrm_sbm_tnt_grade_idx"),
+            models.Index(fields=["tenant", "designation"], name="hrm_sbm_tnt_desig_idx"),
+        ]
+
+    def __str__(self):
+        label = self.designation.name if self.designation_id else (
+            self.job_grade.name if self.job_grade_id else "General")
+        return f"{label} — {self.get_source_display()} ({self.region or 'all regions'})"
+
+    def compa_ratio(self, current_pay):
+        """(current_pay / market median). >1 = above market, <1 = below. None if no median or pay."""
+        if not self.percentile_50 or not current_pay:
+            return None
+        return (Decimal(current_pay) / self.percentile_50).quantize(Decimal("0.01"))
+
+
+class BenefitPlan(TenantOwned):
+    """A benefit offering in the org's catalog (medical/dental/life/retirement/…) with an employer/employee
+    monthly cost split and optional flex-credit eligibility. Reused by EmployeeBenefitEnrollment as the
+    election target. Small per-tenant catalog (not auto-numbered). coverage_tier_options is a comma-separated
+    list (e.g. 'employee_only,employee_spouse,family') — a full tier-pricing sub-table is deferred."""
+
+    PLAN_TYPE_CHOICES = [
+        ("medical", "Medical"),
+        ("dental", "Dental"),
+        ("vision", "Vision"),
+        ("life", "Life Insurance"),
+        ("disability", "Disability"),
+        ("retirement", "Retirement / Pension"),
+        ("wellness", "Wellness"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=150)
+    plan_type = models.CharField(max_length=15, choices=PLAN_TYPE_CHOICES, default="medical")
+    provider = models.CharField(max_length=150, blank=True)
+    is_flex_credit_eligible = models.BooleanField(default=False)
+    flex_credit_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Flex-credit value this plan carries when flex-eligible.")
+    employer_cost_monthly = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    employee_cost_monthly = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_benefit_plans")
+    coverage_tier_options = models.CharField(max_length=255, blank=True,
+        default="employee_only", help_text="Comma-separated coverage tiers.")
+    enrollment_window_start = models.DateField(null=True, blank=True)
+    enrollment_window_end = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["plan_type", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_bplan_tnt_active_idx"),
+            models.Index(fields=["tenant", "plan_type"], name="hrm_bplan_tnt_type_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_plan_type_display()})"
+
+    @property
+    def tier_list(self):
+        """The coverage_tier_options CSV parsed into a clean list (for the enrollment form dropdown)."""
+        return [t.strip() for t in (self.coverage_tier_options or "").split(",") if t.strip()]
+
+
+class EmployeeBenefitEnrollment(TenantNumbered):
+    """A per-employee benefit election (``BEN-#####``) — opt-in/opt-out/waived against a BenefitPlan, tiered
+    by coverage, effective-dated. Employee-owned (the ``employee`` FK reuses _ss_scope/_can_manage_own_child);
+    an admin runs the enroll/waive/terminate lifecycle. Contributions default from the plan but are overridable.
+    unique_together allows re-enrollment across periods but blocks duplicates for one effective_from."""
+
+    NUMBER_PREFIX = "BEN"
+
+    ELECTION_CHOICES = [
+        ("opt_in", "Opt In"),
+        ("opt_out", "Opt Out"),
+        ("waived", "Waived"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("enrolled", "Enrolled"),
+        ("waived", "Waived"),
+        ("terminated", "Terminated"),
+    ]
+    OPEN_STATUSES = ("pending",)  # editable/deletable by the employee only while pending
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                 related_name="benefit_enrollments")
+    plan = models.ForeignKey("hrm.BenefitPlan", on_delete=models.PROTECT, related_name="enrollments")
+    election_choice = models.CharField(max_length=10, choices=ELECTION_CHOICES, default="opt_in")
+    coverage_tier = models.CharField(max_length=50, blank=True)
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    employee_contribution = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    employer_contribution = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="pending")
+    enrolled_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_benefit_decisions")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = (("tenant", "number"), ("tenant", "employee", "plan", "effective_from"))
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_ben_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ben_tnt_status_idx"),
+            models.Index(fields=["tenant", "plan"], name="hrm_ben_tnt_plan_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.plan.name}" if self.number else f"Enrollment ({self.plan_id})"
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+
+class EquityGrant(TenantNumbered):
+    """An equity/ESOP grant to an employee (``ESOP-#####``) — ISO/NSO/RSU/ESPP/phantom, with a cliff + graded
+    vesting schedule. Vesting (vested/unvested/exercisable) is COMPUTED from the schedule + today, NEVER a
+    stored balance (mirrors LeaveAllocation/TravelBooking derivation). Only exercised_shares is stored, updated
+    by the bespoke record-exercise action. 409A/ASC-718 valuation + GL posting are deferred."""
+
+    NUMBER_PREFIX = "ESOP"
+
+    GRANT_TYPE_CHOICES = [
+        ("iso", "ISO (Incentive Stock Option)"),
+        ("nso", "NSO (Non-qualified Stock Option)"),
+        ("rsu", "RSU (Restricted Stock Unit)"),
+        ("espp", "ESPP (Employee Stock Purchase Plan)"),
+        ("phantom", "Phantom Stock"),
+    ]
+    VESTING_FREQUENCY_CHOICES = [
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("annual", "Annual"),
+    ]
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("fully_vested", "Fully Vested"),
+        ("exercised", "Exercised"),
+        ("cancelled", "Cancelled"),
+        ("expired", "Expired"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="equity_grants")
+    grant_type = models.CharField(max_length=10, choices=GRANT_TYPE_CHOICES, default="rsu")
+    grant_date = models.DateField()
+    shares_granted = models.PositiveIntegerField(default=0)
+    exercise_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True,
+        help_text="Strike price per share (options); blank for RSUs.")
+    fair_market_value_at_grant = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_equity_grants")
+    vesting_start_date = models.DateField()
+    cliff_months = models.PositiveSmallIntegerField(default=12)
+    vesting_duration_months = models.PositiveSmallIntegerField(default=48)
+    vesting_frequency = models.CharField(max_length=10, choices=VESTING_FREQUENCY_CHOICES, default="monthly")
+    exercised_shares = models.PositiveIntegerField(default=0)
+    last_exercised_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="active")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-grant_date", "id"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_esop_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_esop_tnt_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.get_grant_type_display()}" if self.number else self.get_grant_type_display()
+
+    # ---- Vesting (computed, NEVER stored) ----
+    @property
+    def _months_vested(self):
+        """Whole months from vesting_start_date to today (0 if the start is in the future)."""
+        if not self.vesting_start_date:
+            return 0
+        today = timezone.localdate()
+        if today <= self.vesting_start_date:
+            return 0
+        m = (today.year - self.vesting_start_date.year) * 12 + (today.month - self.vesting_start_date.month)
+        if today.day < self.vesting_start_date.day:
+            m -= 1
+        return max(0, m)
+
+    @property
+    def vested_shares(self):
+        """0 before the cliff, then graded (by vesting_frequency) up to shares_granted at the end of the
+        vesting window. The cliff gate + linear-by-event math yields the standard '25% at a 1-yr cliff'."""
+        if not self.shares_granted or not self.vesting_duration_months:
+            return 0
+        elapsed = self._months_vested
+        if elapsed < (self.cliff_months or 0):
+            return 0
+        if elapsed >= self.vesting_duration_months:
+            return self.shares_granted
+        freq = {"monthly": 1, "quarterly": 3, "annual": 12}.get(self.vesting_frequency, 1)
+        total_events = max(1, self.vesting_duration_months // freq)
+        done_events = min(elapsed // freq, total_events)
+        return int(self.shares_granted * done_events // total_events)
+
+    @property
+    def vested_percent(self):
+        if not self.shares_granted:
+            return Decimal("0")
+        return (Decimal(self.vested_shares) / self.shares_granted * 100).quantize(Decimal("0.01"))
+
+    @property
+    def unvested_shares(self):
+        return self.shares_granted - self.vested_shares
+
+    @property
+    def exercisable_shares(self):
+        """Vested shares not yet exercised/released."""
+        return max(0, self.vested_shares - self.exercised_shares)
