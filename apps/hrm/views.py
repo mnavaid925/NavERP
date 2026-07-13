@@ -14725,7 +14725,7 @@ from .forms import (  # noqa: E402  — 3.37 Compensation & Benefits
 @login_required
 def salarybenchmark_list(request):
     qs = (SalaryBenchmark.objects.filter(tenant=request.tenant)
-          .select_related("job_grade", "designation", "currency"))
+          .select_related("job_grade", "designation"))  # currency only rendered on the detail page
     return crud_list(request, qs, "hrm/compensation/salarybenchmark/list.html",
                      search_fields=["region", "job_grade__name", "designation__name", "notes"],
                      filters=[("source", "source", False), ("job_grade", "job_grade_id", True),
@@ -14773,7 +14773,7 @@ def salarybenchmark_delete(request, pk):
 # ---- Benefit plans (admin catalog) ------------------------------------------------------------
 @login_required
 def benefitplan_list(request):
-    qs = BenefitPlan.objects.filter(tenant=request.tenant).select_related("currency")
+    qs = BenefitPlan.objects.filter(tenant=request.tenant)  # currency only rendered on the detail page
     return crud_list(request, qs, "hrm/compensation/benefitplan/list.html",
                      search_fields=["name", "provider"],
                      filters=[("plan_type", "plan_type", False), ("is_active", "is_active", False)],
@@ -14853,9 +14853,9 @@ def employeebenefitenrollment_create(request):
             obj.tenant = request.tenant
             obj.employee = target
             obj.status = "pending"
-            if obj.plan_id and obj.employee_contribution is None:
+            # Contributions are DERIVED from the plan server-side (not user-editable — employer money).
+            if obj.plan_id:
                 obj.employee_contribution = obj.plan.employee_cost_monthly
-            if obj.plan_id and obj.employer_contribution is None:
                 obj.employer_contribution = obj.plan.employer_cost_monthly
             try:
                 obj.save()
