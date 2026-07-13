@@ -7207,3 +7207,800 @@ bespoke workflow actions + inline draft-only lines. `_seed_expenses` (3 categori
 **Next: 3.35 Travel Management** (Travel Request, Booking Integration, Travel Policy, Travel Advance, Travel
 Settlement — coordinate with 3.34 Expense [settlement reuses the claim/line pattern] + the deferred mileage/per-diem
 and cash-advance items carried over from 3.34).
+
+---
+# Module 3 -- HRM -- Sub-module 3.35 Travel Management (hrm) -- plan from research-hrm-3.35.md (2026-07-13)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.34) -- no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Full CRUD sub-module: **3 new tenant-scoped models**
+(`TravelPolicy`, `TravelRequest`, `TravelBooking`, new incremental migration `0050`) -- a single-approver
+travel-request workflow + a travel advance + a "Generate Settlement" action that creates a linked
+`hrm.ExpenseClaim` (3.34). NavERP.md 3.35 bullets (verbatim, `NavERP.md:676-680`): Travel Request, Booking
+Integration, Travel Policy, Travel Advance, Travel Settlement. No parallel settlement/expense model is built --
+3.34's `ExpenseClaim`/`ExpenseClaimLine` are reused as-is for the post-travel reconciliation, per the research's
+explicit recommendation.
+
+## 0. Corrections / decisions -- read before writing code
+
+- [ ] **Prefix:** `TravelRequest.NUMBER_PREFIX = "TRV"` -- confirmed no collision against any existing HRM prefix
+  (grepped `NUMBER_PREFIX = "` in `apps/hrm/models.py`: no `"TRV"` in use; distinct from `"ASSETREQ"`/`"ECL"`/
+  `"SUG"` etc). `TravelPolicy` and `TravelBooking` are un-numbered config/child tables (like `TravelPolicy` ~
+  `ExpenseCategory`, `TravelBooking` ~ `ExpenseClaimLine`).
+- [ ] **`_hr_request_*` IS reused VERBATIM for all six lifecycle actions -- `submit`/`cancel`/`approve`/`reject`/
+  `edit`/`delete`.** Confirmed by reading `AssetRequest`/`Suggestion` (`apps/hrm/models.py:7130-7180`,
+  `:7314-7339`) and the helper bodies (`apps/hrm/views.py:11036-11134`): the generic helpers assume exactly
+  `employee` (FK), `status` (+ `OPEN_STATUSES = ("draft", "pending")`), `approver`/`approved_at`/`decision_note`,
+  and `obj.number` for the flash message. `TravelRequest` is built with that EXACT field shape (see Models below)
+  so `travelrequest_submit/_cancel/_approve/_reject/_edit/_delete` are all one-line wrappers around
+  `_hr_request_*`, same as `documentrequest_*`/`idcardrequest_*`/`assetrequest_*`/`suggestion_*`. This is the
+  opposite of 3.34's `ExpenseClaim` decision (which needed 6 bespoke `expenseclaim_*` views because of its 2-stage
+  machine) -- it confirms the research's explicit framing that 3.35 is a lean single-approver authorization, not a
+  payment-claim workflow. Zero new workflow-decision code beyond the 3 travel-specific actions below.
+- [ ] **Advance approval is a SEPARATE bespoke action (`travelrequest_approve_advance`), NOT piggybacked onto
+  `_hr_request_approve` itself -- a deliberate, documented departure from the research's "piggyback" framing.**
+  Rationale: (a) keeps `_hr_request_approve` reusable verbatim with zero override, the whole point of the
+  verbatim-reuse decision above; (b) decouples trip-authorization from advance-authorization -- not every approved
+  trip needs or requests an advance (a same-day domestic trip may have `advance_requested = None`), so forcing the
+  advance decision into the single `approve` click is actually a worse UX fit than the research assumed;
+  (c) mirrors Keka's own explicit two-step "Pending Approval -> Pending Payment" pipeline that the research cites
+  as the closest-shape precedent. `travelrequest_approve_advance` is gated on `status == "approved"` (the trip
+  itself must already be authorized via the reused `_hr_request_approve` first).
+- [ ] **Self-approval block applied proactively to ALL THREE new payout-adjacent bespoke actions**
+  (`travelrequest_approve_advance`, `travelrequest_mark_advance_paid`, `travelrequest_generate_settlement`) from
+  the start, via `_is_own_hr_request`. This directly incorporates 3.34's own `security-reviewer` finding
+  (`expenseclaim_reimburse` initially lacked the `_is_own_hr_request` self-block its three sibling actions had,
+  added as a Medium-severity fix) -- do not reintroduce that gap here.
+- [ ] **`net_settlement` sign convention -- CORRECTING an inversion in the research doc.** The research text says
+  "positive = recoverable from employee, negative = payable to employee" for
+  `total_amount - (advance_approved or 0)` -- that is backwards. Build and document the CORRECT convention:
+  `net_settlement = settlement_claim.total_amount - (advance_approved or 0)`; **POSITIVE** => amount **payable TO
+  the employee** (actual expenses exceeded the advance, the company owes the difference); **NEGATIVE** => amount
+  **recoverable FROM the employee** (the advance exceeded actual expenses, the employee owes the difference back).
+  `None` if `settlement_claim_id` is not set yet. Label the detail-page settlement panel using this corrected
+  convention (e.g. a positive value badge says "Payable to employee", a negative one "Recoverable from employee").
+- [ ] **`TravelBooking.out_of_policy` -- exact comparison, both branches None-guarded, mirrors
+  `ExpenseClaimLine.policy_violation`'s compute-don't-store convention via a private `_policy_check()`:**
+  no violation at all if `travel_request.policy_id` is not set. Flight-class check: only when
+  `booking_type == "flight"` and both `travel_class` and `policy.travel_class` are set -- rank the 4 classes
+  `{"economy": 0, "premium_economy": 1, "business": 2, "first": 3}` (module-level `_TRAVEL_CLASS_RANK` dict, an
+  internal ordering only, never stored/displayed) and flag when the booked rank is higher than the policy's
+  allowed rank. Hotel-cost check: only when `booking_type == "hotel"`, `cost` is not `None`, and
+  `policy.hotel_limit_per_night` is not `None` -- compute `nights = (return_date - depart_date).days` when both
+  dates are set and `return_date > depart_date`, else treat the whole `cost` as a single night (documented
+  fallback, no exception raised); flag when `cost / nights > policy.hotel_limit_per_night`. Both checks return
+  `(bool, reason_text)`; exposed as `out_of_policy` / `out_of_policy_reason` properties (reason joins any flagged
+  messages with `"; "`, same join convention as `ExpenseClaimLine.violation_reason`).
+- [ ] **`TravelPolicy` resolution stays a plain admin/employee-picked dropdown -- no auto-match-by-grade engine
+  this pass.** `TravelRequestForm.policy` is a `ModelChoiceField` scoped to `is_active=True` policies for the
+  tenant (same `__init__` queryset-narrowing pattern as `AssetForm.currency`, `apps/hrm/forms.py:1929-1931`); the
+  employee or admin chooses the applicable policy manually. A grade+trip_type auto-suggest helper is a clean
+  future enhancement (the data for it -- `EmployeeProfile.designation.job_grade` -- already exists) but is not
+  built this pass, per the research's "Buildable now" (manual only) framing for policy scoping.
+- [ ] **Migration:** `python manage.py makemigrations hrm` after these 3 models -> `0050_travelpolicy_travelrequest_travelbooking...py`
+  (Django auto-names; `0049` was 3.34's).
+- [ ] **Booking document upload reuses `ALLOWED_ONBOARDING_DOC_EXTENSIONS`/`MAX_ONBOARDING_DOC_BYTES` verbatim**
+  via `_validate_upload(..., label="Booking Document")` -- same allowlist/size-cap precedent as `ExpenseClaimLine.
+  receipt`, `EmployeeDocument.file`, `InvestmentProof`. No new constants.
+
+## 1. Models (apps/hrm/models.py -- append after `ExpenseClaimLine`; new migration `0050`)
+
+- [ ] **`TravelPolicy(TenantOwned)`** -- config master (Travel Policy bullet), no numbering, like
+  `ExpenseCategory`/`LeaveType`.
+  ```python
+  class TravelPolicy(TenantOwned):
+      """3.35 travel-policy catalog: class-of-travel + daily/hotel/advance caps, optionally scoped to a
+      job grade and a domestic/international/both trip scope. These limits DRIVE
+      TravelBooking.out_of_policy (class + hotel-per-night) and cap TravelRequest advance approval
+      (advance_percent_limit). A blank job_grade means "applies to all grades"."""
+
+      SCOPE_CHOICES = [
+          ("domestic", "Domestic"),
+          ("international", "International"),
+          ("both", "Both"),
+      ]
+      TRAVEL_CLASS_CHOICES = [
+          ("economy", "Economy"),
+          ("premium_economy", "Premium Economy"),
+          ("business", "Business"),
+          ("first", "First"),
+      ]
+
+      name = models.CharField(max_length=100)
+      job_grade = models.ForeignKey("hrm.JobGrade", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="travel_policies", help_text="Blank = applies to all grades.")
+      trip_type = models.CharField(max_length=15, choices=SCOPE_CHOICES, default="both")
+      travel_class = models.CharField(max_length=20, choices=TRAVEL_CLASS_CHOICES, default="economy")
+      daily_allowance_limit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+          help_text="Per-diem cap. A static number this pass -- not an auto-calc engine.")
+      hotel_limit_per_night = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      advance_percent_limit = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+          help_text="Max advance as a percent of estimated cost, e.g. 80.00 = max 80%.")
+      is_active = models.BooleanField(default=True)
+
+      class Meta:
+          ordering = ["name"]
+          unique_together = ("tenant", "name")
+          indexes = [models.Index(fields=["tenant", "is_active"], name="hrm_travelpol_tnt_active_idx")]
+
+      def __str__(self):
+          return f"{self.name} ({self.get_travel_class_display()})"
+  ```
+  Drivers: policy-by-grade (3.35.3, Navan/ITILITE/Ramp-template research), allowed travel class (Concur/Keka),
+  domestic/international/both scope, daily allowance + hotel-per-night caps (Rydoo/Zoho per-diem precedent,
+  static cap only), advance percent cap (universal advance-ceiling pattern). Reuses `hrm.JobGrade` -- adds no new
+  spine entity.
+- [ ] **`TravelRequest(TenantNumbered)`** -- `NUMBER_PREFIX = "TRV"`. The trip header + single-approver workflow
+  + advance (Travel Request + Travel Advance bullets). Field shape matches `AssetRequest`/`Suggestion` exactly so
+  `_hr_request_*` applies verbatim (see Section 0).
+  ```python
+  class TravelRequest(TenantNumbered):
+      """3.35 trip authorization + travel-advance header. Lean single-approver machine
+      (draft -> pending -> approved/rejected/cancelled, then approved -> completed) -- reuses
+      _hr_request_submit/_cancel/_approve/_reject/_edit/_delete VERBATIM (see module docstring/Section 0).
+      Advance approval/payment and settlement generation are separate bespoke actions layered on top of
+      an approved trip (travelrequest_approve_advance / _mark_advance_paid / _generate_settlement /
+      _complete). net_settlement is a computed, never-stored property -- see Section 0 for the sign
+      convention."""
+
+      NUMBER_PREFIX = "TRV"
+
+      TRIP_TYPE_CHOICES = [
+          ("domestic", "Domestic"),
+          ("international", "International"),
+      ]
+      STATUS_CHOICES = [
+          ("draft", "Draft"),
+          ("pending", "Pending"),
+          ("approved", "Approved"),
+          ("rejected", "Rejected"),
+          ("cancelled", "Cancelled"),
+          ("completed", "Completed"),
+      ]
+      OPEN_STATUSES = ("draft", "pending")  # required by _hr_request_edit/_delete/_cancel
+
+      employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="travel_requests")
+      title = models.CharField(max_length=255)
+      trip_type = models.CharField(max_length=15, choices=TRIP_TYPE_CHOICES, default="domestic")
+      origin = models.CharField(max_length=255)
+      destination = models.CharField(max_length=255)
+      purpose = models.TextField()
+      start_date = models.DateField()
+      end_date = models.DateField()
+      policy = models.ForeignKey("hrm.TravelPolicy", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="travel_requests")
+      estimated_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_travel_requests")
+      status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+      approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_travelrequest_approvals")
+      approved_at = models.DateTimeField(null=True, blank=True)
+      decision_note = models.TextField(blank=True)
+      advance_requested = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      advance_approved = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      advance_paid_at = models.DateTimeField(null=True, blank=True)
+      advance_reference = models.CharField(max_length=100, blank=True)
+      settlement_claim = models.ForeignKey("hrm.ExpenseClaim", on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name="travel_settlements")
+
+      class Meta:
+          ordering = ["-created_at"]
+          unique_together = ("tenant", "number")
+          indexes = [
+              models.Index(fields=["tenant", "employee", "status"], name="hrm_travelreq_emp_status_idx"),
+              models.Index(fields=["tenant", "status"], name="hrm_travelreq_tnt_status_idx"),
+          ]
+
+      def __str__(self):
+          return f"{self.number} - {self.destination}" if self.number else f"{self.origin} to {self.destination}"
+
+      @property
+      def net_settlement(self):
+          """total_amount - (advance_approved or 0); None until a settlement exists. POSITIVE = payable
+          to the employee; NEGATIVE = recoverable from the employee (see Section 0 -- this corrects an
+          inverted sign description in the research doc)."""
+          if not self.settlement_claim_id:
+              return None
+          return self.settlement_claim.total_amount - (self.advance_approved or Decimal("0"))
+  ```
+  Drivers: trip header + domestic/international + pre-trip single-approver authorization + self-approval block
+  (Travel Request bullet, all 10 leaders) + trip-completion terminal state (Keka/Zoho/Happay) + advance ask/
+  approve/pay tracking (Travel Advance bullet -- Zoho auto-suggest-from-estimate, Happay approval-gated
+  disbursement, Keka's Pending Approval -> Pending Payment pipeline) + settlement link/net computation (Travel
+  Settlement bullet -- universal advance-vs-actual reconciliation). Reuses `hrm.EmployeeProfile`,
+  `hrm.TravelPolicy`, `accounting.Currency`, `hrm.ExpenseClaim` (settlement, 3.34), the `_hr_request_*` helpers,
+  `_is_own_hr_request`. Adds no new spine entity beyond the request/booking tables themselves.
+- [ ] **`TravelBooking(TenantOwned)`** -- child rows per trip (Booking Integration bullet), like
+  `ExpenseClaimLine`.
+  ```python
+  class TravelBooking(TenantOwned):
+      """One recorded booking (flight/hotel/cab/rail/other) against a TravelRequest. Record-keeping
+      only -- entered after the fact, no live GDS/OTA search or purchase this pass.
+      out_of_policy/out_of_policy_reason are COMPUTED (never stored) -- always current, mirrors
+      ExpenseClaimLine.policy_violation. Editable only while the parent trip is draft/pending
+      (enforced in the views, not here -- a model-level lock would fight admin data-fixes)."""
+
+      BOOKING_TYPE_CHOICES = [
+          ("flight", "Flight"),
+          ("hotel", "Hotel"),
+          ("cab", "Cab"),
+          ("rail", "Rail"),
+          ("other", "Other"),
+      ]
+
+      travel_request = models.ForeignKey("hrm.TravelRequest", on_delete=models.CASCADE, related_name="bookings")
+      booking_type = models.CharField(max_length=10, choices=BOOKING_TYPE_CHOICES, default="flight")
+      vendor = models.CharField(max_length=255)
+      reference = models.CharField(max_length=100, blank=True, help_text="PNR / confirmation number.")
+      depart_date = models.DateField(null=True, blank=True)
+      return_date = models.DateField(null=True, blank=True, help_text="Check-out / drop-off date.")
+      travel_class = models.CharField(max_length=20, choices=TravelPolicy.TRAVEL_CLASS_CHOICES, blank=True)
+      cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+      # WARNING: extension allowlist + size cap enforced in TravelBookingForm.clean_document (shared
+      # _validate_upload, ALLOWED_ONBOARDING_DOC_EXTENSIONS/MAX_ONBOARDING_DOC_BYTES). Keep MEDIA_ROOT
+      # outside the web root and serve with Content-Disposition: attachment + X-Content-Type-Options:
+      # nosniff in production (mirrors ExpenseClaimLine.receipt / InvestmentProof).
+      document = models.FileField(upload_to="hrm/travel_docs/%Y/%m/", null=True, blank=True)
+      notes = models.TextField(blank=True)
+
+      class Meta:
+          ordering = ["depart_date", "id"]
+          indexes = [models.Index(fields=["tenant", "travel_request"], name="hrm_travelbk_tnt_req_idx")]
+
+      def __str__(self):
+          trip = self.travel_request.number if self.travel_request_id else "?"
+          return f"{trip} - {self.get_booking_type_display()} - {self.vendor}"
+
+      def _policy_check(self):
+          """(violation: bool, reason: str) -- both branches None-guarded so a trip with no policy, or a
+          booking missing the relevant fields, never flags. Exact comparisons (Section 0):
+            * flight: _TRAVEL_CLASS_RANK[travel_class] > _TRAVEL_CLASS_RANK[policy.travel_class]
+            * hotel: (cost / nights_between(depart_date, return_date) or cost) > policy.hotel_limit_per_night
+          """
+          if not self.travel_request_id or not self.travel_request.policy_id:
+              return False, ""
+          policy = self.travel_request.policy
+          reasons = []
+          if self.booking_type == "flight" and self.travel_class and policy.travel_class:
+              if _TRAVEL_CLASS_RANK.get(self.travel_class, 0) > _TRAVEL_CLASS_RANK.get(policy.travel_class, 0):
+                  reasons.append(f"Class {self.get_travel_class_display()} exceeds the policy limit of "
+                                 f"{policy.get_travel_class_display()}")
+          if self.booking_type == "hotel" and self.cost is not None and policy.hotel_limit_per_night is not None:
+              nights = 1
+              if self.depart_date and self.return_date and self.return_date > self.depart_date:
+                  nights = (self.return_date - self.depart_date).days
+              per_night = self.cost / nights
+              if per_night > policy.hotel_limit_per_night:
+                  reasons.append(f"Hotel cost {per_night}/night exceeds the policy limit of "
+                                 f"{policy.hotel_limit_per_night}/night")
+          return bool(reasons), "; ".join(reasons)
+
+      @property
+      def out_of_policy(self):
+          return self._policy_check()[0]
+
+      @property
+      def out_of_policy_reason(self):
+          return self._policy_check()[1]
+  ```
+  Module-level constant (defined once, right before `class TravelPolicy`, used only by `TravelBooking._policy_check`):
+  `_TRAVEL_CLASS_RANK = {"economy": 0, "premium_economy": 1, "business": 2, "first": 3}`.
+  Drivers: one row per flight/hotel/cab/rail/other booking with vendor + PNR/reference + dates + class + cost
+  (Booking Integration bullet, Keka Travel Desk / Happay single booking-recording flow) + in/out-of-policy flag
+  (Concur's caution icon, ITILITE real-time compliance) + attached confirmation document (mirrors the 3.34 receipt
+  pattern). Reuses `_validate_upload` -- adds no new spine entity.
+
+## 2. Views (apps/hrm/views.py -- append `# --- 3.35 Travel Management ---` banner after the 3.34 block)
+
+- [ ] **`TravelPolicy` CRUD** -- list `@login_required` (read access for everyone, mirrors `ExpenseCategory`/
+  `LeaveType`); create/edit/delete `@tenant_admin_required` (config master):
+  - `travelpolicy_list(request)` -- `crud_list(request, TravelPolicy.objects.filter(tenant=request.tenant)
+    .select_related("job_grade"), "hrm/travel/travelpolicy/list.html", search_fields=["name"],
+    filters=[("is_active", "is_active", False), ("job_grade", "job_grade_id", True)],
+    extra_context={"job_grades": JobGrade.objects.filter(tenant=request.tenant, is_active=True)
+    .order_by("level_order", "name")})`.
+  - `travelpolicy_create(request)` -- `@tenant_admin_required`. `crud_create(request,
+    form_class=TravelPolicyForm, template="hrm/travel/travelpolicy/form.html",
+    success_url="hrm:travelpolicy_list")`.
+  - `travelpolicy_detail(request, pk)` -- `@login_required`. `crud_detail(request, model=TravelPolicy, pk=pk,
+    template="hrm/travel/travelpolicy/detail.html", extra_context={"request_count":
+    TravelRequest.objects.filter(tenant=request.tenant, policy_id=pk).count()})`.
+  - `travelpolicy_edit(request, pk)` -- `@tenant_admin_required`. `crud_edit(request, model=TravelPolicy, pk=pk,
+    form_class=TravelPolicyForm, template="hrm/travel/travelpolicy/form.html",
+    success_url="hrm:travelpolicy_list")`.
+  - `travelpolicy_delete(request, pk)` -- `@tenant_admin_required` `@require_POST`. Guard: `if
+    TravelRequest.objects.filter(tenant=request.tenant, policy_id=pk).exists(): messages.error(request, "This
+    policy is used by existing travel requests and can't be deleted."); return redirect("hrm:travelpolicy_detail",
+    pk=pk)` -- else `crud_delete(request, model=TravelPolicy, pk=pk, success_url="hrm:travelpolicy_list")`.
+- [ ] **`TravelRequest` CRUD** (`@login_required` throughout; own-vs-admin scoping via `_ss_scope`/
+  `_can_manage_own_child`, identical convention to 3.34):
+  - `travelrequest_list(request)` -- `qs = _ss_scope(request, TravelRequest.objects.filter(tenant=request.tenant)
+    .select_related("employee__party", "policy", "currency", "approver", "settlement_claim")
+    .prefetch_related("bookings"))`. `is_admin = _is_admin(request.user)`. `crud_list(request, qs,
+    "hrm/travel/travelrequest/list.html", search_fields=["number", "title", "origin", "destination"],
+    filters=[("status", "status", False), ("trip_type", "trip_type", False), ("employee", "employee_id",
+    is_admin)], extra_context={"status_choices": TravelRequest.STATUS_CHOICES, "trip_type_choices":
+    TravelRequest.TRIP_TYPE_CHOICES, "is_admin": is_admin, "employees": _ss_employees(request) if is_admin else
+    None})`.
+  - `travelrequest_create(request)` -- `return _ss_child_create(request, TravelRequestForm,
+    "hrm/travel/travelrequest/form.html", "hrm:travelrequest_list")` (reused verbatim, identical to
+    `expenseclaim_create`/`assetrequest_create`).
+  - `travelrequest_detail(request, pk)` -- bespoke (extra bookings/advance/settlement context):
+    ```python
+    obj = get_object_or_404(
+        TravelRequest.objects.select_related("employee__party", "policy", "currency", "approver",
+                                              "settlement_claim").prefetch_related("bookings"),
+        pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This trip belongs to another employee.")
+    ```
+    context: `obj`, `bookings=obj.bookings.all()` (already prefetched), `is_admin=_is_admin(request.user)`,
+    `is_own=_is_own_hr_request(request, obj)`, `booking_form=TravelBookingForm(tenant=request.tenant) if
+    obj.status in TravelRequest.OPEN_STATUSES else None`, `booking_type_choices=
+    TravelBooking.BOOKING_TYPE_CHOICES`, `net_settlement=obj.net_settlement`. Render
+    `hrm/travel/travelrequest/detail.html`.
+  - `travelrequest_edit(request, pk)` -- `return _hr_request_edit(request, TravelRequest, pk, TravelRequestForm,
+    "hrm/travel/travelrequest/form.html", "hrm:travelrequest_detail")` (reused verbatim -- `OPEN_STATUSES` matches
+    exactly, no bespoke status check needed unlike 3.34's `ExpenseClaim`, which is stricter than its own
+    `OPEN_STATUSES`).
+  - `travelrequest_delete(request, pk)` -- `@require_POST`. `return _hr_request_delete(request, TravelRequest, pk,
+    "hrm:travelrequest_list")` (reused verbatim).
+- [ ] **`TravelRequest` lifecycle actions -- reused verbatim, all `@require_POST`:**
+  - `travelrequest_submit(request, pk)` -- `@login_required`. `return _hr_request_submit(request, TravelRequest,
+    pk, "hrm:travelrequest_detail")`.
+  - `travelrequest_cancel(request, pk)` -- `@login_required`. `return _hr_request_cancel(request, TravelRequest,
+    pk, "hrm:travelrequest_detail")`.
+  - `travelrequest_approve(request, pk)` -- `@tenant_admin_required`. `return _hr_request_approve(request,
+    TravelRequest, pk, "hrm:travelrequest_detail")` (self-approval blocked by the helper itself).
+  - `travelrequest_reject(request, pk)` -- `@tenant_admin_required`. `return _hr_request_reject(request,
+    TravelRequest, pk, "hrm:travelrequest_detail")` (requires `decision_note`, self-approval blocked).
+- [ ] **`TravelRequest` travel-specific bespoke actions -- all `@require_POST`, redirect to
+  `hrm:travelrequest_detail` (except generate-settlement, which redirects to the new claim):**
+  - `travelrequest_approve_advance(request, pk)` -- `@tenant_admin_required`.
+    `obj = get_object_or_404(TravelRequest, pk=pk, tenant=request.tenant)`.
+    `if _is_own_hr_request(request, obj)`: error "You can't approve your own travel advance -- another admin must
+    review it." `elif obj.status != "approved"`: error "The trip must be approved before its advance can be
+    authorized." Else parse `amount = request.POST.get("advance_approved", "").strip()` as `Decimal` (invalid ->
+    error "Enter a valid advance amount."); `if amount < 0`: error "Amount must be zero or greater."; `elif
+    obj.advance_requested is not None and amount > obj.advance_requested`: error f"Cannot approve more than the
+    requested advance of {obj.advance_requested}."; `elif` (policy cap, only when both are set)
+    `obj.policy_id and obj.policy.advance_percent_limit is not None and obj.estimated_cost is not None and amount
+    > (obj.policy.advance_percent_limit / Decimal("100")) * obj.estimated_cost`: error f"Cannot exceed the policy
+    cap of {cap} ({obj.policy.advance_percent_limit}% of the estimated cost)."; else `obj.advance_approved =
+    amount`, `obj.save(update_fields=["advance_approved", "updated_at"])`, `write_audit_log(request.user, obj,
+    "update", {"action": "approve_advance"})`, success message.
+  - `travelrequest_mark_advance_paid(request, pk)` -- `@tenant_admin_required`.
+    `if _is_own_hr_request(request, obj)`: error (self-block, Section 0). `elif obj.advance_approved is None or
+    obj.advance_approved <= 0`: error "No approved advance to disburse." `elif obj.advance_paid_at`: error "The
+    advance has already been marked as paid." (idempotency guard). Else `obj.advance_paid_at = timezone.now()`,
+    `obj.advance_reference = request.POST.get("advance_reference", "").strip()[:100]`,
+    `save(update_fields=["advance_paid_at", "advance_reference", "updated_at"])`,
+    `write_audit_log(..., {"action": "mark_advance_paid"})`, success message.
+  - `travelrequest_generate_settlement(request, pk)` -- `@login_required` (own-or-admin via
+    `_can_manage_own_child`, mirrors trip-owner self-service): `obj = get_object_or_404(TravelRequest, pk=pk,
+    tenant=request.tenant)`. `if not _can_manage_own_child(request, obj)`: error "You can only generate a
+    settlement for your own trip." `elif _is_own_hr_request(request, obj) and _is_admin(request.user) and
+    obj.status not in ("approved", "completed")`: falls through to the next check anyway (ownership already
+    covers self-service, no extra self-block needed here -- generating one's OWN settlement claim is the intended
+    self-service flow, unlike approving one's own advance). `elif obj.status not in ("approved", "completed")`:
+    error "Generate a settlement only after the trip is approved." `elif obj.settlement_claim_id`: error "A
+    settlement has already been generated for this trip." (idempotency guard -- can't double-generate). Else:
+    ```python
+    claim = ExpenseClaim.objects.create(
+        tenant=request.tenant, employee=obj.employee,
+        title=f"Travel settlement - {obj.destination}", purpose=obj.purpose,
+        period_start=obj.start_date, period_end=obj.end_date, currency=obj.currency, status="draft")
+    obj.settlement_claim = claim
+    obj.save(update_fields=["settlement_claim", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "generate_settlement", "claim": claim.number})
+    messages.success(request, f"Settlement {claim.number} created. Add expense lines and submit it for approval.")
+    return redirect("hrm:expenseclaim_detail", pk=claim.pk)
+    ```
+  - `travelrequest_complete(request, pk)` -- `@login_required` (own-or-admin via `_can_manage_own_child`).
+    `if not _can_manage_own_child(request, obj)`: error. `elif obj.status != "approved"`: error "Only an approved
+    trip can be marked completed." Else `obj.status = "completed"`, `save(update_fields=["status",
+    "updated_at"])`, `write_audit_log(..., {"action": "complete"})`, success message.
+- [ ] **`TravelBooking` inline CRUD** (editable only while the parent trip is `draft`/`pending`):
+  - `travelbooking_add(request, travel_request_pk)` -- `@login_required` `@require_POST`.
+    `trip = get_object_or_404(TravelRequest, pk=travel_request_pk, tenant=request.tenant)`; ownership via
+    `_can_manage_own_child(request, trip)`; `if trip.status not in TravelRequest.OPEN_STATUSES`: error "Bookings
+    can only be added while the trip is draft or pending." Else `form = TravelBookingForm(request.POST,
+    request.FILES, instance=TravelBooking(tenant=request.tenant, travel_request=trip), tenant=request.tenant)`
+    (multipart -- `request.FILES` for `document`); valid -> `form.save()`, `write_audit_log(request.user, trip,
+    "update", {"action": "booking_add"})`; invalid -> flash the field errors. Always redirect
+    `hrm:travelrequest_detail`, pk=trip.pk`.
+  - `travelbooking_edit(request, pk)` -- `@login_required`. `booking =
+    get_object_or_404(TravelBooking.objects.select_related("travel_request"), pk=pk, tenant=request.tenant)`;
+    ownership via `_can_manage_own_child(request, booking.travel_request)`; `if booking.travel_request.status not
+    in TravelRequest.OPEN_STATUSES`: error "Bookings can only be edited while the trip is draft or pending." GET
+    renders `hrm/travel/travelbooking/form.html` (`form`, `obj=booking`, `travel_request=booking.travel_request`,
+    `is_edit=True`); valid multipart POST saves + redirects to `hrm:travelrequest_detail`.
+  - `travelbooking_delete(request, pk)` -- `@login_required` `@require_POST`. Same ownership + open-status guard,
+    then `booking.delete()`, `write_audit_log(request.user, booking.travel_request, "update", {"action":
+    "booking_delete"})`, redirect to `hrm:travelrequest_detail`.
+- [ ] Every list view tenant-scoped; every list follows the Filter Implementation Rules (`status_choices`/
+  `trip_type_choices`/`employees` explicitly passed; FK filters `|stringformat:"d"` in templates).
+
+## 3. Forms (apps/hrm/forms.py -- append)
+
+- [ ] `TravelPolicyForm(TenantModelForm)`:
+  ```python
+  class TravelPolicyForm(TenantModelForm):
+      class Meta:
+          model = TravelPolicy
+          fields = ["name", "job_grade", "trip_type", "travel_class", "daily_allowance_limit",
+                    "hotel_limit_per_night", "advance_percent_limit", "is_active"]
+
+      def __init__(self, *args, **kwargs):
+          super().__init__(*args, **kwargs)
+          if self.tenant is not None and "job_grade" in self.fields:
+              self.fields["job_grade"].queryset = (
+                  JobGrade.objects.filter(tenant=self.tenant, is_active=True).order_by("level_order", "name"))
+
+      def clean(self):
+          cleaned = super().clean()
+          for f in ("daily_allowance_limit", "hotel_limit_per_night"):
+              v = cleaned.get(f)
+              if v is not None and v < 0:
+                  self.add_error(f, "Must be zero or greater.")
+          pct = cleaned.get("advance_percent_limit")
+          if pct is not None and not (0 <= pct <= 100):
+              self.add_error("advance_percent_limit", "Must be between 0 and 100.")
+          return cleaned
+  ```
+- [ ] `TravelRequestForm(TenantModelForm)` -- workflow fields (status/approver/approved_at/decision_note/
+  advance_approved/advance_paid_at/advance_reference/settlement_claim) excluded -- all workflow-set, not
+  user-editable; `advance_requested` IS included (the employee's own ask); `employee` resolved server-side by
+  `_ss_child_create`/`_ss_child_edit`, not on the form:
+  ```python
+  class TravelRequestForm(TenantModelForm):
+      class Meta:
+          model = TravelRequest
+          fields = ["title", "trip_type", "origin", "destination", "purpose", "start_date", "end_date",
+                    "policy", "estimated_cost", "currency", "advance_requested"]
+          widgets = {"purpose": forms.Textarea(attrs={"rows": 3})}
+
+      def __init__(self, *args, **kwargs):
+          super().__init__(*args, **kwargs)
+          if self.tenant is not None and "policy" in self.fields:
+              self.fields["policy"].queryset = (
+                  TravelPolicy.objects.filter(tenant=self.tenant, is_active=True).order_by("name"))
+          if self.tenant is not None and "currency" in self.fields:
+              from apps.accounting.models import Currency
+              self.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
+
+      def clean(self):
+          cleaned = super().clean()
+          start, end = cleaned.get("start_date"), cleaned.get("end_date")
+          if start and end and end < start:
+              self.add_error("end_date", "End date cannot be before start date.")
+          cost = cleaned.get("estimated_cost")
+          if cost is not None and cost < 0:
+              self.add_error("estimated_cost", "Must be zero or greater.")
+          advance = cleaned.get("advance_requested")
+          if advance is not None:
+              if advance < 0:
+                  self.add_error("advance_requested", "Must be zero or greater.")
+              elif cost is not None and advance > cost:
+                  self.add_error("advance_requested", "Cannot request an advance larger than the estimated cost.")
+          return cleaned
+  ```
+  (`advance_requested <= estimated_cost` is a HARD validation error here -- a plain input-sanity bound on the
+  employee's own numbers, not a policy soft-flag like `ExpenseClaimLine.policy_violation`, so `add_error` is
+  correct rather than a computed warn-only property.)
+- [ ] `TravelBookingForm(TenantModelForm)` -- multipart (`document`), `travel_request`/`tenant` excluded (set by
+  the view, mirrors `ExpenseClaimLineForm`):
+  ```python
+  class TravelBookingForm(TenantModelForm):
+      class Meta:
+          model = TravelBooking
+          fields = ["booking_type", "vendor", "reference", "depart_date", "return_date", "travel_class",
+                    "cost", "document", "notes"]
+          widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+      def clean(self):
+          cleaned = super().clean()
+          depart, ret = cleaned.get("depart_date"), cleaned.get("return_date")
+          if depart and ret and ret < depart:
+              self.add_error("return_date", "Return/check-out date cannot be before the depart/check-in date.")
+          cost = cleaned.get("cost")
+          if cost is not None and cost < 0:
+              self.add_error("cost", "Must be zero or greater.")
+          return cleaned
+
+      def clean_document(self):
+          return _validate_upload(self.cleaned_data.get("document"),
+                                  allowed_ext=ALLOWED_ONBOARDING_DOC_EXTENSIONS,
+                                  max_bytes=MAX_ONBOARDING_DOC_BYTES, label="Booking Document")
+  ```
+
+## 4. URLs (apps/hrm/urls.py -- append after the 3.34 block, before the closing `]`)
+
+- [ ] New `# 3.35 Travel Management` comment block:
+  ```python
+  # 3.35 Travel Management
+  path("travel-policies/", views.travelpolicy_list, name="travelpolicy_list"),
+  path("travel-policies/add/", views.travelpolicy_create, name="travelpolicy_create"),
+  path("travel-policies/<int:pk>/", views.travelpolicy_detail, name="travelpolicy_detail"),
+  path("travel-policies/<int:pk>/edit/", views.travelpolicy_edit, name="travelpolicy_edit"),
+  path("travel-policies/<int:pk>/delete/", views.travelpolicy_delete, name="travelpolicy_delete"),
+  path("travel-requests/", views.travelrequest_list, name="travelrequest_list"),
+  path("travel-requests/add/", views.travelrequest_create, name="travelrequest_create"),
+  path("travel-requests/<int:pk>/", views.travelrequest_detail, name="travelrequest_detail"),
+  path("travel-requests/<int:pk>/edit/", views.travelrequest_edit, name="travelrequest_edit"),
+  path("travel-requests/<int:pk>/delete/", views.travelrequest_delete, name="travelrequest_delete"),
+  path("travel-requests/<int:pk>/submit/", views.travelrequest_submit, name="travelrequest_submit"),
+  path("travel-requests/<int:pk>/approve/", views.travelrequest_approve, name="travelrequest_approve"),
+  path("travel-requests/<int:pk>/reject/", views.travelrequest_reject, name="travelrequest_reject"),
+  path("travel-requests/<int:pk>/cancel/", views.travelrequest_cancel, name="travelrequest_cancel"),
+  path("travel-requests/<int:pk>/approve-advance/", views.travelrequest_approve_advance,
+       name="travelrequest_approve_advance"),
+  path("travel-requests/<int:pk>/mark-advance-paid/", views.travelrequest_mark_advance_paid,
+       name="travelrequest_mark_advance_paid"),
+  path("travel-requests/<int:pk>/generate-settlement/", views.travelrequest_generate_settlement,
+       name="travelrequest_generate_settlement"),
+  path("travel-requests/<int:pk>/complete/", views.travelrequest_complete, name="travelrequest_complete"),
+  path("travel-requests/<int:travel_request_pk>/bookings/add/", views.travelbooking_add,
+       name="travelbooking_add"),
+  path("travel-bookings/<int:pk>/edit/", views.travelbooking_edit, name="travelbooking_edit"),
+  path("travel-bookings/<int:pk>/delete/", views.travelbooking_delete, name="travelbooking_delete"),
+  ```
+- [ ] Confirm no path/name collision against any existing block (`travel-` prefix is new to `apps/hrm/urls.py`).
+
+## 5. Navigation -- apps/core/navigation.py
+
+- [ ] New `LIVE_LINKS["3.35"]` block (insert after `"3.34"`), bullet text verbatim from `NavERP.md:676-680`,
+  mapping decisions (mirrors 3.34's deep-link-to-filtered-slice precedent):
+  ```python
+  # 3.35 Travel Management -- 3 new models (TravelPolicy, TravelRequest, TravelBooking); settlement reuses
+  # hrm.ExpenseClaim (3.34). Booking Integration has no standalone page -- bookings are inline rows under a
+  # trip, so it deep-links to the same request list. Travel Advance deep-links to "approved" (the slice where
+  # advance approve/pay actions are actionable); Travel Settlement to "completed" (the closed-loop slice
+  # where a settlement has typically been generated) -- both are one status-dropdown click from the full list.
+  "3.35": {
+      "Travel Request": "hrm:travelrequest_list",
+      "Booking Integration": "hrm:travelrequest_list",
+      "Travel Policy": "hrm:travelpolicy_list",
+      "Travel Advance": "hrm:travelrequest_list?status=approved",
+      "Travel Settlement": "hrm:travelrequest_list?status=completed",
+  },
+  ```
+
+## 6. Seeder (apps/hrm/management/commands/seed_hrm.py -- extend, idempotent)
+
+- [ ] New `_seed_travel(self, tenant, *, flush)`, called from `handle()` **after** `self._seed_expenses(tenant,
+  flush=options["flush"])` (currently the last call, 3.34) -- append `self._seed_travel(tenant,
+  flush=options["flush"])` as the new final line of the `for tenant in tenants:` loop.
+  - Guard: `if flush: TravelRequest.objects.filter(tenant=tenant).delete()` (cascades `TravelBooking`);
+    `TravelPolicy.objects.filter(tenant=tenant).delete()`. `if TravelPolicy.objects.filter(tenant=tenant)
+    .exists():` print the standard "already exists, use --flush" warning and `return`.
+  - `emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:3])`;
+    guard `if not emps: return`. `actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()`;
+    `usd = Currency.objects.filter(code="USD").first()`; `top_grade =
+    JobGrade.objects.filter(tenant=tenant).order_by("-level_order").first()` (may be `None`).
+  - **2 policies**, each via `TravelPolicy.objects.get_or_create(tenant=tenant, name=..., defaults={...})`:
+    1. `"Standard Domestic"` -- `job_grade=None` (all grades), `trip_type="domestic"`, `travel_class="economy"`,
+       `daily_allowance_limit=50.00`, `hotel_limit_per_night=120.00`, `advance_percent_limit=70.00`.
+    2. `"Executive International"` -- `job_grade=top_grade`, `trip_type="international"`,
+       `travel_class="business"`, `daily_allowance_limit=150.00`, `hotel_limit_per_night=300.00`,
+       `advance_percent_limit=80.00`.
+  - **4 requests spanning the states**, each via `TravelRequest.objects.get_or_create(tenant=tenant,
+    employee=..., title=..., defaults={...})` (title is the natural idempotency key, per the Seed Command Rules),
+    `document` left blank on every seeded booking (no real files):
+    1. **DRAFT**, `emps[0]`, `"Client visit - Islamabad"`, `trip_type="domestic"`, `origin="Lahore"`,
+       `destination="Islamabad"`, `policy=domestic_policy`, `estimated_cost=300.00`, `currency=usd`,
+       `start_date`/`end_date` ~7/~5 days from now -- 1 booking: flight, `economy` (in policy).
+    2. **PENDING**, `emps[1 % len(emps)]`, `"Regional sales trip - Karachi"`, `trip_type="domestic"`,
+       `policy=domestic_policy`, `estimated_cost=500.00`, `advance_requested=300.00`, `status="pending"` -- 2
+       bookings: flight `business` (**out-of-policy** -- exceeds the domestic policy's `economy` cap), hotel
+       `cost=150.00` for 1 night (**out-of-policy** -- exceeds the 120.00/night cap).
+    3. **APPROVED with advance paid**, `emps[2 % len(emps)]`, `"Annual conference - Dubai"`,
+       `trip_type="international"`, `policy=intl_policy`, `estimated_cost=2000.00`, `advance_requested=1500.00`,
+       `status="approved"`, `approver=actor`, `approved_at`=~10 days ago, `advance_approved=1400.00` (<= 1500
+       requested, <= 1600 policy cap [80% of 2000]), `advance_paid_at`=~8 days ago,
+       `advance_reference="TXN-TRV-5521"` -- 2 bookings, both in policy: flight `business`, hotel
+       `cost=250.00`/night (<= 300 cap).
+    4. **COMPLETED with a generated settlement**, `emps[0]`, `"Vendor summit - Dubai"`,
+       `trip_type="international"`, `policy=intl_policy`, `estimated_cost=1200.00`, `advance_requested=800.00`,
+       `status="completed"`, `approver=actor`, `approved_at`=~20 days ago, `advance_approved=800.00`,
+       `advance_paid_at`=~18 days ago, `advance_reference="TXN-TRV-4410"` -- 1 booking: flight `business` (in
+       policy). Only `if created`: also `get_or_create` a linked `ExpenseClaim(tenant=tenant, employee=emps[0],
+       title="Travel settlement - Dubai", defaults={"purpose": obj.purpose, "period_start": obj.start_date,
+       "period_end": obj.end_date, "currency": usd, "status": "draft"})` and set `obj.settlement_claim = claim;
+       obj.save(update_fields=["settlement_claim"])` -- demonstrates the linked-settlement flow end to end.
+  - Every `TravelPolicy`/`TravelRequest` write uses `.get_or_create(...)`; `TravelBooking` rows (and the
+    settlement `ExpenseClaim`) are only created `if created` (guarded by the parent `TravelRequest`'s own
+    `get_or_create` `created` flag) so a second run never duplicates.
+  - `self.stdout.write(self.style.SUCCESS(f"Travel seeded for '{tenant.name}': {TravelPolicy.objects.filter(
+    tenant=tenant).count()} policies, {TravelRequest.objects.filter(tenant=tenant).count()} requests,
+    {TravelBooking.objects.filter(tenant=tenant).count()} bookings."))`.
+
+## 7. Templates (templates/hrm/travel/ -- sub-module folder, then entity folders per the Template Folder
+   Structure rule)
+
+- [ ] `templates/hrm/travel/travelpolicy/list.html` -- filter bar (`q` + Active/Inactive `<select>` with
+  `value="True"`/`"False"` + job-grade `<select>` FK-compared `|stringformat:"d"`), table columns Name/Job
+  Grade/Scope/Class/Daily Allowance/Hotel Limit/Advance %/Active badge/Actions (view/edit/delete). Empty-state:
+  "No travel policies yet."
+- [ ] `templates/hrm/travel/travelpolicy/form.html` -- `TravelPolicyForm` fields loop, breadcrumb Travel
+  Management > Travel Policies > New/Edit.
+- [ ] `templates/hrm/travel/travelpolicy/detail.html` -- fields grid (scope/class/limits) + `request_count` note
+  ("Used by N travel request(s)") + Actions sidebar (Edit, Delete [disabled/hidden when `request_count > 0`, with
+  a tooltip], Back to List).
+- [ ] `templates/hrm/travel/travelrequest/list.html` -- filter bar (`q` + `status` + `trip_type` dropdowns
+  always, `employee` dropdown only `{% if is_admin %}`, FK compared `|stringformat:"d"`), table columns Number/
+  Employee/Destination/Trip Type/Status badge/Dates/Estimated Cost/Actions (view always; edit/delete only `{% if
+  obj.status in "draft pending" %}` using an `{% if obj.status == "draft" or obj.status == "pending" %}` explicit
+  check, not a string-membership template filter). Status badges (exact `STATUS_CHOICES` values, `{% else %}`
+  fallback to `get_status_display`): `draft`, `pending`, `approved`, `rejected`, `cancelled`, `completed` --
+  **grep `static/css/theme.css` first (L33 -- mandatory) and pick from the real `badge-green/red/amber/info/
+  muted/slate` palette**, do not invent new badge classes. Empty-state: "No travel requests yet."
+- [ ] `templates/hrm/travel/travelrequest/form.html` -- `TravelRequestForm` fields loop; `{% if is_admin and
+  employees %}` an employee `<select>` (mirrors the 3.26/3.34 `target_employee`/`employees` context contract);
+  breadcrumb Travel Management > Travel Requests > New/Edit.
+- [ ] `templates/hrm/travel/travelrequest/detail.html` -- header (title, number, status badge, trip_type,
+  employee, origin -> destination, dates, estimated_cost); **bookings table** (booking_type/vendor/reference/
+  dates/travel_class/cost/out-of-policy badge [`{% if b.out_of_policy %}badge-amber "Out of Policy"
+  title="{{ b.out_of_policy_reason }}"{% endif %}`]/Actions [edit/delete, only `{% if obj.status in ... %}`]);
+  **add-booking panel** (`booking_form`, POSTs to `travelbooking_add`, `enctype="multipart/form-data"`, shown
+  only `{% if obj.status == "draft" or obj.status == "pending" %}`); **advance panel** (requested/approved/paid/
+  reference + an approve-advance amount form `{% if obj.status == "approved" and is_admin and not is_own %}` +
+  a mark-advance-paid form `{% if obj.advance_approved and not obj.advance_paid_at and is_admin and not is_own
+  %}`); **settlement panel** (`{% if not obj.settlement_claim %}` a Generate Settlement button `{% if obj.status
+  == "approved" or obj.status == "completed" %}`, `{% else %}` a link to `{% url 'hrm:expenseclaim_detail'
+  obj.settlement_claim.pk %}` + `net_settlement` labeled per the Section-0 corrected convention: positive =
+  "Payable to employee", negative = "Recoverable from employee", `None` = "Settlement not yet generated");
+  **workflow action buttons**, each its own POST form + csrf + confirm, gated by status AND role:
+  - `{% if obj.status == "draft" and is_own %}` Submit, Edit, Delete.
+  - `{% if obj.status == "draft" or obj.status == "pending" %}{% if is_own %}` Cancel (optional `decision_note`
+    textarea).
+  - `{% if obj.status == "pending" and is_admin and not is_own %}` Approve, Reject (reject requires a
+    `decision_note` textarea, client-side `required`).
+  - `{% if obj.status == "approved" %}{% if is_own or is_admin %}` Mark Completed.
+  - Always: Back to List.
+- [ ] `templates/hrm/travel/travelbooking/form.html` -- `TravelBookingForm` fields loop,
+  `enctype="multipart/form-data"`, shows the current `obj.document` link when editing, breadcrumb Travel
+  Management > Travel Requests > {{ travel_request.number }} > Edit Booking, a "Back to Trip" link to
+  `{% url 'hrm:travelrequest_detail' travel_request.pk %}`.
+- [ ] **Badge classes are `badge-green/red/amber/info/muted/slate`, stat-icon `blue/green/orange/purple/slate` --
+  grep `static/css/theme.css` FIRST, do NOT invent `badge-success`/`stat-icon amber` (L33, recurred 3x already --
+  mandatory pre-write grep step).**
+- [ ] All new templates: filter `<form method="get">` re-submits every active param; FK `<select>` comparisons
+  use `|stringformat:"d"`; badge values match the exact model `CHOICES` strings with an `{% else %}` fallback.
+
+## 8. Admin (apps/hrm/admin.py)
+
+- [ ] `@admin.register(TravelPolicy)` -- `list_display = ("name", "job_grade", "trip_type", "travel_class",
+  "advance_percent_limit", "tenant", "is_active")`, `list_filter = ("trip_type", "travel_class", "is_active")`,
+  `search_fields = ("name",)`, `raw_id_fields = ("job_grade",)`.
+- [ ] `TravelBookingInline(admin.TabularInline)` -- `model = TravelBooking`, `extra = 0`, `fields = ("booking_type",
+  "vendor", "reference", "depart_date", "return_date", "travel_class", "cost")`.
+- [ ] `@admin.register(TravelRequest)` -- `list_display = ("number", "employee", "tenant", "trip_type", "status",
+  "estimated_cost", "advance_approved")`, `list_filter = ("status", "trip_type")`, `search_fields = ("number",
+  "title", "destination", "employee__party__name")`, `raw_id_fields = ("employee", "policy", "currency",
+  "approver", "settlement_claim")`, `readonly_fields = ("approver", "approved_at", "advance_paid_at")`
+  (workflow-stamped, not hand-editable from admin either), `inlines = [TravelBookingInline]`.
+- [ ] `@admin.register(TravelBooking)` -- `list_display = ("travel_request", "booking_type", "vendor", "cost",
+  "tenant")`, `list_filter = ("booking_type",)`, `search_fields = ("travel_request__number", "vendor",
+  "reference")`, `raw_id_fields = ("travel_request",)` (standalone registration in addition to the inline, for
+  direct admin search/lookup).
+
+## 9. Verify
+
+- [ ] `python manage.py makemigrations hrm` -> exactly one new file (`0050_...py`): 3 new models, nothing else.
+- [ ] `python manage.py migrate` -- clean apply.
+- [ ] `python manage.py seed_hrm` **twice** in a row -- second run is a no-op for `_seed_travel` (idempotent, per
+  the Seed Command Rules), no duplicated policies/requests/bookings/settlement claim.
+- [ ] `python manage.py check` -- zero errors/warnings.
+- [ ] `temp/` smoke sweep, tenant admin login:
+  - `hrm:travelpolicy_list` / `hrm:travelrequest_list` -> 200, with and without each filter (`is_active`/
+    `job_grade` on policies; `status`/`trip_type`/`employee` on requests), with a garbage/cross-tenant FK filter
+    value (silently ignored, never 500).
+  - Full CRUD round-trip for `TravelPolicy` (create -> detail -> edit -> delete) -> 200/302; delete blocked with
+    a friendly message (not a 500) when a request references the policy.
+  - Full CRUD round-trip for `TravelRequest` while `draft`/`pending` (create -> detail -> edit -> delete) ->
+    200/302; edit/delete both error-with-no-change once the request is `approved`/`rejected`/`cancelled`/
+    `completed`.
+  - `TravelBooking` add/edit/delete via `travelbooking_add`/`_edit`/`_delete` -> 200/302 while the parent trip is
+    `draft`/`pending`; all three blocked (error message, no state change) once the trip is `approved`+.
+  - Document upload: a `.pdf`/`.png` accepted; a renamed `.exe` and an oversized (>10MB) file both rejected with
+    a `ValidationError` message, not a 500.
+  - Full lifecycle round-trip on one seeded/created request: `draft` -> `travelrequest_submit` -> `pending` ->
+    `travelrequest_approve` -> `approved` -> `travelrequest_approve_advance` -> `advance_approved` set ->
+    `travelrequest_mark_advance_paid` -> `advance_paid_at` set -> `travelrequest_complete` -> `completed` ->
+    `travelrequest_generate_settlement` -> `settlement_claim` linked, redirects to the new claim's detail page;
+    each step 302 + the right field(s) stamped.
+  - Self-approval blocked: an admin who IS the request's `employee` gets an error (no change) from
+    `travelrequest_approve`, `travelrequest_reject`, `travelrequest_approve_advance`, and
+    `travelrequest_mark_advance_paid` (four actions, per the Section-0 proactive fix).
+  - `travelrequest_approve_advance` validation: an amount above `advance_requested` -> error, no change; an
+    amount above the policy's `advance_percent_limit`% of `estimated_cost` -> error, no change; a valid amount
+    within both caps -> `advance_approved` set.
+  - `travelrequest_generate_settlement` idempotency: calling it twice on the same request -> the second call
+    errors ("already generated"), no second `ExpenseClaim` created.
+  - `out_of_policy`/`out_of_policy_reason` computed correctly: the seeded out-of-policy flight (business vs.
+    domestic-policy economy) and out-of-policy hotel (150/night vs. 120/night cap) both render `out_of_policy ==
+    True` with the exact expected reason text; the seeded in-policy bookings render `out_of_policy == False`.
+  - `net_settlement` computed correctly on the seeded completed+settled request per the corrected sign convention
+    (Section 0); `None` on a request with no `settlement_claim` yet.
+  - Own-vs-admin request scoping: a plain employee's `travelrequest_list` shows only their own requests; an
+    admin's shows all tenant requests plus the `employee` filter.
+  - Cross-tenant IDOR: a second tenant's `TravelPolicy`/`TravelRequest`/`TravelBooking` pk on every url -> 404
+    (or `PermissionDenied` for the ownership-gated request/booking views, never a leak).
+  - No `{#`/`{% comment` leak markers in any rendered page.
+- [ ] Sidebar shows all 5 `3.35` bullets as **Live** for a tenant login (`Travel Request`, `Booking Integration`,
+  `Travel Policy`, `Travel Advance`, `Travel Settlement`).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` ->
+  `qa-smoke-tester` -> `security-reviewer` -> `test-writer`.
+  - Expect `code-reviewer` to check that `travelrequest_generate_settlement`'s idempotency guard
+    (`obj.settlement_claim_id`) can't race under concurrent double-submission, and that the `_hr_request_*`
+    verbatim-reuse claim actually holds (field names/`OPEN_STATUSES` match exactly).
+  - Expect `performance-reviewer` to check `travelrequest_list`/`_detail` both `.prefetch_related("bookings")`
+    (since `out_of_policy` walks `travel_request.policy` per booking -- confirm `.select_related("policy")` is
+    reachable off the prefetch without N+1) and that `travelpolicy_list` needs no such prefetch.
+  - Expect `security-reviewer` to confirm every new view's tenant scoping, that `travelbooking_add/_edit/_delete`
+    re-check `travel_request.tenant == request.tenant` (via the `tenant=request.tenant` filter on the
+    `TravelBooking`/`TravelRequest` lookups) so a cross-tenant trip pk can't be used to smuggle a booking onto
+    someone else's trip, and that `TravelRequestForm`/`TravelBookingForm` never expose a workflow-owned field
+    (`status`, `approver`, `advance_approved`, `advance_paid_at`, `settlement_claim`).
+  - Expect `test-writer` to cover: full CRUD for all 3 models; the complete lifecycle matrix (every legal
+    transition + every illegal-transition guard, including the 3 bespoke advance/settlement/complete actions);
+    self-approval blocks on all 4 admin actions; `_policy_check()` against hand-computed fixtures (out-of-policy
+    class, out-of-policy hotel, both-clear, no-policy-set None-guard); `net_settlement` sign convention with both
+    positive/negative/None cases; the advance-approval cap math (requested cap AND policy-percent cap);
+    generate-settlement idempotency; document upload allow/reject; migration `0050` applies cleanly; seeder
+    idempotency; own-vs-admin list scoping; cross-tenant IDOR on every new url.
+- [ ] Update `.claude/skills/hrm/SKILL.md`: add a `### 3.35 Travel Management (3 new tables)` section documenting
+  `TravelPolicy`/`TravelRequest`/`TravelBooking`, the verbatim `_hr_request_*` reuse decision (and why it differs
+  from 3.34's bespoke approach), the 3 bespoke advance/settlement/complete actions, the computed
+  `out_of_policy`/`out_of_policy_reason`/`net_settlement` properties (with the corrected sign convention), the
+  settlement-reuse-of-`ExpenseClaim` link, the seeded 2 policies + 4 requests, and the `LIVE_LINKS["3.35"]`
+  mapping.
+- [ ] README.md -- add `/3.35` to the Module 3 header line + a bullet describing the 3 new models + the
+  single-approver workflow + advance + the settlement-generates-an-ExpenseClaim link; refresh HRM test counts
+  after `test-writer` runs.
+
+## Later passes / deferred (carried over from research-hrm-3.35.md)
+
+- **Live GDS/OTA booking APIs, real-time flight/hotel search & price comparison, direct purchase/self-booking
+  tool** -- this pass is record-keeping only; every leader's core booking engine depends on live supplier
+  connections out of scope for a single Django pass.
+- **AI conversational booking assistants** (Concur Booking Agent, Egencia AI) -- LLM+GDS integration, out of
+  scope.
+- **Real-time itinerary notifications** (delays, gate changes) -- TravelPerk/Egencia, needs a live flight-status
+  feed.
+- **Automatic per-diem expense-line generation** (destination-aware daily rate x trip duration, partial-day
+  departure/arrival rates, meals-provided deductions) -- `TravelPolicy.daily_allowance_limit` is stored as a
+  static cap this pass; Rydoo/Zoho's full per-diem calculation engine is deferred.
+- **Mileage reimbursement (rate x distance)** -- still deferred from 3.34/3.35; recommend a plain "Mileage"
+  `ExpenseCategory` row on the settlement `ExpenseClaim` when it's eventually built, not a bespoke model.
+- **Multi-tier / automatic approval routing** (spend-threshold, international, last-minute paths; Navan/ITILITE/
+  Egencia) -- this pass keeps a single `approver`; routing logic is a future upgrade to the same field.
+- **Excess-advance carry-forward to a future trip's advance** (Zoho Expense Trips) -- this pass tracks
+  `net_settlement` as an amount owed/payable only; auto-rolling it into a new advance is deferred.
+- **Multiple/topped-up advances per trip** -- one advance per `TravelRequest` this pass; a true advance ledger
+  (Keka's per-employee Advances tab across trips) is a future extension.
+- **Advance-booking-window enforcement** (e.g. must book >= 14 days ahead) -- `TravelBooking.depart_date` vs.
+  `TravelRequest.created_at` is available data for a future rule-engine check.
+- **Duty-of-care / traveler safety tracking, risk alerts, real-time location** -- Egencia's differentiator, not
+  an ERP data-model concern this pass.
+- **Carbon/sustainability tracking, travel insurance, visa/passport management, group/multi-traveler bookings** --
+  differentiator features seen in enterprise tiers (Navan, Egencia); no immediate NavERP data-model need.
+- **Multi-currency FX conversion** across request/booking/settlement currencies -- amounts are recorded in their
+  stated currency without conversion this pass (same limitation `ExpenseClaim.currency` already carries).
+- **Dynamic/context-aware policy thresholds from real-time market pricing** (Navan) -- `TravelPolicy` limits are
+  static per-tenant config this pass.
+- **Grade+trip_type auto-suggest for the `policy` field** -- the data (`EmployeeProfile.designation.job_grade`)
+  already exists; a suggest-on-create helper is a clean, low-risk future enhancement (Section 0).
+- **GL posting / payroll-integrated payout** of the net settlement amount and the advance disbursement --
+  explicitly out of scope this pass (record-keeping only, matching the 3.34 precedent); `advance_paid_at` and
+  `settlement_claim.reimbursed_at` remain plain timestamps until Module 2 Accounting / 3.30 payroll integration
+  picks this up.
+
+## Review notes
+
+(filled in at the end)
