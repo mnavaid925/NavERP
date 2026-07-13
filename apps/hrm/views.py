@@ -10,7 +10,7 @@ int-FK-guarded filters + windowed pagination + audit), plus:
 import math
 import secrets
 from datetime import date as _date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -13944,3 +13944,272 @@ def expenseclaimline_delete(request, pk):
     write_audit_log(request.user, line.claim, "update", {"action": "line_delete"})
     messages.success(request, "Expense line removed.")
     return redirect("hrm:expenseclaim_detail", pk=claim_pk)
+
+
+# =============================================================================================
+# 3.35 Travel Management — TravelPolicy (admin config) + TravelRequest (own-vs-admin CRUD +
+# single-approver workflow reusing _hr_request_* VERBATIM + bespoke advance/settlement/complete
+# actions) + inline TravelBooking. "Generate Settlement" creates a linked 3.34 ExpenseClaim.
+# =============================================================================================
+from .models import TravelPolicy, TravelRequest, TravelBooking  # noqa: E402
+from .forms import TravelPolicyForm, TravelRequestForm, TravelBookingForm  # noqa: E402
+
+
+@login_required
+def travelpolicy_list(request):
+    return crud_list(request,
+                     TravelPolicy.objects.filter(tenant=request.tenant).select_related("job_grade"),
+                     "hrm/travel/travelpolicy/list.html", search_fields=["name"],
+                     filters=[("is_active", "is_active", False), ("job_grade", "job_grade_id", True)],
+                     extra_context={"job_grades": JobGrade.objects.filter(tenant=request.tenant, is_active=True)
+                                    .order_by("level_order", "name")})
+
+
+@tenant_admin_required
+def travelpolicy_create(request):
+    return crud_create(request, form_class=TravelPolicyForm,
+                       template="hrm/travel/travelpolicy/form.html", success_url="hrm:travelpolicy_list")
+
+
+@login_required
+def travelpolicy_detail(request, pk):
+    return crud_detail(request, model=TravelPolicy, pk=pk, template="hrm/travel/travelpolicy/detail.html",
+                       extra_context={"request_count": TravelRequest.objects.filter(
+                           tenant=request.tenant, policy_id=pk).count()})
+
+
+@tenant_admin_required
+def travelpolicy_edit(request, pk):
+    return crud_edit(request, model=TravelPolicy, pk=pk, form_class=TravelPolicyForm,
+                     template="hrm/travel/travelpolicy/form.html", success_url="hrm:travelpolicy_list")
+
+
+@tenant_admin_required
+@require_POST
+def travelpolicy_delete(request, pk):
+    if TravelRequest.objects.filter(tenant=request.tenant, policy_id=pk).exists():
+        messages.error(request, "This policy is used by existing travel requests and can't be deleted.")
+        return redirect("hrm:travelpolicy_detail", pk=pk)
+    return crud_delete(request, model=TravelPolicy, pk=pk, success_url="hrm:travelpolicy_list")
+
+
+@login_required
+def travelrequest_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, TravelRequest.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "policy", "currency", "approver", "settlement_claim")
+                   .prefetch_related("bookings"))
+    return crud_list(request, qs, "hrm/travel/travelrequest/list.html",
+                     search_fields=["number", "title", "origin", "destination"],
+                     filters=[("status", "status", False), ("trip_type", "trip_type", False),
+                              ("employee", "employee_id", is_admin)],
+                     extra_context={"status_choices": TravelRequest.STATUS_CHOICES,
+                                    "trip_type_choices": TravelRequest.TRIP_TYPE_CHOICES, "is_admin": is_admin,
+                                    "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def travelrequest_create(request):
+    return _ss_child_create(request, TravelRequestForm, "hrm/travel/travelrequest/form.html",
+                            "hrm:travelrequest_list")
+
+
+@login_required
+def travelrequest_detail(request, pk):
+    obj = get_object_or_404(
+        TravelRequest.objects.select_related("employee__party", "policy", "currency", "approver",
+                                             "settlement_claim").prefetch_related("bookings"),
+        pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This trip belongs to another employee.")
+    return render(request, "hrm/travel/travelrequest/detail.html", {
+        "obj": obj, "bookings": obj.bookings.all(), "is_admin": _is_admin(request.user),
+        "is_own": _is_own_hr_request(request, obj), "net_settlement": obj.net_settlement,
+        "booking_form": TravelBookingForm(tenant=request.tenant) if obj.status in TravelRequest.OPEN_STATUSES else None,
+        "booking_type_choices": TravelBooking.BOOKING_TYPE_CHOICES})
+
+
+@login_required
+def travelrequest_edit(request, pk):
+    return _hr_request_edit(request, TravelRequest, pk, TravelRequestForm,
+                            "hrm/travel/travelrequest/form.html", "hrm:travelrequest_detail")
+
+
+@login_required
+@require_POST
+def travelrequest_delete(request, pk):
+    return _hr_request_delete(request, TravelRequest, pk, "hrm:travelrequest_list")
+
+
+@login_required
+@require_POST
+def travelrequest_submit(request, pk):
+    return _hr_request_submit(request, TravelRequest, pk, "hrm:travelrequest_detail")
+
+
+@login_required
+@require_POST
+def travelrequest_cancel(request, pk):
+    return _hr_request_cancel(request, TravelRequest, pk, "hrm:travelrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def travelrequest_approve(request, pk):
+    return _hr_request_approve(request, TravelRequest, pk, "hrm:travelrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def travelrequest_reject(request, pk):
+    return _hr_request_reject(request, TravelRequest, pk, "hrm:travelrequest_detail")
+
+
+@tenant_admin_required
+@require_POST
+def travelrequest_approve_advance(request, pk):
+    obj = get_object_or_404(TravelRequest, pk=pk, tenant=request.tenant)
+    if _is_own_hr_request(request, obj):
+        messages.error(request, "You can't approve your own travel advance — another admin must review it.")
+        return redirect("hrm:travelrequest_detail", pk=obj.pk)
+    if obj.status != "approved":
+        messages.error(request, "The trip must be approved before its advance can be authorized.")
+        return redirect("hrm:travelrequest_detail", pk=obj.pk)
+    raw = (request.POST.get("advance_approved") or "").strip()
+    try:
+        amount = Decimal(raw)
+    except (InvalidOperation, TypeError, ValueError):
+        messages.error(request, "Enter a valid advance amount.")
+        return redirect("hrm:travelrequest_detail", pk=obj.pk)
+    if amount < 0:
+        messages.error(request, "Amount must be zero or greater.")
+    elif obj.advance_requested is not None and amount > obj.advance_requested:
+        messages.error(request, f"Cannot approve more than the requested advance of {obj.advance_requested}.")
+    elif (obj.policy_id and obj.policy.advance_percent_limit is not None and obj.estimated_cost is not None
+          and amount > (obj.policy.advance_percent_limit / Decimal("100")) * obj.estimated_cost):
+        cap = ((obj.policy.advance_percent_limit / Decimal("100")) * obj.estimated_cost).quantize(Decimal("0.01"))
+        messages.error(request, f"Cannot exceed the policy cap of {cap} "
+                                f"({obj.policy.advance_percent_limit}% of the estimated cost).")
+    else:
+        obj.advance_approved = amount
+        obj.save(update_fields=["advance_approved", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "approve_advance"})
+        messages.success(request, "Travel advance approved.")
+    return redirect("hrm:travelrequest_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def travelrequest_mark_advance_paid(request, pk):
+    obj = get_object_or_404(TravelRequest, pk=pk, tenant=request.tenant)
+    if _is_own_hr_request(request, obj):
+        messages.error(request, "You can't disburse your own travel advance.")
+    elif obj.advance_approved is None or obj.advance_approved <= 0:
+        messages.error(request, "No approved advance to disburse.")
+    elif obj.advance_paid_at:
+        messages.error(request, "The advance has already been marked as paid.")
+    else:
+        obj.advance_paid_at = timezone.now()
+        obj.advance_reference = (request.POST.get("advance_reference") or "").strip()[:100]
+        obj.save(update_fields=["advance_paid_at", "advance_reference", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "mark_advance_paid"})
+        messages.success(request, "Advance marked as paid.")
+    return redirect("hrm:travelrequest_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def travelrequest_generate_settlement(request, pk):
+    obj = get_object_or_404(TravelRequest, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("You can only generate a settlement for your own trip.")
+    if obj.status not in ("approved", "completed"):
+        messages.error(request, "Generate a settlement only after the trip is approved.")
+        return redirect("hrm:travelrequest_detail", pk=obj.pk)
+    if obj.settlement_claim_id:
+        messages.error(request, "A settlement has already been generated for this trip.")
+        return redirect("hrm:travelrequest_detail", pk=obj.pk)
+    with transaction.atomic():
+        claim = ExpenseClaim.objects.create(
+            tenant=request.tenant, employee=obj.employee,
+            title=f"Travel settlement - {obj.destination}", purpose=obj.purpose,
+            period_start=obj.start_date, period_end=obj.end_date, currency=obj.currency, status="draft")
+        obj.settlement_claim = claim
+        obj.save(update_fields=["settlement_claim", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "generate_settlement", "claim": claim.number})
+    messages.success(request, f"Settlement {claim.number} created. Add expense lines and submit it for approval.")
+    return redirect("hrm:expenseclaim_detail", pk=claim.pk)
+
+
+@login_required
+@require_POST
+def travelrequest_complete(request, pk):
+    obj = get_object_or_404(TravelRequest, pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This trip belongs to another employee.")
+    if obj.status != "approved":
+        messages.error(request, "Only an approved trip can be marked completed.")
+    else:
+        obj.status = "completed"
+        obj.save(update_fields=["status", "updated_at"])
+        write_audit_log(request.user, obj, "update", {"action": "complete"})
+        messages.success(request, "Trip marked completed.")
+    return redirect("hrm:travelrequest_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def travelbooking_add(request, travel_request_pk):
+    trip = get_object_or_404(TravelRequest, pk=travel_request_pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, trip):
+        raise PermissionDenied("This trip belongs to another employee.")
+    if trip.status not in TravelRequest.OPEN_STATUSES:
+        messages.error(request, "Bookings can only be added while the trip is draft or pending.")
+        return redirect("hrm:travelrequest_detail", pk=trip.pk)
+    form = TravelBookingForm(request.POST, request.FILES,
+                             instance=TravelBooking(tenant=request.tenant, travel_request=trip),
+                             tenant=request.tenant)
+    if form.is_valid():
+        form.save()
+        write_audit_log(request.user, trip, "update", {"action": "booking_add"})
+        messages.success(request, "Booking added.")
+    else:
+        messages.error(request, "; ".join(f"{fld}: {errs[0]}" for fld, errs in form.errors.items()))
+    return redirect("hrm:travelrequest_detail", pk=trip.pk)
+
+
+@login_required
+def travelbooking_edit(request, pk):
+    booking = get_object_or_404(TravelBooking.objects.select_related("travel_request"), pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, booking.travel_request):
+        raise PermissionDenied("This trip belongs to another employee.")
+    if booking.travel_request.status not in TravelRequest.OPEN_STATUSES:
+        messages.error(request, "Bookings can only be edited while the trip is draft or pending.")
+        return redirect("hrm:travelrequest_detail", pk=booking.travel_request_id)
+    if request.method == "POST":
+        form = TravelBookingForm(request.POST, request.FILES, instance=booking, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, booking.travel_request, "update", {"action": "booking_edit"})
+            messages.success(request, "Booking updated.")
+            return redirect("hrm:travelrequest_detail", pk=booking.travel_request_id)
+    else:
+        form = TravelBookingForm(instance=booking, tenant=request.tenant)
+    return render(request, "hrm/travel/travelbooking/form.html",
+                  {"form": form, "obj": booking, "travel_request": booking.travel_request, "is_edit": True})
+
+
+@login_required
+@require_POST
+def travelbooking_delete(request, pk):
+    booking = get_object_or_404(TravelBooking.objects.select_related("travel_request"), pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, booking.travel_request):
+        raise PermissionDenied("This trip belongs to another employee.")
+    if booking.travel_request.status not in TravelRequest.OPEN_STATUSES:
+        messages.error(request, "Bookings can only be removed while the trip is draft or pending.")
+        return redirect("hrm:travelrequest_detail", pk=booking.travel_request_id)
+    trip_pk = booking.travel_request_id
+    booking.delete()
+    write_audit_log(request.user, booking.travel_request, "update", {"action": "booking_delete"})
+    messages.success(request, "Booking removed.")
+    return redirect("hrm:travelrequest_detail", pk=trip_pk)
