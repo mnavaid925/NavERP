@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}
+        {% if is_admin %}{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">Archived</span>{% endif %}{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:knowledgearticle_list' %}">Knowledge Base</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:knowledgearticle_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Articles</a>
+      {% if is_admin %}<a href="{% url 'hrm:knowledgearticle_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Category</span><div>{% if obj.category %}{{ obj.category.name }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Views</span><div>{{ obj.view_count }}</div></div>
+      <div><span class="text-muted">Marked Helpful</span><div>{{ obj.helpful_count }}</div></div>
+      {% if obj.owner %}<div><span class="text-muted">Author</span><div>{{ obj.owner.get_full_name|default:obj.owner.username }}</div></div>{% endif %}
+      {% if obj.published_at %}<div><span class="text-muted">Published</span><div>{{ obj.published_at|date:"d M Y" }}</div></div>{% endif %}
+    </div>
+    {% if obj.summary %}<p class="text-muted" style="margin-top:1rem;"><strong>{{ obj.summary }}</strong></p>{% endif %}
+    <div style="margin-top:1rem;">{{ obj.body|linebreaks }}</div>
+    {% if obj.tags %}<p class="form-help" style="margin-top:1rem;"><i data-lucide="tag"></i> {{ obj.tags }}</p>{% endif %}
+  </div></div>
+
+  <div class="card"><div class="card-body" style="display:flex; gap:1rem; align-items:center;">
+    <span class="text-muted">Was this article helpful?</span>
+    <form method="post" action="{% url 'hrm:knowledgearticle_helpful' obj.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="thumbs-up"></i> Yes, this helped</button></form>
+    {% if is_admin %}<form method="post" action="{% url 'hrm:knowledgearticle_delete' obj.pk %}" onsubmit="return confirm('Delete this article?');" style="margin-left:auto;">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>{% endif %}
+  </div></div>
+{% endblock %}
