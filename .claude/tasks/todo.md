@@ -8346,3 +8346,338 @@ documented). CSAT is inline on the ticket (no separate survey model), requester-
 
 **Deferred (carried forward):** comment thread, auto round-robin routing, multi-level escalation, business-hours
 SLA clocks, KB voting/public portal, CSAT analytics dashboard, ticket→KB conversion, AI triage.
+
+---
+# Module 3 — HRM — Sub-module 3.37 Compensation & Benefits (hrm) — plan from research-compensation-benefits.md (2026-07-14)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.36) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Full CRUD sub-module: **4 new tenant-scoped models**
+(`SalaryBenchmark`, `BenefitPlan`, `EmployeeBenefitEnrollment`, `EquityGrant`; new incremental migration
+`0053`), covering 4 of the 6 NavERP.md bullets (verbatim, `NavERP.md:689-695`): Salary Benchmarking, Benefits
+Administration, Flexible Benefits, Stock/ESOP Management. **Compensation Planning** and **Rewards & Recognition**
+are DEFERRED (no `LIVE_LINKS["3.37"]` entry for either). Reuses `hrm.EmployeeProfile` (enrollment/grant subject),
+`hrm.JobGrade`/`Designation` (3.2, benchmark axis + existing salary bands), `hrm.EmployeeSalaryStructure` (3.13,
+the "current pay" compa-ratio input — NOT re-created), `accounting.Currency`. No GL posting this pass (409A/ASC
+718 stock-comp expense and payroll-deduction posting are both explicitly deferred).
+
+## 0. Decisions — read before writing code
+
+- [ ] **Prefixes:** `EmployeeBenefitEnrollment.NUMBER_PREFIX = "BEN"`, `EquityGrant.NUMBER_PREFIX = "ESOP"` —
+  checked against every `NUMBER_PREFIX = "` in `apps/hrm/models.py` (grepped the full ~65-entry list through
+  3.36's `"HSLA"/"TKT"/"KBA"`): no collision. `SalaryBenchmark` and `BenefitPlan` are `TenantOwned` (no prefix),
+  catalog-style like `TravelPolicy`/`ExpenseCategory`.
+- [ ] **`EmployeeBenefitEnrollment.employee` and `EquityGrant.employee` are named `employee`, not
+  `enrollee`/`grantee`** — so the existing self-service helpers apply verbatim: `_ss_scope`
+  (`apps/hrm/views.py:10407`), `_can_manage_own_child` (`:10398`), `_ss_child_create` (`:10478`), `_ss_employees`
+  (`:10418`).
+- [ ] **No `_hr_request_*` reuse anywhere in this sub-module** — neither model is a single-approver
+  authorization. `EmployeeBenefitEnrollment` is agent-worked (pending → enrolled/waived → terminated) via 3
+  bespoke `@tenant_admin_required` actions; `EquityGrant` is admin-issued end-to-end with 1 bespoke
+  record-exercise action + a plain edit-form status field for the `cancelled`/`expired`/`fully_vested`
+  transitions (see below) — mirrors the "bespoke workflow, not the approver machine" precedent set by 3.36's
+  ticket actions.
+- [ ] **`SalaryBenchmark`/`BenefitPlan` are read-all/write-admin config catalogs** — list + detail
+  `@login_required` (every employee can see the benchmark/benefit catalog), create/edit/delete
+  `@tenant_admin_required`, exact `TravelPolicy` precedent.
+- [ ] **`BenefitPlan` delete guard** — `EmployeeBenefitEnrollment.plan` is `on_delete=PROTECT` (mirrors
+  `ExpenseClaimLine.category` → `ExpenseCategory`); `benefitplan_delete` additionally checks
+  `EmployeeBenefitEnrollment.objects.filter(tenant=request.tenant, plan_id=pk).exists()` first and redirects with
+  a friendly error (belt-and-suspenders, exact `travelpolicy_delete`/`expensecategory_delete` shape). No delete
+  guard needed on `SalaryBenchmark` — nothing FKs to it.
+- [ ] **`EmployeeBenefitEnrollment` contribution defaulting** — `EmployeeBenefitEnrollmentForm.clean()` fills
+  `employee_contribution`/`employer_contribution` from `plan.employee_cost_monthly`/`plan.employer_cost_monthly`
+  when left blank on submit (still overridable — the field stays editable, just pre-filled server-side so a
+  blank POST doesn't silently save `None`).
+- [ ] **`EmployeeBenefitEnrollment` create is self-service** (`_ss_child_create` — an employee elects/waives
+  their own coverage; an admin may create on behalf of `?employee=<id>`), **but the 3 status-changing actions
+  (enroll/waive/terminate) are `@tenant_admin_required` only** — per the research's open-enrollment precedent
+  (bswift/Benefitfocus), the employee's *election* is a request; HR/benefits admin *actions* it. Edit/delete
+  gated to `status == "pending"` via `_can_manage_own_child` (narrower than `OPEN_STATUSES`, matches 3.36's
+  ticket-edit-only-while-`new` precedent — once HR has enrolled/waived it, the employee can't silently rewrite
+  the election).
+- [ ] **`EquityGrant` is admin-issued** — `equitygrant_create/_edit/_delete` are all `@tenant_admin_required`
+  (an employee never self-issues their own equity grant); `equitygrant_list/_detail` are visible to the owning
+  employee via `_ss_scope`/`_can_manage_own_child` (view-only — no edit/delete affordance rendered for a
+  non-admin owner).
+- [ ] **`EquityGrant.status` stays a plain, admin-only editable form field** (included in `EquityGrantForm`,
+  since the whole model is admin-write-gated already) for the `cancelled`/`expired`/`fully_vested` transitions —
+  a deliberate, documented simplification vs. adding 3 more bespoke single-purpose actions for states the
+  research doesn't drive a distinct workflow for. `exercised_shares`/`last_exercised_at` are EXCLUDED from the
+  form (action-only, via `equitygrant_record_exercise`) since they're a running audit total, not a freely
+  editable field.
+- [ ] **`vested_shares` is computed purely from `vesting_start_date`/`cliff_months`/`vesting_duration_months` +
+  today's date, regardless of `status`** — a cancelled/expired grant's date math still "vests" on paper; a true
+  freeze-at-cancellation needs a stored `cancelled_on` date, which this pass doesn't collect. Documented
+  limitation, not a bug — flagged under Later passes.
+- [ ] **`equitygrant_record_exercise`** (`@tenant_admin_required`, POST-only) — `EquityExerciseForm` (
+  `shares_exercised`, `exercised_on` default today) validated `0 < shares_exercised <= obj.exercisable_shares` in
+  `clean()` (needs the instance passed to `__init__`); increments `exercised_shares`, stamps `last_exercised_at`;
+  auto-flips `status` to `"exercised"` when `exercised_shares >= shares_granted`. `equitygrant_cancel`
+  (`@tenant_admin_required`, POST-only) gated `status in ("active", "fully_vested")` → `status = "cancelled"` —
+  a convenience one-click alternative to editing the status field by hand.
+- [ ] **`SalaryBenchmark.compa_ratio(current_pay)`** is a plain method (not a stored field) taking a `Decimal` —
+  `current_pay / self.percentile_50 * 100` (guarded: returns `None` if `percentile_50` is falsy or `current_pay`
+  is `None`). The detail page feeds it each employee at that `job_grade`/`designation`'s active
+  `EmployeeSalaryStructure.annual_ctc_amount` (3.13, reused as-is — no new "current pay" table).
+- [ ] **Migration:** `python manage.py makemigrations hrm` → expected `0053_salarybenchmark_...py` (`0051`+`0052`
+  were 3.36's, confirmed via `apps/hrm/migrations/` listing).
+
+## 1. Models (apps/hrm/models.py — append after `KnowledgeArticle`; new migration `0053`)
+
+- [ ] **`SalaryBenchmark`** `[TenantOwned, no prefix]` — Salary Benchmarking.
+  - `job_grade` → `hrm.JobGrade` (`SET_NULL`, null/blank, `related_name="salary_benchmarks"`) — nullable =
+    applies to all grades
+  - `designation` → `hrm.Designation` (`SET_NULL`, null/blank, `related_name="salary_benchmarks"`)
+  - `source`: `internal/payscale/mercer/radford/other` (default `internal`)
+  - `region` (CharField 100, free text — e.g. "US-National", "APAC")
+  - `currency` → `accounting.Currency` (`SET_NULL`, null/blank)
+  - `percentile_25`/`percentile_50`/`percentile_75`/`percentile_90` (Decimal 14,2)
+  - `survey_date` (DateField)
+  - `notes` (TextField, blank)
+  - Method `compa_ratio(self, current_pay)` — see Decisions above
+  - Meta: `ordering=["-survey_date","region"]`; indexes `(tenant, job_grade)`, `(tenant, designation)`,
+    `(tenant, survey_date)`
+  - Drivers: Payscale/Mercer/Radford P25/P50/P75/P90 percentile pricing; compa-ratio (Payscale/SAP
+    SuccessFactors/Mercer). Reuses `hrm.JobGrade`/`Designation`, `accounting.Currency` — adds no new spine
+    entity.
+- [ ] **`BenefitPlan`** `[TenantOwned, no prefix]` — Benefits Administration + Flexible Benefits (catalog half).
+  - `name` (CharField 150)
+  - `plan_type`: `medical/dental/vision/life/disability/retirement/wellness/other` (default `medical`)
+  - `provider` (CharField 150, blank)
+  - `is_flex_credit_eligible` (BooleanField, default False)
+  - `flex_credit_amount` (Decimal 12,2, null/blank)
+  - `employer_cost_monthly`/`employee_cost_monthly` (Decimal 12,2, default `0`)
+  - `currency` → `accounting.Currency` (`SET_NULL`, null/blank)
+  - `coverage_tier_options` (CharField 255, csv — e.g. `"employee_only,employee_spouse,family"`)
+  - `enrollment_window_start`/`enrollment_window_end` (DateField, null/blank)
+  - `is_active` (BooleanField, default True)
+  - Meta: `ordering=["plan_type","name"]`; `unique_together=("tenant","name")`; index `(tenant, is_active)`,
+    `(tenant, plan_type)`
+  - Drivers: bswift/Benefitfocus/Workday/SAP SuccessFactors plan catalog with employer/employee cost split
+    (Benefits Administration); Section 125 flex-credit pool + tiered coverage (Flexible Benefits catalog half).
+    Reuses `accounting.Currency` — adds no new spine entity.
+- [ ] **`EmployeeBenefitEnrollment`** `[TenantNumbered, "BEN"]` — Flexible Benefits (election half) + Benefits
+  Administration.
+  - `employee` → `hrm.EmployeeProfile` (`CASCADE`, `related_name="benefit_enrollments"`)
+  - `plan` → `hrm.BenefitPlan` (`PROTECT`, `related_name="enrollments"`)
+  - `election_choice`: `opt_in/opt_out/waived` (default `opt_in`)
+  - `coverage_tier` (CharField 50, blank — matches one of `plan.coverage_tier_options`)
+  - `effective_from`/`effective_to` (DateField; `effective_from` default `timezone.localdate`, `effective_to`
+    null/blank)
+  - `employee_contribution`/`employer_contribution` (Decimal 12,2, null/blank — defaulted from the plan in
+    `EmployeeBenefitEnrollmentForm.clean()`, overridable)
+  - `status`: `pending/enrolled/waived/terminated` (default `pending`)
+  - `enrolled_at` (DateTimeField, null/blank — stamped by `_enroll`)
+  - `notes` (TextField, blank)
+  - Meta: `ordering=["-effective_from"]`; `unique_together=("tenant","employee","plan","effective_from")`;
+    `unique_together=("tenant","number")`; indexes `(tenant, employee, status)`, `(tenant, plan)`,
+    `(tenant, status)`
+  - Drivers: bswift/Benefitfocus open-enrollment opt-in/opt-out with an effective-dated audit trail (Flexible
+    Benefits); tiered coverage election (Benefits Administration). Reuses `hrm.EmployeeProfile`,
+    `hrm.BenefitPlan` — adds no new spine entity.
+- [ ] **`EquityGrant`** `[TenantNumbered, "ESOP"]` — Stock/ESOP Management.
+  - `employee` → `hrm.EmployeeProfile` (`CASCADE`, `related_name="equity_grants"`)
+  - `grant_type`: `iso/nso/rsu/espp/phantom` (default `rsu`)
+  - `grant_date` (DateField)
+  - `shares_granted` (PositiveIntegerField)
+  - `exercise_price` (Decimal 12,4, null/blank — RSUs have none)
+  - `fair_market_value_at_grant` (Decimal 12,4, null/blank)
+  - `currency` → `accounting.Currency` (`SET_NULL`, null/blank)
+  - `vesting_start_date` (DateField)
+  - `cliff_months` (PositiveSmallIntegerField, default 12)
+  - `vesting_duration_months` (PositiveSmallIntegerField, default 48)
+  - `vesting_frequency`: `monthly/quarterly/annual` (default `monthly`)
+  - `exercised_shares` (PositiveIntegerField, default 0 — action-only, see Decisions)
+  - `last_exercised_at` (DateTimeField, null/blank)
+  - `status`: `active/fully_vested/exercised/cancelled/expired` (default `active`)
+  - `notes` (TextField, blank)
+  - Computed properties (never stored): `vested_shares` (0 before cliff; else
+    `shares_granted * elapsed_months // vesting_duration_months`, capped at `shares_granted`), `vested_percent`
+    (`vested_shares / shares_granted * 100`), `unvested_shares` (`shares_granted - vested_shares`),
+    `exercisable_shares` (`max(0, vested_shares - exercised_shares)`)
+  - Meta: `ordering=["-grant_date"]`; `unique_together=("tenant","number")`; indexes
+    `(tenant, employee, status)`, `(tenant, status)`, `(tenant, vesting_start_date)`
+  - Drivers: Carta/Shareworks grant issuance (ISO/NSO/RSU/ESPP/phantom) + cliff/graded vesting-schedule
+    computation + exercise tracking — the three table-stakes equity-management features. Reuses
+    `hrm.EmployeeProfile`, `accounting.Currency` — adds no new spine entity; 409A/ASC 718/cap-table modeling
+    explicitly out of scope.
+
+## 2. Forms (apps/hrm/forms.py)
+
+- [ ] `SalaryBenchmarkForm(TenantModelForm)` — fields: `job_grade, designation, source, region, currency,
+  percentile_25, percentile_50, percentile_75, percentile_90, survey_date, notes`; `__init__` scopes
+  `job_grade`/`designation` to the tenant's active rows, `currency` to active currencies (mirrors
+  `TravelRequestForm`'s queryset-narrowing `__init__`).
+- [ ] `BenefitPlanForm(TenantModelForm)` — fields: `name, plan_type, provider, is_flex_credit_eligible,
+  flex_credit_amount, employer_cost_monthly, employee_cost_monthly, currency, coverage_tier_options,
+  enrollment_window_start, enrollment_window_end, is_active`.
+- [ ] `EmployeeBenefitEnrollmentForm(TenantModelForm)` — fields: `plan, election_choice, coverage_tier,
+  effective_from, effective_to, employee_contribution, employer_contribution, notes` (`employee` resolved via
+  `_ss_child_create`; `status`/`enrolled_at` excluded — system/action-set, `# WARNING` comment matching
+  `HelpdeskTicketForm`'s). `clean()` defaults `employee_contribution`/`employer_contribution` from `plan` when
+  left blank (see Decisions).
+- [ ] `EnrollmentTerminateForm` — field: `effective_to` (optional; view defaults to today if blank).
+- [ ] `EquityGrantForm(TenantModelForm)` — fields: `employee, grant_type, grant_date, shares_granted,
+  exercise_price, fair_market_value_at_grant, currency, vesting_start_date, cliff_months,
+  vesting_duration_months, vesting_frequency, status, notes`; `exercised_shares`/`last_exercised_at` excluded
+  (action-only, see Decisions).
+- [ ] `EquityExerciseForm` — fields: `shares_exercised` (PositiveIntegerField), `exercised_on` (DateField,
+  default today); `__init__(self, *args, grant=None, **kwargs)` stashes `grant` for `clean()`'s
+  `0 < shares_exercised <= grant.exercisable_shares` check.
+
+## 3. Views (apps/hrm/views.py — append `# --- 3.37 Compensation & Benefits ---` banner after the 3.36 block)
+
+- [ ] `SalaryBenchmark` CRUD — `salarybenchmark_list/_create/_detail/_edit/_delete` — list/detail
+  `@login_required`; create/edit/delete `@tenant_admin_required`. `salarybenchmark_list`:
+  `search_fields=["region","source","notes"]`, `filters=[("job_grade","job_grade_id",True),
+  ("designation","designation_id",True), ("source","source",False)]`, `extra_context={"source_choices":
+  SalaryBenchmark.SOURCE_CHOICES, "job_grades": ..., "designations": ...}`. `salarybenchmark_detail`: extra
+  context lists the employees at that `job_grade`/`designation` with their active `EmployeeSalaryStructure` and
+  each one's `compa_ratio()`.
+- [ ] `BenefitPlan` CRUD — `benefitplan_list/_create/_detail/_edit/_delete` — same read-all/write-admin split.
+  `benefitplan_list`: `search_fields=["name","provider"]`, `filters=[("plan_type","plan_type",False),
+  ("is_active","is_active",False)]`, `extra_context={"plan_type_choices": BenefitPlan.PLAN_TYPE_CHOICES}`.
+  `benefitplan_delete`: guard per Decisions.
+- [ ] `EmployeeBenefitEnrollment` CRUD:
+  - `employeebenefitenrollment_list` — `crud_list` over `_ss_scope(request,
+    EmployeeBenefitEnrollment.objects.filter(tenant=request.tenant).select_related("employee__party","plan"))`,
+    `search_fields=["number","employee__party__name","plan__name"]`, `filters=[("status","status",False),
+    ("plan","plan_id",True), ("election_choice","election_choice",False), ("employee","employee_id",is_admin)]`,
+    context: `status_choices`, `election_choices`, `plans`, `is_admin`, `employees` (admin only).
+  - `employeebenefitenrollment_create` — `_ss_child_create(request, EmployeeBenefitEnrollmentForm, ...)`.
+  - `employeebenefitenrollment_detail` — `_can_manage_own_child` gate.
+  - `employeebenefitenrollment_edit`/`_delete` — `_can_manage_own_child` gate, only while `status == "pending"`.
+- [ ] Bespoke enrollment actions (all POST-only, `@tenant_admin_required`, redirect to
+  `employeebenefitenrollment_detail`):
+  - `employeebenefitenrollment_enroll(pk)` — gated `status == "pending"`; sets `status="enrolled"`,
+    `enrolled_at=timezone.now()`.
+  - `employeebenefitenrollment_waive(pk)` — gated `status in ("pending","enrolled")`; sets `status="waived"`,
+    `election_choice="waived"`.
+  - `employeebenefitenrollment_terminate(pk)` — gated `status == "enrolled"`; `EnrollmentTerminateForm` sets
+    `effective_to` (default today if blank); `status="terminated"`.
+- [ ] `EquityGrant` CRUD:
+  - `equitygrant_list` — `crud_list` over `_ss_scope(request, EquityGrant.objects.filter(tenant=request.tenant)
+    .select_related("employee__party","currency"))`, `search_fields=["number","employee__party__name"]`,
+    `filters=[("status","status",False), ("grant_type","grant_type",False), ("employee","employee_id",
+    is_admin)]`, context: `status_choices`, `grant_type_choices`, `is_admin`, `employees` (admin only).
+  - `equitygrant_create`/`_edit`/`_delete` — `@tenant_admin_required` (admin-issued, per Decisions).
+  - `equitygrant_detail` — `@login_required` + `_can_manage_own_child` gate (view-only for the owning employee);
+    `extra_context={"exercise_form": EquityExerciseForm(grant=obj)}`.
+- [ ] Bespoke equity actions (POST-only, `@tenant_admin_required`, redirect to `equitygrant_detail`):
+  - `equitygrant_record_exercise(pk)` — see Decisions.
+  - `equitygrant_cancel(pk)` — see Decisions.
+
+## 4. URLs (apps/hrm/urls.py — append after the 3.36 knowledge-base block, `app_name = "hrm"`)
+
+- [ ] `salary-benchmarks/`, `.../add/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/` →
+  `salarybenchmark_*`
+- [ ] `benefit-plans/` (same 5) → `benefitplan_*`
+- [ ] `benefit-enrollments/` (same 5) → `employeebenefitenrollment_*`, plus
+  `benefit-enrollments/<int:pk>/enroll|waive|terminate/` →
+  `employeebenefitenrollment_enroll/_waive/_terminate`
+- [ ] `equity-grants/` (same 5) → `equitygrant_*`, plus
+  `equity-grants/<int:pk>/record-exercise|cancel/` → `equitygrant_record_exercise/_cancel`
+
+## 5. Admin (apps/hrm/admin.py)
+
+- [ ] Register `SalaryBenchmark`, `BenefitPlan`, `EmployeeBenefitEnrollment`, `EquityGrant` — `list_display`/
+  `list_filter`/`search_fields` mirroring `TravelPolicyAdmin`/`TravelRequestAdmin` (tenant, status/type filters,
+  number/name search).
+
+## 6. Migration
+
+- [ ] `python manage.py makemigrations hrm` → single new file (expected `0053_...py`).
+
+## 7. Templates (templates/hrm/compensation/<entity>/{list,detail,form}.html)
+
+- [ ] `compensation/salarybenchmark/{list,detail,form}.html` — list: filter bar (job_grade, designation,
+  source) reflecting `request.GET`; detail: P25/P50/P75/P90 panel + the compa-ratio table per employee at that
+  grade/designation.
+- [ ] `compensation/benefitplan/{list,detail,form}.html` — list: plan_type/is_active filter bar; detail:
+  cost-split panel, flex-credit badge, enrollment count.
+- [ ] `compensation/employeebenefitenrollment/{list,detail,form}.html` — list: status/plan/election_choice
+  (+ employee, admin-only) filter bar; Actions column (view/edit/delete + status-conditional
+  Enroll/Waive/Terminate POST buttons with `{% csrf_token %}` + confirm); detail: contribution split panel.
+- [ ] `compensation/equitygrant/{list,detail,form}.html` — list: status/grant_type (+ employee, admin-only)
+  filter bar; detail: vesting progress bar (`vested_percent`), `exercisable_shares` panel, inline
+  record-exercise form (admin-only), status-conditional Cancel button.
+
+## 8. Wire-up
+
+- [ ] No `settings.py` / `config/urls.py` changes (existing `apps/hrm` app).
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["3.37"]`: `"Salary Benchmarking": "hrm:salarybenchmark_list"`,
+  `"Benefits Administration": "hrm:benefitplan_list"`, `"Flexible Benefits":
+  "hrm:employeebenefitenrollment_list"`, `"Stock/ESOP Management": "hrm:equitygrant_list"`. **No entry** for
+  `"Compensation Planning"` or `"Rewards & Recognition"` — both stay Coming Soon this pass.
+
+## 9. Seeder (apps/hrm/management/commands/seed_hrm.py — new `_seed_compensation(tenant, flush)`, called after
+   `_seed_helpdesk`)
+
+- [ ] Guard: `if not emps: return` (reuse the tenant's existing `EmployeeProfile`s); idempotent —
+  `if SalaryBenchmark.objects.filter(tenant=tenant).exists(): print(...); return`; `--flush` cascades
+  `EquityGrant`/`EmployeeBenefitEnrollment`/`BenefitPlan`/`SalaryBenchmark` deletes.
+- [ ] 2–3 `SalaryBenchmark` rows across a couple of grades/designations (`get_or_create` on
+  `(tenant, job_grade, designation, source, survey_date)`), P25/P50/P75/P90 bracketing the seeded
+  `Designation.mid_salary` so `compa_ratio` renders a realistic ~90–110 range.
+- [ ] 2–3 `BenefitPlan` rows (`get_or_create` on `(tenant, name)`) — e.g. "Standard Medical" (medical, not
+  flex-eligible), "Dental Basic" (dental), and one flex-eligible plan (e.g. "Flex Wellness Credit",
+  `is_flex_credit_eligible=True`, `flex_credit_amount` set).
+- [ ] 4–5 `EmployeeBenefitEnrollment` rows across employees/plans spanning every status (pending, enrolled,
+  waived, terminated) — `get_or_create` on `(tenant, employee, plan, effective_from)`.
+- [ ] 2–3 `EquityGrant` rows (`get_or_create` on `(tenant, employee, grant_date, grant_type)`) — at least one
+  RSU grant with `vesting_start_date` far enough in the past to be **past its cliff and partially vested**
+  (exercises `vested_shares`/`vested_percent`/`exercisable_shares` non-trivially), one fresh grant still inside
+  its cliff (`vested_shares == 0`), and one with `exercised_shares > 0` set directly on create (seeded as
+  already-partially-exercised, not via the action).
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations hrm` then `migrate`
+- [ ] `python manage.py seed_hrm` ×2 (idempotent, second run prints "already exists")
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every `hrm:salarybenchmark*`/`benefitplan*`/`employeebenefitenrollment*`/
+  `equitygrant*` URL 200/302, checked both as a tenant admin AND as a non-admin employee (self-service scoping
+  via `_ss_scope`); no `{#`/`{% comment` leaks; cross-tenant benchmark/plan/enrollment/grant pk → 404 (IDOR)
+- [ ] Sidebar: 3.37 Compensation & Benefits shows 4 of 6 bullets Live (Salary Benchmarking, Benefits
+  Administration, Flexible Benefits, Stock/ESOP Management); Compensation Planning + Rewards & Recognition stay
+  Coming Soon.
+
+## 11. Close-out
+
+- [ ] code-reviewer → apply findings → commit
+- [ ] explorer → apply findings → commit
+- [ ] frontend-reviewer → apply findings → commit
+- [ ] performance-reviewer → apply findings → commit
+- [ ] qa-smoke-tester → apply findings → commit
+- [ ] security-reviewer → apply findings → commit
+- [ ] test-writer → `apps/hrm/tests/test_compensation.py` → commit
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add a `### 3.37 Compensation & Benefits` section (models, URLs,
+  seeder, gotchas)
+- [ ] Update README (module/sub-module/test counts)
+
+## Later passes / deferred (carried from research-compensation-benefits.md)
+
+- **`CompensationCycle` + `CompensationReviewLine`** — merit/promotion/budget review cycles (Workday Merit
+  Process, SAP SuccessFactors Guidelines, Payscale Paycycle, Zoho salary revision); on approval would create the
+  next effective-dated `hrm.EmployeeSalaryStructure` row.
+- **`RecognitionAward`** — Bonusly/Workhuman-style monetary spot/service-milestone awards with approval + budget
+  control, distinct from the free-text kudos already covered by `hrm.Feedback`/`KudosBadge` (3.20).
+- Guideline matrices tying merit % to performance rating (needs `hrm.PerformanceReview`/`ReviewRating`, 3.19).
+- Rewards catalog/redemption (gift cards, donations, merchandise) — third-party vendor integration.
+- Carrier EDI (834 file) / benefits vendor integrations (bswift/Benefitfocus).
+- AI job-pricing / auto job-matching to survey catalogs (Payscale Smart Price, Mercer Data Connector, Radford).
+- Pay-equity risk dashboards, compa-ratio/range-penetration reports (reporting-layer work once
+  `SalaryBenchmark` + `Designation` bands both have data).
+- 409A valuation / ASC 718 & IFRS 2 stock-comp GL expense posting (would post to `accounting.JournalEntry`, needs
+  a valuation input this pass doesn't collect).
+- Cap table, dilution/waterfall modeling, investor reporting (Carta) — deferred indefinitely, out of scope.
+- Payroll deduction posting for benefit contributions / equity exercise cash settlement (would flow through
+  `hrm.PayComponent` and `accounting.PayrollRun`/`JournalEntry`).
+- AI bias-mitigation in recognition text (Workhuman Inclusion Advisor).
+- Summary Plan Description / plan-document distribution (`FileField` on `BenefitPlan` — thin, not a driver this
+  pass).
+- True freeze-at-cancellation for `EquityGrant.vested_shares` (needs a stored `cancelled_on` date — see
+  Decisions above).
+
+## Review notes
+(filled in at the end)
