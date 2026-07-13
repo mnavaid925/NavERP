@@ -1445,3 +1445,46 @@ class KnowledgeArticleAdmin(admin.ModelAdmin):
     search_fields = ("number", "title", "summary", "body", "tags")
     readonly_fields = ("number", "view_count", "helpful_count", "published_at", "created_at", "updated_at")
     raw_id_fields = ("category", "owner")
+
+
+from .models import (  # 3.37 Compensation & Benefits
+    SalaryBenchmark, BenefitPlan, EmployeeBenefitEnrollment, EquityGrant)
+
+
+@admin.register(SalaryBenchmark)
+class SalaryBenchmarkAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "source", "region", "percentile_50", "survey_date", "tenant")
+    list_filter = ("source", "tenant")
+    search_fields = ("region", "job_grade__name", "designation__name")
+    raw_id_fields = ("job_grade", "designation", "currency")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(BenefitPlan)
+class BenefitPlanAdmin(admin.ModelAdmin):
+    list_display = ("name", "plan_type", "provider", "is_flex_credit_eligible", "employee_cost_monthly",
+                    "is_active", "tenant")
+    list_filter = ("plan_type", "is_flex_credit_eligible", "is_active", "tenant")
+    search_fields = ("name", "provider")
+    raw_id_fields = ("currency",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(EmployeeBenefitEnrollment)
+class EmployeeBenefitEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "plan", "election_choice", "coverage_tier", "status",
+                    "effective_from", "tenant")
+    list_filter = ("status", "election_choice", "tenant")
+    search_fields = ("number", "employee__party__name", "plan__name")
+    raw_id_fields = ("employee", "plan", "decided_by")
+    readonly_fields = ("number", "enrolled_at", "decided_by", "created_at", "updated_at")
+
+
+@admin.register(EquityGrant)
+class EquityGrantAdmin(admin.ModelAdmin):
+    list_display = ("number", "employee", "grant_type", "shares_granted", "exercised_shares", "status",
+                    "grant_date", "tenant")
+    list_filter = ("grant_type", "status", "tenant")
+    search_fields = ("number", "employee__party__name")
+    raw_id_fields = ("employee", "currency")
+    readonly_fields = ("number", "exercised_shares", "last_exercised_at", "created_at", "updated_at")
