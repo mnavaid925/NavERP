@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:travelpolicy_list' %}">Travel Policies</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:travelpolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if request_count == 0 %}
+      <form method="post" action="{% url 'hrm:travelpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Job Grade</span><div>{% if obj.job_grade %}{{ obj.job_grade.name }}{% else %}All grades{% endif %}</div></div>
+      <div><span class="text-muted">Scope</span><div>{{ obj.get_trip_type_display }}</div></div>
+      <div><span class="text-muted">Travel Class</span><div>{{ obj.get_travel_class_display }}</div></div>
+      <div><span class="text-muted">Daily Allowance</span><div>{% if obj.daily_allowance_limit != None %}{{ obj.daily_allowance_limit|floatformat:2 }}{% else %}No limit{% endif %}</div></div>
+      <div><span class="text-muted">Hotel / Night</span><div>{% if obj.hotel_limit_per_night != None %}{{ obj.hotel_limit_per_night|floatformat:2 }}{% else %}No limit{% endif %}</div></div>
+      <div><span class="text-muted">Advance Cap</span><div>{% if obj.advance_percent_limit != None %}{{ obj.advance_percent_limit|floatformat:0 }}% of estimated cost{% else %}No cap{% endif %}</div></div>
+      <div><span class="text-muted">Used By</span><div>{{ request_count }} travel request{{ request_count|pluralize }}</div></div>
+    </div>
+    {% if request_count %}<p class="form-help" style="margin-top:1rem;">This policy is referenced by existing travel requests, so it can't be deleted — deactivate it instead.</p>{% endif %}
+  </div></div>
+{% endblock %}
