@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Salary Benchmark{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if obj.designation %}{{ obj.designation.name }}{% elif obj.job_grade %}{{ obj.job_grade.name }}{% else %}General{% endif %} <span class="badge badge-info">{{ obj.get_source_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:salarybenchmark_list' %}">Benchmarks</a><span class="sep">›</span><span>{{ obj.region|default:"detail" }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:salarybenchmark_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Benchmarks</a>
+      {% if is_admin %}<a href="{% url 'hrm:salarybenchmark_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Job Grade</span><div>{% if obj.job_grade %}{{ obj.job_grade.name }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Designation</span><div>{% if obj.designation %}{{ obj.designation.name }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Region</span><div>{{ obj.region|default:"-" }}</div></div>
+      <div><span class="text-muted">Currency</span><div>{% if obj.currency %}{{ obj.currency.code }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Survey Date</span><div>{% if obj.survey_date %}{{ obj.survey_date|date:"d M Y" }}{% else %}-{% endif %}</div></div>
+    </div>
+    <div class="table-wrap" style="margin-top:1rem;"><table class="table">
+      <thead><tr><th>Percentile</th><th style="text-align:end;">Market Pay</th></tr></thead>
+      <tbody>
+        <tr><td>P25</td><td style="text-align:end;">{% if obj.percentile_25 != None %}{{ obj.percentile_25|floatformat:2 }}{% else %}-{% endif %}</td></tr>
+        <tr><td>P50 (median)</td><td style="text-align:end;"><strong>{% if obj.percentile_50 != None %}{{ obj.percentile_50|floatformat:2 }}{% else %}-{% endif %}</strong></td></tr>
+        <tr><td>P75</td><td style="text-align:end;">{% if obj.percentile_75 != None %}{{ obj.percentile_75|floatformat:2 }}{% else %}-{% endif %}</td></tr>
+        <tr><td>P90</td><td style="text-align:end;">{% if obj.percentile_90 != None %}{{ obj.percentile_90|floatformat:2 }}{% else %}-{% endif %}</td></tr>
+      </tbody>
+    </table></div>
+    {% if band_compa_ratio != None %}
+      <p class="form-help" style="margin-top:1rem;">Designation midpoint ({{ band_mid|floatformat:2 }}) vs market median = <strong>compa-ratio {{ band_compa_ratio }}</strong>
+        {% if band_compa_ratio >= 1 %}<span class="badge badge-green">at/above market</span>{% else %}<span class="badge badge-amber">below market</span>{% endif %}
+      </p>
+    {% endif %}
+    {% if obj.notes %}<p class="text-muted" style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  {% if is_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; gap:1rem;">
+      <a href="{% url 'hrm:salarybenchmark_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:salarybenchmark_delete' obj.pk %}" onsubmit="return confirm('Delete this benchmark?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
