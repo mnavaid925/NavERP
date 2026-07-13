@@ -8133,6 +8133,11 @@ class HelpdeskTicket(TenantNumbered):
             models.Index(fields=["tenant", "employee", "status"], name="hrm_tkt_emp_status_idx"),
             models.Index(fields=["tenant", "assignee"], name="hrm_tkt_tnt_assignee_idx"),
             models.Index(fields=["tenant", "category"], name="hrm_tkt_tnt_cat_idx"),
+            # Backs the default ``-created_at`` ordering on the unfiltered list landing page, the exposed
+            # ?priority= filter, and the SLA-policy usage/delete-guard counts (mirrors crm.Case indexes).
+            models.Index(fields=["tenant", "-created_at"], name="hrm_tkt_tnt_created_idx"),
+            models.Index(fields=["tenant", "priority"], name="hrm_tkt_tnt_priority_idx"),
+            models.Index(fields=["tenant", "sla_policy"], name="hrm_tkt_tnt_slapolicy_idx"),
         ]
 
     def __str__(self):
@@ -8222,6 +8227,8 @@ class KnowledgeArticle(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="hrm_kba_tnt_status_idx"),
             models.Index(fields=["tenant", "category"], name="hrm_kba_tnt_cat_idx"),
+            # Backs the default ``-updated_at`` ordering on the self-help list landing page.
+            models.Index(fields=["tenant", "-updated_at"], name="hrm_kba_tnt_updated_idx"),
         ]
 
     def __str__(self):
