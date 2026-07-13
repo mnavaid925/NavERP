@@ -1405,3 +1405,43 @@ class TravelBookingAdmin(admin.ModelAdmin):
     list_filter = ("booking_type",)
     search_fields = ("vendor", "reference")
     raw_id_fields = ("travel_request",)
+
+
+from .models import HelpdeskCategory, HelpdeskSLAPolicy, HelpdeskTicket, KnowledgeArticle  # 3.36 Helpdesk
+
+
+@admin.register(HelpdeskSLAPolicy)
+class HelpdeskSLAPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "is_active", "is_default", "tenant")
+    list_filter = ("is_active", "is_default", "tenant")
+    search_fields = ("number", "name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(HelpdeskCategory)
+class HelpdeskCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "department", "default_assignee", "default_sla_policy", "is_active", "tenant")
+    list_filter = ("department", "is_active", "tenant")
+    search_fields = ("name", "description")
+    raw_id_fields = ("default_assignee", "default_sla_policy")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(HelpdeskTicket)
+class HelpdeskTicketAdmin(admin.ModelAdmin):
+    list_display = ("number", "subject", "employee", "category", "priority", "status", "assignee",
+                    "satisfaction_rating", "created_at", "tenant")
+    list_filter = ("status", "priority", "tenant")
+    search_fields = ("number", "subject", "description", "employee__party__name")
+    readonly_fields = ("number", "first_response_due", "resolution_due", "first_responded_at",
+                       "resolved_at", "closed_at", "satisfaction_at", "created_at", "updated_at")
+    raw_id_fields = ("employee", "category", "assignee", "sla_policy")
+
+
+@admin.register(KnowledgeArticle)
+class KnowledgeArticleAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "category", "status", "owner", "view_count", "helpful_count", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "title", "summary", "body", "tags")
+    readonly_fields = ("number", "view_count", "helpful_count", "published_at", "created_at", "updated_at")
+    raw_id_fields = ("category", "owner")
