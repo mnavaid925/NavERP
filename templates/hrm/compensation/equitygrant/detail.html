@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge badge-info">{{ obj.get_grant_type_display }}</span>
+        {% if obj.status == 'active' %}<span class="badge badge-info">Active</span>{% elif obj.status == 'fully_vested' or obj.status == 'exercised' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'expired' %}<span class="badge badge-red">Expired</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:equitygrant_list' %}">Equity Grants</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:equitygrant_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Grants</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Employee</span><div>{{ obj.employee.party.name }}</div></div>
+      <div><span class="text-muted">Grant Type</span><div>{{ obj.get_grant_type_display }}</div></div>
+      <div><span class="text-muted">Grant Date</span><div>{{ obj.grant_date|date:"d M Y" }}</div></div>
+      <div><span class="text-muted">Shares Granted</span><div>{{ obj.shares_granted }}</div></div>
+      <div><span class="text-muted">Exercise Price</span><div>{% if obj.exercise_price != None %}{{ obj.exercise_price }}{% else %}-{% endif %} {% if obj.currency %}{{ obj.currency.code }}{% endif %}</div></div>
+      <div><span class="text-muted">FMV at Grant</span><div>{% if obj.fair_market_value_at_grant != None %}{{ obj.fair_market_value_at_grant }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Vesting Start</span><div>{{ obj.vesting_start_date|date:"d M Y" }}</div></div>
+      <div><span class="text-muted">Schedule</span><div>{{ obj.cliff_months }}-mo cliff · {{ obj.vesting_duration_months }}-mo total · {{ obj.get_vesting_frequency_display }}</div></div>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Vesting</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="text-muted">Vested</span><div><strong>{{ obj.vested_shares }}</strong> / {{ obj.shares_granted }} ({{ obj.vested_percent }}%)</div></div>
+        <div><span class="text-muted">Unvested</span><div>{{ obj.unvested_shares }}</div></div>
+        <div><span class="text-muted">Exercised</span><div>{{ obj.exercised_shares }}</div></div>
+        <div><span class="text-muted">Exercisable Now</span><div><strong>{{ obj.exercisable_shares }}</strong></div></div>
+        {% if obj.last_exercised_at %}<div><span class="text-muted">Last Exercised</span><div>{{ obj.last_exercised_at|date:"d M Y" }}</div></div>{% endif %}
+      </div>
+      <div class="progress" style="margin-top:1rem;"><div class="progress-bar" style="width: {{ obj.vested_percent }}%;"></div></div>
+      <p class="form-help" style="margin-top:.5rem;">Vested, unvested and exercisable shares are computed from the schedule as of today — never stored.</p>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+      {% if obj.status != 'cancelled' and obj.status != 'expired' and obj.exercisable_shares > 0 %}
+        <form method="post" action="{% url 'hrm:equitygrant_record_exercise' obj.pk %}" style="display:flex; gap:.5rem; align-items:flex-end;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="shares">Exercise shares (max {{ obj.exercisable_shares }})</label><input type="number" name="shares" id="shares" class="form-input" min="1" max="{{ obj.exercisable_shares }}" required></div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Record Exercise</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'hrm:equitygrant_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:equitygrant_delete' obj.pk %}" onsubmit="return confirm('Delete this grant?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+  {% endif %}
+  {% if obj.notes %}<div class="card"><div class="card-body"><p class="text-muted" style="margin:0;">{{ obj.notes|linebreaksbr }}</p></div></div>{% endif %}
+{% endblock %}
