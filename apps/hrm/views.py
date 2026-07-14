@@ -15280,7 +15280,8 @@ from .forms import (  # noqa: E402  — 3.39 Compliance & Legal
 @tenant_admin_required
 def employmentcontract_list(request):
     qs = (EmploymentContract.objects.filter(tenant=request.tenant)
-          .select_related("employee__party", "designation"))
+          .select_related("employee__party", "designation")
+          .defer("notes"))  # not rendered in the list
     if request.GET.get("expiring", "").strip() == "1":
         # Active contracts whose end date falls inside the expiring-soon window (computed in ORM).
         today = timezone.localdate()
@@ -15323,19 +15324,27 @@ def employmentcontract_delete(request, pk):
 
 
 # ---- HR policies (readable by all; writes admin-only) ------------------------------------------
+def _annotate_policy_acks(qs):
+    """Annotate the acknowledgment counts that HRPolicy's properties prefer. Without this the
+    acknowledged_count / target_count / acknowledgment_rate properties each fire their own COUNT — once
+    per row on the list, and up to 4 times on a single detail page."""
+    return qs.annotate(
+        _target_count=Count("acknowledgments", distinct=True),
+        _acknowledged_count=Count("acknowledgments",
+                                  filter=Q(acknowledgments__status="acknowledged"), distinct=True))
+
+
 @login_required
 def hrpolicy_list(request):
     is_admin = _is_admin(request.user)
-    qs = HRPolicy.objects.filter(tenant=request.tenant).select_related("applicable_org_unit")
+    # defer the long free-text columns — the list renders neither.
+    qs = (HRPolicy.objects.filter(tenant=request.tenant).select_related("applicable_org_unit")
+          .defer("body", "summary"))
     if not is_admin:
         qs = qs.filter(status="published")  # employees only ever see published policies
-    # Annotation-backed acknowledgment counts (the list renders the rate per row) + an EXPLICIT order_by:
-    # annotate() adds a GROUP BY which drops Meta.ordering and would leave pagination unordered.
-    qs = qs.annotate(
-        _target_count=Count("acknowledgments", distinct=True),
-        _acknowledged_count=Count("acknowledgments",
-                                  filter=Q(acknowledgments__status="acknowledged"), distinct=True),
-    ).order_by("-created_at")
+    # EXPLICIT order_by: annotate() adds a GROUP BY which drops Meta.ordering and would otherwise leave
+    # the paginator unordered (rows duplicate/skip across pages).
+    qs = _annotate_policy_acks(qs).order_by("-created_at")
     return crud_list(request, qs, "hrm/compliance/hrpolicy/list.html",
                      search_fields=["number", "title", "summary", "body"],
                      filters=[("status", "status", False), ("category", "category", False)],
@@ -15352,8 +15361,10 @@ def hrpolicy_create(request):
 
 @login_required
 def hrpolicy_detail(request, pk):
-    obj = get_object_or_404(HRPolicy.objects.select_related("applicable_org_unit", "previous_version"),
-                            pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        _annotate_policy_acks(
+            HRPolicy.objects.select_related("applicable_org_unit", "previous_version")),
+        pk=pk, tenant=request.tenant)
     is_admin = _is_admin(request.user)
     if obj.status != "published" and not is_admin:
         raise PermissionDenied("This policy isn't published.")
@@ -15386,9 +15397,11 @@ def hrpolicy_publish(request, pk):
         messages.error(request, "This policy is already published.")
         return redirect("hrm:hrpolicy_detail", pk=obj.pk)
 
+    # Only the pks are needed — don't materialize whole EmployeeProfile rows for a large tenant.
     targets = EmployeeProfile.objects.filter(tenant=request.tenant)
     if obj.applicable_org_unit_id:
         targets = targets.filter(employment__org_unit_id=obj.applicable_org_unit_id)
+    target_pks = list(targets.values_list("pk", flat=True))
 
     with transaction.atomic():
         obj.status = "published"
@@ -15397,8 +15410,8 @@ def hrpolicy_publish(request, pk):
         created = 0
         if obj.requires_acknowledgment:
             existing = set(obj.acknowledgments.values_list("employee_id", flat=True))
-            new_rows = [PolicyAcknowledgment(tenant=request.tenant, policy=obj, employee=emp)
-                        for emp in targets if emp.pk not in existing]
+            new_rows = [PolicyAcknowledgment(tenant=request.tenant, policy=obj, employee_id=pk_)
+                        for pk_ in target_pks if pk_ not in existing]
             PolicyAcknowledgment.objects.bulk_create(new_rows)
             created = len(new_rows)
     write_audit_log(request.user, obj, "update", {"action": "publish", "acknowledgments": created})
@@ -15450,7 +15463,8 @@ def policyacknowledgment_acknowledge(request, pk):
 def grievance_list(request):
     is_admin = _is_admin(request.user)
     qs = _ss_scope(request, Grievance.objects.filter(tenant=request.tenant)
-                   .select_related("employee__party", "assigned_investigator__party"))
+                   .select_related("employee__party", "assigned_investigator__party")
+                   .defer("description", "resolution"))  # only `subject` is rendered in the list
     extra = {"is_admin": is_admin, "status_choices": Grievance.STATUS_CHOICES,
              "category_choices": Grievance.CATEGORY_CHOICES,
              "severity_choices": Grievance.SEVERITY_CHOICES}
@@ -15608,7 +15622,7 @@ def grievance_withdraw(request, pk):
 # ---- Compliance register (statutory / labour-law) ----------------------------------------------
 @tenant_admin_required
 def complianceregister_list(request):
-    qs = ComplianceRegister.objects.filter(tenant=request.tenant)
+    qs = ComplianceRegister.objects.filter(tenant=request.tenant).defer("findings", "notes")
     if request.GET.get("overdue", "").strip() == "1":
         qs = qs.filter(due_date__lt=timezone.localdate()).exclude(status__in=("filed", "not_applicable"))
     return crud_list(request, qs, "hrm/compliance/complianceregister/list.html",
