@@ -8575,6 +8575,11 @@ class TalentPool(TenantOwned):
 
     @property
     def active_member_count(self):
+        """Uses the ``_active_member_count`` queryset annotation when the caller supplied one (the list
+        view does, to avoid a per-row COUNT); falls back to a query for a lone instance."""
+        annotated = getattr(self, "_active_member_count", None)
+        if annotated is not None:
+            return annotated
         return self.memberships.filter(status="active").count()
 
 
@@ -8702,13 +8707,24 @@ class SuccessionPlan(TenantNumbered):
 
     @property
     def ready_now_count(self):
+        """Uses the ``_ready_now_count`` annotation when present (the list view annotates it — otherwise
+        rendering bench strength for N rows would fire 2N COUNT queries)."""
+        annotated = getattr(self, "_ready_now_count", None)
+        if annotated is not None:
+            return annotated
         return self.candidates.filter(readiness="ready_now").count()
+
+    @property
+    def candidate_count(self):
+        annotated = getattr(self, "_candidate_count", None)
+        if annotated is not None:
+            return annotated
+        return self.candidates.count()
 
     @property
     def bench_strength(self):
         """strong (2+ ready now) / moderate (1 ready now) / weak (candidates but none ready) / none."""
-        total = self.candidates.count()
-        if not total:
+        if not self.candidate_count:
             return "none"
         ready = self.ready_now_count
         if ready >= 2:
