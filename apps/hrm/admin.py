@@ -1483,6 +1483,58 @@ class EmployeeBenefitEnrollmentAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "enrolled_at", "decided_by", "created_at", "updated_at")
 
 
+from .models import (  # 3.38 Talent Management & Succession Planning
+    TalentPool, TalentPoolMembership, SuccessionPlan, SuccessionCandidate)
+
+
+@admin.register(TalentPool)
+class TalentPoolAdmin(admin.ModelAdmin):
+    list_select_related = ("owner__party", "tenant")
+    list_display = ("name", "pool_type", "owner", "is_active", "tenant")
+    list_filter = ("pool_type", "is_active", "tenant")
+    search_fields = ("name", "description")
+    raw_id_fields = ("owner",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(TalentPoolMembership)
+class TalentPoolMembershipAdmin(admin.ModelAdmin):
+    list_select_related = ("employee__party", "pool", "tenant")
+    list_display = ("employee", "pool", "status", "flight_risk", "performance_rating", "potential_rating",
+                    "tenant")
+    list_filter = ("status", "flight_risk", "tenant")
+    search_fields = ("employee__party__name", "pool__name")
+    raw_id_fields = ("pool", "employee", "review")
+    readonly_fields = ("created_at", "updated_at")
+
+
+class SuccessionCandidateInline(admin.TabularInline):
+    model = SuccessionCandidate
+    extra = 0
+    raw_id_fields = ("candidate",)
+
+
+@admin.register(SuccessionPlan)
+class SuccessionPlanAdmin(admin.ModelAdmin):
+    list_select_related = ("critical_role", "incumbent__party", "tenant")
+    list_display = ("number", "critical_role", "incumbent", "vacancy_risk", "status", "review_date", "tenant")
+    list_filter = ("status", "vacancy_risk", "tenant")
+    search_fields = ("number", "critical_role__name", "incumbent__party__name")
+    raw_id_fields = ("critical_role", "department", "incumbent")
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [SuccessionCandidateInline]
+
+
+@admin.register(SuccessionCandidate)
+class SuccessionCandidateAdmin(admin.ModelAdmin):
+    list_select_related = ("candidate__party", "plan", "tenant")
+    list_display = ("plan", "candidate", "readiness", "rank_order", "tenant")
+    list_filter = ("readiness", "tenant")
+    search_fields = ("candidate__party__name", "plan__number")
+    raw_id_fields = ("plan", "candidate")
+    readonly_fields = ("created_at", "updated_at")
+
+
 @admin.register(EquityGrant)
 class EquityGrantAdmin(admin.ModelAdmin):
     list_select_related = ("employee__party", "tenant")
