@@ -8950,6 +8950,9 @@ class PolicyAcknowledgment(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "policy"], name="hrm_pack_tnt_policy_idx"),
             models.Index(fields=["tenant", "employee", "status"], name="hrm_pack_emp_status_idx"),
+            # Backs the default -created_at ordering on the unfiltered list. This is the fastest-growing
+            # table of the five (one row per employee x per ack-required policy), so it needs it most.
+            models.Index(fields=["tenant", "-created_at"], name="hrm_pack_tnt_created_idx"),
         ]
 
     def __str__(self):
