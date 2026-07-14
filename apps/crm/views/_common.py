@@ -3,8 +3,11 @@
 apps/crm/views.py was split into this package (one sub-package per CRM sub-module 1.1-1.12,
 one module per entity). Every entity module does ``from apps.crm.views._common import *`` to
 pull in the common Django + core toolkit, then adds only the models/forms it uses. The package
-__init__ re-exports every view so ``apps/crm/urls.py`` (``from . import views`` / ``views.<name>``)
-keeps working unchanged.
+__init__ re-exports every view so the ``apps/crm/urls/`` package (``from apps.crm import views`` /
+``views.<name>``) keeps working unchanged.
+
+Imports inside these packages must be ABSOLUTE: a relative ``from . import views`` inside e.g.
+``apps/crm/urls/CoreData/Leads.py`` would resolve to ``apps.crm.urls.CoreData.views`` and fail.
 """
 import hashlib
 import hmac
