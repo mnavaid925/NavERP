@@ -22,17 +22,17 @@
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search employee / pool...">
         </div>
         <div class="form-group">
-          <select name="pool" class="form-select"><option value="">All pools</option>
+          <select name="pool" class="form-select" aria-label="Talent Pool"><option value="">All pools</option>
             {% for p in pools %}<option value="{{ p.pk }}" {% if request.GET.pool == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <select name="status" class="form-select"><option value="">All statuses</option>
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
             {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <select name="flight_risk" class="form-select"><option value="">All flight risks</option>
+          <select name="flight_risk" class="form-select" aria-label="Flight Risk"><option value="">All flight risks</option>
             {% for val, label in flight_risk_choices %}<option value="{{ val }}" {% if request.GET.flight_risk == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
@@ -52,7 +52,7 @@
               <td>{% if obj.nine_box_quadrant %}<span class="badge badge-info">{{ obj.nine_box_quadrant }}</span>{% else %}<span class="badge badge-muted">Unrated</span>{% endif %}</td>
               <td style="text-align:end;">{% if obj.effective_performance != None %}{{ obj.effective_performance }}{% else %}-{% endif %}</td>
               <td style="text-align:end;">{% if obj.effective_potential != None %}{{ obj.effective_potential }}{% else %}-{% endif %}</td>
-              <td>{% if obj.flight_risk == 'high' %}<span class="badge badge-red">High</span>{% elif obj.flight_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">Low</span>{% endif %}</td>
+              <td>{% if obj.flight_risk == 'high' %}<span class="badge badge-red">High</span>{% elif obj.flight_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">{{ obj.get_flight_risk_display }}</span>{% endif %}</td>
               <td>{% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% elif obj.status == 'promoted' %}<span class="badge badge-info">Promoted</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td><div class="table-actions">
                 <a href="{% url 'hrm:talentpoolmembership_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
