@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Compliance Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Compliance Register</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Compliance</span><span class="sep">›</span><span>Registers</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:complianceregister_list' %}?overdue=1" class="btn btn-outline"><i data-lucide="clock-alert"></i> Overdue</a>
+      <a href="{% url 'hrm:complianceregister_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Record</a>
+    </div>
+  </div>
+
+  {% if request.GET.overdue == '1' %}<div class="badge badge-red" style="margin-bottom:1rem;">Showing records past their due date and not yet filed</div>{% endif %}
+  {% if request.GET.register_type == 'labor_law_requirement' %}<div class="badge badge-info" style="margin-bottom:1rem;">Labour Law Compliance — statutory requirements tracked by jurisdiction</div>{% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% if request.GET.overdue %}<input type="hidden" name="overdue" value="{{ request.GET.overdue }}">{% endif %}
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search title / jurisdiction / authority...">
+        </div>
+        <div class="form-group">
+          <select name="register_type" class="form-select" aria-label="Register Type"><option value="">All types</option>
+            {% for val, label in register_type_choices %}<option value="{{ val }}" {% if request.GET.register_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:complianceregister_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Jurisdiction</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:complianceregister_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title|truncatechars:44 }}</td>
+              <td><span class="badge badge-info">{{ obj.get_register_type_display }}</span></td>
+              <td>{{ obj.jurisdiction|default:"-" }}</td>
+              <td>{% if obj.due_date %}{{ obj.due_date|date:"d M Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td>{% if obj.status == 'filed' %}<span class="badge badge-green">Filed</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-amber">In Progress</span>{% elif obj.status == 'pending' %}<span class="badge badge-info">Pending</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:complianceregister_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:complianceregister_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:complianceregister_delete' obj.pk %}" onsubmit="return confirm('Delete this record?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No compliance records</h3><p>Track labour-law requirements, muster rolls, wage registers, inspections and licences with their due dates.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
