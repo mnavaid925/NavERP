@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }} <span class="badge badge-muted">v{{ obj.version_number }}</span>
+        <span class="badge badge-info">{{ obj.get_category_display }}</span>
+        {% if is_admin %}{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:hrpolicy_list' %}">Policies</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:hrpolicy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Policies</a>
+      {% if is_admin %}<a href="{% url 'hrm:hrpolicy_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Category</span><div>{{ obj.get_category_display }}</div></div>
+      <div><span class="text-muted">Version</span><div>v{{ obj.version_number }}</div></div>
+      <div><span class="text-muted">Applies To</span><div>{% if obj.applicable_org_unit %}{{ obj.applicable_org_unit.name }}{% else %}Whole organization{% endif %}</div></div>
+      <div><span class="text-muted">Effective From</span><div>{% if obj.effective_from %}{{ obj.effective_from|date:"d M Y" }}{% else %}-{% endif %}</div></div>
+      {% if obj.previous_version %}<div><span class="text-muted">Supersedes</span><div><a href="{% url 'hrm:hrpolicy_detail' obj.previous_version.pk %}">v{{ obj.previous_version.version_number }}</a></div></div>{% endif %}
+      {% if is_admin and obj.requires_acknowledgment %}<div><span class="text-muted">Acknowledged</span><div>{{ obj.acknowledged_count }}/{{ obj.target_count }} ({{ obj.acknowledgment_rate }}%)</div></div>{% endif %}
+      {% if obj.document %}<div><span class="text-muted">Document</span><div><a href="{{ obj.document.url }}">Download</a></div></div>{% endif %}
+    </div>
+    {% if obj.summary %}<p class="text-muted" style="margin-top:1rem;"><strong>{{ obj.summary }}</strong></p>{% endif %}
+    {% if obj.body %}<div style="margin-top:1rem;">{{ obj.body|linebreaks }}</div>{% endif %}
+  </div></div>
+
+  {% if my_ack %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Your Acknowledgment</h2></div>
+    <div class="card-body" style="display:flex; gap:1rem; align-items:center;">
+      {% if my_ack.status == 'acknowledged' %}
+        <span class="badge badge-green">Acknowledged</span>
+        <span class="text-muted">on {{ my_ack.acknowledged_at|date:"d M Y" }}</span>
+      {% else %}
+        <span class="badge badge-amber">Pending</span>
+        <form method="post" action="{% url 'hrm:policyacknowledgment_acknowledge' my_ack.pk %}">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> I have read and understood this policy</button></form>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if is_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem;">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'hrm:hrpolicy_publish' obj.pk %}" onsubmit="return confirm('Publish this policy and raise acknowledgment requests?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Publish</button></form>
+      {% endif %}
+      <a href="{% url 'hrm:hrpolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'hrm:policyacknowledgment_list' %}?policy={{ obj.pk }}" class="btn btn-outline"><i data-lucide="check-check"></i> View Acknowledgments</a>
+      <form method="post" action="{% url 'hrm:hrpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
