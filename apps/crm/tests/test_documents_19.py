@@ -319,6 +319,30 @@ class TestSSTISandbox:
         assert resp.status_code == 302
         assert DocumentVersion.objects.filter(contract=contract).count() == 0
 
+    def test_allowed_filters_and_tags_still_render(self, client_a, tenant_a):
+        """The sandbox must block ONLY the escape-bypass vectors — not every tag/filter.
+
+        Guard-rail for the blocked-* tests above: they assert "no version was created", which also
+        holds if the engine's restricted tag/filter libraries are left EMPTY — in that case every
+        tag/filter raises, the merge-variable feature is dead, and those tests still pass. This
+        test fails in exactly that scenario, so they can never pass vacuously.
+        """
+        from apps.crm.models import DocumentVersion
+        contract = self._make(
+            tenant_a,
+            body="{{ account.name|upper }}|{{ opportunity.amount|floatformat:2 }}"
+                 "{% if account.name %}|IF-OK{% endif %}"
+                 "{% for c in '12'|make_list %}|{{ c }}{% endfor %}",
+        )
+        resp = self._post_generate(client_a, contract)
+        assert resp.status_code == 302
+        assert DocumentVersion.objects.filter(contract=contract).count() == 1
+        contract.refresh_from_db()
+        assert "SANDBOX CORP" in contract.body_snapshot   # |upper ran
+        assert "1.00" in contract.body_snapshot           # |floatformat ran
+        assert "IF-OK" in contract.body_snapshot          # {% if %} ran
+        assert "|1|2" in contract.body_snapshot           # {% for %} + |make_list ran
+
     def test_xss_chars_in_context_value_are_escaped(self, client_a, tenant_a):
         """An account whose name contains '<x>' must appear escaped as '&lt;x&gt;' in body_snapshot."""
         from apps.core.models import Party
