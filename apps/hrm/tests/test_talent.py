@@ -254,6 +254,52 @@ def test_list_annotations_match_unannotated_properties(client_a, tenant_a, plan_
     assert pool.active_member_count == TalentPool.objects.get(pk=pool_a.pk).active_member_count == 1
 
 
+def test_successioncandidate_add_duplicate_is_rejected(client_a, tenant_a, plan_a, employee_a):
+    """unique_together(tenant, plan, candidate) on the INLINE add: adding the same employee twice must
+    be rejected cleanly (no 500, no duplicate row) — the form's clean() now guards the add path too."""
+    from apps.hrm.models import SuccessionCandidate
+    SuccessionCandidate.objects.create(tenant=tenant_a, plan=plan_a, candidate=employee_a,
+                                       readiness="ready_now", rank_order=1)
+    resp = client_a.post(reverse("hrm:successioncandidate_add", args=[plan_a.pk]), {
+        "candidate": employee_a.pk, "readiness": "ready_1_2y", "rank_order": "2"})
+    assert resp.status_code == 302  # redirects back to the plan with an error message
+    assert SuccessionCandidate.objects.filter(plan=plan_a, candidate=employee_a).count() == 1
+
+
+def test_successioncandidate_add_duplicate_leaves_transaction_usable(client_a, tenant_a, plan_a,
+                                                                     employee_a):
+    """Regression (code-review Critical): the duplicate-successor IntegrityError must be caught inside a
+    SAVEPOINT (transaction.atomic()). Without it the exception poisons the surrounding transaction and
+    the very next query blows up with TransactionManagementError (surfacing as SessionInterrupted)."""
+    from apps.hrm.models import SuccessionCandidate
+    SuccessionCandidate.objects.create(tenant=tenant_a, plan=plan_a, candidate=employee_a,
+                                       readiness="ready_now", rank_order=1)
+    resp = client_a.post(reverse("hrm:successioncandidate_add", args=[plan_a.pk]), {
+        "candidate": employee_a.pk, "readiness": "ready_1_2y", "rank_order": "2"})
+    assert resp.status_code == 302
+    # The connection must still be usable — this is what regressed before the savepoint fix.
+    assert SuccessionCandidate.objects.filter(plan=plan_a).count() == 1
+    assert client_a.get(reverse("hrm:successionplan_list")).status_code == 200
+
+
+def test_annotated_lists_are_ordered_for_pagination(client_a, tenant_a, designation_a):
+    """Regression (code-review Important): annotate() adds a GROUP BY that DROPS Meta.ordering, so the
+    paginator would silently duplicate/skip rows. Both annotated lists must come back ordered."""
+    from apps.hrm.models import SuccessionPlan, TalentPool
+    for i in range(20):
+        TalentPool.objects.create(tenant=tenant_a, name=f"Pool {i:02d}", pool_type="hipo")
+        SuccessionPlan.objects.create(tenant=tenant_a, critical_role=designation_a, status="active")
+
+    for url_name in ("hrm:talentpool_list", "hrm:successionplan_list"):
+        resp = client_a.get(reverse(url_name))
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].object_list.ordered, f"{url_name} paginates an UNORDERED qs"
+        # Page 1 and page 2 must not overlap (the symptom an unordered qs produces).
+        p1 = {o.pk for o in resp.context["object_list"]}
+        p2 = {o.pk for o in client_a.get(reverse(url_name) + "?page=2").context["object_list"]}
+        assert p1 and p2 and not (p1 & p2), f"{url_name} repeated a row across pages"
+
+
 def _query_count(client, url):
     """Queries fired by one GET of ``url`` (must not grow with row count)."""
     from django.db import connection
