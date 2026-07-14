@@ -2986,10 +2986,11 @@ class SuccessionCandidateForm(TenantModelForm):
         rank = cleaned.get("rank_order")
         if rank is not None and rank < 1:
             self.add_error("rank_order", "Rank must be 1 or greater.")
-        # unique_together(tenant, plan, candidate): on EDIT the plan is on the instance (the form excludes
-        # it); on ADD the view catches IntegrityError, since the plan isn't known until then.
+        # unique_together(tenant, plan, candidate): plan_id is set on the instance on BOTH add (the
+        # view passes SuccessionCandidate(tenant=..., plan=plan)) and edit, so this guard covers both —
+        # exclude(pk=self.instance.pk) is a no-op on add (pk is None -> excludes nothing).
         candidate = cleaned.get("candidate")
-        if self.instance.pk and self.instance.plan_id and candidate and self.tenant is not None:
+        if self.instance.plan_id and candidate and self.tenant is not None:
             dupe = SuccessionCandidate.objects.filter(
                 tenant=self.tenant, plan_id=self.instance.plan_id, candidate=candidate
             ).exclude(pk=self.instance.pk)
