@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Talent Pool Members{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Talent Pool Members</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Talent</span><span class="sep">›</span><span>Members</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:talent_nine_box' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> 9-Box Grid</a>
+      <a href="{% url 'hrm:talentpool_list' %}" class="btn btn-outline"><i data-lucide="users-round"></i> Pools</a>
+      <a href="{% url 'hrm:talentpoolmembership_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Member</a>
+    </div>
+  </div>
+
+  {% if request.GET.flight_risk == 'high' %}<div class="badge badge-red" style="margin-bottom:1rem;">Retention Strategies — showing high flight-risk members</div>{% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search employee / pool...">
+        </div>
+        <div class="form-group">
+          <select name="pool" class="form-select"><option value="">All pools</option>
+            {% for p in pools %}<option value="{{ p.pk }}" {% if request.GET.pool == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="flight_risk" class="form-select"><option value="">All flight risks</option>
+            {% for val, label in flight_risk_choices %}<option value="{{ val }}" {% if request.GET.flight_risk == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:talentpoolmembership_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Pool</th><th>9-Box</th><th style="text-align:end;">Perf</th><th style="text-align:end;">Potential</th><th>Flight Risk</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:talentpoolmembership_detail' obj.pk %}" class="fw-600">{{ obj.employee.party.name }}</a></td>
+              <td>{{ obj.pool.name }}</td>
+              <td>{% if obj.nine_box_quadrant %}<span class="badge badge-info">{{ obj.nine_box_quadrant }}</span>{% else %}<span class="badge badge-muted">Unrated</span>{% endif %}</td>
+              <td style="text-align:end;">{% if obj.effective_performance != None %}{{ obj.effective_performance }}{% else %}-{% endif %}</td>
+              <td style="text-align:end;">{% if obj.effective_potential != None %}{{ obj.effective_potential }}{% else %}-{% endif %}</td>
+              <td>{% if obj.flight_risk == 'high' %}<span class="badge badge-red">High</span>{% elif obj.flight_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">Low</span>{% endif %}</td>
+              <td>{% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% elif obj.status == 'promoted' %}<span class="badge badge-info">Promoted</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:talentpoolmembership_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:talentpoolmembership_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:talentpoolmembership_delete' obj.pk %}" onsubmit="return confirm('Remove this member?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="user-check"></i><h3>No members found</h3><p>Add employees to a talent pool with their 9-box ratings, flight risk, and retention plan.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
