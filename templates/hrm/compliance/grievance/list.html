@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Grievances{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_admin %}Grievances{% else %}My Grievances{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Compliance</span><span class="sep">›</span><span>Grievances</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:grievance_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> File a Grievance</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / subject...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" class="form-select" aria-label="Category"><option value="">All categories</option>
+            {% for val, label in category_choices %}<option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" class="form-select" aria-label="Severity"><option value="">All severities</option>
+            {% for val, label in severity_choices %}<option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if is_admin %}
+        <div class="form-group">
+          <select name="employee" class="form-select" aria-label="Complainant"><option value="">All complainants</option>
+            {% for e in employees %}<option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:grievance_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Subject</th><th>Complainant</th><th>Category</th><th>Severity</th><th>Status</th><th>Investigator</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:grievance_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.subject|truncatechars:44 }}</td>
+              {# is_anonymous masks the complainant from everyone except HR admins (3.20 pattern). #}
+              <td>{% if obj.is_anonymous and not is_admin %}<span class="badge badge-muted">Anonymous</span>{% else %}{{ obj.employee.party.name }}{% if obj.is_anonymous %} <span class="badge badge-muted">Anon</span>{% endif %}{% endif %}</td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>{% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>{% elif obj.severity == 'high' %}<span class="badge badge-red">High</span>{% elif obj.severity == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-muted">{{ obj.get_severity_display }}</span>{% endif %}</td>
+              <td>{% if obj.status == 'resolved' %}<span class="badge badge-green">Resolved</span>{% elif obj.status == 'investigating' %}<span class="badge badge-amber">Investigating</span>{% elif obj.status == 'open' %}<span class="badge badge-info">Open</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{% if obj.assigned_investigator %}{{ obj.assigned_investigator.party.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:grievance_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                {% if obj.is_open %}
+                <a href="{% url 'hrm:grievance_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:grievance_delete' obj.pk %}" onsubmit="return confirm('Delete this grievance?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                {% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No grievances</h3><p>File a complaint (optionally anonymously) and track it through investigation to resolution.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
