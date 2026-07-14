@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Talent Pools{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Talent Pools</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Talent</span><span class="sep">›</span><span>Pools</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:talent_nine_box' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> 9-Box Grid</a>
+      <a href="{% url 'hrm:successionplan_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Succession</a>
+      <a href="{% url 'hrm:talentpool_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Pool</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search pools...">
+        </div>
+        <div class="form-group">
+          <select name="pool_type" class="form-select"><option value="">All types</option>
+            {% for val, label in pool_type_choices %}<option value="{{ val }}" {% if request.GET.pool_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" class="form-select"><option value="">All statuses</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:talentpool_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Type</th><th>Owner</th><th style="text-align:end;">Active Members</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:talentpool_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_pool_type_display }}</span></td>
+              <td>{% if obj.owner %}{{ obj.owner.party.name }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td style="text-align:end;">{{ obj.active_member_count }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:talentpool_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:talentpool_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:talentpool_delete' obj.pk %}" onsubmit="return confirm('Delete this talent pool?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="users-round"></i><h3>No talent pools yet</h3><p>Create a high-potential, successor-bench, or critical-skill pool and place members on the 9-box grid.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
