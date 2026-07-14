@@ -198,6 +198,7 @@ from .models import (
     PRIORITY_CHOICES,
     QUALIFICATION_CHOICES,
     REJECTION_REASON_CHOICES,
+    POSTING_TYPE_CHOICES,
     REQ_TYPE_CHOICES,
     TASK_CATEGORY_CHOICES,
     CandidateCommunication,
@@ -3668,13 +3669,18 @@ def jobrequisition_list(request):
         .select_related("designation", "department", "hiring_manager__party", "recruiter__party"),
         "hrm/recruitment/jobrequisition/list.html",
         search_fields=["number", "title", "location", "designation__name"],
+        # ``posting_type`` backs the 3.38 "Internal Mobility" sidebar deep-link
+        # (?posting_type=internal) — without it in this tuple the deep-link silently showed every
+        # requisition instead of just the internally-posted ones.
         filters=[("status", "status", False), ("priority", "priority", False),
                  ("department", "department_id", True), ("hiring_manager", "hiring_manager_id", True),
-                 ("req_type", "req_type", False), ("employment_type", "employment_type", False)],
+                 ("req_type", "req_type", False), ("employment_type", "employment_type", False),
+                 ("posting_type", "posting_type", False)],
         extra_context={"status_choices": JR_STATUS_CHOICES,
                        "priority_choices": PRIORITY_CHOICES,
                        "req_type_choices": REQ_TYPE_CHOICES,
                        "employment_type_choices": EMPLOYMENT_TYPE_CHOICES,
+                       "posting_type_choices": POSTING_TYPE_CHOICES,
                        "departments": OrgUnit.objects.filter(tenant=request.tenant, kind="department")
                        .order_by("name"),
                        "hiring_managers": EmployeeProfile.objects.filter(tenant=request.tenant)
@@ -14998,3 +15004,227 @@ def equitygrant_record_exercise(request, pk):
     write_audit_log(request.user, obj, "update", {"action": "record_exercise", "shares": shares})
     messages.success(request, f"Recorded exercise of {shares} share(s) on {obj.number}.")
     return redirect("hrm:equitygrant_detail", pk=obj.pk)
+
+
+# ============================================================================
+# 3.38 Talent Management & Succession Planning — HiPo pools + the computed 9-box
+# grid, succession benches with ranked successors, and retention/flight-risk plans.
+#
+# CONFIDENTIAL: every view here is @tenant_admin_required (the 3.21 PIP/CoachingNote
+# precedent). An employee must never see their own 9-box placement, flight-risk flag,
+# or whether they sit on someone's succession bench.
+# ============================================================================
+from .models import (  # noqa: E402  — 3.38 Talent Management & Succession
+    _NINE_BOX_LABELS, TalentPool, TalentPoolMembership, SuccessionPlan, SuccessionCandidate)
+from .forms import (  # noqa: E402  — 3.38 Talent Management & Succession
+    TalentPoolForm, TalentPoolMembershipForm, SuccessionPlanForm, SuccessionCandidateForm)
+
+
+# ---- Talent pools -----------------------------------------------------------------------------
+@tenant_admin_required
+def talentpool_list(request):
+    qs = TalentPool.objects.filter(tenant=request.tenant).select_related("owner__party")
+    return crud_list(request, qs, "hrm/talent/talentpool/list.html",
+                     search_fields=["name", "description"],
+                     filters=[("pool_type", "pool_type", False), ("is_active", "is_active", False)],
+                     extra_context={"pool_type_choices": TalentPool.POOL_TYPE_CHOICES})
+
+
+@tenant_admin_required
+def talentpool_create(request):
+    return crud_create(request, form_class=TalentPoolForm, template="hrm/talent/talentpool/form.html",
+                       success_url="hrm:talentpool_list")
+
+
+@tenant_admin_required
+def talentpool_detail(request, pk):
+    obj = get_object_or_404(TalentPool.objects.select_related("owner__party"), pk=pk, tenant=request.tenant)
+    members = (obj.memberships.select_related("employee__party", "review").order_by("-created_at"))
+    return render(request, "hrm/talent/talentpool/detail.html", {"obj": obj, "members": members})
+
+
+@tenant_admin_required
+def talentpool_edit(request, pk):
+    return crud_edit(request, model=TalentPool, pk=pk, form_class=TalentPoolForm,
+                     template="hrm/talent/talentpool/form.html", success_url="hrm:talentpool_list")
+
+
+@tenant_admin_required
+@require_POST
+def talentpool_delete(request, pk):
+    if TalentPoolMembership.objects.filter(tenant=request.tenant, pool_id=pk).exists():
+        messages.error(request, "This pool still has members and can't be deleted.")
+        return redirect("hrm:talentpool_detail", pk=pk)
+    return crud_delete(request, model=TalentPool, pk=pk, success_url="hrm:talentpool_list")
+
+
+# ---- Talent pool memberships (the 9-box rows) -------------------------------------------------
+@tenant_admin_required
+def talentpoolmembership_list(request):
+    qs = (TalentPoolMembership.objects.filter(tenant=request.tenant)
+          .select_related("employee__party", "pool", "review"))
+    return crud_list(request, qs, "hrm/talent/talentpoolmembership/list.html",
+                     search_fields=["employee__party__name", "pool__name", "retention_action_plan"],
+                     filters=[("pool", "pool_id", True), ("status", "status", False),
+                              ("flight_risk", "flight_risk", False)],
+                     extra_context={
+                         "status_choices": TalentPoolMembership.STATUS_CHOICES,
+                         "flight_risk_choices": TalentPoolMembership.FLIGHT_RISK_CHOICES,
+                         "pools": TalentPool.objects.filter(tenant=request.tenant, is_active=True)
+                         .order_by("pool_type", "name")})
+
+
+@tenant_admin_required
+def talentpoolmembership_create(request):
+    return crud_create(request, form_class=TalentPoolMembershipForm,
+                       template="hrm/talent/talentpoolmembership/form.html",
+                       success_url="hrm:talentpoolmembership_list")
+
+
+@tenant_admin_required
+def talentpoolmembership_detail(request, pk):
+    return crud_detail(request, model=TalentPoolMembership, pk=pk,
+                       template="hrm/talent/talentpoolmembership/detail.html",
+                       select_related=("employee__party", "pool", "review"))
+
+
+@tenant_admin_required
+def talentpoolmembership_edit(request, pk):
+    return crud_edit(request, model=TalentPoolMembership, pk=pk, form_class=TalentPoolMembershipForm,
+                     template="hrm/talent/talentpoolmembership/form.html",
+                     success_url="hrm:talentpoolmembership_list")
+
+
+@tenant_admin_required
+@require_POST
+def talentpoolmembership_delete(request, pk):
+    return crud_delete(request, model=TalentPoolMembership, pk=pk,
+                       success_url="hrm:talentpoolmembership_list")
+
+
+@tenant_admin_required
+def talent_nine_box(request):
+    """The 9-box grid: ACTIVE memberships bucketed by their COMPUTED performance/potential bands
+    (rows = potential high→low, cols = performance low→high — the conventional layout). Optional
+    ``?pool=<id>`` scope. Members missing either axis are listed separately as unplaced."""
+    qs = (TalentPoolMembership.objects.filter(tenant=request.tenant, status="active")
+          .select_related("employee__party", "pool", "review"))
+    pool_id = request.GET.get("pool", "").strip()
+    if pool_id.isdigit():
+        qs = qs.filter(pool_id=int(pool_id))
+    members = list(qs)  # materialize once — the band properties are pure Python, no extra queries
+
+    bands = ["high", "medium", "low"]
+    grid = {(perf, pot): [] for perf in bands for pot in bands}
+    unplaced = []
+    for m in members:
+        perf, pot = m.performance_band, m.potential_band
+        if perf and pot:
+            grid[(perf, pot)].append(m)
+        else:
+            unplaced.append(m)
+
+    rows = []
+    for pot in bands:                                  # potential: high (top) → low (bottom)
+        cells = [{"performance": perf, "potential": pot,
+                  "label": _NINE_BOX_LABELS.get((perf, pot)),
+                  "members": grid[(perf, pot)]}
+                 for perf in ["low", "medium", "high"]]  # performance: low (left) → high (right)
+        rows.append({"potential": pot, "cells": cells})
+
+    return render(request, "hrm/talent/nine_box.html", {
+        "rows": rows, "unplaced": unplaced, "placed_count": len(members) - len(unplaced),
+        "total": len(members),
+        "pools": TalentPool.objects.filter(tenant=request.tenant, is_active=True).order_by("pool_type", "name")})
+
+
+# ---- Succession plans + their ranked candidate bench ------------------------------------------
+@tenant_admin_required
+def successionplan_list(request):
+    qs = (SuccessionPlan.objects.filter(tenant=request.tenant)
+          .select_related("critical_role", "department", "incumbent__party"))
+    return crud_list(request, qs, "hrm/talent/successionplan/list.html",
+                     search_fields=["number", "critical_role__name", "incumbent__party__name", "notes"],
+                     filters=[("status", "status", False), ("vacancy_risk", "vacancy_risk", False),
+                              ("critical_role", "critical_role_id", True)],
+                     extra_context={"status_choices": SuccessionPlan.STATUS_CHOICES,
+                                    "vacancy_risk_choices": SuccessionPlan.VACANCY_RISK_CHOICES,
+                                    "designations": Designation.objects.filter(tenant=request.tenant)
+                                    .order_by("name")})
+
+
+@tenant_admin_required
+def successionplan_create(request):
+    return crud_create(request, form_class=SuccessionPlanForm,
+                       template="hrm/talent/successionplan/form.html", success_url="hrm:successionplan_list")
+
+
+@tenant_admin_required
+def successionplan_detail(request, pk):
+    obj = get_object_or_404(
+        SuccessionPlan.objects.select_related("critical_role", "department", "incumbent__party"),
+        pk=pk, tenant=request.tenant)
+    candidates = obj.candidates.select_related("candidate__party").all()
+    return render(request, "hrm/talent/successionplan/detail.html", {
+        "obj": obj, "candidates": candidates,
+        "candidate_form": SuccessionCandidateForm(tenant=request.tenant)})
+
+
+@tenant_admin_required
+def successionplan_edit(request, pk):
+    return crud_edit(request, model=SuccessionPlan, pk=pk, form_class=SuccessionPlanForm,
+                     template="hrm/talent/successionplan/form.html", success_url="hrm:successionplan_list")
+
+
+@tenant_admin_required
+@require_POST
+def successionplan_delete(request, pk):
+    return crud_delete(request, model=SuccessionPlan, pk=pk, success_url="hrm:successionplan_list")
+
+
+@tenant_admin_required
+@require_POST
+def successioncandidate_add(request, plan_pk):
+    """Add a ranked successor to a plan's bench (inline on the plan detail — mirrors travelbooking_add)."""
+    plan = get_object_or_404(SuccessionPlan, pk=plan_pk, tenant=request.tenant)
+    form = SuccessionCandidateForm(request.POST,
+                                   instance=SuccessionCandidate(tenant=request.tenant, plan=plan),
+                                   tenant=request.tenant)
+    if form.is_valid():
+        try:
+            form.save()
+        except IntegrityError:
+            messages.error(request, "That employee is already a successor on this plan.")
+            return redirect("hrm:successionplan_detail", pk=plan.pk)
+        write_audit_log(request.user, plan, "update", {"action": "candidate_add"})
+        messages.success(request, "Successor added to the bench.")
+    else:
+        messages.error(request, "; ".join(f"{fld}: {errs[0]}" for fld, errs in form.errors.items()))
+    return redirect("hrm:successionplan_detail", pk=plan.pk)
+
+
+@tenant_admin_required
+def successioncandidate_edit(request, pk):
+    obj = get_object_or_404(SuccessionCandidate.objects.select_related("plan"), pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = SuccessionCandidateForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, obj.plan, "update", {"action": "candidate_edit"})
+            messages.success(request, "Successor updated.")
+            return redirect("hrm:successionplan_detail", pk=obj.plan_id)
+    else:
+        form = SuccessionCandidateForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/talent/successioncandidate/form.html",
+                  {"form": form, "obj": obj, "plan": obj.plan, "is_edit": True})
+
+
+@tenant_admin_required
+@require_POST
+def successioncandidate_delete(request, pk):
+    obj = get_object_or_404(SuccessionCandidate.objects.select_related("plan"), pk=pk, tenant=request.tenant)
+    plan_pk = obj.plan_id
+    obj.delete()
+    write_audit_log(request.user, obj.plan, "update", {"action": "candidate_delete"})
+    messages.success(request, "Successor removed from the bench.")
+    return redirect("hrm:successionplan_detail", pk=plan_pk)
