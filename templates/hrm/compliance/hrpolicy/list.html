@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}HR Policies{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">HR Policies</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Compliance</span><span class="sep">›</span><span>Policies</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:policyacknowledgment_list' %}" class="btn btn-outline"><i data-lucide="check-check"></i> My Acknowledgments</a>
+      {% if is_admin %}<a href="{% url 'hrm:hrpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Policy</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search policies...">
+        </div>
+        {% if is_admin %}
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="form-group">
+          <select name="category" class="form-select" aria-label="Category"><option value="">All categories</option>
+            {% for val, label in category_choices %}<option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:hrpolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Category</th><th>Version</th>{% if is_admin %}<th>Status</th><th>Acknowledged</th>{% endif %}<th>Effective</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:hrpolicy_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title|truncatechars:50 }}</td>
+              <td><span class="badge badge-info">{{ obj.get_category_display }}</span></td>
+              <td>v{{ obj.version_number }}</td>
+              {% if is_admin %}
+                <td>{% if obj.status == 'published' %}<span class="badge badge-green">Published</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}</td>
+                <td>{% if obj.requires_acknowledgment %}{{ obj.acknowledged_count }}/{{ obj.target_count }} <span class="text-muted">({{ obj.acknowledgment_rate }}%)</span>{% else %}<span class="text-muted">Not required</span>{% endif %}</td>
+              {% endif %}
+              <td>{% if obj.effective_from %}{{ obj.effective_from|date:"d M Y" }}{% else %}-{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:hrpolicy_detail' obj.pk %}" class="btn-icon" title="Read"><i data-lucide="eye"></i></a>
+                {% if is_admin %}
+                <a href="{% url 'hrm:hrpolicy_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:hrpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                {% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if is_admin %}8{% else %}6{% endif %}"><div class="empty-state"><i data-lucide="scroll-text"></i><h3>No policies {% if not is_admin %}published{% else %}yet{% endif %}</h3><p>{% if is_admin %}Author a versioned HR policy and publish it to raise acknowledgment requests.{% else %}No published policies to read yet.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
