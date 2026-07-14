@@ -8679,5 +8679,42 @@ the "current pay" compa-ratio input — NOT re-created), `accounting.Currency`. 
 - True freeze-at-cancellation for `EquityGrant.vested_shares` (needs a stored `cancelled_on` date — see
   Decisions above).
 
+## Review notes — 3.37 Compensation & Benefits (as-built, 2026-07-14)
+
+**Delivered:** 4 tenant-scoped models (migrations `0053`+`0054`) — `SalaryBenchmark`, `BenefitPlan`,
+`EmployeeBenefitEnrollment` (`BEN-`), `EquityGrant` (`ESOP-`) + forms, tenant-scoped CRUD views, the admin
+`enroll`/`waive`/`terminate` enrollment lifecycle, the guarded `record_exercise` equity action, 12 templates,
+admin, an idempotent `_seed_compensation`, `LIVE_LINKS["3.37"]` (4 of 6 bullets; Compensation Planning +
+Rewards & Recognition deferred), and a **29-test** suite.
+
+**Key design points:** equity vesting (`vested_shares`/`vested_percent`/`unvested_shares`/`exercisable_shares`)
+is COMPUTED from the cliff + graded schedule, never stored — only `exercised_shares` persists. Benefit
+contributions are DERIVED from the plan server-side. `SalaryBenchmark` builds on the 3.2 Designation bands +
+3.13 EmployeeSalaryStructure rather than duplicating them.
+
+**Review agents (run in parallel, findings applied + committed):**
+- **code-reviewer** — found 3 real data-integrity bugs (dynamically reproduced): `BenefitPlan` duplicate
+  `(tenant,name)` and `EmployeeBenefitEnrollment` duplicate `(tenant,employee,plan,effective_from)` on EDIT both
+  **500'd on a raw IntegrityError** (Django skips `validate_unique` when `tenant`/`employee` are form-excluded),
+  and an admin could shrink `shares_granted` below already-`exercised_shares`. All three fixed with `clean()`
+  guards + 3 regression tests.
+- **security-reviewer** — one Medium: a self-service employee could POST an arbitrary `employer_contribution`
+  (employer money) on their own enrollment. Fixed by dropping both contribution fields from the self-service form
+  and deriving them from the plan server-side. Tenant isolation, authz, CSRF, XSS, and the record-exercise
+  overflow guard all verified clean.
+- **performance-reviewer** — added `list_select_related` to all 4 admin classes (changelist N+1), dropped an
+  unused `currency` join from two list views, and added `(tenant,-created_at)` / `(tenant,-grant_date)` ordering
+  indexes. Confirmed the vesting properties do zero queries.
+- **frontend-reviewer** — clean; documented the deliberate `grant_type` abbreviation in the equity list badge.
+- **explorer** — fully wired (24 routes ↔ 24 views, 12 templates, LIVE_LINKS, admin, seeder dispatch).
+- **qa-smoke-tester** — expanded the suite (URL sweep, CRUD cycles, comment-leak scan, per-endpoint IDOR) and
+  confirmed `_seed_compensation` idempotency (2 benchmarks / 4 plans / 4 enrollments / 2 grants; re-run a no-op).
+
+**Verify:** `manage.py check` clean; migrations `0053`+`0054` apply; all 24 URLs reverse; **29/29 tests pass**.
+
+**Deferred (carried forward):** `CompensationCycle`/`CompensationReviewLine` (merit/promotion/budget cycles),
+`RecognitionAward` (monetary spot/service awards), guideline matrices, rewards-catalog redemption, carrier EDI,
+AI job-pricing, pay-equity dashboards, 409A/ASC-718 GL posting, cap-table modeling, payroll-deduction posting.
+
 ## Review notes
 (filled in at the end)
