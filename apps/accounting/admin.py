@@ -183,7 +183,7 @@ class ReconciliationMatchAdmin(admin.ModelAdmin):
 
 
 # ===================== Advanced sub-modules 2.6–2.15 =====================
-from .models_advanced import (  # noqa: E402
+from .models import (  # noqa: E402
     AssetDisposal,
     Budget,
     BudgetLine,
