@@ -15025,9 +15025,12 @@ from .forms import (  # noqa: E402  — 3.38 Talent Management & Succession
 def talentpool_list(request):
     # Annotate the active-member count the template renders per row — the model property picks the
     # annotation up, so the list stays a fixed query count instead of one COUNT per pool.
+    # Explicit order_by — annotate() introduces a GROUP BY, which drops Meta.ordering, and an unordered
+    # queryset makes the paginator duplicate/skip rows across pages.
     qs = (TalentPool.objects.filter(tenant=request.tenant).select_related("owner__party")
           .annotate(_active_member_count=Count("memberships",
-                                               filter=Q(memberships__status="active"), distinct=True)))
+                                               filter=Q(memberships__status="active"), distinct=True))
+          .order_by("pool_type", "name"))
     return crud_list(request, qs, "hrm/talent/talentpool/list.html",
                      search_fields=["name", "description"],
                      filters=[("pool_type", "pool_type", False), ("is_active", "is_active", False)],
@@ -15163,7 +15166,9 @@ def successionplan_list(request):
           .select_related("critical_role", "department", "incumbent__party")
           .annotate(_candidate_count=Count("candidates", distinct=True),
                     _ready_now_count=Count("candidates",
-                                           filter=Q(candidates__readiness="ready_now"), distinct=True)))
+                                           filter=Q(candidates__readiness="ready_now"), distinct=True))
+          # Explicit order_by — annotate()'s GROUP BY drops Meta.ordering, leaving pagination unordered.
+          .order_by("-created_at"))
     return crud_list(request, qs, "hrm/talent/successionplan/list.html",
                      search_fields=["number", "critical_role__name", "incumbent__party__name", "notes"],
                      filters=[("status", "status", False), ("vacancy_risk", "vacancy_risk", False),
@@ -15213,7 +15218,11 @@ def successioncandidate_add(request, plan_pk):
                                    tenant=request.tenant)
     if form.is_valid():
         try:
-            form.save()
+            # Savepoint: a duplicate-successor IntegrityError must roll back only this insert instead of
+            # poisoning the surrounding request transaction (which would then raise
+            # TransactionManagementError on the next query). Mirrors investmentdeclarationline_add.
+            with transaction.atomic():
+                form.save()
         except IntegrityError:
             messages.error(request, "That employee is already a successor on this plan.")
             return redirect("hrm:successionplan_detail", pk=plan.pk)
