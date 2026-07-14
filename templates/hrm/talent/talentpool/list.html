@@ -20,12 +20,12 @@
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search pools...">
         </div>
         <div class="form-group">
-          <select name="pool_type" class="form-select"><option value="">All types</option>
+          <select name="pool_type" class="form-select" aria-label="Pool Type"><option value="">All types</option>
             {% for val, label in pool_type_choices %}<option value="{{ val }}" {% if request.GET.pool_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <select name="is_active" class="form-select"><option value="">All statuses</option>
+          <select name="is_active" class="form-select" aria-label="Status"><option value="">All statuses</option>
             <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
             <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
           </select>
