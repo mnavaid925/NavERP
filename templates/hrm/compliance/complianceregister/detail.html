@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }} <span class="badge badge-info">{{ obj.get_register_type_display }}</span>
+        {% if obj.status == 'filed' %}<span class="badge badge-green">Filed</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-amber">In Progress</span>{% elif obj.status == 'pending' %}<span class="badge badge-info">Pending</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:complianceregister_list' %}">Registers</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:complianceregister_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Records</a>
+      <a href="{% url 'hrm:complianceregister_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Type</span><div>{{ obj.get_register_type_display }}</div></div>
+      <div><span class="text-muted">Jurisdiction</span><div>{{ obj.jurisdiction|default:"-" }}</div></div>
+      <div><span class="text-muted">Authority</span><div>{{ obj.authority|default:"-" }}</div></div>
+      <div><span class="text-muted">Period</span><div>{% if obj.period_start %}{{ obj.period_start|date:"d M Y" }}{% if obj.period_end %} – {{ obj.period_end|date:"d M Y" }}{% endif %}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Due Date</span><div>{% if obj.due_date %}{{ obj.due_date|date:"d M Y" }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Filed On</span><div>{% if obj.filed_on %}{{ obj.filed_on|date:"d M Y" }}{% else %}Not filed{% endif %}</div></div>
+      {% if obj.inspector_name %}<div><span class="text-muted">Inspector</span><div>{{ obj.inspector_name }}</div></div>{% endif %}
+      {% if obj.document %}<div><span class="text-muted">Document</span><div><a href="{{ obj.document.url }}">Download</a></div></div>{% endif %}
+    </div>
+    {% if obj.findings %}<div style="margin-top:1rem;"><span class="text-muted">Findings</span><p>{{ obj.findings|linebreaksbr }}</p></div>{% endif %}
+    {% if obj.notes %}<p class="text-muted" style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; gap:1rem;">
+      <a href="{% url 'hrm:complianceregister_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:complianceregister_delete' obj.pk %}" onsubmit="return confirm('Delete this record?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+{% endblock %}
