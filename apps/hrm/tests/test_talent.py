@@ -225,6 +225,102 @@ def test_multitenant_idor_404(client_a, pool_b, plan_b):
 
 
 # ============================================================ 3.38 wiring fix: Internal Mobility deep-link
+def test_list_annotations_match_unannotated_properties(client_a, tenant_a, plan_a, pool_a, star_a,
+                                                       employee_a, employee_a2):
+    """The list views ANNOTATE the counts that bench_strength / active_member_count read (to avoid a
+    per-row N+1). Guard that the annotated result equals the plain (query-based) property — two filtered
+    Count()s over one relation can silently mis-count without distinct=True."""
+    from apps.hrm.models import SuccessionCandidate, SuccessionPlan, TalentPool
+    SuccessionCandidate.objects.create(tenant=tenant_a, plan=plan_a, candidate=employee_a,
+                                       readiness="ready_now", rank_order=1)
+    SuccessionCandidate.objects.create(tenant=tenant_a, plan=plan_a, candidate=employee_a2,
+                                       readiness="ready_1_2y", rank_order=2)
+    # Unannotated (fresh instance) → query-based property.
+    plain = SuccessionPlan.objects.get(pk=plan_a.pk)
+    assert plain.candidate_count == 2 and plain.ready_now_count == 1
+    assert plain.bench_strength == "moderate"
+
+    # Annotated, exactly as successionplan_list builds it.
+    resp = client_a.get(reverse("hrm:successionplan_list"))
+    assert resp.status_code == 200
+    annotated = resp.context["object_list"][0]
+    assert annotated.candidate_count == 2 and annotated.ready_now_count == 1
+    assert annotated.bench_strength == "moderate"
+    assert b"Moderate" in resp.content
+
+    # Same for the pool's active-member annotation.
+    resp = client_a.get(reverse("hrm:talentpool_list"))
+    pool = resp.context["object_list"][0]
+    assert pool.active_member_count == TalentPool.objects.get(pk=pool_a.pk).active_member_count == 1
+
+
+def _query_count(client, url):
+    """Queries fired by one GET of ``url`` (must not grow with row count)."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(url).status_code == 200
+    return len(ctx)
+
+
+def test_successionplan_list_query_count_is_flat(client_a, tenant_a, designation_a,
+                                                 employee_a, employee_a2):
+    """bench_strength renders on EVERY row and reads 2 counts — the annotation must keep the query
+    count FLAT as plans grow (it was 2 COUNTs per row before the fix)."""
+    from apps.hrm.models import SuccessionCandidate, SuccessionPlan
+    url = reverse("hrm:successionplan_list")
+
+    def _plan_with_bench():
+        p = SuccessionPlan.objects.create(tenant=tenant_a, critical_role=designation_a, status="active")
+        SuccessionCandidate.objects.create(tenant=tenant_a, plan=p, candidate=employee_a,
+                                           readiness="ready_now", rank_order=1)
+        SuccessionCandidate.objects.create(tenant=tenant_a, plan=p, candidate=employee_a2,
+                                           readiness="ready_1_2y", rank_order=2)
+
+    _plan_with_bench()
+    baseline = _query_count(client_a, url)
+    for _ in range(4):
+        _plan_with_bench()
+    assert _query_count(client_a, url) == baseline, "successionplan_list regressed to an N+1"
+
+
+def test_talentpool_list_query_count_is_flat(client_a, tenant_a, employee_a, employee_a2):
+    """active_member_count renders per row — the annotation must keep the count flat."""
+    from apps.hrm.models import TalentPool, TalentPoolMembership
+    url = reverse("hrm:talentpool_list")
+
+    def _pool(i):
+        p = TalentPool.objects.create(tenant=tenant_a, name=f"Pool {i}", pool_type="hipo")
+        TalentPoolMembership.objects.create(tenant=tenant_a, pool=p, employee=employee_a, status="active")
+        TalentPoolMembership.objects.create(tenant=tenant_a, pool=p, employee=employee_a2, status="active")
+
+    _pool(0)
+    baseline = _query_count(client_a, url)
+    for i in range(1, 5):
+        _pool(i)
+    assert _query_count(client_a, url) == baseline, "talentpool_list regressed to an N+1"
+
+
+def test_membership_list_query_count_is_flat(client_a, tenant_a, employee_a,
+                                             performance_review_a, review_rating_a):
+    """The 9-box axis falls back to review.effective_rating -> overall_rating -> review.ratings when
+    calibrated_rating is null. The review__ratings prefetch must keep the count flat."""
+    from apps.hrm.models import TalentPool, TalentPoolMembership
+    url = reverse("hrm:talentpoolmembership_list")
+    assert performance_review_a.calibrated_rating is None  # forces the ratings fallback path
+
+    def _membership(i):
+        p = TalentPool.objects.create(tenant=tenant_a, name=f"MP {i}", pool_type="hipo")
+        TalentPoolMembership.objects.create(tenant=tenant_a, pool=p, employee=employee_a,
+                                            review=performance_review_a)
+
+    _membership(0)
+    baseline = _query_count(client_a, url)
+    for i in range(1, 5):
+        _membership(i)
+    assert _query_count(client_a, url) == baseline, "talentpoolmembership_list regressed to an N+1"
+
+
 def test_jobrequisition_posting_type_filter(client_a, tenant_a, designation_a, dept_a):
     """The 'Internal Mobility' sidebar deep-link (?posting_type=internal) must actually filter — before
     the fix, posting_type wasn't in jobrequisition_list's filter tuple so it showed EVERY requisition."""
@@ -239,3 +335,164 @@ def test_jobrequisition_posting_type_filter(client_a, tenant_a, designation_a, d
     assert resp.status_code == 200
     assert internal.number.encode() in resp.content
     assert external.number.encode() not in resp.content
+
+
+# ============================================================ QA smoke: full URL sweep (gap 1)
+@pytest.fixture
+def candidate_a(db, tenant_a, plan_a, employee_a2):
+    """A ranked successor on plan_a's bench (used to GET successioncandidate_edit)."""
+    from apps.hrm.models import SuccessionCandidate
+    return SuccessionCandidate.objects.create(
+        tenant=tenant_a, plan=plan_a, candidate=employee_a2, readiness="ready_now", rank_order=1)
+
+
+def test_full_url_sweep_get_200(client_a, pool_a, star_a, plan_a, candidate_a):
+    """Every 3.38 list/create/detail/edit GET renders 200 for a tenant admin (create/delete-only
+    endpoints like successioncandidate_add/successioncandidate_delete/*_delete are POST-only and are
+    exercised via POST in the CRUD-cycle tests below, not here)."""
+    gets = [
+        ("hrm:talentpool_list", []),
+        ("hrm:talentpool_create", []),
+        ("hrm:talentpool_detail", [pool_a.pk]),
+        ("hrm:talentpool_edit", [pool_a.pk]),
+        ("hrm:talentpoolmembership_list", []),
+        ("hrm:talentpoolmembership_create", []),
+        ("hrm:talentpoolmembership_detail", [star_a.pk]),
+        ("hrm:talentpoolmembership_edit", [star_a.pk]),
+        ("hrm:talent_nine_box", []),
+        ("hrm:successionplan_list", []),
+        ("hrm:successionplan_create", []),
+        ("hrm:successionplan_detail", [plan_a.pk]),
+        ("hrm:successionplan_edit", [plan_a.pk]),
+        ("hrm:successioncandidate_edit", [candidate_a.pk]),
+    ]
+    for name, args in gets:
+        resp = client_a.get(reverse(name, args=args))
+        assert resp.status_code == 200, f"{name}{args} -> {resp.status_code}"
+
+
+def test_filtered_list_renders(client_a, tenant_a, pool_a, star_a):
+    """One filtered list (?q= + a choice filter) — must still 200, not throw on the combined filter."""
+    resp = client_a.get(reverse("hrm:talentpoolmembership_list") + "?q=a&status=active&flight_risk=low")
+    assert resp.status_code == 200
+    assert star_a.employee.party.name.encode() in resp.content
+
+
+# ============================================================ QA smoke: full CRUD cycles (gap 2)
+def test_talentpool_full_crud_cycle(client_a, tenant_a, employee_a):
+    """create -> edit -> delete via POST, each a 302 redirect, with the DB reflecting every step."""
+    from apps.hrm.models import TalentPool
+    resp = client_a.post(reverse("hrm:talentpool_create"), {
+        "name": "Rising Stars", "pool_type": "hipo", "description": "",
+        "owner": employee_a.pk, "is_active": "on"})
+    assert resp.status_code == 302
+    obj = TalentPool.objects.get(tenant=tenant_a, name="Rising Stars")
+
+    resp = client_a.post(reverse("hrm:talentpool_edit", args=[obj.pk]), {
+        "name": "Rising Stars Updated", "pool_type": "leadership", "description": "Updated",
+        "owner": employee_a.pk, "is_active": "on"})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.name == "Rising Stars Updated" and obj.pool_type == "leadership"
+
+    resp = client_a.post(reverse("hrm:talentpool_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not TalentPool.objects.filter(pk=obj.pk).exists()
+
+
+def test_talentpoolmembership_full_crud_cycle(client_a, tenant_a, pool_a, employee_a2):
+    """create -> edit -> delete via POST for a membership NOT already covered by the star_a fixture."""
+    from apps.hrm.models import TalentPoolMembership
+    resp = client_a.post(reverse("hrm:talentpoolmembership_create"), {
+        "pool": pool_a.pk, "employee": employee_a2.pk, "joined_on": TODAY.isoformat(),
+        "status": "active", "flight_risk": "low"})
+    assert resp.status_code == 302
+    obj = TalentPoolMembership.objects.get(tenant=tenant_a, pool=pool_a, employee=employee_a2)
+
+    resp = client_a.post(reverse("hrm:talentpoolmembership_edit", args=[obj.pk]), {
+        "pool": pool_a.pk, "employee": employee_a2.pk, "joined_on": TODAY.isoformat(),
+        "status": "active", "flight_risk": "high",
+        "performance_rating": "3.50", "potential_rating": "3.60"})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.flight_risk == "high" and obj.performance_rating == Decimal("3.50")
+
+    resp = client_a.post(reverse("hrm:talentpoolmembership_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not TalentPoolMembership.objects.filter(pk=obj.pk).exists()
+
+
+def test_successionplan_full_crud_cycle(client_a, tenant_a, designation_a, employee_a):
+    """create -> edit -> delete via POST for a plan NOT already covered by the plan_a fixture."""
+    from apps.hrm.models import SuccessionPlan
+    resp = client_a.post(reverse("hrm:successionplan_create"), {
+        "critical_role": designation_a.pk, "incumbent": employee_a.pk,
+        "vacancy_risk": "medium", "status": "draft", "review_date": TODAY.isoformat(), "notes": ""})
+    assert resp.status_code == 302
+    obj = SuccessionPlan.objects.filter(tenant=tenant_a).order_by("-created_at").first()
+    assert obj is not None and obj.number.startswith("SPL-")
+
+    resp = client_a.post(reverse("hrm:successionplan_edit", args=[obj.pk]), {
+        "critical_role": designation_a.pk, "incumbent": employee_a.pk,
+        "vacancy_risk": "high", "status": "active", "review_date": TODAY.isoformat(),
+        "notes": "Updated"})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.vacancy_risk == "high" and obj.status == "active" and obj.notes == "Updated"
+
+    resp = client_a.post(reverse("hrm:successionplan_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not SuccessionPlan.objects.filter(pk=obj.pk).exists()
+
+
+# ============================================================ QA smoke: comment-leak scan (gap 3)
+def test_no_template_comment_leak_across_talent_pages(client_a, pool_a, star_a, plan_a):
+    """``{#`` / ``{% comment`` must never reach rendered HTML on any 3.38 list/detail page, incl. the
+    9-box grid."""
+    urls = [
+        reverse("hrm:talentpool_list"),
+        reverse("hrm:talentpool_detail", args=[pool_a.pk]),
+        reverse("hrm:talentpoolmembership_list"),
+        reverse("hrm:talentpoolmembership_detail", args=[star_a.pk]),
+        reverse("hrm:successionplan_list"),
+        reverse("hrm:successionplan_detail", args=[plan_a.pk]),
+        reverse("hrm:talent_nine_box"),
+    ]
+    for url in urls:
+        resp = client_a.get(url)
+        assert resp.status_code == 200, url
+        content = resp.content.decode()
+        assert "{#" not in content, f"comment-leak marker in {url}"
+        assert "{% comment" not in content, f"comment-leak marker in {url}"
+
+
+# ============================================================ QA smoke: nine-box ?pool= filter (gap 4)
+@pytest.fixture
+def pool_a2(db, tenant_a):
+    from apps.hrm.models import TalentPool
+    return TalentPool.objects.create(tenant=tenant_a, name="Leadership Pipeline 2", pool_type="leadership")
+
+
+def test_nine_box_pool_filter_scopes_grid_and_unrated_is_unplaced(client_a, tenant_a, pool_a, pool_a2,
+                                                                   star_a, employee_a2):
+    """``?pool=<id>`` scopes the grid to that pool only; a same-pool member with no rating lands in the
+    "unplaced" section, while a rated member of a DIFFERENT pool is excluded entirely from the response."""
+    unrated_in_pool = _member(tenant_a, pool_a, employee_a2)                       # no ratings -> unplaced
+    rated_in_other_pool = _member(tenant_a, pool_a2, employee_a2, Decimal("4.5"), Decimal("4.6"))
+
+    resp = client_a.get(reverse("hrm:talent_nine_box") + f"?pool={pool_a.pk}")
+    assert resp.status_code == 200
+    content = resp.content.decode()
+
+    star_href = reverse("hrm:talentpoolmembership_detail", args=[star_a.pk])
+    unrated_href = reverse("hrm:talentpoolmembership_detail", args=[unrated_in_pool.pk])
+    other_href = reverse("hrm:talentpoolmembership_detail", args=[rated_in_other_pool.pk])
+
+    assert star_href in content            # placed (Star), scoped to pool_a
+    assert unrated_href in content         # unplaced, scoped to pool_a
+    assert other_href not in content       # different pool -> excluded entirely by the filter
+    assert resp.context["placed_count"] == 1 and resp.context["total"] == 2
+
+    # Sanity: without the filter, the OTHER pool's member IS included.
+    resp_all = client_a.get(reverse("hrm:talent_nine_box"))
+    assert other_href in resp_all.content.decode()
