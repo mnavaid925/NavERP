@@ -272,6 +272,56 @@ def test_multitenant_idor_404(client_a, policy_b, grievance_b):
     assert client_a.get(reverse("hrm:grievance_detail", args=[grievance_b.pk])).status_code == 404
 
 
+def _query_count(client, url):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(url).status_code == 200
+    return len(ctx)
+
+
+def test_policy_list_and_detail_query_counts_are_flat(client_a, tenant_a, employee_a, employee_a2):
+    """hrpolicy_list/detail annotate the acknowledgment counts — without that, each of the three
+    properties fires its own COUNT (per row on the list, up to 4x on the detail)."""
+    from apps.hrm.models import HRPolicy, PolicyAcknowledgment
+    list_url = reverse("hrm:hrpolicy_list")
+
+    def _policy_with_acks(i):
+        p = HRPolicy.objects.create(tenant=tenant_a, title=f"P{i}", version_number="1.0",
+                                    status="published", requires_acknowledgment=True)
+        for emp in (employee_a, employee_a2):
+            PolicyAcknowledgment.objects.create(tenant=tenant_a, policy=p, employee=emp)
+        return p
+
+    first = _policy_with_acks(0)
+    baseline = _query_count(client_a, list_url)
+    for i in range(1, 5):
+        _policy_with_acks(i)
+    assert _query_count(client_a, list_url) == baseline, "hrpolicy_list regressed to an N+1"
+
+    # The detail page must not re-COUNT per property access either.
+    detail = _query_count(client_a, reverse("hrm:hrpolicy_detail", args=[first.pk]))
+    assert detail <= baseline, "hrpolicy_detail is re-running the acknowledgment COUNTs"
+
+
+def test_grievance_and_contract_list_query_counts_are_flat(client_a, tenant_a, employee_a,
+                                                           designation_a):
+    from apps.hrm.models import EmploymentContract, Grievance
+    g_url, c_url = reverse("hrm:grievance_list"), reverse("hrm:employmentcontract_list")
+
+    Grievance.objects.create(tenant=tenant_a, employee=employee_a, subject="G0", description="x")
+    EmploymentContract.objects.create(tenant=tenant_a, employee=employee_a, contract_type="permanent",
+                                      start_date=TODAY, designation=designation_a, status="active")
+    g_base, c_base = _query_count(client_a, g_url), _query_count(client_a, c_url)
+    for i in range(1, 6):
+        Grievance.objects.create(tenant=tenant_a, employee=employee_a, subject=f"G{i}", description="x")
+        EmploymentContract.objects.create(tenant=tenant_a, employee=employee_a,
+                                          contract_type="permanent", start_date=TODAY,
+                                          designation=designation_a, status="active")
+    assert _query_count(client_a, g_url) == g_base, "grievance_list regressed to an N+1"
+    assert _query_count(client_a, c_url) == c_base, "employmentcontract_list regressed to an N+1"
+
+
 def test_hrpolicy_list_is_ordered_for_pagination(client_a, tenant_a):
     """hrpolicy_list annotates ack counts — annotate() drops Meta.ordering, so it MUST re-apply order_by
     or the paginator duplicates/skips rows (the 3.38 lesson)."""
