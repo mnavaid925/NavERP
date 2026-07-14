@@ -15,7 +15,8 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
 3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management,
-3.34 Expense Management, 3.35 Travel Management, 3.36 Helpdesk, 3.37 Compensation & Benefits.** Reuses the
+3.34 Expense Management, 3.35 Travel Management, 3.36 Helpdesk, 3.37 Compensation & Benefits,
+3.38 Talent Management & Succession Planning.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -598,6 +599,72 @@ Templates: `templates/hrm/compensation/{salarybenchmark,benefitplan,employeebene
 **Deferred:** Compensation Planning (`CompensationCycle`/`ReviewLine`) + a formal monetary Rewards & Recognition (peer
 kudos already ship in 3.20) — those 2 NavERP.md bullets stay roadmap placeholders.
 
+### 3.38 Talent Management & Succession Planning (4 tables) — HiPo 9-box + succession bench
+**CONFIDENTIALITY (read this first):** **EVERY 3.38 view is `@tenant_admin_required`** — no own-vs-admin
+self-service, no `_ss_scope`. This follows the **3.21 PIP/CoachingNote precedent**: an employee must never learn
+they're in a HiPo pool, what their 9-box placement is, that they're flagged a flight risk, or that they sit (or
+don't sit) on someone's succession bench. Locked in by `test_non_admin_forbidden_on_every_talent_view`
+(`apps/hrm/tests/test_talent.py`) — if you add a 3.38 view, add it to that test.
+
+**Models** (`apps/hrm/models.py`, migration `0055`):
+`TalentPool` (`TenantOwned`, **not** auto-numbered; `name` [unique per tenant], `pool_type`
+[hipo/successor/critical_skill/leadership/other], `description`, `owner`→`hrm.EmployeeProfile`(SET_NULL),
+`is_active`; the `active_member_count` property is **ANNOTATION-AWARE** — it returns the `_active_member_count`
+annotation the list view supplies and only falls back to a COUNT query for a lone instance),
+`TalentPoolMembership` (`TenantOwned`; the 9-box row: `pool`(CASCADE, related_name `memberships`),
+`employee`→`EmployeeProfile`, `joined_on`, `status` [active/exited/promoted], **`review`→`hrm.PerformanceReview`
+(3.19, SET_NULL) — the rating SOURCE**, `performance_rating`/`potential_rating` [optional Decimal 1–5
+**OVERRIDES** of the review], `flight_risk` [low/medium/high], `retention_action_plan`, `notes`; **COMPUTED, never
+stored:** `effective_performance`/`effective_potential` [the override if set, else the review's
+`effective_rating`/`potential_rating`, else None], `performance_band`/`potential_band` [via the module-level
+`_rating_band()`: **low <3, medium <4, high >=4**], `nine_box_quadrant` [the `_NINE_BOX_LABELS` 3×3 lookup keyed
+`(performance_band, potential_band)` → Star / Emerging Star / High Performer / Core Player / Solid Performer /
+Average Performer / Enigma / Inconsistent Player / Underperformer; **None when either axis is unrated**];
+`unique_together (tenant, pool, employee)`), `SuccessionPlan` (`TenantNumbered`, **`SPL-`**;
+`critical_role`→`hrm.Designation`(**PROTECT**), `department`→`core.OrgUnit`(SET_NULL, kind=department),
+`incumbent`→`EmployeeProfile`(SET_NULL), `vacancy_risk` [low/medium/high], `status` [draft/active/closed],
+`review_date`, `notes`; **COMPUTED** `bench_strength` [**strong** = 2+ ready_now, **moderate** = 1, **weak** =
+candidates but none ready, **none** = empty bench] off the annotation-aware `ready_now_count`/`candidate_count`),
+`SuccessionCandidate` (`TenantOwned`; the **inline child** of a plan — the `TravelBooking`-under-`TravelRequest`
+shape: `plan`(CASCADE, related_name `candidates`), `candidate`→`EmployeeProfile`, `readiness`
+[ready_now/ready_1_2y/ready_3_5y/development_needed], `rank_order`, `development_notes`;
+`unique_together (tenant, plan, candidate)`).
+
+**Views** (`apps/hrm/views.py`, the `# 3.38 Talent Management & Succession Planning` section): full CRUD for the
+3 top-level models (`crud_list`/`crud_create`/`crud_edit`/`crud_delete` + bespoke detail views so the review's
+rating lines can be prefetched) + inline `successioncandidate_add`/`_edit`/`_delete` on the plan detail + the
+derived **`talent_nine_box`** grid (rows = potential **high→low**, cols = performance **low→high** — the
+conventional layout; optional `?pool=<id>` scope; active memberships missing either axis are listed separately as
+**unplaced**). `talentpool_delete` is **blocked while the pool still has members** (deactivate instead).
+
+**GOTCHAS (learned the hard way — keep these):**
+1. **The two annotated lists (`talentpool_list`, `successionplan_list`) MUST re-apply an explicit `.order_by()`** —
+   `annotate()` adds a GROUP BY that **DROPS `Meta.ordering`**, and an unordered queryset makes the paginator
+   duplicate/skip rows across pages.
+2. **`successioncandidate_add` wraps `form.save()` in `transaction.atomic()`** — a duplicate-successor
+   `IntegrityError` otherwise poisons the surrounding request transaction (`TransactionManagementError` on the next
+   query → `SessionInterrupted`). Mirrors `investmentdeclarationline_add`.
+3. **Every list/detail that renders the 9-box must `select_related("review")` AND
+   `prefetch_related("review__ratings")`** — `effective_performance` falls back to `PerformanceReview.effective_rating`,
+   which (when `calibrated_rating` is null) derives `overall_rating` from the review's **rating lines**. Without the
+   prefetch that's one query per row.
+4. **All three `unique_together`s are guarded in the forms' `clean()`** — Django **SKIPS `validate_unique`** when
+   `tenant` (and `plan`/`employee`) are form-excluded, so a duplicate would otherwise reach the DB and 500.
+
+**Core-spine reuse:** `hrm.PerformanceReview` (3.19 — the rating source for BOTH 9-box axes), `hrm.Designation`
+(3.2 — the critical role), `core.OrgUnit` (department), `hrm.EmployeeProfile`. **Posts no GL.**
+
+**Templates:** `templates/hrm/talent/{talentpool,talentpoolmembership,successionplan}/{list,detail,form}.html` +
+`talent/successioncandidate/form.html` (the inline child's edit page) + the standalone `talent/nine_box.html`.
+
+**Seeder:** `_seed_talent` (dispatched right after `_seed_compensation`) — 2 pools (High Potentials 2026 + Leadership
+Pipeline) with **5 members spread across the 9-box** (Star / Emerging Star **+ a high-flight-risk retention case** /
+High Performer / Core Player / Underperformer) and **1 succession plan with a 3-deep ranked bench**
+(ready_now → ready_1_2y → development_needed). Idempotent (guarded on `TalentPool.exists()`).
+
+**Deferred:** **Career Pathing** — it needs a `CareerPath` + `EmployeeSkill` taxonomy of its own, so that NavERP.md
+bullet stays a roadmap placeholder (no model, no sidebar entry).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -787,6 +854,15 @@ kudos already ship in 3.20) — those 2 NavERP.md bullets stay roadmap placehold
   `hrm:equitygrant_list`/`_create`/`_detail`/`_edit`/`_delete` + admin-only `hrm:equitygrant_record_exercise`
   (`/hrm/compensation/equity-grants/...`). All `@login_required`, tenant-scoped; catalog + equity writes
   `@tenant_admin_required`; enrollment is own-vs-admin self-service (pending-only owner edit/delete).
+- **Talent Management & Succession (3.38):** `hrm:talentpool_list`/`_create`/`_detail`/`_edit`/`_delete`
+  (`/hrm/talent/pools/...`) + `hrm:talentpoolmembership_list`/`_create`/`_detail`/`_edit`/`_delete`
+  (`/hrm/talent/memberships/...`) + the derived grid `hrm:talent_nine_box` (`/hrm/talent/nine-box/`, GET, optional
+  `?pool=<id>`) + `hrm:successionplan_list`/`_create`/`_detail`/`_edit`/`_delete`
+  (`/hrm/talent/succession-plans/...`) + the inline bench `hrm:successioncandidate_add`
+  (`/hrm/talent/succession-plans/<plan_pk>/candidates/add/`, POST) / `hrm:successioncandidate_edit` /
+  `hrm:successioncandidate_delete` (`/hrm/talent/candidates/<pk>/...`; edit is GET+POST, delete POST — both redirect
+  back to the plan detail). **EVERY route here is `@tenant_admin_required`** — reads included (HiPo/9-box/flight-risk/
+  bench data is HR-confidential; see 3.38 above), and the two deletes are additionally `@require_POST`.
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1333,6 +1409,13 @@ tenant and sees nothing.
 - 3.37 (4 of 6 bullets live): Salary Benchmarking → `hrm:salarybenchmark_list`; Benefits Administration →
   `hrm:benefitplan_list`; Flexible Benefits → `hrm:employeebenefitenrollment_list`; Stock/ESOP Management →
   `hrm:equitygrant_list`. `LIVE_LINKS["3.37"]`. Compensation Planning + Rewards & Recognition are deferred (roadmap).
+- 3.38 (5 of 6 bullets live): Talent Pool → `hrm:talentpool_list`; Succession Planning → `hrm:successionplan_list`;
+  **Talent Reviews → `hrm:calibration_board` (REUSES the 3.19 calibration board — no new model)**; **Internal Mobility
+  → `hrm:jobrequisition_list?posting_type=internal` (REUSES 3.5/3.6 — note `posting_type` had to be ADDED to
+  `jobrequisition_list`'s `filters` tuple, otherwise the deep-link silently listed EVERY requisition)**; Retention
+  Strategies → `hrm:talentpoolmembership_list?flight_risk=high`; + extras 9-Box Grid → `hrm:talent_nine_box` and
+  Talent Pool Members → `hrm:talentpoolmembership_list`. `LIVE_LINKS["3.38"]`. **Career Pathing is DEFERRED** (needs a
+  `CareerPath` + `EmployeeSkill` taxonomy) — no entry, it stays a roadmap placeholder.
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
