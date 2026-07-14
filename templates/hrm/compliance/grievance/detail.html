@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.subject }}
+        {% if obj.status == 'resolved' %}<span class="badge badge-green">Resolved</span>{% elif obj.status == 'investigating' %}<span class="badge badge-amber">Investigating</span>{% elif obj.status == 'open' %}<span class="badge badge-info">Open</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.severity == 'critical' or obj.severity == 'high' %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>{% elif obj.severity == 'medium' %}<span class="badge badge-amber">Medium</span>{% endif %}
+        {% if obj.is_anonymous %}<span class="badge badge-muted">Anonymous</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:grievance_list' %}">Grievances</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:grievance_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Grievances</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Number</span><div>{{ obj.number }}</div></div>
+      {# show_complainant is False for a non-admin viewing an anonymous grievance. #}
+      <div><span class="text-muted">Complainant</span><div>{% if show_complainant %}{{ obj.employee.party.name }}{% else %}<span class="badge badge-muted">Anonymous</span>{% endif %}</div></div>
+      <div><span class="text-muted">Category</span><div>{{ obj.get_category_display }}</div></div>
+      <div><span class="text-muted">Severity</span><div>{{ obj.get_severity_display }}</div></div>
+      <div><span class="text-muted">Filed On</span><div>{% if obj.filed_on %}{{ obj.filed_on|date:"d M Y" }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Investigator</span><div>{% if obj.assigned_investigator %}{{ obj.assigned_investigator.party.name }}{% else %}Unassigned{% endif %}</div></div>
+      {% if obj.related_policy %}<div><span class="text-muted">Related Policy</span><div><a href="{% url 'hrm:hrpolicy_detail' obj.related_policy.pk %}">{{ obj.related_policy.title }}</a></div></div>{% endif %}
+      {% if obj.related_warning %}<div><span class="text-muted">Warning Letter</span><div>{{ obj.related_warning.number }}</div></div>{% endif %}
+    </div>
+    <p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>
+  </div></div>
+
+  {% if obj.resolution %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Resolution</h2></div>
+    <div class="card-body"><p style="margin:0;">{{ obj.resolution|linebreaksbr }}</p>
+      {% if obj.resolved_at %}<p class="form-help" style="margin-top:.5rem;">Resolved {{ obj.resolved_at|date:"d M Y" }}.</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if is_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Investigation</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+      {% if obj.status == 'open' or obj.status == 'investigating' %}
+        <form method="post" action="{% url 'hrm:grievance_assign' obj.pk %}" style="display:flex; gap:.5rem; align-items:flex-end;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="investigator">Assign investigator</label>
+            <select name="investigator" id="investigator" class="form-select" required>
+              <option value="">-- Select --</option>
+              {% for e in investigators %}<option value="{{ e.pk }}" {% if obj.assigned_investigator_id == e.pk %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="user-check"></i> Assign</button>
+        </form>
+        <form method="post" action="{% url 'hrm:grievance_resolve' obj.pk %}" style="display:flex; gap:.5rem; align-items:flex-end;">{% csrf_token %}
+          <div class="form-group"><label class="form-label" for="resolution">Resolution <span class="req">*</span></label><input type="text" name="resolution" id="resolution" class="form-input" required></div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Resolve</button>
+        </form>
+      {% endif %}
+      {% if obj.status != 'closed' %}
+        <form method="post" action="{% url 'hrm:grievance_close' obj.pk %}" onsubmit="return confirm('Close this grievance?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close</button></form>
+      {% else %}
+        <span class="text-muted">This grievance is closed.</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if is_own %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Manage</h2></div>
+    <div class="card-body" style="display:flex; flex-wrap:wrap; gap:1rem;">
+      {% if obj.is_open %}
+        <a href="{% url 'hrm:grievance_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'hrm:grievance_delete' obj.pk %}" onsubmit="return confirm('Delete this grievance?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+      {% if obj.status == 'open' or obj.status == 'investigating' %}
+        <form method="post" action="{% url 'hrm:grievance_withdraw' obj.pk %}" onsubmit="return confirm('Withdraw this grievance?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Withdraw</button></form>
+      {% else %}
+        <span class="text-muted">This grievance is {{ obj.get_status_display|lower }}.</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
