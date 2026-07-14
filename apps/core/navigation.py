@@ -653,6 +653,21 @@ LIVE_LINKS = {
         "Flexible Benefits": "hrm:employeebenefitenrollment_list",
         "Stock/ESOP Management": "hrm:equitygrant_list",
     },
+    # 3.38 Talent Management & Succession Planning — 5 of the 6 bullets live. TWO of them need NO new
+    # table and REUSE what already ships: "Talent Reviews" -> the 3.19 calibration board, and "Internal
+    # Mobility" -> JobRequisition(posting_type=internal) from 3.5 (+ the 3.6 JobApplication pipeline).
+    # "Retention Strategies" deep-links to the high-flight-risk member slice. "Career Pathing" is DEFERRED
+    # (needs a CareerPath + EmployeeSkill taxonomy of its own), so it stays a roadmap placeholder.
+    # Everything here is @tenant_admin_required — HiPo/9-box/flight-risk/bench data is HR-confidential.
+    "3.38": {
+        "Talent Pool": "hrm:talentpool_list",
+        "Succession Planning": "hrm:successionplan_list",
+        "Talent Reviews": "hrm:calibration_board",                            # REUSE (3.19)
+        "Internal Mobility": "hrm:jobrequisition_list?posting_type=internal",  # REUSE (3.5/3.6)
+        "Retention Strategies": "hrm:talentpoolmembership_list?flight_risk=high",
+        "9-Box Grid": "hrm:talent_nine_box",                                  # extra (computed grid)
+        "Talent Pool Members": "hrm:talentpoolmembership_list",               # extra
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
