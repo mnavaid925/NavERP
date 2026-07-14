@@ -297,6 +297,7 @@ class Command(BaseCommand):
             self._seed_travel(tenant, flush=options["flush"])
             self._seed_helpdesk(tenant, flush=options["flush"])
             self._seed_compensation(tenant, flush=options["flush"])
+            self._seed_talent(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -1414,7 +1415,7 @@ class Command(BaseCommand):
         ``accounting.Project`` where one exists (else free-text tasks + no project), plus 1 pending
         ``OvertimeRequest``. Guarded on Timesheet existence; reuses existing EmployeeProfile +
         accounting.Project — no duplicate masters. Totals set via ``refresh_totals()`` (never hand-typed)."""
-        from apps.accounting.models_advanced import Project
+        from apps.accounting.models import Project
 
         if flush:
             OvertimeRequest.objects.filter(tenant=tenant).delete()
@@ -3415,3 +3416,75 @@ class Command(BaseCommand):
             f"{BenefitPlan.objects.filter(tenant=tenant).count()} plans, "
             f"{EmployeeBenefitEnrollment.objects.filter(tenant=tenant).count()} enrollments, "
             f"{EquityGrant.objects.filter(tenant=tenant).count()} grants."))
+
+    def _seed_talent(self, tenant, *, flush):
+        """3.38 Talent Management & Succession - a HiPo pool + a leadership pipeline whose members spread
+        across the 9-box (incl. a high-flight-risk retention case), and a succession plan with a ranked
+        bench. Runs after 3.37. Idempotent (guarded on TalentPool existence). ASCII-only."""
+        from apps.hrm.models import (TalentPool, TalentPoolMembership, SuccessionPlan, SuccessionCandidate,
+                                     EmployeeProfile, Designation)
+        from apps.core.models import OrgUnit
+
+        if flush:
+            SuccessionCandidate.objects.filter(tenant=tenant).delete()
+            SuccessionPlan.objects.filter(tenant=tenant).delete()
+            TalentPoolMembership.objects.filter(tenant=tenant).delete()
+            TalentPool.objects.filter(tenant=tenant).delete()
+        if TalentPool.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Talent data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:5])
+        if not emps:
+            return
+        today = timezone.localdate()
+        day = datetime.timedelta(days=1)
+        desig = Designation.objects.filter(tenant=tenant).order_by("id").first()
+        dept = OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("id").first()
+
+        hipo, _ = TalentPool.objects.get_or_create(
+            tenant=tenant, name="High Potentials 2026",
+            defaults={"pool_type": "hipo", "owner": emps[0],
+                      "description": "Employees identified as high-potential for accelerated development."})
+        leadership, _ = TalentPool.objects.get_or_create(
+            tenant=tenant, name="Leadership Pipeline",
+            defaults={"pool_type": "leadership", "owner": emps[0],
+                      "description": "Bench for director-and-above roles."})
+
+        # Spread members across the 9-box: (employee, pool, performance, potential, flight_risk).
+        placements = [
+            (emps[0], hipo, Decimal("4.5"), Decimal("4.6"), "low"),                 # Star
+            (emps[1 % len(emps)], hipo, Decimal("3.4"), Decimal("4.4"), "high"),    # Emerging Star + at risk
+            (emps[2 % len(emps)], hipo, Decimal("4.2"), Decimal("3.1"), "medium"),  # High Performer
+            (emps[3 % len(emps)], leadership, Decimal("3.2"), Decimal("3.3"), "low"),     # Core Player
+            (emps[4 % len(emps)], leadership, Decimal("2.4"), Decimal("2.2"), "medium"),  # Underperformer
+        ]
+        for emp, pool, perf, pot, risk in placements:
+            TalentPoolMembership.objects.get_or_create(
+                tenant=tenant, pool=pool, employee=emp,
+                defaults={"joined_on": today - 120 * day, "status": "active",
+                          "performance_rating": perf, "potential_rating": pot, "flight_risk": risk,
+                          "retention_action_plan": ("Assign a stretch project and a mentor; review compensation."
+                                                    if risk == "high" else "")})
+
+        if desig:
+            plan, created = SuccessionPlan.objects.get_or_create(
+                tenant=tenant, critical_role=desig,
+                defaults={"department": dept, "incumbent": emps[0], "vacancy_risk": "high",
+                          "status": "active", "review_date": today + 90 * day,
+                          "notes": "Incumbent is a retirement risk within 18 months."})
+            if created:
+                bench = [(emps[1 % len(emps)], "ready_now"),
+                         (emps[2 % len(emps)], "ready_1_2y"),
+                         (emps[3 % len(emps)], "development_needed")]
+                for rank, (emp, readiness) in enumerate(bench, start=1):
+                    SuccessionCandidate.objects.get_or_create(
+                        tenant=tenant, plan=plan, candidate=emp,
+                        defaults={"readiness": readiness, "rank_order": rank,
+                                  "development_notes": "Rotational assignment recommended."})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Talent seeded for '{tenant.name}': {TalentPool.objects.filter(tenant=tenant).count()} pools, "
+            f"{TalentPoolMembership.objects.filter(tenant=tenant).count()} members, "
+            f"{SuccessionPlan.objects.filter(tenant=tenant).count()} succession plans, "
+            f"{SuccessionCandidate.objects.filter(tenant=tenant).count()} successors."))
