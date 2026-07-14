@@ -8502,3 +8502,246 @@ class EquityGrant(TenantNumbered):
     def exercisable_shares(self):
         """Vested shares not yet exercised/released."""
         return max(0, self.vested_shares - self.exercised_shares)
+
+
+# ---------------------------------------------------------------------------
+# 3.38 Talent Management & Succession Planning — the HiPo/9-box + succession-bench
+# layer built ON the 3.19 PerformanceReview ratings (potential_rating IS the 9-box
+# potential axis; effective_rating is the performance axis) and the 3.2 Designation
+# catalog. Two of the six NavERP.md bullets need NO new table: **Talent Reviews**
+# reuses the 3.19 calibration board, and **Internal Mobility** reuses
+# JobRequisition(posting_type="internal") + JobApplication (3.5/3.6). **Career
+# Pathing** is DEFERRED (needs a CareerPath + EmployeeSkill taxonomy of its own).
+#
+# CONFIDENTIAL: HiPo membership, 9-box placement, flight risk and succession benches
+# are HR-only data (the 3.21 PIP/CoachingNote precedent) — every 3.38 view is
+# @tenant_admin_required. An employee must never see that they are (or aren't) on a
+# bench or flagged a flight risk.
+# ---------------------------------------------------------------------------
+def _rating_band(value):
+    """Band a 1-5 rating into the 9-box axis: low (<3), medium (<4), high (>=4). None passes through."""
+    if value is None:
+        return None
+    if value < 3:
+        return "low"
+    if value < 4:
+        return "medium"
+    return "high"
+
+
+# The standard 9-box labels, keyed (performance_band, potential_band).
+_NINE_BOX_LABELS = {
+    ("high", "high"): "Star",
+    ("high", "medium"): "High Performer",
+    ("high", "low"): "Solid Performer",
+    ("medium", "high"): "Emerging Star",
+    ("medium", "medium"): "Core Player",
+    ("medium", "low"): "Average Performer",
+    ("low", "high"): "Enigma",
+    ("low", "medium"): "Inconsistent Player",
+    ("low", "low"): "Underperformer",
+}
+
+
+class TalentPool(TenantOwned):
+    """A named talent segment (high-potentials, successor bench, critical-skill group, …). Small
+    per-tenant catalog identified by name — not auto-numbered. Members join via TalentPoolMembership."""
+
+    POOL_TYPE_CHOICES = [
+        ("hipo", "High Potential"),
+        ("successor", "Successor Bench"),
+        ("critical_skill", "Critical Skill"),
+        ("leadership", "Leadership Pipeline"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=150)
+    pool_type = models.CharField(max_length=20, choices=POOL_TYPE_CHOICES, default="hipo")
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="owned_talent_pools")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["pool_type", "name"]
+        unique_together = ("tenant", "name")
+        indexes = [
+            models.Index(fields=["tenant", "is_active"], name="hrm_tpool_tnt_active_idx"),
+            models.Index(fields=["tenant", "pool_type"], name="hrm_tpool_tnt_type_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_pool_type_display()})"
+
+    @property
+    def active_member_count(self):
+        return self.memberships.filter(status="active").count()
+
+
+class TalentPoolMembership(TenantOwned):
+    """One employee's place in a talent pool, carrying their 9-box coordinates + retention posture.
+
+    The ratings come from the linked 3.19 ``PerformanceReview`` (``effective_rating`` = the performance axis,
+    ``potential_rating`` = the potential axis); the two Decimal columns here are optional OVERRIDES a talent
+    reviewer can set when calibrating. ``nine_box_quadrant`` is COMPUTED from whichever applies — never stored."""
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("exited", "Exited"),
+        ("promoted", "Promoted"),
+    ]
+    FLIGHT_RISK_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+    ]
+
+    pool = models.ForeignKey("hrm.TalentPool", on_delete=models.CASCADE, related_name="memberships")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                 related_name="talent_memberships")
+    joined_on = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="active")
+    review = models.ForeignKey("hrm.PerformanceReview", on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="talent_memberships",
+                               help_text="Source review for the 9-box ratings (optional).")
+    performance_rating = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("1")), MaxValueValidator(Decimal("5"))],
+        help_text="Overrides the linked review's effective rating (1-5).")
+    potential_rating = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("1")), MaxValueValidator(Decimal("5"))],
+        help_text="Overrides the linked review's potential rating (1-5).")
+    flight_risk = models.CharField(max_length=10, choices=FLIGHT_RISK_CHOICES, default="low")
+    retention_action_plan = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "pool", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "pool"], name="hrm_tpm_tnt_pool_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_tpm_tnt_emp_idx"),
+            models.Index(fields=["tenant", "flight_risk"], name="hrm_tpm_tnt_risk_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_tpm_tnt_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} in {self.pool}" if self.employee_id and self.pool_id else "Talent membership"
+
+    # ---- 9-box (computed, NEVER stored) ----
+    @property
+    def effective_performance(self):
+        """The override if set, else the linked review's effective_rating, else None."""
+        if self.performance_rating is not None:
+            return self.performance_rating
+        return self.review.effective_rating if self.review_id else None
+
+    @property
+    def effective_potential(self):
+        if self.potential_rating is not None:
+            return self.potential_rating
+        return self.review.potential_rating if self.review_id else None
+
+    @property
+    def performance_band(self):
+        return _rating_band(self.effective_performance)
+
+    @property
+    def potential_band(self):
+        return _rating_band(self.effective_potential)
+
+    @property
+    def nine_box_quadrant(self):
+        """The standard 9-box label (Star / Core Player / Underperformer / …), or None when either axis
+        has no rating yet."""
+        perf, pot = self.performance_band, self.potential_band
+        if perf is None or pot is None:
+            return None
+        return _NINE_BOX_LABELS.get((perf, pot))
+
+
+class SuccessionPlan(TenantNumbered):
+    """A succession bench for one critical role (``SPL-#####``) — the incumbent, the vacancy risk, and a
+    ranked list of SuccessionCandidates. ``bench_strength`` is COMPUTED from the candidates' readiness."""
+
+    NUMBER_PREFIX = "SPL"
+
+    VACANCY_RISK_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("closed", "Closed"),
+    ]
+
+    critical_role = models.ForeignKey("hrm.Designation", on_delete=models.PROTECT,
+                                      related_name="succession_plans")
+    department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="hrm_succession_plans")
+    incumbent = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="succession_plans_held")
+    vacancy_risk = models.CharField(max_length=10, choices=VACANCY_RISK_CHOICES, default="medium")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    review_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_spl_tnt_status_idx"),
+            models.Index(fields=["tenant", "vacancy_risk"], name="hrm_spl_tnt_risk_idx"),
+            models.Index(fields=["tenant", "critical_role"], name="hrm_spl_tnt_role_idx"),
+        ]
+
+    def __str__(self):
+        role = self.critical_role.name if self.critical_role_id else "role"
+        return f"{self.number} - {role}" if self.number else f"Succession: {role}"
+
+    @property
+    def ready_now_count(self):
+        return self.candidates.filter(readiness="ready_now").count()
+
+    @property
+    def bench_strength(self):
+        """strong (2+ ready now) / moderate (1 ready now) / weak (candidates but none ready) / none."""
+        total = self.candidates.count()
+        if not total:
+            return "none"
+        ready = self.ready_now_count
+        if ready >= 2:
+            return "strong"
+        if ready == 1:
+            return "moderate"
+        return "weak"
+
+
+class SuccessionCandidate(TenantOwned):
+    """A ranked successor on a SuccessionPlan's bench (an inline child, like TravelBooking under a trip)."""
+
+    READINESS_CHOICES = [
+        ("ready_now", "Ready Now"),
+        ("ready_1_2y", "Ready in 1-2 Years"),
+        ("ready_3_5y", "Ready in 3-5 Years"),
+        ("development_needed", "Development Needed"),
+    ]
+
+    plan = models.ForeignKey("hrm.SuccessionPlan", on_delete=models.CASCADE, related_name="candidates")
+    candidate = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                  related_name="succession_candidacies")
+    readiness = models.CharField(max_length=20, choices=READINESS_CHOICES, default="development_needed")
+    rank_order = models.PositiveSmallIntegerField(default=1)
+    development_notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["rank_order", "id"]
+        unique_together = ("tenant", "plan", "candidate")
+        indexes = [
+            models.Index(fields=["tenant", "plan"], name="hrm_sc_tnt_plan_idx"),
+            models.Index(fields=["tenant", "readiness"], name="hrm_sc_tnt_readiness_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.candidate} ({self.get_readiness_display()})" if self.candidate_id else "Successor"
