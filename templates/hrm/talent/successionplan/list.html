@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Succession Plans{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Succession Plans</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Talent</span><span class="sep">›</span><span>Succession</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:talentpool_list' %}" class="btn btn-outline"><i data-lucide="users-round"></i> Talent Pools</a>
+      <a href="{% url 'hrm:successionplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Plan</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / role / incumbent...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vacancy_risk" class="form-select"><option value="">All risks</option>
+            {% for val, label in vacancy_risk_choices %}<option value="{{ val }}" {% if request.GET.vacancy_risk == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="critical_role" class="form-select"><option value="">All roles</option>
+            {% for d in designations %}<option value="{{ d.pk }}" {% if request.GET.critical_role == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:successionplan_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Critical Role</th><th>Incumbent</th><th>Vacancy Risk</th><th>Bench</th><th>Status</th><th>Review Date</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:successionplan_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.critical_role.name }}</td>
+              <td>{% if obj.incumbent %}{{ obj.incumbent.party.name }}{% else %}<span class="badge badge-amber">Vacant</span>{% endif %}</td>
+              <td>{% if obj.vacancy_risk == 'high' %}<span class="badge badge-red">High</span>{% elif obj.vacancy_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">Low</span>{% endif %}</td>
+              <td>{% if obj.bench_strength == 'strong' %}<span class="badge badge-green">Strong</span>{% elif obj.bench_strength == 'moderate' %}<span class="badge badge-amber">Moderate</span>{% elif obj.bench_strength == 'weak' %}<span class="badge badge-red">Weak</span>{% else %}<span class="badge badge-muted">Empty</span>{% endif %}</td>
+              <td>{% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{% if obj.review_date %}{{ obj.review_date|date:"d M Y" }}{% else %}-{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:successionplan_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:successionplan_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:successionplan_delete' obj.pk %}" onsubmit="return confirm('Delete this succession plan?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No succession plans yet</h3><p>Map a critical role, flag its vacancy risk, and build a ranked bench of successors.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
