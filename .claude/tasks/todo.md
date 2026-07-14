@@ -9101,3 +9101,322 @@ scheduling shell, drag-drop succession org chart, AI candidate matching, predict
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 3 — HRM — Sub-module 3.39 Compliance & Legal (hrm) — plan from research-compliance-legal.md (2026-07-15)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.38) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** All 6 NavERP.md bullets covered (verbatim, `NavERP.md:705-711`):
+Labor Law Compliance, Contract Management, Policy Management, Disciplinary Actions (REUSE), Grievance
+Handling, Statutory Registers. **Disciplinary Actions needs NO new model** — already fully built as the
+3.21 `hrm.WarningLetter` (`hrm:warningletter_list`); this pass only points a `LIVE_LINKS` entry at it.
+`EmployeeLifecycleEvent(event_type="contract_renewal")` (3.1) is reused for contract-renewal history — no
+new history table.
+
+**STATE CHECK (verified in code before writing this plan): the model + form layer is ALREADY BUILT and
+committed.** `apps/hrm/models.py:8766-9084` already has `EmploymentContract`, `HRPolicy`,
+`PolicyAcknowledgment`, `Grievance`, `ComplianceRegister`; migration
+`apps/hrm/migrations/0056_hrpolicy_grievance_policyacknowledgment_and_more.py` exists on disk;
+`apps/hrm/forms.py:3002-3119` already has `EmploymentContractForm`, `HRPolicyForm`, `GrievanceForm`,
+`ComplianceRegisterForm`. **`views.py`, `urls.py`, `admin.py`, `seed_hrm.py`, `navigation.py`, and every
+template are NOT yet built** (confirmed: zero `employmentcontract_list`/`hrpolicy_list`/`grievance_list`/
+`complianceregister_list` hits in `urls.py`; no `templates/hrm/compliance/` folder on disk). This plan
+covers only the remaining layers — do not re-model.
+
+## 0. Decisions — read before writing code
+
+- [ ] **`NUMBER_PREFIX` collision-checked** (already true in code): `CTR`/`POL`/`GRV`/`CMP` — none collide
+  with the ~60 other prefixes in `apps/hrm/models.py` (grep-confirmed against the full list).
+- [ ] **`ComplianceRegister.STATUS_CHOICES` as-built is 4 states** (`pending/in_progress/filed/
+  not_applicable`) — there is **no literal `"overdue"` status**; overdue-ness is the COMPUTED `is_overdue`
+  property (`due_date` in the past AND status not in `filed`/`not_applicable`). Filter/badge logic must
+  branch on `obj.is_overdue`, never on `status == "overdue"`. Flag this in the SKILL.md as a deliberate
+  deviation from the fuller research sketch.
+- [ ] **Access model:** `EmploymentContract`/`HRPolicy`/`ComplianceRegister` — list + detail
+  `@login_required` (any authenticated tenant user can read, incl. published policies); create/edit/delete/
+  `hrpolicy_publish` `@tenant_admin_required`. `PolicyAcknowledgment` — list `_ss_scope`-scoped (admin sees
+  all, employee sees own — works unmodified since the FK is literally named `employee`); `acknowledge` is
+  self-service (`_can_manage_own_child`); create/edit/delete admin-only (manual roster correction).
+  `Grievance` — CONFIDENTIAL, own-vs-admin via `_ss_scope`/`_can_manage_own_child` (works unmodified, same
+  `employee`-FK reason); `is_anonymous` masks the complainant's name in templates for non-admins
+  (`{% if obj.is_anonymous and not is_admin %}Anonymous{% else %}{{ obj.employee.party.name }}{% endif %}`,
+  `is_admin` passed via `extra_context`); `assign`/`investigate`/`resolve`/`close` are
+  `@tenant_admin_required`; `withdraw` is self-service (own row, `status == "open"` only) — added even
+  though not named in the launch spec's action list because `Grievance.OPEN_STATUSES`'s own docstring says
+  "editable/withdrawable by the complainant only while still open," so the model already promises it.
+- [ ] **Lesson (a) — guard every `unique_together` in `clean()`:** `HRPolicyForm.clean()` already guards
+  `(tenant, title, version_number)` (verified in code). `PolicyAcknowledgment(tenant, policy, employee)` has
+  no form (system/action-generated) — guarded with `get_or_create` in `hrpolicy_publish` and
+  `policyacknowledgment_create`, not a form `clean()`. `EmploymentContract`/`Grievance`/
+  `ComplianceRegister`'s only `unique_together` is `(tenant, number)` — server-generated, no guard needed.
+- [ ] **Lesson (b) — `transaction.atomic()` savepoint around every `IntegrityError` catch:** wrap
+  `hrpolicy_publish`'s bulk `PolicyAcknowledgment.get_or_create(...)` loop and
+  `policyacknowledgment_acknowledge`'s save in `transaction.atomic()` so a race/duplicate can't poison the
+  request transaction.
+- [ ] **Lesson (c) — re-apply `.order_by()` after `.annotate()`:** `hrpolicy_list` annotates
+  `_acknowledged_count`/`_target_count` (`Count(..., distinct=True, filter=...)`) so `acknowledgment_rate`
+  renders per-row without N+1 — must end with an explicit `.order_by("-created_at")` (annotate's GROUP BY
+  drops `Meta.ordering`).
+- [ ] **Lesson (d) — computed per-row properties must not add N+1:** `employmentcontract_list`'s
+  `is_expiring_soon`/`days_to_expiry` and `complianceregister_list`'s `is_overdue` are pure date-math on
+  already-loaded fields (no extra query); `hrpolicy_list`'s `acknowledgment_rate` is the one that needs the
+  annotation from lesson (c).
+- [ ] **Migration:** `0056_hrpolicy_grievance_policyacknowledgment_and_more.py` already exists — re-running
+  `makemigrations hrm` must print "No changes detected."
+- [ ] **Roster path for `hrpolicy_publish`:** `EmployeeProfile.employment` is a direct `OneToOneField` to
+  `core.Employment` (not a reverse/plural path) — the department scope is `employment__org_unit_id`, not
+  `employment__department_id`; "active" is `employment__status="active"`.
+
+## 1. Models (apps/hrm/models.py:8766-9084) — ALREADY BUILT, verify only
+
+- [x] `EmploymentContract` [`CTR-`] `TenantNumbered` — `employee`, `contract_type`, `start_date`/`end_date`/
+  `probation_end_date`, `notice_period_days`, `designation`, `salary_structure`, `status`, `renewed_from`
+  (self-FK), `document`, `signed_on`, `notes`. Computed `days_to_expiry`/`is_expiring_soon`/`is_expired`.
+  Reuses `hrm.EmployeeProfile`, `hrm.Designation` (3.2), `hrm.EmployeeSalaryStructure` (3.13).
+- [x] `HRPolicy` [`POL-`] `TenantNumbered` — `title`, `category`, `version_number`, `previous_version`
+  (self-FK), `applicable_org_unit` (`core.OrgUnit`, null = whole org), `summary`, `body`, `document`,
+  `status`, `effective_from`, `published_at`, `requires_acknowledgment`. Computed `acknowledged_count`/
+  `target_count`/`acknowledgment_rate` (annotation-aware). `unique_together` also on
+  `(tenant, title, version_number)`.
+- [x] `PolicyAcknowledgment` `TenantOwned` child of `HRPolicy` — `policy`, `employee`, `status`,
+  `acknowledged_at`. `unique_together (tenant, policy, employee)`.
+- [x] `Grievance` [`GRV-`] `TenantNumbered` — `employee` (complainant), `is_anonymous`, `category`,
+  `severity`, `subject`, `description`, `status`, `assigned_investigator`, `related_policy` (reuse
+  `HRPolicy`), `related_warning` (reuse `hrm.WarningLetter`), `resolution`, `resolved_at`, `filed_on`.
+  `OPEN_STATUSES = ("open",)`, computed `is_open`.
+- [x] `ComplianceRegister` [`CMP-`] `TenantNumbered` — `register_type`, `title`, `jurisdiction`,
+  `authority`, `period_start`/`period_end`, `due_date`, `status` (4 states, see Decisions), `filed_on`,
+  `inspector_name`, `findings`, `document`, `notes`. Computed `is_overdue`. Deliberately separate from 3.15
+  `StatutoryReturn`.
+
+## 2. Forms (apps/hrm/forms.py:3002-3119) — mostly ALREADY BUILT, 3 gaps to fill
+
+- [x] `EmploymentContractForm` — `renewed_from` self-scoped (excludes self on edit); `clean()` guards
+  `end_date >= start_date` and `probation_end_date >= start_date`; `clean_document()` via shared
+  `_validate_upload` (compliance doc allowlist: pdf/doc/docx/jpg/jpeg/png, 10 MB).
+- [x] `HRPolicyForm` — `applicable_org_unit` scoped to `kind="department"`; `previous_version`
+  self-scoped; `clean()` guards the `(tenant, title, version_number)` dupe; `clean_document()` shared
+  validator.
+- [x] `GrievanceForm` — fields `category, severity, subject, description, is_anonymous, related_policy`
+  (`employee`/`status`/`assigned_investigator`/`resolution`/`resolved_at` all workflow/server-set,
+  excluded); `related_policy` scoped to `status="published"`.
+- [x] `ComplianceRegisterForm` — `clean()` guards `period_end >= period_start` and requires `filed_on`
+  when `status="filed"`; `clean_document()` shared validator.
+- [ ] **NEW `PolicyAcknowledgmentForm`** (not yet in `forms.py`; needed for the admin manual-correction
+  create/edit views) — fields `policy, employee, status` (`acknowledged_at` excluded, set only by the
+  `acknowledge` action, mirrors `WarningLetter.acknowledged_at`); `__init__` scopes `policy`/`employee` to
+  the tenant.
+- [ ] **NEW `GrievanceAssignForm`** — single field `assigned_investigator`, scoped to the tenant's
+  `EmployeeProfile`s, for `grievance_assign`.
+- [ ] **NEW `GrievanceResolveForm`** — single required field `resolution`, for `grievance_resolve`.
+
+## 3. Views (apps/hrm/views.py — new `# --- 3.39 Compliance & Legal ---` banner after the 3.38 talent block)
+
+- [ ] `EmploymentContract` CRUD — `employmentcontract_list/_create/_detail/_edit/_delete`. List/detail
+  `@login_required`; create/edit/delete `@tenant_admin_required`. `employmentcontract_list`: `crud_list`
+  over `.select_related("employee__party","designation","salary_structure","renewed_from")`,
+  `search_fields=["number","employee__party__name"]`, `filters=[("contract_type","contract_type",False),
+  ("status","status",False), ("employee","employee_id",True), ("designation","designation_id",True)]`,
+  plus a bespoke `?expiring_soon=1` pre-filter (`status="active"`,
+  `end_date__range=(today, today + EmploymentContract.EXPIRING_SOON_DAYS days)`),
+  `extra_context={"contract_type_choices": ..., "status_choices": ..., "employees": ..., "designations":
+  ...}`. `employmentcontract_create`: after a successful save, if `obj.renewed_from_id`, write
+  `EmployeeLifecycleEvent(event_type="contract_renewal", employee=obj.employee, effective_date=
+  obj.start_date, reason=f"Renewed from {obj.renewed_from.number}", initiated_by=request.user)` and flip
+  the prior contract to `status="renewed"` (`obj.renewed_from.status="renewed"`;
+  `.save(update_fields=["status","updated_at"])`) — reuses the existing 3.1 lifecycle table, no new
+  history model.
+- [ ] `HRPolicy` CRUD — `hrpolicy_list/_create/_detail/_edit/_delete`. List/detail `@login_required`;
+  create/edit/delete `@tenant_admin_required`. `hrpolicy_list`: annotate `_acknowledged_count`/
+  `_target_count` (`Count(..., distinct=True)`, filtered on `status="acknowledged"`), explicit
+  `.order_by("-created_at")` (lesson c); `search_fields=["title","summary","body"]`,
+  `filters=[("category","category",False), ("status","status",False), ("applicable_org_unit",
+  "applicable_org_unit_id",True)]`. `hrpolicy_detail`: `extra_context={"acknowledgments":
+  obj.acknowledgments.select_related("employee__party").order_by("employee__party__name")}`.
+- [ ] `hrpolicy_publish(pk)` — `@tenant_admin_required @require_POST`. Guard `status == "draft"` (else
+  error message + redirect). Inside `transaction.atomic()`: `status="published"`, `published_at=now()`,
+  save; if `requires_acknowledgment`, resolve the roster
+  (`EmployeeProfile.objects.filter(tenant=request.tenant, employment__status="active")`, further
+  `.filter(employment__org_unit_id=obj.applicable_org_unit_id)` when set) and
+  `get_or_create(tenant=, policy=obj, employee=emp, defaults={"status": "pending"})` per employee.
+  `write_audit_log(request.user, obj, "update", {"action": "publish"})`; redirect to `hrpolicy_detail`.
+- [ ] `PolicyAcknowledgment` — `policyacknowledgment_list/_create/_edit/_delete` (**no standalone
+  `_detail`** — a thin roster row shown inline on `hrpolicy_detail`, mirrors the `SuccessionCandidate`/
+  `TravelBooking` child-row precedent). List `@login_required` via `_ss_scope(request, qs)`; create/edit/
+  delete `@tenant_admin_required`. `policyacknowledgment_list`: `filters=[("policy","policy_id",True),
+  ("status","status",False)]` (+ `("employee","employee_id",True)` shown only when `_is_admin`).
+- [ ] `policyacknowledgment_acknowledge(pk)` — `@login_required @require_POST`.
+  `get_object_or_404(..., tenant=request.tenant)`; `if not _can_manage_own_child(request, obj): raise
+  PermissionDenied`. Guard `status == "pending"`. Inside `transaction.atomic()` (lesson b):
+  `status="acknowledged"`, `acknowledged_at=timezone.now()`, save; `write_audit_log(...)`; redirect to
+  `hrpolicy_detail(obj.policy_id)`.
+- [ ] `Grievance` CRUD + workflow — `grievance_list/_create/_detail/_edit/_delete`, all `@login_required`
+  except `_delete` (`@tenant_admin_required`). `grievance_list`: `_ss_scope(request, qs)
+  .select_related("employee__party","assigned_investigator__party")`,
+  `search_fields=["number","subject","description"]`, `filters=[("category","category",False),
+  ("severity","severity",False), ("status","status",False)]` (admin also gets `("assigned_investigator",
+  "assigned_investigator_id",True)`); `extra_context={"is_admin": _is_admin(request.user), ...}` so the
+  template masks `is_anonymous` rows. `grievance_create`: `employee` resolved server-side from
+  `_current_employee_profile(request)` (redirect with an error if none), `filed_on=timezone.localdate()`.
+  `grievance_detail`/`_edit`: `if not (_is_admin(...) or _can_manage_own_child(request, obj)): raise
+  PermissionDenied`; `_edit` additionally requires `obj.is_open` for a non-admin.
+  `grievance_delete`: `@tenant_admin_required`, only when `obj.is_open` (protects an active investigation
+  record).
+- [ ] `grievance_withdraw(pk)` — `@login_required @require_POST`, own-only (`_can_manage_own_child`), guard
+  `obj.is_open`, `status="withdrawn"`, redirect `grievance_detail`.
+- [ ] `grievance_assign(pk)` — `@tenant_admin_required @require_POST`, `GrievanceAssignForm`, sets
+  `assigned_investigator` (status unchanged).
+- [ ] `grievance_investigate(pk)` — `@tenant_admin_required @require_POST`, guard
+  `status == "open" and assigned_investigator_id`, `status="investigating"`.
+- [ ] `grievance_resolve(pk)` — `@tenant_admin_required @require_POST`, `GrievanceResolveForm`, guard
+  `status == "investigating"`, sets `resolution`, `resolved_at=now()`, `status="resolved"`.
+- [ ] `grievance_close(pk)` — `@tenant_admin_required @require_POST`, guard `status == "resolved"`,
+  `status="closed"`.
+- [ ] `ComplianceRegister` CRUD — `complianceregister_list/_create/_detail/_edit/_delete`. List/detail
+  `@login_required`; create/edit/delete `@tenant_admin_required`. `complianceregister_list`:
+  `search_fields=["number","title","jurisdiction","authority","findings"]`,
+  `filters=[("register_type","register_type",False), ("status","status",False)]`, plus a bespoke
+  `?overdue=1` pre-filter (`status__in=["pending","in_progress"], due_date__lt=today`);
+  `extra_context={"register_type_choices": ..., "status_choices": ...}`.
+
+## 4. URLs (apps/hrm/urls.py — append after the 3.38 talent block, `app_name = "hrm"` already set)
+
+- [ ] `employment-contracts/`, `.../add/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/` →
+  `employmentcontract_*`
+- [ ] `hr-policies/` (same 5) → `hrpolicy_*`, plus `hr-policies/<int:pk>/publish/` → `hrpolicy_publish`
+- [ ] `policy-acknowledgments/`, `.../add/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/` →
+  `policyacknowledgment_*` (no `_detail` route), plus `policy-acknowledgments/<int:pk>/acknowledge/` →
+  `policyacknowledgment_acknowledge`
+- [ ] `grievances/` (same 5) → `grievance_*`, plus `grievances/<int:pk>/withdraw/`,
+  `grievances/<int:pk>/assign/`, `grievances/<int:pk>/investigate/`, `grievances/<int:pk>/resolve/`,
+  `grievances/<int:pk>/close/`
+- [ ] `compliance-registers/` (same 5) → `complianceregister_*`
+
+## 5. Admin (apps/hrm/admin.py)
+
+- [ ] Register all 5 — `list_display`/`list_filter`/`search_fields` mirroring `TravelPolicyAdmin`/
+  `TravelRequestAdmin` (tenant, status/type filters, number/title/name search);
+  `EmploymentContractAdmin`/`PolicyAcknowledgmentAdmin`/`GrievanceAdmin` use `list_select_related` for the
+  FK-heavy list.
+
+## 6. Migration
+
+- [ ] Already exists: `apps/hrm/migrations/0056_hrpolicy_grievance_policyacknowledgment_and_more.py`.
+  Re-run `makemigrations hrm` and confirm "No changes detected."
+
+## 7. Templates (templates/hrm/compliance/<entity>/{list,detail,form}.html)
+
+- [ ] `compliance/employmentcontract/{list,detail,form}.html` — list: contract_type/status/employee/
+  designation filter bar + `is_expiring_soon` badge column; detail: renewal chain (`renewed_from` /
+  reverse `renewals`), document link, Actions sidebar.
+- [ ] `compliance/hrpolicy/{list,detail,form}.html` — list: category/status/org-unit filter bar +
+  `acknowledgment_rate` progress bar; detail: acknowledgment roster table (employee, status badge,
+  `acknowledged_at`), version chain (`previous_version` / reverse `superseded_by`), Publish button (draft
+  only, POST + confirm).
+- [ ] `compliance/policyacknowledgment/{list,form}.html` (no `detail.html` — thin child row, per
+  Decisions) — list: policy/status filter bar (+ employee filter for admins), per-row Acknowledge button
+  (own pending rows only, POST + `{% csrf_token %}`).
+- [ ] `compliance/grievance/{list,detail,form}.html` — list: category/severity/status filter bar,
+  complainant column masked to "Anonymous" when `obj.is_anonymous and not is_admin`; detail: workflow
+  Actions sidebar (Assign/Investigate/Resolve/Close for admins, Withdraw for the own-open complainant),
+  masked identity banner when anonymous.
+- [ ] `compliance/complianceregister/{list,detail,form}.html` — list: register_type/status filter bar +
+  overdue badge (`obj.is_overdue`, red); detail: findings/inspector panel, document link.
+
+## 8. Wire-up
+
+- [ ] No `settings.py` / `config/urls.py` changes (existing `apps/hrm` app).
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["3.39"]` (bullet text verbatim, `NavERP.md:705-711`):
+  ```python
+  # 3.39 Compliance & Legal — 4 new models (EmploymentContract, HRPolicy + PolicyAcknowledgment child,
+  # Grievance, ComplianceRegister). Disciplinary Actions REUSES the existing 3.21 WarningLetter (no new
+  # table). All 6 bullets are Live.
+  "3.39": {
+      "Labor Law Compliance": "hrm:complianceregister_list?register_type=labor_law_requirement",
+      "Contract Management": "hrm:employmentcontract_list",
+      "Policy Management": "hrm:hrpolicy_list",
+      "Disciplinary Actions": "hrm:warningletter_list",           # REUSE (3.21)
+      "Grievance Handling": "hrm:grievance_list",
+      "Statutory Registers": "hrm:complianceregister_list",
+  },
+  ```
+
+## 9. Seeder (apps/hrm/management/commands/seed_hrm.py — new `_seed_compliance(tenant, flush)`, called
+   after `_seed_talent`)
+
+- [ ] Guard: `if not emps: return`; idempotent — `if EmploymentContract.objects.filter(tenant=tenant)
+  .exists(): print(...); return`; `--flush` cascades deletes in order `ComplianceRegister`, `Grievance`,
+  `PolicyAcknowledgment`, `HRPolicy`, `EmploymentContract`. Update `handle()`'s dispatch list (append after
+  `self._seed_talent(...)`, `apps/hrm/management/commands/seed_hrm.py:300`).
+- [ ] 3 `EmploymentContract` rows (guarded by the existence check, not `get_or_create` on a unique field)
+  — one `permanent`/`active` (no `end_date`), one `fixed_term`/`active` with `end_date = today + 30d` (so
+  `is_expiring_soon` renders true), one `probation` with `probation_end_date = today + 60d`.
+- [ ] 2 `HRPolicy` rows (`get_or_create` on `(tenant, title, version_number)`) — one `status="published"`,
+  `requires_acknowledgment=True`, `applicable_org_unit=None` (whole org); one `status="draft"`. For the
+  published one, seed 3-4 `PolicyAcknowledgment` rows (`get_or_create` on `(tenant, policy, employee)`)
+  mixing `status="acknowledged"` (with `acknowledged_at`) and `status="pending"` so `acknowledgment_rate`
+  renders a realistic partial percentage, not 0% or 100%.
+- [ ] 2 `Grievance` rows (guarded by the existence check) — one `status="open"`, `is_anonymous=True`,
+  `category="harassment"`, `severity="high"`; one `status="resolved"` with `assigned_investigator`,
+  `resolution`, `resolved_at` filled, `category="management"`.
+- [ ] 3 `ComplianceRegister` rows (guarded by the existence check) — one
+  `register_type="labor_law_requirement"`, `status="pending"`, `due_date` in the past (so `is_overdue`
+  renders true for the demo); one `register_type="muster_roll"`, `status="filed"`, `filed_on` set; one
+  `register_type="inspection_report"`, `status="in_progress"`, `inspector_name`/`findings` filled.
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations hrm` → "No changes detected"; `python manage.py migrate`
+- [ ] `python manage.py seed_hrm` ×2 (idempotent, second run prints "already exists")
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every `hrm:employmentcontract*`/`hrpolicy*`/`policyacknowledgment*`/`grievance*`/
+  `complianceregister*` URL 200/302 as a tenant admin; as a **non-admin employee**: list/detail 200 for
+  `employmentcontract`/`hrpolicy`/`complianceregister`, but create/edit/delete/`hrpolicy_publish` 403;
+  `grievance_list` shows only own rows, `grievance_create` 200, `assign`/`investigate`/`resolve`/`close`/
+  `_delete` 403; `policyacknowledgment_acknowledge` 200 on the employee's own pending row, 403/404 on
+  someone else's. No `{#`/`{% comment` leaks. Cross-tenant pk on every detail/edit/delete → 404 (IDOR),
+  checked as a tenant admin of the OTHER tenant.
+- [ ] Sidebar: 3.39 Compliance & Legal shows all 6 bullets Live (Labor Law Compliance, Contract Management,
+  Policy Management, Disciplinary Actions, Grievance Handling, Statutory Registers).
+
+## 11. Close-out
+
+- [ ] code-reviewer → apply findings (esp. the lesson (a)/(b)/(c) unique_together/savepoint/ordering
+  guards baked in above) → commit
+- [ ] explorer → apply findings → commit
+- [ ] frontend-reviewer → apply findings (badge fallbacks incl. `is_overdue`/`is_expiring_soon` derived
+  badges, anonymous-mask rendering) → commit
+- [ ] performance-reviewer → apply findings (N+1 on `hrpolicy_list.acknowledgment_rate`,
+  `grievance_list`/`employmentcontract_list` select_related coverage) → commit
+- [ ] qa-smoke-tester → apply findings → commit
+- [ ] security-reviewer → apply findings (Grievance confidentiality/IDOR/anonymous-masking, cross-tenant
+  isolation on every model, mass-assignment on workflow fields) → commit
+- [ ] test-writer → `apps/hrm/tests/test_compliance.py` → commit
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add a `### 3.39 Compliance & Legal` section (models, URLs,
+  seeder, the `_ss_scope`/`_can_manage_own_child` reuse on `Grievance`/`PolicyAcknowledgment`, the 4-state
+  `ComplianceRegister.status` + computed `is_overdue` deviation, the `EmployeeLifecycleEvent
+  (contract_renewal)` reuse)
+- [ ] Update README (module/sub-module/test counts)
+
+## Later passes / deferred (carried from research-compliance-legal.md)
+
+- **`WarningLetter` "appealed" extension** — add an `"appealed"` `STATUS_CHOICES` entry + `appeal_notes`
+  TextField to the existing 3.21 model (closes the one Disciplinary-Actions sub-feature it doesn't yet
+  cover) — a small 2-field extension, not part of this pass.
+- **Automated regulatory-change monitoring** (Deel's 150-country law-change feed) — external data
+  subscription, not a Django-only feature.
+- **True e-signature / biometric attestation** for contracts/policies — v1 is click-to-acknowledge /
+  uploaded signed document.
+- **AI-assisted grievance investigation planning** (HR Acuity olivER™) — integration/later.
+- **External whistleblower hotline** (NAVEX-style 24/7 multilingual phone channel) — reporting-channel
+  integration, not a data-model concern.
+- **Multi-member Grievance Redressal Committee** (vs. the single `assigned_investigator`) — fast-follow.
+- **Automated attendance/wage recomputation into `ComplianceRegister`** (a live Form-II/III generator
+  pulling `AttendanceRecord`/`PayslipLine`) — v1 records the register as a filed document.
+- **Redline / side-by-side version diff UI** for `HRPolicy` — v1 has the version chain + free-text
+  `summary`, no visual diff.
+- **Cross-case pattern analytics** across grievances (HR Acuity repeat-issue detection) — a
+  reporting/analytics pass.
+
+## Review notes
+(filled in at the end)
