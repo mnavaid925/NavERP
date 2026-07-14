@@ -377,3 +377,44 @@ def test_multitenant_idor_lifecycle_post_404(client_a, enrollment_b):
     resp = client_a.post(reverse("hrm:employeebenefitenrollment_enroll", args=[enrollment_b.pk]))
     assert resp.status_code == 404
     assert EmployeeBenefitEnrollment.objects.get(pk=enrollment_b.pk).status == "pending"
+
+
+# ============================================================ Review-driven data-integrity guards
+def test_benefitplan_duplicate_name_shows_form_error(client_a, plan_a):
+    """unique_together(tenant, name): a duplicate name must re-render the form (200), not 500 (code-review)."""
+    from apps.hrm.models import BenefitPlan
+    before = BenefitPlan.objects.filter(tenant=plan_a.tenant).count()
+    resp = client_a.post(reverse("hrm:benefitplan_create"), {
+        "name": plan_a.name, "plan_type": "dental", "employer_cost_monthly": "1",
+        "employee_cost_monthly": "1", "coverage_tier_options": "employee_only", "is_active": "on"})
+    assert resp.status_code == 200
+    assert BenefitPlan.objects.filter(tenant=plan_a.tenant).count() == before
+
+
+def test_enrollment_edit_duplicate_shows_form_error(client_a, tenant_a, employee_a, plan_a):
+    """unique_together(tenant, employee, plan, effective_from) on EDIT → form error, not 500 (code-review)."""
+    from apps.hrm.models import EmployeeBenefitEnrollment
+    EmployeeBenefitEnrollment.objects.create(
+        tenant=tenant_a, employee=employee_a, plan=plan_a, effective_from=TODAY, status="pending")
+    e2 = EmployeeBenefitEnrollment.objects.create(
+        tenant=tenant_a, employee=employee_a, plan=plan_a,
+        effective_from=TODAY - datetime.timedelta(days=30), status="pending")
+    resp = client_a.post(reverse("hrm:employeebenefitenrollment_edit", args=[e2.pk]), {
+        "plan": plan_a.pk, "election_choice": "opt_in", "coverage_tier": "",
+        "effective_from": TODAY.isoformat(), "effective_to": ""})
+    assert resp.status_code == 200
+    e2.refresh_from_db()
+    assert e2.effective_from == TODAY - datetime.timedelta(days=30)  # unchanged
+
+
+def test_grant_edit_cannot_shrink_below_exercised(client_a, grant_a):
+    """An admin can't shrink shares_granted below the shares already exercised (code-review)."""
+    from apps.hrm.models import EquityGrant
+    client_a.post(reverse("hrm:equitygrant_record_exercise", args=[grant_a.pk]), {"shares": "100"})
+    assert EquityGrant.objects.get(pk=grant_a.pk).exercised_shares == 100
+    resp = client_a.post(reverse("hrm:equitygrant_edit", args=[grant_a.pk]), {
+        "employee": grant_a.employee_id, "grant_type": "rsu", "grant_date": grant_a.grant_date.isoformat(),
+        "shares_granted": "50", "vesting_start_date": grant_a.vesting_start_date.isoformat(),
+        "cliff_months": "12", "vesting_duration_months": "48", "vesting_frequency": "monthly", "status": "active"})
+    assert resp.status_code == 200  # form error, not saved
+    assert EquityGrant.objects.get(pk=grant_a.pk).shares_granted == 4800  # unchanged
