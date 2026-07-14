@@ -1544,3 +1544,65 @@ class EquityGrantAdmin(admin.ModelAdmin):
     search_fields = ("number", "employee__party__name")
     raw_id_fields = ("employee", "currency")
     readonly_fields = ("number", "exercised_shares", "last_exercised_at", "created_at", "updated_at")
+
+
+from .models import (  # 3.39 Compliance & Legal
+    ComplianceRegister, EmploymentContract, Grievance, HRPolicy, PolicyAcknowledgment)
+
+
+@admin.register(EmploymentContract)
+class EmploymentContractAdmin(admin.ModelAdmin):
+    list_select_related = ("employee__party", "designation", "tenant")
+    list_display = ("number", "employee", "contract_type", "start_date", "end_date", "status", "tenant")
+    list_filter = ("contract_type", "status", "tenant")
+    search_fields = ("number", "employee__party__name")
+    raw_id_fields = ("employee", "designation", "salary_structure", "renewed_from")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+class PolicyAcknowledgmentInline(admin.TabularInline):
+    model = PolicyAcknowledgment
+    extra = 0
+    raw_id_fields = ("employee",)
+    readonly_fields = ("acknowledged_at",)
+
+
+@admin.register(HRPolicy)
+class HRPolicyAdmin(admin.ModelAdmin):
+    list_select_related = ("applicable_org_unit", "tenant")
+    list_display = ("number", "title", "version_number", "category", "status", "effective_from", "tenant")
+    list_filter = ("category", "status", "requires_acknowledgment", "tenant")
+    search_fields = ("number", "title", "summary", "body")
+    raw_id_fields = ("previous_version", "applicable_org_unit")
+    readonly_fields = ("number", "published_at", "created_at", "updated_at")
+    inlines = [PolicyAcknowledgmentInline]
+
+
+@admin.register(PolicyAcknowledgment)
+class PolicyAcknowledgmentAdmin(admin.ModelAdmin):
+    list_select_related = ("policy", "employee__party", "tenant")
+    list_display = ("policy", "employee", "status", "acknowledged_at", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("policy__title", "employee__party__name")
+    raw_id_fields = ("policy", "employee")
+    readonly_fields = ("acknowledged_at", "created_at", "updated_at")
+
+
+@admin.register(Grievance)
+class GrievanceAdmin(admin.ModelAdmin):
+    list_select_related = ("employee__party", "assigned_investigator__party", "tenant")
+    list_display = ("number", "subject", "category", "severity", "status", "is_anonymous",
+                    "assigned_investigator", "tenant")
+    list_filter = ("status", "category", "severity", "is_anonymous", "tenant")
+    search_fields = ("number", "subject", "description")
+    raw_id_fields = ("employee", "assigned_investigator", "related_policy", "related_warning")
+    readonly_fields = ("number", "resolved_at", "created_at", "updated_at")
+
+
+@admin.register(ComplianceRegister)
+class ComplianceRegisterAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant",)
+    list_display = ("number", "title", "register_type", "jurisdiction", "due_date", "status", "tenant")
+    list_filter = ("register_type", "status", "tenant")
+    search_fields = ("number", "title", "jurisdiction", "authority")
+    readonly_fields = ("number", "created_at", "updated_at")
