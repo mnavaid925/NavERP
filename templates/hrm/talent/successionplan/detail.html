@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.critical_role.name }}
+        {% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.vacancy_risk == 'high' %}<span class="badge badge-red">High Vacancy Risk</span>{% elif obj.vacancy_risk == 'medium' %}<span class="badge badge-amber">Medium Risk</span>{% else %}<span class="badge badge-green">Low Risk</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:successionplan_list' %}">Succession Plans</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:successionplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Plans</a>
+      <a href="{% url 'hrm:successionplan_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Plan #</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Critical Role</span><div>{{ obj.critical_role.name }}</div></div>
+      <div><span class="text-muted">Department</span><div>{% if obj.department %}{{ obj.department.name }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Incumbent</span><div>{% if obj.incumbent %}{{ obj.incumbent.party.name }}{% else %}Vacant{% endif %}</div></div>
+      <div><span class="text-muted">Bench Strength</span><div>
+        {% if obj.bench_strength == 'strong' %}<span class="badge badge-green">Strong</span>{% elif obj.bench_strength == 'moderate' %}<span class="badge badge-amber">Moderate</span>{% elif obj.bench_strength == 'weak' %}<span class="badge badge-red">Weak</span>{% else %}<span class="badge badge-muted">Empty</span>{% endif %}
+        <span class="text-muted">({{ obj.ready_now_count }} ready now)</span>
+      </div></div>
+      <div><span class="text-muted">Review Date</span><div>{% if obj.review_date %}{{ obj.review_date|date:"d M Y" }}{% else %}-{% endif %}</div></div>
+    </div>
+    {% if obj.notes %}<p class="text-muted" style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Successor Bench</h2></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th style="text-align:end;">Rank</th><th>Candidate</th><th>Readiness</th><th>Development Notes</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for c in candidates %}
+          <tr>
+            <td style="text-align:end;">{{ c.rank_order }}</td>
+            <td class="fw-600">{{ c.candidate.party.name }}</td>
+            <td>{% if c.readiness == 'ready_now' %}<span class="badge badge-green">Ready Now</span>{% elif c.readiness == 'ready_1_2y' %}<span class="badge badge-info">1-2 Years</span>{% elif c.readiness == 'ready_3_5y' %}<span class="badge badge-amber">3-5 Years</span>{% else %}<span class="badge badge-muted">{{ c.get_readiness_display }}</span>{% endif %}</td>
+            <td>{{ c.development_notes|default:"-"|truncatechars:60 }}</td>
+            <td><div class="table-actions">
+              <a href="{% url 'hrm:successioncandidate_edit' c.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'hrm:successioncandidate_delete' c.pk %}" onsubmit="return confirm('Remove this successor?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form>
+            </div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-muted">No successors on the bench yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Add Successor</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'hrm:successioncandidate_add' obj.pk %}" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in candidate_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add to Bench</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body" style="display:flex; gap:1rem;">
+      <a href="{% url 'hrm:successionplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:successionplan_delete' obj.pk %}" onsubmit="return confirm('Delete this succession plan and its bench?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    </div>
+  </div>
+{% endblock %}
