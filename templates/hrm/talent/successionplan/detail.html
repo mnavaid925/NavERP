@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">{{ obj.critical_role.name }}
         {% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
-        {% if obj.vacancy_risk == 'high' %}<span class="badge badge-red">High Vacancy Risk</span>{% elif obj.vacancy_risk == 'medium' %}<span class="badge badge-amber">Medium Risk</span>{% else %}<span class="badge badge-green">Low Risk</span>{% endif %}
+        {% if obj.vacancy_risk == 'high' %}<span class="badge badge-red">High Vacancy Risk</span>{% elif obj.vacancy_risk == 'medium' %}<span class="badge badge-amber">Medium Risk</span>{% else %}<span class="badge badge-green">{{ obj.get_vacancy_risk_display }}</span>{% endif %}
       </h1>
       <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:successionplan_list' %}">Succession Plans</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
