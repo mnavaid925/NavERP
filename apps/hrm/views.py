@@ -15023,7 +15023,11 @@ from .forms import (  # noqa: E402  — 3.38 Talent Management & Succession
 # ---- Talent pools -----------------------------------------------------------------------------
 @tenant_admin_required
 def talentpool_list(request):
-    qs = TalentPool.objects.filter(tenant=request.tenant).select_related("owner__party")
+    # Annotate the active-member count the template renders per row — the model property picks the
+    # annotation up, so the list stays a fixed query count instead of one COUNT per pool.
+    qs = (TalentPool.objects.filter(tenant=request.tenant).select_related("owner__party")
+          .annotate(_active_member_count=Count("memberships",
+                                               filter=Q(memberships__status="active"), distinct=True)))
     return crud_list(request, qs, "hrm/talent/talentpool/list.html",
                      search_fields=["name", "description"],
                      filters=[("pool_type", "pool_type", False), ("is_active", "is_active", False)],
@@ -15039,7 +15043,9 @@ def talentpool_create(request):
 @tenant_admin_required
 def talentpool_detail(request, pk):
     obj = get_object_or_404(TalentPool.objects.select_related("owner__party"), pk=pk, tenant=request.tenant)
-    members = (obj.memberships.select_related("employee__party", "review").order_by("-created_at"))
+    members = (obj.memberships.select_related("employee__party", "review")
+               .prefetch_related("review__ratings")  # the roster renders each member's 9-box quadrant
+               .order_by("-created_at"))
     return render(request, "hrm/talent/talentpool/detail.html", {"obj": obj, "members": members})
 
 
@@ -15061,8 +15067,12 @@ def talentpool_delete(request, pk):
 # ---- Talent pool memberships (the 9-box rows) -------------------------------------------------
 @tenant_admin_required
 def talentpoolmembership_list(request):
+    # review__ratings is prefetched because effective_performance falls back to the review's
+    # effective_rating, which (when calibrated_rating is null) derives overall_rating from its rating
+    # lines — without this every row would fire a query for them.
     qs = (TalentPoolMembership.objects.filter(tenant=request.tenant)
-          .select_related("employee__party", "pool", "review"))
+          .select_related("employee__party", "pool", "review")
+          .prefetch_related("review__ratings"))
     return crud_list(request, qs, "hrm/talent/talentpoolmembership/list.html",
                      search_fields=["employee__party__name", "pool__name", "retention_action_plan"],
                      filters=[("pool", "pool_id", True), ("status", "status", False),
@@ -15083,9 +15093,14 @@ def talentpoolmembership_create(request):
 
 @tenant_admin_required
 def talentpoolmembership_detail(request, pk):
-    return crud_detail(request, model=TalentPoolMembership, pk=pk,
-                       template="hrm/talent/talentpoolmembership/detail.html",
-                       select_related=("employee__party", "pool", "review"))
+    # Bespoke (not crud_detail) so the review's rating lines can be prefetched — the 9-box fallback
+    # derives the performance axis from review.effective_rating, which reads them when calibrated_rating
+    # is null. Without this the detail page fires one extra query.
+    obj = get_object_or_404(
+        TalentPoolMembership.objects.select_related("employee__party", "pool", "review")
+        .prefetch_related("review__ratings"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/talent/talentpoolmembership/detail.html", {"obj": obj})
 
 
 @tenant_admin_required
@@ -15108,7 +15123,8 @@ def talent_nine_box(request):
     (rows = potential high→low, cols = performance low→high — the conventional layout). Optional
     ``?pool=<id>`` scope. Members missing either axis are listed separately as unplaced."""
     qs = (TalentPoolMembership.objects.filter(tenant=request.tenant, status="active")
-          .select_related("employee__party", "pool", "review"))
+          .select_related("employee__party", "pool", "review")
+          .prefetch_related("review__ratings"))  # see talentpoolmembership_list — the 9-box fallback
     pool_id = request.GET.get("pool", "").strip()
     if pool_id.isdigit():
         qs = qs.filter(pool_id=int(pool_id))
@@ -15141,8 +15157,13 @@ def talent_nine_box(request):
 # ---- Succession plans + their ranked candidate bench ------------------------------------------
 @tenant_admin_required
 def successionplan_list(request):
+    # bench_strength renders on EVERY row and reads both counts — annotate them (the model properties
+    # prefer the annotation), otherwise each row would fire 2 COUNT queries.
     qs = (SuccessionPlan.objects.filter(tenant=request.tenant)
-          .select_related("critical_role", "department", "incumbent__party"))
+          .select_related("critical_role", "department", "incumbent__party")
+          .annotate(_candidate_count=Count("candidates", distinct=True),
+                    _ready_now_count=Count("candidates",
+                                           filter=Q(candidates__readiness="ready_now"), distinct=True)))
     return crud_list(request, qs, "hrm/talent/successionplan/list.html",
                      search_fields=["number", "critical_role__name", "incumbent__party__name", "notes"],
                      filters=[("status", "status", False), ("vacancy_risk", "vacancy_risk", False),
