@@ -6,6 +6,7 @@ system-computed fields (``days``, ``hours_worked``, ``approved_at``, ``confirmed
 """
 import os
 import re
+from decimal import Decimal
 
 from django import forms
 from django.contrib.auth import get_user_model
