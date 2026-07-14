@@ -52,7 +52,7 @@ def open_period_sec(tenant_a):
 @pytest.fixture
 def asset_for_sec(tenant_a):
     from apps.accounting.models import GLAccount
-    from apps.accounting.models_advanced import FixedAsset
+    from apps.accounting.models import FixedAsset
     acct = GLAccount.objects.create(
         tenant=tenant_a, code="1610", name="FA Cost Sec", account_type="asset", normal_balance="debit"
     )
@@ -71,7 +71,7 @@ def asset_for_sec(tenant_a):
 @pytest.fixture
 def asset_b(tenant_b):
     """A FixedAsset belonging to tenant_b for IDOR tests."""
-    from apps.accounting.models_advanced import FixedAsset
+    from apps.accounting.models import FixedAsset
     return FixedAsset.objects.create(
         tenant=tenant_b,
         name="Tenant B Asset",
@@ -84,7 +84,7 @@ def asset_b(tenant_b):
 
 @pytest.fixture
 def project_sec(tenant_a):
-    from apps.accounting.models_advanced import Project
+    from apps.accounting.models import Project
     return Project.objects.create(
         tenant=tenant_a,
         name="Sec Test Project",
@@ -97,7 +97,7 @@ def project_sec(tenant_a):
 @pytest.fixture
 def project_b(tenant_b):
     """A Project belonging to tenant_b for IDOR tests."""
-    from apps.accounting.models_advanced import Project
+    from apps.accounting.models import Project
     return Project.objects.create(
         tenant=tenant_b,
         name="Globex Project",
@@ -109,7 +109,7 @@ def project_b(tenant_b):
 
 @pytest.fixture
 def budget_sec(tenant_a, open_period_sec):
-    from apps.accounting.models_advanced import Budget
+    from apps.accounting.models import Budget
     return Budget.objects.create(
         tenant=tenant_a,
         name="Sec Test Budget",
@@ -121,7 +121,7 @@ def budget_sec(tenant_a, open_period_sec):
 @pytest.fixture
 def budget_b(tenant_b):
     """A Budget belonging to tenant_b for IDOR tests."""
-    from apps.accounting.models_advanced import Budget
+    from apps.accounting.models import Budget
     return Budget.objects.create(
         tenant=tenant_b,
         name="Globex Budget",
@@ -131,7 +131,7 @@ def budget_b(tenant_b):
 
 @pytest.fixture
 def integration_sec(tenant_a):
-    from apps.accounting.models_advanced import IntegrationConfig
+    from apps.accounting.models import IntegrationConfig
     return IntegrationConfig.objects.create(
         tenant=tenant_a,
         name="Stripe Sec Test",
@@ -143,7 +143,7 @@ def integration_sec(tenant_a):
 @pytest.fixture
 def integration_b(tenant_b):
     """An IntegrationConfig belonging to tenant_b for IDOR tests."""
-    from apps.accounting.models_advanced import IntegrationConfig
+    from apps.accounting.models import IntegrationConfig
     return IntegrationConfig.objects.create(
         tenant=tenant_b,
         name="Globex Integration",
@@ -154,7 +154,7 @@ def integration_b(tenant_b):
 
 @pytest.fixture
 def tax_code_sec(tenant_a):
-    from apps.accounting.models_advanced import TaxCode
+    from apps.accounting.models import TaxCode
     return TaxCode.objects.create(
         tenant=tenant_a,
         name="VAT 20%",
@@ -165,7 +165,7 @@ def tax_code_sec(tenant_a):
 
 @pytest.fixture
 def tax_return_sec(tenant_a, tax_code_sec, open_period_sec):
-    from apps.accounting.models_advanced import TaxReturn
+    from apps.accounting.models import TaxReturn
     return TaxReturn.objects.create(
         tenant=tenant_a,
         tax_code=tax_code_sec,
@@ -180,7 +180,7 @@ def tax_return_sec(tenant_a, tax_code_sec, open_period_sec):
 @pytest.fixture
 def tax_return_b(tenant_b):
     """A TaxReturn belonging to tenant_b."""
-    from apps.accounting.models_advanced import TaxCode, TaxReturn
+    from apps.accounting.models import TaxCode, TaxReturn
     tc = TaxCode.objects.create(
         tenant=tenant_b, name="VAT B", tax_type="vat", rate_pct=Decimal("10.000")
     )
@@ -197,7 +197,7 @@ def tax_return_b(tenant_b):
 
 @pytest.fixture
 def ict_sec(tenant_a, org_unit_sec, org_unit_b_sec, open_period_sec):
-    from apps.accounting.models_advanced import IntercompanyTransaction
+    from apps.accounting.models import IntercompanyTransaction
     return IntercompanyTransaction.objects.create(
         tenant=tenant_a,
         description="Sec test ICT",
@@ -210,7 +210,7 @@ def ict_sec(tenant_a, org_unit_sec, org_unit_b_sec, open_period_sec):
 
 @pytest.fixture
 def draft_disposal_sec(tenant_a, asset_for_sec):
-    from apps.accounting.models_advanced import AssetDisposal
+    from apps.accounting.models import AssetDisposal
     return AssetDisposal.objects.create(
         tenant=tenant_a,
         asset=asset_for_sec,
@@ -221,7 +221,7 @@ def draft_disposal_sec(tenant_a, asset_for_sec):
 
 @pytest.fixture
 def draft_payroll_sec(tenant_a, open_period_sec):
-    from apps.accounting.models_advanced import PayrollRun
+    from apps.accounting.models import PayrollRun
     return PayrollRun.objects.create(
         tenant=tenant_a,
         period_start=datetime.date(2026, 7, 1),
@@ -235,7 +235,7 @@ def draft_payroll_sec(tenant_a, open_period_sec):
 @pytest.fixture
 def draft_calloc_sec(tenant_a, open_period_sec):
     from apps.accounting.models import GLAccount
-    from apps.accounting.models_advanced import CostAllocation
+    from apps.accounting.models import CostAllocation
     src = GLAccount.objects.create(
         tenant=tenant_a, code="1050", name="Overhead Pool Sec",
         account_type="asset", normal_balance="debit"
@@ -257,7 +257,7 @@ def draft_calloc_sec(tenant_a, open_period_sec):
 @pytest.fixture
 def draft_jce_sec(tenant_a, project_sec, open_period_sec):
     from apps.accounting.models import GLAccount
-    from apps.accounting.models_advanced import JobCostEntry
+    from apps.accounting.models import JobCostEntry
     gl = GLAccount.objects.create(
         tenant=tenant_a, code="5700", name="JCE Sec Cost",
         account_type="expense", normal_balance="debit"
@@ -340,14 +340,14 @@ class TestAdminRequiredAdvancedGates:
 class TestAdvancedFormFieldExclusions:
 
     def test_intercompany_form_has_no_eliminated_field(self):
-        from apps.accounting.forms_advanced import IntercompanyTransactionForm
+        from apps.accounting.forms import IntercompanyTransactionForm
         form = IntercompanyTransactionForm(tenant=None)
         assert "eliminated" not in form.fields, (
             "IntercompanyTransactionForm must NOT expose 'eliminated' — it's toggle-only"
         )
 
     def test_fixed_asset_form_excludes_disposed_status(self):
-        from apps.accounting.forms_advanced import FixedAssetForm
+        from apps.accounting.forms import FixedAssetForm
         form = FixedAssetForm(tenant=None)
         status_values = [c[0] for c in form.fields["status"].choices]
         assert "disposed" not in status_values, (
@@ -355,35 +355,35 @@ class TestAdvancedFormFieldExclusions:
         )
 
     def test_integration_config_form_has_no_api_key_prefix(self):
-        from apps.accounting.forms_advanced import IntegrationConfigForm
+        from apps.accounting.forms import IntegrationConfigForm
         form = IntegrationConfigForm(tenant=None)
         assert "api_key_prefix" not in form.fields
         assert "api_key_hash" not in form.fields
 
     def test_payroll_run_form_has_no_net_pay(self):
-        from apps.accounting.forms_advanced import PayrollRunForm
+        from apps.accounting.forms import PayrollRunForm
         form = PayrollRunForm(tenant=None)
         assert "net_pay" not in form.fields, "net_pay is derived — must not appear in the form"
 
     def test_asset_disposal_form_has_no_gain_loss(self):
         """gain_loss is computed by the post action, not user-editable."""
-        from apps.accounting.forms_advanced import AssetDisposalForm
+        from apps.accounting.forms import AssetDisposalForm
         form = AssetDisposalForm(tenant=None)
         assert "gain_loss" not in form.fields
 
     def test_asset_disposal_form_has_no_status(self):
         """status is owned by asset_disposal_post, not the form."""
-        from apps.accounting.forms_advanced import AssetDisposalForm
+        from apps.accounting.forms import AssetDisposalForm
         form = AssetDisposalForm(tenant=None)
         assert "status" not in form.fields
 
     def test_cost_allocation_form_has_no_status(self):
-        from apps.accounting.forms_advanced import CostAllocationForm
+        from apps.accounting.forms import CostAllocationForm
         form = CostAllocationForm(tenant=None)
         assert "status" not in form.fields
 
     def test_payroll_run_form_has_no_status(self):
-        from apps.accounting.forms_advanced import PayrollRunForm
+        from apps.accounting.forms import PayrollRunForm
         form = PayrollRunForm(tenant=None)
         assert "status" not in form.fields
 
@@ -430,7 +430,7 @@ class TestAdvancedCrossTenantIDOR:
     def test_cost_allocation_detail_cross_tenant_404(self, client_a, tenant_b, open_period_sec):
         """CostAllocation belonging to tenant_b → 404 for tenant_a admin."""
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import CostAllocation
+        from apps.accounting.models import CostAllocation
         src = GLAccount.objects.create(
             tenant=tenant_b, code="1000", name="Cash B IDOR",
             account_type="asset", normal_balance="debit"
