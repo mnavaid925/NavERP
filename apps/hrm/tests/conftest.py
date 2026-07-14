@@ -417,7 +417,7 @@ def election_b(db, tenant_b, employee_b, optional_holiday_b, holiday_policy_b):
 @pytest.fixture
 def project_a(db, tenant_a):
     """An accounting.Project for tenant_a (2.9 job-costing spine, optional FK on TimesheetEntry)."""
-    from apps.accounting.models_advanced import Project
+    from apps.accounting.models import Project
     return Project.objects.create(
         tenant=tenant_a, name="Website Revamp", budget_amount=Decimal("50000"),
     )
@@ -426,7 +426,7 @@ def project_a(db, tenant_a):
 @pytest.fixture
 def project_b(db, tenant_b):
     """An accounting.Project for tenant_b (IDOR tests)."""
-    from apps.accounting.models_advanced import Project
+    from apps.accounting.models import Project
     return Project.objects.create(
         tenant=tenant_b, name="Globex Migration", budget_amount=Decimal("20000"),
     )
