@@ -16,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import OrgUnit, Party, PartyRole, Tenant
-from apps.accounting.models_advanced import (
+from apps.accounting.models import (
     Budget,
     BudgetLine,
     CostAllocation,
@@ -338,7 +338,7 @@ class Command(BaseCommand):
             method="straight_line", in_service_date=today - datetime.timedelta(days=400), status="active",
             accumulated_depreciation=Decimal("2400"), last_depreciation_date=today - datetime.timedelta(days=30),
             asset_account=equipment, accumulated_account=accum_dep, expense_account=dep_exp, location=org_a)
-        from apps.accounting.models_advanced import AssetDisposal
+        from apps.accounting.models import AssetDisposal
         AssetDisposal.objects.create(
             tenant=tenant, asset=old_printer, disposal_date=today, proceeds=Decimal("500"),
             status="draft", notes="End-of-life sale to staff.")
