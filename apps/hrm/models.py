@@ -8761,3 +8761,324 @@ class SuccessionCandidate(TenantOwned):
 
     def __str__(self):
         return f"{self.candidate} ({self.get_readiness_display()})" if self.candidate_id else "Successor"
+
+
+# ---------------------------------------------------------------------------
+# 3.39 Compliance & Legal — employment contracts (+ renewal chain), the versioned
+# HR-policy library with per-employee acknowledgments, the grievance register, and
+# the statutory/labour-law compliance register.
+#
+# **Disciplinary Actions needs NO new table** — it is already fully built as the 3.21
+# ``WarningLetter`` (progressive discipline + issue/acknowledge + printable letter);
+# the 3.39 bullet simply points at it. ``ComplianceRegister`` is deliberately SEPARATE
+# from 3.15's ``StatutoryReturn`` (that one is payroll-tax remittance; this one is
+# labour-law registers, muster rolls, wage registers and inspection reports).
+#
+# CONFIDENTIAL: ``Grievance`` is own-vs-admin (a complainant sees only what they filed;
+# HR sees all) and ``is_anonymous`` masks the complainant from non-admins — mirroring
+# the 3.20 Feedback anonymous-giver pattern.
+# ---------------------------------------------------------------------------
+class EmploymentContract(TenantNumbered):
+    """An employment contract (``CTR-#####``) for an employee — type, dates, notice period, and an
+    optional signed document. ``renewed_from`` chains a renewal back to the contract it replaces (the
+    lifecycle history itself is recorded via the existing ``EmployeeLifecycleEvent(contract_renewal)``).
+    Expiry is COMPUTED from ``end_date``, never stored."""
+
+    NUMBER_PREFIX = "CTR"
+
+    CONTRACT_TYPE_CHOICES = [
+        ("permanent", "Permanent"),
+        ("fixed_term", "Fixed Term"),
+        ("probation", "Probation"),
+        ("consultant", "Consultant"),
+        ("intern", "Intern"),
+        ("part_time", "Part Time"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("expired", "Expired"),
+        ("terminated", "Terminated"),
+        ("renewed", "Renewed"),
+    ]
+    EXPIRING_SOON_DAYS = 60
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="contracts")
+    contract_type = models.CharField(max_length=15, choices=CONTRACT_TYPE_CHOICES, default="permanent")
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True, help_text="Blank for an open-ended contract.")
+    probation_end_date = models.DateField(null=True, blank=True)
+    notice_period_days = models.PositiveSmallIntegerField(default=30)
+    designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="contracts")
+    salary_structure = models.ForeignKey("hrm.EmployeeSalaryStructure", on_delete=models.SET_NULL,
+                                         null=True, blank=True, related_name="contracts")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    renewed_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="renewals")
+    # WARNING: extension allowlist + size cap enforced in the form's clean (shared _validate_upload).
+    # Keep MEDIA_ROOT outside the web root and serve with Content-Disposition: attachment in production.
+    document = models.FileField(upload_to="hrm/contracts/%Y/%m/", null=True, blank=True)
+    signed_on = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_ctr_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_ctr_tnt_status_idx"),
+            models.Index(fields=["tenant", "end_date"], name="hrm_ctr_tnt_end_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_ctr_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.get_contract_type_display()}" if self.number else self.get_contract_type_display()
+
+    @property
+    def days_to_expiry(self):
+        """Days until end_date (negative once past). None for an open-ended contract."""
+        if not self.end_date:
+            return None
+        return (self.end_date - timezone.localdate()).days
+
+    @property
+    def is_expiring_soon(self):
+        """Active and within EXPIRING_SOON_DAYS of its end date (and not already past)."""
+        days = self.days_to_expiry
+        return bool(self.status == "active" and days is not None and 0 <= days <= self.EXPIRING_SOON_DAYS)
+
+    @property
+    def is_expired(self):
+        days = self.days_to_expiry
+        return bool(days is not None and days < 0)
+
+
+class HRPolicy(TenantNumbered):
+    """A versioned HR policy (``POL-#####``). ``previous_version`` chains supersessions; a policy targeted at
+    one ``applicable_org_unit`` applies only there (blank = the whole tenant). When ``requires_acknowledgment``
+    is set, publishing raises a ``PolicyAcknowledgment`` row per targeted employee. ``acknowledgment_rate`` is
+    COMPUTED (annotation-aware for list rendering)."""
+
+    NUMBER_PREFIX = "POL"
+
+    CATEGORY_CHOICES = [
+        ("code_of_conduct", "Code of Conduct"),
+        ("leave", "Leave"),
+        ("attendance", "Attendance"),
+        ("it_security", "IT & Security"),
+        ("harassment", "Anti-Harassment"),
+        ("health_safety", "Health & Safety"),
+        ("travel", "Travel & Expense"),
+        ("other", "Other"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("published", "Published"),
+        ("archived", "Archived"),
+    ]
+
+    title = models.CharField(max_length=255)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other")
+    version_number = models.CharField(max_length=20, default="1.0")
+    previous_version = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name="superseded_by")
+    applicable_org_unit = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                            related_name="hrm_policies",
+                                            help_text="Blank = applies to the whole organization.")
+    summary = models.CharField(max_length=500, blank=True)
+    body = models.TextField(blank=True)
+    document = models.FileField(upload_to="hrm/policies/%Y/%m/", null=True, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    effective_from = models.DateField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    requires_acknowledgment = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = (("tenant", "number"), ("tenant", "title", "version_number"))
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_pol_tnt_status_idx"),
+            models.Index(fields=["tenant", "category"], name="hrm_pol_tnt_cat_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_pol_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.title} v{self.version_number}"
+
+    @property
+    def acknowledged_count(self):
+        annotated = getattr(self, "_acknowledged_count", None)
+        if annotated is not None:
+            return annotated
+        return self.acknowledgments.filter(status="acknowledged").count()
+
+    @property
+    def target_count(self):
+        annotated = getattr(self, "_target_count", None)
+        if annotated is not None:
+            return annotated
+        return self.acknowledgments.count()
+
+    @property
+    def acknowledgment_rate(self):
+        """Percent of targeted employees who have acknowledged (0 when nobody is targeted)."""
+        total = self.target_count
+        if not total:
+            return Decimal("0")
+        return (Decimal(self.acknowledged_count) / total * 100).quantize(Decimal("0.1"))
+
+
+class PolicyAcknowledgment(TenantOwned):
+    """One employee's acknowledgment of one policy version. Raised in bulk when a policy that requires
+    acknowledgment is published; the employee flips it to ``acknowledged`` themselves."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("acknowledged", "Acknowledged"),
+    ]
+
+    policy = models.ForeignKey("hrm.HRPolicy", on_delete=models.CASCADE, related_name="acknowledgments")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                 related_name="policy_acknowledgments")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "policy", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "policy"], name="hrm_pack_tnt_policy_idx"),
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_pack_emp_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} — {self.policy}" if self.employee_id and self.policy_id else "Acknowledgment"
+
+
+class Grievance(TenantNumbered):
+    """An employee grievance / complaint (``GRV-#####``) with an investigation workflow.
+
+    CONFIDENTIAL: own-vs-admin — a complainant sees only what they filed, HR sees everything. When
+    ``is_anonymous`` is set the complainant is MASKED in the UI for non-admins (the identity is still stored
+    so HR can investigate; mirrors the 3.20 Feedback anonymous-giver pattern). ``related_warning`` links to
+    the existing 3.21 ``WarningLetter`` when a grievance results in disciplinary action."""
+
+    NUMBER_PREFIX = "GRV"
+
+    CATEGORY_CHOICES = [
+        ("harassment", "Harassment"),
+        ("discrimination", "Discrimination"),
+        ("safety", "Workplace Safety"),
+        ("compensation", "Compensation"),
+        ("management", "Management / Supervision"),
+        ("other", "Other"),
+    ]
+    SEVERITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("critical", "Critical"),
+    ]
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("investigating", "Investigating"),
+        ("resolved", "Resolved"),
+        ("closed", "Closed"),
+        ("withdrawn", "Withdrawn"),
+    ]
+    OPEN_STATUSES = ("open",)  # editable/withdrawable by the complainant only while still open
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                 related_name="grievances_filed")  # the complainant
+    is_anonymous = models.BooleanField(default=False,
+                                       help_text="Mask the complainant from everyone except HR admins.")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other")
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default="medium")
+    subject = models.CharField(max_length=255)
+    description = models.TextField()
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="open")
+    assigned_investigator = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL,
+                                              null=True, blank=True, related_name="grievances_investigating")
+    related_policy = models.ForeignKey("hrm.HRPolicy", on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name="grievances")
+    related_warning = models.ForeignKey("hrm.WarningLetter", on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="grievances")
+    resolution = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    filed_on = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_grv_tnt_status_idx"),
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_grv_emp_status_idx"),
+            models.Index(fields=["tenant", "severity"], name="hrm_grv_tnt_severity_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_grv_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.subject}" if self.number else self.subject
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+
+class ComplianceRegister(TenantNumbered):
+    """A statutory / labour-law compliance record (``CMP-#####``) — a labour-law requirement, a muster roll,
+    a wage register, an inspection report, or a licence/permit. Deliberately SEPARATE from 3.15's
+    ``StatutoryReturn`` (payroll-tax remittance). ``is_overdue`` is COMPUTED from ``due_date`` + status."""
+
+    NUMBER_PREFIX = "CMP"
+
+    REGISTER_TYPE_CHOICES = [
+        ("labor_law_requirement", "Labour Law Requirement"),
+        ("muster_roll", "Muster Roll"),
+        ("wage_register", "Wage Register"),
+        ("inspection_report", "Inspection Report"),
+        ("license_permit", "Licence / Permit"),
+        ("other", "Other"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("filed", "Filed"),
+        ("not_applicable", "Not Applicable"),
+    ]
+
+    register_type = models.CharField(max_length=25, choices=REGISTER_TYPE_CHOICES,
+                                     default="labor_law_requirement")
+    title = models.CharField(max_length=255)
+    jurisdiction = models.CharField(max_length=150, blank=True, help_text="e.g. Karnataka, India / Federal.")
+    authority = models.CharField(max_length=150, blank=True, help_text="The issuing/inspecting authority.")
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    filed_on = models.DateField(null=True, blank=True)
+    inspector_name = models.CharField(max_length=150, blank=True)
+    findings = models.TextField(blank=True)
+    document = models.FileField(upload_to="hrm/compliance/%Y/%m/", null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "register_type"], name="hrm_cmp_tnt_type_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_cmp_tnt_status_idx"),
+            models.Index(fields=["tenant", "due_date"], name="hrm_cmp_tnt_due_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_cmp_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.title}" if self.number else self.title
+
+    @property
+    def is_overdue(self):
+        """Past its due date and not yet filed / marked not-applicable."""
+        if not self.due_date or self.status in ("filed", "not_applicable"):
+            return False
+        return self.due_date < timezone.localdate()
