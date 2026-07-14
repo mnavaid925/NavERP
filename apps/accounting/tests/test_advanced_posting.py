@@ -119,7 +119,7 @@ def open_period_adv(tenant_a):
 @pytest.fixture
 def active_asset(tenant_a, gl_asset_acct, gl_accum, gl_expense, org_unit, open_period_adv):
     """Straight-line asset: $12 000 cost, $0 salvage, 12-month life → $1 000/month."""
-    from apps.accounting.models_advanced import FixedAsset
+    from apps.accounting.models import FixedAsset
     return FixedAsset.objects.create(
         tenant=tenant_a,
         name="Server Rack",
@@ -138,7 +138,7 @@ def active_asset(tenant_a, gl_asset_acct, gl_accum, gl_expense, org_unit, open_p
 @pytest.fixture
 def declining_asset(tenant_a, gl_asset_acct, gl_accum, gl_expense, open_period_adv):
     """Declining-balance asset: $10 000 cost, $0 salvage, 10-month life → rate=20%."""
-    from apps.accounting.models_advanced import FixedAsset
+    from apps.accounting.models import FixedAsset
     return FixedAsset.objects.create(
         tenant=tenant_a,
         name="Laptop Fleet",
@@ -157,7 +157,7 @@ def declining_asset(tenant_a, gl_asset_acct, gl_accum, gl_expense, open_period_a
 @pytest.fixture
 def draft_disposal(tenant_a, active_asset):
     """Draft disposal with proceeds > book value (gain case)."""
-    from apps.accounting.models_advanced import AssetDisposal
+    from apps.accounting.models import AssetDisposal
     return AssetDisposal.objects.create(
         tenant=tenant_a,
         asset=active_asset,
@@ -168,7 +168,7 @@ def draft_disposal(tenant_a, active_asset):
 
 @pytest.fixture
 def project(tenant_a, open_period_adv):
-    from apps.accounting.models_advanced import Project
+    from apps.accounting.models import Project
     return Project.objects.create(
         tenant=tenant_a,
         name="Website Redesign",
@@ -238,7 +238,7 @@ class TestFixedAssetDepreciation:
                                                      gl_accum, gl_expense, open_period_adv):
         """An asset fully depreciated (accumulated >= depreciable_base) produces no further JE."""
         from apps.accounting.models import JournalEntry
-        from apps.accounting.models_advanced import FixedAsset
+        from apps.accounting.models import FixedAsset
         # Asset where accumulated == depreciable base → no more depreciation
         asset = FixedAsset.objects.create(
             tenant=tenant_a,
@@ -290,7 +290,7 @@ class TestFixedAssetDepreciation:
 class TestAssetDisposal:
 
     def _make_disposal(self, tenant_a, asset, proceeds):
-        from apps.accounting.models_advanced import AssetDisposal
+        from apps.accounting.models import AssetDisposal
         return AssetDisposal.objects.create(
             tenant=tenant_a,
             asset=asset,
@@ -413,7 +413,7 @@ class TestCostAllocationPost:
 
     @pytest.fixture
     def draft_alloc(self, tenant_a, gl_cash, gl_target, open_period_adv):
-        from apps.accounting.models_advanced import CostAllocation
+        from apps.accounting.models import CostAllocation
         # gl_cash is the source (code 1000), gl_target is the target
         return CostAllocation.objects.create(
             tenant=tenant_a,
@@ -472,7 +472,7 @@ class TestPayrollPost:
 
     @pytest.fixture
     def draft_payroll(self, tenant_a, open_period_adv, gl_wages_exp, gl_cash_payroll, gl_tax_payable):
-        from apps.accounting.models_advanced import PayrollRun
+        from apps.accounting.models import PayrollRun
         return PayrollRun.objects.create(
             tenant=tenant_a,
             period_start=datetime.date(2026, 6, 1),
@@ -552,7 +552,7 @@ class TestJobCostEntryPost:
 
     @pytest.fixture
     def draft_cost_entry(self, tenant_a, project, gl_cost_acct, gl_cash_jce, open_period_adv):
-        from apps.accounting.models_advanced import JobCostEntry
+        from apps.accounting.models import JobCostEntry
         return JobCostEntry.objects.create(
             tenant=tenant_a,
             project=project,
@@ -565,7 +565,7 @@ class TestJobCostEntryPost:
 
     @pytest.fixture
     def draft_revenue_entry(self, tenant_a, project, gl_revenue_acct, gl_cash_jce, open_period_adv):
-        from apps.accounting.models_advanced import JobCostEntry
+        from apps.accounting.models import JobCostEntry
         return JobCostEntry.objects.create(
             tenant=tenant_a,
             project=project,
@@ -627,7 +627,7 @@ class TestIntercompanyPost:
 
     @pytest.fixture
     def draft_ict(self, tenant_a, org_unit, org_unit_b, gl_due_from, gl_due_to, open_period_adv):
-        from apps.accounting.models_advanced import IntercompanyTransaction
+        from apps.accounting.models import IntercompanyTransaction
         return IntercompanyTransaction.objects.create(
             tenant=tenant_a,
             description="Parent-to-subsidiary loan",
@@ -671,7 +671,7 @@ class TestGlobalDoubleEntryBalance:
         """After posting depreciation + disposal + cost_allocation + job_cost:
         total posted debits == total posted credits for the tenant."""
         from apps.accounting.models import GLAccount, JournalEntry, JournalLine
-        from apps.accounting.models_advanced import CostAllocation, JobCostEntry
+        from apps.accounting.models import CostAllocation, JobCostEntry
 
         # Ensure needed accounts exist
         GLAccount.objects.get_or_create(
@@ -733,7 +733,7 @@ class TestImmutabilityAndLocking:
     def _make_posted_alloc(self, tenant_a, gl_cash, open_period_adv):
         """Helper to create and post a CostAllocation."""
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import CostAllocation
+        from apps.accounting.models import CostAllocation
         target = GLAccount.objects.create(
             tenant=tenant_a, code="5500", name="Locked Target",
             account_type="expense", normal_balance="debit"
@@ -757,7 +757,7 @@ class TestImmutabilityAndLocking:
 
     def test_posted_cost_allocation_delete_blocked(self, client_a, tenant_a, gl_cash, open_period_adv):
         """POST delete on a posted CostAllocation → not deleted."""
-        from apps.accounting.models_advanced import CostAllocation
+        from apps.accounting.models import CostAllocation
         alloc, _ = self._make_posted_alloc(tenant_a, gl_cash, open_period_adv)
         client_a.post(reverse("accounting:cost_allocation_post", args=[alloc.pk]))
         client_a.post(reverse("accounting:cost_allocation_delete", args=[alloc.pk]))
@@ -766,7 +766,7 @@ class TestImmutabilityAndLocking:
     def test_posted_payroll_edit_redirects(self, client_a, tenant_a, open_period_adv):
         """GET edit on a posted PayrollRun → redirect."""
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import PayrollRun
+        from apps.accounting.models import PayrollRun
         GLAccount.objects.get_or_create(
             tenant=tenant_a, code="1000",
             defaults={"name": "Cash", "account_type": "asset", "normal_balance": "debit"}
@@ -793,7 +793,7 @@ class TestImmutabilityAndLocking:
 
     def test_fixed_asset_delete_blocked_when_depreciated(self, client_a, active_asset, open_period_adv):
         """DELETE on an asset that has been depreciated → blocked (redirect to detail, not deleted)."""
-        from apps.accounting.models_advanced import FixedAsset
+        from apps.accounting.models import FixedAsset
         # Post depreciation first
         client_a.post(reverse("accounting:fixed_asset_depreciate", args=[active_asset.pk]))
         active_asset.refresh_from_db()
@@ -809,7 +809,7 @@ class TestImmutabilityAndLocking:
                                                  open_period_adv):
         """GET edit on a posted IntercompanyTransaction → redirect."""
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import IntercompanyTransaction
+        from apps.accounting.models import IntercompanyTransaction
         due_from = GLAccount.objects.get_or_create(
             tenant=tenant_a, code="1100",
             defaults={"name": "Due From", "account_type": "asset", "normal_balance": "debit"}
@@ -835,7 +835,7 @@ class TestImmutabilityAndLocking:
     def test_posted_jce_delete_blocked(self, client_a, tenant_a, project, open_period_adv):
         """POST delete on a posted JobCostEntry → not deleted."""
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import JobCostEntry
+        from apps.accounting.models import JobCostEntry
         cost_gl = GLAccount.objects.get_or_create(
             tenant=tenant_a, code="5300", name="JCE Immutable Cost",
             defaults={"account_type": "expense", "normal_balance": "debit"}
@@ -870,7 +870,7 @@ class TestPostOnlyAdvanced:
 
     def test_get_cost_allocation_post_returns_405(self, client_a, tenant_a, gl_cash, open_period_adv):
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import CostAllocation
+        from apps.accounting.models import CostAllocation
         target = GLAccount.objects.create(
             tenant=tenant_a, code="5600", name="GET Test Target",
             account_type="expense", normal_balance="debit"
@@ -888,7 +888,7 @@ class TestPostOnlyAdvanced:
 
     def test_get_intercompany_post_returns_405(self, client_a, tenant_a, org_unit, org_unit_b, open_period_adv):
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import IntercompanyTransaction
+        from apps.accounting.models import IntercompanyTransaction
         due_from = GLAccount.objects.get_or_create(
             tenant=tenant_a, code="1100",
             defaults={"name": "Due From", "account_type": "asset", "normal_balance": "debit"}
