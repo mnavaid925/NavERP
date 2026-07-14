@@ -285,6 +285,48 @@ Templates MUST be organized **one folder per sub-module, then one folder per ent
 
 ---
 
+### Backend Package Structure (MANDATORY)
+
+The backend mirrors the template rule: `models`, `forms`, `views` and `urls` are **Python packages**, organized
+**one folder per sub-module, then one file per entity** — never flat `.py` monoliths. `apps/crm` and
+`apps/accounting` are fully converted; **read them as the reference.**
+
+1. **Path shape:** `apps/<app>/<layer>/<SubModule>/<Entity>.py` where `<layer>` ∈ {`models`, `forms`, `views`,
+   `urls`}. `<SubModule>` is the NavERP.md sub-module title in **PascalCase** (`### 2.2 General Ledger (GL)` →
+   `GeneralLedger/`); `<Entity>` is the entity in **PascalCase** (`Leads.py`, `Invoices.py`). The four layers
+   **line up one-to-one**: `models/GeneralLedger/JournalEntries.py` ↔ `forms/…` ↔ `views/…` ↔ `urls/…`.
+
+2. **An entity file owns the primary model plus its children** — `Invoices.py` = `Invoice` + `InvoiceLine`;
+   `Cases.py` = `Case` + `CaseComment`. Do not scatter one entity's CRUD across files.
+
+3. **Every package `__init__.py` re-exports everything it owns**
+   (`from .<SubModule>.<Entity> import (A, B)`). This is what keeps `from apps.<app>.models import X`,
+   `views.<name>` in the URLconf, and `include('apps.<app>.urls')` working. **Adding a model/form/view WITHOUT
+   adding it to the re-export block is a bug** — it will `ImportError` / `AttributeError` at runtime.
+
+4. **Imports inside these packages MUST be ABSOLUTE** — `from apps.<app>.models import X`. A relative
+   `from .models import X` resolves to the wrong package one level deeper. Entity modules pull the shared toolkit
+   from `<layer>/_base.py` (models) or `<layer>/_common.py` (forms/views) via `import *`.
+
+5. **Shared modules:** `models/_base.py` (django imports + the abstract `Tenant*` base), `forms/_common.py`,
+   `views/_common.py`. Private helpers used by **more than one** sub-module go in `views/_helpers.py`; helpers used
+   by a single entity stay in that entity's module.
+
+6. **`urls/__init__.py`** sets `app_name` and concatenates each entity module's `urlpatterns`. Django resolves
+   **first-match-wins, so order is behaviour** — keep literal routes before `<int:pk>` ones, and check any new
+   greedy `<str:token>` route against the whole concatenated list, not just its own module.
+
+7. **Never create a `*_advanced.py` sidecar** (or any second flat file) for "advanced"/later features — a later
+   sub-module's models simply get their own `<SubModule>/<Entity>.py`. Accounting's `models_advanced.py` /
+   `forms_advanced.py` / `views_advanced.py` were folded away for exactly this reason.
+
+8. **`admin.py`, `apps.py`, `analytics.py` and other single-purpose modules stay flat** at the app root.
+   Migrations are unaffected: models sit deeper than the app root, but Django still derives `app_label` from the
+   app config — a correct split needs **no new migration** (`makemigrations --check` must say "No changes
+   detected").
+
+---
+
 ### Seed Command Rules (Preventing Data Issues)
 
 1. **Idempotent by default:**
