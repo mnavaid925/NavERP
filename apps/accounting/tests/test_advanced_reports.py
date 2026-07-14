@@ -114,7 +114,7 @@ def posted_je_expense(tenant_a, admin_user, open_period_rep, gl_liability_rep, g
 
 @pytest.fixture
 def project_for_actuals(tenant_a):
-    from apps.accounting.models_advanced import Project
+    from apps.accounting.models import Project
     return Project.objects.create(
         tenant=tenant_a,
         name="Actuals Test Project",
@@ -209,7 +209,7 @@ class TestBudgetVarianceReport:
 
     @pytest.fixture
     def budget_with_lines(self, tenant_a, open_period_rep, gl_expense_rep):
-        from apps.accounting.models_advanced import Budget, BudgetLine
+        from apps.accounting.models import Budget, BudgetLine
         budget = Budget.objects.create(
             tenant=tenant_a,
             name="Aug 2026 Budget",
@@ -261,7 +261,7 @@ class TestBudgetVarianceReport:
 
     def test_budget_total_derived_from_lines(self, tenant_a, budget_with_lines, gl_expense_rep):
         """Budget.total() sums BudgetLine.amount — it is derived, not stored."""
-        from apps.accounting.models_advanced import BudgetLine
+        from apps.accounting.models import BudgetLine
         BudgetLine.objects.create(
             tenant=tenant_a,
             budget=budget_with_lines,
@@ -281,7 +281,7 @@ class TestAccountBalances:
         self, tenant_a, posted_je_balanced, gl_cash_rep
     ):
         """Asset account (normal_balance=debit) is signed as (debit - credit)."""
-        from apps.accounting.views_advanced import _account_balances
+        from apps.accounting.views import _account_balances
         rows = _account_balances(tenant_a)
         cash_row = next((r for r in rows if r["code"] == gl_cash_rep.code), None)
         assert cash_row is not None, f"No row found for account {gl_cash_rep.code}"
@@ -292,7 +292,7 @@ class TestAccountBalances:
         self, tenant_a, posted_je_balanced, gl_income_rep
     ):
         """Income account (normal_balance=credit) is signed as (credit - debit)."""
-        from apps.accounting.views_advanced import _account_balances
+        from apps.accounting.views import _account_balances
         rows = _account_balances(tenant_a)
         income_row = next((r for r in rows if r["code"] == gl_income_rep.code), None)
         assert income_row is not None
@@ -304,7 +304,7 @@ class TestAccountBalances:
     ):
         """_account_balances must NOT include draft JE lines."""
         from apps.accounting.models import JournalEntry, JournalLine
-        from apps.accounting.views_advanced import _account_balances
+        from apps.accounting.views import _account_balances
         # Create a draft JE (should be excluded)
         draft_je = JournalEntry.objects.create(
             tenant=tenant_a,
@@ -337,7 +337,7 @@ class TestProjectActualsDerived:
     ):
         """actual_cost() is derived from posted JobCostEntry rows, not stored on Project."""
         from apps.accounting.models import GLAccount
-        from apps.accounting.models_advanced import JobCostEntry
+        from apps.accounting.models import JobCostEntry
         cost_gl = GLAccount.objects.create(
             tenant=tenant_a, code="5800", name="JCE Derived Cost",
             account_type="expense", normal_balance="debit"
@@ -377,7 +377,7 @@ class TestSeedAccountingAdvanced:
 
     def test_seed_advanced_idempotent(self, tenant_a, admin_user, db):
         """Running seed_accounting twice must not duplicate advanced rows."""
-        from apps.accounting.models_advanced import FixedAsset, Project, Budget
+        from apps.accounting.models import FixedAsset, Project, Budget
 
         # Run once
         try:
@@ -412,7 +412,7 @@ class TestSeedAccountingAdvanced:
 class TestAdvancedModelProperties:
 
     def test_fixed_asset_book_value(self, tenant_a):
-        from apps.accounting.models_advanced import FixedAsset
+        from apps.accounting.models import FixedAsset
         asset = FixedAsset.objects.create(
             tenant=tenant_a,
             name="Test BV Asset",
@@ -425,7 +425,7 @@ class TestAdvancedModelProperties:
         assert asset.book_value() == Decimal("10000.00")
 
     def test_fixed_asset_remaining_depreciable(self, tenant_a):
-        from apps.accounting.models_advanced import FixedAsset
+        from apps.accounting.models import FixedAsset
         asset = FixedAsset.objects.create(
             tenant=tenant_a,
             name="Test RD Asset",
@@ -439,7 +439,7 @@ class TestAdvancedModelProperties:
         assert asset.remaining_depreciable() == Decimal("4500.00")
 
     def test_fixed_asset_str(self, tenant_a):
-        from apps.accounting.models_advanced import FixedAsset
+        from apps.accounting.models import FixedAsset
         asset = FixedAsset.objects.create(
             tenant=tenant_a,
             name="Display Asset",
@@ -453,7 +453,7 @@ class TestAdvancedModelProperties:
         assert "Display Asset" in s
 
     def test_payroll_run_total_expense(self, tenant_a):
-        from apps.accounting.models_advanced import PayrollRun
+        from apps.accounting.models import PayrollRun
         run = PayrollRun.objects.create(
             tenant=tenant_a,
             period_start=datetime.date(2026, 8, 1),
@@ -467,7 +467,7 @@ class TestAdvancedModelProperties:
         assert run.total_expense() == Decimal("34500.00")
 
     def test_project_str_contains_number_and_name(self, tenant_a):
-        from apps.accounting.models_advanced import Project
+        from apps.accounting.models import Project
         prj = Project.objects.create(
             tenant=tenant_a,
             name="Alpha Project",
@@ -480,7 +480,7 @@ class TestAdvancedModelProperties:
 
     def test_integration_config_masked_empty_when_no_key(self, tenant_a):
         """IntegrationConfig.masked returns empty string when no api_key_hash set."""
-        from apps.accounting.models_advanced import IntegrationConfig
+        from apps.accounting.models import IntegrationConfig
         cfg = IntegrationConfig.objects.create(
             tenant=tenant_a,
             name="No Key Config",
@@ -491,7 +491,7 @@ class TestAdvancedModelProperties:
 
     def test_payroll_run_net_pay_non_negative_with_valid_data(self, tenant_a):
         """net_pay = gross - employee_tax - deductions; must not go negative with standard data."""
-        from apps.accounting.models_advanced import PayrollRun
+        from apps.accounting.models import PayrollRun
         run = PayrollRun.objects.create(
             tenant=tenant_a,
             period_start=datetime.date(2026, 8, 1),
