@@ -68,6 +68,14 @@
             {% endfor %}
           </select>
         </div>
+        <div class="form-group">
+          <select name="posting_type" class="form-select" aria-label="Posting Type">
+            <option value="">All postings</option>
+            {% for val, label in posting_type_choices %}
+              <option value="{{ val }}" {% if request.GET.posting_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
         <a href="{% url 'hrm:jobrequisition_list' %}" class="btn btn-outline">Reset</a>
       </form>
