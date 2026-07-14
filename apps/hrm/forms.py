@@ -2792,6 +2792,15 @@ class BenefitPlanForm(TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        # unique_together(tenant, name): Django's validate_unique skips it (tenant is excluded from the
+        # form), so guard it here — otherwise a duplicate name 500s on save instead of a friendly error.
+        name = cleaned.get("name")
+        if name and self.tenant is not None:
+            dupe = BenefitPlan.objects.filter(tenant=self.tenant, name=name)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("name", "A benefit plan with this name already exists.")
         for f in ("flex_credit_amount", "employer_cost_monthly", "employee_cost_monthly"):
             v = cleaned.get(f)
             if v is not None and v < 0:
@@ -2822,6 +2831,18 @@ class EmployeeBenefitEnrollmentForm(TenantModelForm):
         start, end = cleaned.get("effective_from"), cleaned.get("effective_to")
         if start and end and end < start:
             self.add_error("effective_to", "Effective-to cannot be before effective-from.")
+        # unique_together(tenant, employee, plan, effective_from): the form excludes tenant/employee so
+        # Django can't validate it. On EDIT (instance has employee) guard against colliding with another
+        # enrollment (create is guarded by the view's IntegrityError catch, where employee isn't yet known).
+        if self.instance.pk and self.instance.employee_id and self.tenant is not None:
+            plan, eff = cleaned.get("plan"), cleaned.get("effective_from")
+            if plan and eff:
+                dupe = EmployeeBenefitEnrollment.objects.filter(
+                    tenant=self.tenant, employee_id=self.instance.employee_id, plan=plan, effective_from=eff
+                ).exclude(pk=self.instance.pk)
+                if dupe.exists():
+                    self.add_error("effective_from",
+                                   "This employee already has an enrollment for this plan and effective date.")
         return cleaned
 
 
@@ -2846,6 +2867,10 @@ class EquityGrantForm(TenantModelForm):
         shares = cleaned.get("shares_granted")
         if shares is not None and shares <= 0:
             self.add_error("shares_granted", "Must be greater than zero.")
+        # Can't shrink a grant below shares already exercised (would corrupt exercisable/unvested math).
+        if self.instance.pk and shares is not None and shares < self.instance.exercised_shares:
+            self.add_error("shares_granted",
+                           f"Cannot be less than the {self.instance.exercised_shares} share(s) already exercised.")
         cliff, dur = cleaned.get("cliff_months"), cleaned.get("vesting_duration_months")
         if cliff is not None and dur is not None and cliff > dur:
             self.add_error("cliff_months", "The cliff cannot be longer than the total vesting duration.")
