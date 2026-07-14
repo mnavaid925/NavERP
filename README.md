@@ -49,8 +49,8 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), and **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
-management — goals, reviews, continuous feedback, and performance improvement — 37 of 41 sub-modules). The remaining
-functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **8,967 passing tests**.
+management — goals, reviews, continuous feedback, and performance improvement — 38 of 41 sub-modules). The remaining
+functional modules (4–13) are planned and scaffolded against the same core. The suite stands at **9,000 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36/3.37
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36/3.37/3.38
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -620,8 +620,23 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   Planning (merit/promotion cycles) and a formal monetary Rewards & Recognition are deferred — peer kudos already
   ship in 3.20. Carrier EDI, AI job-pricing, 409A/ASC-718 GL posting, and cap-table modeling are deferred.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,320-test** HRM suite
-(**8,967 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+- **3.38 Talent Management & Succession Planning** — the HiPo/9-box + succession-bench layer, built **on** the
+  3.19 `PerformanceReview` ratings rather than duplicating them. **4 new models** (migration `0055`):
+  `TalentPool` (hipo / successor / critical-skill / leadership segments), `TalentPoolMembership` (the 9-box row —
+  its `review` FK supplies the two axes [`effective_rating` = performance, `potential_rating` = potential] with
+  optional per-member overrides, plus `flight_risk` + a `retention_action_plan`; `nine_box_quadrant` is
+  **computed, never stored** — a 3×3 label lookup from the banded ratings: Star / Emerging Star / Core Player /
+  Enigma / Underperformer …), `SuccessionPlan` (`SPL-`; a critical role's bench with `vacancy_risk` and a
+  **computed** `bench_strength` from successor readiness), and `SuccessionCandidate` (the ranked inline bench).
+  A derived **9-box grid** view buckets active members (rows = potential, columns = performance) with an
+  "unplaced" list for the unrated. **CONFIDENTIAL:** every 3.38 view is `@tenant_admin_required` — an employee
+  must never learn they're in a HiPo pool, on a bench, or flagged a flight risk (the 3.21 precedent).
+  `LIVE_LINKS["3.38"]` lights **5 of 6** bullets, and notably **two need no new table**: *Talent Reviews* reuses
+  the 3.19 calibration board and *Internal Mobility* reuses `JobRequisition(posting_type="internal")` + the 3.6
+  application pipeline. *Career Pathing* is deferred (needs a CareerPath + EmployeeSkill taxonomy).
+
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,353-test** HRM suite
+(**9,000 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
