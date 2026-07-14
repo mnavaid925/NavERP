@@ -76,10 +76,52 @@ is a module-level constant in `models.py`. `website`/`linkedin` use `forms.URLFi
   `crm:contact_*` (delete is POST-only **and `@tenant_admin_required`** — see Views). "View in Core"
   links to `core:party_detail`.
 
-## Views (`apps/crm/views.py`)
+## Views (`apps/crm/views/` — a package, one file per entity)
 
-Function-based, `@login_required` (CRM is day-to-day work — not `@tenant_admin_required`), tenant-
-scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_detail`/`_edit`/
+**The old monolithic `apps/crm/views.py` no longer exists.** It was split into a package,
+**one sub-package per CRM sub-module, one module per entity**:
+
+```
+apps/crm/views/
+  __init__.py                 # re-exports EVERY view -> urls.py (`views.<name>`) is unchanged
+  _common.py                  # shared toolkit: django + apps.core.crud/decorators/models/utils + User
+  CoreData/                   # 1.1  Accounts.py Contacts.py Leads.py
+  SalesForceAutomation/       # 1.2  Opportunities.py Territories.py Products.py PriceBooks.py
+                              #      Quotes.py SalesQuotas.py Forecast.py
+  MarketingAutomation/        # 1.3  Campaigns.py CampaignMembers.py EmailTemplates.py
+                              #      EmailCampaigns.py LandingPages.py FormSubmissions.py
+  CustomerService/            # 1.4  Cases.py SlaPolicies.py KnowledgeBase.py KbCategories.py
+                              #      CustomerPortalAccess.py PublicPages.py CustomerPortal.py
+  ActivityManagement/         # 1.5  Tasks.py CalendarEvents.py CommunicationLogs.py
+  AnalyticsReporting/         # 1.6  Overview.py Dashboards.py Widgets.py Reports.py Snapshots.py
+  FinanceBilling/             # 1.7  Expenses.py DealInvoices.py PaymentReceipts.py
+  ProjectDelivery/            # 1.8  Projects.py Milestones.py Timesheets.py ResourceAllocation.py
+  DocumentContract/           # 1.9  DocTemplates.py Contracts.py DocumentVersions.py
+  AutomationWorkflow/         # 1.10 _engine.py WorkflowRules.py Webhooks.py WorkflowLogs.py Approvals.py
+  CustomerSuccess/            # 1.11 OnboardingPlans.py OnboardingTemplates.py HealthScores.py Surveys.py
+  InventoryVendor/            # 1.12 ProductStock.py PurchaseOrders.py PartnerPortalAccess.py PartnerPortal.py
+```
+
+**Rules when working in here:**
+- **Find a view** by sub-module → entity (e.g. `quote_send` → `SalesForceAutomation/Quotes.py`).
+- **Every entity file** starts with `from apps.crm.views._common import *` (the shared django/crud/core
+  toolkit + `User`), then imports only the `apps.crm.models` / `apps.crm.forms` names it actually uses.
+- **Adding a view:** put it in the entity's file, then **add it to `views/__init__.py`'s re-export block
+  for that file** — otherwise `urls.py` (`views.<name>`) will `AttributeError`. Add the `path(...)` to
+  `urls.py` as usual; `urls.py` itself never changes shape (`from . import views`).
+- **Adding a new entity:** create `<SubModule>/<Entity>.py` + a re-export block in `views/__init__.py`.
+- **Shared helpers:** the workflow-execution engine (`_run_rule`, `_eval_conditions`,
+  `_safe_record_field`, `_webhook_payload`, `_deliver_webhook`, `_RULE_ENTITY_MODELS`) lives in
+  `AutomationWorkflow/_engine.py` because WorkflowRules + Webhooks both use it. Every other private
+  helper is local to its one entity file (`_client_ip`, `_ccy_symbol`, the `_DOC_ENGINE`/
+  `_render_doc_body` doc-generation set, `_customer_portal_access`, `_portal_access`,
+  `_can_share_dashboards`, `_OPP_FLOW`, `_SURVEY_SCALE_MAX`, `DEFAULT_WEEKLY_CAPACITY`).
+- **`views/__init__.py` also re-exports 4 private helpers** that outside code imports from
+  `apps.crm.views`: `_render_doc_body` (used by `seed_crm.py`) and `_safe_record_field` /
+  `_eval_conditions` / `_run_rule` (used by `apps/crm/tests/test_workflow_110.py`). Don't drop them.
+
+Views are function-based, `@login_required` (CRM is day-to-day work — not `@tenant_admin_required`),
+tenant-scoped. CRUD delegates to `apps.core.crud` helpers (`crud_list`/`_create`/`_detail`/`_edit`/
 `_delete`); deletes + `lead_convert` are `@require_POST`. Notable:
 - `lead_convert` — atomic: creates org `Party`+`PartyRole(customer)` (if `company`), person
   `Party`+`PartyRole(contact)` (+`ContactMethod` if email), and an `Opportunity(source_lead=lead)`;
@@ -222,7 +264,7 @@ validators). Models in the same `apps/crm/models.py`:
 `opportunity_advance`, `opportunitysplit_add`/`_remove`; `quoteline_add`/`_remove` (atomic + `recalc_totals`),
 `quote_send`/`_accept`/`_decline`, `quote_print` (login-gated); `forecast` (dashboard).
 
-**Views & actions (`views.py`):** all `@login_required`, tenant-scoped, `crud_*` helpers. `opportunity_detail`
+**Views & actions (`views/SalesForceAutomation/`):** all `@login_required`, tenant-scoped, `crud_*` helpers. `opportunity_detail`
 recreated (splits panel w/ inline add + revenue total, quotes panel, tasks). `opportunity_board` — one grouped
 aggregate for per-stage count/total + a slice per column. `opportunity_advance` — forward stage flow; closed_won
 sets probability 100 + forecast_category closed; fixed-allowlist redirect (no open redirect). Quote actions are
@@ -267,7 +309,7 @@ The basic `Case` + `KnowledgeArticle` were rebuilt to cover all three NavERP.md 
 `cases/track/<token>/` (case_public), `kb/<token>/` (kb_public) + `kb/<token>/helpful/` (kb_helpful).
 **Portal** (login): `portal/cases/` (list), `portal/cases/new/` (create), `portal/cases/<pk>/` (detail).
 
-**Views & actions (`views.py`):** all `@login_required`, tenant-scoped, `crud_*` helpers. `case_detail` recreated
+**Views & actions (`views/CustomerService/`):** all `@login_required`, tenant-scoped, `crud_*` helpers. `case_detail` recreated
 (SLA breach banners + comments thread + inline internal/public add). `case_comment_add` stamps first_responded_at
 via an atomic `filter().update()`. **Public** `case_public(token)` — status + public-only comments + reply + CSAT
 (submitted-once via atomic update); `kb_public(token)` — only published+external resolves (else 404), F() view
@@ -314,7 +356,7 @@ same `apps/crm/models.py`:
 (read-mostly). Custom: `campaignmember_add`(inline on campaign)/`campaignmember_remove`; `emailcampaign_send`;
 `landingpage_publish`; `formsubmission_convert`; **public** `path("p/<str:token>/", landing_public)`.
 
-**Views & actions (`views.py`):** `campaign_detail` recreated — funnel `.aggregate` + members(≤50, "View all"
+**Views & actions (`views/MarketingAutomation/`):** `campaign_detail` recreated — funnel `.aggregate` + members(≤50, "View all"
 >50)/email-campaigns/landing-pages/opportunities panels. Privileged actions are **`@tenant_admin_required`**:
 `emailcampaign_send` (snapshots recipients from members via a **race-safe conditional `.update()`** that claims
 the row; advances targeted→sent; system-sets metrics+sent_at) and `landingpage_publish` (draft↔published toggle —
@@ -419,8 +461,8 @@ larger-scale indexes (`Opportunity(tenant,owner)`, `Campaign(tenant,actual_reven
 
 # Sub-modules 1.7–1.12 (extension — finance/delivery/docs/automation/success/vendor)
 
-Added as an extension pass on the **same `apps/crm` app** (one big `models.py`, `forms.py`, `views.py`,
-`urls.py`, `admin.py`, `seed_crm.py`). Migration `0005` created the original 18 tables; later migrations
+Added as an extension pass on the **same `apps/crm` app** (one big `models.py`, `forms.py`, the
+`views/` package, `urls.py`, `admin.py`, `seed_crm.py`). Migration `0005` created the original 18 tables; later migrations
 added the recreations: `0016` **1.7** (`DealInvoice`, `PaymentReceipt`, `Expense.is_billable`), `0017`–`0018`
 **1.8** (`ResourceAllocation` + project fields), `0019`–`0020` **1.9** (`DocumentVersion` + contract fields),
 `0021`–`0022` **1.10** (`Webhook` + `WebhookDelivery`; `WorkflowLog` `(tenant,rule,-fired_at)` index), `0023`–`0024`
