@@ -2997,3 +2997,127 @@ class SuccessionCandidateForm(TenantModelForm):
             if dupe.exists():
                 self.add_error("candidate", "This employee is already a successor on this plan.")
         return cleaned
+
+
+from .models import (  # noqa: E402  — 3.39 Compliance & Legal
+    ComplianceRegister, EmploymentContract, Grievance, HRPolicy, PolicyAcknowledgment)
+
+# Compliance document uploads (contracts / policies / inspection reports): documents + scans, 10 MB cap.
+ALLOWED_COMPLIANCE_DOC_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}
+MAX_COMPLIANCE_DOC_BYTES = 10 * 1024 * 1024
+
+
+class EmploymentContractForm(TenantModelForm):
+    class Meta:
+        model = EmploymentContract
+        fields = ["employee", "contract_type", "start_date", "end_date", "probation_end_date",
+                  "notice_period_days", "designation", "salary_structure", "status", "renewed_from",
+                  "document", "signed_on", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "employee" in self.fields:
+                self.fields["employee"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
+                    .order_by("party__name"))
+            if "designation" in self.fields:
+                self.fields["designation"].queryset = (
+                    Designation.objects.filter(tenant=self.tenant).order_by("name"))
+            if "renewed_from" in self.fields:
+                qs = EmploymentContract.objects.filter(tenant=self.tenant)
+                if self.instance.pk:
+                    qs = qs.exclude(pk=self.instance.pk)  # a contract can't renew itself
+                self.fields["renewed_from"].queryset = qs.order_by("-created_at")
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_date"), cleaned.get("end_date")
+        if start and end and end < start:
+            self.add_error("end_date", "End date cannot be before the start date.")
+        probation = cleaned.get("probation_end_date")
+        if start and probation and probation < start:
+            self.add_error("probation_end_date", "Probation end cannot be before the start date.")
+        return cleaned
+
+    def clean_document(self):
+        return _validate_upload(self.cleaned_data.get("document"),
+                                allowed_ext=ALLOWED_COMPLIANCE_DOC_EXTENSIONS,
+                                max_bytes=MAX_COMPLIANCE_DOC_BYTES, label="Contract Document")
+
+
+class HRPolicyForm(TenantModelForm):
+    # published_at is stamped by the publish action; acknowledgments are raised there too.
+    class Meta:
+        model = HRPolicy
+        fields = ["title", "category", "version_number", "previous_version", "applicable_org_unit",
+                  "summary", "body", "document", "status", "effective_from", "requires_acknowledgment"]
+        widgets = {"summary": forms.Textarea(attrs={"rows": 2}), "body": forms.Textarea(attrs={"rows": 10})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "applicable_org_unit" in self.fields:
+                self.fields["applicable_org_unit"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+            if "previous_version" in self.fields:
+                qs = HRPolicy.objects.filter(tenant=self.tenant)
+                if self.instance.pk:
+                    qs = qs.exclude(pk=self.instance.pk)  # a policy can't supersede itself
+                self.fields["previous_version"].queryset = qs.order_by("-created_at")
+
+    def clean(self):
+        cleaned = super().clean()
+        # unique_together(tenant, title, version_number) — Django skips validate_unique because tenant is
+        # form-excluded, so a duplicate would 500 on save instead of showing a field error.
+        title, version = cleaned.get("title"), cleaned.get("version_number")
+        if title and version and self.tenant is not None:
+            dupe = HRPolicy.objects.filter(tenant=self.tenant, title=title, version_number=version)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("version_number", "This policy already has a version with that number.")
+        return cleaned
+
+    def clean_document(self):
+        return _validate_upload(self.cleaned_data.get("document"),
+                                allowed_ext=ALLOWED_COMPLIANCE_DOC_EXTENSIONS,
+                                max_bytes=MAX_COMPLIANCE_DOC_BYTES, label="Policy Document")
+
+
+class GrievanceForm(TenantModelForm):
+    # employee (complainant) is resolved server-side by the create view; status/investigator/resolution/
+    # resolved_at are workflow-set by the admin actions.
+    class Meta:
+        model = Grievance
+        fields = ["category", "severity", "subject", "description", "is_anonymous", "related_policy"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 5})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "related_policy" in self.fields:
+            self.fields["related_policy"].queryset = (
+                HRPolicy.objects.filter(tenant=self.tenant, status="published").order_by("title"))
+
+
+class ComplianceRegisterForm(TenantModelForm):
+    class Meta:
+        model = ComplianceRegister
+        fields = ["register_type", "title", "jurisdiction", "authority", "period_start", "period_end",
+                  "due_date", "status", "filed_on", "inspector_name", "findings", "document", "notes"]
+        widgets = {"findings": forms.Textarea(attrs={"rows": 3}), "notes": forms.Textarea(attrs={"rows": 2})}
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("period_start"), cleaned.get("period_end")
+        if start and end and end < start:
+            self.add_error("period_end", "Period end cannot be before the period start.")
+        if cleaned.get("status") == "filed" and not cleaned.get("filed_on"):
+            self.add_error("filed_on", "A filed record needs a filing date.")
+        return cleaned
+
+    def clean_document(self):
+        return _validate_upload(self.cleaned_data.get("document"),
+                                allowed_ext=ALLOWED_COMPLIANCE_DOC_EXTENSIONS,
+                                max_bytes=MAX_COMPLIANCE_DOC_BYTES, label="Compliance Document")
