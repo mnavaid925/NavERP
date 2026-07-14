@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}9-Box Talent Grid{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">9-Box Talent Grid</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Talent</span><span class="sep">›</span><span>9-Box</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:talentpoolmembership_list' %}" class="btn btn-outline"><i data-lucide="user-check"></i> Members</a>
+      <a href="{% url 'hrm:talentpool_list' %}" class="btn btn-outline"><i data-lucide="users-round"></i> Pools</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group">
+        <select name="pool" class="form-select"><option value="">All talent pools</option>
+          {% for p in pools %}<option value="{{ p.pk }}" {% if request.GET.pool == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'hrm:talent_nine_box' %}" class="btn btn-outline">Reset</a>
+      <span class="text-muted" style="margin-inline-start:auto;">{{ placed_count }} of {{ total }} active member{{ total|pluralize }} placed</span>
+    </form>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Potential (rows) × Performance (columns)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:8rem;">Potential ↓</th>
+            <th>Performance: Low</th>
+            <th>Performance: Medium</th>
+            <th>Performance: High</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">
+                {% if row.potential == 'high' %}<span class="badge badge-green">High</span>{% elif row.potential == 'medium' %}<span class="badge badge-info">Medium</span>{% else %}<span class="badge badge-muted">Low</span>{% endif %}
+              </td>
+              {% for cell in row.cells %}
+                <td style="vertical-align:top;">
+                  <div class="text-muted" style="margin-bottom:.35rem;">{{ cell.label }}</div>
+                  {% for m in cell.members %}
+                    <div style="margin-bottom:.25rem;">
+                      <a href="{% url 'hrm:talentpoolmembership_detail' m.pk %}">{{ m.employee.party.name }}</a>
+                      {% if m.flight_risk == 'high' %}<span class="badge badge-red">Flight risk</span>{% endif %}
+                    </div>
+                  {% empty %}
+                    <span class="text-muted">—</span>
+                  {% endfor %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">Placement is computed from each member's performance and potential ratings (1-5 → low &lt;3, medium &lt;4, high ≥4), taken from their linked performance review unless overridden. Nothing here is stored.</p>
+    </div>
+  </div>
+
+  {% if unplaced %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Unplaced ({{ unplaced|length }})</h2></div>
+    <div class="card-body">
+      <p class="text-muted">These active members are missing a performance and/or potential rating:</p>
+      {% for m in unplaced %}
+        <div style="margin-bottom:.25rem;"><a href="{% url 'hrm:talentpoolmembership_detail' m.pk %}">{{ m.employee.party.name }}</a> <span class="text-muted">— {{ m.pool.name }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
