@@ -15,7 +15,7 @@ NavERP Module 3. App path: `apps/hrm/`, templates: `templates/hrm/`, URL prefix 
 3.23 Learning Management (LMS), 3.24 Training Administration, 3.25 Personal Information (Self-Service),
 3.26 Request Management (Self-Service), 3.27 Communication Hub, 3.28 HR Reports, 3.29 Attendance Reports,
 3.30 Leave Reports, 3.31 Payroll Reports, 3.32 Analytics Dashboard, 3.33 Asset Management,
-3.34 Expense Management, 3.35 Travel Management, 3.36 Helpdesk.** Reuses the
+3.34 Expense Management, 3.35 Travel Management, 3.36 Helpdesk, 3.37 Compensation & Benefits.** Reuses the
 unified core spine — an **employee is a `core.Party` (person) + `core.Employment`**; departments reuse
 `core.OrgUnit`. Payroll GL posting stays with **`accounting.PayrollRun`** (HRM does not duplicate it).
 
@@ -560,6 +560,44 @@ is `helpdeskticket/`. Seeder `_seed_helpdesk` (dispatched right after `_seed_tra
 + CSAT-rated resolved/closed, 4 KB articles; idempotent (guarded on `HelpdeskTicket.exists()`). Templates:
 `templates/hrm/helpdesk/{helpdeskslapolicy,helpdeskcategory,helpdeskticket,knowledgearticle}/{list,detail,form}.html`.
 
+### 3.37 Compensation & Benefits (4 tables) — market benchmarks + benefits + equity. **Models**
+(`apps/hrm/models.py`, migrations `0053`+`0054`): `SalaryBenchmark` (`TenantOwned`, **not** auto-numbered; external
+market-percentile data: `job_grade`→`hrm.JobGrade`(null), `designation`→`hrm.Designation`(null), `source`
+[internal/payscale/mercer/radford/other], `region`, `currency`→`accounting.Currency`, `percentile_25/50/75/90`,
+`survey_date`, `notes`; method `compa_ratio(current_pay)` = current_pay / P50 — **builds on** the 3.2 Designation
+min/mid/max salary bands + the 3.13 `EmployeeSalaryStructure`, does NOT duplicate them), `BenefitPlan` (`TenantOwned`,
+**not** auto-numbered; the benefits catalog: `name` [unique per tenant], `plan_type`
+[medical/dental/vision/life/disability/retirement/wellness/other], `provider`, `is_flex_credit_eligible`+
+`flex_credit_amount`, `employer_cost_monthly`/`employee_cost_monthly`, `currency`, `coverage_tier_options` [CSV;
+`tier_list` property parses it], `enrollment_window_start/end`, `is_active`), `EmployeeBenefitEnrollment`
+(`TenantNumbered`, `BEN-`; the per-employee opt-in/opt-out election: the requester FK is named **`employee`→
+`hrm.EmployeeProfile`** so it reuses `_ss_scope`/`_can_manage_own_child`, `plan`→`BenefitPlan` [**PROTECT** + a
+view-level delete guard], `election_choice` [opt_in/opt_out/waived], `coverage_tier`, `effective_from/to`,
+`employee_contribution`/`employer_contribution` [**DERIVED server-side from the plan, NOT on the self-service form** —
+a deliberate security decision], `status` [pending/enrolled/waived/terminated], `OPEN_STATUSES=(pending,)`,
+`enrolled_at`, `decided_by`; `unique_together (tenant,employee,plan,effective_from)` — guarded in the form's `clean()`
+on edit + the create view's `IntegrityError` catch, since Django skips `validate_unique` when tenant/employee are
+form-excluded), `EquityGrant` (`TenantNumbered`, `ESOP-`; ISO/NSO/RSU/ESPP/phantom grants:
+`employee`→`hrm.EmployeeProfile`, `grant_type`, `grant_date`, `shares_granted`, `exercise_price`,
+`fair_market_value_at_grant`, `currency`, `vesting_start_date`, `cliff_months` [default 12],
+`vesting_duration_months` [default 48], `vesting_frequency` [monthly/quarterly/annual], `exercised_shares`,
+`last_exercised_at`, `status` [active/fully_vested/exercised/cancelled/expired]; **COMPUTED, never stored:**
+`vested_shares` [0 before the cliff, then `shares_granted * done_events // total_events` graded by frequency, full at
+the end], `vested_percent`, `unvested_shares`, `exercisable_shares` [= vested − exercised]; the form guards
+`shares_granted >= exercised_shares`). **Views** (`apps/hrm/views.py`, `# 3.37 Compensation & Benefits`):
+`SalaryBenchmark`/`BenefitPlan` = admin catalogs (list/detail `@login_required`, writes `@tenant_admin_required`;
+`benefitplan` delete-guarded when enrollments reference it); `EmployeeBenefitEnrollment` = own-vs-admin self-service
+(`_ss_scope`; `_hr_request_edit`/`_hr_request_delete` for **pending-only** owner edit/delete) + **admin-only**
+`enroll`/`waive`/`terminate` lifecycle actions; `EquityGrant` = admin-issued (`@tenant_admin_required` CRUD),
+own-vs-admin visibility (`equitygrant_detail` gated by `_can_manage_own_child`) + an **admin-only** `record_exercise`
+action (guards shares ≤ exercisable). List filters via `crud_list`. **Core-spine reuse:**
+JobGrade/Designation/EmployeeProfile/`accounting.Currency`; posts no GL. Seeder `_seed_compensation` (dispatched
+right after `_seed_helpdesk`) — 2 benchmarks, 4 benefit plans (incl. a flex-credit-eligible one), 4 enrollments across
+statuses, 2 equity grants (one past-cliff partially-vested RSU); idempotent (guarded on `BenefitPlan.exists()`).
+Templates: `templates/hrm/compensation/{salarybenchmark,benefitplan,employeebenefitenrollment,equitygrant}/{list,detail,form}.html`.
+**Deferred:** Compensation Planning (`CompensationCycle`/`ReviewLine`) + a formal monetary Rewards & Recognition (peer
+kudos already ship in 3.20) — those 2 NavERP.md bullets stay roadmap placeholders.
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
@@ -741,6 +779,14 @@ is `helpdeskticket/`. Seeder `_seed_helpdesk` (dispatched right after `_seed_tra
   (`/hrm/helpdesk/knowledge-base/...`). All `@login_required`, tenant-scoped; writes `@tenant_admin_required`. **NOTE**
   the ticket url-name stem is **`ticket_*`** (not `helpdeskticket_*`) though the model is `HelpdeskTicket` and the
   template folder is `helpdeskticket/`.
+- **Compensation & Benefits (3.37):** `hrm:salarybenchmark_list`/`_create`/`_detail`/`_edit`/`_delete`
+  (`/hrm/compensation/salary-benchmarks/...`, writes admin-only) + `hrm:benefitplan_list`/`_create`/`_detail`/`_edit`/
+  `_delete` (`/hrm/compensation/benefit-plans/...`, writes admin-only; delete-guarded when enrollments reference it) +
+  `hrm:employeebenefitenrollment_list`/`_create`/`_detail`/`_edit`/`_delete` + lifecycle
+  `hrm:employeebenefitenrollment_enroll`/`_waive`/`_terminate` (admin-only, POST) (`/hrm/compensation/enrollments/...`) +
+  `hrm:equitygrant_list`/`_create`/`_detail`/`_edit`/`_delete` + admin-only `hrm:equitygrant_record_exercise`
+  (`/hrm/compensation/equity-grants/...`). All `@login_required`, tenant-scoped; catalog + equity writes
+  `@tenant_admin_required`; enrollment is own-vs-admin self-service (pending-only owner edit/delete).
 - **Time Tracking (3.11):** `hrm:timesheet_submit/_approve/_reject/_cancel` (POST; approve `@tenant_admin_required`,
   recomputes + locks); inline entries `hrm:timesheetentry_add` (`/hrm/timesheets/<ts_pk>/entries/add/`, POST),
   `hrm:timesheetentry_edit` (`/hrm/timesheet-entries/<pk>/edit/`, GET+POST), `_delete` (POST) — all blocked once the
@@ -1284,6 +1330,9 @@ tenant and sees nothing.
   SLA Management → `hrm:helpdesksla_list`; Knowledge Base → `hrm:knowledgearticle_list`; Satisfaction Survey →
   `hrm:ticket_list?rated=1`; + extra SLA Breaches → `hrm:ticket_list?sla=breached`. `LIVE_LINKS["3.36"]`. The 3.27
   "Help Desk" bullet was also re-pointed from `hrm:suggestion_list` to `hrm:ticket_list`.
+- 3.37 (4 of 6 bullets live): Salary Benchmarking → `hrm:salarybenchmark_list`; Benefits Administration →
+  `hrm:benefitplan_list`; Flexible Benefits → `hrm:employeebenefitenrollment_list`; Stock/ESOP Management →
+  `hrm:equitygrant_list`. `LIVE_LINKS["3.37"]`. Compensation Planning + Rewards & Recognition are deferred (roadmap).
 
 ## Conventions & gotchas
 - An employee is `core.Party(kind=person)` + `core.Employment` + `hrm.EmployeeProfile` (1:1:1). Create the Party
