@@ -17,7 +17,53 @@ The unified-core spine (`apps/core`) has **no** financial ledger. `apps/accounti
 4. Posting into a non-open `FiscalPeriod` is blocked.
 5. `Invoice`/`Bill` `subtotal/tax_total/total` are recomputed from lines (`recalc_totals()`), never on the form. Status is **not** user-editable — it advances via actions (`invoice_post`, `bill_approve`) and `recompute_payment_status()` (derives partial/paid from *confirmed* allocations).
 
-## Models (`apps/accounting/models.py`) — 18 tables
+## App layout — models / forms / views / urls are all PACKAGES (no monolithic .py files left)
+
+The four former monoliths **and their `*_advanced.py` companions** were split into packages that share
+the same 15 sub-module folders (NavERP 2.1–2.15) and the same entity file names, so the four layers
+line up one-to-one:
+
+```
+apps/accounting/
+  models/   _base.py   (ZERO, add_months, abstract TenantOwned/TenantNumbered + django toolkit)
+  forms/    _common.py (django forms, core TenantModelForm, _active_currencies)
+  views/    _common.py (django + apps.core crud/decorators) + _helpers.py (cross-cutting privates)
+  urls/     __init__.py sets app_name="accounting" + concatenates each entity module's urlpatterns
+     +-- Dashboard/ GeneralLedger/ AccountsPayable/ AccountsReceivable/ CashManagement/ FixedAssets/
+         CostManagement/ PayrollIntegration/ ProjectCosting/ MultiEntity/ Tax/ Reporting/
+         Budgeting/ AuditControls/ Integration/            (= NavERP sub-modules 2.1 .. 2.15)
+```
+
+e.g. the Invoice entity is `models/AccountsReceivable/Invoices.py` (`Invoice` + `InvoiceLine`),
+`forms/AccountsReceivable/Invoices.py`, `views/AccountsReceivable/Invoices.py`,
+`urls/AccountsReceivable/Invoices.py`.
+
+**`models_advanced.py` / `forms_advanced.py` / `views_advanced.py` NO LONGER EXIST.** Their contents
+now live in the sub-module folders (2.6–2.15). Import everything from the package root:
+`from apps.accounting.models import FixedAsset` (this already worked before the split, because the old
+`models.py` ended with `from .models_advanced import *`). The old
+`from apps.accounting.models_advanced import X` / `views_advanced` / `forms_advanced` paths are gone.
+
+**Every package `__init__.py` re-exports everything**, so `from apps.accounting.models import Invoice`
+(CRM 1.7, HRM payroll, `admin.py`, `seed_accounting.py`, every test), `from apps.accounting.forms import
+InvoiceForm`, `views.<name>` in the URLconf, and `include("apps.accounting.urls")` all work unchanged.
+
+**Rules when working here:**
+- **Adding a model / form / view:** put it in the entity file, **then add it to that package's
+  `__init__.py` re-export block** — otherwise `from apps.accounting.models import X` / `views.<name>`
+  will fail.
+- **Adding a URL:** add the `path()` to `urls/<SubModule>/<Entity>.py`'s `urlpatterns` (each URL module
+  imports views absolutely: `from apps.accounting import views`). **Order matters** — Django is
+  first-match-wins; keep literal routes before `<int:pk>` ones.
+- **Cross-cutting view helpers** live in `views/_helpers.py`: `_post_journal_entry`, `_first_account`,
+  `_open_period`, `_need_tenant`, `_recompute_doc_status`, `_reverse_journal_entry`, `_cash_position`,
+  `_aging`, `_account_balances`. (`views/__init__` re-exports the last three — the test-suite imports
+  them.) Entity-local helpers (`_bill_form`, `_invoice_form`, `_vendor_parties`, `_customer_parties`)
+  stay in their entity module.
+- **Imports inside these packages must be ABSOLUTE** (`from apps.accounting.models import X`). A
+  relative `from .models import X` now resolves to the wrong package.
+
+## Models (`apps/accounting/models/` — one file per entity; see App layout above)
 Abstract bases: `TenantOwned` (tenant FK + timestamps), `TenantNumbered(TenantOwned)` (+ auto per-tenant `number` via `next_number`, 5-retry on collision — mirrors `apps/crm`).
 
 **2.2 General Ledger**
@@ -50,7 +96,7 @@ Abstract bases: `TenantOwned` (tenant FK + timestamps), `TenantNumbered(TenantOw
 - `BankTransaction` — `bank_account`, `transaction_date`, `description`, `amount`, `direction` (credit/debit), `source` (manual/csv_import/bank_feed — editable=False on form), `status` (editable=False), `external_ref` (dedupe key).
 - `ReconciliationMatch` — `bank_transaction`, `payment` or `journal_line`, `matched_by` (system), `matched_at`, `is_confirmed`.
 
-## URLs / routes (`apps/accounting/urls.py`, namespace `accounting:`)
+## URLs / routes (`apps/accounting/urls/` package, namespace `accounting:`)
 Per CRUD model: `<base>_list / _create / _detail / _edit / _delete`. Bases: `glaccount`, `fiscal_period`, `journal_entry`, `currency`, `exchange_rate`, `payment_term`, `vendor_profile`, `bill`, `customer_profile`, `invoice`, `recurringinvoice` (2.4 Recurring Invoicing), `payment`, `allocation`, `bank_account`, `bank_transaction`, `reconciliation`.
 **Custom actions (POST-only, `@tenant_admin_required` unless noted):** `fiscal_period_close`, `journal_entry_post`, `journal_entry_void`, `bill_approve`, `invoice_post`, `recurringinvoice_generate` (`@login_required` — creates a draft Invoice from the schedule, sets `Invoice.recurring_invoice` FK, advances `next_run_date` anchored to `start_date`), `payment_confirm`, `payment_void`, `reconciliation_confirm`, `bank_transaction_import_csv` (GET form + POST upload, `@login_required`).
 **Reports / dashboard (GET, `@login_required`):** `accounting_dashboard` (+ alias `dashboard`), `trial_balance`, `cash_forecast` (2.1 Forecasting — projects cash from open AR/AP by due date; `?weeks=` 4–52 default 13; shares the `_cash_position(tenant)` helper with the dashboard), `payment_schedule` (2.3 — open bills by due date with discount-aware suggested pay date + running outflow), `ar_aging`, `ap_aging`, `gl_account_ledger` (arg `account_pk`). The dashboard's four 2.1 widgets carry anchor ids (`#executive-summary`/`#cash-flow`/`#alert-center`/`#quick-actions`) that the sidebar deep-links to.
@@ -90,12 +136,12 @@ Extend `base.html`, design-system classes only (`.card/.btn/.badge badge-green|r
 - **Add a list filter** → pass the choices/queryset in the view's `crud_list(extra_context=...)`; add the `<select>` to the list template (string compare `request.GET.x == val`; FK compare `obj.pk|stringformat:"d"`; bool `value="True"/"False"`).
 - **Extend the seeder** → add to `_seed_tenant` guarded by the CoA-exists check; use balanced `_posted_je(...)` legs for any JE.
 
-## Advanced sub-modules 2.6–2.15 (`models_advanced.py` / `views_advanced.py` / `forms_advanced.py`)
+## Advanced sub-modules 2.6–2.15 (now in the `models/` `views/` `forms/` packages — see App layout)
 A second pass (migrations `0002` + index `0003`) added 14 accounting-owned models that REUSE the GL spine and
 `core.OrgUnit` (the cost-centre / department / legal-entity / consolidation dimension — no new Entity table). New
 code lives in `*_advanced.py` files imported into `models.py`/`urls.py`/`admin.py`; templates are in the same
 `templates/accounting/` dir. Six **balanced-JE posting actions** (all `@tenant_admin_required`, POST-only) build a
-balanced `JournalEntry` via the local `views_advanced._post_journal_entry(tenant, user, desc, legs)` helper
+balanced `JournalEntry` via the shared `views/_helpers.py::_post_journal_entry(tenant, user, desc, legs)` helper
 (`legs=[(gl_account, debit, credit, party, org_unit)]`, refuses to post unless Σdebit==Σcredit>0).
 
 - **2.6 Fixed Assets** — `FixedAsset` [FA-] (cost/salvage/useful_life/method straight_line|declining_balance|units,
