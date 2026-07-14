@@ -15258,3 +15258,388 @@ def successioncandidate_delete(request, pk):
     write_audit_log(request.user, obj.plan, "update", {"action": "candidate_delete"})
     messages.success(request, "Successor removed from the bench.")
     return redirect("hrm:successionplan_detail", pk=plan_pk)
+
+
+# ============================================================================
+# 3.39 Compliance & Legal — employment contracts, the versioned HR-policy library
+# with per-employee acknowledgments, the grievance register, and the statutory /
+# labour-law compliance register.
+#
+# Disciplinary Actions needs NO view here — it reuses the 3.21 WarningLetter.
+# Grievance is CONFIDENTIAL (own-vs-admin via _ss_scope; is_anonymous masks the
+# complainant from non-admins). Policies are readable by every employee once
+# published; all writes are admin-only.
+# ============================================================================
+from .models import (  # noqa: E402  — 3.39 Compliance & Legal
+    ComplianceRegister, EmploymentContract, Grievance, HRPolicy, PolicyAcknowledgment)
+from .forms import (  # noqa: E402  — 3.39 Compliance & Legal
+    ComplianceRegisterForm, EmploymentContractForm, GrievanceForm, HRPolicyForm)
+
+
+# ---- Employment contracts (admin-managed) -----------------------------------------------------
+@tenant_admin_required
+def employmentcontract_list(request):
+    qs = (EmploymentContract.objects.filter(tenant=request.tenant)
+          .select_related("employee__party", "designation"))
+    if request.GET.get("expiring", "").strip() == "1":
+        # Active contracts whose end date falls inside the expiring-soon window (computed in ORM).
+        today = timezone.localdate()
+        horizon = today + timedelta(days=EmploymentContract.EXPIRING_SOON_DAYS)
+        qs = qs.filter(status="active", end_date__gte=today, end_date__lte=horizon)
+    return crud_list(request, qs, "hrm/compliance/employmentcontract/list.html",
+                     search_fields=["number", "employee__party__name", "notes"],
+                     filters=[("status", "status", False), ("contract_type", "contract_type", False),
+                              ("employee", "employee_id", True)],
+                     extra_context={"status_choices": EmploymentContract.STATUS_CHOICES,
+                                    "contract_type_choices": EmploymentContract.CONTRACT_TYPE_CHOICES,
+                                    "employees": _ss_employees(request)})
+
+
+@tenant_admin_required
+def employmentcontract_create(request):
+    return crud_create(request, form_class=EmploymentContractForm,
+                       template="hrm/compliance/employmentcontract/form.html",
+                       success_url="hrm:employmentcontract_list")
+
+
+@tenant_admin_required
+def employmentcontract_detail(request, pk):
+    return crud_detail(request, model=EmploymentContract, pk=pk,
+                       template="hrm/compliance/employmentcontract/detail.html",
+                       select_related=("employee__party", "designation", "salary_structure", "renewed_from"))
+
+
+@tenant_admin_required
+def employmentcontract_edit(request, pk):
+    return crud_edit(request, model=EmploymentContract, pk=pk, form_class=EmploymentContractForm,
+                     template="hrm/compliance/employmentcontract/form.html",
+                     success_url="hrm:employmentcontract_list")
+
+
+@tenant_admin_required
+@require_POST
+def employmentcontract_delete(request, pk):
+    return crud_delete(request, model=EmploymentContract, pk=pk, success_url="hrm:employmentcontract_list")
+
+
+# ---- HR policies (readable by all; writes admin-only) ------------------------------------------
+@login_required
+def hrpolicy_list(request):
+    is_admin = _is_admin(request.user)
+    qs = HRPolicy.objects.filter(tenant=request.tenant).select_related("applicable_org_unit")
+    if not is_admin:
+        qs = qs.filter(status="published")  # employees only ever see published policies
+    # Annotation-backed acknowledgment counts (the list renders the rate per row) + an EXPLICIT order_by:
+    # annotate() adds a GROUP BY which drops Meta.ordering and would leave pagination unordered.
+    qs = qs.annotate(
+        _target_count=Count("acknowledgments", distinct=True),
+        _acknowledged_count=Count("acknowledgments",
+                                  filter=Q(acknowledgments__status="acknowledged"), distinct=True),
+    ).order_by("-created_at")
+    return crud_list(request, qs, "hrm/compliance/hrpolicy/list.html",
+                     search_fields=["number", "title", "summary", "body"],
+                     filters=[("status", "status", False), ("category", "category", False)],
+                     extra_context={"is_admin": is_admin,
+                                    "status_choices": HRPolicy.STATUS_CHOICES,
+                                    "category_choices": HRPolicy.CATEGORY_CHOICES})
+
+
+@tenant_admin_required
+def hrpolicy_create(request):
+    return crud_create(request, form_class=HRPolicyForm, template="hrm/compliance/hrpolicy/form.html",
+                       success_url="hrm:hrpolicy_list")
+
+
+@login_required
+def hrpolicy_detail(request, pk):
+    obj = get_object_or_404(HRPolicy.objects.select_related("applicable_org_unit", "previous_version"),
+                            pk=pk, tenant=request.tenant)
+    is_admin = _is_admin(request.user)
+    if obj.status != "published" and not is_admin:
+        raise PermissionDenied("This policy isn't published.")
+    profile = _current_employee_profile(request)
+    my_ack = (obj.acknowledgments.filter(employee=profile).first() if profile else None)
+    return render(request, "hrm/compliance/hrpolicy/detail.html", {
+        "obj": obj, "is_admin": is_admin, "my_ack": my_ack})
+
+
+@tenant_admin_required
+def hrpolicy_edit(request, pk):
+    return crud_edit(request, model=HRPolicy, pk=pk, form_class=HRPolicyForm,
+                     template="hrm/compliance/hrpolicy/form.html", success_url="hrm:hrpolicy_list")
+
+
+@tenant_admin_required
+@require_POST
+def hrpolicy_delete(request, pk):
+    return crud_delete(request, model=HRPolicy, pk=pk, success_url="hrm:hrpolicy_list")
+
+
+@tenant_admin_required
+@require_POST
+def hrpolicy_publish(request, pk):
+    """Publish a policy and, when it requires acknowledgment, raise a pending PolicyAcknowledgment for
+    every targeted employee (the whole tenant, or just the applicable org unit). Atomic + idempotent:
+    re-publishing tops up any employees who joined since, without duplicating existing rows."""
+    obj = get_object_or_404(HRPolicy, pk=pk, tenant=request.tenant)
+    if obj.status == "published":
+        messages.error(request, "This policy is already published.")
+        return redirect("hrm:hrpolicy_detail", pk=obj.pk)
+
+    targets = EmployeeProfile.objects.filter(tenant=request.tenant)
+    if obj.applicable_org_unit_id:
+        targets = targets.filter(employment__org_unit_id=obj.applicable_org_unit_id)
+
+    with transaction.atomic():
+        obj.status = "published"
+        obj.published_at = timezone.now()
+        obj.save(update_fields=["status", "published_at", "updated_at"])
+        created = 0
+        if obj.requires_acknowledgment:
+            existing = set(obj.acknowledgments.values_list("employee_id", flat=True))
+            new_rows = [PolicyAcknowledgment(tenant=request.tenant, policy=obj, employee=emp)
+                        for emp in targets if emp.pk not in existing]
+            PolicyAcknowledgment.objects.bulk_create(new_rows)
+            created = len(new_rows)
+    write_audit_log(request.user, obj, "update", {"action": "publish", "acknowledgments": created})
+    messages.success(request, f"Policy published. {created} acknowledgment request(s) raised.")
+    return redirect("hrm:hrpolicy_detail", pk=obj.pk)
+
+
+# ---- Policy acknowledgments (employee self-service) --------------------------------------------
+@login_required
+def policyacknowledgment_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, PolicyAcknowledgment.objects.filter(tenant=request.tenant)
+                   .select_related("policy", "employee__party"))
+    extra = {"is_admin": is_admin, "status_choices": PolicyAcknowledgment.STATUS_CHOICES,
+             "policies": HRPolicy.objects.filter(tenant=request.tenant, status="published")
+             .order_by("title")}
+    filters = [("status", "status", False), ("policy", "policy_id", True)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/compliance/policyacknowledgment/list.html",
+                     search_fields=["policy__title", "employee__party__name"],
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+@require_POST
+def policyacknowledgment_acknowledge(request, pk):
+    """The employee acknowledges their OWN pending policy row (an admin can't acknowledge for them)."""
+    obj = get_object_or_404(PolicyAcknowledgment.objects.select_related("policy"),
+                            pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (profile is not None and obj.employee_id == profile.pk):
+        messages.error(request, "You can only acknowledge your own policy assignments.")
+        return redirect("hrm:policyacknowledgment_list")
+    if obj.status == "acknowledged":
+        messages.error(request, "You have already acknowledged this policy.")
+        return redirect("hrm:policyacknowledgment_list")
+    obj.status = "acknowledged"
+    obj.acknowledged_at = timezone.now()
+    obj.save(update_fields=["status", "acknowledged_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "acknowledge"})
+    messages.success(request, f"Acknowledged '{obj.policy.title}'.")
+    return redirect("hrm:policyacknowledgment_list")
+
+
+# ---- Grievances (CONFIDENTIAL: own-vs-admin; is_anonymous masks the complainant) ---------------
+@login_required
+def grievance_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, Grievance.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party", "assigned_investigator__party"))
+    extra = {"is_admin": is_admin, "status_choices": Grievance.STATUS_CHOICES,
+             "category_choices": Grievance.CATEGORY_CHOICES,
+             "severity_choices": Grievance.SEVERITY_CHOICES}
+    filters = [("status", "status", False), ("category", "category", False),
+               ("severity", "severity", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/compliance/grievance/list.html",
+                     search_fields=["number", "subject", "description"],
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def grievance_create(request):
+    """File a grievance. A non-admin files for THEMSELVES; an admin may file on behalf of ?employee=<id>."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    target = own
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            target = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    if target is None:
+        messages.error(request, "Select an employee to file this grievance for.")
+        return redirect("hrm:grievance_list")
+    if request.method == "POST":
+        form = GrievanceForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.employee = target
+            obj.status = "open"
+            obj.filed_on = timezone.localdate()
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, f"Grievance {obj.number} filed.")
+            return redirect("hrm:grievance_detail", pk=obj.pk)
+    else:
+        form = GrievanceForm(tenant=request.tenant)
+    return render(request, "hrm/compliance/grievance/form.html", {
+        "form": form, "is_edit": False, "is_admin": is_admin,
+        "target_employee": target, "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def grievance_detail(request, pk):
+    obj = get_object_or_404(
+        Grievance.objects.select_related("employee__party", "assigned_investigator__party",
+                                         "related_policy", "related_warning"),
+        pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This grievance belongs to another employee.")
+    is_admin = _is_admin(request.user)
+    profile = _current_employee_profile(request)
+    return render(request, "hrm/compliance/grievance/detail.html", {
+        "obj": obj, "is_admin": is_admin,
+        "is_own": profile is not None and obj.employee_id == profile.pk,
+        # is_anonymous hides the complainant from everyone except HR admins (who must investigate).
+        "show_complainant": is_admin or not obj.is_anonymous,
+        "investigators": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def grievance_edit(request, pk):
+    return _hr_request_edit(request, Grievance, pk, GrievanceForm,
+                            "hrm/compliance/grievance/form.html", "hrm:grievance_detail")
+
+
+@login_required
+@require_POST
+def grievance_delete(request, pk):
+    return _hr_request_delete(request, Grievance, pk, "hrm:grievance_list")
+
+
+@tenant_admin_required
+@require_POST
+def grievance_assign(request, pk):
+    """Assign an investigator and move the grievance to 'investigating' (admin only)."""
+    obj = get_object_or_404(Grievance, pk=pk, tenant=request.tenant)
+    if obj.status in ("resolved", "closed", "withdrawn"):
+        messages.error(request, "A closed grievance can't be reassigned.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    raw = (request.POST.get("investigator") or "").strip()
+    investigator = None
+    if raw.isdigit():
+        investigator = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(raw)).first()
+    if investigator is None:
+        messages.error(request, "Select a valid investigator.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    obj.assigned_investigator = investigator
+    obj.status = "investigating"
+    obj.save(update_fields=["assigned_investigator", "status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "assign"})
+    messages.success(request, f"Grievance {obj.number} assigned for investigation.")
+    return redirect("hrm:grievance_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def grievance_resolve(request, pk):
+    obj = get_object_or_404(Grievance, pk=pk, tenant=request.tenant)
+    if obj.status not in ("open", "investigating"):
+        messages.error(request, "Only an open or under-investigation grievance can be resolved.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    resolution = (request.POST.get("resolution") or "").strip()
+    if not resolution:
+        messages.error(request, "A resolution note is required.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    obj.status = "resolved"
+    obj.resolution = resolution[:5000]
+    obj.resolved_at = timezone.now()
+    obj.save(update_fields=["status", "resolution", "resolved_at", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "resolve"})
+    messages.success(request, f"Grievance {obj.number} resolved.")
+    return redirect("hrm:grievance_detail", pk=obj.pk)
+
+
+@tenant_admin_required
+@require_POST
+def grievance_close(request, pk):
+    obj = get_object_or_404(Grievance, pk=pk, tenant=request.tenant)
+    if obj.status == "closed":
+        messages.error(request, "This grievance is already closed.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    obj.status = "closed"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "close"})
+    messages.success(request, f"Grievance {obj.number} closed.")
+    return redirect("hrm:grievance_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def grievance_withdraw(request, pk):
+    """The complainant withdraws their own still-open grievance."""
+    obj = get_object_or_404(Grievance, pk=pk, tenant=request.tenant)
+    profile = _current_employee_profile(request)
+    if not (profile is not None and obj.employee_id == profile.pk):
+        messages.error(request, "You can only withdraw your own grievance.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    if obj.status not in ("open", "investigating"):
+        messages.error(request, "Only an open grievance can be withdrawn.")
+        return redirect("hrm:grievance_detail", pk=obj.pk)
+    obj.status = "withdrawn"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "withdraw"})
+    messages.success(request, f"Grievance {obj.number} withdrawn.")
+    return redirect("hrm:grievance_detail", pk=obj.pk)
+
+
+# ---- Compliance register (statutory / labour-law) ----------------------------------------------
+@tenant_admin_required
+def complianceregister_list(request):
+    qs = ComplianceRegister.objects.filter(tenant=request.tenant)
+    if request.GET.get("overdue", "").strip() == "1":
+        qs = qs.filter(due_date__lt=timezone.localdate()).exclude(status__in=("filed", "not_applicable"))
+    return crud_list(request, qs, "hrm/compliance/complianceregister/list.html",
+                     search_fields=["number", "title", "jurisdiction", "authority", "findings"],
+                     filters=[("register_type", "register_type", False), ("status", "status", False)],
+                     extra_context={"register_type_choices": ComplianceRegister.REGISTER_TYPE_CHOICES,
+                                    "status_choices": ComplianceRegister.STATUS_CHOICES})
+
+
+@tenant_admin_required
+def complianceregister_create(request):
+    return crud_create(request, form_class=ComplianceRegisterForm,
+                       template="hrm/compliance/complianceregister/form.html",
+                       success_url="hrm:complianceregister_list")
+
+
+@tenant_admin_required
+def complianceregister_detail(request, pk):
+    return crud_detail(request, model=ComplianceRegister, pk=pk,
+                       template="hrm/compliance/complianceregister/detail.html")
+
+
+@tenant_admin_required
+def complianceregister_edit(request, pk):
+    return crud_edit(request, model=ComplianceRegister, pk=pk, form_class=ComplianceRegisterForm,
+                     template="hrm/compliance/complianceregister/form.html",
+                     success_url="hrm:complianceregister_list")
+
+
+@tenant_admin_required
+@require_POST
+def complianceregister_delete(request, pk):
+    return crud_delete(request, model=ComplianceRegister, pk=pk,
+                       success_url="hrm:complianceregister_list")
