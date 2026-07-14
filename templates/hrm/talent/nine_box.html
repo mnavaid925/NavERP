@@ -15,7 +15,7 @@
   <div class="card"><div class="card-body">
     <form method="get" class="filter-bar">
       <div class="form-group">
-        <select name="pool" class="form-select"><option value="">All talent pools</option>
+        <select name="pool" class="form-select" aria-label="Talent Pool"><option value="">All talent pools</option>
           {% for p in pools %}<option value="{{ p.pk }}" {% if request.GET.pool == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
         </select>
       </div>
@@ -45,7 +45,7 @@
               </td>
               {% for cell in row.cells %}
                 <td style="vertical-align:top;">
-                  <div class="text-muted" style="margin-bottom:.35rem;">{{ cell.label }}</div>
+                  <div style="margin-bottom:.35rem;"><span class="badge badge-info">{{ cell.label }}</span></div>
                   {% for m in cell.members %}
                     <div style="margin-bottom:.25rem;">
                       <a href="{% url 'hrm:talentpoolmembership_detail' m.pk %}">{{ m.employee.party.name }}</a>
