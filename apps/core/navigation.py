@@ -668,6 +668,20 @@ LIVE_LINKS = {
         "9-Box Grid": "hrm:talent_nine_box",                                  # extra (computed grid)
         "Talent Pool Members": "hrm:talentpoolmembership_list",               # extra
     },
+    # 3.39 Compliance & Legal — all 6 bullets live, but "Disciplinary Actions" needs NO new model: it
+    # REUSES the 3.21 WarningLetter (progressive discipline + issue/acknowledge + printable letter).
+    # Labor Law Compliance deep-links to the labour-law slice of the one ComplianceRegister; Statutory
+    # Registers is the same register unfiltered (muster rolls / wage registers / inspection reports).
+    # Grievance is CONFIDENTIAL (own-vs-admin; is_anonymous masks the complainant from non-admins).
+    "3.39": {
+        "Labor Law Compliance": "hrm:complianceregister_list?register_type=labor_law_requirement",
+        "Contract Management": "hrm:employmentcontract_list",
+        "Policy Management": "hrm:hrpolicy_list",
+        "Disciplinary Actions": "hrm:warningletter_list",                    # REUSE (3.21)
+        "Grievance Handling": "hrm:grievance_list",
+        "Statutory Registers": "hrm:complianceregister_list",
+        "Policy Acknowledgments": "hrm:policyacknowledgment_list",           # extra
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
