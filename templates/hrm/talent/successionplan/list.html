@@ -19,17 +19,17 @@
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / role / incumbent...">
         </div>
         <div class="form-group">
-          <select name="status" class="form-select"><option value="">All statuses</option>
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
             {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <select name="vacancy_risk" class="form-select"><option value="">All risks</option>
+          <select name="vacancy_risk" class="form-select" aria-label="Vacancy Risk"><option value="">All risks</option>
             {% for val, label in vacancy_risk_choices %}<option value="{{ val }}" {% if request.GET.vacancy_risk == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <select name="critical_role" class="form-select"><option value="">All roles</option>
+          <select name="critical_role" class="form-select" aria-label="Critical Role"><option value="">All roles</option>
             {% for d in designations %}<option value="{{ d.pk }}" {% if request.GET.critical_role == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
           </select>
         </div>
@@ -47,7 +47,7 @@
               <td><a href="{% url 'hrm:successionplan_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.critical_role.name }}</td>
               <td>{% if obj.incumbent %}{{ obj.incumbent.party.name }}{% else %}<span class="badge badge-amber">Vacant</span>{% endif %}</td>
-              <td>{% if obj.vacancy_risk == 'high' %}<span class="badge badge-red">High</span>{% elif obj.vacancy_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">Low</span>{% endif %}</td>
+              <td>{% if obj.vacancy_risk == 'high' %}<span class="badge badge-red">High</span>{% elif obj.vacancy_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">{{ obj.get_vacancy_risk_display }}</span>{% endif %}</td>
               <td>{% if obj.bench_strength == 'strong' %}<span class="badge badge-green">Strong</span>{% elif obj.bench_strength == 'moderate' %}<span class="badge badge-amber">Moderate</span>{% elif obj.bench_strength == 'weak' %}<span class="badge badge-red">Weak</span>{% else %}<span class="badge badge-muted">Empty</span>{% endif %}</td>
               <td>{% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td>{% if obj.review_date %}{{ obj.review_date|date:"d M Y" }}{% else %}-{% endif %}</td>
