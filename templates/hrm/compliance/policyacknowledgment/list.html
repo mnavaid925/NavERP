@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Policy Acknowledgments{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_admin %}Policy Acknowledgments{% else %}My Policy Acknowledgments{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Compliance</span><span class="sep">›</span><span>Acknowledgments</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:hrpolicy_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Policies</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search policy / employee...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="policy" class="form-select" aria-label="Policy"><option value="">All policies</option>
+            {% for p in policies %}<option value="{{ p.pk }}" {% if request.GET.policy == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.title }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if is_admin %}
+        <div class="form-group">
+          <select name="employee" class="form-select" aria-label="Employee"><option value="">All employees</option>
+            {% for e in employees %}<option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:policyacknowledgment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Policy</th><th>Version</th>{% if is_admin %}<th>Employee</th>{% endif %}<th>Status</th><th>Acknowledged</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:hrpolicy_detail' obj.policy.pk %}" class="fw-600">{{ obj.policy.title|truncatechars:45 }}</a></td>
+              <td>v{{ obj.policy.version_number }}</td>
+              {% if is_admin %}<td>{{ obj.employee.party.name }}</td>{% endif %}
+              <td>{% if obj.status == 'acknowledged' %}<span class="badge badge-green">Acknowledged</span>{% else %}<span class="badge badge-amber">Pending</span>{% endif %}</td>
+              <td>{% if obj.acknowledged_at %}{{ obj.acknowledged_at|date:"d M Y" }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:hrpolicy_detail' obj.policy.pk %}" class="btn-icon" title="Read policy"><i data-lucide="eye"></i></a>
+                {% if obj.status == 'pending' %}
+                <form method="post" action="{% url 'hrm:policyacknowledgment_acknowledge' obj.pk %}" onsubmit="return confirm('Acknowledge that you have read and understood this policy?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Acknowledge"><i data-lucide="check"></i></button></form>
+                {% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if is_admin %}6{% else %}5{% endif %}"><div class="empty-state"><i data-lucide="check-check"></i><h3>Nothing to acknowledge</h3><p>Acknowledgment requests appear here when a policy that requires sign-off is published.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
