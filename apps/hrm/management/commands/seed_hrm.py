@@ -162,6 +162,19 @@ from apps.hrm.models import (  # 3.27 Communication Hub
     Survey,
     SurveyResponse,
 )
+from apps.hrm.models import (  # 3.38 Talent Management & Succession (flush order: PROTECTs Designation)
+    SuccessionCandidate,
+    SuccessionPlan,
+    TalentPool,
+    TalentPoolMembership,
+)
+from apps.hrm.models import (  # 3.39 Compliance & Legal
+    ComplianceRegister,
+    EmploymentContract,
+    Grievance,
+    HRPolicy,
+    PolicyAcknowledgment,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -298,6 +311,7 @@ class Command(BaseCommand):
             self._seed_helpdesk(tenant, flush=options["flush"])
             self._seed_compensation(tenant, flush=options["flush"])
             self._seed_talent(tenant, flush=options["flush"])
+            self._seed_compliance(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -336,6 +350,16 @@ class Command(BaseCommand):
                           # 3.27: communication rows (SurveyResponse before Survey/EmployeeProfile;
                           # all employee/survey FKs CASCADE, so order-agnostic — listed for a tidy
                           # explicit teardown before the 3.26 block).
+                          # 3.38: SuccessionPlan.critical_role is PROTECT against Designation — wipe the
+                          # bench (candidates -> plans) BEFORE the Designation master further down, or
+                          # --flush dies with a ProtectedError. TalentPoolMembership.pool/employee are
+                          # CASCADE (order-agnostic) but are grouped here for a tidy teardown.
+                          SuccessionCandidate, SuccessionPlan, TalentPoolMembership, TalentPool,
+                          # 3.39: Grievance/PolicyAcknowledgment/EmploymentContract all CASCADE off
+                          # EmployeeProfile and SET_NULL off Designation, so they're order-agnostic —
+                          # listed for an explicit, tidy teardown alongside the rest.
+                          PolicyAcknowledgment, Grievance, HRPolicy, EmploymentContract,
+                          ComplianceRegister,
                           Suggestion, SurveyResponse, Survey, Announcement,
                           AssetRequest, IdCardRequest, DocumentRequest,
                           # 3.25: EmployeeInfoChangeRequest (SET_NULL content_type/requested_by/
@@ -3488,3 +3512,104 @@ class Command(BaseCommand):
             f"{TalentPoolMembership.objects.filter(tenant=tenant).count()} members, "
             f"{SuccessionPlan.objects.filter(tenant=tenant).count()} succession plans, "
             f"{SuccessionCandidate.objects.filter(tenant=tenant).count()} successors."))
+
+    def _seed_compliance(self, tenant, *, flush):
+        """3.39 Compliance & Legal - employment contracts (incl. one expiring soon), a published policy with
+        per-employee acknowledgments, grievances (incl. an anonymous one), and compliance-register records
+        (incl. an overdue one). Runs after 3.38. Idempotent. ASCII-only."""
+        from apps.hrm.models import (ComplianceRegister, EmploymentContract, Grievance, HRPolicy,
+                                     PolicyAcknowledgment, EmployeeProfile, Designation)
+
+        if flush:
+            PolicyAcknowledgment.objects.filter(tenant=tenant).delete()
+            HRPolicy.objects.filter(tenant=tenant).delete()
+            Grievance.objects.filter(tenant=tenant).delete()
+            EmploymentContract.objects.filter(tenant=tenant).delete()
+            ComplianceRegister.objects.filter(tenant=tenant).delete()
+        if HRPolicy.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Compliance data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:4])
+        if not emps:
+            return
+        today = timezone.localdate()
+        now = timezone.now()
+        day = datetime.timedelta(days=1)
+        desig = Designation.objects.filter(tenant=tenant).order_by("id").first()
+
+        # Contracts — one permanent, one fixed-term expiring inside the 60-day warning window.
+        EmploymentContract.objects.get_or_create(
+            tenant=tenant, employee=emps[0], start_date=today - 900 * day,
+            defaults={"contract_type": "permanent", "notice_period_days": 60, "designation": desig,
+                      "status": "active", "signed_on": today - 900 * day})
+        EmploymentContract.objects.get_or_create(
+            tenant=tenant, employee=emps[1 % len(emps)], start_date=today - 320 * day,
+            defaults={"contract_type": "fixed_term", "end_date": today + 45 * day,
+                      "notice_period_days": 30, "designation": desig, "status": "active",
+                      "signed_on": today - 320 * day,
+                      "notes": "Renewal review due before expiry."})
+
+        # A published policy that requires acknowledgment, with a row per employee (one acknowledged).
+        policy, created = HRPolicy.objects.get_or_create(
+            tenant=tenant, title="Code of Conduct", version_number="2.0",
+            defaults={"category": "code_of_conduct", "status": "published",
+                      "summary": "Expected standards of professional behaviour.",
+                      "body": "All employees must act with integrity, respect and fairness.",
+                      "effective_from": today - 30 * day, "published_at": now - 30 * day,
+                      "requires_acknowledgment": True})
+        if created:
+            for i, emp in enumerate(emps):
+                PolicyAcknowledgment.objects.get_or_create(
+                    tenant=tenant, policy=policy, employee=emp,
+                    defaults={"status": "acknowledged" if i == 0 else "pending",
+                              "acknowledged_at": now - 20 * day if i == 0 else None})
+        HRPolicy.objects.get_or_create(
+            tenant=tenant, title="Remote Work Policy", version_number="1.0",
+            defaults={"category": "other", "status": "draft",
+                      "summary": "Draft policy for hybrid and remote working.",
+                      "body": "Eligibility, equipment and security expectations for remote work.",
+                      "requires_acknowledgment": True})
+
+        # Grievances — one open (named), one anonymous under investigation, one resolved.
+        Grievance.objects.get_or_create(
+            tenant=tenant, employee=emps[1 % len(emps)], subject="Unsafe walkway near the loading bay",
+            defaults={"category": "safety", "severity": "high", "status": "open", "filed_on": today - 5 * day,
+                      "description": "The walkway is unlit and slippery after rain."})
+        Grievance.objects.get_or_create(
+            tenant=tenant, employee=emps[2 % len(emps)], subject="Inappropriate comments in team meetings",
+            defaults={"category": "harassment", "severity": "critical", "is_anonymous": True,
+                      "status": "investigating", "assigned_investigator": emps[0],
+                      "filed_on": today - 12 * day,
+                      "description": "Repeated inappropriate remarks during weekly meetings."})
+        Grievance.objects.get_or_create(
+            tenant=tenant, employee=emps[0], subject="Overtime not credited",
+            defaults={"category": "compensation", "severity": "medium", "status": "resolved",
+                      "assigned_investigator": emps[0], "filed_on": today - 40 * day,
+                      "resolved_at": now - 25 * day,
+                      "resolution": "Overtime hours recalculated and paid in the next cycle.",
+                      "description": "Two weekends of overtime were not reflected in the payslip."})
+
+        # Compliance register — a labour-law requirement, a muster roll, and an OVERDUE wage register.
+        ComplianceRegister.objects.get_or_create(
+            tenant=tenant, title="Shops & Establishments registration renewal",
+            defaults={"register_type": "labor_law_requirement", "jurisdiction": "Karnataka, India",
+                      "authority": "Labour Department", "due_date": today + 60 * day, "status": "in_progress"})
+        ComplianceRegister.objects.get_or_create(
+            tenant=tenant, title="Muster roll - current month",
+            defaults={"register_type": "muster_roll", "jurisdiction": "Karnataka, India",
+                      "period_start": today - 30 * day, "period_end": today,
+                      "due_date": today + 10 * day, "status": "pending"})
+        ComplianceRegister.objects.get_or_create(
+            tenant=tenant, title="Wage register - last quarter",
+            defaults={"register_type": "wage_register", "jurisdiction": "Karnataka, India",
+                      "period_start": today - 120 * day, "period_end": today - 30 * day,
+                      "due_date": today - 15 * day, "status": "pending"})  # deliberately OVERDUE
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Compliance seeded for '{tenant.name}': "
+            f"{EmploymentContract.objects.filter(tenant=tenant).count()} contracts, "
+            f"{HRPolicy.objects.filter(tenant=tenant).count()} policies, "
+            f"{PolicyAcknowledgment.objects.filter(tenant=tenant).count()} acknowledgments, "
+            f"{Grievance.objects.filter(tenant=tenant).count()} grievances, "
+            f"{ComplianceRegister.objects.filter(tenant=tenant).count()} register records."))
