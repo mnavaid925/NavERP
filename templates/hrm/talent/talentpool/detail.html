@@ -36,7 +36,7 @@
             <td>{% if m.nine_box_quadrant %}<span class="badge badge-info">{{ m.nine_box_quadrant }}</span>{% else %}<span class="badge badge-muted">Unrated</span>{% endif %}</td>
             <td>{% if m.effective_performance != None %}{{ m.effective_performance }}{% else %}-{% endif %}</td>
             <td>{% if m.effective_potential != None %}{{ m.effective_potential }}{% else %}-{% endif %}</td>
-            <td>{% if m.flight_risk == 'high' %}<span class="badge badge-red">High</span>{% elif m.flight_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">Low</span>{% endif %}</td>
+            <td>{% if m.flight_risk == 'high' %}<span class="badge badge-red">High</span>{% elif m.flight_risk == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-green">{{ m.get_flight_risk_display }}</span>{% endif %}</td>
             <td>{% if m.status == 'active' %}<span class="badge badge-green">Active</span>{% elif m.status == 'promoted' %}<span class="badge badge-info">Promoted</span>{% else %}<span class="badge badge-muted">{{ m.get_status_display }}</span>{% endif %}</td>
             <td><div class="table-actions">
               <a href="{% url 'hrm:talentpoolmembership_detail' m.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
