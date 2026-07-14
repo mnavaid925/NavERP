@@ -1,8 +1,11 @@
 """CRM views package — split from the former monolithic apps/crm/views.py.
 
 One sub-package per CRM sub-module (1.1-1.12), one module per entity. This __init__
-re-exports every view + the private helpers imported elsewhere, so apps/crm/urls.py
-(`from . import views`, `views.<name>`) and external importers keep working unchanged.
+re-exports every view + the private helpers imported elsewhere, so the apps/crm/urls/ package
+(`from apps.crm import views`, `views.<name>`) and external importers keep working unchanged.
+
+Adding a view: put it in its entity module, then add it to the re-export block below — otherwise
+`views.<name>` in the URLconf raises AttributeError.
 """
 
 # 1.1 Core Data Management
