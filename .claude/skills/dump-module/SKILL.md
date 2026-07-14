@@ -59,6 +59,20 @@ Notes:
 - The script overwrites the matching `<NN>_<slug>.txt` file (idempotent — safe to re-run).
 - `temp/` should be gitignored — no commit snippet needed for the generated `.txt`.
 - The script prints one line per generated file: `OK  <slug>  <bytes>  ->  temp\<slug>.txt`.
+- It walks `apps\<name>\` **recursively**, so the `models/ forms/ views/ urls/` **packages** (one folder per
+  sub-module, one file per entity) are captured with no script change. A packaged module therefore produces many
+  small file blocks rather than four large ones — that is expected, not a bug.
+
+## Backend layout the dump walks (models/forms/views/urls are PACKAGES)
+
+Built modules keep their backend in **packages, not flat `.py` files** — `models/`, `forms/`, `views/`, `urls/` each
+hold **one folder per NavERP sub-module, then one file per entity** (see CLAUDE.md / `/next-module` §2a). `apps/crm`
+and `apps/accounting` are the converted reference apps.
+
+The generator walks `apps\<name>\` **recursively** (`Get-ChildItem -Recurse`, `__pycache__` excluded), so these
+nested package files are picked up automatically — **no script change is needed when a module is packaged**. The
+practical effect is that a packaged module dumps *many* small file blocks instead of four huge ones (e.g. the
+accounting dump is ~228 backend blocks / ~900 KB), sorted by full path so each package's folders read together.
 
 ## Output structure (per .txt file)
 
@@ -79,6 +93,18 @@ FILE: apps\<name>\admin.py
 ----------------------------------------------------------------------------------------------------
 <file contents>
 
+----------------------------------------------------------------------------------------------------
+FILE: apps\<name>\models\__init__.py            <- package __init__ (re-exports every model)
+----------------------------------------------------------------------------------------------------
+FILE: apps\<name>\models\_base.py               <- shared imports + abstract Tenant* base
+FILE: apps\<name>\models\<SubModule>\<Entity>.py
+FILE: apps\<name>\forms\<SubModule>\<Entity>.py
+FILE: apps\<name>\views\_common.py  /  _helpers.py
+FILE: apps\<name>\views\<SubModule>\<Entity>.py
+FILE: apps\<name>\urls\__init__.py              <- app_name + concatenated urlpatterns
+FILE: apps\<name>\urls\<SubModule>\<Entity>.py
+...
+
 ... (one block per .py / .json / .yml / .md / .ini file, sorted by full path, __pycache__ excluded)
 
 ====================================================================================================
@@ -86,7 +112,7 @@ FRONTEND  (templates\<name>\)
 ====================================================================================================
 
 ----------------------------------------------------------------------------------------------------
-FILE: templates\<name>\<entity>_list.html
+FILE: templates\<name>\<submodule>\<entity>\list.html
 ----------------------------------------------------------------------------------------------------
 <file contents>
 
