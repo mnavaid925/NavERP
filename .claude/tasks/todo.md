@@ -8718,3 +8718,346 @@ AI job-pricing, pay-equity dashboards, 409A/ASC-718 GL posting, cap-table modeli
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 3 — HRM — Sub-module 3.38 Talent Management & Succession Planning (hrm) — plan from research-talent-succession.md (2026-07-15)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.37) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** Full CRUD sub-module: **4 new tenant-scoped models**
+(`TalentPool`, `TalentPoolMembership`, `SuccessionPlan`, `SuccessionCandidate`; new incremental migration
+`0055`), covering 5 of the 6 NavERP.md bullets (verbatim, `NavERP.md:698-703`): Talent Pool, Succession
+Planning, Internal Mobility (reuse), Talent Reviews (reuse), Retention Strategies. **Career Pathing is
+DEFERRED** (no `LIVE_LINKS["3.38"]` entry — needs a `CareerPath` + `EmployeeSkill` taxonomy, its own pass per
+`research-talent-succession.md`'s "Deferred" section).
+
+Reuses (never duplicates): `hrm.EmployeeProfile` (every person FK — owner/employee/incumbent/candidate, all by
+string FK, never a new employee table); `hrm.PerformanceReview.potential_rating` (3.19, the 9-box potential
+axis — already exists, docstring literally says *"9-box potential axis (visualization deferred)"* — this pass
+plots the grid, never re-stores the score) + `.effective_rating`/`.calibrated_rating` (the performance axis);
+`hrm.Designation` (critical-role catalog); `core.OrgUnit` (`kind="department"`); `hrm.JobRequisition.posting_type
+="internal"` + `hrm.JobApplication` (Internal Mobility — already modeled, no new table); the existing 3.19
+`hrm:calibration_board` view (Talent Reviews — already modeled, no new table). No new core-spine entity; nothing
+posts to the GL.
+
+## 0. Decisions — read before writing code
+
+- [ ] **CONFIDENTIALITY IS THE DESIGN CRUX (like 3.21 PIP/CoachingNote):** talent-pool membership, 9-box
+  ratings, flight-risk flags, and succession benches are HR-confidential. **Every 3.38 view — list, create,
+  detail, edit, delete, the inline `SuccessionCandidate` add/edit/delete, and the `talent_nine_box` grid — is
+  `@tenant_admin_required`, no exceptions and no self-service tier.** This is *simpler* than 3.35/3.37's
+  `_ss_scope`/`_can_manage_own_child` machinery — there is no employee-visible slice of this sub-module at all.
+  A non-admin hitting any 3.38 URL gets Django's `PermissionDenied` (403) via `apps.core.decorators
+  .tenant_admin_required` (confirmed: raises `PermissionDenied`, does not silently empty-list) — verified
+  correct behavior for "employees must NOT see who is in a HiPo pool or on a succession bench."
+- [ ] **Prefixes:** `SuccessionPlan.NUMBER_PREFIX = "SPL"` — confirmed free against the full `NUMBER_PREFIX`
+  grep of `apps/hrm/models.py` (research already checked; re-confirmed no collision through 3.37's `"BEN"`/
+  `"ESOP"`). `TalentPool`, `TalentPoolMembership`, `SuccessionCandidate` are `TenantOwned` (no prefix) —
+  catalog/child-row convention matching `TravelPolicy`/`TravelBooking`, `JobGrade`/`Designation`.
+- [ ] **Field/choice set is the lean task-given spec, not research's fuller draft** — `research-talent-
+  succession.md`'s "Recommended build scope" proposed `performance_review`/`potential_override`/
+  `performance_override` and a richer `pool_type`/`status`/`vacancy_risk` choice list; this pass builds the
+  simpler, explicitly-specified set below (`review`, `performance_rating`/`potential_rating`,
+  `hipo/successor/critical_skill/leadership/other`, `draft/active/closed`, `low/medium/high`) — same spine
+  reuse, fewer states. Note this in the SKILL.md so a future pass doesn't "rediscover" the richer set as a bug.
+- [ ] **`SuccessionCandidate` is an inline child of `SuccessionPlan`, exact `TravelBooking`-under-`TravelRequest`
+  shape** (`apps/hrm/views.py:14174` `travelbooking_add`/`_edit`/`_delete`): `plan`/`tenant` are set by the view,
+  never form fields; `successioncandidate_add` is `@require_POST` with the add form embedded inline on
+  `successionplan_detail.html` (no standalone add page); `successioncandidate_edit` gets its own
+  `talent/successioncandidate/form.html`. Unlike `TravelBooking` there's no `OPEN_STATUSES` edit-window gate —
+  candidates can be re-ranked/edited for the life of the plan (only `@tenant_admin_required` gates it).
+- [ ] **`TalentPoolMembership.nine_box_quadrant` bands each rating on the de-facto 5-point scale**
+  (`hrm.ReviewTemplate.rating_scale_max` defaults to 5): `low` = `< 2.5`, `medium` = `2.5 <= x < 4`, `high` =
+  `>= 4`. A module-level `QUADRANT_LABELS` dict keyed `(performance_band, potential_band)` returns the standard
+  9-box label (AIHR/industry-standard naming, matches the task's own example):
+  ```python
+  QUADRANT_LABELS = {
+      ("high", "high"): "Star", ("high", "medium"): "High Performer", ("high", "low"): "Trusted Professional",
+      ("medium", "high"): "Future Star", ("medium", "medium"): "Core Player", ("medium", "low"): "Average Performer",
+      ("low", "high"): "Enigma", ("low", "medium"): "Inconsistent Player", ("low", "low"): "Risk",
+  }
+  ```
+  Returns `None`/"Not yet rated" when either axis has no data (no override AND no linked review, or a linked
+  review with no `effective_rating`/`potential_rating` yet) — mirrors `PerformanceReview.overall_rating`
+  returning `None` (not 0) when unrated.
+- [ ] **`SuccessionPlan.bench_strength`** returns a small dict `{"ready_now": n, "total": n, "label": ...}` from
+  its `SuccessionCandidate` rows (mirrors `JobRequisition.approval_progress`-style derived property, never
+  stored): `label` = `"strong"` if `ready_now >= 2`, `"moderate"` if `ready_now == 1` or `ready_1_2_years count
+  >= 2`, `"weak"` if `total > 0` (but neither strong/moderate condition met), `"none"` if `total == 0`.
+- [ ] **Internal Mobility reuse needs one small, real addition** — `hrm:jobrequisition_list` does **not**
+  currently accept `?posting_type=`; its `filters=[...]` tuple (`apps/hrm/views.py:3671`) only covers
+  `status/priority/department/hiring_manager/req_type/employment_type`. Add a bespoke pre-filter, exact
+  `ticket_list`'s `?sla=breached`/`?rated=1` pattern (`apps/hrm/views.py:14353`): `if request.GET.get
+  ("posting_type", "").strip() in ("internal", "external", "both"): qs = qs.filter(posting_type=...)` in
+  `jobrequisition_list`, plus `"posting_type_choices": POSTING_TYPE_CHOICES` in its `extra_context` so the list
+  template can render a Posting Type filter chip too. Without this the `LIVE_LINKS["3.38"]["Internal Mobility"]`
+  deep link would silently show ALL requisitions, not just internal ones — a dead filter (violates the CLAUDE.md
+  Filter Implementation Rule). This is the ONE `views.py` touch outside the new 3.38 banner block.
+- [ ] **`Retention Strategies` reuse is a pure deep-link, no view change needed** —
+  `hrm:talentpoolmembership_list?flight_risk=high` works out of the box as long as `talentpoolmembership_list`'s
+  own `filters=` tuple includes `("flight_risk", "flight_risk", False)` (it does, per the CRUD spec below) — no
+  bespoke pre-filter required (`flight_risk` is a plain `filters=` entry, unlike `posting_type` above).
+- [ ] **Migration:** `python manage.py makemigrations hrm` → expected `0055_talentpool_...py` (`0053`+`0054`
+  were 3.37's, confirmed via `apps/hrm/migrations/` listing — `0054` is the last file on disk).
+
+## 1. Models (apps/hrm/models.py — append after `KnowledgeArticle`/compensation block; new migration `0055`)
+
+- [ ] **`TalentPool`** `[TenantOwned, no prefix]` — Talent Pool (named pool/segment).
+  - `name` (CharField 150)
+  - `pool_type`: `hipo/successor/critical_skill/leadership/other` (default `hipo`)
+  - `description` (TextField, blank)
+  - `owner` → `hrm.EmployeeProfile` (`SET_NULL`, null/blank, `related_name="sponsored_talent_pools"`) — the
+    pool sponsor
+  - `is_active` (BooleanField, default True)
+  - Meta: `ordering=["name"]`; `unique_together=("tenant","name")`; indexes `(tenant, is_active)`,
+    `(tenant, pool_type)`
+  - Drivers: named talent pools/segments (Workday succession pools, Cornerstone talent pools, SAP
+    SuccessFactors talent pool nominations). Adds no new spine entity — catalog table only.
+- [ ] **`TalentPoolMembership`** `[TenantOwned, child of TalentPool]` — Talent Pool (9-box grid) +
+  Retention Strategies (flight risk, retention plan).
+  - `pool` → `hrm.TalentPool` (`CASCADE`, `related_name="memberships"`)
+  - `employee` → `hrm.EmployeeProfile` (`CASCADE`, `related_name="talent_pool_memberships"`)
+  - `joined_on` (DateField, default `timezone.localdate`)
+  - `status`: `active/exited/promoted` (default `active`)
+  - `review` → `hrm.PerformanceReview` (`SET_NULL`, null/blank, `related_name="talent_pool_memberships"`) — the
+    rating source (nullable so a membership can exist before a review does)
+  - `performance_rating`/`potential_rating` (Decimal 4,2, null/blank) — optional manual overrides of the
+    linked review's `effective_rating`/`potential_rating`
+  - `flight_risk`: `low/medium/high` (default `low`)
+  - `retention_action_plan` (TextField, blank)
+  - `notes` (TextField, blank)
+  - `QUADRANT_LABELS` module-level dict (see Decisions)
+  - Properties (never stored): `effective_performance` (`performance_rating` if set, else
+    `review.effective_rating` if `review_id`, else `None`), `effective_potential` (same pattern against
+    `potential_rating`/`review.potential_rating`), `nine_box_quadrant` (bands both via a `_band(value)` helper,
+    looks up `QUADRANT_LABELS[(perf_band, pot_band)]`, `None` if either axis is `None`)
+  - Meta: `ordering=["-joined_on"]`; `unique_together=("tenant","pool","employee")`; indexes
+    `(tenant, pool)`, `(tenant, employee)`, `(tenant, flight_risk)`, `(tenant, status)`
+  - Drivers: 9-box grid + high-potential ID (Talent Pool) — plots `effective_performance`/`effective_potential`
+    without re-storing the review's score; flight-risk flag + retention action plan (Retention Strategies) —
+    meaningful precisely for people already tracked as key talent, so it lives on the membership row, not a
+    separate table. Reuses `hrm.TalentPool`, `hrm.EmployeeProfile`, `hrm.PerformanceReview` — adds no new spine
+    entity.
+- [ ] **`SuccessionPlan`** `[TenantNumbered, "SPL"]` — Succession Planning (critical-role register).
+  - `critical_role` → `hrm.Designation` (`PROTECT`, `related_name="succession_plans"`) — the role being
+    planned for; reuses the existing title catalog instead of a new Position model
+  - `department` → `core.OrgUnit` (`SET_NULL`, null/blank, `limit_choices_to={"kind": "department"}`,
+    `related_name="succession_plans"`)
+  - `incumbent` → `hrm.EmployeeProfile` (`SET_NULL`, null/blank, `related_name="succession_plans_as_incumbent"`)
+    — nullable, a plan can exist for a currently-vacant/at-risk role
+  - `vacancy_risk`: `low/medium/high` (default `medium`)
+  - `status`: `draft/active/closed` (default `draft`)
+  - `review_date` (DateField, null/blank)
+  - `notes` (TextField, blank)
+  - Property `bench_strength` (see Decisions)
+  - Meta: `ordering=["-review_date", "critical_role__name"]`; `unique_together=("tenant","number")`; indexes
+    `(tenant, critical_role)`, `(tenant, status)`, `(tenant, vacancy_risk)`
+  - Drivers: critical-role register + bench-strength/vacancy-risk indicator (PeopleFluent succession slates,
+    Workday/SAP succession pools per role, Eightfold role-readiness). Reuses `hrm.Designation`, `core.OrgUnit`,
+    `hrm.EmployeeProfile` — adds no new spine entity.
+- [ ] **`SuccessionCandidate`** `[TenantOwned, inline child of SuccessionPlan]` — Succession Planning
+  (successor slate + readiness tiers).
+  - `plan` → `hrm.SuccessionPlan` (`CASCADE`, `related_name="candidates"`)
+  - `candidate` → `hrm.EmployeeProfile` (`CASCADE`, `related_name="succession_candidacies"`)
+  - `readiness`: `ready_now/ready_1_2y/ready_3_5y/development_needed` (default `development_needed`)
+  - `rank_order` (PositiveSmallIntegerField, default 1)
+  - `development_notes` (TextField, blank)
+  - Meta: `ordering=["plan", "rank_order"]`; `unique_together=("tenant","plan","candidate")`; indexes
+    `(tenant, plan)`, `(tenant, readiness)`
+  - Drivers: successor slate with readiness tiers (PeopleFluent succession slates, SAP SuccessFactors Suggested
+    Successors, Eightfold role-readiness, Betterworks bench strength — the industry-standard ready-now/1-2y/
+    3-5y/development-needed bands). Reuses `hrm.EmployeeProfile` — adds no new spine entity; the `(tenant, plan,
+    candidate)` uniqueness allows the same employee to be a successor slate member of a DIFFERENT plan
+    concurrently (multi-role nomination, per research — no extra modeling needed).
+
+## 2. Forms (apps/hrm/forms.py)
+
+- [ ] `TalentPoolForm(TenantModelForm)` — fields: `name, pool_type, description, owner, is_active`; `__init__`
+  scopes `owner` to the tenant's `EmployeeProfile`s (mirrors `TravelPolicyForm`).
+- [ ] `TalentPoolMembershipForm(TenantModelForm)` — fields: `pool, employee, joined_on, status, review,
+  performance_rating, potential_rating, flight_risk, retention_action_plan, notes`; `__init__` scopes
+  `pool`/`employee`/`review` to the tenant (review queryset further narrowed to `review.subject == employee`
+  is NOT enforced server-side this pass — documented simplification, flagged under Later passes).
+- [ ] `SuccessionPlanForm(TenantModelForm)` — fields: `critical_role, department, incumbent, vacancy_risk,
+  status, review_date, notes`; `__init__` scopes `critical_role`/`department`/`incumbent` to the tenant.
+- [ ] `SuccessionCandidateForm(TenantModelForm)` — fields: `candidate, readiness, rank_order,
+  development_notes` (`plan`/`tenant` excluded — set by the view, exact `TravelBookingForm` shape); `__init__`
+  scopes `candidate` to the tenant's `EmployeeProfile`s.
+
+## 3. Views (apps/hrm/views.py — append `# --- 3.38 Talent Management & Succession Planning ---` banner after
+   the 3.37 compensation block; ALL views `@tenant_admin_required`, no `@login_required`-only tier)
+
+- [ ] `TalentPool` CRUD — `talentpool_list/_create/_detail/_edit/_delete`, all `@tenant_admin_required`.
+  `talentpool_list`: `crud_list` over `TalentPool.objects.filter(tenant=request.tenant)
+  .select_related("owner__party")`, `search_fields=["name","description"]`, `filters=[("pool_type","pool_type",
+  False), ("is_active","is_active",False)]`, `extra_context={"pool_type_choices": TalentPool.POOL_TYPE_CHOICES}`.
+  `talentpool_detail`: `extra_context` lists `obj.memberships.select_related("employee__party","review")` with
+  each membership's `nine_box_quadrant`/`flight_risk`.
+- [ ] `TalentPoolMembership` CRUD — `talentpoolmembership_list/_create/_detail/_edit/_delete`, all
+  `@tenant_admin_required`. `talentpoolmembership_list`: `crud_list` over
+  `TalentPoolMembership.objects.filter(tenant=request.tenant)
+  .select_related("pool","employee__party","review")`, `search_fields=["employee__party__name","pool__name"]`,
+  `filters=[("pool","pool_id",True), ("employee","employee_id",True), ("status","status",False),
+  ("flight_risk","flight_risk",False)]`, `extra_context={"status_choices": ..., "flight_risk_choices": ...,
+  "pools": ..., "employees": ...}` (the `flight_risk` filter is what makes the Retention Strategies deep-link
+  work).
+- [ ] `SuccessionPlan` CRUD — `successionplan_list/_create/_detail/_edit/_delete`, all `@tenant_admin_required`.
+  `successionplan_list`: `crud_list` over `SuccessionPlan.objects.filter(tenant=request.tenant)
+  .select_related("critical_role","department","incumbent__party")`,
+  `search_fields=["number","critical_role__name","notes"]`, `filters=[("status","status",False),
+  ("vacancy_risk","vacancy_risk",False), ("department","department_id",True),
+  ("critical_role","critical_role_id",True)]`, `extra_context={"status_choices": ..., "vacancy_risk_choices":
+  ..., "departments": ..., "designations": ...}`. `successionplan_detail`: `extra_context={"candidates":
+  obj.candidates.select_related("candidate__party").order_by("rank_order"), "candidate_form":
+  SuccessionCandidateForm(tenant=request.tenant), "bench_strength": obj.bench_strength}`.
+- [ ] Inline `SuccessionCandidate` actions (exact `travelbooking_add/_edit/_delete` shape,
+  `apps/hrm/views.py:14174`), all `@tenant_admin_required`:
+  - `successioncandidate_add(plan_pk)` — `@require_POST`; `get_object_or_404(SuccessionPlan, pk=plan_pk,
+    tenant=request.tenant)`; `SuccessionCandidateForm(request.POST, instance=SuccessionCandidate(
+    tenant=request.tenant, plan=plan), tenant=request.tenant)`; redirect `successionplan_detail`.
+  - `successioncandidate_edit(pk)` — GET/POST, own `talent/successioncandidate/form.html`; redirect
+    `successionplan_detail` on save.
+  - `successioncandidate_delete(pk)` — `@require_POST`; redirect `successionplan_detail`.
+- [ ] `talent_nine_box(request)` — derived report view (no model, mirrors `calibration_board`'s shape),
+  `@tenant_admin_required`. `?pool=<id>` narrows to one pool (default: all active memberships). Buckets every
+  in-scope `TalentPoolMembership` into a 3×3 grid keyed `(performance_band, potential_band)` using the same
+  `_band()`/`QUADRANT_LABELS` helper as the model property; unrated memberships (no `nine_box_quadrant`) list
+  separately under "Not yet rated". Renders `hrm/talent/nine_box.html` with `{"pools": ..., "pool": ...,
+  "grid": ..., "unrated": ...}`.
+
+## 4. URLs (apps/hrm/urls.py — append after the 3.37 equity-grant block, `app_name = "hrm"`)
+
+- [ ] `talent-pools/`, `.../add/`, `.../<int:pk>/`, `.../<int:pk>/edit/`, `.../<int:pk>/delete/` →
+  `talentpool_*`
+- [ ] `talent-pool-memberships/` (same 5) → `talentpoolmembership_*`
+- [ ] `succession-plans/` (same 5) → `successionplan_*`, plus
+  `succession-plans/<int:plan_pk>/candidates/add/` → `successioncandidate_add`
+- [ ] `succession-candidates/<int:pk>/edit/` → `successioncandidate_edit`
+- [ ] `succession-candidates/<int:pk>/delete/` → `successioncandidate_delete`
+- [ ] `talent/nine-box/` → `talent_nine_box`
+
+## 5. Admin (apps/hrm/admin.py)
+
+- [ ] Register `TalentPool`, `TalentPoolMembership`, `SuccessionPlan`, `SuccessionCandidate` — `list_display`/
+  `list_filter`/`search_fields` mirroring `TravelPolicyAdmin`/`TravelRequestAdmin` (tenant, status/type/risk
+  filters, name/number search); `TalentPoolMembershipAdmin`/`SuccessionCandidateAdmin` use
+  `list_select_related` for the FK-heavy list.
+
+## 6. Migration
+
+- [ ] `python manage.py makemigrations hrm` → single new file (expected `0055_...py`).
+
+## 7. Templates (templates/hrm/talent/<entity>/{list,detail,form}.html + talent/nine_box.html)
+
+- [ ] `talent/talentpool/{list,detail,form}.html` — list: `pool_type`/`is_active` filter bar reflecting
+  `request.GET`; detail: membership roster table (employee, `nine_box_quadrant` badge, `flight_risk` badge,
+  status) + Add Membership link.
+- [ ] `talent/talentpoolmembership/{list,detail,form}.html` — list: `pool`/`employee`/`status`/`flight_risk`
+  filter bar (the `flight_risk` filter is what `LIVE_LINKS["3.38"]["Retention Strategies"]` deep-links into);
+  detail: 9-box position panel (`effective_performance`/`effective_potential`/`nine_box_quadrant`),
+  retention-action-plan panel.
+- [ ] `talent/successionplan/{list,detail,form}.html` — list: `status`/`vacancy_risk`/`department`/
+  `critical_role` filter bar; detail: `bench_strength` summary card, ranked candidate slate table (readiness
+  badge, rank, development notes, per-row Edit/Delete), inline "Add Candidate" form (POSTs to
+  `successioncandidate_add`, `{% csrf_token %}`).
+- [ ] `talent/successioncandidate/form.html` — edit-only form (add is inline on `successionplan/detail.html`,
+  per Decisions).
+- [ ] `talent/nine_box.html` — standalone report page (sub-module root, no entity folder, per Template Folder
+  Structure rule 6): pool selector, 3×3 grid of quadrant cards each listing its members (name, pool, flight-risk
+  badge), "Not yet rated" overflow list.
+
+## 8. Wire-up
+
+- [ ] No `settings.py` / `config/urls.py` changes (existing `apps/hrm` app).
+- [ ] `jobrequisition_list` — add the `?posting_type=` bespoke filter + `posting_type_choices` context (see
+  Decisions) so the Internal Mobility deep link actually filters.
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["3.38"]` (bullet text verbatim, `NavERP.md:698-703`):
+  ```python
+  # 3.38 Talent Management & Succession Planning — 4 new models (TalentPool, TalentPoolMembership,
+  # SuccessionPlan, SuccessionCandidate); Internal Mobility + Talent Reviews REUSE existing 3.5/3.19
+  # views (no new tables). Career Pathing DEFERRED (needs a CareerPath + EmployeeSkill taxonomy).
+  "3.38": {
+      "Talent Pool": "hrm:talentpool_list",
+      "Succession Planning": "hrm:successionplan_list",
+      "Talent Reviews": "hrm:calibration_board",
+      "Internal Mobility": "hrm:jobrequisition_list?posting_type=internal",
+      "Retention Strategies": "hrm:talentpoolmembership_list?flight_risk=high",
+  },
+  ```
+  **No entry** for `"Career Pathing"` — stays Coming Soon this pass.
+
+## 9. Seeder (apps/hrm/management/commands/seed_hrm.py — new `_seed_talent(tenant, flush)`, called after
+   `_seed_compensation`)
+
+- [ ] Guard: `if not emps: return` (reuse the tenant's existing `EmployeeProfile`s/`PerformanceReview`s);
+  idempotent — `if TalentPool.objects.filter(tenant=tenant).exists(): print(...); return`; `--flush` cascades
+  `SuccessionCandidate`/`SuccessionPlan`/`TalentPoolMembership`/`TalentPool` deletes.
+  Called after `_seed_compensation` and update `handle()`'s dispatch list (`apps/hrm/management/commands/
+  seed_hrm.py:298-299`).
+- [ ] 1 `TalentPool` (`get_or_create` on `(tenant, name)`) — e.g. "High-Potential Leaders" (`pool_type="hipo"`,
+  `owner=` a seeded manager `EmployeeProfile`).
+- [ ] 4–6 `TalentPoolMembership` rows (`get_or_create` on `(tenant, pool, employee)`) spanning the 9-box: at
+  least one row per `performance_band × potential_band` combination that lands on `"Star"`/`"Core Player"`/
+  `"Risk"` (mix of `review=`-linked rows using an existing seeded `PerformanceReview` and rows using the manual
+  `performance_rating`/`potential_rating` override when no review exists), including at least one
+  `flight_risk="high"` row (so `LIVE_LINKS["3.38"]["Retention Strategies"]` renders non-empty) with a populated
+  `retention_action_plan`.
+- [ ] 1 `SuccessionPlan` (`get_or_create` on `(tenant, critical_role, department)` — or on `number` if that pair
+  isn't unique enough) — a seeded `Designation` as `critical_role`, `status="active"`, `vacancy_risk="medium"`.
+- [ ] 3 ranked `SuccessionCandidate` rows on that plan (`get_or_create` on `(tenant, plan, candidate)`) — one
+  `ready_now` (`rank_order=1`), one `ready_1_2y` (`rank_order=2`), one `development_needed` (`rank_order=3`) —
+  so `bench_strength` renders a realistic `"moderate"`/`"weak"` label, not just `"none"`.
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations hrm` then `migrate`
+- [ ] `python manage.py seed_hrm` ×2 (idempotent, second run prints "already exists")
+- [ ] `python manage.py check`
+- [ ] `temp/` smoke sweep: every `hrm:talentpool*`/`talentpoolmembership*`/`successionplan*`/
+  `successioncandidate*`/`talent_nine_box` URL 200/302 **as a tenant admin**, AND explicitly verify **403** as a
+  non-admin employee login for every one of those URLs (the confidentiality requirement — this is the opposite
+  assertion from the usual self-service 200/302 sweep); confirm `hrm:jobrequisition_list?posting_type=internal`
+  actually narrows the result set; no `{#`/`{% comment` leaks; cross-tenant pool/membership/plan/candidate pk →
+  404 (IDOR), checked as a tenant admin of the OTHER tenant.
+- [ ] Sidebar: 3.38 Talent Management & Succession Planning shows 5 of 6 bullets Live (Talent Pool, Succession
+  Planning, Talent Reviews, Internal Mobility, Retention Strategies); Career Pathing stays Coming Soon.
+
+## 11. Close-out
+
+- [ ] code-reviewer → apply findings → commit
+- [ ] explorer → apply findings → commit
+- [ ] frontend-reviewer → apply findings → commit
+- [ ] performance-reviewer → apply findings → commit
+- [ ] qa-smoke-tester → apply findings → commit
+- [ ] security-reviewer → apply findings → commit
+- [ ] test-writer → `apps/hrm/tests/test_talent.py` → commit
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add a `### 3.38 Talent Management & Succession Planning` section
+  (models, URLs, seeder, the all-admin confidentiality gotcha, the `jobrequisition_list` `?posting_type=`
+  addition, the deliberately-leaner-than-research field/choice set)
+- [ ] Update README (module/sub-module/test counts)
+
+## Later passes / deferred (carried from research-talent-succession.md)
+
+- **Career Pathing** — `CareerPath` (from-`Designation` → to-`Designation`) edge table + a proper
+  `EmployeeSkill`/role-skill-requirement structure (Lattice Career Tracks, Cornerstone Career Center, Fuel50
+  multi-path journeys). The skills taxonomy is shared infrastructure Talent Pool's future "skill-set matrix"
+  also wants — worth building once, deliberately, as its own follow-up pass.
+- **AI-suggested pool candidates / skills-based matching** (SAP SuccessFactors AI-Assisted Successor
+  Recommendation, Eightfold, Gloat) — external-model/ML territory.
+- **Transfer-approval workflow** for Internal Mobility (releasing manager + receiving manager + HR sign-off,
+  auto-update `core.Employment`, optional backfill req) — a thin workflow layer over the already-modeled
+  `JobRequisition`/`JobApplication`, not a new model; and letting an internal `EmployeeProfile` apply without
+  re-entering a `CandidateProfile`.
+- **`TalentReviewSession`** — a session-scheduling shell (attendees, date, linked `ReviewCycle`, minutes) for
+  Talent Reviews; the rating data itself already lives on `PerformanceReview`.
+- **Drag-and-drop succession org chart / scenario planning UI** — a visualization layer over `SuccessionPlan`/
+  `SuccessionCandidate`, not a data-model gap.
+- **Rating-distribution / bias-detection view during calibration** — an aggregate report over existing
+  `PerformanceReview` rows, not a new table.
+- **Predictive attrition scoring** from behavioral/engagement signals — needs an analytics/ML pipeline.
+- **Retention ↔ compensation/promotion linkage** — cross-references 3.37 Compensation & Benefits; out of scope.
+- **`review` queryset on `TalentPoolMembershipForm` not narrowed to `review.subject == employee`** —
+  documented simplification from this pass's Decisions; a future pass should either enforce it in `clean()` or
+  auto-populate `review` from `employee` server-side.
+
+## Review notes
+(filled in at the end)
