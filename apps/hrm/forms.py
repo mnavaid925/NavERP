@@ -2879,3 +2879,119 @@ class EquityGrantForm(TenantModelForm):
             if v is not None and v < 0:
                 self.add_error(f, "Must be zero or greater.")
         return cleaned
+
+
+from .models import (  # noqa: E402  — 3.38 Talent Management & Succession Planning
+    TalentPool, TalentPoolMembership, SuccessionPlan, SuccessionCandidate)
+
+
+class TalentPoolForm(TenantModelForm):
+    class Meta:
+        model = TalentPool
+        fields = ["name", "pool_type", "description", "owner", "is_active"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "owner" in self.fields:
+            self.fields["owner"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party").order_by("party__name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        # unique_together(tenant, name) — Django skips validate_unique because tenant is form-excluded.
+        name = cleaned.get("name")
+        if name and self.tenant is not None:
+            dupe = TalentPool.objects.filter(tenant=self.tenant, name=name)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("name", "A talent pool with this name already exists.")
+        return cleaned
+
+
+class TalentPoolMembershipForm(TenantModelForm):
+    class Meta:
+        model = TalentPoolMembership
+        fields = ["pool", "employee", "joined_on", "status", "review", "performance_rating",
+                  "potential_rating", "flight_risk", "retention_action_plan", "notes"]
+        widgets = {"retention_action_plan": forms.Textarea(attrs={"rows": 3}),
+                   "notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "pool" in self.fields:
+                self.fields["pool"].queryset = (
+                    TalentPool.objects.filter(tenant=self.tenant, is_active=True).order_by("pool_type", "name"))
+            if "employee" in self.fields:
+                self.fields["employee"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
+                    .order_by("party__name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        for f in ("performance_rating", "potential_rating"):
+            v = cleaned.get(f)
+            if v is not None and not (Decimal("1") <= v <= Decimal("5")):
+                self.add_error(f, "Must be between 1 and 5.")
+        # unique_together(tenant, pool, employee) — guard it (tenant is form-excluded).
+        pool, employee = cleaned.get("pool"), cleaned.get("employee")
+        if pool and employee and self.tenant is not None:
+            dupe = TalentPoolMembership.objects.filter(tenant=self.tenant, pool=pool, employee=employee)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("employee", "This employee is already a member of that talent pool.")
+        return cleaned
+
+
+class SuccessionPlanForm(TenantModelForm):
+    class Meta:
+        model = SuccessionPlan
+        fields = ["critical_role", "department", "incumbent", "vacancy_risk", "status", "review_date", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "critical_role" in self.fields:
+                self.fields["critical_role"].queryset = (
+                    Designation.objects.filter(tenant=self.tenant).order_by("name"))
+            if "incumbent" in self.fields:
+                self.fields["incumbent"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
+                    .order_by("party__name"))
+            if "department" in self.fields:
+                self.fields["department"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+
+
+class SuccessionCandidateForm(TenantModelForm):
+    # plan is set by the view (inline child of a SuccessionPlan).
+    class Meta:
+        model = SuccessionCandidate
+        fields = ["candidate", "readiness", "rank_order", "development_notes"]
+        widgets = {"development_notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and "candidate" in self.fields:
+            self.fields["candidate"].queryset = (
+                EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party").order_by("party__name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        rank = cleaned.get("rank_order")
+        if rank is not None and rank < 1:
+            self.add_error("rank_order", "Rank must be 1 or greater.")
+        # unique_together(tenant, plan, candidate): on EDIT the plan is on the instance (the form excludes
+        # it); on ADD the view catches IntegrityError, since the plan isn't known until then.
+        candidate = cleaned.get("candidate")
+        if self.instance.pk and self.instance.plan_id and candidate and self.tenant is not None:
+            dupe = SuccessionCandidate.objects.filter(
+                tenant=self.tenant, plan_id=self.instance.plan_id, candidate=candidate
+            ).exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("candidate", "This employee is already a successor on this plan.")
+        return cleaned
