@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Employment Contracts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Employment Contracts</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Compliance</span><span class="sep">›</span><span>Contracts</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:hrpolicy_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Policies</a>
+      <a href="{% url 'hrm:employmentcontract_list' %}?expiring=1" class="btn btn-outline"><i data-lucide="clock-alert"></i> Expiring Soon</a>
+      <a href="{% url 'hrm:employmentcontract_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Contract</a>
+    </div>
+  </div>
+
+  {% if request.GET.expiring == '1' %}<div class="badge badge-amber" style="margin-bottom:1rem;">Showing active contracts expiring within 60 days</div>{% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% if request.GET.expiring %}<input type="hidden" name="expiring" value="{{ request.GET.expiring }}">{% endif %}
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / employee...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="contract_type" class="form-select" aria-label="Contract Type"><option value="">All types</option>
+            {% for val, label in contract_type_choices %}<option value="{{ val }}" {% if request.GET.contract_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="employee" class="form-select" aria-label="Employee"><option value="">All employees</option>
+            {% for e in employees %}<option value="{{ e.pk }}" {% if request.GET.employee == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:employmentcontract_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Employee</th><th>Type</th><th>Start</th><th>End</th><th>Status</th><th>Expiry</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:employmentcontract_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.employee.party.name }}</td>
+              <td>{{ obj.get_contract_type_display }}</td>
+              <td>{{ obj.start_date|date:"d M Y" }}</td>
+              <td>{% if obj.end_date %}{{ obj.end_date|date:"d M Y" }}{% else %}<span class="text-muted">Open-ended</span>{% endif %}</td>
+              <td>{% if obj.status == 'active' %}<span class="badge badge-green">Active</span>{% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% elif obj.status == 'terminated' or obj.status == 'expired' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{% if obj.is_expiring_soon %}<span class="badge badge-amber">{{ obj.days_to_expiry }}d left</span>{% elif obj.is_expired %}<span class="badge badge-red">Expired</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:employmentcontract_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:employmentcontract_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:employmentcontract_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-signature"></i><h3>No contracts yet</h3><p>Record employment contracts, track probation and notice periods, and get an expiry warning.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
