@@ -9059,5 +9059,45 @@ posts to the GL.
   documented simplification from this pass's Decisions; a future pass should either enforce it in `clean()` or
   auto-populate `review` from `employee` server-side.
 
+## Review notes — 3.38 Talent Management & Succession Planning (as-built, 2026-07-14)
+
+**Delivered:** 4 tenant-scoped models (migration `0055`) — `TalentPool`, `TalentPoolMembership` (the COMPUTED
+9-box), `SuccessionPlan` (`SPL-`, computed bench strength), `SuccessionCandidate` (ranked inline bench) — plus
+forms, views, urls, admin, 11 templates incl. a derived **9-box grid**, an idempotent `_seed_talent`,
+`LIVE_LINKS["3.38"]`, and a **33-test** suite.
+
+**Design:** built ON the 3.19 `PerformanceReview` (its `effective_rating`/`potential_rating` ARE the two 9-box
+axes; the membership's Decimal columns are optional overrides). Two of the six bullets need **no new table** —
+*Talent Reviews* reuses the 3.19 calibration board, *Internal Mobility* reuses
+`JobRequisition(posting_type="internal")`. *Career Pathing* deferred. **CONFIDENTIAL:** every view is
+`@tenant_admin_required` (the 3.21 precedent) — locked in by `test_non_admin_forbidden_on_every_talent_view`.
+
+**Bug found by the todo agent (before any code):** `jobrequisition_list` didn't accept `?posting_type=`, so the
+Internal Mobility deep-link would have silently shown EVERY requisition. Added the filter + dropdown + a test.
+
+**Review agents:**
+- **code-reviewer** — 2 real bugs. (1) CRITICAL: `successioncandidate_add` caught `IntegrityError` **without a
+  savepoint**, so a duplicate poisoned the surrounding transaction → `TransactionManagementError` /
+  `SessionInterrupted` (a live crash, which I had initially mis-diagnosed as test flakiness). Fixed with
+  `transaction.atomic()`, mirroring `investmentdeclarationline_add`. (2) `annotate()` adds a GROUP BY that
+  **drops `Meta.ordering`**, leaving both annotated lists unordered → the paginator can duplicate/skip rows.
+  Fixed with explicit `.order_by()`. Both have regression guards.
+- **performance-reviewer** — independently confirmed 3 N+1s I'd introduced: `bench_strength` fired 2 COUNTs
+  *per row*, `active_member_count` 1 per row, and the 9-box's `effective_rating` fallback materialized
+  `review.ratings` per row. Fixed with annotation-aware properties + `Count(..., distinct=True)` annotations +
+  `prefetch_related("review__ratings")` on all four 9-box surfaces. 3 flat-query-count tests lock it in.
+- **qa-smoke-tester** — caught a **missing `from decimal import Decimal`** in forms.py: a latent `NameError`
+  (→500) that fires whenever a 9-box rating override is actually posted. My own tests never posted ratings, so
+  they passed. Expanded the suite to 33.
+- **security-reviewer** — **zero findings** (confidentiality contract, IDOR, CSRF, XSS, mass-assignment verified).
+- **frontend-reviewer** — clean; verified the 9-box axis orientation + label keying are correct. Applied
+  `get_..._display` badge fallbacks, aria-labels, badge-ed the quadrant labels.
+- **explorer** — fully wired (19 routes ↔ 19 views, 11 templates, LIVE_LINKS, admin, seeder).
+
+**Verify:** `manage.py check` clean; migration `0055` applies; all 19 URLs reverse; **33/33 tests pass**.
+
+**Deferred:** Career Pathing (`CareerPath` + `EmployeeSkill`), transfer-approval workflow, a `TalentReviewSession`
+scheduling shell, drag-drop succession org chart, AI candidate matching, predictive attrition scoring.
+
 ## Review notes
 (filled in at the end)
