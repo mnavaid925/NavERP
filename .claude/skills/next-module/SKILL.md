@@ -43,6 +43,11 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
   (e.g. `models.ForeignKey('core.Party', ...)`). Your module owns only its domain-specific tables.
 - **App layout:** `apps/<slug>/`, AppConfig `name = 'apps.<slug>'`. Register in `config/settings.py`
   `INSTALLED_APPS` and add `path('<slug>/', include('apps.<slug>.urls'))` to `config/urls.py`.
+- **Backend packages (MANDATORY):** `models/`, `forms/`, `views/`, `urls/` are **packages**, never flat `.py`
+  files — **one folder per sub-module, then one file per entity**
+  (`apps/<slug>/models/<SubModule>/<Entity>.py`), exactly mirroring the template rule. Each package's
+  `__init__.py` re-exports everything it owns; imports inside them are **absolute**. See §2a and the two
+  converted reference apps `apps/crm` + `apps/accounting`.
 - **Templates:** project-level `templates/<slug>/<submodule>/<entity>/<page>.html` (**one folder per sub-module,
   then one folder per entity, with a bare `list/detail/form.html` page filename — MANDATORY**, see
   CLAUDE.md "Template Folder Structure"; landing page stays at `templates/<slug>/` root), **extend
@@ -68,8 +73,10 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
   Commit per CLAUDE.md / project memory (one file per commit, to `main`); do NOT `git push` — the user pushes.
 - **Security:** flag vulnerabilities with a `# WARNING:` comment + secure alternative.
 
-Reference files to read before building: `NavERP-ERD.md`, `apps/tenants/models.py`, `apps/tenants/views.py`,
-`apps/tenants/urls.py`, `apps/tenants/forms.py`, `apps/core/navigation.py`, `apps/core/models.py` (the core spine),
+Reference files to read before building: `NavERP-ERD.md`, `apps/core/navigation.py`, `apps/core/models.py` (the
+core spine), and — for the **mandatory backend package layout** — `apps/crm/` and `apps/accounting/` (both fully
+converted: `models/`, `forms/`, `views/`, `urls/` packages, one folder per sub-module, one file per entity).
+For single-file CRUD/auth patterns: `apps/tenants/models.py`, `apps/tenants/views.py`, `apps/tenants/forms.py`,
 `templates/tenants/*.html`, `static/css/theme.css`, `apps/core/management/commands/seed_demo.py`. Patterns worth
 copying from `apps/tenants`: `Invoice.save()` per-tenant auto-numbering (`INV-00001`),
 `EncryptionKey.generate_secret()` / `.masked`, `OnboardingStep.seed_defaults()`, `RegisterForm.save()` (atomic)
@@ -162,8 +169,9 @@ where noted; the models below are each module's **own** domain tables.
 Aim for **1–4 models** per sub-module pass (the one `N.M` you resolved) so that sub-module's features each map to a
 real list page. Some sub-modules are already covered by the foundation (`accounts:role_list`, `accounts:user_list`,
 `core:audit_log`, all `tenants:*`) or by an earlier sub-module — keep those mappings and only build the missing
-pieces. Before coding, **verify the spine/sibling models you plan to reuse actually exist** (`grep -n "^class <Name>"
-apps/<slug>/models.py apps/core/models.py apps/accounting/models.py`); if a planned parent (e.g. an onboarding
+pieces. Before coding, **verify the spine/sibling models you plan to reuse actually exist** (`grep -rn "^class <Name>"
+apps/<slug>/models apps/core/models.py apps/accounting/models`  — note `models` is a **package** in crm/accounting,
+so the grep must be recursive); if a planned parent (e.g. an onboarding
 `AssetAllocation`, a `core.Item`) was researched but never built, make this sub-module self-contained and note the
 future migration (lessons L28/L29).
 
@@ -172,35 +180,81 @@ future migration (lessons L28/L29).
 ## Step 2 — Build the sub-module (prefer a parallel agent Workflow for speed)
 
 **Existing module vs. new module.** First check whether `apps/<slug>/` already exists:
-- **App exists (the common case — you're adding a sub-module):** you **extend** it. Append the new sub-module's
-  models to `models.py`, its views to `views.py`, its url patterns to `urls.py`, register in `admin.py`, and extend
-  the existing `seed_<slug>.py`. **Skip** the `apps.py`/`__init__.py` scaffolding and the `config/settings.py`
-  `INSTALLED_APPS` + `config/urls.py` `include(...)` wire-up — those are already done; touching them again is
-  needless churn. The only navigation change is **one new `LIVE_LINKS["N.M"]` entry** for the sub-module you built.
-  `makemigrations <slug>` produces a new incremental migration (e.g. `0002_…`), not `0001_initial`.
+- **App exists (the common case — you're adding a sub-module):** you **extend** it by **adding a new
+  `<SubModule>/` folder to each of the four packages** (`models/`, `forms/`, `views/`, `urls/`) with one
+  `<Entity>.py` per model — then **add that sub-module's re-export block to each package's `__init__.py`**
+  (and wire the new url module into `urls/__init__.py`). Register the models in `admin.py` and extend the existing
+  `seed_<slug>.py`. **Skip** the `apps.py`/`__init__.py` scaffolding and the `config/settings.py` `INSTALLED_APPS` +
+  `config/urls.py` `include(...)` wire-up — those are already done. The only navigation change is **one new
+  `LIVE_LINKS["N.M"]` entry**. `makemigrations <slug>` produces a new incremental migration (e.g. `0002_…`).
+  - If you are extending an **entity that already exists** (a new field, an extra child model), edit that entity's
+    existing `<Entity>.py` in each layer rather than creating a parallel file.
+  - **Legacy apps not yet converted:** `apps/crm` and `apps/accounting` are packaged. If you hit an app that is
+    still flat (`models.py` etc.), convert it to the package layout as part of the run — do **not** append to the
+    monolith and do **not** add a `*_advanced.py` sidecar.
 - **App does NOT exist (first run for a brand-new module):** scaffold the full app skeleton below (`apps.py`,
-  `__init__.py`, `migrations/__init__.py`, the `management/commands` tree) AND do the `config/settings.py` +
-  `config/urls.py` wire-up — then build that module's first sub-module (`N.1`).
+  `__init__.py`, `migrations/__init__.py`, the four **packages** with their `__init__.py` + `_base.py`/`_common.py`,
+  the `management/commands` tree) AND do the `config/settings.py` + `config/urls.py` wire-up — then build that
+  module's first sub-module (`N.1`).
 
 The user prefers fanning work out across agents. For one sub-module a small **2–3 agent Workflow** works well:
 keep **backend + migrations + seed** as one solo agent (single DB writer), then **templates** as 1–2 agents.
 You may also build it inline if it's quick. Produce ALL of the following **for the one sub-module** (for an existing
 app, "create" means "append to the existing file"):
 
-### 2a. Backend (`apps/<slug>/`)
-- `apps.py` (`name='apps.<slug>'`, `verbose_name`), `__init__.py` — **new-app run only** (skip if the app exists).
-- `models.py` — this sub-module's 1–4 models. Each: `tenant` FK, timestamps (mirror `apps/tenants` base or add
-  `created_at/updated_at`), `STATUS_CHOICES` class attrs where relevant, `__str__`, `class Meta: ordering`.
-  FK into the unified core **by string** (`models.ForeignKey('core.Party', ...)`, `('core.Item', ...)`). Where a
-  domain model belongs to a parent in another module, FK it by string **once that module exists**. Auto-number in
-  `save()` or the view with an existence guard. Inventory/financial effects go through `StockMove` /
-  `JournalEntry` service helpers in `transaction.atomic()`.
-- `forms.py` — ModelForms; **exclude** `tenant`, auto-`number`, and any derived/posted field (set them in the view).
-- `views.py` — function-based, `@login_required` (privileged writes `@tenant_admin_required`), tenant-scoped, full
-  CRUD + search + filters + pagination (copy the shape from `apps/tenants/views.py`). Write an `AuditLog` row on
-  meaningful changes via `apps.core.utils.log_action`.
-- `urls.py` — `app_name='<slug>'` (already set on an existing app), add names `<entity>_list/_detail/_create/_edit/_delete` for the new model(s).
-- `admin.py` — register the new model(s).
+### 2a. Backend (`apps/<slug>/`) — **models / forms / views / urls are PACKAGES, never flat .py files**
+
+**MANDATORY — Backend Package Structure.** Exactly like the template rule, the four backend layers are organized
+**one folder per sub-module, then one file per entity**. This mirrors `apps/crm` and `apps/accounting` (both fully
+converted — read them as the reference).
+
+```
+apps/<slug>/
+  models/   __init__.py (re-exports EVERY model)   _base.py  (shared imports + abstract Tenant* base)
+  forms/    __init__.py (re-exports EVERY form)    _common.py (shared imports)
+  views/    __init__.py (re-exports EVERY view)    _common.py (shared imports) [+ _helpers.py]
+  urls/     __init__.py (app_name + concatenates each entity module's urlpatterns)
+     +-- <SubModule>/          # PascalCase NavERP sub-module title, e.g. CoreData, GeneralLedger
+           __init__.py
+           <Entity>.py         # PascalCase entity, e.g. Leads.py, Invoices.py
+```
+
+The four layers **line up one-to-one**: `models/GeneralLedger/JournalEntries.py` ↔
+`forms/GeneralLedger/JournalEntries.py` ↔ `views/GeneralLedger/JournalEntries.py` ↔
+`urls/GeneralLedger/JournalEntries.py`. Folder = the NavERP.md sub-module title in PascalCase
+(`### 2.2 General Ledger (GL)` → `GeneralLedger/`). An entity file holds the primary model **plus its children**
+(`Invoices.py` = `Invoice` + `InvoiceLine`).
+
+**Non-negotiable rules:**
+1. **Every package `__init__.py` re-exports everything** it owns (`from .<SubModule>.<Entity> import (A, B)`).
+   This is what keeps `from apps.<slug>.models import X`, `views.<name>` in the URLconf, and
+   `include('apps.<slug>.urls')` working. **If you add a model/form/view and forget the re-export block, it breaks.**
+2. **Imports inside these packages MUST be ABSOLUTE** — `from apps.<slug>.models import X`. A relative
+   `from .models import X` resolves to the wrong package one level deeper and will `ImportError`/silently misbehave.
+   Entity modules pull the shared toolkit via `from apps.<slug>.models._base import *` (resp. `forms._common`,
+   `views._common`).
+3. **`urls/__init__.py`** sets `app_name = '<slug>'` and concatenates each entity module's `urlpatterns`. Django is
+   **first-match-wins**, so order is behaviour: keep literal routes before `<int:pk>` ones, and check any new greedy
+   `<str:token>` route against the whole list.
+4. **Shared private helpers** used by MORE THAN ONE sub-module go in `views/_helpers.py` (see
+   `apps/accounting/views/_helpers.py`). Helpers used by one entity stay in that entity's module.
+5. **NEVER create `models_advanced.py` / `views_advanced.py` / a second flat file for "advanced" features** — a later
+   sub-module's models just get their own `<SubModule>/<Entity>.py`. (Accounting's `*_advanced.py` files were folded
+   away for exactly this reason.)
+
+**What each layer contains** (unchanged rules, new locations):
+- `models/<SubModule>/<Entity>.py` — this sub-module's 1–4 models. Each: `tenant` FK, timestamps, `STATUS_CHOICES`
+  class attrs where relevant, `__str__`, `class Meta: ordering`. FK into the unified core **by string**
+  (`models.ForeignKey('core.Party', ...)`). Auto-number in `save()` with an existence guard. Inventory/financial
+  effects go through `StockMove` / `JournalEntry` service helpers in `transaction.atomic()`. Models sit deeper than
+  the app root, but Django still derives `app_label` from the app config — **migrations are unaffected**.
+- `forms/<SubModule>/<Entity>.py` — ModelForms; **exclude** `tenant`, auto-`number`, and any derived/posted field.
+- `views/<SubModule>/<Entity>.py` — function-based, `@login_required` (privileged writes `@tenant_admin_required`),
+  tenant-scoped, full CRUD + search + filters + pagination. Write an `AuditLog` row via `apps.core.utils.log_action`.
+- `urls/<SubModule>/<Entity>.py` — `urlpatterns = [...]` with names
+  `<entity>_list/_detail/_create/_edit/_delete`; imports views absolutely (`from apps.<slug> import views`).
+- `admin.py` — stays a flat file; register the new model(s) (`from .models import ...` still works via the re-export).
+- `apps.py` / `__init__.py` — **new-app run only** (skip if the app exists).
 - `migrations/` — `makemigrations <slug>` yields `0001_initial.py` for a new app, or the next incremental migration (`000N_…`) for an existing one. (`migrations/__init__.py` exists already on an existing app.)
 - `management/commands/seed_<slug>.py` — for a new app create the `management/__init__.py` + `management/commands/__init__.py` tree + the command; for an existing app **extend the existing `seed_<slug>.py`** with this sub-module's demo rows (idempotent per-tenant guard; reuse existing Party/EmployeeProfile/Item rows rather than inventing duplicates).
 
@@ -264,8 +318,10 @@ Credentials: tenant admins `admin_acme` / `admin_globex`, password `password` (p
 ## Step 4 — Document + commit snippet
 1. Update `README.md` (mark **this sub-module** complete in the roadmap; ensure `seed_<slug>` is in the seeding section).
 2. Update `.claude/tasks/todo.md` with a short review of the sub-module just built.
-3. Output the **one-file-per-commit** PowerShell snippet for every created/changed file
-   (`git add 'apps/<slug>/models.py'; git commit -m 'feat(<slug>): N.M models (...)'` etc.), plus the edits to
+3. Output the **one-file-per-commit** PowerShell snippet for every created/changed file — with the package layout
+   this is one commit per entity module per layer, e.g.
+   `git add 'apps/<slug>/models/<SubModule>/<Entity>.py'; git commit -m 'feat(<slug>): N.M <Entity> models (...)'`
+   then the same for `forms/`, `views/`, `urls/`, **and the touched `__init__.py` re-export blocks** — plus the edits to
    `apps/core/navigation.py` (the new `LIVE_LINKS["N.M"]` entry) and `README.md` — and, **on a brand-new-app run
    only**, `config/settings.py` + `config/urls.py`. One `git add` + one `git commit` per file — never bundle.
    Commit to `main`; do NOT `git push`.
@@ -289,7 +345,10 @@ ONE. Keep going **sub-module by sub-module** within a module; only roll over to 
 once every sub-module of the current one is wired (Step 1 rollover rule).
 
 ## Quality bar
-A delivered sub-module must: migrate cleanly to `nav_erp` (incremental migration on an existing app); seed
+A delivered sub-module must: live in the **backend package layout** (§2a — a `<SubModule>/` folder with one
+`<Entity>.py` per model in each of `models/ forms/ views/ urls/`, **plus the re-export block added to every
+touched `__init__.py`**, absolute imports throughout, and **no flat `models.py`/`*_advanced.py`**);
+migrate cleanly to `nav_erp` (incremental migration on an existing app); seed
 idempotently; pass `manage.py check`; have every new list page rendering 200 with working search/filters/pagination
 + Actions; appear as **Live** in the sidebar via its new `LIVE_LINKS["N.M"]` entry; reuse the unified core and
 existing sibling models instead of duplicating Party/EmployeeProfile/Item/ledgers; match the blue/white Tailwind
