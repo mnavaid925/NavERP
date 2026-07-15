@@ -128,3 +128,37 @@ class TestSeedHRM:
         self._run_seeder(flush=True)
         count2 = WorkforcePlanLine.objects.filter(tenant=tenant_a).count()
         assert count1 == count2 and count1 >= 1
+
+    def test_seeder_creates_engagement_data(self, tenant_a):
+        """3.41 — _seed_engagement lays down action plans, a wellbeing catalog, participations + FWAs."""
+        from apps.hrm.models import (FlexibleWorkArrangement, SurveyActionPlan,
+                                     WellbeingParticipation, WellbeingProgram)
+        self._run_seeder()
+        assert SurveyActionPlan.objects.filter(tenant=tenant_a).count() >= 1
+        assert WellbeingProgram.objects.filter(tenant=tenant_a).count() >= 1
+        assert WellbeingParticipation.objects.filter(tenant=tenant_a).exists()
+        assert FlexibleWorkArrangement.objects.filter(tenant=tenant_a).exists()
+
+    def test_seeder_forces_eap_program_confidential(self, tenant_a):
+        """The seeded EAP program is created is_confidential=False — the model's save() must force True."""
+        from apps.hrm.models import WellbeingProgram
+        self._run_seeder()
+        eap = WellbeingProgram.objects.filter(tenant=tenant_a, program_type="eap_counseling").first()
+        assert eap is not None and eap.is_confidential is True
+
+    def test_seeder_flush_recreates_engagement_data(self, tenant_a):
+        """--flush validates the 3.41 teardown ordering (SurveyActionPlan.owner + participation.employee
+        are PROTECT against EmployeeProfile) — no ProtectedError, stable count."""
+        from apps.hrm.models import WellbeingProgram
+        self._run_seeder()
+        count1 = WellbeingProgram.objects.filter(tenant=tenant_a).count()
+        self._run_seeder(flush=True)
+        count2 = WellbeingProgram.objects.filter(tenant=tenant_a).count()
+        assert count1 == count2 and count1 >= 1
+
+    def test_seeder_does_not_disturb_3_27_surveys(self, tenant_a):
+        """_seed_engagement adds its OWN closed survey — 3.27's Q3 pulse + draft culture survey stay."""
+        from apps.hrm.models import Survey
+        self._run_seeder()
+        assert Survey.objects.filter(tenant=tenant_a, title="Q3 Employee Engagement Pulse").exists()
+        assert Survey.objects.filter(tenant=tenant_a, title="H1 Engagement Pulse (closed)").exists()
