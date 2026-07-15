@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36/3.37/3.38/3.39/3.40
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36/3.37/3.38/3.39/3.40/3.41
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -653,9 +653,20 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   and **workforce analytics** (headcount + skill-coverage + hiring-mix). **CONFIDENTIAL:** every plan/scenario/report
   view is `@tenant_admin_required` (restructuring/reduction headcount); only the skills inventory is employee-facing.
   `LIVE_LINKS["3.40"]` lights **all 6** bullets.
+- **3.41 Employee Engagement & Wellbeing** — an **extension** pass that reuses 3.27's `Survey`/`SurveyResponse`
+  (pulse/eNPS delivery) and `Announcement` (values content) rather than rebuilding them. **4 new models** (migration
+  `0060`): `SurveyActionPlan` (`ACTP-`; the "close the loop" gap — turns a closed survey's low scores into an owned,
+  dated initiative, editable by the owner-or-admin), `WellbeingProgram` (`WBP-`; **one** `program_type`-discriminated
+  catalog spanning wellness challenges, EAP/counseling, culture assessments, team events, interest groups and
+  volunteering), `WellbeingParticipation` (the RSVP/attendance child — a non-admin can register or withdraw only, never
+  self-award points), and `FlexibleWorkArrangement` (`FWA-`; a remote/hybrid/compressed-week request, a `TravelRequest`
+  clone reusing the shared approval workflow). **CONFIDENTIAL:** EAP programs are **forced** confidential at the model
+  layer, and a confidential program's roster is **aggregate-only for everyone — admins included** (even the audit trail
+  is scrubbed of participant identity). `LIVE_LINKS["3.41"]` lights **all 6** bullets — the four wellbeing bullets are
+  `program_type`-filtered slices of the one catalog.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,445-test** HRM suite
-(**9,093 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,489-test** HRM suite
+(**9,137 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
