@@ -3265,3 +3265,110 @@ class EmployeeSkillForm(TenantModelForm):
             if dupe.exists():
                 self.add_error("skill_name", "This skill is already on the employee's profile.")
         return cleaned
+
+
+from .models import (  # noqa: E402  — 3.41 Employee Engagement & Wellbeing
+    FlexibleWorkArrangement, SurveyActionPlan, WellbeingParticipation, WellbeingProgram)
+from .models import Survey as _Survey  # noqa: E402
+
+
+class SurveyActionPlanForm(TenantModelForm):
+    # tenant/number/completed_at are set/managed server-side.
+    class Meta:
+        model = SurveyActionPlan
+        fields = ["survey", "title", "focus_area", "owner", "department", "description",
+                  "related_objective", "target_date", "status"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 4})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            # NOTE: survey is NOT filtered to status="closed" — an already-linked plan whose survey later
+            # reopens must still render its selected option. The help_text conveys the intent instead.
+            if "survey" in self.fields:
+                self.fields["survey"].queryset = (
+                    _Survey.objects.filter(tenant=self.tenant).order_by("-created_at"))
+            if "owner" in self.fields:
+                self.fields["owner"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
+                    .order_by("party__name"))
+            if "department" in self.fields:
+                self.fields["department"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+            if "related_objective" in self.fields:
+                self.fields["related_objective"].queryset = (
+                    Objective.objects.filter(tenant=self.tenant).order_by("title"))
+
+
+class WellbeingProgramForm(TenantModelForm):
+    class Meta:
+        model = WellbeingProgram
+        fields = ["title", "description", "program_type", "owner", "target_department", "start_date",
+                  "end_date", "points_value", "external_resource_url", "is_confidential", "status"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 3})}
+        help_texts = {
+            "program_type": "EAP / Counseling is always treated as confidential, regardless of the box below.",
+            "is_confidential": "Hides the per-employee roster (aggregate stats only). Forced on for EAP.",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "owner" in self.fields:
+                self.fields["owner"].queryset = (
+                    get_user_model().objects.filter(tenant=self.tenant, is_active=True).order_by("username"))
+            if "target_department" in self.fields:
+                self.fields["target_department"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_date"), cleaned.get("end_date")
+        if start and end and end < start:
+            self.add_error("end_date", "End date cannot be before the start date.")
+        return cleaned
+
+
+class WellbeingParticipationForm(TenantModelForm):
+    """RSVP / attendance / points row. ``can_admin`` drops the privileged fields for a plain employee
+    (mirrors HRDashboardForm(can_share=...)): a non-admin may register or withdraw only, and never
+    self-award points or self-mark attended/completed."""
+
+    # tenant/program/employee are all view-resolved (the (tenant, program, employee) unique_together is
+    # therefore guarded by an explicit query in the view, not here — Django can't validate_unique it).
+    class Meta:
+        model = WellbeingParticipation
+        fields = ["status", "points_earned", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, can_admin=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not can_admin:
+            # A plain employee can only RSVP or withdraw — never self-mark attendance or award points.
+            self.fields.pop("points_earned", None)
+            self.fields["status"].choices = [("registered", "Registered"), ("withdrawn", "Withdrawn")]
+
+
+class FlexibleWorkArrangementForm(TenantModelForm):
+    # status/approver/approved_at/decision_note are workflow-set; employee is resolved by _ss_child_create.
+    class Meta:
+        model = FlexibleWorkArrangement
+        fields = ["arrangement_type", "start_date", "end_date", "days_per_week_remote", "reason"]
+        widgets = {"reason": forms.Textarea(attrs={"rows": 3})}
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_date"), cleaned.get("end_date")
+        if start and end and end < start:
+            self.add_error("end_date", "End date cannot be before the start date.")
+        atype = cleaned.get("arrangement_type")
+        days = cleaned.get("days_per_week_remote")
+        if atype in ("remote", "hybrid"):
+            if days is None:
+                self.add_error("days_per_week_remote", "Required for a remote or hybrid arrangement.")
+            elif not (1 <= days <= 5):
+                self.add_error("days_per_week_remote", "Enter a value between 1 and 5.")
+        elif days is not None:
+            self.add_error("days_per_week_remote",
+                           "Only applies to a remote or hybrid arrangement — leave it blank.")
+        return cleaned
