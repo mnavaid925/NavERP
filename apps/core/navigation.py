@@ -682,6 +682,18 @@ LIVE_LINKS = {
         "Statutory Registers": "hrm:complianceregister_list",
         "Policy Acknowledgments": "hrm:policyacknowledgment_list",           # extra
     },
+    # 3.40 Workforce Planning — the demand side is the WorkforcePlan (+ its per-department lines), the
+    # supply side is the EmployeeSkill inventory, and Gap/Analytics are derived views over both. Budget
+    # Planning deep-links to the approved plans (that's the slice whose budget_impact is committed);
+    # most-specific match wins, so it highlights on its own filtered page.
+    "3.40": {
+        "Demand Forecasting": "hrm:workforceplan_list",
+        "Supply Analysis": "hrm:employeeskill_list",
+        "Gap Analysis": "hrm:workforce_gap_analysis",
+        "Budget Planning": "hrm:workforceplan_list?status=approved",
+        "Scenario Planning": "hrm:workforcescenario_list",
+        "Workforce Analytics": "hrm:workforce_analytics",
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
