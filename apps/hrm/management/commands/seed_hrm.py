@@ -175,6 +175,12 @@ from apps.hrm.models import (  # 3.39 Compliance & Legal
     HRPolicy,
     PolicyAcknowledgment,
 )
+from apps.hrm.models import (  # 3.40 Workforce Planning
+    EmployeeSkill,
+    WorkforcePlan,
+    WorkforcePlanLine,
+    WorkforceScenario,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -312,6 +318,7 @@ class Command(BaseCommand):
             self._seed_compensation(tenant, flush=options["flush"])
             self._seed_talent(tenant, flush=options["flush"])
             self._seed_compliance(tenant, flush=options["flush"])
+            self._seed_workforce(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -360,6 +367,12 @@ class Command(BaseCommand):
                           # listed for an explicit, tidy teardown alongside the rest.
                           PolicyAcknowledgment, Grievance, HRPolicy, EmploymentContract,
                           ComplianceRegister,
+                          # 3.40: nothing here PROTECTs a master the flush wipes — WorkforceScenario/
+                          # WorkforcePlanLine CASCADE off WorkforcePlan, EmployeeSkill CASCADEs off
+                          # EmployeeProfile, and org_unit/designation/owner/currency are all SET_NULL.
+                          # So this block is order-agnostic; listed child-before-parent for a tidy
+                          # explicit teardown (and so a future PROTECT can't silently break --flush).
+                          WorkforceScenario, WorkforcePlanLine, WorkforcePlan, EmployeeSkill,
                           Suggestion, SurveyResponse, Survey, Announcement,
                           AssetRequest, IdCardRequest, DocumentRequest,
                           # 3.25: EmployeeInfoChangeRequest (SET_NULL content_type/requested_by/
@@ -3613,3 +3626,97 @@ class Command(BaseCommand):
             f"{PolicyAcknowledgment.objects.filter(tenant=tenant).count()} acknowledgments, "
             f"{Grievance.objects.filter(tenant=tenant).count()} grievances, "
             f"{ComplianceRegister.objects.filter(tenant=tenant).count()} register records."))
+
+    def _seed_workforce(self, tenant, *, flush):
+        """3.40 Workforce Planning - an annual plan with a line per department (a growth line, a backfill
+        and a reduction), three what-if scenarios (baseline / freeze / restructuring) and a skills
+        inventory across the employees. Runs after 3.39. Idempotent. ASCII-only."""
+        from apps.hrm.models import (EmployeeProfile, EmployeeSkill, WorkforcePlan, WorkforcePlanLine,
+                                     WorkforceScenario)
+        from apps.core.models import OrgUnit
+        from apps.accounting.models import Currency   # lazy - global master, no tenant FK
+
+        if flush:
+            WorkforceScenario.objects.filter(tenant=tenant).delete()
+            WorkforcePlanLine.objects.filter(tenant=tenant).delete()
+            WorkforcePlan.objects.filter(tenant=tenant).delete()
+            EmployeeSkill.objects.filter(tenant=tenant).delete()
+        if WorkforcePlan.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Workforce planning data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:6])
+        if not emps:
+            return
+        today = timezone.localdate()
+        day = datetime.timedelta(days=1)
+        # Prefer real departments; fall back to any org unit (cost centres) so the demo still gets
+        # lines when this runs before the core department seeder — mirrors the fallback at line ~417.
+        depts = list(OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("id")[:3])
+        if not depts:
+            depts = list(OrgUnit.objects.filter(tenant=tenant).order_by("id")[:3])
+        currency = Currency.objects.filter(code="USD").first()
+
+        # The plan is ACTIVE so it shows up in Gap Analysis + Analytics (both read active/approved only).
+        plan, created = WorkforcePlan.objects.get_or_create(
+            tenant=tenant, name="FY Annual Headcount Plan",
+            defaults={"plan_type": "annual", "period_start": today - 30 * day,
+                      "period_end": today + 335 * day, "growth_assumption_percent": Decimal("12.50"),
+                      "owner": emps[0], "currency": currency, "status": "active",
+                      "notes": "Baseline annual plan driven by a 12.5% growth assumption."})
+
+        if created and depts:
+            # A growth line, an attrition backfill, and a reduction — so the hiring-mix chart has spread
+            # and Gap Analysis shows both a positive and a negative department gap.
+            specs = [
+                ("new_growth", 12, 18, Decimal("85000.00")),
+                ("attrition_backfill", 8, 8, Decimal("64000.00")),
+                ("reduction", 10, 7, Decimal("72000.00")),
+            ]
+            for i, (hiring_type, current, planned, cost) in enumerate(specs):
+                WorkforcePlanLine.objects.get_or_create(
+                    tenant=tenant, plan=plan, org_unit=depts[i % len(depts)], designation=None,
+                    defaults={"current_headcount": current, "planned_headcount": planned,
+                              "hiring_type": hiring_type, "avg_annual_cost": cost})
+
+            # Scenarios: a baseline (zero delta), a hiring freeze, and a restructuring. Deltas are SIGNED.
+            WorkforceScenario.objects.get_or_create(
+                tenant=tenant, plan=plan, name="Baseline",
+                defaults={"scenario_type": "growth", "headcount_delta": 0, "cost_delta": Decimal("0"),
+                          "is_baseline": True, "is_selected": True, "status": "approved",
+                          "description": "The plan as approved, with no what-if applied."})
+            WorkforceScenario.objects.get_or_create(
+                tenant=tenant, plan=plan, name="Hiring Freeze (H2)",
+                defaults={"scenario_type": "freeze", "headcount_delta": -6,
+                          "cost_delta": Decimal("-510000.00"), "status": "under_review",
+                          "affected_org_unit": depts[0],
+                          "description": "Freeze all open growth roles from H2 onward."})
+            WorkforceScenario.objects.get_or_create(
+                tenant=tenant, plan=plan, name="Support Restructuring",
+                defaults={"scenario_type": "restructuring", "headcount_delta": -3,
+                          "cost_delta": Decimal("-216000.00"), "status": "draft",
+                          "affected_org_unit": depts[-1],
+                          "description": "Consolidate two support tiers into one."})
+
+        # The skills inventory — the SUPPLY side. Two employees carry a critical skill.
+        skill_specs = [
+            ("Python", "technical", "expert", 8, True, True, "PCEP"),
+            ("Django", "technical", "advanced", 5, False, True, ""),
+            ("SQL", "technical", "advanced", 6, False, False, ""),
+            ("Project Management", "functional", "intermediate", 4, True, False, "PMP"),
+            ("Team Leadership", "leadership", "advanced", 7, False, False, ""),
+            ("Stakeholder Communication", "soft_skill", "intermediate", 3, False, False, ""),
+        ]
+        for i, (name, cat, prof, yrs, certified, critical, cert_name) in enumerate(skill_specs):
+            EmployeeSkill.objects.get_or_create(
+                tenant=tenant, employee=emps[i % len(emps)], skill_name=name,
+                defaults={"skill_category": cat, "proficiency_level": prof, "years_experience": yrs,
+                          "is_certified": certified, "certification_name": cert_name,
+                          "is_critical_skill": critical, "last_assessed_date": today - 60 * day})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Workforce planning seeded for '{tenant.name}': "
+            f"{WorkforcePlan.objects.filter(tenant=tenant).count()} plans, "
+            f"{WorkforcePlanLine.objects.filter(tenant=tenant).count()} lines, "
+            f"{WorkforceScenario.objects.filter(tenant=tenant).count()} scenarios, "
+            f"{EmployeeSkill.objects.filter(tenant=tenant).count()} skills."))
