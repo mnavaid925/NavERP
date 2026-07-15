@@ -108,3 +108,23 @@ class TestSeedHRM:
         from apps.hrm.models import EmployeeProfile
         self._run_seeder()
         assert EmployeeProfile.objects.filter(tenant=tenant_a, number="EMP-00001").exists()
+
+    def test_seeder_creates_workforce_planning_data(self, tenant_a):
+        """3.40 — _seed_workforce lays down a plan (with lines), scenarios and a skills inventory."""
+        from apps.hrm.models import (EmployeeSkill, WorkforcePlan, WorkforcePlanLine,
+                                     WorkforceScenario)
+        self._run_seeder()
+        assert WorkforcePlan.objects.filter(tenant=tenant_a).exists()
+        assert WorkforcePlanLine.objects.filter(tenant=tenant_a).count() >= 1
+        assert WorkforceScenario.objects.filter(tenant=tenant_a, is_baseline=True).exists()
+        assert EmployeeSkill.objects.filter(tenant=tenant_a, is_critical_skill=True).exists()
+
+    def test_seeder_flush_recreates_workforce_data(self, tenant_a):
+        """--flush must tear the 3.40 rows down (nothing PROTECTs a flushed master) and rebuild them
+        with a stable count — a regression guard for the _seed_tenant teardown ordering."""
+        from apps.hrm.models import WorkforcePlanLine
+        self._run_seeder()
+        count1 = WorkforcePlanLine.objects.filter(tenant=tenant_a).count()
+        self._run_seeder(flush=True)
+        count2 = WorkforcePlanLine.objects.filter(tenant=tenant_a).count()
+        assert count1 == count2 and count1 >= 1
