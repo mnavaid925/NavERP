@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Workforce Gap Analysis{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Gap Analysis</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Workforce Planning</span><span class="sep">›</span><span>Gap Analysis</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:workforceplan_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Plans</a>
+      <a href="{% url 'hrm:workforce_analytics' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Analytics</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:220px;">
+        <select name="plan" class="form-select" aria-label="Plan">
+          <option value="">All active &amp; approved plans</option>
+          {% for p in plans %}<option value="{{ p.pk }}" {% if request.GET.plan == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+      <a href="{% url 'hrm:workforce_gap_analysis' %}" class="btn btn-outline">Reset</a>
+    </form>
+    <p class="form-help">Only <strong>active</strong> and <strong>approved</strong> plans are counted — draft and archived plans are excluded.</p>
+  </div></div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="users"></i></div><div class="stat-value">{{ total_current }}</div><div class="stat-label">Current Headcount</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user-plus"></i></div><div class="stat-value">{{ total_planned }}</div><div class="stat-label">Planned Headcount</div></div>
+    <div class="stat-card">
+      <div class="stat-icon {% if total_gap < 0 %}orange{% else %}green{% endif %}"><i data-lucide="git-compare"></i></div>
+      <div class="stat-value">{% if total_gap > 0 %}+{% endif %}{{ total_gap }}</div>
+      <div class="stat-label">Net Gap ({% if total_gap > 0 %}hiring need{% elif total_gap < 0 %}net reduction{% else %}flat{% endif %})</div>
+    </div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="building-2"></i></div><div class="stat-value">{{ departments|length }}</div><div class="stat-label">Departments Planned</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Current vs Planned, by Department</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Department</th><th class="text-right">Current</th><th class="text-right">Planned</th><th class="text-right">Gap</th><th>Direction</th></tr></thead>
+        <tbody>
+          {% for d in departments %}
+            <tr>
+              <td class="fw-600">{{ d.name }}</td>
+              <td class="text-right">{{ d.current }}</td>
+              <td class="text-right">{{ d.planned }}</td>
+              <td class="text-right">
+                {% if d.gap > 0 %}<span class="badge badge-green">+{{ d.gap }}</span>
+                {% elif d.gap < 0 %}<span class="badge badge-red">{{ d.gap }}</span>
+                {% else %}<span class="badge badge-muted">0</span>{% endif %}
+              </td>
+              <td>{% if d.gap > 0 %}Hire{% elif d.gap < 0 %}Reduce{% else %}Hold{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="git-compare"></i><h3>Nothing to compare</h3><p>Gap analysis reads the lines of your <a href="{% url 'hrm:workforceplan_list' %}">active and approved plans</a>. Add plan lines to see the per-department gap.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if departments %}
+        <tfoot>
+          <tr>
+            <th>Total</th>
+            <th class="text-right">{{ total_current }}</th>
+            <th class="text-right">{{ total_planned }}</th>
+            <th class="text-right">{% if total_gap > 0 %}+{% endif %}{{ total_gap }}</th>
+            <th></th>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+{% endblock %}
