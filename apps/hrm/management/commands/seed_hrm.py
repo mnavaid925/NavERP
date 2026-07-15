@@ -3816,7 +3816,7 @@ class Command(BaseCommand):
         # A few participations across active, non-confidential programs (mixed status/points).
         part_specs = [
             ("wellness_challenge", 0, "completed", 100),
-            ("wellness_challenge", 1, "attended", 60),
+            ("wellness_challenge", 1 % len(emps), "attended", 60),
             ("team_event", 2 % len(emps), "registered", None),
             ("volunteering", 3 % len(emps), "registered", None),
         ]
