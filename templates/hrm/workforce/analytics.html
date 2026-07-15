@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Workforce Analytics{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Workforce Analytics</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Workforce Planning</span><span class="sep">›</span><span>Analytics</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:workforceplan_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Plans</a>
+      <a href="{% url 'hrm:workforce_gap_analysis' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Gap Analysis</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="users"></i></div><div class="stat-value">{{ headcount }}</div><div class="stat-label">Employees</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ active_plan_count }}</div><div class="stat-label">Active &amp; Approved Plans ({{ plan_count }} total)</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="sparkles"></i></div><div class="stat-value">{{ skill_count }}</div><div class="stat-label">Skills Recorded</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="user-check"></i></div><div class="stat-value">{{ skill_coverage_percent }}%</div><div class="stat-label">Skill Coverage ({{ employees_with_skills }} of {{ headcount }} employees)</div></div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ critical_skill_count }}</div><div class="stat-label">Critical Skills Flagged</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="award"></i></div><div class="stat-value">{{ certified_skill_count }}</div><div class="stat-label">Certified Skills</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Hiring Mix (active &amp; approved plan lines)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Hiring Type</th><th class="text-right">Plan Lines</th></tr></thead>
+        <tbody>
+          {% for row in hiring_mix %}
+            <tr>
+              <td>{% if row.hiring_type == 'reduction' %}<span class="badge badge-red">Reduction</span>{% elif row.hiring_type == 'new_growth' %}<span class="badge badge-green">New Growth</span>{% else %}<span class="badge badge-muted">{{ row.label }}</span>{% endif %}</td>
+              <td class="text-right">{{ row.n }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2"><div class="empty-state"><i data-lucide="pie-chart"></i><h3>No plan lines</h3><p>Add lines to an active or approved plan to see how the headcount demand splits across growth, replacement, backfill and reduction.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Top Skills</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Skill</th><th class="text-right">Employees</th></tr></thead>
+        <tbody>
+          {% for row in top_skills %}
+            <tr><td class="fw-600">{{ row.skill_name }}</td><td class="text-right">{{ row.n }}</td></tr>
+          {% empty %}
+            <tr><td colspan="2"><div class="empty-state"><i data-lucide="sparkles"></i><h3>No skills recorded</h3><p>The <a href="{% url 'hrm:employeeskill_list' %}">skills inventory</a> is the supply side of workforce planning.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Skills by Category</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th class="text-right">Skills</th></tr></thead>
+        <tbody>
+          {% for row in by_category %}
+            <tr><td>{{ row.label }}</td><td class="text-right">{{ row.n }}</td></tr>
+          {% empty %}
+            <tr><td colspan="2"><div class="empty-state"><i data-lucide="layers"></i><h3>No skills recorded</h3><p>Add skills to see how the workforce's capabilities break down by category.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
