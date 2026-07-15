@@ -1176,4 +1176,34 @@ urlpatterns = [
     path("workforce/skills/<int:pk>/", views.employeeskill_detail, name="employeeskill_detail"),
     path("workforce/skills/<int:pk>/edit/", views.employeeskill_edit, name="employeeskill_edit"),
     path("workforce/skills/<int:pk>/delete/", views.employeeskill_delete, name="employeeskill_delete"),
+
+    # ---- 3.41 Employee Engagement & Wellbeing ----------------------------------------------------
+    # Literal routes before <int:pk> ones (first-match-wins).
+    path("engagement/action-plans/", views.surveyactionplan_list, name="surveyactionplan_list"),
+    path("engagement/action-plans/add/", views.surveyactionplan_create, name="surveyactionplan_create"),
+    path("engagement/action-plans/<int:pk>/", views.surveyactionplan_detail, name="surveyactionplan_detail"),
+    path("engagement/action-plans/<int:pk>/edit/", views.surveyactionplan_edit, name="surveyactionplan_edit"),
+    path("engagement/action-plans/<int:pk>/delete/", views.surveyactionplan_delete, name="surveyactionplan_delete"),
+
+    path("engagement/wellbeing/programs/", views.wellbeingprogram_list, name="wellbeingprogram_list"),
+    path("engagement/wellbeing/programs/add/", views.wellbeingprogram_create, name="wellbeingprogram_create"),
+    path("engagement/wellbeing/programs/<int:pk>/", views.wellbeingprogram_detail, name="wellbeingprogram_detail"),
+    path("engagement/wellbeing/programs/<int:pk>/edit/", views.wellbeingprogram_edit, name="wellbeingprogram_edit"),
+    path("engagement/wellbeing/programs/<int:pk>/delete/", views.wellbeingprogram_delete, name="wellbeingprogram_delete"),
+    path("engagement/wellbeing/programs/<int:program_pk>/participations/add/",
+         views.wellbeingparticipation_add, name="wellbeingparticipation_add"),
+    path("engagement/wellbeing/programs/<int:program_pk>/participations/<int:pk>/edit/",
+         views.wellbeingparticipation_edit, name="wellbeingparticipation_edit"),
+    path("engagement/wellbeing/programs/<int:program_pk>/participations/<int:pk>/delete/",
+         views.wellbeingparticipation_delete, name="wellbeingparticipation_delete"),
+
+    path("engagement/flexible-work/", views.flexibleworkarrangement_list, name="flexibleworkarrangement_list"),
+    path("engagement/flexible-work/add/", views.flexibleworkarrangement_create, name="flexibleworkarrangement_create"),
+    path("engagement/flexible-work/<int:pk>/", views.flexibleworkarrangement_detail, name="flexibleworkarrangement_detail"),
+    path("engagement/flexible-work/<int:pk>/edit/", views.flexibleworkarrangement_edit, name="flexibleworkarrangement_edit"),
+    path("engagement/flexible-work/<int:pk>/delete/", views.flexibleworkarrangement_delete, name="flexibleworkarrangement_delete"),
+    path("engagement/flexible-work/<int:pk>/submit/", views.flexibleworkarrangement_submit, name="flexibleworkarrangement_submit"),
+    path("engagement/flexible-work/<int:pk>/cancel/", views.flexibleworkarrangement_cancel, name="flexibleworkarrangement_cancel"),
+    path("engagement/flexible-work/<int:pk>/approve/", views.flexibleworkarrangement_approve, name="flexibleworkarrangement_approve"),
+    path("engagement/flexible-work/<int:pk>/reject/", views.flexibleworkarrangement_reject, name="flexibleworkarrangement_reject"),
 ]
