@@ -1150,4 +1150,30 @@ urlpatterns = [
     path("compliance/registers/<int:pk>/", views.complianceregister_detail, name="complianceregister_detail"),
     path("compliance/registers/<int:pk>/edit/", views.complianceregister_edit, name="complianceregister_edit"),
     path("compliance/registers/<int:pk>/delete/", views.complianceregister_delete, name="complianceregister_delete"),
+
+    # ---- 3.40 Workforce Planning -----------------------------------------------------------------
+    # Literal routes before the <int:pk> ones (first-match-wins).
+    path("workforce/gap-analysis/", views.workforce_gap_analysis, name="workforce_gap_analysis"),
+    path("workforce/analytics/", views.workforce_analytics, name="workforce_analytics"),
+
+    path("workforce/plans/", views.workforceplan_list, name="workforceplan_list"),
+    path("workforce/plans/add/", views.workforceplan_create, name="workforceplan_create"),
+    path("workforce/plans/<int:pk>/", views.workforceplan_detail, name="workforceplan_detail"),
+    path("workforce/plans/<int:pk>/edit/", views.workforceplan_edit, name="workforceplan_edit"),
+    path("workforce/plans/<int:pk>/delete/", views.workforceplan_delete, name="workforceplan_delete"),
+    path("workforce/plans/<int:plan_pk>/lines/add/", views.workforceplanline_add, name="workforceplanline_add"),
+    path("workforce/plan-lines/<int:pk>/edit/", views.workforceplanline_edit, name="workforceplanline_edit"),
+    path("workforce/plan-lines/<int:pk>/delete/", views.workforceplanline_delete, name="workforceplanline_delete"),
+
+    path("workforce/scenarios/", views.workforcescenario_list, name="workforcescenario_list"),
+    path("workforce/scenarios/add/", views.workforcescenario_create, name="workforcescenario_create"),
+    path("workforce/scenarios/<int:pk>/", views.workforcescenario_detail, name="workforcescenario_detail"),
+    path("workforce/scenarios/<int:pk>/edit/", views.workforcescenario_edit, name="workforcescenario_edit"),
+    path("workforce/scenarios/<int:pk>/delete/", views.workforcescenario_delete, name="workforcescenario_delete"),
+
+    path("workforce/skills/", views.employeeskill_list, name="employeeskill_list"),
+    path("workforce/skills/add/", views.employeeskill_create, name="employeeskill_create"),
+    path("workforce/skills/<int:pk>/", views.employeeskill_detail, name="employeeskill_detail"),
+    path("workforce/skills/<int:pk>/edit/", views.employeeskill_edit, name="employeeskill_edit"),
+    path("workforce/skills/<int:pk>/delete/", views.employeeskill_delete, name="employeeskill_delete"),
 ]
