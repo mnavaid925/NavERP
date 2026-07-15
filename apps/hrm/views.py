@@ -16222,8 +16222,11 @@ def wellbeingparticipation_add(request, program_pk):
 
 @login_required
 def wellbeingparticipation_edit(request, program_pk, pk):
-    obj = get_object_or_404(WellbeingParticipation.objects.select_related("program"),
-                            pk=pk, program_id=program_pk, tenant=request.tenant)
+    # select_related program (for the is_confidential check) AND employee__party (str(obj) -> the audit
+    # log dereferences employee.party.name; without it that's 2 extra queries per edit).
+    obj = get_object_or_404(
+        WellbeingParticipation.objects.select_related("program", "employee__party"),
+        pk=pk, program_id=program_pk, tenant=request.tenant)
     if not _can_manage_own_child(request, obj):
         messages.error(request, "You can only manage your own participation.")
         return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
