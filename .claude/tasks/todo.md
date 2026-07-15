@@ -9420,3 +9420,449 @@ covers only the remaining layers — do not re-model.
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 3 — HRM — Sub-module 3.40 Workforce Planning (hrm) — plan from research-workforce-planning.md (2026-07-15)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.39) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** `apps/hrm` is still the flat `models.py`/`forms.py`/`views.py`/
+`urls.py` shape (not yet converted to the `crm`/`accounting` package layout) — new code is appended under a
+`# --- 3.40 Workforce Planning ---` banner in each file. Next migration is `0058`. All 6 NavERP.md bullets
+(`NavERP.md:713-719`) go live: Demand Forecasting, Supply Analysis, Gap Analysis, Budget Planning, Scenario
+Planning, Workforce Analytics.
+
+**Access model:** `WorkforcePlan`/`WorkforcePlanLine`/`WorkforceScenario` CRUD + the two derived report views
+are ALL `@tenant_admin_required` (restructuring/reduction headcount plans are among the most sensitive data
+in the system — no employee self-view tier this pass). `EmployeeSkill` is own-vs-admin self-service, reusing
+the EXISTING `_ss_scope`/`_can_manage_own_child`/`_current_employee_profile`/`_is_admin`/`_ss_employees`
+helpers already in `apps/hrm/views.py` (built for 3.25/3.26) — do not reimplement them.
+
+**Reuse callouts (don't re-derive):**
+- `EmployeeSkill.proficiency_level` REUSES the existing `SKILL_PROFICIENCY_CHOICES` constant
+  (`apps/hrm/models.py:2418`, already `beginner/intermediate/advanced/expert` for `CandidateSkill.proficiency`)
+  — do NOT define a second identical constant.
+- `WorkforcePlanLine.org_unit` mirrors `JobRequisition.department`'s `limit_choices_to={"kind": "department"}`
+  shape (`apps/hrm/models.py:2216-2218`) but is REQUIRED (not nullable) — a plan line always targets one dept.
+- `WorkforcePlanLine.avg_annual_cost` is pre-fillable (view-level `initial=`, not JS) from
+  `designation.mid_salary` (`apps/hrm/models.py:145`) when a designation is selected.
+- Admin-gated CRUD reuses the shared `apps/core/crud.py` helpers (`crud_list`/`crud_create`/`crud_edit`/
+  `crud_detail`/`crud_delete`) exactly like the 3.39 `HRPolicy`/`ComplianceRegister` views — thin wrappers only.
+
+**IMPORTANT — `EmployeeProfile.manager`/`.department` are Python PROPERTIES**, not DB columns. If
+`workforce_analytics` needs "employee's department" for a skills-coverage-by-department breakdown, filter via
+`employee__employment__org_unit`, never `EmployeeProfile.objects.filter(department=x)`.
+
+## Models (from research) — `apps/hrm/models.py`, new `# --- 3.40 Workforce Planning ---` block
+
+- [ ] **`WorkforcePlan`** [`WFP-`, `TenantNumbered`] — the planning-cycle header.
+  - `name` CharField(200)
+  - `org_unit` FK `core.OrgUnit`, `null=True, blank=True, on_delete=SET_NULL, related_name="workforce_plans"`
+    — null = whole-company scope (driver: Demand Forecasting by org unit)
+  - `plan_type` CharField choices `WORKFORCE_PLAN_TYPE_CHOICES` = `annual`/`project`/`restructuring`/`custom`,
+    default `"annual"`
+  - `period_start`, `period_end` DateField
+  - `growth_assumption_percent` `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` — the
+    Demand Forecasting driver
+  - `owner` FK `hrm.EmployeeProfile`, `on_delete=PROTECT, related_name="owned_workforce_plans"`
+  - `currency` FK `accounting.Currency`, `on_delete=SET_NULL, null=True, blank=True, related_name="+"`
+  - `status` CharField choices `WORKFORCE_PLAN_STATUS_CHOICES` = `draft`/`active`/`approved`/`archived`,
+    default `"draft"` (lean single-status-field approval per research — no separate approve action)
+  - `notes` TextField(blank=True)
+  - `class Meta`: `ordering = ["-period_start", "-id"]`; indexes `["tenant","status"]` (`hrm_wfp_tenant_status_idx`),
+    `["tenant","plan_type"]` (`hrm_wfp_tenant_type_idx`)
+  - **COMPUTED (annotation-aware, lesson d):** `total_current_headcount`/`total_planned_headcount` read
+    `getattr(self, "_total_current_headcount", None)` / `_total_planned_headcount` first, falling back to
+    `self.lines.aggregate(Sum(...))`; `total_gap` = `total_planned_headcount - total_current_headcount` (free —
+    no extra query once the two are annotated); `total_budget_impact` reads `_total_budget_impact` first,
+    falling back to `sum(ln.budget_impact or 0 for ln in self.lines.all())`.
+  - Justified by: Demand Forecasting, Budget Planning · reuses `core.OrgUnit`, `hrm.EmployeeProfile`,
+    `accounting.Currency`.
+
+- [ ] **`WorkforcePlanLine`** (`TenantOwned`, child, `related_name="lines"`) — one row per department (+
+  optional designation), inline-managed off the plan detail page (no standalone list page).
+  - `plan` FK `WorkforcePlan`, `on_delete=CASCADE, related_name="lines"`
+  - `org_unit` FK `core.OrgUnit`, **required**, `on_delete=PROTECT, related_name="workforce_plan_lines",
+    limit_choices_to={"kind": "department"}`
+  - `designation` FK `hrm.Designation`, `null=True, blank=True, on_delete=SET_NULL,
+    related_name="workforce_plan_lines"` — blank = whole-department aggregate
+  - `current_headcount`, `planned_headcount` `PositiveSmallIntegerField(default=0)`
+  - `hiring_type` CharField choices `HIRING_TYPE_CHOICES` = `new_growth`/`replacement`/`attrition_backfill`/
+    `reduction`, default `"new_growth"`
+  - `avg_annual_cost` `DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)`
+  - `notes` TextField(blank=True)
+  - `class Meta`: `ordering = ["org_unit__name", "id"]`
+  - **COMPUTED (lesson d):** `headcount_gap` = `planned_headcount - current_headcount` (pure arithmetic on
+    loaded fields, no query); `budget_impact` = `headcount_gap * avg_annual_cost` only when `avg_annual_cost is
+    not None`, else `None`.
+  - Justified by: Supply Analysis, Gap Analysis, Budget Planning, Operational Headcount Planning · reuses
+    `core.OrgUnit`, `hrm.Designation`.
+
+- [ ] **`WorkforceScenario`** [`WFS-`, `TenantNumbered`, FK `WorkforcePlan`, `related_name="scenarios"`] — a
+  named what-if variant, own top-level list page.
+  - `plan` FK `WorkforcePlan`, `on_delete=CASCADE, related_name="scenarios"`
+  - `name` CharField(200)
+  - `scenario_type` CharField choices `WORKFORCE_SCENARIO_TYPE_CHOICES` = `growth`/`freeze`/`restructuring`/
+    `attrition`/`cost_reduction`/`custom`
+  - `affected_org_unit` FK `core.OrgUnit`, `null=True, blank=True, on_delete=SET_NULL,
+    related_name="workforce_scenarios"`
+  - `description` TextField(blank=True)
+  - `headcount_delta` `SmallIntegerField(default=0)` — SIGNED
+  - `cost_delta` `DecimalField(max_digits=14, decimal_places=2, default=0)` — SIGNED
+  - `is_baseline`, `is_selected` `BooleanField(default=False)`
+  - `status` CharField choices `WORKFORCE_SCENARIO_STATUS_CHOICES` = `draft`/`under_review`/`approved`/
+    `rejected`, default `"draft"`
+  - `notes` TextField(blank=True)
+  - `class Meta`: `ordering = ["-is_baseline", "name"]`; index `["tenant","plan"]` (`hrm_wfs_tenant_plan_idx`)
+  - Not a stored uniqueness constraint on `is_baseline` — the create/edit view normalizes it (see Forms below).
+  - Justified by: Scenario Planning, restructuring simulations · reuses `core.OrgUnit`, `WorkforcePlan`.
+
+- [ ] **`EmployeeSkill`** (`TenantOwned`, FK `hrm.EmployeeProfile`, `related_name="skills"`) — structured
+  skills inventory, own tenant-wide searchable/filterable list page.
+  - `employee` FK `hrm.EmployeeProfile`, `on_delete=CASCADE, related_name="skills"`
+  - `skill_name` CharField(100)
+  - `skill_category` CharField choices `SKILL_CATEGORY_CHOICES` = `technical`/`functional`/`leadership`/
+    `soft_skill`/`certification` (NEW constant — distinct from `SKILL_PROFICIENCY_CHOICES`)
+  - `proficiency_level` CharField choices — **REUSES** existing `SKILL_PROFICIENCY_CHOICES`
+    (`beginner`/`intermediate`/`advanced`/`expert`)
+  - `years_experience` `PositiveSmallIntegerField(null=True, blank=True)`
+  - `is_certified` `BooleanField(default=False)`
+  - `certification_name` CharField(150, blank=True)
+  - `last_assessed_date` `DateField(null=True, blank=True)`
+  - `is_critical_skill` `BooleanField(default=False)`
+  - `notes` TextField(blank=True)
+  - `class Meta`: `ordering = ["skill_name"]`; `unique_together = ("tenant", "employee", "skill_name")`
+    (mirrors `CandidateSkill`'s `("candidate","skill_name")` shape exactly); index
+    `["tenant","skill_category"]` (`hrm_eskill_tenant_cat_idx`), `["tenant","is_critical_skill"]`
+    (`hrm_eskill_tenant_crit_idx`)
+  - Justified by: Supply Analysis, Gap Analysis (critical-skill flag), TalentGuard/Orgvue skills-database
+    differentiator · reuses `hrm.EmployeeProfile`.
+
+## Forms (`apps/hrm/forms.py`)
+
+- [ ] `WorkforcePlanForm(TenantModelForm)` — fields `name, org_unit, plan_type, period_start, period_end,
+  growth_assumption_percent, owner, currency, status, notes` (excludes `tenant`/`number`); `__init__` scopes
+  `org_unit`/`owner`/`currency` querysets to the tenant; `clean()` guards `period_end >= period_start`.
+- [ ] `WorkforcePlanLineForm(TenantModelForm)` — fields `org_unit, designation, current_headcount,
+  planned_headcount, hiring_type, avg_annual_cost, notes` (excludes `tenant`, `plan` — set by the view from the
+  URL `plan_pk`); `__init__` scopes `org_unit` to `kind="department"` + tenant, `designation` to tenant.
+- [ ] `WorkforceScenarioForm(TenantModelForm)` — fields `plan, name, scenario_type, affected_org_unit,
+  description, headcount_delta, cost_delta, is_baseline, is_selected, status, notes`; `__init__` scopes `plan`/
+  `affected_org_unit` to the tenant and accepts an initial `plan` from `?plan=<id>` when linked from a plan's
+  detail page. Baseline normalization is a VIEW-level step (not form `clean()`): when saving with
+  `is_baseline=True`, atomically unset `is_baseline` on the plan's other scenarios inside
+  `transaction.atomic()` (multi-row update alongside the main save — lesson b applies even without an
+  `IntegrityError` catch, since a half-applied normalization would leave two baselines).
+- [ ] `EmployeeSkillForm(TenantModelForm)` — fields `skill_name, skill_category, proficiency_level,
+  years_experience, is_certified, certification_name, last_assessed_date, is_critical_skill, notes` (excludes
+  `tenant` AND `employee` — employee is resolved own-vs-admin in the view, same as `EmergencyContactForm`).
+  **Lesson (a) — the `(tenant, employee, skill_name)` unique_together CANNOT be guarded in this form's
+  `clean()`**: both `tenant` and `employee` are excluded/unknown at form-validation time (the view resolves
+  `employee` only after `form.is_valid()`, mirroring `_ss_child_create`'s `target` resolution). Do **not**
+  reuse `_ss_child_create`/`_ss_child_edit` verbatim for this model — write bespoke
+  `employeeskill_create`/`employeeskill_edit` views (see Views below) that replicate the same own-vs-admin
+  target resolution inline, then explicitly check
+  `EmployeeSkill.objects.filter(tenant=request.tenant, employee=target,
+  skill_name=form.cleaned_data["skill_name"]).exclude(pk=obj.pk if editing else None).exists()` BEFORE saving
+  and re-render with `form.add_error("skill_name", "...")` on a hit; wrap the actual `.save()` in
+  `transaction.atomic()` and catch `IntegrityError` as defense-in-depth against a concurrent race (lesson b).
+- [ ] Lesson (f) confirmed: `Decimal` is already imported module-level in `forms.py` — no new import needed for
+  `growth_assumption_percent`/`avg_annual_cost`/`cost_delta` handling.
+
+## Views (`apps/hrm/views.py`, new `# --- 3.40 Workforce Planning ---` banner after the 3.39 compliance block)
+
+- [ ] `WorkforcePlan` CRUD — `workforceplan_list/_create/_detail/_edit/_delete`, ALL `@tenant_admin_required`.
+  - `workforceplan_list`: `crud_list` over
+    `.select_related("org_unit","owner__party","currency").annotate(
+    _total_current_headcount=Sum("lines__current_headcount"),
+    _total_planned_headcount=Sum("lines__planned_headcount"))` then **explicit `.order_by("-period_start",
+    "-id")`** (lesson c — annotate's GROUP BY drops `Meta.ordering`); `search_fields=["name","number"]`,
+    `filters=[("status","status",False), ("plan_type","plan_type",False), ("org_unit","org_unit_id",True)]`;
+    `extra_context={"status_choices": WORKFORCE_PLAN_STATUS_CHOICES, "plan_type_choices":
+    WORKFORCE_PLAN_TYPE_CHOICES, "org_units": ...}`. This is the URL the `?status=approved` Budget Planning
+    nav link targets.
+  - `workforceplan_detail`: `crud_detail` + `extra_context` passing `lines` (`.select_related("org_unit",
+    "designation")`, small per-plan set so per-row `headcount_gap`/`budget_impact` properties are fine
+    unannotated) and `scenarios` (`.order_by("-is_baseline","name")`) for the inline tables.
+  - `workforceplan_create`/`_edit`: `crud_create`/`crud_edit`.
+  - `workforceplan_delete`: `crud_delete` (cascades lines + scenarios).
+- [ ] `WorkforcePlanLine` inline add/edit/delete — bespoke (mirrors `ClearanceItem`'s inline-child shape),
+  ALL `@tenant_admin_required`:
+  - `workforceplanline_add(request, plan_pk)` — `get_object_or_404(WorkforcePlan, pk=plan_pk,
+    tenant=request.tenant)`; on GET, if `?designation=<id>` is present, seed the form's `initial["avg_annual_cost"]`
+    from `designation.mid_salary`; on POST save with `plan=plan, tenant=request.tenant`; redirect to
+    `workforceplan_detail`.
+  - `workforceplanline_edit(request, plan_pk, pk)` — line scoped via
+    `get_object_or_404(WorkforcePlanLine, pk=pk, plan_id=plan_pk, plan__tenant=request.tenant)`.
+  - `workforceplanline_delete(request, plan_pk, pk)` — `@require_POST`, same tenant-scoped lookup, redirect to
+    `workforceplan_detail`.
+- [ ] `WorkforceScenario` CRUD — `workforcescenario_list/_create/_detail/_edit/_delete`, ALL
+  `@tenant_admin_required`.
+  - `workforcescenario_list`: `crud_list` over `.select_related("plan","affected_org_unit")` +
+    explicit `.order_by("-is_baseline","name")`; `search_fields=["name","number","plan__name"]`,
+    `filters=[("status","status",False), ("scenario_type","scenario_type",False), ("plan","plan_id",True),
+    ("is_baseline","is_baseline",False), ("is_selected","is_selected",False)]`; `extra_context` with choice
+    lists + `plans` queryset for the filter dropdown.
+  - `workforcescenario_create`: bespoke thin wrapper around `crud_create` semantics (needs the baseline
+    normalization step) — after a successful save, if `obj.is_baseline`, run
+    `WorkforceScenario.objects.filter(plan=obj.plan).exclude(pk=obj.pk).update(is_baseline=False)` inside
+    `transaction.atomic()` together with the save.
+  - `workforcescenario_detail`: `crud_detail`.
+  - `workforcescenario_edit`: same baseline-normalization as create.
+  - `workforcescenario_delete`: `crud_delete`.
+- [ ] `EmployeeSkill` own-vs-admin CRUD — `employeeskill_list/_create/_detail/_edit/_delete`, ALL
+  `@login_required` (no `@tenant_admin_required` — self-service).
+  - `employeeskill_list`: `_ss_scope(request, EmployeeSkill.objects.filter(tenant=request.tenant)
+    .select_related("employee__party"))`; search on `skill_name`/`certification_name`; filters
+    `skill_category`, `proficiency_level`, `is_certified`, `is_critical_skill`, and (admin-only)
+    `employee`; `extra_context={"is_admin": ..., "skill_category_choices": ..., "proficiency_choices":
+    SKILL_PROFICIENCY_CHOICES, "employees": _ss_employees(request) if is_admin else None}`.
+  - `employeeskill_create`/`_edit`: bespoke (per the Forms lesson-a note above — duplicate-guard +
+    `transaction.atomic()`, NOT the generic `_ss_child_create`/`_ss_child_edit`).
+  - `employeeskill_detail`: `_ss_child_detail(request, EmployeeSkill, pk, "hrm/workforce/employeeskill/detail.html",
+    select_related=("employee__party",))`.
+  - `employeeskill_delete`: `_ss_child_delete(request, EmployeeSkill, pk, "hrm:employeeskill_list")` (reusable
+    as-is — no duplicate concern on delete).
+- [ ] TWO derived reports, `@tenant_admin_required`:
+  - `workforce_gap_analysis(request)` — `WorkforcePlanLine.objects.filter(tenant=request.tenant,
+    plan__status="active")` optionally narrowed by `?plan=<id>`, `.values("org_unit_id","org_unit__name")
+    .annotate(total_current=Sum("current_headcount"), total_planned=Sum("planned_headcount"))` then **explicit
+    `.order_by("org_unit__name")`** (lesson c); compute `gap = total_planned - total_current` per row in
+    Python; pass the tenant's active `plans` queryset for the filter dropdown.
+  - `workforce_analytics(request)` — KPI dict: `total_employees` (`EmployeeProfile.objects.filter(tenant=...)
+    .count()`), `total_active_planned_headcount`/`total_active_gap` (aggregated off `WorkforcePlanLine` for
+    `plan__status="active"`), skills coverage (`EmployeeSkill.objects.filter(tenant=...)
+    .values("skill_category").annotate(count=Count("id")).order_by("skill_category")` + distinct-employee
+    coverage `%` = employees with >=1 skill / `total_employees`), critical-skill risk
+    (`EmployeeSkill.objects.filter(tenant=..., is_critical_skill=True).values("proficiency_level")
+    .annotate(count=Count("id")).order_by("proficiency_level")`, flagging `beginner`/`intermediate` rows as
+    "at risk"). If a department breakdown is added, join via `employee__employment__org_unit`, never
+    `EmployeeProfile.department`.
+
+## URLs (`apps/hrm/urls.py`, append under `app_name = "hrm"`)
+
+- [ ] `path("workforce/plans/", views.workforceplan_list, name="workforceplan_list")`
+- [ ] `path("workforce/plans/add/", views.workforceplan_create, name="workforceplan_create")`
+- [ ] `path("workforce/plans/<int:pk>/", views.workforceplan_detail, name="workforceplan_detail")`
+- [ ] `path("workforce/plans/<int:pk>/edit/", views.workforceplan_edit, name="workforceplan_edit")`
+- [ ] `path("workforce/plans/<int:pk>/delete/", views.workforceplan_delete, name="workforceplan_delete")`
+- [ ] `path("workforce/plans/<int:plan_pk>/lines/add/", views.workforceplanline_add, name="workforceplanline_add")`
+- [ ] `path("workforce/plans/<int:plan_pk>/lines/<int:pk>/edit/", views.workforceplanline_edit,
+  name="workforceplanline_edit")`
+- [ ] `path("workforce/plans/<int:plan_pk>/lines/<int:pk>/delete/", views.workforceplanline_delete,
+  name="workforceplanline_delete")`
+- [ ] `path("workforce/scenarios/", views.workforcescenario_list, name="workforcescenario_list")`
+- [ ] `path("workforce/scenarios/add/", views.workforcescenario_create, name="workforcescenario_create")`
+- [ ] `path("workforce/scenarios/<int:pk>/", views.workforcescenario_detail, name="workforcescenario_detail")`
+- [ ] `path("workforce/scenarios/<int:pk>/edit/", views.workforcescenario_edit, name="workforcescenario_edit")`
+- [ ] `path("workforce/scenarios/<int:pk>/delete/", views.workforcescenario_delete,
+  name="workforcescenario_delete")`
+- [ ] `path("workforce/skills/", views.employeeskill_list, name="employeeskill_list")`
+- [ ] `path("workforce/skills/add/", views.employeeskill_create, name="employeeskill_create")`
+- [ ] `path("workforce/skills/<int:pk>/", views.employeeskill_detail, name="employeeskill_detail")`
+- [ ] `path("workforce/skills/<int:pk>/edit/", views.employeeskill_edit, name="employeeskill_edit")`
+- [ ] `path("workforce/skills/<int:pk>/delete/", views.employeeskill_delete, name="employeeskill_delete")`
+- [ ] `path("workforce/gap-analysis/", views.workforce_gap_analysis, name="workforce_gap_analysis")`
+- [ ] `path("workforce/analytics/", views.workforce_analytics, name="workforce_analytics")`
+- [ ] Check route order against the whole concatenated `urlpatterns` — none of these are greedy `<str:...>`
+  patterns, so no ordering conflict expected, but confirm `workforce/plans/add/` sits before
+  `workforce/plans/<int:pk>/` (literal-before-int convention already used throughout the file).
+
+## Admin (`apps/hrm/admin.py`)
+
+- [ ] `WorkforcePlanLineInline(admin.TabularInline)` — `model = WorkforcePlanLine`, `extra = 0`.
+- [ ] `WorkforcePlanAdmin` — `list_display = ("number","name","org_unit","plan_type","status","period_start",
+  "period_end","owner")`, `list_filter = ("status","plan_type")`, `search_fields = ("number","name")`,
+  `inlines = [WorkforcePlanLineInline]`.
+- [ ] `WorkforceScenarioAdmin` — `list_display = ("number","name","plan","scenario_type","status",
+  "is_baseline","is_selected")`, `list_filter = ("status","scenario_type","is_baseline")`,
+  `search_fields = ("number","name","plan__name")`.
+- [ ] `EmployeeSkillAdmin` — `list_display = ("employee","skill_name","skill_category","proficiency_level",
+  "is_critical_skill","is_certified")`, `list_filter = ("skill_category","proficiency_level",
+  "is_critical_skill")`, `search_fields = ("skill_name","employee__party__name")`.
+
+## Migration
+
+- [ ] `makemigrations hrm` → expect `apps/hrm/migrations/0058_workforceplan_workforceplanline_
+  workforcescenario_employeeskill.py` (auto-named; confirm it covers all 4 models + their indexes/
+  unique_together in one file, consistent with prior sub-modules).
+
+## Templates (`templates/hrm/workforce/<entity>/{list,detail,form}.html`)
+
+- [ ] `templates/hrm/workforce/workforceplan/list.html` — filter bar (`status`, `plan_type`, `org_unit`,
+  search `q`) reflecting `request.GET`; columns incl. the 4 computed totals; Actions = view/edit/delete
+  (POST+confirm+csrf); pagination; empty-state.
+- [ ] `templates/hrm/workforce/workforceplan/detail.html` — header fields; inline **lines table** (org_unit,
+  designation, current/planned headcount, gap, hiring_type, avg_annual_cost, budget_impact) with inline
+  add/edit/delete row actions posting to the `workforceplanline_*` urls; inline **scenarios table**
+  (name, scenario_type, headcount_delta, cost_delta, is_baseline/is_selected badges, status) linking to
+  `workforcescenario_detail`, plus a "+ New Scenario" link to `workforcescenario_create?plan=<pk>`; Actions
+  sidebar (edit/delete/back to list).
+- [ ] `templates/hrm/workforce/workforceplan/form.html` — create/edit form (shared).
+- [ ] `templates/hrm/workforce/workforceplan/line_form.html` — shared add/edit form for `WorkforcePlanLine`
+  (submits back to the plan detail page).
+- [ ] `templates/hrm/workforce/workforcescenario/list.html` — filter bar (`status`, `scenario_type`, `plan`,
+  `is_baseline`, `is_selected`, search `q`); baseline/selected badges; Actions column.
+- [ ] `templates/hrm/workforce/workforcescenario/detail.html` — full fields + link back to `plan`; Actions
+  sidebar.
+- [ ] `templates/hrm/workforce/workforcescenario/form.html` — create/edit form; `plan` field pre-selected
+  (locked visually, not disabled — disabled fields don't POST) when arriving via `?plan=<id>`.
+- [ ] `templates/hrm/workforce/employeeskill/list.html` — filter bar (`skill_category`, `proficiency_level`,
+  `is_certified`, `is_critical_skill`, admin-only `employee`, search `q`); `is_admin` gates the employee
+  column/filter; Actions column (own-vs-admin gated per row via `is_own`/`is_admin` context, mirroring
+  `emergencycontact/list.html`).
+- [ ] `templates/hrm/workforce/employeeskill/detail.html` — full fields; Actions sidebar gated by
+  `_can_manage_own_child`.
+- [ ] `templates/hrm/workforce/employeeskill/form.html` — create/edit form; admin sees an `employee` picker
+  (via `?employee=<id>` / hidden field pattern mirroring `emergencycontact/form.html`), non-admin does not.
+- [ ] `templates/hrm/workforce/gap_analysis.html` — per-department current/planned/gap table (from
+  `workforce_gap_analysis`), optional plan filter, gap highlighted (red if negative/understaffed, per the
+  sign convention documented in the view).
+- [ ] `templates/hrm/workforce/analytics.html` — KPI tiles (total employees, active planned headcount, active
+  gap, skills-coverage %) + skill-category breakdown table + critical-skill-risk table (at-risk rows
+  highlighted).
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.40"]` (add after the `"3.39"` block, verbatim NavERP.md bullet
+  text as keys):
+  ```python
+  "3.40": {
+      "Demand Forecasting": "hrm:workforceplan_list",
+      "Supply Analysis": "hrm:employeeskill_list",
+      "Gap Analysis": "hrm:workforce_gap_analysis",
+      "Budget Planning": "hrm:workforceplan_list?status=approved",
+      "Scenario Planning": "hrm:workforcescenario_list",
+      "Workforce Analytics": "hrm:workforce_analytics",
+  },
+  ```
+- [ ] No `settings.py` / `config/urls.py` changes needed — `apps.hrm` and its `hrm/` include already exist.
+- [ ] `apps/hrm/analytics.py` `WIDGET_METRIC_CHOICES` extension (from research's deferred-but-flagged item) —
+  OPTIONAL this pass, not blocking; if time allows, add `kpi_workforce_plan_gap`/`kpi_avg_cost_per_head`
+  entries wired to the same aggregates used in `workforce_analytics`. Otherwise carry to Later passes.
+
+## Seed (`apps/hrm/management/commands/seed_hrm.py`)
+
+- [ ] New `_seed_workforce(self, tenant, *, flush)` method (mirrors `_seed_compliance`'s shape), called from
+  `_seed_tenant` right after `self._seed_compliance(tenant, flush=options["flush"])` (~line 314).
+- [ ] Idempotent: `if flush:` block deletes 3.40 rows first; existence check
+  `if WorkforcePlan.objects.filter(tenant=tenant).exists(): ... return` with the standard
+  "already exists. Use --flush to re-seed." message; all creates via `get_or_create` keyed on natural fields
+  (`tenant, name` for `WorkforcePlan`; `tenant, plan, org_unit, designation` for `WorkforcePlanLine`;
+  `tenant, plan, name` for `WorkforceScenario`; `tenant, employee, skill_name` for `EmployeeSkill`).
+- [ ] Seed content: 2 `WorkforcePlan`s (one `annual`/company-wide/`status="approved"` with a positive
+  `growth_assumption_percent`; one `restructuring`/single-org_unit/`status="draft"`), each with 3-4
+  `WorkforcePlanLine` rows across different departments (mix of `hiring_type`, at least one with
+  `avg_annual_cost` pre-filled from a `Designation.mid_salary`); 2 `WorkforceScenario`s per plan (one
+  `is_baseline=True`, one alternative `is_selected=True` with a nonzero signed `headcount_delta`/`cost_delta`);
+  `EmployeeSkill` rows for 4-5 employees (mix of `skill_category`/`proficiency_level`, at least one
+  `is_certified=True` with `certification_name` + `last_assessed_date`, at least one `is_critical_skill=True`
+  at `beginner`/`intermediate` proficiency to populate the analytics "at risk" bucket).
+- [ ] **Lesson (e) — flush order:** `WorkforcePlan.owner` is `PROTECT` against `hrm.EmployeeProfile`, and
+  `WorkforcePlanLine.org_unit` is `PROTECT` against `core.OrgUnit` (not flushed by `seed_hrm`, so no ordering
+  action needed there) — add `WorkforceScenario, WorkforcePlanLine, WorkforcePlan` (CASCADE off each other but
+  listed explicitly, child-to-parent, for a tidy teardown) and `EmployeeSkill` (CASCADE off `EmployeeProfile`,
+  listed for tidiness) to the ordered flush tuple in `_seed_tenant`, positioned in the tuple **before**
+  `..., EmployeeProfile, Designation, JobGrade)` at its tail (~line 394) — comment the block the same way the
+  3.38/3.39 additions are commented (why each FK forces this order).
+- [ ] Print login instructions unchanged (existing `seed_hrm` footer already covers this — no new print
+  needed unless the footer enumerates sub-modules, in which case add "Workforce Planning: N plans, N scenarios,
+  N skills").
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` → new `0058_...py`; `python manage.py migrate`.
+- [ ] `python manage.py seed_hrm` ×2 (idempotent — second run prints "already exists" for 3.40, no
+  duplicate/IntegrityError).
+- [ ] `python manage.py seed_hrm --flush` — confirm no `ProtectedError` (validates the lesson-e flush-order
+  fix).
+- [ ] `python manage.py check`.
+- [ ] `temp/` smoke sweep: every `hrm:workforceplan_*`, `hrm:workforcescenario_*`, `hrm:employeeskill_*`,
+  `hrm:workforceplanline_*`, `hrm:workforce_gap_analysis`, `hrm:workforce_analytics` URL returns 200/302 for a
+  tenant admin; `employeeskill_*` also 200/302 for a plain employee (scoped to own rows) and 403/redirect for
+  the admin-only pages when hit as a plain employee; no `{#`/`{% comment` leaks in rendered HTML; cross-tenant
+  IDOR check (a `WorkforcePlan`/`WorkforceScenario`/`EmployeeSkill` pk from tenant A → 404 under tenant B's
+  session).
+- [ ] Sidebar: log in as a tenant admin, confirm all 6 sub-module 3.40 bullets render as **Live** (not
+  "Coming Soon").
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to verify the `EmployeeSkillForm` duplicate-guard was actually implemented at the
+    VIEW level (not skipped because "the form has a `clean()`") and that `workforcescenario_create`/`_edit`'s
+    baseline-normalization update is inside the same `transaction.atomic()` as the main save.
+  - Expect `performance-reviewer` to confirm `workforceplan_list`'s two `Sum()` annotations don't fire extra
+    per-row queries for `total_gap` (should be free arithmetic on the two annotated values) and that
+    `workforceplan_detail`'s `lines`/`scenarios` are `select_related`, not lazy per-row.
+  - Expect `security-reviewer` to confirm `@tenant_admin_required` is actually present on all 5
+    `WorkforcePlan` views + all 5 `WorkforceScenario` views + both derived reports (not just create/edit), and
+    that `workforceplanline_*`'s `plan__tenant=request.tenant` scoping blocks a cross-tenant `plan_pk`/`pk`
+    combination, and that `EmployeeSkillForm` never exposes `employee` as a form field (mass-assignment check).
+  - Expect `test-writer` to cover: full CRUD for all 4 models incl. the bespoke `EmployeeSkill` duplicate-guard
+    (create dupe → friendly form error, not 500) and the `WorkforceScenario` baseline-normalization (creating a
+    second baseline unsets the first); computed properties (`total_gap`/`total_budget_impact`/`headcount_gap`/
+    `budget_impact`) against hand-computed fixtures incl. `avg_annual_cost is None`; `workforce_gap_analysis`
+    scoping to `plan__status="active"` only; `workforce_analytics` KPI math; own-vs-admin scoping on
+    `EmployeeSkill` (employee sees only own rows, admin sees all); `@tenant_admin_required` 403/redirect on
+    every admin-gated url for a plain employee; migration `0058` applies cleanly; seeder idempotency +
+    `--flush` (no `ProtectedError`); cross-tenant IDOR on every new url.
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add a `### 3.40 Workforce Planning` section (4 models, the
+  `@tenant_admin_required` access model on plan/line/scenario vs. `EmployeeSkill`'s own-vs-admin self-service,
+  the `SKILL_PROFICIENCY_CHOICES` reuse, the annotation-aware computed totals, the two derived report views,
+  the seeded 2 plans/4 scenarios/skills, and the `LIVE_LINKS["3.40"]` mapping).
+- [ ] Update README (module/sub-module/test counts; add `/3.40` bullet describing the 4 new models + the
+  demand/supply/gap/scenario/analytics shape).
+
+## Later passes / deferred (carried over from research-workforce-planning.md)
+
+- **Auto-generate `JobRequisition` rows from an approved `WorkforcePlanLine`** — bespoke "Generate
+  Requisition" action reusing the existing `JobRequisition` model (ChartHop/Anaplan pattern).
+- **Multi-step approval chain for plans/scenarios** (mirroring `RequisitionApproval`/`OfferApproval`) — this
+  pass keeps the single `status` field.
+- **Predictive/ML forecasting** (attrition-driven demand, skill-shortage prediction) — needs a stats/ML layer
+  outside a single Django CRUD pass.
+- **Drag-and-drop visual org-chart scenario builder** (ChartHop/Orgvue) — static HTMX/Tailwind forms this
+  pass, not a live-editable org-chart canvas.
+- **Multi-country compliance-aware cost planning** (Deel's 150+-country labor-law/benchmark inputs) — needs a
+  jurisdiction cost-rule table.
+- **9-box grid / succession / talent pool linkage** — belongs to the already-built 3.38 Talent Management &
+  Succession Planning; do not duplicate.
+- **`WIDGET_METRIC_CHOICES` extension on `HRDashboard`** — folded into this pass's Wire-up as optional; if
+  skipped, carry forward.
+- **Continuous auto-sync of `current_headcount` from live `EmployeeProfile` counts** — a manual "Refresh
+  Actuals" action at most this pass; scheduled/automatic sync is deferred.
+- **Full line-by-line scenario re-forecast engine** — `WorkforceScenario` stays a plan-level aggregate delta,
+  not a per-line override engine.
+
+## Review notes (3.40 — as-built)
+**Built:** 4 models (`WorkforcePlan`/`WorkforcePlanLine`/`WorkforceScenario`/`EmployeeSkill`, migrations 0058 +
+0059), full CRUD + inline plan-lines + two derived reports (`workforce_gap_analysis`, `workforce_analytics`), 11
+templates, `LIVE_LINKS["3.40"]` (all 6 NavERP.md bullets live), `_seed_workforce`, and 59 tests
+(`test_workforce.py`) + 2 seeder tests. All green; `makemigrations --check` clean.
+
+**Reviews applied:**
+- *code-reviewer* — (1) `workforce_gap_analysis` grouped by name only → same-named departments merged; fixed to
+  group by `(org_unit_id, org_unit__name)`. (2) Multiple `is_baseline=True` per plan possible → made
+  `workforcescenario_create`/`_edit` bespoke with `_normalize_baseline` inside `atomic()`. (3) stale form comment +
+  no `?plan=` prefill on the "New Scenario" link → fixed. Regression tests added for all three.
+- *security-reviewer* — **zero findings.** Verified: every plan/scenario/report view `@tenant_admin_required`;
+  EmployeeSkill mass-assignment via `employee_pk` is a no-op for non-admins (added a permanent regression test);
+  cross-tenant IDOR → 404; gap/analytics aggregates filter tenant on the LINE/SKILL querysets; `?plan` digit-guarded;
+  no `|safe`; CSRF on every form. `is_critical_skill` self-flag judged benign (data-quality, not privilege).
+- *performance-reviewer* — both N+1 traps avoided (annotation-aware plan totals; `resulting_headcount` off the list).
+  Added the two missing indexes (`(tenant,scenario_type)`, `(tenant,proficiency_level)`, migration 0059) and made
+  `workforcescenario_detail` resolve the plan aggregate once.
+- *frontend-reviewer* — no invented CSS, no comment leaks, filters/badges/colspans all correct. Added an
+  admin-editing-name banner to the skill form; threaded `?plan=` (folded into the code-review fix).
+
+**Deferred (roadmap):** predictive/ML forecasting, drag-and-drop org-chart scenario builder, auto-generate
+`JobRequisition` from approved lines, multi-step approval chains, continuous headcount auto-sync, per-line scenario
+re-forecast. See the Deferred list above.
+
+**Also closed out here (3.39 Compliance & Legal):** applied the 3.39 code-review — `HRPolicyForm` no longer lets
+`status=published` through (publishing must go via `hrpolicy_publish`, which raises the acknowledgment rows), and
+`hrpolicy_publish` now wraps the acknowledgment `bulk_create` in a savepoint. Both covered by new tests; the 3.39
+skill + README sections were added in the same pass. Known follow-up: a maker-checker guard so an HR admin who is
+also the complainant can't self-investigate a grievance (left open — a single-admin tenant may be the only resolver).
