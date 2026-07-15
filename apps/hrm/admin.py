@@ -1657,3 +1657,59 @@ class EmployeeSkillAdmin(admin.ModelAdmin):
     list_filter = ("skill_category", "proficiency_level", "is_certified", "is_critical_skill", "tenant")
     search_fields = ("skill_name", "certification_name", "employee__party__name")
     readonly_fields = ("created_at", "updated_at")
+
+
+# ---- 3.41 Employee Engagement & Wellbeing ----------------------------------------------------
+from .models import (  # 3.41 Employee Engagement & Wellbeing
+    FlexibleWorkArrangement, SurveyActionPlan, WellbeingParticipation, WellbeingProgram)
+
+
+@admin.register(SurveyActionPlan)
+class SurveyActionPlanAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "survey", "owner__party", "department")
+    list_display = ("number", "title", "survey", "owner", "status", "target_date", "is_overdue", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "title", "focus_area", "survey__title")
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+# WARNING (confidentiality — honest, documented limitation): for a program with
+# is_confidential=True (always the case for program_type="eap_counseling"), this inline still exposes
+# the per-employee participation roster to Django-admin staff. The app's own list/detail views enforce
+# aggregate-only for confidential programs; Django-admin/DB access to a tenant is itself a privileged,
+# audited action OUTSIDE this module's scope. We do NOT hide the inline (that would be a false sense of
+# security) — same posture as PerformanceImprovementPlan / CoachingNote (3.21).
+class WellbeingParticipationInline(admin.TabularInline):
+    model = WellbeingParticipation
+    extra = 0
+    fields = ("employee", "status", "points_earned")
+
+
+@admin.register(WellbeingProgram)
+class WellbeingProgramAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "owner", "target_department")
+    list_display = ("number", "title", "program_type", "status", "is_confidential", "start_date",
+                    "end_date", "points_value", "tenant")
+    list_filter = ("program_type", "status", "is_confidential", "tenant")
+    search_fields = ("number", "title")
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [WellbeingParticipationInline]
+
+
+@admin.register(WellbeingParticipation)
+class WellbeingParticipationAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "program", "employee__party")
+    list_display = ("program", "employee", "status", "points_earned", "tenant")
+    list_filter = ("status", "tenant")
+    search_fields = ("program__title", "employee__party__name")
+    readonly_fields = ("completed_at", "created_at", "updated_at")
+
+
+@admin.register(FlexibleWorkArrangement)
+class FlexibleWorkArrangementAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "employee__party", "approver")
+    list_display = ("number", "employee", "arrangement_type", "status", "start_date", "end_date",
+                    "days_per_week_remote", "tenant")
+    list_filter = ("status", "arrangement_type", "tenant")
+    search_fields = ("number", "employee__party__name", "reason")
+    readonly_fields = ("number", "approved_at", "created_at", "updated_at")
