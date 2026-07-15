@@ -44,7 +44,7 @@
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'hrm:wellbeingprogram_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
-              <td>{{ obj.title|truncatechars:40 }}{% if obj.is_confidential %} <span class="badge badge-muted">Confidential</span>{% endif %}</td>
+              <td>{{ obj.title|truncatechars:40 }}{% if obj.is_confidential %} <span class="badge badge-red">Confidential</span>{% endif %}</td>
               <td>{{ obj.get_program_type_display }}</td>
               <td>{% if obj.start_date %}{{ obj.start_date|date:"d M Y" }}{% if obj.end_date %} – {{ obj.end_date|date:"d M Y" }}{% endif %}{% else %}<span class="text-muted">Ongoing</span>{% endif %}</td>
               <td class="text-right">{{ obj.participant_count }}</td>
