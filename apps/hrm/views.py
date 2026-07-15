@@ -15403,17 +15403,25 @@ def hrpolicy_publish(request, pk):
         targets = targets.filter(employment__org_unit_id=obj.applicable_org_unit_id)
     target_pks = list(targets.values_list("pk", flat=True))
 
-    with transaction.atomic():
-        obj.status = "published"
-        obj.published_at = timezone.now()
-        obj.save(update_fields=["status", "published_at", "updated_at"])
-        created = 0
-        if obj.requires_acknowledgment:
-            existing = set(obj.acknowledgments.values_list("employee_id", flat=True))
-            new_rows = [PolicyAcknowledgment(tenant=request.tenant, policy=obj, employee_id=pk_)
-                        for pk_ in target_pks if pk_ not in existing]
-            PolicyAcknowledgment.objects.bulk_create(new_rows)
-            created = len(new_rows)
+    try:
+        # Savepoint: the `existing` set is read INSIDE the transaction but the status guard above is
+        # not, so two concurrent publishes can both get here and collide on
+        # unique_together(tenant, policy, employee). That must roll this insert back and report a
+        # friendly error, never surface as an unhandled IntegrityError (a 500).
+        with transaction.atomic():
+            obj.status = "published"
+            obj.published_at = timezone.now()
+            obj.save(update_fields=["status", "published_at", "updated_at"])
+            created = 0
+            if obj.requires_acknowledgment:
+                existing = set(obj.acknowledgments.values_list("employee_id", flat=True))
+                new_rows = [PolicyAcknowledgment(tenant=request.tenant, policy=obj, employee_id=pk_)
+                            for pk_ in target_pks if pk_ not in existing]
+                PolicyAcknowledgment.objects.bulk_create(new_rows)
+                created = len(new_rows)
+    except IntegrityError:
+        messages.error(request, "This policy was published by someone else just now. Reload to see it.")
+        return redirect("hrm:hrpolicy_detail", pk=obj.pk)
     write_audit_log(request.user, obj, "update", {"action": "publish", "acknowledgments": created})
     messages.success(request, f"Policy published. {created} acknowledgment request(s) raised.")
     return redirect("hrm:hrpolicy_detail", pk=obj.pk)
@@ -15657,3 +15665,361 @@ def complianceregister_edit(request, pk):
 def complianceregister_delete(request, pk):
     return crud_delete(request, model=ComplianceRegister, pk=pk,
                        success_url="hrm:complianceregister_list")
+
+
+# ============================================================================
+# 3.40 Workforce Planning — demand (plans + lines), supply (the EmployeeSkill
+# inventory), gap + budget (computed), and scenarios (signed what-if deltas), plus
+# two derived views (gap analysis + workforce analytics) that need no tables.
+#
+# CONFIDENTIAL: headcount plans carry RESTRUCTURING/REDUCTION lines, so every
+# plan/line/scenario/derived view is @tenant_admin_required. EmployeeSkill is the
+# exception — own-vs-admin self-service (an employee curates their own skills).
+# ============================================================================
+from .models import (  # noqa: E402  — 3.40 Workforce Planning
+    EmployeeSkill, WorkforcePlan, WorkforcePlanLine, WorkforceScenario)
+from .forms import (  # noqa: E402  — 3.40 Workforce Planning
+    EmployeeSkillForm, WorkforcePlanForm, WorkforcePlanLineForm, WorkforceScenarioForm)
+
+
+def _annotate_plan_totals(qs):
+    """Annotate the headcount totals WorkforcePlan's properties prefer — without this, rendering N plans
+    fires 2N SUM queries (the properties fall back to per-instance aggregates)."""
+    return qs.annotate(_total_current=Coalesce(Sum("lines__current_headcount"), 0),
+                       _total_planned=Coalesce(Sum("lines__planned_headcount"), 0))
+
+
+# ---- Workforce plans (admin-only) --------------------------------------------------------------
+@tenant_admin_required
+def workforceplan_list(request):
+    # Explicit order_by: annotate() adds a GROUP BY which drops Meta.ordering and would leave the
+    # paginator unordered (rows duplicate/skip across pages).
+    qs = (_annotate_plan_totals(
+              WorkforcePlan.objects.filter(tenant=request.tenant)
+              .select_related("org_unit", "owner__party", "currency").defer("notes"))
+          .order_by("-created_at"))
+    return crud_list(request, qs, "hrm/workforce/workforceplan/list.html",
+                     search_fields=["number", "name", "org_unit__name"],
+                     filters=[("status", "status", False), ("plan_type", "plan_type", False)],
+                     extra_context={"status_choices": WorkforcePlan.STATUS_CHOICES,
+                                    "plan_type_choices": WorkforcePlan.PLAN_TYPE_CHOICES})
+
+
+@tenant_admin_required
+def workforceplan_create(request):
+    return crud_create(request, form_class=WorkforcePlanForm,
+                       template="hrm/workforce/workforceplan/form.html",
+                       success_url="hrm:workforceplan_list")
+
+
+@tenant_admin_required
+def workforceplan_detail(request, pk):
+    obj = get_object_or_404(
+        WorkforcePlan.objects.select_related("org_unit", "owner__party", "currency")
+        .prefetch_related("lines__org_unit", "lines__designation", "scenarios"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/workforce/workforceplan/detail.html", {
+        "obj": obj, "lines": obj.lines.all(), "scenarios": obj.scenarios.all(),
+        "line_form": WorkforcePlanLineForm(tenant=request.tenant)})
+
+
+@tenant_admin_required
+def workforceplan_edit(request, pk):
+    return crud_edit(request, model=WorkforcePlan, pk=pk, form_class=WorkforcePlanForm,
+                     template="hrm/workforce/workforceplan/form.html",
+                     success_url="hrm:workforceplan_list")
+
+
+@tenant_admin_required
+@require_POST
+def workforceplan_delete(request, pk):
+    return crud_delete(request, model=WorkforcePlan, pk=pk, success_url="hrm:workforceplan_list")
+
+
+# ---- Plan lines (inline on the plan) -----------------------------------------------------------
+@tenant_admin_required
+@require_POST
+def workforceplanline_add(request, plan_pk):
+    plan = get_object_or_404(WorkforcePlan, pk=plan_pk, tenant=request.tenant)
+    form = WorkforcePlanLineForm(request.POST,
+                                 instance=WorkforcePlanLine(tenant=request.tenant, plan=plan),
+                                 tenant=request.tenant)
+    if form.is_valid():
+        form.save()
+        write_audit_log(request.user, plan, "update", {"action": "line_add"})
+        messages.success(request, "Line added to the plan.")
+    else:
+        messages.error(request, "; ".join(f"{fld}: {errs[0]}" for fld, errs in form.errors.items()))
+    return redirect("hrm:workforceplan_detail", pk=plan.pk)
+
+
+@tenant_admin_required
+def workforceplanline_edit(request, pk):
+    obj = get_object_or_404(WorkforcePlanLine.objects.select_related("plan"), pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = WorkforcePlanLineForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, obj.plan, "update", {"action": "line_edit"})
+            messages.success(request, "Line updated.")
+            return redirect("hrm:workforceplan_detail", pk=obj.plan_id)
+    else:
+        form = WorkforcePlanLineForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/workforce/workforceplanline/form.html",
+                  {"form": form, "obj": obj, "plan": obj.plan, "is_edit": True})
+
+
+@tenant_admin_required
+@require_POST
+def workforceplanline_delete(request, pk):
+    obj = get_object_or_404(WorkforcePlanLine.objects.select_related("plan"), pk=pk, tenant=request.tenant)
+    plan_pk = obj.plan_id
+    obj.delete()
+    write_audit_log(request.user, obj.plan, "update", {"action": "line_delete"})
+    messages.success(request, "Line removed.")
+    return redirect("hrm:workforceplan_detail", pk=plan_pk)
+
+
+# ---- Scenarios (admin-only) --------------------------------------------------------------------
+@tenant_admin_required
+def workforcescenario_list(request):
+    qs = (WorkforceScenario.objects.filter(tenant=request.tenant)
+          .select_related("plan", "affected_org_unit").defer("description", "notes"))
+    return crud_list(request, qs, "hrm/workforce/workforcescenario/list.html",
+                     search_fields=["number", "name", "plan__name"],
+                     filters=[("status", "status", False), ("scenario_type", "scenario_type", False),
+                              ("plan", "plan_id", True)],
+                     extra_context={"status_choices": WorkforceScenario.STATUS_CHOICES,
+                                    "scenario_type_choices": WorkforceScenario.SCENARIO_TYPE_CHOICES,
+                                    "plans": WorkforcePlan.objects.filter(tenant=request.tenant)
+                                    .order_by("-created_at")})
+
+
+def _normalize_baseline(scenario):
+    """Enforce "at most one baseline per plan": when a scenario is saved as the baseline, clear the
+    flag on every sibling scenario of the same plan."""
+    if scenario.is_baseline:
+        WorkforceScenario.objects.filter(plan=scenario.plan).exclude(pk=scenario.pk).update(
+            is_baseline=False)
+
+
+@tenant_admin_required
+def workforcescenario_create(request):
+    # Bespoke (not crud_create) so a new baseline demotes the plan's other baselines atomically, and
+    # so ?plan=<id> from a plan's "New Scenario" link pre-selects the plan.
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = WorkforceScenarioForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                obj = form.save(commit=False)
+                obj.tenant = request.tenant
+                obj.save()
+                _normalize_baseline(obj)
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Scenario created.")
+            return redirect("hrm:workforcescenario_list")
+    else:
+        initial = {}
+        plan_id = request.GET.get("plan", "").strip()
+        if plan_id.isdigit() and WorkforcePlan.objects.filter(
+                tenant=request.tenant, pk=int(plan_id)).exists():
+            initial["plan"] = int(plan_id)
+        form = WorkforceScenarioForm(tenant=request.tenant, initial=initial)
+    return render(request, "hrm/workforce/workforcescenario/form.html",
+                  {"form": form, "is_edit": False})
+
+
+@tenant_admin_required
+def workforcescenario_detail(request, pk):
+    obj = get_object_or_404(
+        WorkforceScenario.objects.select_related("plan__currency", "affected_org_unit"),
+        pk=pk, tenant=request.tenant)
+    # The plan's planned headcount is an un-cached aggregate — resolve it ONCE here. Reading
+    # obj.resulting_headcount and obj.plan.total_planned_headcount straight from the template would
+    # re-run the same SUM twice.
+    planned = obj.plan.total_planned_headcount
+    return render(request, "hrm/workforce/workforcescenario/detail.html", {
+        "obj": obj, "plan_planned_headcount": planned,
+        "resulting_headcount": planned + obj.headcount_delta})
+
+
+@tenant_admin_required
+def workforcescenario_edit(request, pk):
+    obj = get_object_or_404(WorkforceScenario, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = WorkforceScenarioForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                obj = form.save()
+                _normalize_baseline(obj)
+            write_audit_log(request.user, obj, "update", changes=_changed(form))
+            messages.success(request, "Scenario updated.")
+            return redirect("hrm:workforcescenario_list")
+    else:
+        form = WorkforceScenarioForm(instance=obj, tenant=request.tenant)
+    return render(request, "hrm/workforce/workforcescenario/form.html",
+                  {"form": form, "is_edit": True, "obj": obj})
+
+
+@tenant_admin_required
+@require_POST
+def workforcescenario_delete(request, pk):
+    return crud_delete(request, model=WorkforceScenario, pk=pk, success_url="hrm:workforcescenario_list")
+
+
+# ---- Employee skills inventory (own-vs-admin self-service) --------------------------------------
+@login_required
+def employeeskill_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, EmployeeSkill.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party").defer("notes"))
+    extra = {"is_admin": is_admin,
+             "skill_category_choices": EmployeeSkill.SKILL_CATEGORY_CHOICES,
+             "proficiency_choices": EmployeeSkill.PROFICIENCY_CHOICES}
+    filters = [("skill_category", "skill_category", False),
+               ("proficiency_level", "proficiency_level", False),
+               ("is_critical_skill", "is_critical_skill", False)]
+    if is_admin:
+        filters.append(("employee", "employee_id", True))
+        extra["employees"] = _ss_employees(request)
+    return crud_list(request, qs, "hrm/workforce/employeeskill/list.html",
+                     search_fields=["skill_name", "certification_name", "employee__party__name"],
+                     filters=filters, extra_context=extra)
+
+
+@login_required
+def employeeskill_create(request):
+    """Add a skill. A non-admin adds to THEIR OWN profile; an admin may target ?employee=<id>."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    target = own
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            target = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    if target is None:
+        messages.error(request, "Select an employee to add this skill to.")
+        return redirect("hrm:employeeskill_list")
+    if request.method == "POST":
+        # Seed the unsaved instance with tenant+employee so the form's unique_together guard can run.
+        instance = EmployeeSkill(tenant=request.tenant, employee=target)
+        form = EmployeeSkillForm(request.POST, instance=instance, tenant=request.tenant)
+        if form.is_valid():
+            try:
+                # Savepoint: a duplicate skill must roll back only this insert, never poison the request
+                # transaction (the 3.38 lesson).
+                with transaction.atomic():
+                    obj = form.save()
+            except IntegrityError:
+                messages.error(request, "That skill is already on the employee's profile.")
+                return redirect("hrm:employeeskill_list")
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Skill added.")
+            return redirect("hrm:employeeskill_list")
+    else:
+        form = EmployeeSkillForm(tenant=request.tenant)
+    return render(request, "hrm/workforce/employeeskill/form.html", {
+        "form": form, "is_edit": False, "is_admin": is_admin,
+        "target_employee": target, "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def employeeskill_detail(request, pk):
+    return _ss_child_detail(request, EmployeeSkill, pk, "hrm/workforce/employeeskill/detail.html",
+                            select_related=("employee__party",))
+
+
+@login_required
+def employeeskill_edit(request, pk):
+    return _ss_child_edit(request, EmployeeSkill, pk, EmployeeSkillForm,
+                          "hrm/workforce/employeeskill/form.html", "hrm:employeeskill_detail")
+
+
+@login_required
+@require_POST
+def employeeskill_delete(request, pk):
+    return _ss_child_delete(request, EmployeeSkill, pk, "hrm:employeeskill_list")
+
+
+# ---- Derived views (no models) ------------------------------------------------------------------
+@tenant_admin_required
+def workforce_gap_analysis(request):
+    """Gap Analysis — current vs planned headcount per department across the ACTIVE/APPROVED plans
+    (optionally scoped to one plan via ?plan=<id>). Aggregated in SQL, not per-row Python."""
+    lines = (WorkforcePlanLine.objects.filter(tenant=request.tenant,
+                                              plan__status__in=("active", "approved"))
+             .select_related("org_unit", "plan"))
+    plan_id = request.GET.get("plan", "").strip()
+    if plan_id.isdigit():
+        lines = lines.filter(plan_id=int(plan_id))
+
+    # Group by org_unit_id (NOT name) — core.OrgUnit doesn't enforce unique names, so two distinct
+    # departments that happen to share a name ("Support" under Eng vs under Sales) must stay separate
+    # rows; grouping by name alone would silently merge them and mask one dept's reduction.
+    rows = (lines.values("org_unit_id", "org_unit__name")
+            .annotate(current=Coalesce(Sum("current_headcount"), 0),
+                      planned=Coalesce(Sum("planned_headcount"), 0))
+            .order_by("org_unit__name"))
+    departments = []
+    total_current = total_planned = 0
+    for r in rows:
+        gap = r["planned"] - r["current"]
+        total_current += r["current"]
+        total_planned += r["planned"]
+        departments.append({"name": r["org_unit__name"] or "Unassigned",
+                            "current": r["current"], "planned": r["planned"], "gap": gap})
+    return render(request, "hrm/workforce/gap_analysis.html", {
+        "departments": departments, "total_current": total_current, "total_planned": total_planned,
+        "total_gap": total_planned - total_current,
+        "plans": WorkforcePlan.objects.filter(tenant=request.tenant,
+                                              status__in=("active", "approved")).order_by("-created_at")})
+
+
+@tenant_admin_required
+def workforce_analytics(request):
+    """Workforce Analytics — headcount + skills-coverage metrics derived from the plans and the skills
+    inventory. All aggregates run in SQL."""
+    plans = WorkforcePlan.objects.filter(tenant=request.tenant)
+    skills = EmployeeSkill.objects.filter(tenant=request.tenant)
+
+    # Resolve each choice code to its display label HERE — a Django template can't index a dict by a
+    # variable key, so the row has to carry its own label.
+    hiring_labels = dict(WorkforcePlanLine.HIRING_TYPE_CHOICES)
+    category_labels = dict(EmployeeSkill.SKILL_CATEGORY_CHOICES)
+
+    hiring_mix = [
+        {**row, "label": hiring_labels.get(row["hiring_type"], row["hiring_type"])}
+        for row in WorkforcePlanLine.objects.filter(tenant=request.tenant,
+                                                    plan__status__in=("active", "approved"))
+        .values("hiring_type").annotate(n=Count("id")).order_by("-n")]
+    top_skills = list(skills.values("skill_name")
+                      .annotate(n=Count("id")).order_by("-n", "skill_name")[:10])
+    by_category = [
+        {**row, "label": category_labels.get(row["skill_category"], row["skill_category"])}
+        for row in skills.values("skill_category").annotate(n=Count("id")).order_by("-n")]
+
+    headcount = EmployeeProfile.objects.filter(tenant=request.tenant).count()
+    critical = skills.filter(is_critical_skill=True).count()
+    certified = skills.filter(is_certified=True).count()
+    covered = skills.values("employee_id").distinct().count()
+
+    return render(request, "hrm/workforce/analytics.html", {
+        "headcount": headcount,
+        "plan_count": plans.count(),
+        "active_plan_count": plans.filter(status__in=("active", "approved")).count(),
+        "skill_count": skills.count(),
+        "critical_skill_count": critical,
+        "certified_skill_count": certified,
+        "employees_with_skills": covered,
+        # Coverage: employees who have at least one skill recorded.
+        "skill_coverage_percent": (round(covered / headcount * 100, 1) if headcount else 0),
+        "hiring_mix": hiring_mix,
+        "top_skills": top_skills,
+        "by_category": by_category,
+    })
