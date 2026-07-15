@@ -9085,3 +9085,246 @@ class ComplianceRegister(TenantNumbered):
         if not self.due_date or self.status in ("filed", "not_applicable"):
             return False
         return self.due_date < timezone.localdate()
+
+
+# ---------------------------------------------------------------------------
+# 3.40 Workforce Planning — the demand/supply/gap planning layer. A WorkforcePlan
+# is a planning cycle for an org unit; its lines hold the per-department current vs
+# planned headcount (gap + budget impact are COMPUTED); scenarios are signed what-if
+# deltas on top of a plan; EmployeeSkill is the skills inventory that powers Supply
+# Analysis. Derived gap-analysis + analytics views need no tables of their own.
+#
+# CONFIDENTIAL: headcount plans include RESTRUCTURING and REDUCTION lines — every
+# plan/line/scenario view is @tenant_admin_required. EmployeeSkill is the exception:
+# it is own-vs-admin self-service (an employee curates their own skills).
+#
+# NOTE (seeder): WorkforcePlanLine.org_unit / .designation are SET_NULL, and nothing
+# here PROTECTs a master the seeder flushes — so no _seed_tenant teardown entry is
+# needed (unlike 3.38's SuccessionPlan.critical_role, which is PROTECT).
+# ---------------------------------------------------------------------------
+class WorkforcePlan(TenantNumbered):
+    """A workforce planning cycle (``WFP-#####``) for an org unit (or the whole company). The four
+    totals are COMPUTED from its lines and are ANNOTATION-AWARE — the list view annotates them so
+    rendering N plans doesn't fire 4N aggregate queries."""
+
+    NUMBER_PREFIX = "WFP"
+
+    PLAN_TYPE_CHOICES = [
+        ("annual", "Annual"),
+        ("project", "Project"),
+        ("restructuring", "Restructuring"),
+        ("custom", "Custom"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("approved", "Approved"),
+        ("archived", "Archived"),
+    ]
+
+    name = models.CharField(max_length=150)
+    org_unit = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_workforce_plans",
+                                 help_text="Blank = the whole organization.")
+    plan_type = models.CharField(max_length=15, choices=PLAN_TYPE_CHOICES, default="annual")
+    period_start = models.DateField()
+    period_end = models.DateField()
+    growth_assumption_percent = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="Business-growth assumption driving the demand forecast, e.g. 12.50 = +12.5%.")
+    owner = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="workforce_plans_owned")
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_workforce_plans")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = (("tenant", "number"), ("tenant", "name"))
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_wfp_tnt_status_idx"),
+            models.Index(fields=["tenant", "plan_type"], name="hrm_wfp_tnt_type_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_wfp_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.name}" if self.number else self.name
+
+    # ---- Totals: COMPUTED from the lines, annotation-aware (see workforceplan_list) ----
+    @property
+    def total_current_headcount(self):
+        annotated = getattr(self, "_total_current", None)
+        if annotated is not None:
+            return annotated
+        return self.lines.aggregate(v=Sum("current_headcount"))["v"] or 0
+
+    @property
+    def total_planned_headcount(self):
+        annotated = getattr(self, "_total_planned", None)
+        if annotated is not None:
+            return annotated
+        return self.lines.aggregate(v=Sum("planned_headcount"))["v"] or 0
+
+    @property
+    def total_gap(self):
+        """Net headcount change across the plan (negative = a net reduction)."""
+        return self.total_planned_headcount - self.total_current_headcount
+
+    @property
+    def total_budget_impact(self):
+        """Sum of each line's budget impact. Computed in Python off the (few) lines rather than in SQL,
+        because a line only contributes when BOTH its gap and its avg_annual_cost are set."""
+        total = Decimal("0")
+        for line in self.lines.all():
+            impact = line.budget_impact
+            if impact is not None:
+                total += impact
+        return total
+
+
+class WorkforcePlanLine(TenantOwned):
+    """One department (optionally narrowed to a designation) inside a WorkforcePlan: its current vs planned
+    headcount. ``headcount_gap`` and ``budget_impact`` are COMPUTED, never stored."""
+
+    HIRING_TYPE_CHOICES = [
+        ("new_growth", "New Growth"),
+        ("replacement", "Replacement"),
+        ("attrition_backfill", "Attrition Backfill"),
+        ("reduction", "Reduction"),
+    ]
+
+    plan = models.ForeignKey("hrm.WorkforcePlan", on_delete=models.CASCADE, related_name="lines")
+    org_unit = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_workforce_plan_lines")
+    designation = models.ForeignKey("hrm.Designation", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="workforce_plan_lines",
+                                    help_text="Blank = a whole-department aggregate.")
+    current_headcount = models.PositiveSmallIntegerField(default=0)
+    planned_headcount = models.PositiveSmallIntegerField(default=0)
+    hiring_type = models.CharField(max_length=20, choices=HIRING_TYPE_CHOICES, default="new_growth")
+    avg_annual_cost = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                          help_text="Fully-loaded average annual cost per head.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["id"]
+        indexes = [
+            models.Index(fields=["tenant", "plan"], name="hrm_wfpl_tnt_plan_idx"),
+            models.Index(fields=["tenant", "org_unit"], name="hrm_wfpl_tnt_org_idx"),
+        ]
+
+    def __str__(self):
+        unit = self.org_unit.name if self.org_unit_id else "All"
+        return f"{unit}: {self.current_headcount} -> {self.planned_headcount}"
+
+    @property
+    def headcount_gap(self):
+        """planned − current. Positive = hiring need; negative = a reduction."""
+        return self.planned_headcount - self.current_headcount
+
+    @property
+    def budget_impact(self):
+        """gap × avg_annual_cost — None when no cost is set (so it can't be silently treated as zero)."""
+        if self.avg_annual_cost is None:
+            return None
+        return self.headcount_gap * self.avg_annual_cost
+
+
+class WorkforceScenario(TenantNumbered):
+    """A named what-if variant on a WorkforcePlan (``WFS-#####``) — e.g. a hiring freeze or a
+    restructuring. The deltas are SIGNED (a reduction scenario carries a negative headcount_delta)."""
+
+    NUMBER_PREFIX = "WFS"
+
+    SCENARIO_TYPE_CHOICES = [
+        ("growth", "Growth"),
+        ("freeze", "Hiring Freeze"),
+        ("restructuring", "Restructuring"),
+        ("attrition", "Attrition"),
+        ("cost_reduction", "Cost Reduction"),
+        ("custom", "Custom"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("under_review", "Under Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    plan = models.ForeignKey("hrm.WorkforcePlan", on_delete=models.CASCADE, related_name="scenarios")
+    name = models.CharField(max_length=150)
+    scenario_type = models.CharField(max_length=20, choices=SCENARIO_TYPE_CHOICES, default="custom")
+    affected_org_unit = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="hrm_workforce_scenarios")
+    description = models.TextField(blank=True)
+    headcount_delta = models.SmallIntegerField(default=0, help_text="Signed: negative = a reduction.")
+    cost_delta = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"),
+                                     help_text="Signed: negative = a saving.")
+    is_baseline = models.BooleanField(default=False)
+    is_selected = models.BooleanField(default=False)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = (("tenant", "number"), ("tenant", "plan", "name"))
+        indexes = [
+            models.Index(fields=["tenant", "plan"], name="hrm_wfs_tnt_plan_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_wfs_tnt_status_idx"),
+            models.Index(fields=["tenant", "scenario_type"], name="hrm_wfs_tnt_type_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="hrm_wfs_tnt_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.name}" if self.number else self.name
+
+    @property
+    def resulting_headcount(self):
+        """The plan's planned headcount with this scenario's delta applied."""
+        return self.plan.total_planned_headcount + self.headcount_delta
+
+
+class EmployeeSkill(TenantOwned):
+    """One skill on an employee's profile — the skills inventory behind Supply Analysis. Mirrors the
+    existing ``CandidateSkill`` shape (3.6), just anchored to EmployeeProfile. Own-vs-admin: an employee
+    curates their own skills; HR sees the whole inventory."""
+
+    SKILL_CATEGORY_CHOICES = [
+        ("technical", "Technical"),
+        ("functional", "Functional"),
+        ("leadership", "Leadership"),
+        ("soft_skill", "Soft Skill"),
+        ("certification", "Certification"),
+    ]
+    PROFICIENCY_CHOICES = [
+        ("beginner", "Beginner"),
+        ("intermediate", "Intermediate"),
+        ("advanced", "Advanced"),
+        ("expert", "Expert"),
+    ]
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE, related_name="skills")
+    skill_name = models.CharField(max_length=120)
+    skill_category = models.CharField(max_length=15, choices=SKILL_CATEGORY_CHOICES, default="technical")
+    proficiency_level = models.CharField(max_length=15, choices=PROFICIENCY_CHOICES, default="intermediate")
+    years_experience = models.PositiveSmallIntegerField(null=True, blank=True)
+    is_certified = models.BooleanField(default=False)
+    certification_name = models.CharField(max_length=150, blank=True)
+    last_assessed_date = models.DateField(null=True, blank=True)
+    is_critical_skill = models.BooleanField(default=False,
+                                            help_text="Flags a skill critical to future workforce needs.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["skill_name", "id"]
+        unique_together = ("tenant", "employee", "skill_name")
+        indexes = [
+            models.Index(fields=["tenant", "employee"], name="hrm_eskill_tnt_emp_idx"),
+            models.Index(fields=["tenant", "skill_category"], name="hrm_eskill_tnt_cat_idx"),
+            models.Index(fields=["tenant", "proficiency_level"], name="hrm_eskill_tnt_prof_idx"),
+            models.Index(fields=["tenant", "is_critical_skill"], name="hrm_eskill_tnt_crit_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.skill_name} ({self.get_proficiency_level_display()})"
