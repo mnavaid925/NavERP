@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        {% if obj.status == 'approved' %}<span class="badge badge-green">Approved</span>
+        {% elif obj.status == 'under_review' %}<span class="badge badge-amber">Under Review</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.is_baseline %}<span class="badge badge-muted">Baseline</span>{% endif %}
+        {% if obj.is_selected %}<span class="badge badge-green">Selected</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:workforcescenario_list' %}">Scenarios</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:workforcescenario_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:workforcescenario_delete' obj.pk %}" onsubmit="return confirm('Delete this scenario?');" style="display:inline;">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      <a href="{% url 'hrm:workforcescenario_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Scenarios</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Number</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Plan</span><div><a href="{% url 'hrm:workforceplan_detail' obj.plan.pk %}">{{ obj.plan.name }}</a></div></div>
+      <div><span class="text-muted">Scenario Type</span><div>{{ obj.get_scenario_type_display }}</div></div>
+      <div><span class="text-muted">Affected Unit</span><div>{% if obj.affected_org_unit %}{{ obj.affected_org_unit.name }}{% else %}Whole plan{% endif %}</div></div>
+      <div><span class="text-muted">Status</span><div>{{ obj.get_status_display }}</div></div>
+    </div>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  {# Signed deltas: negative = a reduction / a saving. resulting_headcount applies the delta to the plan. #}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon {% if obj.headcount_delta < 0 %}orange{% else %}green{% endif %}"><i data-lucide="users"></i></div>
+      <div class="stat-value">{% if obj.headcount_delta > 0 %}+{% endif %}{{ obj.headcount_delta }}</div>
+      <div class="stat-label">Headcount Delta</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ obj.cost_delta|floatformat:2 }}</div>
+      <div class="stat-label">Cost Delta{% if obj.plan.currency %} ({{ obj.plan.currency.code }}){% endif %}</div>
+    </div>
+    {# Both come from the view — the property behind them is an un-cached aggregate. #}
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="user-check"></i></div>
+      <div class="stat-value">{{ resulting_headcount }}</div>
+      <div class="stat-label">Resulting Headcount</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="user-plus"></i></div>
+      <div class="stat-value">{{ plan_planned_headcount }}</div>
+      <div class="stat-label">Plan's Planned Headcount</div>
+    </div>
+  </div>
+
+  {% if obj.notes %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Notes</h2></div>
+    <div class="card-body"><p style="margin:0;">{{ obj.notes|linebreaksbr }}</p></div>
+  </div>
+  {% endif %}
+{% endblock %}
