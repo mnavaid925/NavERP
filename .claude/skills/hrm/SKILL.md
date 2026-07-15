@@ -771,6 +771,58 @@ Analysis → `employeeskill_list`, Gap Analysis → `workforce_gap_analysis`, Bu
 `workforce_analytics`). **Tests:** `apps/hrm/tests/test_workforce.py` (59) — if you add a plan/scenario view, add it
 to `ADMIN_ONLY_ROUTES`.
 
+### 3.41 Employee Engagement & Wellbeing (4 tables) — an EXTENSION pass that reuses 3.27, not a new survey stack
+**REUSE, don't duplicate:** pulse/eNPS survey DELIVERY is already `hrm.Survey`/`hrm.SurveyResponse` (3.27) — a 0–10
+rating question IS the eNPS pattern; values/mission content is `hrm.Announcement(category="policy")` (3.27). This pass
+adds only the real gaps.
+
+**CONFIDENTIALITY (read first):** EAP/counseling data is highly sensitive. `WellbeingProgram.save()` **forces
+`is_confidential=True`** for `program_type="eap_counseling"` (model-layer — a tampered POST or a direct
+`.create(is_confidential=False)` can't bypass it; `WellbeingProgramForm.clean()` mirrors it so the audit diff stays
+honest). A confidential program's roster is **AGGREGATE-ONLY for EVERY viewer including admins** —
+`wellbeingprogram_detail` passes `participations=None` (never a per-employee queryset) when `is_confidential`. And
+because `str(obj)` becomes the admin-readable `AuditLog.target`, **`WellbeingParticipation.__str__` returns
+"Confidential participation #N"** (never the employee name) for a confidential program, and the edit view logs
+`changes=None` for one. (Honest limitation, documented on the admin inline: Django-admin/DB access still sees the rows —
+that's a privileged, audited action outside this module.)
+
+**Models** (`apps/hrm/models.py`, migration `0060`):
+`SurveyActionPlan` (`TenantNumbered`, **`ACTP-`**; `survey`→3.27 `Survey`(CASCADE), `title`, `focus_area`,
+`owner`→`EmployeeProfile`(**PROTECT**), `department`(SET_NULL), `description`, `related_objective`→3.18
+`Objective`(SET_NULL), `target_date`, `status` [open/in_progress/completed/cancelled]; `save()` auto-manages
+`completed_at` symmetrically; **`is_overdue`** is pure arithmetic — safe to render unannotated), `WellbeingProgram`
+(`TenantNumbered`, **`WBP-`**; the ONE `program_type`-discriminated catalog [wellness_challenge / mental_health_resource
+/ eap_counseling / culture_assessment / team_event / interest_group / volunteering / work_life_policy], `owner`→User,
+`target_department`(SET_NULL), dates, `points_value`, `external_resource_url`, `is_confidential`, `status`; the
+confidentiality `save()` force; **`participant_count`** ANNOTATION-AWARE; **`participation_stats()`** the aggregate-only
+roll-up), `WellbeingParticipation` (`TenantOwned`, the nested RSVP/attendance child, form-only; `program`(CASCADE,
+related_name `participations`), `employee`→`EmployeeProfile`(**PROTECT**), `status`
+[registered/attended/completed/no_show/withdrawn], `points_earned`, `notes` [scheduling-only], `completed_at` auto;
+`unique_together (tenant, program, employee)`), `FlexibleWorkArrangement` (`TenantNumbered`, **`FWA-`**; a
+`TravelRequest` clone reusing `_hr_request_*` verbatim — `arrangement_type`, dates, `days_per_week_remote`, `reason`,
+`status` [draft/pending/approved/rejected/cancelled/expired], `OPEN_STATUSES=("draft","pending")`, approver/decision).
+
+**Views** (`apps/hrm/views.py`, `# 3.41 Employee Engagement & Wellbeing`): `SurveyActionPlan` CRUD — list/detail
+`@login_required`, create/delete `@tenant_admin_required`, **edit gated by `_can_manage_action_plan`** (owner-OR-admin,
+keyed on `owner` not `employee`); `WellbeingProgram` catalog — list/detail `@login_required`, create/edit/delete
+`@tenant_admin_required`, detail branches on `is_confidential`; inline `wellbeingparticipation_add`/`_edit`/`_delete`
+(`@login_required`) — **`add` is bespoke**: resolves own-vs-admin target, guards the `(tenant,program,employee)`
+unique_together with an explicit query (all three fields are view-resolved, so Django can't `validate_unique`) + a
+`transaction.atomic()` savepoint, and `WellbeingParticipationForm(can_admin=…)` drops `points_earned` + narrows `status`
+for a non-admin (so an employee can RSVP/withdraw only, never self-award points); `FlexibleWorkArrangement` — full
+`_ss_child_create`/`_hr_request_*` lifecycle (approve/reject `@tenant_admin_required` with the self-approval guard).
+
+**Core-spine reuse:** `hrm.Survey`/`SurveyResponse`/`Announcement` (3.27), `hrm.Objective` (3.18), `hrm.EmployeeProfile`,
+`core.OrgUnit`, `settings.AUTH_USER_MODEL`. **Posts no GL.** **Templates:**
+`templates/hrm/engagement/{surveyactionplan,wellbeingprogram,flexibleworkarrangement}/{list,detail,form}.html` +
+`engagement/wellbeingparticipation/form.html` (form-only child). **Seeder:** `_seed_engagement` (after `_seed_workforce`)
+— its OWN additional closed `Survey` (title-scoped so flush leaves 3.27's surveys intact) + 2 action plans, a
+7-program catalog (incl. an `eap_counseling` seeded `is_confidential=False` to prove the force), participations, and
+FWAs across the workflow. Flush teardown: `SurveyActionPlan.owner`/`WellbeingParticipation.employee` are PROTECT →
+listed before `EmployeeProfile` in `_seed_tenant`. **Sidebar:** `LIVE_LINKS["3.41"]` — all 6 bullets (Engagement Surveys
+→ `surveyactionplan_list`; Wellbeing/EAP/Culture/Social are `program_type`-filtered `wellbeingprogram_list` slices;
+Work-Life Balance → `flexibleworkarrangement_list`). **Tests:** `apps/hrm/tests/test_engagement.py` (40).
+
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
