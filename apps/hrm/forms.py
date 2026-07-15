@@ -3326,6 +3326,11 @@ class WellbeingProgramForm(TenantModelForm):
         start, end = cleaned.get("start_date"), cleaned.get("end_date")
         if start and end and end < start:
             self.add_error("end_date", "End date cannot be before the start date.")
+        # Mirror the model's save() force here too, so cleaned_data (and therefore the audit-log diff,
+        # which reads it) records the TRUE persisted value — an admin unchecking "confidential" on an EAP
+        # program must not leave a misleading "is_confidential -> False" trail.
+        if cleaned.get("program_type") == "eap_counseling":
+            cleaned["is_confidential"] = True
         return cleaned
 
 
