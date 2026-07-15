@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        {% if obj.status == 'approved' %}<span class="badge badge-green">Approved</span>
+        {% elif obj.status == 'active' %}<span class="badge badge-info">Active</span>
+        {% elif obj.status == 'draft' %}<span class="badge badge-amber">Draft</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.plan_type == 'restructuring' %}<span class="badge badge-red">Restructuring</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:workforceplan_list' %}">Workforce Plans</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:workforceplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:workforceplan_delete' obj.pk %}" onsubmit="return confirm('Delete this plan and all of its lines and scenarios?');" style="display:inline;">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      <a href="{% url 'hrm:workforceplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Plans</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Number</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Scope</span><div>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}Whole organization{% endif %}</div></div>
+      <div><span class="text-muted">Plan Type</span><div>{{ obj.get_plan_type_display }}</div></div>
+      <div><span class="text-muted">Period</span><div>{{ obj.period_start|date:"d M Y" }} – {{ obj.period_end|date:"d M Y" }}</div></div>
+      <div><span class="text-muted">Growth Assumption</span><div>{% if obj.growth_assumption_percent is not None %}{{ obj.growth_assumption_percent }}%{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Owner</span><div>{% if obj.owner %}{{ obj.owner.party.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</div></div>
+      <div><span class="text-muted">Currency</span><div>{% if obj.currency %}{{ obj.currency.code }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Status</span><div>{{ obj.get_status_display }}</div></div>
+    </div>
+    {% if obj.notes %}<p style="margin-top:1rem;">{{ obj.notes|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  {# Rolled-up totals — computed from the lines, never stored. #}
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="users"></i></div><div class="stat-value">{{ obj.total_current_headcount }}</div><div class="stat-label">Current Headcount</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user-plus"></i></div><div class="stat-value">{{ obj.total_planned_headcount }}</div><div class="stat-label">Planned Headcount</div></div>
+    <div class="stat-card">
+      <div class="stat-icon {% if obj.total_gap < 0 %}orange{% else %}green{% endif %}"><i data-lucide="git-compare"></i></div>
+      <div class="stat-value">{% if obj.total_gap > 0 %}+{% endif %}{{ obj.total_gap }}</div>
+      <div class="stat-label">Net Gap ({% if obj.total_gap > 0 %}hiring need{% elif obj.total_gap < 0 %}net reduction{% else %}flat{% endif %})</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ obj.total_budget_impact|floatformat:2 }}</div>
+      <div class="stat-label">Budget Impact{% if obj.currency %} ({{ obj.currency.code }}){% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Plan Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Department</th><th>Designation</th><th class="text-right">Current</th><th class="text-right">Planned</th><th class="text-right">Gap</th><th>Hiring Type</th><th class="text-right">Avg Annual Cost</th><th class="text-right">Budget Impact</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{% if line.org_unit %}{{ line.org_unit.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>{% if line.designation %}{{ line.designation.name }}{% else %}<span class="text-muted">All roles</span>{% endif %}</td>
+              <td class="text-right">{{ line.current_headcount }}</td>
+              <td class="text-right">{{ line.planned_headcount }}</td>
+              <td class="text-right">
+                {% if line.headcount_gap > 0 %}<span class="badge badge-green">+{{ line.headcount_gap }}</span>
+                {% elif line.headcount_gap < 0 %}<span class="badge badge-red">{{ line.headcount_gap }}</span>
+                {% else %}<span class="badge badge-muted">0</span>{% endif %}
+              </td>
+              <td>{% if line.hiring_type == 'reduction' %}<span class="badge badge-red">Reduction</span>{% elif line.hiring_type == 'new_growth' %}<span class="badge badge-green">New Growth</span>{% else %}<span class="badge badge-muted">{{ line.get_hiring_type_display }}</span>{% endif %}</td>
+              <td class="text-right">{% if line.avg_annual_cost is not None %}{{ line.avg_annual_cost|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td class="text-right">{% if line.budget_impact is not None %}{{ line.budget_impact|floatformat:2 }}{% else %}<span class="text-muted">n/a</span>{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:workforceplanline_edit' line.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:workforceplanline_delete' line.pk %}" onsubmit="return confirm('Remove this line?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-plus"></i><h3>No lines yet</h3><p>Add one line per department to record its current vs planned headcount.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-body">
+      <h2 class="card-title">Add a Line</h2>
+      <form method="post" action="{% url 'hrm:workforceplanline_add' obj.pk %}" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in line_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Line</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Scenarios</h2>
+      <a href="{% url 'hrm:workforcescenario_create' %}?plan={{ obj.pk }}" class="btn btn-sm btn-outline"><i data-lucide="plus"></i> New Scenario</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Type</th><th class="text-right">Headcount Δ</th><th class="text-right">Cost Δ</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in scenarios %}
+            <tr>
+              <td><a href="{% url 'hrm:workforcescenario_detail' s.pk %}" class="fw-600">{{ s.number }}</a></td>
+              <td>{{ s.name|truncatechars:36 }}{% if s.is_baseline %} <span class="badge badge-muted">Baseline</span>{% endif %}{% if s.is_selected %} <span class="badge badge-green">Selected</span>{% endif %}</td>
+              <td>{{ s.get_scenario_type_display }}</td>
+              <td class="text-right">{% if s.headcount_delta > 0 %}+{% endif %}{{ s.headcount_delta }}</td>
+              <td class="text-right">{{ s.cost_delta|floatformat:2 }}</td>
+              <td>{% if s.status == 'approved' %}<span class="badge badge-green">Approved</span>{% elif s.status == 'under_review' %}<span class="badge badge-amber">Under Review</span>{% elif s.status == 'rejected' %}<span class="badge badge-red">Rejected</span>{% else %}<span class="badge badge-muted">{{ s.get_status_display }}</span>{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'hrm:workforcescenario_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No scenarios</h3><p>Model a hiring freeze, a restructuring, or a growth push as a signed delta on top of this plan.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
