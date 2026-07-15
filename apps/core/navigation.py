@@ -694,6 +694,19 @@ LIVE_LINKS = {
         "Scenario Planning": "hrm:workforcescenario_list",
         "Workforce Analytics": "hrm:workforce_analytics",
     },
+    # 3.41 Employee Engagement & Wellbeing — an EXTENSION pass. "Engagement Surveys" deep-links to the NEW
+    # SurveyActionPlan list (the one real gap this pass fills); pulse/eNPS survey DELIVERY itself stays
+    # reachable via 3.27's own "Surveys" bullet (hrm:survey_list) — not duplicated here. The other four
+    # bullets are program_type-filtered slices of the single WellbeingProgram catalog (the 3.40 "Budget
+    # Planning" pattern: a query-string filter on the base entity's own list, most-specific match wins).
+    "3.41": {
+        "Engagement Surveys": "hrm:surveyactionplan_list",
+        "Wellbeing Programs": "hrm:wellbeingprogram_list?program_type=wellness_challenge",
+        "Work-Life Balance": "hrm:flexibleworkarrangement_list",
+        "Employee Assistance": "hrm:wellbeingprogram_list?program_type=eap_counseling",
+        "Culture & Values": "hrm:wellbeingprogram_list?program_type=culture_assessment",
+        "Social Connect": "hrm:wellbeingprogram_list?program_type=team_event",
+    },
     # 3.5 Job Requisition — authorization-to-hire hub, sequential approval chain, JD templates. The
     # list bullets deep-link to filtered slices of the one requisition list so each highlights on its
     # own page (most-specific match wins): Job Posting → the posted/published openings, Approval
