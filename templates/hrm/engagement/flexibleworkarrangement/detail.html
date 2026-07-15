@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_arrangement_type_display }}
+        {% if obj.status == 'approved' %}<span class="badge badge-green">Approved</span>
+        {% elif obj.status == 'pending' %}<span class="badge badge-amber">Pending</span>
+        {% elif obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>
+        {% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">Cancelled</span>
+        {% elif obj.status == 'expired' %}<span class="badge badge-muted">Expired</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:flexibleworkarrangement_list' %}">Flexible Work</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions"><a href="{% url 'hrm:flexibleworkarrangement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Requests</a></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Number</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Employee</span><div>{{ obj.employee.party.name }}</div></div>
+      <div><span class="text-muted">Type</span><div>{{ obj.get_arrangement_type_display }}</div></div>
+      <div><span class="text-muted">From</span><div>{{ obj.start_date|date:"d M Y" }}</div></div>
+      <div><span class="text-muted">To</span><div>{% if obj.end_date %}{{ obj.end_date|date:"d M Y" }}{% else %}Open-ended{% endif %}</div></div>
+      {% if obj.days_per_week_remote is not None %}<div><span class="text-muted">Days Remote / Week</span><div>{{ obj.days_per_week_remote }}</div></div>{% endif %}
+      <div><span class="text-muted">Status</span><div>{{ obj.get_status_display }}</div></div>
+      {% if obj.approver %}<div><span class="text-muted">Decided By</span><div>{{ obj.approver.get_full_name|default:obj.approver.username }}</div></div>{% endif %}
+      {% if obj.approved_at %}<div><span class="text-muted">Decided</span><div>{{ obj.approved_at|date:"d M Y" }}</div></div>{% endif %}
+    </div>
+    <p style="margin-top:1rem;">{{ obj.reason|linebreaksbr }}</p>
+    {% if obj.status == 'rejected' and obj.decision_note %}<div class="form-error" style="margin-top:1rem;"><strong>Rejected:</strong> {{ obj.decision_note }}</div>{% endif %}
+  </div></div>
+
+  {# Owner actions while the request is still open; approver actions for an admin who isn't the requester. #}
+  {% if obj.status == 'draft' or obj.status == 'pending' or is_admin and obj.status == 'pending' and not is_own %}
+  <div class="card"><div class="card-body"><div class="form-actions">
+    {% if obj.status == 'draft' %}
+      <form method="post" action="{% url 'hrm:flexibleworkarrangement_submit' obj.pk %}" onsubmit="return confirm('Submit this request for approval?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button></form>
+    {% endif %}
+    {% if obj.status == 'draft' or obj.status == 'pending' %}
+      <a href="{% url 'hrm:flexibleworkarrangement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:flexibleworkarrangement_cancel' obj.pk %}" onsubmit="return confirm('Cancel this request?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Cancel</button></form>
+      <form method="post" action="{% url 'hrm:flexibleworkarrangement_delete' obj.pk %}" onsubmit="return confirm('Delete this request?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+    {% endif %}
+    {% if is_admin and obj.status == 'pending' and not is_own %}
+      <form method="post" action="{% url 'hrm:flexibleworkarrangement_approve' obj.pk %}" onsubmit="return confirm('Approve this request?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button></form>
+    {% endif %}
+  </div>
+  {% if is_admin and obj.status == 'pending' and not is_own %}
+    <form method="post" action="{% url 'hrm:flexibleworkarrangement_reject' obj.pk %}" onsubmit="return confirm('Reject this request?');" style="display:flex; gap:.5rem; align-items:flex-end; margin-top:1rem;">{% csrf_token %}
+      <div class="form-group" style="flex:1;"><label class="form-label" for="dec_note">Rejection reason <span class="req">*</span></label><input type="text" name="decision_note" id="dec_note" class="form-input" required></div>
+      <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject</button>
+    </form>
+  {% endif %}
+  </div></div>
+  {% endif %}
+{% endblock %}
