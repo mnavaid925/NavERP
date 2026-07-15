@@ -98,6 +98,23 @@ def grievance_b(db, tenant_b, employee_b):
                                     status="open")
 
 
+@pytest.fixture
+def contract_b(db, tenant_b, employee_b):
+    """An EmploymentContract belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import EmploymentContract
+    return EmploymentContract.objects.create(
+        tenant=tenant_b, employee=employee_b, contract_type="permanent",
+        start_date=TODAY - datetime.timedelta(days=100), status="active")
+
+
+@pytest.fixture
+def register_b(db, tenant_b):
+    """A ComplianceRegister record belonging to tenant_b (IDOR tests)."""
+    from apps.hrm.models import ComplianceRegister
+    return ComplianceRegister.objects.create(
+        tenant=tenant_b, title="B Register", register_type="wage_register", status="pending")
+
+
 # ============================================================ Models (computed)
 def test_contract_autonumber_and_expiry(contract_a):
     assert contract_a.number.startswith("CTR-")
@@ -335,3 +352,187 @@ def test_hrpolicy_list_is_ordered_for_pagination(client_a, tenant_a):
     p1 = {o.pk for o in resp.context["object_list"]}
     p2 = {o.pk for o in client_a.get(reverse("hrm:hrpolicy_list") + "?page=2").context["object_list"]}
     assert p1 and p2 and not (p1 & p2)
+
+
+# ============================================================ Full URL sweep (list/create/detail/edit)
+def _all_compliance_urls(contract, policy, grievance, register, employee):
+    """The 17 GET routes across the 13 compliance templates: employmentcontract/hrpolicy/grievance/
+    complianceregister each get list+create+detail+edit (list/detail are their own template; create and
+    edit share one form.html); policyacknowledgment is list-only (self-service, no create/edit).
+    grievance_create needs ?employee=<id> because the tenant admin fixture has no linked
+    EmployeeProfile (own == None) — same on-behalf-of pattern the create view documents for HR admins."""
+    return [
+        reverse("hrm:employmentcontract_list"),
+        reverse("hrm:employmentcontract_create"),
+        reverse("hrm:employmentcontract_detail", args=[contract.pk]),
+        reverse("hrm:employmentcontract_edit", args=[contract.pk]),
+        reverse("hrm:hrpolicy_list"),
+        reverse("hrm:hrpolicy_create"),
+        reverse("hrm:hrpolicy_detail", args=[policy.pk]),
+        reverse("hrm:hrpolicy_edit", args=[policy.pk]),
+        reverse("hrm:policyacknowledgment_list"),
+        reverse("hrm:grievance_list"),
+        reverse("hrm:grievance_create") + f"?employee={employee.pk}",
+        reverse("hrm:grievance_detail", args=[grievance.pk]),
+        reverse("hrm:grievance_edit", args=[grievance.pk]),
+        reverse("hrm:complianceregister_list"),
+        reverse("hrm:complianceregister_create"),
+        reverse("hrm:complianceregister_detail", args=[register.pk]),
+        reverse("hrm:complianceregister_edit", args=[register.pk]),
+    ]
+
+
+def test_full_url_sweep_get_200(client_a, contract_a, policy_a, grievance_a, register_a, employee_a):
+    """Every 3.39 list/create/detail/edit GET renders (200) for a tenant admin."""
+    urls = _all_compliance_urls(contract_a, policy_a, grievance_a, register_a, employee_a)
+    assert len(urls) == 17
+    for url in urls:
+        resp = client_a.get(url)
+        assert resp.status_code == 200, f"{url} -> {resp.status_code}"
+
+
+def test_no_template_comment_leaks_across_compliance_pages(client_a, contract_a, policy_a, grievance_a,
+                                                            register_a, employee_a):
+    """None of the 13 compliance templates leak a raw ``{#`` / ``{% comment`` marker into the response
+    (Django strips real comment tags before rendering — a leak here means a template broke out of the
+    tag, e.g. inside a ``{% verbatim %}`` block or a string literal)."""
+    urls = _all_compliance_urls(contract_a, policy_a, grievance_a, register_a, employee_a)
+    seen_titles = set()
+    for url in urls:
+        resp = client_a.get(url)
+        assert resp.status_code == 200, url
+        html = resp.content.decode()
+        assert "{#" not in html, f"comment leak at {url}"
+        assert "{% comment" not in html, f"comment leak at {url}"
+        seen_titles.add(html.split("<title>", 1)[1].split("</title>", 1)[0] if "<title>" in html else "")
+    # Sanity: the pages actually rendered distinct titles (not one broken template reused everywhere).
+    assert len(seen_titles) > 1
+
+
+# ============================================================ Full CRUD cycles via the real web forms
+def test_employmentcontract_full_crud_via_form(client_a, tenant_a, employee_a, designation_a):
+    """create -> edit (WITH a document upload, exercising the FileField clean()) -> delete."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.hrm.models import EmploymentContract
+
+    # CREATE — file-less submission.
+    resp = client_a.post(reverse("hrm:employmentcontract_create"), {
+        "employee": employee_a.pk, "contract_type": "permanent",
+        "start_date": TODAY.isoformat(), "notice_period_days": "30",
+        "designation": designation_a.pk, "status": "active"})
+    assert resp.status_code == 302
+    obj = EmploymentContract.objects.get(tenant=tenant_a, employee=employee_a, contract_type="permanent")
+    assert obj.number.startswith("CTR-")
+
+    # EDIT — with a document upload this time.
+    doc = SimpleUploadedFile("contract.pdf", b"%PDF-1.4 test", content_type="application/pdf")
+    resp = client_a.post(reverse("hrm:employmentcontract_edit", args=[obj.pk]), {
+        "employee": employee_a.pk, "contract_type": "permanent",
+        "start_date": TODAY.isoformat(), "notice_period_days": "45",
+        "designation": designation_a.pk, "status": "active", "document": doc})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.notice_period_days == 45
+    assert obj.document.name
+
+    # DELETE
+    resp = client_a.post(reverse("hrm:employmentcontract_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not EmploymentContract.objects.filter(pk=obj.pk).exists()
+
+
+def test_hrpolicy_full_crud_via_form(client_a, tenant_a):
+    """create -> edit -> delete, file-less throughout."""
+    from apps.hrm.models import HRPolicy
+
+    resp = client_a.post(reverse("hrm:hrpolicy_create"), {
+        "title": "Data Protection Policy", "category": "it_security", "version_number": "1.0",
+        "status": "draft", "requires_acknowledgment": "on"})
+    assert resp.status_code == 302
+    obj = HRPolicy.objects.get(tenant=tenant_a, title="Data Protection Policy")
+    assert obj.number.startswith("POL-")
+
+    resp = client_a.post(reverse("hrm:hrpolicy_edit", args=[obj.pk]), {
+        "title": "Data Protection Policy", "category": "it_security", "version_number": "1.1",
+        "status": "draft", "requires_acknowledgment": "on", "summary": "Updated summary."})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.version_number == "1.1" and obj.summary == "Updated summary."
+
+    resp = client_a.post(reverse("hrm:hrpolicy_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not HRPolicy.objects.filter(pk=obj.pk).exists()
+
+
+def test_complianceregister_full_crud_via_form(client_a, tenant_a):
+    """create -> edit (status -> filed, which clean() requires filed_on for) -> delete."""
+    from apps.hrm.models import ComplianceRegister
+
+    resp = client_a.post(reverse("hrm:complianceregister_create"), {
+        "register_type": "muster_roll", "title": "Muster Roll - August",
+        "jurisdiction": "Karnataka", "status": "pending",
+        "due_date": (TODAY + datetime.timedelta(days=20)).isoformat()})
+    assert resp.status_code == 302
+    obj = ComplianceRegister.objects.get(tenant=tenant_a, title="Muster Roll - August")
+    assert obj.number.startswith("CMP-")
+
+    resp = client_a.post(reverse("hrm:complianceregister_edit", args=[obj.pk]), {
+        "register_type": "muster_roll", "title": "Muster Roll - August",
+        "jurisdiction": "Karnataka", "status": "filed",
+        "due_date": (TODAY + datetime.timedelta(days=20)).isoformat(), "filed_on": TODAY.isoformat()})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.status == "filed"
+
+    resp = client_a.post(reverse("hrm:complianceregister_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not ComplianceRegister.objects.filter(pk=obj.pk).exists()
+
+
+def test_complianceregister_filed_without_filed_on_shows_form_error(client_a, tenant_a):
+    """clean() rejects status=filed without filed_on — must be a 200 re-render, not a 500."""
+    from apps.hrm.models import ComplianceRegister
+    before = ComplianceRegister.objects.filter(tenant=tenant_a).count()
+    resp = client_a.post(reverse("hrm:complianceregister_create"), {
+        "register_type": "muster_roll", "title": "Missing filed_on", "status": "filed"})
+    assert resp.status_code == 200
+    assert ComplianceRegister.objects.filter(tenant=tenant_a).count() == before
+
+
+def test_grievance_full_crud_via_form(client_a, tenant_a, employee_a):
+    """An HR admin (no linked EmployeeProfile) files ON BEHALF of ?employee=<id> -> edit -> delete,
+    all while the grievance stays 'open' (the only status _hr_request_edit/_hr_request_delete allow)."""
+    from apps.hrm.models import Grievance
+
+    resp = client_a.post(reverse("hrm:grievance_create") + f"?employee={employee_a.pk}", {
+        "category": "safety", "severity": "medium", "subject": "Broken chair",
+        "description": "The chair in row 3 is broken."})
+    assert resp.status_code == 302
+    obj = Grievance.objects.get(tenant=tenant_a, subject="Broken chair")
+    assert obj.number.startswith("GRV-")
+    assert obj.employee_id == employee_a.pk
+    assert obj.status == "open"
+
+    resp = client_a.post(reverse("hrm:grievance_edit", args=[obj.pk]), {
+        "category": "safety", "severity": "high", "subject": "Broken chair - urgent",
+        "description": "The chair in row 3 is broken and needs urgent replacement."})
+    assert resp.status_code == 302
+    obj.refresh_from_db()
+    assert obj.severity == "high" and obj.subject == "Broken chair - urgent"
+
+    resp = client_a.post(reverse("hrm:grievance_delete", args=[obj.pk]))
+    assert resp.status_code == 302
+    assert not Grievance.objects.filter(pk=obj.pk).exists()
+
+
+# ============================================================ Multi-tenant IDOR (extended)
+def test_multitenant_idor_404_contract_register_and_lifecycle_post(client_a, contract_b, register_b,
+                                                                    grievance_b):
+    """A tenant-A admin gets 404 (never a leaked object) for tenant-B's contract/register detail pages,
+    AND for a lifecycle-mutating POST (grievance_resolve) against a tenant-B grievance."""
+    from apps.hrm.models import Grievance
+    assert client_a.get(reverse("hrm:employmentcontract_detail", args=[contract_b.pk])).status_code == 404
+    assert client_a.get(reverse("hrm:complianceregister_detail", args=[register_b.pk])).status_code == 404
+    resp = client_a.post(reverse("hrm:grievance_resolve", args=[grievance_b.pk]), {"resolution": "x"})
+    assert resp.status_code == 404
+    assert Grievance.objects.get(pk=grievance_b.pk).status == "open"  # untouched
