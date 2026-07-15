@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Wellbeing Programs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Wellbeing Programs</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Engagement</span><span class="sep">›</span><span>Wellbeing</span></div>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}<a href="{% url 'hrm:wellbeingprogram_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Program</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / title / description...">
+        </div>
+        <div class="form-group">
+          <select name="program_type" class="form-select" aria-label="Program type"><option value="">All types</option>
+            {% for val, label in program_type_choices %}<option value="{{ val }}" {% if request.GET.program_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="target_department" class="form-select" aria-label="Department"><option value="">All departments</option>
+            {% for d in departments %}<option value="{{ d.pk }}" {% if request.GET.target_department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:wellbeingprogram_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Dates</th><th class="text-right">Participants</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:wellbeingprogram_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title|truncatechars:40 }}{% if obj.is_confidential %} <span class="badge badge-muted">Confidential</span>{% endif %}</td>
+              <td>{{ obj.get_program_type_display }}</td>
+              <td>{% if obj.start_date %}{{ obj.start_date|date:"d M Y" }}{% if obj.end_date %} – {{ obj.end_date|date:"d M Y" }}{% endif %}{% else %}<span class="text-muted">Ongoing</span>{% endif %}</td>
+              <td class="text-right">{{ obj.participant_count }}</td>
+              <td>
+                {% if obj.status == 'active' %}<span class="badge badge-green">Active</span>
+                {% elif obj.status == 'draft' %}<span class="badge badge-amber">Draft</span>
+                {% elif obj.status == 'completed' %}<span class="badge badge-info">Completed</span>
+                {% elif obj.status == 'archived' %}<span class="badge badge-muted">Archived</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:wellbeingprogram_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                {% if is_admin %}
+                <a href="{% url 'hrm:wellbeingprogram_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:wellbeingprogram_delete' obj.pk %}" onsubmit="return confirm('Delete this program and all of its participation records?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                {% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="heart-handshake"></i><h3>No programs yet</h3><p>Publish wellness challenges, EAP resources, culture assessments, team events and volunteering — all from one catalog.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
