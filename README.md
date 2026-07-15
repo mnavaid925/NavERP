@@ -683,6 +683,27 @@ request
       → tenant-scoped queryset → template (sidebar from MODULE_CATALOG, branding from context processor)
 ```
 
+### Backend organization — models / forms / views / urls are packages
+The domain modules keep their backend in **Python packages, not flat `.py` files**, organized **one folder per
+sub-module, then one file per entity** — the exact mirror of the template folder rule. `apps/crm` and
+`apps/accounting` are fully converted:
+
+```
+apps/<app>/
+  models/  forms/  views/  urls/          each a package
+    __init__.py                           re-exports every symbol it owns (so `from apps.<app>.models import X`,
+    _base.py / _common.py                 shared imports + the abstract Tenant* base / TenantModelForm
+    <SubModule>/<Entity>.py               e.g. models/GeneralLedger/JournalEntries.py  (= JournalEntry + JournalLine)
+```
+
+The four layers line up one-to-one, so a single entity's model, form, view and URL module share a path
+(`<SubModule>/<Entity>.py`). Because each `__init__.py` re-exports everything, `urls.py`, the seeders, the admin,
+cross-app imports and every test keep importing `apps.<app>.models` / `.forms` / `.views` unchanged — and since a
+model's `app_label` still derives from the app config, **the split needs no migration**. Imports *inside* a package
+are absolute; cross-sub-module view helpers live in `views/_helpers.py`; there are no `*_advanced.py` sidecars. See
+the "Backend Package Structure" rule in `.claude/CLAUDE.md` and the two reference apps. (`hrm` is still flat and a
+future split candidate; the foundation apps `core`/`accounts`/`tenants`/`dashboard` are intentionally flat.)
+
 ### Reusable CRUD layer
 `apps/core/crud.py` centralizes list/create/detail/edit/delete so every module behaves consistently and the
 recurring pitfalls are fixed once:
@@ -910,12 +931,19 @@ NavERP/
 │  │  └─ tests/
 │  ├─ dashboard/            KPI aggregation (no models)
 │  ├─ crm/                  Module 1 — CRM (leads/opportunities/cases/… + 1.7–1.12)
+│  │  ├─ models/ forms/ views/ urls/   PACKAGES — one folder per sub-module (1.1–1.12), one file per entity
+│  │  │  └─ <SubModule>/<Entity>.py    e.g. SalesForceAutomation/Quotes.py  (each __init__ re-exports all)
+│  │  ├─ analytics.py  admin.py        (single-purpose modules stay flat)
+│  │  ├─ management/commands/seed_crm.py
+│  │  └─ tests/
 │  ├─ accounting/           Module 2 — GL ledger, AP/AR, cash, recurring invoicing + advanced 2.6–2.15
-│  │  ├─ models.py  models_advanced.py  views.py  views_advanced.py  forms.py  urls.py  admin.py
+│  │  ├─ models/ forms/ views/ urls/   PACKAGES — one folder per sub-module (2.1–2.15), one file per entity
+│  │  │  └─ <SubModule>/<Entity>.py    e.g. AccountsReceivable/Invoices.py  (the old *_advanced.py files folded in)
+│  │  ├─ admin.py
 │  │  ├─ management/commands/seed_accounting.py
 │  │  └─ tests/
 │  └─ hrm/                  Module 3 — employees, onboarding, offboarding, leave, attendance, holidays
-│     ├─ models.py  forms.py  views.py  urls.py  admin.py
+│     ├─ models.py  forms.py  views.py  urls.py  admin.py   (still flat — a future package-split candidate)
 │     ├─ services.py        request-free domain logic (task/clearance generation, leave encashment)
 │     ├─ management/commands/seed_hrm.py
 │     └─ tests/
