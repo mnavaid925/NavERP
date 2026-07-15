@@ -10438,5 +10438,41 @@ workforce block)
   `TrainingNomination`/`TrainingAttendance`/`TrainingFeedback` 3-table pattern) — deferred until usage shows the
   unified row is too coarse; the lean 4-model budget for this pass keeps it as one child table.
 
-## Review notes
-(filled in at the end)
+## Review notes (3.41 — as-built)
+**Built:** 4 models (`SurveyActionPlan`/`WellbeingProgram`/`WellbeingParticipation`/`FlexibleWorkArrangement`,
+migrations 0060 + 0061), full CRUD + the confidential-roster branch + the FWA approval workflow (reusing
+`_hr_request_*`), 10 templates, `LIVE_LINKS["3.41"]` (all 6 NavERP.md bullets live), `_seed_engagement`, and 43
+tests (`test_engagement.py`) + 5 seeder tests. Reuses 3.27 `Survey`/`SurveyResponse`/`Announcement` and 3.18
+`Objective` rather than rebuilding. All green; `makemigrations --check` clean.
+
+**Reviews applied (all 4 code-touching passes + frontend):**
+- *security-reviewer* — found a genuinely non-obvious **High**: `WellbeingParticipation.__str__` fed the
+  admin-readable `AuditLog.target`, re-exposing the EAP roster the module keeps aggregate-only. Fixed: `__str__`
+  returns "Confidential participation #N" for a confidential program, and the edit view logs `changes=None` for one.
+  A **Low** (action-plan list Edit link shown to non-owners) was gated to owner-or-admin. Everything else clean
+  (EAP model-forced confidentiality, admin-inclusive aggregate-only roster, mass-assignment guard, duplicate-RSVP
+  savepoint, `_can_manage_action_plan`, FWA self-approval guard, tenant IDOR).
+- *code-reviewer* — fixed a seeder `IndexError` for a single-employee tenant (unmodulo'd `emps[1]`) and an
+  audit-fidelity gap (`WellbeingProgramForm.clean()` now forces `is_confidential` so the diff records the true
+  persisted value, not the unchecked box). Save-symmetry, stats math, the RSVP add flow and flush ordering all
+  verified correct.
+- *performance-reviewer* — no N+1s (both annotation-aware/`select_related` designs confirmed). Added 3 missing
+  filter-column indexes (department / target_department / arrangement_type), dropped a redundant `(tenant,program)`
+  index, and `select_related(employee__party)` on the participation edit (the audit `str(obj)` was firing 2 extra
+  queries). Added flat-query-count guard tests.
+- *frontend-reviewer* — **no Critical/Important**; the confidentiality branch, conditional colspans and three
+  distinct edit/delete gates were all correct. Two Minor polish fixes: consistent `badge-red` Confidential flag,
+  and dropped a dead boolean clause.
+
+**Confidentiality model (the module's crux):** EAP/counseling is forced confidential at the MODEL layer
+(`save()`), the roster is aggregate-only for every viewer including admins, and even the audit trail is scrubbed of
+participant identity — a defense-in-depth chain verified end to end by the security review + regression tests. Honest
+limitation (documented on the admin inline): Django-admin/DB access still sees the rows.
+
+**Deferred (roadmap):** AI sentiment/NLP + AI-recommended plans, eNPS/heatmap trend dashboards (-> 3.32), wearable
+sync, predictive ROI, EAP session billing/clinical notes (by design), donation matching, points redemption catalog
+(-> 3.37), desk/room booking (-> Module 11), owner-originated action plans, and splitting `WellbeingParticipation`
+into a 3-table pattern. See the Deferred list above.
+
+**This completes the 3.36 -> 3.41 HRM run** (Helpdesk, Compensation, Talent, Compliance, Workforce Planning,
+Engagement & Wellbeing).
