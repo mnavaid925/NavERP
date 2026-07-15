@@ -16023,3 +16023,301 @@ def workforce_analytics(request):
         "top_skills": top_skills,
         "by_category": by_category,
     })
+
+
+# ============================================================================
+# 3.41 Employee Engagement & Wellbeing — SurveyActionPlan (close-the-loop on 3.27
+# surveys), the WellbeingProgram catalog + its participation child, and the
+# FlexibleWorkArrangement request (a TravelRequest clone reusing _hr_request_*).
+#
+# CONFIDENTIALITY: an eap_counseling / is_confidential program's roster is
+# AGGREGATE-ONLY for every viewer, admins included (wellbeingprogram_detail never
+# passes a per-employee queryset for a confidential program).
+# ============================================================================
+from .models import (  # noqa: E402  — 3.41 Employee Engagement & Wellbeing
+    FlexibleWorkArrangement, SurveyActionPlan, WellbeingParticipation, WellbeingProgram)
+from .forms import (  # noqa: E402  — 3.41 Employee Engagement & Wellbeing
+    FlexibleWorkArrangementForm, SurveyActionPlanForm, WellbeingParticipationForm, WellbeingProgramForm)
+
+
+def _can_manage_action_plan(request, obj):
+    """A survey action plan is manageable by a tenant admin OR by its accountable owner (who is often a
+    manager, not an admin). Mirrors _can_manage_own_child, keyed on ``owner`` instead of ``employee``."""
+    if _is_admin(request.user):
+        return True
+    profile = _current_employee_profile(request)
+    return profile is not None and obj.owner_id == profile.pk
+
+
+# ---- Survey action plans -----------------------------------------------------------------------
+@login_required
+def surveyactionplan_list(request):
+    is_admin = _is_admin(request.user)
+    qs = (SurveyActionPlan.objects.filter(tenant=request.tenant)
+          .select_related("survey", "owner__party", "department", "related_objective")
+          .order_by("-target_date", "-id"))
+    return crud_list(request, qs, "hrm/engagement/surveyactionplan/list.html",
+                     search_fields=["number", "title", "focus_area", "survey__title"],
+                     filters=[("status", "status", False), ("owner", "owner_id", True),
+                              ("department", "department_id", True), ("survey", "survey_id", True)],
+                     extra_context={"status_choices": SurveyActionPlan.STATUS_CHOICES, "is_admin": is_admin,
+                                    "owners": EmployeeProfile.objects.filter(tenant=request.tenant)
+                                    .select_related("party").order_by("party__name"),
+                                    "departments": OrgUnit.objects.filter(tenant=request.tenant,
+                                                                          kind="department").order_by("name"),
+                                    "surveys": Survey.objects.filter(tenant=request.tenant)
+                                    .order_by("-created_at")})
+
+
+@tenant_admin_required
+def surveyactionplan_create(request):
+    return crud_create(request, form_class=SurveyActionPlanForm,
+                       template="hrm/engagement/surveyactionplan/form.html",
+                       success_url="hrm:surveyactionplan_list")
+
+
+@login_required
+def surveyactionplan_detail(request, pk):
+    obj = get_object_or_404(
+        SurveyActionPlan.objects.select_related("survey", "owner__party", "department",
+                                                "related_objective"),
+        pk=pk, tenant=request.tenant)
+    return render(request, "hrm/engagement/surveyactionplan/detail.html",
+                  {"obj": obj, "can_manage": _can_manage_action_plan(request, obj),
+                   "is_admin": _is_admin(request.user)})
+
+
+@login_required
+def surveyactionplan_edit(request, pk):
+    """Editable by the owner or an admin (crud_edit has no ownership gate, so guard first)."""
+    obj = get_object_or_404(SurveyActionPlan, pk=pk, tenant=request.tenant)
+    if not _can_manage_action_plan(request, obj):
+        raise PermissionDenied("Only the plan's owner or an HR admin can edit it.")
+    return crud_edit(request, model=SurveyActionPlan, pk=pk, form_class=SurveyActionPlanForm,
+                     template="hrm/engagement/surveyactionplan/form.html",
+                     success_url="hrm:surveyactionplan_list")
+
+
+@tenant_admin_required
+@require_POST
+def surveyactionplan_delete(request, pk):
+    return crud_delete(request, model=SurveyActionPlan, pk=pk,
+                       success_url="hrm:surveyactionplan_list")
+
+
+# ---- Wellbeing programs (catalog) --------------------------------------------------------------
+@login_required
+def wellbeingprogram_list(request):
+    is_admin = _is_admin(request.user)
+    # Explicit order_by after the Count() annotation — GROUP BY drops Meta.ordering.
+    qs = (WellbeingProgram.objects.filter(tenant=request.tenant)
+          .select_related("owner", "target_department")
+          .annotate(_participant_count=Count("participations", distinct=True))
+          .order_by("-start_date", "-id"))
+    return crud_list(request, qs, "hrm/engagement/wellbeingprogram/list.html",
+                     search_fields=["number", "title", "description"],
+                     filters=[("program_type", "program_type", False), ("status", "status", False),
+                              ("target_department", "target_department_id", True)],
+                     extra_context={"program_type_choices": WellbeingProgram.PROGRAM_TYPE_CHOICES,
+                                    "status_choices": WellbeingProgram.STATUS_CHOICES, "is_admin": is_admin,
+                                    "departments": OrgUnit.objects.filter(tenant=request.tenant,
+                                                                          kind="department").order_by("name")})
+
+
+@tenant_admin_required
+def wellbeingprogram_create(request):
+    return crud_create(request, form_class=WellbeingProgramForm,
+                       template="hrm/engagement/wellbeingprogram/form.html",
+                       success_url="hrm:wellbeingprogram_list")
+
+
+@login_required
+def wellbeingprogram_detail(request, pk):
+    obj = get_object_or_404(
+        WellbeingProgram.objects.select_related("owner", "target_department"),
+        pk=pk, tenant=request.tenant)
+    is_admin = _is_admin(request.user)
+    profile = _current_employee_profile(request)
+    own_participation = None
+    if profile is not None:
+        own_participation = obj.participations.filter(employee=profile).first()
+
+    ctx = {"obj": obj, "is_admin": is_admin, "own_participation": own_participation,
+           "stats": obj.participation_stats()}
+    # CONFIDENTIALITY: a confidential program NEVER exposes a per-employee roster — aggregate stats only,
+    # for every viewer including admins. Only a non-confidential program passes the roster queryset.
+    if obj.is_confidential:
+        ctx["participations"] = None
+    else:
+        ctx["participations"] = (obj.participations.select_related("employee__party")
+                                 .order_by("-created_at"))
+    # Offer the inline RSVP form to a logged-in employee who has no row yet, on an active program.
+    if obj.status == "active" and profile is not None and own_participation is None:
+        ctx["rsvp_form"] = WellbeingParticipationForm(can_admin=is_admin, tenant=request.tenant)
+    return render(request, "hrm/engagement/wellbeingprogram/detail.html", ctx)
+
+
+@tenant_admin_required
+def wellbeingprogram_edit(request, pk):
+    return crud_edit(request, model=WellbeingProgram, pk=pk, form_class=WellbeingProgramForm,
+                     template="hrm/engagement/wellbeingprogram/form.html",
+                     success_url="hrm:wellbeingprogram_list")
+
+
+@tenant_admin_required
+@require_POST
+def wellbeingprogram_delete(request, pk):
+    return crud_delete(request, model=WellbeingProgram, pk=pk, success_url="hrm:wellbeingprogram_list")
+
+
+# ---- Wellbeing participation (inline child of a program) ----------------------------------------
+@login_required
+def wellbeingparticipation_add(request, program_pk):
+    """RSVP / log a participation. A non-admin adds for THEMSELVES; an admin may target ?employee=<id>."""
+    program = get_object_or_404(WellbeingProgram, pk=program_pk, tenant=request.tenant)
+    if program.status != "active":
+        messages.error(request, "You can only join an active program.")
+        return redirect("hrm:wellbeingprogram_detail", pk=program.pk)
+    is_admin = _is_admin(request.user)
+    own = _current_employee_profile(request)
+    target = own
+    if is_admin:
+        emp_pk = (request.GET.get("employee", "") or request.POST.get("employee_pk", "")).strip()
+        if emp_pk.isdigit():
+            target = EmployeeProfile.objects.filter(tenant=request.tenant, pk=int(emp_pk)).first() or own
+    if target is None:
+        messages.error(request, "Select an employee to register.")
+        return redirect("hrm:wellbeingprogram_detail", pk=program.pk)
+
+    if request.method == "POST":
+        form = WellbeingParticipationForm(request.POST, can_admin=is_admin, tenant=request.tenant)
+        # unique_together(tenant, program, employee) — all three are view-resolved, so guard by an explicit
+        # query (Django can't validate_unique it), then keep the savepoint as a concurrent-race backstop.
+        if WellbeingParticipation.objects.filter(tenant=request.tenant, program=program,
+                                                 employee=target).exists():
+            form.add_error(None, "That employee is already registered for this program.")
+        elif form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.program = program
+            obj.employee = target
+            try:
+                with transaction.atomic():
+                    obj.save()
+            except IntegrityError:
+                messages.error(request, "That employee is already registered for this program.")
+                return redirect("hrm:wellbeingprogram_detail", pk=program.pk)
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Registered for the program.")
+            return redirect("hrm:wellbeingprogram_detail", pk=program.pk)
+    else:
+        form = WellbeingParticipationForm(can_admin=is_admin, tenant=request.tenant)
+    return render(request, "hrm/engagement/wellbeingparticipation/form.html",
+                  {"form": form, "program": program, "is_edit": False, "is_admin": is_admin,
+                   "target_employee": target, "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def wellbeingparticipation_edit(request, program_pk, pk):
+    obj = get_object_or_404(WellbeingParticipation, pk=pk, program_id=program_pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only manage your own participation.")
+        return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
+    is_admin = _is_admin(request.user)
+    if request.method == "POST":
+        form = WellbeingParticipationForm(request.POST, instance=obj, can_admin=is_admin,
+                                          tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, obj, "update", changes=_changed(form))
+            messages.success(request, "Participation updated.")
+            return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
+    else:
+        form = WellbeingParticipationForm(instance=obj, can_admin=is_admin, tenant=request.tenant)
+    return render(request, "hrm/engagement/wellbeingparticipation/form.html",
+                  {"form": form, "program": obj.program, "obj": obj, "is_edit": True, "is_admin": is_admin})
+
+
+@login_required
+@require_POST
+def wellbeingparticipation_delete(request, program_pk, pk):
+    obj = get_object_or_404(WellbeingParticipation, pk=pk, program_id=program_pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        messages.error(request, "You can only manage your own participation.")
+        return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Participation removed.")
+    return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
+
+
+# ---- Flexible work arrangements (a TravelRequest-shaped self-service request) -------------------
+@login_required
+def flexibleworkarrangement_list(request):
+    is_admin = _is_admin(request.user)
+    qs = _ss_scope(request, FlexibleWorkArrangement.objects.filter(tenant=request.tenant)
+                   .select_related("employee__party"))
+    return crud_list(request, qs, "hrm/engagement/flexibleworkarrangement/list.html",
+                     search_fields=["number", "reason"],
+                     filters=[("status", "status", False),
+                              ("arrangement_type", "arrangement_type", False),
+                              ("employee", "employee_id", is_admin)],
+                     extra_context={"status_choices": FlexibleWorkArrangement.STATUS_CHOICES,
+                                    "arrangement_type_choices": FlexibleWorkArrangement.ARRANGEMENT_TYPE_CHOICES,
+                                    "is_admin": is_admin,
+                                    "employees": _ss_employees(request) if is_admin else None})
+
+
+@login_required
+def flexibleworkarrangement_create(request):
+    return _ss_child_create(request, FlexibleWorkArrangementForm,
+                            "hrm/engagement/flexibleworkarrangement/form.html",
+                            "hrm:flexibleworkarrangement_list")
+
+
+@login_required
+def flexibleworkarrangement_detail(request, pk):
+    obj = get_object_or_404(
+        FlexibleWorkArrangement.objects.select_related("employee__party", "approver"),
+        pk=pk, tenant=request.tenant)
+    if not _can_manage_own_child(request, obj):
+        raise PermissionDenied("This request belongs to another employee.")
+    return render(request, "hrm/engagement/flexibleworkarrangement/detail.html", {
+        "obj": obj, "is_admin": _is_admin(request.user), "is_own": _is_own_hr_request(request, obj)})
+
+
+@login_required
+def flexibleworkarrangement_edit(request, pk):
+    return _hr_request_edit(request, FlexibleWorkArrangement, pk, FlexibleWorkArrangementForm,
+                            "hrm/engagement/flexibleworkarrangement/form.html",
+                            "hrm:flexibleworkarrangement_detail")
+
+
+@login_required
+@require_POST
+def flexibleworkarrangement_delete(request, pk):
+    return _hr_request_delete(request, FlexibleWorkArrangement, pk, "hrm:flexibleworkarrangement_list")
+
+
+@login_required
+@require_POST
+def flexibleworkarrangement_submit(request, pk):
+    return _hr_request_submit(request, FlexibleWorkArrangement, pk, "hrm:flexibleworkarrangement_detail")
+
+
+@login_required
+@require_POST
+def flexibleworkarrangement_cancel(request, pk):
+    return _hr_request_cancel(request, FlexibleWorkArrangement, pk, "hrm:flexibleworkarrangement_detail")
+
+
+@tenant_admin_required
+@require_POST
+def flexibleworkarrangement_approve(request, pk):
+    return _hr_request_approve(request, FlexibleWorkArrangement, pk, "hrm:flexibleworkarrangement_detail")
+
+
+@tenant_admin_required
+@require_POST
+def flexibleworkarrangement_reject(request, pk):
+    return _hr_request_reject(request, FlexibleWorkArrangement, pk, "hrm:flexibleworkarrangement_detail")
