@@ -181,6 +181,12 @@ from apps.hrm.models import (  # 3.40 Workforce Planning
     WorkforcePlanLine,
     WorkforceScenario,
 )
+from apps.hrm.models import (  # 3.41 Employee Engagement & Wellbeing
+    FlexibleWorkArrangement,
+    SurveyActionPlan,
+    WellbeingParticipation,
+    WellbeingProgram,
+)
 
 # Fallback person names if a tenant has too few persons to staff the demo.
 PERSON_NAMES = ["Aisha Khan", "Daniel Reed", "Sofia Marquez", "Liam O'Brien", "Hana Suzuki"]
@@ -319,6 +325,7 @@ class Command(BaseCommand):
             self._seed_talent(tenant, flush=options["flush"])
             self._seed_compliance(tenant, flush=options["flush"])
             self._seed_workforce(tenant, flush=options["flush"])
+            self._seed_engagement(tenant, flush=options["flush"])
         self.stdout.write(self.style.WARNING(
             "NOTE: Superuser 'admin' has no tenant — HRM data won't appear when logged in as admin. "
             "Log in as admin_acme / admin_globex (password)."))
@@ -373,6 +380,13 @@ class Command(BaseCommand):
                           # So this block is order-agnostic; listed child-before-parent for a tidy
                           # explicit teardown (and so a future PROTECT can't silently break --flush).
                           WorkforceScenario, WorkforcePlanLine, WorkforcePlan, EmployeeSkill,
+                          # 3.41: SurveyActionPlan.owner and WellbeingParticipation.employee are BOTH
+                          # PROTECT against EmployeeProfile — wipe them (child-before-parent) before the
+                          # EmployeeProfile at this tuple's tail, or --flush dies with a ProtectedError.
+                          # FlexibleWorkArrangement/WellbeingProgram CASCADE, listed here for a tidy
+                          # teardown. The extra closed Survey/SurveyResponse this method seeds are already
+                          # covered by the Survey/SurveyResponse entries below — no new entry needed.
+                          FlexibleWorkArrangement, WellbeingParticipation, WellbeingProgram, SurveyActionPlan,
                           Suggestion, SurveyResponse, Survey, Announcement,
                           AssetRequest, IdCardRequest, DocumentRequest,
                           # 3.25: EmployeeInfoChangeRequest (SET_NULL content_type/requested_by/
@@ -3720,3 +3734,129 @@ class Command(BaseCommand):
             f"{WorkforcePlanLine.objects.filter(tenant=tenant).count()} lines, "
             f"{WorkforceScenario.objects.filter(tenant=tenant).count()} scenarios, "
             f"{EmployeeSkill.objects.filter(tenant=tenant).count()} skills."))
+
+    def _seed_engagement(self, tenant, *, flush):
+        """3.41 Employee Engagement & Wellbeing - an additional CLOSED survey with a couple of low-scoring
+        responses, 2 action plans off it, a wellbeing-program catalog (one of each headline type, incl. a
+        confidential EAP program seeded is_confidential=False to prove the model forces it True), a few
+        participations, and flexible-work requests across the workflow. Runs after 3.40. Idempotent.
+        ASCII-only. Does NOT touch 3.27's existing seeded surveys - it adds its own."""
+        from apps.hrm.models import (EmployeeProfile, FlexibleWorkArrangement, SurveyActionPlan,
+                                     Survey, SurveyResponse, WellbeingParticipation, WellbeingProgram)
+        from apps.core.models import OrgUnit
+
+        if flush:
+            SurveyActionPlan.objects.filter(tenant=tenant).delete()
+            WellbeingParticipation.objects.filter(tenant=tenant).delete()
+            WellbeingProgram.objects.filter(tenant=tenant).delete()
+            FlexibleWorkArrangement.objects.filter(tenant=tenant).delete()
+            # Only the extra survey this method created (title-scoped) - leave 3.27's surveys untouched.
+            Survey.objects.filter(tenant=tenant, title="H1 Engagement Pulse (closed)").delete()
+        if WellbeingProgram.objects.filter(tenant=tenant).exists():
+            self.stdout.write("  Engagement & wellbeing data already exists. Use --flush to re-seed.")
+            return
+
+        emps = list(EmployeeProfile.objects.filter(tenant=tenant).select_related("party").order_by("id")[:6])
+        if not emps:
+            return
+        today = timezone.localdate()
+        day = datetime.timedelta(days=1)
+        actor = get_user_model().objects.filter(tenant=tenant).order_by("id").first()
+        dept = OrgUnit.objects.filter(tenant=tenant, kind="department").order_by("id").first()
+        objective = Objective.objects.filter(tenant=tenant).order_by("id").first()
+
+        # An additional CLOSED survey (title-scoped so flush only removes THIS one) with 2 low responses -
+        # something real for the action plans to point at, demonstrating close-the-loop end to end.
+        survey, created = Survey.objects.get_or_create(
+            tenant=tenant, title="H1 Engagement Pulse (closed)",
+            defaults={"description": "Closed half-year pulse - drove this cycle's action plans.",
+                      "questions": [{"text": "How likely are you to recommend us?", "type": "rating"},
+                                    {"text": "What should we improve?", "type": "text"}],
+                      "status": "closed", "is_anonymous": True,
+                      "opens_at": today - 120 * day, "closes_at": today - 90 * day, "author": actor})
+        if created:
+            SurveyResponse.objects.create(tenant=tenant, survey=survey, employee=emps[0],
+                                          answers={"0": "4", "1": "More career growth support."})
+            SurveyResponse.objects.create(tenant=tenant, survey=survey, employee=emps[1 % len(emps)],
+                                          answers={"0": "5", "1": "Clearer recognition."})
+
+        # 2 action plans - one in progress (owner + department + objective), one completed (auto-stamped).
+        SurveyActionPlan.objects.get_or_create(
+            tenant=tenant, survey=survey, title="Launch a career-development framework",
+            defaults={"focus_area": "Career Growth", "owner": emps[0], "department": dept,
+                      "related_objective": objective, "target_date": today + 60 * day,
+                      "status": "in_progress",
+                      "description": "Publish role ladders and quarterly growth conversations."})
+        SurveyActionPlan.objects.get_or_create(
+            tenant=tenant, survey=survey, title="Roll out a recognition program",
+            defaults={"focus_area": "Recognition", "owner": emps[1 % len(emps)],
+                      "target_date": today - 10 * day, "status": "completed",
+                      "description": "Peer kudos + monthly shout-outs, launched last month."})
+
+        # Wellbeing catalog - one of each headline type. The EAP one is seeded is_confidential=False on
+        # purpose: the model's save() must force it True (asserted in test_seeder).
+        program_specs = [
+            ("Step Challenge - Spring", "wellness_challenge", 100, False, today, today + 30 * day),
+            ("Mental Health Resource Library", "mental_health_resource", None, False, None, None),
+            ("Confidential EAP Counseling", "eap_counseling", None, False, None, None),
+            ("Annual Culture Assessment", "culture_assessment", None, False, today, today + 21 * day),
+            ("Quarterly Team Offsite", "team_event", 50, False, today + 14 * day, today + 15 * day),
+            ("Photography Interest Group", "interest_group", None, False, today, None),
+            ("Community Volunteering Day", "volunteering", 75, False, today + 40 * day, today + 40 * day),
+        ]
+        programs = {}
+        for title, ptype, points, confidential, start, end in program_specs:
+            prog, _ = WellbeingProgram.objects.get_or_create(
+                tenant=tenant, title=title,
+                defaults={"program_type": ptype, "points_value": points, "is_confidential": confidential,
+                          "start_date": start, "end_date": end, "status": "active", "owner": actor,
+                          "description": f"{title} - seeded demo program."})
+            programs[ptype] = prog
+
+        # A few participations across active, non-confidential programs (mixed status/points).
+        part_specs = [
+            ("wellness_challenge", 0, "completed", 100),
+            ("wellness_challenge", 1, "attended", 60),
+            ("team_event", 2 % len(emps), "registered", None),
+            ("volunteering", 3 % len(emps), "registered", None),
+        ]
+        for ptype, emp_idx, status, points in part_specs:
+            prog = programs.get(ptype)
+            if prog is None:
+                continue
+            WellbeingParticipation.objects.get_or_create(
+                tenant=tenant, program=prog, employee=emps[emp_idx],
+                defaults={"status": status, "points_earned": points,
+                          "notes": "Scheduling note only."})
+        # One participation on the confidential EAP program - plain scheduling notes only, per policy.
+        eap = programs.get("eap_counseling")
+        if eap is not None:
+            WellbeingParticipation.objects.get_or_create(
+                tenant=tenant, program=eap, employee=emps[0],
+                defaults={"status": "registered", "notes": "Intake scheduled."})
+
+        # Flexible-work requests across the workflow states.
+        fwa_specs = [
+            (0, "remote", 3, "draft", None),
+            (1 % len(emps), "hybrid", 2, "pending", None),
+            (2 % len(emps), "compressed_week", None, "approved", None),
+            (3 % len(emps), "flextime", None, "rejected", "Coverage needs during core hours."),
+        ]
+        for emp_idx, atype, days, status, note in fwa_specs:
+            defaults = {"arrangement_type": atype, "days_per_week_remote": days,
+                        "reason": f"Requesting a {atype.replace('_', ' ')} arrangement.", "status": status}
+            if status in ("approved", "rejected"):
+                defaults["approver"] = actor
+                defaults["approved_at"] = timezone.now()
+            if note:
+                defaults["decision_note"] = note
+            FlexibleWorkArrangement.objects.get_or_create(
+                tenant=tenant, employee=emps[emp_idx], arrangement_type=atype,
+                start_date=today + 20 * day, defaults=defaults)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Engagement & wellbeing seeded for '{tenant.name}': "
+            f"{SurveyActionPlan.objects.filter(tenant=tenant).count()} action plans, "
+            f"{WellbeingProgram.objects.filter(tenant=tenant).count()} programs, "
+            f"{WellbeingParticipation.objects.filter(tenant=tenant).count()} participations, "
+            f"{FlexibleWorkArrangement.objects.filter(tenant=tenant).count()} flexible-work requests."))
