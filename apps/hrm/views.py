@@ -16053,6 +16053,7 @@ def _can_manage_action_plan(request, obj):
 @login_required
 def surveyactionplan_list(request):
     is_admin = _is_admin(request.user)
+    profile = _current_employee_profile(request)
     qs = (SurveyActionPlan.objects.filter(tenant=request.tenant)
           .select_related("survey", "owner__party", "department", "related_objective")
           .order_by("-target_date", "-id"))
@@ -16061,6 +16062,8 @@ def surveyactionplan_list(request):
                      filters=[("status", "status", False), ("owner", "owner_id", True),
                               ("department", "department_id", True), ("survey", "survey_id", True)],
                      extra_context={"status_choices": SurveyActionPlan.STATUS_CHOICES, "is_admin": is_admin,
+                                    # so the list only shows the Edit link where the server would allow it
+                                    "my_employee_pk": profile.pk if profile else None,
                                     "owners": EmployeeProfile.objects.filter(tenant=request.tenant)
                                     .select_related("party").order_by("party__name"),
                                     "departments": OrgUnit.objects.filter(tenant=request.tenant,
@@ -16219,7 +16222,8 @@ def wellbeingparticipation_add(request, program_pk):
 
 @login_required
 def wellbeingparticipation_edit(request, program_pk, pk):
-    obj = get_object_or_404(WellbeingParticipation, pk=pk, program_id=program_pk, tenant=request.tenant)
+    obj = get_object_or_404(WellbeingParticipation.objects.select_related("program"),
+                            pk=pk, program_id=program_pk, tenant=request.tenant)
     if not _can_manage_own_child(request, obj):
         messages.error(request, "You can only manage your own participation.")
         return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
@@ -16229,7 +16233,10 @@ def wellbeingparticipation_edit(request, program_pk, pk):
                                           tenant=request.tenant)
         if form.is_valid():
             form.save()
-            write_audit_log(request.user, obj, "update", changes=_changed(form))
+            # Don't record the field diff (status/notes) for a confidential program — the audit trail is
+            # admin-readable, and that would leak what the aggregate-only rule protects.
+            changes = None if obj.program.is_confidential else _changed(form)
+            write_audit_log(request.user, obj, "update", changes=changes)
             messages.success(request, "Participation updated.")
             return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
     else:
@@ -16241,7 +16248,8 @@ def wellbeingparticipation_edit(request, program_pk, pk):
 @login_required
 @require_POST
 def wellbeingparticipation_delete(request, program_pk, pk):
-    obj = get_object_or_404(WellbeingParticipation, pk=pk, program_id=program_pk, tenant=request.tenant)
+    obj = get_object_or_404(WellbeingParticipation.objects.select_related("program"),
+                            pk=pk, program_id=program_pk, tenant=request.tenant)
     if not _can_manage_own_child(request, obj):
         messages.error(request, "You can only manage your own participation.")
         return redirect("hrm:wellbeingprogram_detail", pk=program_pk)
