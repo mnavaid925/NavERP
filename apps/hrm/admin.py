@@ -1548,6 +1548,8 @@ class EquityGrantAdmin(admin.ModelAdmin):
 
 from .models import (  # 3.39 Compliance & Legal
     ComplianceRegister, EmploymentContract, Grievance, HRPolicy, PolicyAcknowledgment)
+from .models import (  # 3.40 Workforce Planning
+    EmployeeSkill, WorkforcePlan, WorkforcePlanLine, WorkforceScenario)
 
 
 @admin.register(EmploymentContract)
@@ -1606,3 +1608,52 @@ class ComplianceRegisterAdmin(admin.ModelAdmin):
     list_filter = ("register_type", "status", "tenant")
     search_fields = ("number", "title", "jurisdiction", "authority")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+# ---- 3.40 Workforce Planning -----------------------------------------------------------------
+class WorkforcePlanLineInline(admin.TabularInline):
+    model = WorkforcePlanLine
+    extra = 0
+    fields = ("org_unit", "designation", "current_headcount", "planned_headcount", "hiring_type",
+              "avg_annual_cost")
+
+
+@admin.register(WorkforcePlan)
+class WorkforcePlanAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "org_unit", "owner__party", "currency")
+    list_display = ("number", "name", "plan_type", "org_unit", "period_start", "period_end", "status",
+                    "tenant")
+    list_filter = ("plan_type", "status", "tenant")
+    search_fields = ("number", "name", "org_unit__name")
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [WorkforcePlanLineInline]
+
+
+@admin.register(WorkforcePlanLine)
+class WorkforcePlanLineAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "plan", "org_unit", "designation")
+    list_display = ("plan", "org_unit", "designation", "current_headcount", "planned_headcount",
+                    "hiring_type", "tenant")
+    list_filter = ("hiring_type", "tenant")
+    search_fields = ("plan__name", "plan__number", "org_unit__name", "designation__name")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(WorkforceScenario)
+class WorkforceScenarioAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "plan", "affected_org_unit")
+    list_display = ("number", "name", "plan", "scenario_type", "headcount_delta", "cost_delta",
+                    "is_baseline", "is_selected", "status", "tenant")
+    list_filter = ("scenario_type", "status", "is_baseline", "is_selected", "tenant")
+    search_fields = ("number", "name", "plan__name")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(EmployeeSkill)
+class EmployeeSkillAdmin(admin.ModelAdmin):
+    list_select_related = ("tenant", "employee__party")
+    list_display = ("employee", "skill_name", "skill_category", "proficiency_level", "years_experience",
+                    "is_certified", "is_critical_skill", "tenant")
+    list_filter = ("skill_category", "proficiency_level", "is_certified", "is_critical_skill", "tenant")
+    search_fields = ("skill_name", "certification_name", "employee__party__name")
+    readonly_fields = ("created_at", "updated_at")
