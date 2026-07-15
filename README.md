@@ -262,7 +262,7 @@ HRM*, and the 2.15 connector categories as filtered integration views). The bull
 deliberately deferred — they belong to unbuilt modules (all of 2.7 → Inventory/Procurement) or need external
 integrations (OCR capture, Plaid feeds, XBRL filing, customer/vendor portals).
 
-### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36/3.37/3.38
+### Module 3 — Human Resource Management (`hrm`) — 3.1/3.2/3.3/3.4/3.5/3.6/3.7/3.8/3.9/3.10/3.11/3.12/3.13/3.14/3.15/3.16/3.17/3.18/3.19/3.20/3.21/3.22/3.23/3.24/3.25/3.26/3.27/3.28/3.29/3.30/3.31/3.32/3.33/3.34/3.35/3.36/3.37/3.38/3.39/3.40
 
 HRM passes so far — **employee directory + onboarding + offboarding + leave + attendance + time tracking + holidays**, reusing the
 core spine: an employee is a `core.Party` (person) + `core.Employment` + a 1:1 `hrm.EmployeeProfile` (`EMP-#####`)
@@ -634,9 +634,28 @@ lives in `apps/hrm/services.py` so the seeder and tests can call it without the 
   `LIVE_LINKS["3.38"]` lights **5 of 6** bullets, and notably **two need no new table**: *Talent Reviews* reuses
   the 3.19 calibration board and *Internal Mobility* reuses `JobRequisition(posting_type="internal")` + the 3.6
   application pipeline. *Career Pathing* is deferred (needs a CareerPath + EmployeeSkill taxonomy).
+- **3.39 Compliance & Legal** — the employment-lifecycle compliance layer. **5 new models** (migrations `0053`–`0057`):
+  `EmploymentContract` (`ECON-`; permanent/fixed-term/probation/consultant, with a **computed** `is_expiring_soon`
+  60-day window), `HRPolicy` (versioned, draft→published→archived; **publishing goes only through the dedicated
+  action**, which stamps `published_at` and raises the acknowledgment rows — the create/edit form offers
+  draft/archived only, so it can't silently skip acknowledgments), `PolicyAcknowledgment` (per-employee, employee
+  self-service), `Grievance` (`GRV-`; severity + **anonymous complainants masked from everyone but HR**, investigate→
+  resolve→close), and `ComplianceRegister` (`CREG-`; statutory filings with a **computed** `is_overdue`).
+  `LIVE_LINKS["3.39"]` lights **all 6** bullets — *Disciplinary Actions* reuses the 3.21 `WarningLetter` (no new
+  table).
+- **3.40 Workforce Planning** — demand/supply/gap/scenario planning. **4 new models** (migrations `0058`/`0059`):
+  `WorkforcePlan` (`WFP-`; a planning cycle whose four headcount/budget totals are **computed and annotation-aware** —
+  the list annotates them so rendering N plans never fires 4N aggregates), `WorkforcePlanLine` (per-department current
+  vs planned headcount with a **computed** gap and budget impact — `None`, not 0, when unpriced), `WorkforceScenario`
+  (`WFS-`; **signed** what-if deltas for hiring-freeze/restructuring, with an enforced one-baseline-per-plan), and
+  `EmployeeSkill` (the skills inventory behind Supply Analysis, **own-vs-admin self-service**). Two derived reports —
+  a **gap analysis** (current vs planned per department, grouped by org-unit id so same-named departments don't merge)
+  and **workforce analytics** (headcount + skill-coverage + hiring-mix). **CONFIDENTIAL:** every plan/scenario/report
+  view is `@tenant_admin_required` (restructuring/reduction headcount); only the skills inventory is employee-facing.
+  `LIVE_LINKS["3.40"]` lights **all 6** bullets.
 
-Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,353-test** HRM suite
-(**9,000 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
+Full CRUD, tenant isolation, working filters, an idempotent `seed_hrm`, and a **6,445-test** HRM suite
+(**9,093 project-wide**). Leave/approver, offboarding, and document-verification/lifecycle workflow & approval
 fields are workflow-set (never form-set); sensitive bank/national-ID/passport fields are masked in the UI and
 redacted from the audit trail.
 
