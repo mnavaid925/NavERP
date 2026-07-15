@@ -200,6 +200,18 @@ def test_policy_duplicate_version_shows_form_error(client_a, policy_a):
     assert HRPolicy.objects.filter(tenant=policy_a.tenant).count() == before
 
 
+def test_policy_cannot_be_published_straight_from_the_create_form(client_a, tenant_a):
+    """Publishing MUST go through hrpolicy_publish (which raises the acknowledgment rows). A crafted
+    status=published POST to the create form must be rejected, not silently create a published policy
+    with no acknowledgments — the bypass a code review flagged."""
+    from apps.hrm.models import HRPolicy
+    resp = client_a.post(reverse("hrm:hrpolicy_create"), {
+        "title": "Sneaky Policy", "version_number": "1.0", "category": "other",
+        "status": "published", "requires_acknowledgment": "on"})
+    assert resp.status_code == 200          # redisplayed with a field error
+    assert not HRPolicy.objects.filter(tenant=tenant_a, title="Sneaky Policy").exists()
+
+
 # ============================================================ Grievance: confidentiality + workflow
 def test_grievance_own_scoping(other_client, grievance_a):
     """A different employee must not see someone else's grievance."""
