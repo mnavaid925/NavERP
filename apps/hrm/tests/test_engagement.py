@@ -153,6 +153,17 @@ def test_participation_form_drops_points_and_narrows_status_for_non_admin():
     assert len(admin.fields["status"].choices) == 5
 
 
+def test_program_form_forces_eap_confidential_in_cleaned_data(tenant_a):
+    """The form mirrors the model's force so the audit-log diff (which reads cleaned_data) records the
+    true persisted value — unchecking 'confidential' on an EAP program can't leave a misleading trail."""
+    from apps.hrm.forms import WellbeingProgramForm
+    form = WellbeingProgramForm(
+        {"title": "EAP", "program_type": "eap_counseling", "status": "active",
+         "is_confidential": False}, tenant=tenant_a)
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["is_confidential"] is True
+
+
 def test_fwa_form_requires_days_for_remote(tenant_a):
     from apps.hrm.forms import FlexibleWorkArrangementForm
     form = FlexibleWorkArrangementForm(
@@ -213,6 +224,24 @@ def test_non_confidential_program_shows_the_roster(client_a, tenant_a, program_a
     resp = client_a.get(reverse("hrm:wellbeingprogram_detail", args=[program_a.pk]))
     assert resp.context["participations"] is not None
     assert len(resp.context["participations"]) == 1
+
+
+def test_confidential_participation_does_not_name_the_employee_in_its_str(tenant_a, employee_a):
+    """str(obj) becomes the admin-readable AuditLog.target — a confidential program must not leak the
+    participant's identity there (a cross-module leak a security review flagged)."""
+    eap = WellbeingProgram.objects.create(tenant=tenant_a, title="EAP", program_type="eap_counseling",
+                                          status="active")
+    p = WellbeingParticipation.objects.create(tenant=tenant_a, program=eap, employee=employee_a,
+                                              status="registered")
+    text = str(p)
+    assert employee_a.party.name not in text
+    assert "Confidential" in text
+    # A non-confidential program is unaffected — its str still identifies the participant.
+    open_prog = WellbeingProgram.objects.create(tenant=tenant_a, title="Event",
+                                                program_type="team_event", status="active")
+    op = WellbeingParticipation.objects.create(tenant=tenant_a, program=open_prog, employee=employee_a,
+                                               status="registered")
+    assert str(employee_a) in str(op)
 
 
 # ---------------------------------------------------------------------------- participation self-service
