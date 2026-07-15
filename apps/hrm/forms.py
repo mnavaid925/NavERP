@@ -3057,6 +3057,18 @@ class HRPolicyForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "status" in self.fields:
+            # WARNING (review finding): "published" must NOT be settable from this form. Publishing
+            # goes through hrpolicy_publish, which stamps published_at AND raises a pending
+            # PolicyAcknowledgment for every targeted employee. Setting it here would skip both — and
+            # then permanently lock the policy out of the real publish action, whose own guard refuses
+            # to run on an already-published policy. So the form offers draft/archived only.
+            allowed = [c for c in HRPolicy.STATUS_CHOICES if c[0] != "published"]
+            if self.instance.pk and self.instance.status == "published":
+                # An already-published policy keeps its value (an edit must not silently demote it to
+                # draft) and may only move on to archived.
+                allowed = [c for c in HRPolicy.STATUS_CHOICES if c[0] in ("published", "archived")]
+            self.fields["status"].choices = allowed
         if self.tenant is not None:
             if "applicable_org_unit" in self.fields:
                 self.fields["applicable_org_unit"].queryset = (
@@ -3066,6 +3078,17 @@ class HRPolicyForm(TenantModelForm):
                 if self.instance.pk:
                     qs = qs.exclude(pk=self.instance.pk)  # a policy can't supersede itself
                 self.fields["previous_version"].queryset = qs.order_by("-created_at")
+
+    def clean_status(self):
+        """Defence in depth behind the narrowed choices above — a crafted POST must not be able to
+        publish a policy (and thereby skip the acknowledgment rows)."""
+        status = self.cleaned_data.get("status")
+        already_published = bool(self.instance.pk and self.instance.status == "published")
+        if status == "published" and not already_published:
+            raise forms.ValidationError(
+                "Publish a policy from its detail page — that is what raises the acknowledgment "
+                "requests. It cannot be published from this form.")
+        return status
 
     def clean(self):
         cleaned = super().clean()
@@ -3121,3 +3144,124 @@ class ComplianceRegisterForm(TenantModelForm):
         return _validate_upload(self.cleaned_data.get("document"),
                                 allowed_ext=ALLOWED_COMPLIANCE_DOC_EXTENSIONS,
                                 max_bytes=MAX_COMPLIANCE_DOC_BYTES, label="Compliance Document")
+
+
+from .models import (  # noqa: E402  — 3.40 Workforce Planning
+    EmployeeSkill, WorkforcePlan, WorkforcePlanLine, WorkforceScenario)
+
+
+class WorkforcePlanForm(TenantModelForm):
+    class Meta:
+        model = WorkforcePlan
+        fields = ["name", "org_unit", "plan_type", "period_start", "period_end",
+                  "growth_assumption_percent", "owner", "currency", "status", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _scope_currency(self)
+        if self.tenant is not None:
+            if "org_unit" in self.fields:
+                self.fields["org_unit"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+            if "owner" in self.fields:
+                self.fields["owner"].queryset = (
+                    EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
+                    .order_by("party__name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("period_start"), cleaned.get("period_end")
+        if start and end and end < start:
+            self.add_error("period_end", "Period end cannot be before the period start.")
+        # unique_together(tenant, name) — Django skips validate_unique (tenant is form-excluded).
+        name = cleaned.get("name")
+        if name and self.tenant is not None:
+            dupe = WorkforcePlan.objects.filter(tenant=self.tenant, name=name)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("name", "A workforce plan with this name already exists.")
+        return cleaned
+
+
+class WorkforcePlanLineForm(TenantModelForm):
+    # plan is set by the view (inline child).
+    class Meta:
+        model = WorkforcePlanLine
+        fields = ["org_unit", "designation", "current_headcount", "planned_headcount", "hiring_type",
+                  "avg_annual_cost", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "org_unit" in self.fields:
+                self.fields["org_unit"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+            if "designation" in self.fields:
+                self.fields["designation"].queryset = (
+                    Designation.objects.filter(tenant=self.tenant).order_by("name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        cost = cleaned.get("avg_annual_cost")
+        if cost is not None and cost < 0:
+            self.add_error("avg_annual_cost", "Must be zero or greater.")
+        return cleaned
+
+
+class WorkforceScenarioForm(TenantModelForm):
+    # `plan` is an editable dropdown. When created from a plan's "New Scenario" link the view seeds
+    # initial={"plan": ...} from ?plan=<id>, but the user can always change it here.
+    class Meta:
+        model = WorkforceScenario
+        fields = ["plan", "name", "scenario_type", "affected_org_unit", "description",
+                  "headcount_delta", "cost_delta", "is_baseline", "is_selected", "status", "notes"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 3}),
+                   "notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            if "plan" in self.fields:
+                self.fields["plan"].queryset = (
+                    WorkforcePlan.objects.filter(tenant=self.tenant).order_by("-created_at"))
+            if "affected_org_unit" in self.fields:
+                self.fields["affected_org_unit"].queryset = (
+                    OrgUnit.objects.filter(tenant=self.tenant, kind="department").order_by("name"))
+
+    def clean(self):
+        cleaned = super().clean()
+        # unique_together(tenant, plan, name) — guarded here (tenant is form-excluded).
+        plan, name = cleaned.get("plan"), cleaned.get("name")
+        if plan and name and self.tenant is not None:
+            dupe = WorkforceScenario.objects.filter(tenant=self.tenant, plan=plan, name=name)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("name", "This plan already has a scenario with that name.")
+        return cleaned
+
+
+class EmployeeSkillForm(TenantModelForm):
+    # employee is resolved server-side by the create view (own-vs-admin self-service).
+    class Meta:
+        model = EmployeeSkill
+        fields = ["skill_name", "skill_category", "proficiency_level", "years_experience",
+                  "is_certified", "certification_name", "last_assessed_date", "is_critical_skill", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def clean(self):
+        cleaned = super().clean()
+        # unique_together(tenant, employee, skill_name). The form excludes `employee`, but the view seeds
+        # the unsaved instance with it (on ADD and EDIT), so both paths can be guarded here.
+        skill = cleaned.get("skill_name")
+        if skill and self.instance.employee_id and self.tenant is not None:
+            dupe = EmployeeSkill.objects.filter(
+                tenant=self.tenant, employee_id=self.instance.employee_id, skill_name=skill)
+            if self.instance.pk:
+                dupe = dupe.exclude(pk=self.instance.pk)
+            if dupe.exists():
+                self.add_error("skill_name", "This skill is already on the employee's profile.")
+        return cleaned
