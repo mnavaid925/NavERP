@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Survey Action Plans{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Survey Action Plans</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Engagement</span><span class="sep">›</span><span>Action Plans</span></div>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}<a href="{% url 'hrm:surveyactionplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Action Plan</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / title / focus area / survey...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" class="form-select" aria-label="Owner"><option value="">All owners</option>
+            {% for e in owners %}<option value="{{ e.pk }}" {% if request.GET.owner == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="department" class="form-select" aria-label="Department"><option value="">All departments</option>
+            {% for d in departments %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="survey" class="form-select" aria-label="Survey"><option value="">All surveys</option>
+            {% for s in surveys %}<option value="{{ s.pk }}" {% if request.GET.survey == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.title|truncatechars:30 }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:surveyactionplan_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Survey</th><th>Owner</th><th>Target Date</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:surveyactionplan_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title|truncatechars:40 }}</td>
+              <td>{{ obj.survey.title|truncatechars:28 }}</td>
+              <td>{{ obj.owner.party.name }}</td>
+              <td>{{ obj.target_date|date:"d M Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}</td>
+              <td>
+                {% if obj.status == 'completed' %}<span class="badge badge-green">Completed</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">In Progress</span>
+                {% elif obj.status == 'open' %}<span class="badge badge-amber">Open</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">Cancelled</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:surveyactionplan_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:surveyactionplan_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                {% if is_admin %}<form method="post" action="{% url 'hrm:surveyactionplan_delete' obj.pk %}" onsubmit="return confirm('Delete this action plan?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>{% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>No action plans</h3><p>Turn a closed survey's low-scoring themes into owned, dated initiatives — the "close the loop" step of engagement.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
