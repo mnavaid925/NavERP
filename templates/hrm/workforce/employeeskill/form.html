@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Skill{% else %}Add Skill{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Skill{% else %}Add Skill{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:employeeskill_list' %}">Skills</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% if is_admin and employees and not is_edit %}
+          <div class="form-group">
+            <label class="form-label" for="employee_pk">Employee <span class="req">*</span></label>
+            <select name="employee_pk" id="employee_pk" class="form-select" required>
+              <option value="">-- Select employee --</option>
+              {% for e in employees %}<option value="{{ e.pk }}" {% if target_employee and e.pk == target_employee.pk %}selected{% endif %}>{{ e.party.name }}</option>{% endfor %}
+            </select>
+          </div>
+        {% endif %}
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {# On edit the selector is hidden, so an admin needs to see WHOSE profile they are changing. #}
+      {% if is_admin and is_edit and target_employee %}<p class="form-help">Editing a skill on <strong>{{ target_employee.party.name }}</strong>'s profile.</p>{% endif %}
+      {% if not is_admin %}<p class="form-help">These skills feed the <strong>Supply Analysis</strong> side of workforce planning — HR uses them to match you to internal openings and future roles.</p>{% endif %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'hrm:employeeskill_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
