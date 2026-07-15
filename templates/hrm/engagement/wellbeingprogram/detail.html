@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}
+        {% if obj.status == 'active' %}<span class="badge badge-green">Active</span>
+        {% elif obj.status == 'draft' %}<span class="badge badge-amber">Draft</span>
+        {% elif obj.status == 'completed' %}<span class="badge badge-info">Completed</span>
+        {% elif obj.status == 'archived' %}<span class="badge badge-muted">Archived</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.is_confidential %}<span class="badge badge-red">Confidential</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><a href="{% url 'hrm:wellbeingprogram_list' %}">Wellbeing</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}
+      <a href="{% url 'hrm:wellbeingprogram_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'hrm:wellbeingprogram_delete' obj.pk %}" onsubmit="return confirm('Delete this program and all of its participation records?');" style="display:inline;">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+      <a href="{% url 'hrm:wellbeingprogram_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All Programs</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <div class="detail-grid">
+      <div><span class="text-muted">Number</span><div>{{ obj.number }}</div></div>
+      <div><span class="text-muted">Type</span><div>{{ obj.get_program_type_display }}</div></div>
+      <div><span class="text-muted">Scope</span><div>{% if obj.target_department %}{{ obj.target_department.name }}{% else %}Company-wide{% endif %}</div></div>
+      <div><span class="text-muted">Dates</span><div>{% if obj.start_date %}{{ obj.start_date|date:"d M Y" }}{% if obj.end_date %} – {{ obj.end_date|date:"d M Y" }}{% endif %}{% else %}Ongoing{% endif %}</div></div>
+      <div><span class="text-muted">Points</span><div>{% if obj.points_value is not None %}{{ obj.points_value }}{% else %}-{% endif %}</div></div>
+      <div><span class="text-muted">Owner</span><div>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}-{% endif %}</div></div>
+      {% if obj.external_resource_url %}<div><span class="text-muted">Resource</span><div><a href="{{ obj.external_resource_url }}" target="_blank" rel="noopener noreferrer">Open link</a></div></div>{% endif %}
+    </div>
+    {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+  </div></div>
+
+  {# Aggregate participation stats — the ONLY participation view a confidential program ever exposes. #}
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total Participants</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.completed }}</div><div class="stat-label">Completed</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user-check"></i></div><div class="stat-value">{{ stats.attended }}</div><div class="stat-label">Attended</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="award"></i></div><div class="stat-value">{{ stats.total_points }}</div><div class="stat-label">Points Awarded</div></div>
+  </div>
+
+  {# Own participation — always visible to the viewer, regardless of the confidential branch below. #}
+  {% if own_participation %}
+  <div class="card"><div class="card-header"><h2 class="card-title">My Participation</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="text-muted">Status</span><div>{{ own_participation.get_status_display }}</div></div>
+        {% if own_participation.points_earned is not None %}<div><span class="text-muted">Points Earned</span><div>{{ own_participation.points_earned }}</div></div>{% endif %}
+      </div>
+      <div class="form-actions">
+        <a href="{% url 'hrm:wellbeingparticipation_edit' obj.pk own_participation.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Update</a>
+        <form method="post" action="{% url 'hrm:wellbeingparticipation_delete' obj.pk own_participation.pk %}" onsubmit="return confirm('Withdraw from this program?');" style="display:inline;">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Withdraw</button></form>
+      </div>
+    </div>
+  </div>
+  {% elif rsvp_form %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Join This Program</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'hrm:wellbeingparticipation_add' obj.pk %}" novalidate>
+        {% csrf_token %}
+        {% for e in rsvp_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in rsvp_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Register</button></div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if obj.is_confidential %}
+  <div class="card"><div class="card-body">
+    <div class="empty-state"><i data-lucide="lock"></i><h3>Roster hidden</h3><p>This is a confidential program — only aggregate participation totals are shown, to no one but the individual's own record. This protects the privacy of everyone using EAP / counseling support.</p></div>
+  </div></div>
+  {% else %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Participants</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Employee</th><th>Status</th><th class="text-right">Points</th><th>Notes</th>{% if is_admin %}<th class="table-actions">Actions</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for p in participations %}
+            <tr>
+              <td>{{ p.employee.party.name }}</td>
+              <td>
+                {% if p.status == 'completed' %}<span class="badge badge-green">Completed</span>
+                {% elif p.status == 'attended' %}<span class="badge badge-info">Attended</span>
+                {% elif p.status == 'registered' %}<span class="badge badge-amber">Registered</span>
+                {% elif p.status == 'no_show' %}<span class="badge badge-red">No Show</span>
+                {% elif p.status == 'withdrawn' %}<span class="badge badge-muted">Withdrawn</span>
+                {% else %}<span class="badge badge-muted">{{ p.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="text-right">{% if p.points_earned is not None %}{{ p.points_earned }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+              <td>{{ p.notes|truncatechars:40 }}</td>
+              {% if is_admin %}<td><div class="table-actions">
+                <a href="{% url 'hrm:wellbeingparticipation_edit' obj.pk p.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:wellbeingparticipation_delete' obj.pk p.pk %}" onsubmit="return confirm('Remove this participation?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>{% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if is_admin %}5{% else %}4{% endif %}"><div class="empty-state"><i data-lucide="users"></i><h3>No participants yet</h3><p>Employees who register or are logged for this program appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
