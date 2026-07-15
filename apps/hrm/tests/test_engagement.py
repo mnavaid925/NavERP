@@ -418,3 +418,50 @@ def test_program_list_never_leaks_another_tenant(client_a, tenant_a, tenant_b):
     WellbeingProgram.objects.create(tenant=tenant_a, title="Mine", program_type="team_event")
     resp = client_a.get(reverse("hrm:wellbeingprogram_list"))
     assert {p.title for p in resp.context["object_list"]} == {"Mine"}
+
+
+# ---------------------------------------------------------------------------- query-count guards
+def _query_count(client, url):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(url).status_code == 200
+    return len(ctx)
+
+
+def test_program_list_query_count_is_flat(client_a, tenant_a, employee_a, other_employee_a):
+    """participant_count is annotation-aware — adding programs (each with participations) must NOT add a
+    per-row COUNT."""
+    url = reverse("hrm:wellbeingprogram_list")
+    p1 = WellbeingProgram.objects.create(tenant=tenant_a, title="P1", program_type="team_event",
+                                         status="active")
+    WellbeingParticipation.objects.create(tenant=tenant_a, program=p1, employee=employee_a,
+                                          status="registered")
+    baseline = _query_count(client_a, url)
+    for i in range(4):
+        prog = WellbeingProgram.objects.create(tenant=tenant_a, title=f"P{i+2}",
+                                               program_type="team_event", status="active")
+        WellbeingParticipation.objects.create(tenant=tenant_a, program=prog, employee=other_employee_a,
+                                              status="registered")
+    assert _query_count(client_a, url) == baseline, "wellbeingprogram_list regressed to an N+1"
+
+
+def test_action_plan_and_fwa_list_query_counts_are_flat(client_a, tenant_a, survey_a, employee_a,
+                                                        other_employee_a):
+    ap_url = reverse("hrm:surveyactionplan_list")
+    fwa_url = reverse("hrm:flexibleworkarrangement_list")
+
+    def _make(idx):
+        SurveyActionPlan.objects.create(
+            tenant=tenant_a, survey=survey_a, title=f"A{idx}", focus_area="F", owner=employee_a,
+            description="D", target_date=timezone.localdate())
+        FlexibleWorkArrangement.objects.create(
+            tenant=tenant_a, employee=employee_a, arrangement_type="flextime",
+            start_date=timezone.localdate() + datetime.timedelta(days=idx), reason=f"r{idx}")
+
+    _make(0)
+    ap_base, fwa_base = _query_count(client_a, ap_url), _query_count(client_a, fwa_url)
+    for i in range(1, 5):
+        _make(i)
+    assert _query_count(client_a, ap_url) == ap_base, "surveyactionplan_list regressed to an N+1"
+    assert _query_count(client_a, fwa_url) == fwa_base, "flexibleworkarrangement_list regressed to an N+1"
