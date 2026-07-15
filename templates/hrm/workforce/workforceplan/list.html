@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Workforce Plans{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Workforce Plans</h1>
+      <div class="breadcrumb"><a href="{% url 'hrm:hrm_overview' %}">HRM</a><span class="sep">›</span><span>Workforce Planning</span><span class="sep">›</span><span>Plans</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'hrm:workforce_gap_analysis' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Gap Analysis</a>
+      <a href="{% url 'hrm:workforce_analytics' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Analytics</a>
+      <a href="{% url 'hrm:workforceplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Plan</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number / name / department...">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status"><option value="">All statuses</option>
+            {% for val, label in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="plan_type" class="form-select" aria-label="Plan type"><option value="">All types</option>
+            {% for val, label in plan_type_choices %}<option value="{{ val }}" {% if request.GET.plan_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'hrm:workforceplan_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Scope</th><th>Type</th><th>Period</th><th class="text-right">Current</th><th class="text-right">Planned</th><th class="text-right">Gap</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'hrm:workforceplan_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.name|truncatechars:40 }}</td>
+              <td>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="text-muted">Whole organization</span>{% endif %}</td>
+              <td>{{ obj.get_plan_type_display }}</td>
+              <td>{{ obj.period_start|date:"M Y" }} – {{ obj.period_end|date:"M Y" }}</td>
+              {# The totals are annotation-backed (see _annotate_plan_totals) — no per-row aggregate query. #}
+              <td class="text-right">{{ obj.total_current_headcount }}</td>
+              <td class="text-right">{{ obj.total_planned_headcount }}</td>
+              <td class="text-right">
+                {% if obj.total_gap > 0 %}<span class="badge badge-green">+{{ obj.total_gap }}</span>
+                {% elif obj.total_gap < 0 %}<span class="badge badge-red">{{ obj.total_gap }}</span>
+                {% else %}<span class="badge badge-muted">0</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'approved' %}<span class="badge badge-green">Approved</span>
+                {% elif obj.status == 'active' %}<span class="badge badge-info">Active</span>
+                {% elif obj.status == 'draft' %}<span class="badge badge-amber">Draft</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td><div class="table-actions">
+                <a href="{% url 'hrm:workforceplan_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'hrm:workforceplan_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'hrm:workforceplan_delete' obj.pk %}" onsubmit="return confirm('Delete this plan and all of its lines and scenarios?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="users"></i><h3>No workforce plans</h3><p>Create a plan to forecast headcount demand per department, compare it against today's supply, and model the budget impact.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
