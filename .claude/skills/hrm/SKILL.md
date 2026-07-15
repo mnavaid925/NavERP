@@ -663,7 +663,113 @@ High Performer / Core Player / Underperformer) and **1 succession plan with a 3-
 (ready_now → ready_1_2y → development_needed). Idempotent (guarded on `TalentPool.exists()`).
 
 **Deferred:** **Career Pathing** — it needs a `CareerPath` + `EmployeeSkill` taxonomy of its own, so that NavERP.md
-bullet stays a roadmap placeholder (no model, no sidebar entry).
+bullet stays a roadmap placeholder (no model, no sidebar entry). (3.40 later added `EmployeeSkill` as its skills
+inventory — Career Pathing could now build on it.)
+
+### 3.39 Compliance & Legal (5 tables) — contracts, policies + acknowledgments, grievances, statutory registers
+**Models** (`apps/hrm/models.py`, migrations `0053`/`0054`/`0056`/`0057`):
+`EmploymentContract` (`TenantNumbered`, **`ECON-`**; `employee`→`EmployeeProfile`, `contract_type`
+[permanent/fixed_term/probation/consultant/internship], `start_date`, `end_date` [nullable], `designation`(SET_NULL),
+`notice_period_days`, `status` [draft/active/expired/terminated], `signed_on`, `document`; **COMPUTED**
+`is_expiring_soon` = `0 <= (end_date − today) <= 60` **and** `status=active`), `HRPolicy` (`TenantOwned`; `title`,
+`category` [code_of_conduct/leave/...], `version_number`, `previous_version`(self SET_NULL),
+`applicable_org_unit`(SET_NULL, kind=department), `summary`, `body`, `document`, `status`
+[draft/published/archived], `effective_from`, `published_at`, `requires_acknowledgment`;
+`unique_together (tenant, title, version_number)`), `PolicyAcknowledgment` (`TenantOwned`; `policy`(CASCADE,
+related_name `acknowledgments`), `employee`→`EmployeeProfile`, `status` [pending/acknowledged], `acknowledged_at`;
+`unique_together (tenant, policy, employee)`; index `(tenant, -created_at)`), `Grievance` (`TenantNumbered`,
+**`GRV-`**; `employee`→`EmployeeProfile`, `subject`, `category`, `severity` [low/medium/high/critical],
+`is_anonymous`, `description`, `status` [open/investigating/resolved/closed], `assigned_investigator`(SET_NULL),
+`resolution`, `resolved_at`, `related_policy`/`related_warning`(SET_NULL); **COMPUTED** `is_open`), `ComplianceRegister`
+(`TenantNumbered`, **`CREG-`**; `title`, `register_type`, `jurisdiction`, `authority`, `due_date`, `status`
+[pending/filed/not_applicable], `document`; **COMPUTED** `is_overdue` = `due_date < today` and status not in
+filed/not_applicable).
+
+**Views** (`apps/hrm/views.py`, `# 3.39 Compliance & Legal`): full CRUD for the 5 models. **Publishing a policy goes
+ONLY through `hrpolicy_publish`** (POST) — it stamps `published_at` AND raises a pending `PolicyAcknowledgment` for
+every targeted employee (whole tenant, or the `applicable_org_unit` roster), atomic + idempotent (re-publish tops
+up new joiners). Grievance workflow actions: `grievance_assign`/`_resolve`/`_close`. Acknowledgment is employee
+self-service (`policyacknowledgment_*` via `_ss_scope`); a non-admin `_ss` acknowledges their own rows.
+
+**GOTCHAS (security/correctness — keep these):**
+1. **`HRPolicyForm` must NOT let `status=published` through.** Publishing has to raise the acknowledgment rows;
+   setting `published` on the plain form skips them AND permanently locks out `hrpolicy_publish` (its guard refuses an
+   already-published policy). The form offers **draft/archived only** (an already-published policy may only move to
+   archived), with a `clean_status()` backstop. Covered by
+   `test_policy_cannot_be_published_straight_from_the_create_form`.
+2. **`hrpolicy_publish` wraps the `bulk_create` in a savepoint + `except IntegrityError`** — a concurrent
+   double-publish would otherwise collide on `unique_together(tenant, policy, employee)` and 500.
+3. **All three `unique_together`s are guarded in the forms' `clean()`** (tenant is form-excluded → Django skips
+   `validate_unique`).
+4. **Anonymous grievances mask the complainant** from everyone except HR admins, in **both** list and detail
+   (`show_complainant`); the "Complainant" filter is admin-only.
+
+**Core-spine reuse:** `hrm.EmployeeProfile`, `hrm.Designation`, `core.OrgUnit`, `hrm.WarningLetter` (3.21 — the
+`related_warning`). **Posts no GL.** **Templates:** `templates/hrm/compliance/{employmentcontract,hrpolicy,
+policyacknowledgment,grievance,complianceregister}/{list,detail,form}.html`. **Seeder:** `_seed_compliance`
+(after `_seed_talent`) — contracts (one expiring inside the 60-day window), a published Code-of-Conduct policy with
+per-employee acknowledgments, grievances (incl. an anonymous one), register records (incl. an overdue one).
+**Sidebar:** `LIVE_LINKS["3.39"]` — all 6 bullets live (Disciplinary Actions REUSES `warningletter_list` from 3.21;
+Statutory Registers → `complianceregister_list`) + a Policy Acknowledgments extra. **Follow-up (known, deferred):**
+a maker-checker guard so an HR admin who is also the complainant can't investigate/resolve their own grievance
+(`_is_own_change_request` precedent) — left open because a single-admin tenant may be the only resolver.
+
+### 3.40 Workforce Planning (4 tables) — demand/supply/gap/scenario planning + a skills inventory
+**CONFIDENTIALITY:** the plan/line/scenario data carries **RESTRUCTURING and REDUCTION** headcount, so **every
+`workforceplan_*`/`workforceplanline_*`/`workforcescenario_*` view + the two derived reports
+(`workforce_gap_analysis`, `workforce_analytics`) is `@tenant_admin_required`.** `EmployeeSkill` is the **exception** —
+own-vs-admin self-service (an employee curates their own skills) via `_ss_scope`/`_ss_child_*`.
+
+**Models** (`apps/hrm/models.py`, migrations `0058`/`0059`):
+`WorkforcePlan` (`TenantNumbered`, **`WFP-`**; `name` [unique per tenant], `org_unit`(SET_NULL, kind=department;
+blank = whole org), `plan_type` [annual/project/restructuring/custom], `period_start`/`period_end`,
+`growth_assumption_percent`, `owner`→`EmployeeProfile`(SET_NULL), `currency`(SET_NULL), `status`
+[draft/active/approved/archived]; **four COMPUTED totals that are ANNOTATION-AWARE** —
+`total_current_headcount`/`total_planned_headcount` return the `_total_current`/`_total_planned` annotations the list
+supplies via `_annotate_plan_totals`, else fall back to a `Sum`; `total_gap` = planned − current; `total_budget_impact`
+loops the (prefetched) lines and **skips unpriced ones**), `WorkforcePlanLine` (`TenantOwned`, inline child,
+related_name `lines`; `plan`(CASCADE), `org_unit`(SET_NULL)/`designation`(SET_NULL), `current_headcount`/
+`planned_headcount`, `hiring_type` [new_growth/replacement/attrition_backfill/reduction], `avg_annual_cost`;
+**COMPUTED** `headcount_gap` = planned − current, `budget_impact` = gap × cost or **None** when no cost),
+`WorkforceScenario` (`TenantNumbered`, **`WFS-`**; `plan`(CASCADE, related_name `scenarios`), `name`, `scenario_type`
+[growth/freeze/restructuring/attrition/cost_reduction/custom], `affected_org_unit`(SET_NULL), **SIGNED**
+`headcount_delta`/`cost_delta` [negative = a reduction/saving], `is_baseline`, `is_selected`, `status`;
+`unique_together (tenant, plan, name)`; **COMPUTED** `resulting_headcount` = plan.total_planned + delta),
+`EmployeeSkill` (`TenantOwned`; `employee`→`EmployeeProfile`(CASCADE, related_name `skills`), `skill_name`,
+`skill_category`, `proficiency_level`, `years_experience`, `is_certified`/`certification_name`, `last_assessed_date`,
+`is_critical_skill`; `unique_together (tenant, employee, skill_name)`).
+
+**Views** (`apps/hrm/views.py`, `# 3.40 Workforce Planning`): full CRUD for plans (with the inline
+`workforceplanline_add`/`_edit`/`_delete` on the plan detail) + scenarios + skills, plus two derived reports:
+`workforce_gap_analysis` (current vs planned per department across ACTIVE/APPROVED plans, optional `?plan=`) and
+`workforce_analytics` (headcount/skill-coverage/hiring-mix/top-skills). Skills use the `_ss_child_*` helpers;
+`employeeskill_create` is bespoke (seeds the unsaved instance with tenant+employee so the `clean()` guard fires, and
+a non-admin is forced onto their own profile — `employee_pk` is honoured only for admins).
+
+**GOTCHAS (keep these):**
+1. **Annotation-aware totals + explicit `.order_by()`.** `workforceplan_list` calls `_annotate_plan_totals`
+   (`Coalesce(Sum(...), 0)`) then re-applies `.order_by("-created_at")` — `annotate()`'s GROUP BY drops
+   `Meta.ordering`. `total_budget_impact` (a Python loop) is rendered ONLY on the detail (lines prefetched), never the
+   list — else N+1.
+2. **`workforcescenario_create`/`_edit` are bespoke** (not `crud_create`/`crud_edit`): they enforce
+   **one-baseline-per-plan** (`_normalize_baseline` clears `is_baseline` on the plan's siblings inside the same
+   `atomic()`) and honour `?plan=<id>` to preselect the plan (the plan-detail "New Scenario" link passes it).
+3. **`workforce_gap_analysis` groups by `(org_unit_id, org_unit__name)`, NOT name alone** — `core.OrgUnit` doesn't
+   enforce unique names, so two same-named departments must stay separate rows.
+4. **All three `unique_together`s guarded in the forms' `clean()`**; a duplicate skill also hits a savepoint in the
+   view. `workforcescenario_detail` resolves the plan's planned headcount ONCE in the view (un-cached aggregate).
+
+**Core-spine reuse:** `hrm.EmployeeProfile`, `hrm.Designation`, `core.OrgUnit` (department), `accounting.Currency`.
+**Posts no GL.** **Templates:** `templates/hrm/workforce/{workforceplan,workforceplanline,workforcescenario,
+employeeskill}/{list,detail,form}.html` (plan-line is form-only) + the standalone `workforce/gap_analysis.html` +
+`workforce/analytics.html`. **Seeder:** `_seed_workforce` (after `_seed_compliance`) — an active annual plan with a
+growth/backfill/reduction line per department, three scenarios (baseline/freeze/restructuring), and a skills
+inventory with two critical skills; departments fall back to any org unit so it lands even before the core dept
+seeder. **Sidebar:** `LIVE_LINKS["3.40"]` — all 6 bullets live (Demand Forecasting → `workforceplan_list`, Supply
+Analysis → `employeeskill_list`, Gap Analysis → `workforce_gap_analysis`, Budget Planning →
+`workforceplan_list?status=approved`, Scenario Planning → `workforcescenario_list`, Workforce Analytics →
+`workforce_analytics`). **Tests:** `apps/hrm/tests/test_workforce.py` (59) — if you add a plan/scenario view, add it
+to `ADMIN_ONLY_ROUTES`.
 
 ## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
