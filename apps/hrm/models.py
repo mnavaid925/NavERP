@@ -9387,6 +9387,7 @@ class SurveyActionPlan(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="hrm_actp_tenant_status_idx"),
             models.Index(fields=["tenant", "survey"], name="hrm_actp_tenant_survey_idx"),
             models.Index(fields=["tenant", "owner"], name="hrm_actp_tenant_owner_idx"),
+            models.Index(fields=["tenant", "department"], name="hrm_actp_tenant_dept_idx"),
         ]
 
     def __str__(self):
@@ -9458,6 +9459,7 @@ class WellbeingProgram(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "program_type"], name="hrm_wbp_tenant_type_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_wbp_tenant_status_idx"),
+            models.Index(fields=["tenant", "target_department"], name="hrm_wbp_tenant_dept_idx"),
         ]
 
     def __str__(self):
@@ -9521,7 +9523,8 @@ class WellbeingParticipation(TenantOwned):
         ordering = ["-created_at"]
         unique_together = ("tenant", "program", "employee")
         indexes = [
-            models.Index(fields=["tenant", "program"], name="hrm_wbpart_tnt_program_idx"),
+            # (tenant, program) is already the leftmost prefix of the unique_together index above — no
+            # separate index for it. Only (tenant, employee) needs its own.
             models.Index(fields=["tenant", "employee"], name="hrm_wbpart_tnt_employee_idx"),
         ]
 
@@ -9586,6 +9589,7 @@ class FlexibleWorkArrangement(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "employee", "status"], name="hrm_fwa_emp_status_idx"),
             models.Index(fields=["tenant", "status"], name="hrm_fwa_tnt_status_idx"),
+            models.Index(fields=["tenant", "arrangement_type"], name="hrm_fwa_tnt_type_idx"),
         ]
 
     def __str__(self):
