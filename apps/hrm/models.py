@@ -9328,3 +9328,260 @@ class EmployeeSkill(TenantOwned):
 
     def __str__(self):
         return f"{self.skill_name} ({self.get_proficiency_level_display()})"
+
+
+# ---------------------------------------------------------------------------
+# 3.41 Employee Engagement & Wellbeing — an EXTENSION pass that reuses 3.27's
+# Survey/SurveyResponse (pulse/eNPS delivery) and Announcement (values/mission
+# content) rather than rebuilding them. It adds only the real gaps:
+#   * SurveyActionPlan — turns a closed survey's findings into a tracked initiative
+#     (the Culture Amp / Qualtrics "close the loop" differentiator).
+#   * WellbeingProgram — ONE catalog table, program_type-discriminated, covering
+#     Wellbeing Programs / Employee Assistance / Culture & Values / Social Connect.
+#   * WellbeingParticipation — the RSVP/attendance/points child of a program.
+#   * FlexibleWorkArrangement — a Work-Life-Balance request, a structural clone of
+#     3.35 TravelRequest (reuses _hr_request_* verbatim).
+#
+# CONFIDENTIALITY: EAP/counseling data is highly sensitive. WellbeingProgram forces
+# is_confidential=True for program_type="eap_counseling" in save() (not a form
+# default — a tampered POST can't turn it off), and a confidential program's roster
+# is AGGREGATE-ONLY for every viewer including admins (see wellbeingprogram_detail).
+# ---------------------------------------------------------------------------
+class SurveyActionPlan(TenantNumbered):
+    """A tracked follow-up initiative born from a (typically closed) 3.27 Survey — the "close the loop"
+    step that turns low-scoring drivers into an owned, dated action. ``completed_at`` is auto-managed in
+    ``save()``; ``is_overdue`` is pure arithmetic (safe to render unannotated)."""
+
+    NUMBER_PREFIX = "ACTP"
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+    _CLOSED_STATUSES = ("completed", "cancelled")
+
+    survey = models.ForeignKey("hrm.Survey", on_delete=models.CASCADE, related_name="action_plans",
+                               help_text="The survey this plan responds to (typically a closed one).")
+    title = models.CharField(max_length=255)
+    focus_area = models.CharField(max_length=255,
+                                  help_text="The low-scoring driver/theme this plan addresses.")
+    owner = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+                              related_name="owned_action_plans",
+                              help_text="The accountable owner — may be a manager, not necessarily an admin.")
+    department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                   limit_choices_to={"kind": "department"},
+                                   related_name="survey_action_plans")
+    description = models.TextField()
+    related_objective = models.ForeignKey("hrm.Objective", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="survey_action_plans")
+    target_date = models.DateField()
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="open")
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-target_date", "-id"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="hrm_actp_tenant_status_idx"),
+            models.Index(fields=["tenant", "survey"], name="hrm_actp_tenant_survey_idx"),
+            models.Index(fields=["tenant", "owner"], name="hrm_actp_tenant_owner_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.title}" if self.number else self.title
+
+    def save(self, *args, **kwargs):
+        # Auto-manage completed_at symmetrically: stamp it when the plan first closes, clear it if the
+        # plan is later reopened. No separate "close" action needed.
+        if self.status in self._CLOSED_STATUSES:
+            if self.completed_at is None:
+                self.completed_at = timezone.now()
+        else:
+            self.completed_at = None
+        return super().save(*args, **kwargs)
+
+    @property
+    def is_overdue(self):
+        return self.status in ("open", "in_progress") and self.target_date < timezone.localdate()
+
+
+class WellbeingProgram(TenantNumbered):
+    """One catalog entry covering Wellbeing Programs / Employee Assistance / Culture & Values / Social
+    Connect, discriminated by ``program_type`` (the "one platform, one catalog, a type field" shape every
+    researched leader uses). ``is_confidential`` is FORCED true for EAP/counseling in ``save()``."""
+
+    NUMBER_PREFIX = "WBP"
+
+    PROGRAM_TYPE_CHOICES = [
+        ("wellness_challenge", "Wellness Challenge"),
+        ("mental_health_resource", "Mental Health Resource"),
+        ("eap_counseling", "EAP / Counseling"),
+        ("culture_assessment", "Culture Assessment"),
+        ("team_event", "Team Event"),
+        ("interest_group", "Interest Group"),
+        ("volunteering", "Volunteering"),
+        ("work_life_policy", "Work-Life Policy"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("completed", "Completed"),
+        ("archived", "Archived"),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    program_type = models.CharField(max_length=25, choices=PROGRAM_TYPE_CHOICES, default="wellness_challenge")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="hrm_wellbeingprogram_owned")
+    target_department = models.ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True,
+                                          limit_choices_to={"kind": "department"},
+                                          related_name="wellbeing_programs",
+                                          help_text="Blank = company-wide.")
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True,
+                                help_text="Blank for an ongoing resource (e.g. an EAP hotline).")
+    points_value = models.PositiveIntegerField(null=True, blank=True,
+                                               help_text="Gamification points a participant earns.")
+    external_resource_url = models.URLField(blank=True,
+                                            help_text="Link out to the provider portal / sign-up page.")
+    is_confidential = models.BooleanField(
+        default=False,
+        help_text="EAP/counseling is ALWAYS confidential (forced on save); its roster is aggregate-only.")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+
+    class Meta:
+        ordering = ["-start_date", "-id"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "program_type"], name="hrm_wbp_tenant_type_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_wbp_tenant_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.title}" if self.number else self.title
+
+    def save(self, *args, **kwargs):
+        # Model-layer confidentiality enforcement: EAP/counseling can never be non-confidential, even if a
+        # tampered POST (or a direct .create(is_confidential=False, ...)) says otherwise.
+        if self.program_type == "eap_counseling":
+            self.is_confidential = True
+        return super().save(*args, **kwargs)
+
+    @property
+    def participant_count(self):
+        """ANNOTATION-AWARE — the list view supplies ``_participant_count`` so rendering N programs doesn't
+        fire N COUNTs; falls back to a query for a lone instance."""
+        annotated = getattr(self, "_participant_count", None)
+        if annotated is not None:
+            return annotated
+        return self.participations.count()
+
+    def participation_stats(self):
+        """Aggregate-only roll-up for the detail page (the ONLY participation view a confidential program
+        ever exposes). One GROUP BY + one Sum — no per-employee rows."""
+        by_status = {row["status"]: row["n"]
+                     for row in self.participations.values("status").annotate(n=models.Count("id"))}
+        stats = {key: by_status.get(key, 0)
+                 for key, _ in WellbeingParticipation.PARTICIPATION_STATUS_CHOICES}
+        stats["total"] = sum(stats.values())
+        stats["total_points"] = (self.participations.aggregate(
+            v=models.Sum("points_earned"))["v"] or 0)
+        return stats
+
+
+class WellbeingParticipation(TenantOwned):
+    """An employee's RSVP / attendance / volunteering-log for a ``WellbeingProgram`` — the nested child
+    (form-only, no standalone list), added from the program's detail page. ``notes`` is SCHEDULING/status
+    text ONLY, never clinical content (enforced by help_text + review, not an ML filter)."""
+
+    PARTICIPATION_STATUS_CHOICES = [
+        ("registered", "Registered"),
+        ("attended", "Attended"),
+        ("completed", "Completed"),
+        ("no_show", "No Show"),
+        ("withdrawn", "Withdrawn"),
+    ]
+    _CLOSED_STATUSES = ("completed",)
+
+    program = models.ForeignKey("hrm.WellbeingProgram", on_delete=models.CASCADE,
+                                related_name="participations")
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.PROTECT,
+                                 related_name="wellbeing_participations")
+    status = models.CharField(max_length=12, choices=PARTICIPATION_STATUS_CHOICES, default="registered")
+    points_earned = models.PositiveIntegerField(null=True, blank=True,
+                                                help_text="Admin-awarded — not self-settable by employees.")
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True,
+                             help_text="Scheduling/status notes only — never clinical or counseling content.")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "program", "employee")
+        indexes = [
+            models.Index(fields=["tenant", "program"], name="hrm_wbpart_tnt_program_idx"),
+            models.Index(fields=["tenant", "employee"], name="hrm_wbpart_tnt_employee_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} @ {self.program_id} ({self.get_status_display()})"
+
+    def save(self, *args, **kwargs):
+        if self.status in self._CLOSED_STATUSES:
+            if self.completed_at is None:
+                self.completed_at = timezone.now()
+        else:
+            self.completed_at = None
+        return super().save(*args, **kwargs)
+
+
+class FlexibleWorkArrangement(TenantNumbered):
+    """A Work-Life-Balance request (remote/hybrid/compressed/flextime/part-time) — a structural clone of
+    3.35 TravelRequest that reuses _hr_request_submit/_cancel/_approve/_reject/_edit/_delete VERBATIM."""
+
+    NUMBER_PREFIX = "FWA"
+
+    ARRANGEMENT_TYPE_CHOICES = [
+        ("remote", "Fully Remote"),
+        ("hybrid", "Hybrid"),
+        ("compressed_week", "Compressed Week"),
+        ("flextime", "Flexible Hours"),
+        ("part_time", "Part Time"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+        ("expired", "Expired"),
+    ]
+    OPEN_STATUSES = ("draft", "pending")  # required by _hr_request_edit/_delete/_cancel
+
+    employee = models.ForeignKey("hrm.EmployeeProfile", on_delete=models.CASCADE,
+                                 related_name="flexible_work_arrangements")
+    arrangement_type = models.CharField(max_length=20, choices=ARRANGEMENT_TYPE_CHOICES, default="remote")
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True, help_text="Blank = open-ended / permanent.")
+    days_per_week_remote = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Only for Remote/Hybrid — days worked remotely per week (1–5).")
+    reason = models.TextField()
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="draft")
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="hrm_fwa_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("tenant", "number")
+        indexes = [
+            models.Index(fields=["tenant", "employee", "status"], name="hrm_fwa_emp_status_idx"),
+            models.Index(fields=["tenant", "status"], name="hrm_fwa_tnt_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.number} - {self.get_arrangement_type_display()}" if self.number \
+            else self.get_arrangement_type_display()
