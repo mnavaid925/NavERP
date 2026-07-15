@@ -9866,3 +9866,577 @@ re-forecast. See the Deferred list above.
 `hrpolicy_publish` now wraps the acknowledgment `bulk_create` in a savepoint. Both covered by new tests; the 3.39
 skill + README sections were added in the same pass. Known follow-up: a maker-checker guard so an HR admin who is
 also the complainant can't self-investigate a grievance (left open — a single-admin tenant may be the only resolver).
+
+---
+# Module 3 — HRM — Sub-module 3.41 Employee Engagement & Wellbeing (hrm) — plan from research-engagement-wellbeing.md (2026-07-16)
+
+**EXTENDS the existing `apps/hrm` app (already built through 3.40) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** `apps/hrm` is still the flat `models.py`/`forms.py`/`views.py`/
+`urls.py` shape — new code is appended under a `# --- 3.41 Employee Engagement & Wellbeing ---` banner in each
+file. Next migration is `0060`. **4 new models** cover all 6 NavERP.md bullets (`NavERP.md:721-727`) either as a
+live model or an explicit, documented reuse — no bullet is left un-wired.
+
+**This is an EXTENSION pass, not a green-field one — the priority is reusing 3.27's `Survey`/`SurveyResponse`
+machinery, not re-inventing a second survey stack:**
+- **Engagement Surveys** (pulse/eNPS delivery) is **already fully built** by `hrm.Survey`/`hrm.SurveyResponse`
+  (3.27) — a 0–10 `rating` question in `Survey.questions` IS the eNPS pattern. This pass adds **only** the one
+  real gap: `SurveyActionPlan` (turning a closed survey's findings into a tracked follow-up initiative). Do
+  **not** add a second `Survey`-like model.
+- **Culture & Values** ("mission alignment, culture assessments") reuses `hrm.Survey` as the assessment
+  instrument (a values-alignment question set is just another `Survey`) and `WellbeingProgram(program_type=
+  "culture_assessment")` as the catalog entry that promotes/schedules it — no new survey engine. "Values/mission
+  content & acknowledgment" is **already covered** by `hrm.Announcement(category="policy")` (3.27) — not
+  rebuilt here.
+- **Wellbeing Programs / Employee Assistance / Social Connect** (4 of the 6 bullets) share **one** catalog table,
+  `WellbeingProgram`, discriminated by `program_type` — the same "one table, a type field" shape `Feedback
+  .feedback_type` (3.20) and `Suggestion.category` (3.27) already use in this app. Do **not** build 3–4 separate
+  catalog tables.
+- **Work-Life Balance**'s "flexible work arrangements" is a genuinely new self-service request
+  (`FlexibleWorkArrangement`) — a direct structural clone of 3.35 `TravelRequest`, reusing
+  `_hr_request_submit/_cancel/_approve/_reject/_edit/_delete` **verbatim**, no bespoke workflow code.
+
+## 0. Decisions — confidentiality model + access model (read before writing code)
+
+- [ ] **EAP/counseling data is HIGHLY SENSITIVE — confidentiality is stated up front, cloning the 3.21
+  PIP/CoachingNote and 3.38 talent-confidentiality precedent of documenting the access model before any code is
+  written:**
+  - `WellbeingProgram.is_confidential` is **forced `True`** by the model whenever `program_type ==
+    "eap_counseling"` (enforced in `save()`, not just the form default — a tampered POST cannot turn it off).
+  - `WellbeingParticipation.notes` is **scheduling/status notes only — never clinical/counseling content.** The
+    field's `help_text` says so explicitly; there is no separate "case notes" field anywhere in this pass (EAP
+    session detail is out of scope — see Deferred).
+  - On a **confidential** program's detail page, **every viewer — including a tenant admin** — sees only
+    **aggregate** participation counts (`registered`/`attended`/`completed`/`no_show`/`withdrawn` totals), never
+    a per-employee roster. This matches the research's "aggregate reporting only" EAP-software-category finding
+    literally: it is not merely an employee-vs-admin split, it is a **no-per-row-view-for-anyone** rule on the
+    confidential program's own participation table. An individual employee can still see (and manage) **their
+    own** `WellbeingParticipation` row via `wellbeingparticipation_edit`/`_ss_child_detail`-style
+    `_can_manage_own_child` gating — the aggregate-only rule applies to the *program's* roster view, not to a
+    person's own record.
+  - **Non-confidential** programs (team events, interest groups, volunteering, wellness challenges) intentionally
+    show the **full roster** to every logged-in viewer — social visibility ("who's going," leaderboards) is a
+    named Wellable/WeSpire/Deed feature, not a bug, and must not be masked.
+  - **WARNING — honest limitation, document it, do not overclaim:** this confidentiality guarantee covers the
+    app's own list/detail/report VIEWS only. A superuser or a tenant admin with direct Django-admin/DB access can
+    still see individual `WellbeingParticipation` rows for a confidential program — `admin.py` for this model
+    must carry the same caveat comment `PerformanceImprovementPlan`/`CoachingNote` (3.21) already documents,
+    rather than presenting the app-level masking as end-to-end anonymity.
+- [ ] **Per-model access model (mirrors the established `@tenant_admin_required`-vs-self-service split):**
+  - `WellbeingProgram` — **catalog**, same shape as `TravelPolicy`/`HRPolicy`: `list`/`detail` are `@login_required`
+    (every employee browses the catalog to find something to join), `create`/`edit`/`delete` are
+    `@tenant_admin_required` (HR/wellness admin governs what's on offer).
+  - `SurveyActionPlan` — `list`/`detail` are `@login_required` tenant-wide (transparency — seeing what the org is
+    doing about survey results is itself part of "closing the loop"), `create`/`delete` are `@tenant_admin_required`
+    (HR governs which plans exist and when one is retired), `edit` is gated by a **new small helper**
+    `_can_manage_action_plan(request, obj)` — `_is_admin(request.user) or (profile is not None and obj.owner_id
+    == profile.pk)` (mirrors `_can_manage_own_child`'s exact shape, just keyed on `owner` instead of `employee`)
+    — so the assigned owner (often a manager, not necessarily a tenant admin) can update status/description/
+    target_date as they execute the plan, matching Culture Amp's real "owner tracks their own action plan"
+    workflow, while HR retains control over which plans exist.
+  - `WellbeingParticipation` — self-service RSVP/log: any `@login_required` employee can create their **own** row
+    (`wellbeingparticipation_add`); an admin can additionally log a row **for another employee** via `?employee=
+    <id>` (mirrors `_ss_child_create`'s own-vs-admin target resolution). Edit is owner-or-admin
+    (`_can_manage_own_child`), but the **fields differ by role** — see `WellbeingParticipationForm` below.
+  - `FlexibleWorkArrangement` — plain 3.26/3.35-shaped self-service request, `@login_required` throughout,
+    reusing `_ss_child_create`/`_hr_request_edit`/`_hr_request_delete`/`_hr_request_submit`/`_hr_request_cancel`
+    and `@tenant_admin_required` on `_hr_request_approve`/`_hr_request_reject` only (exact `TravelRequest`
+    pattern — no new decorator, no bespoke workflow).
+- [ ] **No new derived-report/analytics view this pass** — unlike 3.40, all 6 NavERP.md bullets map onto CRUD or
+  an explicit reuse route; heatmap/trend/eNPS-benchmark dashboards are explicitly deferred to 3.32
+  `HRDashboard`/`HRDashboardWidget` (research's own Deferred list). Keep this pass at exactly 4 models + CRUD.
+- [ ] **Prefixes confirmed free** against the full `NUMBER_PREFIX` grep of `apps/hrm/models.py` (through 3.40's
+  `WFP`/`WFS`): `ACTP` (`SurveyActionPlan`), `WBP` (`WellbeingProgram`), `FWA` (`FlexibleWorkArrangement`).
+  `WellbeingParticipation` is `TenantOwned` (no prefix) — nested-child convention matching `TravelBooking`/
+  `WorkforcePlanLine`/`EmployeeSkill`.
+- [ ] **`WellbeingParticipation`'s `unique_together (tenant, program, employee)` needs the bespoke Lesson-4/
+  Lesson-1 EmployeeSkill treatment** — see Forms/Views below; do **not** reuse `_ss_child_create` verbatim for
+  this model (three of the constraint's fields — `tenant`, `program`, `employee` — are all view-resolved, not
+  form fields, so Django's `validate_unique` never fires).
+
+## Models (from research) — `apps/hrm/models.py`, new `# --- 3.41 Employee Engagement & Wellbeing ---` block
+
+- [ ] **`SurveyActionPlan`** [`ACTP-`, `TenantNumbered`] — closes the one real gap in 3.27's survey coverage
+  (Culture Amp/Qualtrics/Lattice's action-planning differentiator); the highest-value model this pass.
+  - `survey` = FK `hrm.Survey`, `on_delete=CASCADE, related_name="action_plans"` — the survey this plan responds
+    to (help_text notes it's typically a closed survey; not DB-enforced, so an edit doesn't break if the linked
+    survey's status later changes).
+  - `title` = `CharField(255)`
+  - `focus_area` = `CharField(255)` — the low-scoring driver/theme this plan addresses, free text since
+    `Survey.questions` is schema-less JSON (driver: Culture Amp/Qualtrics "focus area" concept)
+  - `owner` = FK `hrm.EmployeeProfile`, `on_delete=PROTECT, related_name="owned_action_plans"` — the accountable
+    owner (often a manager, may not be a tenant admin — see the `_can_manage_action_plan` access model above),
+    mirrors `Objective.owner`
+  - `department` = FK `core.OrgUnit`, `on_delete=SET_NULL, null=True, blank=True,
+    limit_choices_to={"kind": "department"}, related_name="survey_action_plans"` — scope, mirrors
+    `Announcement.target_department`/`Objective.department`
+  - `description` = `TextField()`
+  - `related_objective` = FK `hrm.Objective`, `on_delete=SET_NULL, null=True, blank=True,
+    related_name="survey_action_plans"` — optional tie-in to 3.18 OKR tracking, mirrors `Feedback
+    .related_objective`
+  - `target_date` = `DateField()`
+  - `status` = `CharField` choices `STATUS_CHOICES` = `open`/`in_progress`/`completed`/`cancelled`, default
+    `"open"` — **lean single-status-field lifecycle, no separate close action** (3.40 `WorkforcePlan`/
+    `WorkforceScenario` precedent: "single status field, no separate approve action")
+  - `completed_at` = `DateTimeField(null=True, blank=True, editable=False)` — **`save()` auto-manages it**:
+    stamp `timezone.now()` the moment `status` enters `completed`/`cancelled` (only if not already set), clear it
+    back to `None` if status is later reverted to `open`/`in_progress` — no bespoke "close" view needed.
+  - `is_overdue` **property** (pure arithmetic, no query — safe to render in list/detail unannotated, mirrors
+    `MeetingActionItem.is_overdue`): `status in ("open", "in_progress") and target_date < today`.
+  - `class Meta`: `ordering = ["-target_date", "-id"]`; `unique_together = ("tenant", "number")`; indexes
+    `["tenant", "status"]` (`hrm_actp_tenant_status_idx`), `["tenant", "survey"]` (`hrm_actp_tenant_survey_idx`),
+    `["tenant", "owner"]` (`hrm_actp_tenant_owner_idx`).
+  - Justified by: Engagement Surveys → Action Planning (the sole researched gap) · reuses `hrm.Survey`,
+    `hrm.EmployeeProfile`, `core.OrgUnit`, `hrm.Objective` — **no new core-spine entity, no GL posting.**
+
+- [ ] **`WellbeingProgram`** [`WBP-`, `TenantNumbered`] — the unified catalog for Wellbeing Programs, Employee
+  Assistance, Culture & Values, and Social Connect (Wellable/WeSpire/Deed/Alaya precedent: one platform, one
+  catalog, a type discriminator).
+  - `title` = `CharField(255)`; `description` = `TextField(blank=True)`
+  - `program_type` = `CharField` choices `PROGRAM_TYPE_CHOICES` = `wellness_challenge` / `mental_health_resource`
+    / `eap_counseling` / `culture_assessment` / `team_event` / `interest_group` / `volunteering` /
+    `work_life_policy` — one field covers 4 of the 6 NavERP.md bullets, matching how every researched leader
+    bundles these into one platform.
+  - `owner` = FK `settings.AUTH_USER_MODEL`, `on_delete=SET_NULL, null=True, blank=True,
+    related_name="hrm_wellbeingprogram_owned"` — the HR/wellness admin, mirrors `Announcement.author`
+  - `target_department` = FK `core.OrgUnit`, `on_delete=SET_NULL, null=True, blank=True,
+    limit_choices_to={"kind": "department"}, related_name="wellbeing_programs"` — blank = company-wide
+  - `start_date` / `end_date` = `DateField(null=True, blank=True)` — ongoing resources (an EAP hotline, a
+    mental-health article library) have neither
+  - `points_value` = `PositiveIntegerField(null=True, blank=True)` — Wellable's points-as-common-currency
+    gamification (a simple int field this pass, **not** a redemption ledger — see Deferred)
+  - `external_resource_url` = `URLField(blank=True)` — link out to the EAP provider portal, wearable-challenge
+    page, or ERG sign-up. **WARNING (honest scope): a plain link only — do not build a fake "connect to
+    provider" button; there is no live vendor integration this pass.**
+  - `is_confidential` = `BooleanField(default=False)` — **see the confidentiality model in Decisions above.**
+  - `status` = `CharField` choices `STATUS_CHOICES` = `draft`/`active`/`completed`/`archived`, default `"draft"`
+    — mirrors `Survey.status` shape.
+  - `save()` override — **enforces the confidentiality rule at the model layer**: if `program_type ==
+    "eap_counseling"`, force `is_confidential = True` before saving (cannot be bypassed via form tampering).
+  - `participant_count` **annotation-aware property** (Lesson 3): `getattr(self, "_participant_count", None)`,
+    falling back to `self.participations.count()` — feeds the list page without a per-row query.
+  - `participation_stats()` **method** (not a stored field) — returns
+    `{"registered": n, "attended": n, "completed": n, "no_show": n, "withdrawn": n, "total_points": n}` via one
+    `.values("status").annotate(count=Count("id"))` + a `Sum("points_earned")` query; used on the detail page for
+    confidential programs (aggregate-only view) and optionally as a summary strip on non-confidential ones too.
+  - `class Meta`: `ordering = ["-start_date", "-id"]`; `unique_together = ("tenant", "number")`; indexes
+    `["tenant", "program_type"]` (`hrm_wbp_tenant_type_idx`), `["tenant", "status"]` (`hrm_wbp_tenant_status_idx`).
+  - Justified by: Wellbeing Programs, Employee Assistance, Culture & Values (catalog half), Social Connect ·
+    reuses `core.OrgUnit`, `settings.AUTH_USER_MODEL` · no new core-spine entity.
+
+- [ ] **`WellbeingParticipation`** (`TenantOwned` — nested child, **no** `NUMBER_PREFIX`, own entity folder with
+  only a `form.html` — mirrors the as-built `WorkforcePlanLine`/`TravelBooking` shape exactly, confirmed against
+  the real `templates/hrm/workforce/workforceplanline/form.html` and `templates/hrm/travel/travelbooking/
+  form.html` paths, **not** the older "line_form.html inside the parent folder" idea from an earlier plan draft)
+  — RSVP/enrollment/attendance/volunteering-log for a `WellbeingProgram`, added/edited from the program's detail
+  page.
+  - `program` = FK `WellbeingProgram`, `on_delete=CASCADE, related_name="participations"`
+  - `employee` = FK `hrm.EmployeeProfile`, `on_delete=PROTECT, related_name="wellbeing_participations"`
+  - `status` = `CharField` choices `PARTICIPATION_STATUS_CHOICES` = `registered`/`attended`/`completed`/
+    `no_show`/`withdrawn`, default `"registered"` — mirrors `TrainingAttendance.attendance_status` shape
+  - `points_earned` = `PositiveIntegerField(null=True, blank=True)` — **admin-only field, see Forms below**
+  - `completed_at` = `DateTimeField(null=True, blank=True, editable=False)` — stamped the same `save()`-auto-
+    manage way as `SurveyActionPlan.completed_at` (set on entering `completed`, cleared otherwise)
+  - `notes` = `TextField(blank=True)` — **WARNING (confidentiality, restated at the field level): scheduling/
+    status notes only — never clinical/counseling content, enforced via `help_text` and called out again in the
+    form's `clean()`** as a soft validation warning (reject obviously clinical-sounding free text is out of
+    scope/unreliable; the control here is the help_text + code-review, not an ML filter).
+  - `class Meta`: `unique_together = ("tenant", "program", "employee")` — one participation row per employee per
+    program (re-enroll = a new `WellbeingProgram` instance, mirrors `TrainingNomination`'s `unique_together`);
+    `ordering = ["-created_at"]`; indexes `["tenant", "program"]` (`hrm_wbpart_tenant_program_idx`),
+    `["tenant", "employee"]` (`hrm_wbpart_tenant_employee_idx`).
+  - Justified by: Wellbeing Programs (challenge participation), Employee Assistance (confidential enrollment
+    tracking), Social Connect (RSVP/attendance/volunteering hours) · reuses `hrm.EmployeeProfile`.
+
+- [ ] **`FlexibleWorkArrangement`** [`FWA-`, `TenantNumbered`] — the Work-Life Balance request, a direct
+  structural clone of 3.35 `TravelRequest` (confirmed field-for-field against the real `TravelRequest` model).
+  - `employee` = FK `hrm.EmployeeProfile`, `on_delete=CASCADE, related_name="flexible_work_arrangements"`
+  - `arrangement_type` = `CharField` choices `ARRANGEMENT_TYPE_CHOICES` = `remote`/`hybrid`/`compressed_week`/
+    `flextime`/`part_time`, default `"remote"`
+  - `start_date` = `DateField()`; `end_date` = `DateField(null=True, blank=True)` — blank = open-ended/permanent
+  - `days_per_week_remote` = `PositiveSmallIntegerField(null=True, blank=True)` — only meaningful for
+    `remote`/`hybrid` (form `clean()` enforces required+1–5 when applicable, blank otherwise — see Forms)
+  - `reason` = `TextField()`
+  - `status` = `CharField` choices `STATUS_CHOICES` = `draft`/`pending`/`approved`/`rejected`/`cancelled`/
+    `expired`, default `"draft"`; `OPEN_STATUSES = ("draft", "pending")` — **reuses `_hr_request_submit/_cancel/
+    _approve/_reject/_edit/_delete` verbatim**, exactly like `Suggestion`/`TravelRequest`
+  - `approver` = FK `settings.AUTH_USER_MODEL`, `on_delete=SET_NULL, null=True, blank=True,
+    related_name="hrm_fwa_approvals"`; `approved_at` = `DateTimeField(null=True, blank=True)`;
+    `decision_note` = `TextField(blank=True)`
+  - `class Meta`: `ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+    `["tenant", "employee", "status"]` (`hrm_fwa_emp_status_idx`), `["tenant", "status"]`
+    (`hrm_fwa_tnt_status_idx"`).
+  - Justified by: Work-Life Balance → flexible/remote work arrangement requests (table-stakes per research) ·
+    reuses `hrm.EmployeeProfile`, `settings.AUTH_USER_MODEL` · no new core-spine entity.
+
+## Forms (`apps/hrm/forms.py`)
+
+- [ ] `SurveyActionPlanForm(TenantModelForm)` — fields `survey, title, focus_area, owner, department,
+  description, related_objective, target_date, status` (excludes `tenant`/`number`/`completed_at`); `__init__`
+  scopes `survey`/`owner`/`department`/`related_objective` querysets to the tenant (do **not** filter `survey`
+  to `status="closed"` only — an already-linked plan whose survey's status later changes must still render its
+  selected option; document the intent via the model field's `help_text` instead).
+- [ ] `WellbeingProgramForm(TenantModelForm)` — fields `title, description, program_type, owner,
+  target_department, start_date, end_date, points_value, external_resource_url, is_confidential, status`
+  (excludes `tenant`/`number`); `__init__` scopes `owner` to `get_user_model().objects.filter(tenant=tenant)`,
+  `target_department` to tenant `kind="department"`; `clean()` guards `end_date >= start_date` when both are
+  present. The `is_confidential` checkbox stays a real form field (so non-EAP programs can still opt in), but
+  add `help_text` on `program_type`/`is_confidential` noting EAP/counseling is always confidential regardless of
+  what's submitted — the actual enforcement is the model's `save()` override (belt-and-braces, not duplicated
+  logic).
+- [ ] `WellbeingParticipationForm(TenantModelForm)` — fields `status, points_earned, notes` (excludes `tenant`,
+  `program`, `employee` — all view-resolved). **`__init__(self, *args, can_admin=False, **kwargs)`** — mirrors
+  the `HRDashboardForm(can_share=...)` precedent (`apps/hrm/forms.py`) for dropping privileged fields to prevent
+  privilege escalation via the form: when `can_admin` is `False`, `self.fields.pop("points_earned", None)` and
+  narrow `self.fields["status"].choices` to `[("registered", "Registered"), ("withdrawn", "Withdrawn")]` only —
+  a plain employee can RSVP or withdraw but never self-mark `attended`/`completed`/`no_show` or award their own
+  points. `clean_notes()` — soft guard: if `notes` is set and the parent `program.is_confidential` is `True`,
+  re-render the `help_text` warning as a non-blocking `self.add_error` is **not** appropriate (would block
+  legitimate scheduling notes) — instead surface the warning as static template copy next to the field, not a
+  form validation error.
+  **Lesson (a)/(b)/(d) — the `(tenant, program, employee)` unique_together CANNOT be guarded in this form's
+  `clean()`**: `tenant`, `program`, AND `employee` are all excluded/view-resolved (three fields, not one — worse
+  than the 3.40 `EmployeeSkillForm` case). Do **not** reuse `_ss_child_create` verbatim. Write bespoke
+  `wellbeingparticipation_add` (see Views) that: (1) resolves `target` employee own-vs-admin exactly like
+  `_ss_child_create`; (2) seeds the unsaved instance with `tenant`/`program`/`employee` **before** calling
+  `form.is_valid()` is not needed here since the guard is an explicit query, not `full_clean()` — instead,
+  **after** `form.is_valid()`, explicitly check
+  `WellbeingParticipation.objects.filter(tenant=request.tenant, program=program,
+  employee=target).exists()` and, on a hit, `form.add_error(None, "Already registered for this program.")` and
+  re-render instead of saving; (3) wrap the actual `.save()` in `transaction.atomic()` and catch `IntegrityError`
+  as defense-in-depth against a concurrent double-RSVP race (same belt-and-braces shape as 3.40's
+  `EmployeeSkillForm` fix).
+- [ ] `FlexibleWorkArrangementForm(TenantModelForm)` — fields `arrangement_type, start_date, end_date,
+  days_per_week_remote, reason` (excludes `tenant`, `employee`, `status`, `approver`, `approved_at`,
+  `decision_note` — mirrors `TravelRequestForm`'s exclusion set exactly, since `_ss_child_create`/
+  `_hr_request_edit` set `tenant`/`employee` and the workflow fields are never user-editable). `clean()` guards:
+  `end_date >= start_date` when `end_date` is set; `days_per_week_remote` is **required, 1–5** when
+  `arrangement_type` is `remote` or `hybrid`, and must be **blank** otherwise (`add_error` either way — this is
+  the one piece of real business validation in this pass's forms).
+- [ ] Lesson (f) confirmed **N/A this pass** — no `DecimalField` anywhere in the 4 new models (only ints/dates/
+  choices/text), so no `Decimal` import concern.
+
+## Views (`apps/hrm/views.py`, new `# --- 3.41 Employee Engagement & Wellbeing ---` banner after the 3.40
+workforce block)
+
+- [ ] `_can_manage_action_plan(request, obj)` — new tiny helper (placed next to `_can_manage_own_child`):
+  `_is_admin(request.user) or (profile := _current_employee_profile(request)) is not None and obj.owner_id ==
+  profile.pk`.
+- [ ] `SurveyActionPlan` CRUD — `surveyactionplan_list/_create/_detail/_edit/_delete`.
+  - `surveyactionplan_list` (`@login_required`): `crud_list` over `.select_related("survey", "owner__party",
+    "department", "related_objective")` + explicit `.order_by("-target_date", "-id")` (defensive — no
+    `.annotate()` here, but keeps the convention visible); `search_fields=["number","title","focus_area",
+    "survey__title"]`; `filters=[("status","status",False), ("owner","owner_id",True),
+    ("department","department_id",True), ("survey","survey_id",True)]`; `extra_context` with the 4 choice/qs
+    lists.
+  - `surveyactionplan_create` (`@tenant_admin_required`): `crud_create`.
+  - `surveyactionplan_detail` (`@login_required`): `crud_detail` with `select_related=("survey","owner__party",
+    "department","related_objective")`.
+  - `surveyactionplan_edit` (`@login_required`, gated by `_can_manage_action_plan` — `PermissionDenied` on a
+    miss): bespoke thin wrapper (not `crud_edit` directly, since `crud_edit` has no ownership gate) that checks
+    `_can_manage_action_plan` first, then delegates to the same save flow as `crud_edit`.
+  - `surveyactionplan_delete` (`@tenant_admin_required`, `@require_POST`): `crud_delete`.
+- [ ] `WellbeingProgram` CRUD — `wellbeingprogram_list/_create/_detail/_edit/_delete`.
+  - `wellbeingprogram_list` (`@login_required`): `crud_list` over `.select_related("owner","target_department")
+    .annotate(_participant_count=Count("participations", distinct=True))` then **explicit `.order_by("-start_date",
+    "-id")`** (Lesson 2 — the `Count()` GROUP BY drops `Meta.ordering`); `search_fields=["number","title",
+    "description"]`; `filters=[("program_type","program_type",False), ("status","status",False),
+    ("target_department","target_department_id",True)]`; `extra_context` with `program_type_choices`,
+    `status_choices`, `departments`.
+  - `wellbeingprogram_create`/`_edit` (`@tenant_admin_required`): `crud_create`/`crud_edit`.
+  - `wellbeingprogram_detail` (`@login_required`): bespoke `render()` (not `crud_detail` — needs the
+    confidentiality branch): if `obj.is_confidential`, pass `participation_stats = obj.participation_stats()`
+    and **no** `participations` queryset (template renders the aggregate-only block); else pass `participations
+    = obj.participations.select_related("employee__party").order_by("-created_at")` (full roster). Always pass
+    `is_admin`, `own_participation` (the viewer's own row if any, via `_ss_scope`-style lookup), and — if
+    `obj.status == "active"` and the viewer has no row yet — a blank `WellbeingParticipationForm` for the inline
+    RSVP action.
+  - `wellbeingprogram_delete` (`@tenant_admin_required`, `@require_POST`): `crud_delete` (cascades
+    participations).
+- [ ] `WellbeingParticipation` inline add/edit/delete — bespoke (mirrors `workforceplanline_add`/`_edit`/`_delete`
+  and `travelbooking_add`/`_edit`/`_delete`'s inline-child shape):
+  - `wellbeingparticipation_add(request, program_pk)` (`@login_required`): `get_object_or_404(WellbeingProgram,
+    pk=program_pk, tenant=request.tenant)`; reject with a message + redirect if `program.status != "active"`;
+    resolve `target` own-vs-admin exactly like `_ss_child_create` (`?employee=<id>` GET / `employee_pk` POST,
+    admin-only override); build `WellbeingParticipationForm(request.POST, can_admin=_is_admin(request.user))`;
+    run the bespoke duplicate-guard + `transaction.atomic()` save described in Forms above; on success `obj.
+    tenant = request.tenant; obj.program = program; obj.employee = target` before saving; redirect to
+    `wellbeingprogram_detail`.
+  - `wellbeingparticipation_edit(request, program_pk, pk)` (`@login_required`, gated by `_can_manage_own_child`):
+    scoped via `get_object_or_404(WellbeingParticipation, pk=pk, program_id=program_pk,
+    tenant=request.tenant)`; builds the form with `can_admin=_is_admin(request.user)`; redirects to
+    `wellbeingprogram_detail`.
+  - `wellbeingparticipation_delete(request, program_pk, pk)` (`@login_required`, `@require_POST`, gated by
+    `_can_manage_own_child`): same tenant/program-scoped lookup; redirect to `wellbeingprogram_detail`.
+- [ ] `FlexibleWorkArrangement` CRUD — `flexibleworkarrangement_list/_create/_detail/_edit/_delete/_submit/
+  _cancel/_approve/_reject`, exact `TravelRequest` shape (`@login_required` throughout except `_approve`/
+  `_reject`):
+  - `flexibleworkarrangement_list`: `_ss_scope(request, FlexibleWorkArrangement.objects.filter(tenant=
+    request.tenant).select_related("employee__party"))` through `crud_list`; `search_fields=["number","reason"]`;
+    `filters=[("status","status",False), ("arrangement_type","arrangement_type",False),
+    ("employee","employee_id", is_admin)]`; `extra_context` with choice lists + `is_admin` +
+    `employees=_ss_employees(request) if is_admin else None`.
+  - `flexibleworkarrangement_create`: `_ss_child_create(request, FlexibleWorkArrangementForm,
+    "hrm/engagement/flexibleworkarrangement/form.html", "hrm:flexibleworkarrangement_list")`.
+  - `flexibleworkarrangement_detail`: bespoke `render()` (mirrors `travelrequest_detail`) —
+    `get_object_or_404` + `select_related("employee__party","approver")`, `_can_manage_own_child` gate raising
+    `PermissionDenied`, pass `is_admin`/`is_own` (via `_is_own_hr_request`).
+  - `flexibleworkarrangement_edit`: `_hr_request_edit(...)`.
+  - `flexibleworkarrangement_delete`: `_hr_request_delete(...)`.
+  - `flexibleworkarrangement_submit`/`_cancel`: `_hr_request_submit`/`_hr_request_cancel` (`@require_POST`).
+  - `flexibleworkarrangement_approve`/`_reject` (`@tenant_admin_required`, `@require_POST`): `_hr_request_approve`
+    /`_hr_request_reject`.
+
+## URLs (`apps/hrm/urls.py`, append under `app_name = "hrm"`)
+
+- [ ] `path("engagement/action-plans/", views.surveyactionplan_list, name="surveyactionplan_list")`
+- [ ] `path("engagement/action-plans/add/", views.surveyactionplan_create, name="surveyactionplan_create")`
+- [ ] `path("engagement/action-plans/<int:pk>/", views.surveyactionplan_detail, name="surveyactionplan_detail")`
+- [ ] `path("engagement/action-plans/<int:pk>/edit/", views.surveyactionplan_edit, name="surveyactionplan_edit")`
+- [ ] `path("engagement/action-plans/<int:pk>/delete/", views.surveyactionplan_delete,
+  name="surveyactionplan_delete")`
+- [ ] `path("engagement/wellbeing/programs/", views.wellbeingprogram_list, name="wellbeingprogram_list")`
+- [ ] `path("engagement/wellbeing/programs/add/", views.wellbeingprogram_create, name="wellbeingprogram_create")`
+- [ ] `path("engagement/wellbeing/programs/<int:pk>/", views.wellbeingprogram_detail,
+  name="wellbeingprogram_detail")`
+- [ ] `path("engagement/wellbeing/programs/<int:pk>/edit/", views.wellbeingprogram_edit,
+  name="wellbeingprogram_edit")`
+- [ ] `path("engagement/wellbeing/programs/<int:pk>/delete/", views.wellbeingprogram_delete,
+  name="wellbeingprogram_delete")`
+- [ ] `path("engagement/wellbeing/programs/<int:program_pk>/participations/add/",
+  views.wellbeingparticipation_add, name="wellbeingparticipation_add")`
+- [ ] `path("engagement/wellbeing/programs/<int:program_pk>/participations/<int:pk>/edit/",
+  views.wellbeingparticipation_edit, name="wellbeingparticipation_edit")`
+- [ ] `path("engagement/wellbeing/programs/<int:program_pk>/participations/<int:pk>/delete/",
+  views.wellbeingparticipation_delete, name="wellbeingparticipation_delete")`
+- [ ] `path("engagement/flexible-work/", views.flexibleworkarrangement_list,
+  name="flexibleworkarrangement_list")`
+- [ ] `path("engagement/flexible-work/add/", views.flexibleworkarrangement_create,
+  name="flexibleworkarrangement_create")`
+- [ ] `path("engagement/flexible-work/<int:pk>/", views.flexibleworkarrangement_detail,
+  name="flexibleworkarrangement_detail")`
+- [ ] `path("engagement/flexible-work/<int:pk>/edit/", views.flexibleworkarrangement_edit,
+  name="flexibleworkarrangement_edit")`
+- [ ] `path("engagement/flexible-work/<int:pk>/delete/", views.flexibleworkarrangement_delete,
+  name="flexibleworkarrangement_delete")`
+- [ ] `path("engagement/flexible-work/<int:pk>/submit/", views.flexibleworkarrangement_submit,
+  name="flexibleworkarrangement_submit")`
+- [ ] `path("engagement/flexible-work/<int:pk>/cancel/", views.flexibleworkarrangement_cancel,
+  name="flexibleworkarrangement_cancel")`
+- [ ] `path("engagement/flexible-work/<int:pk>/approve/", views.flexibleworkarrangement_approve,
+  name="flexibleworkarrangement_approve")`
+- [ ] `path("engagement/flexible-work/<int:pk>/reject/", views.flexibleworkarrangement_reject,
+  name="flexibleworkarrangement_reject")`
+- [ ] Check route order against the whole concatenated `urlpatterns` — every literal `/add/` sits before its
+  `<int:pk>/` sibling within its own group (established convention); none of these are greedy `<str:...>`
+  patterns, so no cross-group ordering conflict expected, but confirm against the full file as usual.
+
+## Admin (`apps/hrm/admin.py`)
+
+- [ ] `SurveyActionPlanAdmin` — `list_display = ("number","title","survey","owner","status","target_date",
+  "is_overdue")`, `list_filter = ("status",)`, `search_fields = ("number","title","focus_area","survey__title")`.
+- [ ] `WellbeingProgramAdmin` — `list_display = ("number","title","program_type","status","is_confidential",
+  "start_date","end_date","points_value")`, `list_filter = ("program_type","status","is_confidential")`,
+  `search_fields = ("number","title")`.
+- [ ] `WellbeingParticipationInline(admin.TabularInline)` on `WellbeingProgramAdmin` — `model =
+  WellbeingParticipation`, `extra = 0`. **WARNING comment required directly above the inline/admin class**: for
+  a confidential (`is_confidential=True`) program this inline still exposes per-employee rows to Django-admin
+  staff — this is the documented, honest limitation from the Decisions section above, not a bug to silently fix
+  here; do not attempt to hide it from Django admin (that's a false sense of security) — instead the comment
+  states clearly that Django-admin access to a tenant is itself a privileged, audited action outside this
+  module's scope.
+- [ ] `FlexibleWorkArrangementAdmin` — `list_display = ("number","employee","arrangement_type","status",
+  "start_date","end_date","days_per_week_remote")`, `list_filter = ("status","arrangement_type")`,
+  `search_fields = ("number","employee__party__name","reason")`.
+
+## Migration
+
+- [ ] `makemigrations hrm` → expect `apps/hrm/migrations/0060_surveyactionplan_wellbeingprogram_
+  wellbeingparticipation_flexibleworkarrangement.py` (auto-named; confirm it covers all 4 models + their
+  indexes/`unique_together` in one file, consistent with prior sub-modules — `0058`/`0060` follow the same
+  "everything in one migration" convention `0058` used for 3.40's 4 models).
+
+## Templates (`templates/hrm/engagement/<entity>/{list,detail,form}.html`)
+
+- [ ] `templates/hrm/engagement/surveyactionplan/list.html` — filter bar (`status`, `owner`, `department`,
+  `survey`, search `q`) reflecting `request.GET`; overdue rows highlighted (`is_overdue`); Actions column =
+  view/edit(gated `is_own_or_admin`)/delete(admin-only, POST+confirm+csrf); pagination; empty-state.
+- [ ] `templates/hrm/engagement/surveyactionplan/detail.html` — full fields incl. linked `survey`/
+  `related_objective`; Actions sidebar: Edit shown only when `can_manage` (owner or admin) is true, Delete
+  shown only to admin, Back to List.
+- [ ] `templates/hrm/engagement/surveyactionplan/form.html` — create/edit form (shared); when the editor is the
+  owner-not-admin, still show every field (owner can revise scope, not just status) since `_can_manage_action_plan`
+  already gates who gets here at all.
+- [ ] `templates/hrm/engagement/wellbeingprogram/list.html` — filter bar (`program_type`, `status`,
+  `target_department`, search `q`); `participant_count` column (annotation-aware); confidential-program badge;
+  Actions = view (all) / edit+delete (admin-only, POST+confirm+csrf); pagination; empty-state.
+- [ ] `templates/hrm/engagement/wellbeingprogram/detail.html` — header fields; **branches on
+  `obj.is_confidential`**: aggregate-only stats block (registered/attended/completed/no_show/withdrawn counts +
+  total points) when confidential, vs. full participations roster table (employee, status, points, notes —
+  notes visible per-row only because roster is already non-confidential) when not; inline RSVP form
+  (`wellbeingparticipation_add`) shown to any logged-in viewer without an existing row when `status == "active"`;
+  the viewer's **own** row (if any) always shown with an edit/withdraw action regardless of the confidential
+  branch; Actions sidebar (edit/delete admin-only, back to list).
+- [ ] `templates/hrm/engagement/wellbeingprogram/form.html` — create/edit form (shared); static help text next
+  to `program_type`/`is_confidential` noting EAP/counseling is always treated as confidential.
+- [ ] `templates/hrm/engagement/wellbeingparticipation/form.html` — shared add/edit form for
+  `WellbeingParticipation` (own entity folder, `form.html` only — no `list.html`/`detail.html`, exact
+  `workforceplanline`/`travelbooking` precedent); submits back to the program detail page; `points_earned` field
+  rendered only when `is_admin` (form already pops it server-side — template just mirrors that, doesn't newly
+  enforce it); `status` choices rendered narrow for a non-admin editing their own row.
+- [ ] `templates/hrm/engagement/flexibleworkarrangement/list.html` — filter bar (`status`, `arrangement_type`,
+  admin-only `employee`, search `q`) reflecting `request.GET`; Actions column = view/edit/delete/submit/cancel
+  (all POST+confirm+csrf where applicable), each conditional on `obj.status in OPEN_STATUSES` exactly like
+  `travelrequest/list.html`; pagination; empty-state.
+- [ ] `templates/hrm/engagement/flexibleworkarrangement/detail.html` — full fields; Approve/Reject buttons
+  (admin-only, hidden for `is_own`); Submit/Cancel/Edit/Delete (owner-or-admin, status-gated); Back to List.
+- [ ] `templates/hrm/engagement/flexibleworkarrangement/form.html` — create/edit form (shared); JS-free
+  conditional help text: "Days per week remote" is only relevant for Remote/Hybrid (server-side `clean()` is the
+  real enforcement — the template just labels it, no client-side hide/show required this pass).
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["3.41"]` (add after the `"3.40"` block, verbatim NavERP.md bullet
+  text as keys — all 6 bullets, `NavERP.md:721-727`):
+  ```python
+  # 3.41 Employee Engagement & Wellbeing — "Engagement Surveys" deep-links to the NEW SurveyActionPlan
+  # list (the one real gap this pass fills); pulse/eNPS survey DELIVERY itself is unchanged and stays
+  # reachable via 3.27's own "Surveys" bullet (hrm:survey_list) — not duplicated here. The other 4
+  # bullets are program_type-filtered slices of the single WellbeingProgram catalog (same pattern as
+  # 3.40's "Budget Planning": a query-string filter on the base entity's own list, not a separate model).
+  "3.41": {
+      "Engagement Surveys": "hrm:surveyactionplan_list",
+      "Wellbeing Programs": "hrm:wellbeingprogram_list?program_type=wellness_challenge",
+      "Work-Life Balance": "hrm:flexibleworkarrangement_list",
+      "Employee Assistance": "hrm:wellbeingprogram_list?program_type=eap_counseling",
+      "Culture & Values": "hrm:wellbeingprogram_list?program_type=culture_assessment",
+      "Social Connect": "hrm:wellbeingprogram_list?program_type=team_event",
+  },
+  ```
+- [ ] No `settings.py` / `config/urls.py` changes needed — `apps.hrm` and its `hrm/` include already exist.
+
+## Seed (`apps/hrm/management/commands/seed_hrm.py`)
+
+- [ ] New `_seed_engagement(self, tenant, *, flush)` method (mirrors `_seed_workforce`'s shape), called from
+  `_seed_tenant` right after `self._seed_workforce(tenant, flush=options["flush"])`.
+- [ ] Idempotent: `if flush:` block deletes 3.41 rows first; existence check
+  `if WellbeingProgram.objects.filter(tenant=tenant).exists(): ... return` with the standard "already exists.
+  Use --flush to re-seed." message; all creates via `get_or_create` keyed on natural fields (`tenant, title` for
+  `WellbeingProgram`; `tenant, program, employee` for `WellbeingParticipation`; `tenant, survey, title` for
+  `SurveyActionPlan`; `tenant, employee, arrangement_type, start_date` for `FlexibleWorkArrangement`).
+- [ ] **Do not mutate 3.27's existing seeded `Survey` rows** (the "Q3 Employee Engagement Pulse" open survey and
+  the draft "Annual Culture Survey" created by `_seed_communication` must stay exactly as 3.27 left them, so
+  existing 3.27 seeder/tests never regress). Instead create **one new, additional** closed `Survey` scoped to
+  this method (e.g. `"H1 Engagement Pulse (closed)"`, `status="closed"`, 2–3 low-scoring `SurveyResponse` rows
+  from seeded employees) purely to give the 2 seeded `SurveyActionPlan` rows something real to point at and to
+  demonstrate the actual "closed survey → low scores → action plan" workflow end to end.
+- [ ] Seed content: 1 new closed `Survey` + 2–3 `SurveyResponse`; 2 `SurveyActionPlan`s off it (one `status=
+  "in_progress"` owned by a manager-employee with a `department`+`related_objective` set, one `status=
+  "completed"` with `completed_at` populated by the model's `save()` auto-stamp); 6–7 `WellbeingProgram`s — at
+  least one of each `program_type` that a `LIVE_LINKS["3.41"]` route filters on
+  (`wellness_challenge`/`eap_counseling`/`culture_assessment`/`team_event`), plus
+  `mental_health_resource`/`interest_group`/`volunteering` for full catalog coverage — the `eap_counseling` one
+  seeded with `is_confidential` left `False` on the `create()` call to prove the model's `save()` override
+  actually forces it `True` (assert this in `test_seeder.py`, not just in the seed script); 2–4
+  `WellbeingParticipation` rows per active program across different seeded employees (mixed
+  `status`/`points_earned`, the `eap_counseling` program's participation `notes` kept to plain scheduling text
+  only, per the confidentiality rule); 3–4 `FlexibleWorkArrangement`s across employees/arrangement_types/status
+  (one `draft`, one `pending`, one `approved` with `approver`+`approved_at`, one `rejected` with
+  `decision_note`).
+- [ ] **Flush-order tuple** (Lesson 6, mirrors 3.40's lesson-e comment): `SurveyActionPlan.owner` and
+  `WellbeingParticipation.employee` are both `PROTECT` against `hrm.EmployeeProfile` — add
+  `FlexibleWorkArrangement, WellbeingParticipation, WellbeingProgram, SurveyActionPlan,` to the ordered flush
+  tuple in `_seed_tenant`, positioned **before** `EmployeeProfile` at its tail (right after the existing
+  `WorkforceScenario, WorkforcePlanLine, WorkforcePlan, EmployeeSkill,` block) — comment why (the two `PROTECT`
+  FKs). The extra closed `Survey`/`SurveyResponse` this method creates are already covered by the existing
+  `Suggestion, SurveyResponse, Survey, Announcement,` entries in that same tuple — no new entry needed for those
+  two.
+- [ ] Print login instructions unchanged (existing `seed_hrm` footer already covers this).
+
+## Verify
+
+- [ ] `python manage.py makemigrations hrm` → new `0060_...py`; `python manage.py migrate`.
+- [ ] `python manage.py seed_hrm` ×2 (idempotent — second run prints "already exists" for 3.41, no
+  duplicate/IntegrityError, including the bespoke `WellbeingParticipation` unique_together path).
+- [ ] `python manage.py seed_hrm --flush` — confirm no `ProtectedError` (validates the flush-order fix).
+- [ ] `python manage.py check`.
+- [ ] `temp/` smoke sweep: every `hrm:surveyactionplan_*`, `hrm:wellbeingprogram_*`,
+  `hrm:wellbeingparticipation_*`, `hrm:flexibleworkarrangement_*` URL returns 200/302 for a tenant admin;
+  `surveyactionplan_edit`/`wellbeingparticipation_*`/`flexibleworkarrangement_*` also 200/302 for a plain
+  employee acting on their **own** rows, and a 403/redirect when a plain employee tries another employee's row
+  or an admin-only action (`surveyactionplan_create`/`_delete`, `wellbeingprogram_create`/`_edit`/`_delete`,
+  `flexibleworkarrangement_approve`/`_reject`); confirm the `eap_counseling` program's detail page renders
+  **zero** per-employee rows for an admin session (aggregate-only assertion, not just "loads without error");
+  no `{#`/`{% comment` leaks in rendered HTML; cross-tenant IDOR check (a `SurveyActionPlan`/`WellbeingProgram`/
+  `WellbeingParticipation`/`FlexibleWorkArrangement` pk from tenant A → 404 under tenant B's session).
+- [ ] Sidebar: log in as a tenant admin, confirm all 6 sub-module 3.41 bullets render as **Live** (not "Coming
+  Soon"), and that "Surveys" under 3.27 still separately points at `hrm:survey_list` (no regression there).
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to verify `WellbeingProgram.save()` really forces `is_confidential=True` for
+    `program_type="eap_counseling"` (not just a form default that a direct `.objects.create(is_confidential=
+    False, program_type="eap_counseling")` could bypass), that `SurveyActionPlan.save()`'s `completed_at`
+    auto-stamp/clear logic is symmetric (both directions), and that `WellbeingParticipationForm`'s `can_admin`
+    field-dropping actually happens server-side in the view (not merely templated away client-side).
+  - Expect `performance-reviewer` to confirm `wellbeingprogram_list`'s `Count()` annotation doesn't reintroduce
+    a per-row query for `participant_count`, and that `wellbeingprogram_detail`'s roster branch is
+    `select_related`, not lazy per-row.
+  - Expect `security-reviewer` to confirm: the confidential-program aggregate-only rule holds for an
+    **admin** session too (not just non-admin); `WellbeingParticipationForm`'s `points_earned`/`status`
+    restriction can't be defeated by a crafted POST from a non-admin (mass-assignment check, mirrors the
+    3.40 `EmployeeSkillForm` `employee_pk` no-op regression test); `surveyactionplan_edit`'s
+    `_can_manage_action_plan` gate actually blocks a random employee who is neither owner nor admin;
+    `@tenant_admin_required` present on every admin-only 3.41 view; cross-tenant IDOR on every new url.
+  - Expect `test-writer` to cover: full CRUD for all 4 models incl. the bespoke `WellbeingParticipation`
+    duplicate-guard (create dupe → friendly form error, not 500) and the model-level `is_confidential` force;
+    `SurveyActionPlan.completed_at`/`is_overdue` against hand-computed fixtures; `_can_manage_action_plan`
+    owner-vs-admin-vs-stranger matrix; `WellbeingParticipationForm(can_admin=False)` field-dropping;
+    `WellbeingProgram.participation_stats()` math; own-vs-admin scoping on `FlexibleWorkArrangement`
+    (`_ss_scope`) and its full `_hr_request_*` lifecycle (submit→approve, submit→reject, cancel, edit/delete
+    only while open); `@tenant_admin_required` 403/redirect on every admin-gated url for a plain employee;
+    migration `0060` applies cleanly; seeder idempotency + `--flush` (no `ProtectedError`); cross-tenant IDOR on
+    every new url; confirm 3.27's `Survey`/`SurveyResponse`/`Suggestion`/`Announcement` seeded rows/tests are
+    unaffected by `_seed_engagement`'s additive-only new `Survey`.
+- [ ] Update `.claude/skills/hrm/SKILL.md` — add a `### 3.41 Employee Engagement & Wellbeing` section (4 models,
+  the reuse-not-duplicate relationship to 3.27 `Survey`/`Suggestion`/`Announcement`, the confidentiality model
+  for `eap_counseling` programs, the `_can_manage_action_plan` owner-or-admin gate, the `WellbeingParticipationForm
+  (can_admin=...)` field-dropping pattern, the seeded content, and the `LIVE_LINKS["3.41"]` mapping incl. the
+  program_type-filtered deep links).
+- [ ] Update README (module/sub-module/test counts; add `/3.41` bullet describing the 4 new models + the
+  survey-action-planning / unified-wellbeing-catalog / confidential-EAP / flexible-work-request shape).
+
+## Later passes / deferred (carried over from research-engagement-wellbeing.md)
+
+- **AI sentiment/NLP comment analysis, AI-recommended action plans** (Glint, Officevibe, Qualtrics) — external AI
+  call; the plain `SurveyActionPlan` model is the buildable substrate for this later.
+- **Heatmap / cycle-over-cycle trend dashboards, eNPS benchmarking** — an `HRDashboard`/`HRDashboardWidget`
+  analytics-pass item (3.32), not a new table.
+- **Wearable/consumer-app sync** (Fitbit, Apple Health, Garmin) — external device API integration.
+- **Predictive/ROI wellbeing analytics, health-cost correlation** (Virgin Pulse/Personify) — needs claims/cost
+  data this ERP doesn't hold.
+- **EAP session billing / coverage-limit tracking, clinical case notes** — normally owned by the EAP vendor's
+  own system of record; NavERP only stores confidentiality-respecting participation status, never clinical
+  detail — by design, not an oversight.
+- **Donation matching / volunteering-hours-to-grant conversion** (Deed) — payment/grant processing, a Module 2
+  (Accounting) integration if ever built.
+- **Points redemption / gift-card catalog** (Wellable, Bonusly, Virgin Pulse) — this pass stores `points_earned`
+  only; a redeemable-rewards catalog overlaps 3.37 Compensation & Benefits' "Rewards & Recognition" (not yet
+  built) and should live there, not be duplicated in 3.41.
+- **Desk/room booking & office-occupancy analytics** (hybrid-workplace-management category) — facilities-adjacent,
+  nearer Module 11 (Assets) if built at all.
+- **Values/mission content publishing** — already covered by existing `Announcement(category="policy")`; no new
+  table needed.
+- **Individual/team leaderboards UI** (Wellable) — `points_earned`/`participant_count` are the buildable data
+  substrate; a ranked leaderboard view/widget is a follow-on presentation-layer pass, not this one.
+- **`SurveyActionPlan` owner self-service outside `_can_manage_action_plan`'s edit gate** (e.g., an owner
+  creating their own plan without HR) — this pass keeps plan creation `@tenant_admin_required`-only (governance);
+  revisit if usage shows managers need to self-originate plans.
+- **Splitting `WellbeingParticipation` into separate registration/attendance/feedback tables** (the 3.24
+  `TrainingNomination`/`TrainingAttendance`/`TrainingFeedback` 3-table pattern) — deferred until usage shows the
+  unified row is too coarse; the lean 4-model budget for this pass keeps it as one child table.
+
+## Review notes
+(filled in at the end)
