@@ -732,8 +732,12 @@ cross-app imports and every test keep importing `apps.<app>.models` / `.forms` /
 model's `app_label` still derives from the app config, **the split needs no migration**. Imports *inside* a package
 are absolute; cross-sub-module view helpers live in `views/_helpers.py`; there are no `*_advanced.py` sidecars. See
 the "Backend Package Structure" rule in `.claude/CLAUDE.md` and the reference apps. All three domain
-modules (`crm`, `accounting`, `hrm`) are converted; the foundation apps `core`/`accounts`/`tenants`/
-`dashboard` are intentionally flat (Module 0 has no NavERP sub-modules).
+modules (`crm`, `accounting`, `hrm`) are converted. The Module 0 foundation apps `core` and `tenants` use
+the same packages **without** the sub-module level — Module 0 has no NavERP sub-modules, so their entity
+files sit flat at the package root (`core/models/Party.py`), mirroring their flat templates. Their
+`urls.py` stays a flat module on purpose: `core/urls.py` is a `crud()` factory that generates the 5
+standard routes per model, and expanding it would only duplicate `path()` lines. `accounts` and
+`dashboard` remain flat.
 
 ### Reusable CRUD layer
 `apps/core/crud.py` centralizes list/create/detail/edit/delete so every module behaves consistently and the
@@ -948,8 +952,12 @@ NavERP/
 │  └─ wsgi.py / asgi.py
 ├─ apps/
 │  ├─ core/                 Tenant spine, middleware, navigation, crud helpers, audit
-│  │  ├─ models.py  crud.py  middleware.py  decorators.py  navigation.py
-│  │  ├─ context_processors.py  utils.py  forms.py  views.py  urls.py  admin.py
+│  │  ├─ models/ forms/ views/         PACKAGES — FLAT entity files (Module 0 has no sub-modules)
+│  │  │  └─ Party.py Tenant.py …       models/forms/views line up 1:1; _base.py/_common.py hold the
+│  │  │                                shared plumbing (TenantModelForm lives in forms/_common.py)
+│  │  ├─ urls.py            kept flat — a crud(slug, name) factory generates the 5 routes per model
+│  │  ├─ crud.py  middleware.py  decorators.py  navigation.py  search.py
+│  │  ├─ context_processors.py  utils.py  admin.py
 │  │  ├─ management/commands/seed_core.py
 │  │  └─ tests/
 │  ├─ accounts/             User/Role/Permission/UserInvite, auth, RBAC
@@ -957,7 +965,8 @@ NavERP/
 │  │  ├─ management/commands/seed_accounts.py
 │  │  └─ tests/
 │  ├─ tenants/              Module 0.1 — subscriptions/billing/branding/keys/health + Stripe
-│  │  ├─ models.py  stripe_utils.py  forms.py  views.py  urls.py  admin.py
+│  │  ├─ models/ forms/ views/         PACKAGES — FLAT entity files (Subscription.py, EncryptionKey.py …)
+│  │  ├─ urls.py  stripe_utils.py  admin.py     (urls kept flat — small + explicit)
 │  │  ├─ management/commands/seed_tenants.py
 │  │  └─ tests/
 │  ├─ dashboard/            KPI aggregation (no models)
