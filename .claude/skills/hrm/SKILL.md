@@ -25,7 +25,51 @@ Tenant-scoped employee directory + leave + attendance for the demo tenants. Ever
 `request.tenant`. Derived figures (leave balance, leave days, attendance hours) are computed, never stored
 editable. Recruiting/payroll/performance are deferred to later passes (see "Deferred").
 
-## Models (`apps/hrm/models.py`) — 93 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management + 4 statutory-compliance + 6 tax-investment + 4 payout-reports + 4 goal-setting + 4 performance-review + 4 continuous-feedback + 4 performance-improvement + 2 training-management + 4 learning-management + 4 training-administration + 4 personal-information)
+## App layout — models / forms / views / urls are all PACKAGES (no monolithic .py files left)
+
+The four former monoliths (models.py 9,597 / views.py 16,334 / forms.py 3,379 / urls.py 1,209 lines)
+were split into packages sharing the same **41 sub-module folders** (NavERP 3.1–3.41), one file per
+entity — the same shape as `apps/crm` and `apps/accounting`:
+
+```
+apps/hrm/
+  models/  _base.py    (ZERO, _json_safe, _advance_months, abstract TenantOwned/TenantNumbered)
+  forms/   _common.py  (django forms, core TenantModelForm, upload allow-lists)
+  views/   _common.py  (django + apps.core crud/decorators) + _helpers.py (cross-sub-module privates)
+  urls/    __init__.py (app_name="hrm" + concatenated urlpatterns)
+     +-- EmployeeManagement/ OrganizationalStructure/ EmployeeOnboarding/ EmployeeOffboarding/
+         JobRequisition/ CandidateManagement/ InterviewProcess/ OfferManagement/
+         AttendanceManagement/ LeaveManagement/ TimeTracking/ HolidayManagement/ SalaryStructure/
+         PayrollProcessing/ StatutoryCompliance/ TaxInvestment/ PayoutReports/ GoalSetting/
+         PerformanceReview/ ContinuousFeedback/ PerformanceImprovement/ TrainingManagement/
+         LearningManagement/ TrainingAdministration/ PersonalInformation/ RequestManagement/
+         CommunicationHub/ HRReports/ AttendanceReports/ LeaveReports/ PayrollReports/
+         AnalyticsDashboard/ AssetManagement/ ExpenseManagement/ TravelManagement/ Helpdesk/
+         CompensationBenefits/ TalentManagement/ ComplianceLegal/ WorkforcePlanning/
+         EmployeeEngagement/                                      (= NavERP 3.1 .. 3.41)
+           <Entity>.py        one file per entity, e.g. LeaveManagement/Request.py
+           _helpers.py        that sub-module's PRIVATE helpers
+```
+
+`analytics.py`, `services.py`, `admin.py`, `apps.py` stay flat at the app root.
+
+**Rules when working here:**
+- **Find a symbol** by sub-module → entity (`leave_request_approve` → `views/LeaveManagement/Request.py`).
+- **Adding a model/form/view:** put it in the entity file, **then add it to that package's
+  `__init__.py` re-export block** — otherwise `from apps.hrm.models import X` / `views.<name>` fails.
+- **Adding a URL:** add the `path()` to `urls/<SubModule>/<Entity>.py` (each imports views absolutely:
+  `from apps.hrm import views`). Django is first-match-wins — keep literals before `<int:pk>`.
+- **Private helpers live in `<SubModule>/_helpers.py`, never in an entity file.** The dependency
+  direction is strictly **entity → _helpers → _base/_common**, which is what keeps the package
+  import-cycle-free. Cross-sub-module privates go in `views/_helpers.py`.
+- **Imports inside these packages MUST be ABSOLUTE.** The originals' `from .models`/`.forms`/
+  `.services`/`.analytics` were rewritten — a relative import resolves to the wrong package here.
+- **`import *` SKIPS underscore names** (including aliased imports like `from datetime import date as
+  _date`, `from apps.core.crud import _changed`, and `from apps.hrm.models import Survey as _Survey`).
+  Any module using such a name must import it **explicitly**; the package `__init__` likewise lists
+  private symbols by name. This silently breaks at runtime, not at import — watch for it.
+
+## Models (`apps/hrm/models/` — one file per entity; see App layout above) — 93 tables (18 core HRM + 7 onboarding + 4 offboarding + 2 employee-records + 3 job-requisition + 6 candidate-management + 4 interview-process + 5 offer-management + 4 statutory-compliance + 6 tax-investment + 4 payout-reports + 4 goal-setting + 4 performance-review + 4 continuous-feedback + 4 performance-improvement + 2 training-management + 4 learning-management + 4 training-administration + 4 personal-information)
 All inherit local abstract bases (mirror crm/accounting; peer apps don't import each other):
 - `TenantOwned` — `tenant` FK (`related_name="+"`) + `created_at`/`updated_at`.
 - `TenantNumbered(TenantOwned)` — adds auto per-tenant `number` via `core.utils.next_number` with a 5-retry
@@ -100,7 +144,7 @@ properties.
 | `EmployeeDocument` | `EDOC-` | employee→`EmployeeProfile`, document_type(19 choices: national_id/passport/visa/work_permit/degree_certificate/employment_contract/nda/…), title, document_number, issuing_authority/_country, issued_on, expires_on, is_confidential, file(upload, allowlist pdf/doc/docx/jpg/png + 10 MB), **verification_status**(pending/verified/rejected, editable=False), verified_by/verified_at(editable=False), notes | Personnel-file vault — distinct from `OnboardingDocument` (program e-sign) and `core.Document` (generic). `is_expired`/`is_expiring_soon` (≤30 days) **derived props**. **`is_confidential` is enforced** — confidential docs are admin-only on detail/edit/delete and excluded from the non-admin list/hub. Verify/reject are workflow-owned (`@tenant_admin_required`). |
 | `EmployeeLifecycleEvent` | `ELC-` | employee→`EmployeeProfile`, event_type(`LIFECYCLE_EVENT_TYPE_CHOICES`: hire/confirmation/transfer/promotion/demotion/salary_revision/separation/…, module-level), effective_date, reason, from/to pairs (designation→`Designation`, department→`core.OrgUnit`, location, job_title, salary, manager→`EmployeeProfile`, employee_type — all `related_name="+"`), notes, initiated_by→`User`(editable=False) | Append-only job-history timeline. v1 records events only — does NOT auto-mutate `core.Employment`/`EmployeeProfile` (deferred). Ordering `-effective_date`. **Create/edit/delete are `@tenant_admin_required`** (authoritative HR records carrying salary); list/detail are view-only for members. `initiated_by` stamped from `request.user`. |
 
-**Employee-records views (`apps/hrm/views.py`, the `3.1 … (completion)` section):** full CRUD for both via `crud_*`; `_employee_child_create` (the `?employee=<pk>` pre-fill helper, validates the pk → `cancel_employee`); `employee_document_mark_verified`/`_reject` (`@tenant_admin_required`); `_is_hr_admin(user)` helper (superuser or `is_tenant_admin`) gates confidential docs. `employee_detail` is the hub — adds **Documents** + **Employment Lifecycle** section cards (confidential docs filtered for non-admins). The employee form renders the new personnel-file fields via its generic `{% for field in form %}` loop (no template edit needed). Seeded by `_seed_employee_records` (see Seeder).
+**Employee-records views (`apps/hrm/views/`, the `3.1 … (completion)` section):** full CRUD for both via `crud_*`; `_employee_child_create` (the `?employee=<pk>` pre-fill helper, validates the pk → `cancel_employee`); `employee_document_mark_verified`/`_reject` (`@tenant_admin_required`); `_is_hr_admin(user)` helper (superuser or `is_tenant_admin`) gates confidential docs. `employee_detail` is the hub — adds **Documents** + **Employment Lifecycle** section cards (confidential docs filtered for non-admins). The employee form renders the new personnel-file fields via its generic `{% for field in form %}` loop (no template edit needed). Seeded by `_seed_employee_records` (see Seeder).
 
 ### 3.5 Job Requisition (3 tables) — authorization-to-hire hub + JD template library + approval chain
 
@@ -333,7 +377,7 @@ verify-by-code page, expiry-reminder emails, and a ring-fenced TrainingBudget mo
 ### 3.28 HR Reports (NO models — 6 derived read-only views) — the core HR analytics surface, all
 `@tenant_admin_required` (company-wide salary/attrition/demographics), mirroring accounting's
 `trial_balance`/`ap_aging`. **No models / migration / seeder** — pure tenant-scoped aggregates over the
-existing spine. Views (`apps/hrm/views.py`, `# --- 3.28 HR Reports ---` block): `hr_reports_index`
+existing spine. Views (`apps/hrm/views/`, `# --- 3.28 HR Reports ---` block): `hr_reports_index`
 (`/hrm/reports/hr/`, 5 KPI tiles) + `headcount_report` (active/joins/exits by department/designation
 [+budgeted variance]/type, 12-month trend via a **2-query bisect** over hire/first-separation dates),
 `attrition_report` (SHRM annualized turnover = separations ÷ avg-headcount × 365/period-days, guarded
@@ -353,7 +397,7 @@ an empty report; `?department`/`?cycle` resolved against the tenant's own rows o
 
 ### 3.29 Attendance Reports (NO models — 5 derived read-only views) — `@tenant_admin_required`, reusing the
 3.28 report helpers (`_report_period`/`_report_department`/`_dept_choices`), templates under `templates/hrm/reports/`.
-Views (`apps/hrm/views.py`, `# --- 3.29 Attendance Reports ---`): `attendance_reports_index` (`/hrm/reports/
+Views (`apps/hrm/views/`, `# --- 3.29 Attendance Reports ---`): `attendance_reports_index` (`/hrm/reports/
 attendance/`, KPI tiles — the Utilization tile links to the EXISTING 3.11 `hrm:timesheet_utilization_report`, not
 rebuilt) + `attendance_summary_report` (status breakdown; **attendance % = present-equivalent [present +
 regularized + ½·half_day] ÷ tracked [total − holiday − on_leave]**; by department; monthly trend), `late_early_report`
@@ -371,7 +415,7 @@ single `TruncMonth`-grouped query; every rate guards div-by-zero. Templates: `at
 
 ### 3.30 Leave Reports (NO models — 5 derived read-only views) — `@tenant_admin_required`, reusing the 3.28
 report helpers (`_report_period`/`_report_department`/`_dept_choices`) + the 3.10 leave models, templates under
-`templates/hrm/reports/`. Views (`apps/hrm/views.py`, `# --- 3.30 Leave Reports ---`): `leave_reports_index`
+`templates/hrm/reports/`. Views (`apps/hrm/views/`, `# --- 3.30 Leave Reports ---`): `leave_reports_index`
 (`/hrm/reports/leave/`, KPI tiles) + `leave_register_report` (per-employee×type allocated/carried/**availed**/
 encashed/**balance** for a `?year`; totals), `leave_liability_report` (encashable-only, balance>0 rows; days ×
 per-day rate → estimated value; **rate priority** = latest approved/paid `LeaveEncashment.rate_per_day`, else
@@ -389,7 +433,7 @@ Python, since `used_db` is a subquery alias other annotations can't reference). 
 value. Templates: `leave_index.html` + `leave_register/leave_liability/comp_off/leave_trend.html`.
 
 ### 3.31 Payroll Reports (NO models — 6 derived read-only views) — `@tenant_admin_required`, aggregating the
-built payroll engine (3.13-3.16), templates under `templates/hrm/reports/`. Views (`apps/hrm/views.py`,
+built payroll engine (3.13-3.16), templates under `templates/hrm/reports/`. Views (`apps/hrm/views/`,
 `# --- 3.31 Payroll Reports ---`): `payroll_reports_index` (`/hrm/reports/payroll/`, KPI tiles: latest-cycle
 headcount/gross/net, pending Form 16, overdue statutory) + `salary_register_report` (per-`Payslip` earnings/
 deductions/net grid for a `?cycle` [default latest by `pay_date`, `cost_report`'s selector], totals footer +
@@ -414,7 +458,7 @@ are `None` (rendered "—") when `budget_annual` is None; `ctc_report` caches `S
 `template_id` (N+1-safe). Templates: `payroll_index.html` + `salary_register/tax/statutory/ctc/cost_center.html`.
 
 ### 3.32 Analytics Dashboard (2 NEW models + 3 derived views) — the dashboard layer over the 3.28-3.31 reports,
-mirroring CRM 1.6's `AnalyticsDashboard`/`DashboardWidget`. **Models** (`apps/hrm/models.py`, migration `0046`):
+mirroring CRM 1.6's `AnalyticsDashboard`/`DashboardWidget`. **Models** (`apps/hrm/models/`, migration `0046`):
 `HRDashboard` (`TenantNumbered` `HRD-`; name/description/`owner` [FK User]/`is_shared`/`is_default`/`layout`
 [one/two/three]; `widget_count` prop) + `HRDashboardWidget` (plain child row: tenant, dashboard FK, title,
 `metric` [16-metric `WIDGET_METRIC_CHOICES`], `chart_type` [kpi/gauge/bar/line/pie/doughnut/table], `date_range`,
@@ -428,7 +472,7 @@ never the reverse); shared derived helpers `_turnover_rate(…, seps_count=None,
 Low/Medium/High/Critical bands, NO N+1); 16 `_r_*` resolvers; the `WIDGET_METRICS` registry (module-level assert
 keeps it in sync with `WIDGET_METRIC_CHOICES`); `allowed_charts(metric)`; `compute_widget(widget)` returning
 `{"kind": "scalar"|"series"|"table", …}` (`kind` is NOT `"kpi"` — that's a chart_type; a non-positive target is
-ignored). **Views** (`apps/hrm/views.py`, `# --- 3.32 Analytics Dashboard ---`): dashboard CRUD `hr_dashboard_list`
+ignored). **Views** (`apps/hrm/views/`, `# --- 3.32 Analytics Dashboard ---`): dashboard CRUD `hr_dashboard_list`
 (owner's + shared, `widget_total` annotated to avoid the `widget_count` N+1)/`_create` (owner set server-side)/
 `_detail` (live widget compute; `PermissionDenied` for a non-owner opening a private dashboard, 404 cross-tenant)/
 `_edit`/`_delete` + `hr_widget_create`/`_edit`/`_delete`/`_move` (position-swap `bulk_update`), all `@login_required`
@@ -444,7 +488,7 @@ for chart data. Templates: `templates/hrm/analytics/dashboard/{list,detail,form}
 `_seed_analytics` (2 demo dashboards + 9 widgets, idempotent).
 
 ### 3.33 Asset Management (2 NEW models + a patch to the existing AssetAllocation) — the HR-facing asset register
-the 3.3 `AssetAllocation` issuance rows now point at. **Models** (`apps/hrm/models.py`, migration `0048`):
+the 3.3 `AssetAllocation` issuance rows now point at. **Models** (`apps/hrm/models/`, migration `0048`):
 `Asset` (`TenantNumbered` `ASSET-`; asset_tag/name/category [reuses `AssetAllocation.ASSET_CATEGORY_CHOICES`]/
 manufacturer/model_number/serial_number/`status` [in_stock/assigned/in_repair/retired/disposed]/condition/
 purchase_date/purchase_cost/`currency` [accounting.Currency]/warranty_expiry/`location` [core.OrgUnit]/
@@ -459,7 +503,7 @@ scheduled/completed dates, vendor, cost, AMC contract_start/end). **THE sync (ke
 lost→retired; **no-op when `asset_id is None`**, so every pre-3.33 row is untouched), and `AssetMaintenance.save()`
 → `_sync_asset_status()` moves a REPAIR record's asset in/out of `in_repair` on any save path (create/edit/complete).
 The `AST-` prefix stays with `AssetAllocation` (Module 11 reserves it) — the register uses `ASSET-`. **Views**
-(`apps/hrm/views.py`, `# --- 3.33 Asset Management ---`, all `@login_required`, tenant-scoped): `Asset` CRUD +
+(`apps/hrm/views/`, `# --- 3.33 Asset Management ---`, all `@login_required`, tenant-scoped): `Asset` CRUD +
 lifecycle POST actions `asset_assign` (locks the row `select_for_update` in an atomic block, creates a linked issued
 allocation → sync)/`asset_return`/`asset_retire`/`asset_dispose` (status-gated; delete blocked when
 assigned/in_repair) + `AssetMaintenance` CRUD + `assetmaintenance_complete` (delete blocks an active in-repair
@@ -472,14 +516,14 @@ in_stock so the allocation/repair sync actually fires). Templates: `templates/hr
 + `assets/assetmaintenance/{list,detail,form}.html`.
 
 ### 3.34 Expense Management (3 NEW models) — employee T&E claims (distinct from `crm.Expense` [sales] and the
-payroll `reimbursement_amount` payout, which is a deferred integration). **Models** (`apps/hrm/models.py`, migration
+payroll `reimbursement_amount` payout, which is a deferred integration). **Models** (`apps/hrm/models/`, migration
 `0049`): `ExpenseCategory` (`TenantOwned`; per_claim_limit/monthly_limit/requires_receipt_above + `gl_account_hint`
 [hint only, no posting]), `ExpenseClaim` (`ECL-`; a **2-stage** status machine `draft→submitted→manager_approved→
 approved→reimbursed` + `rejected`/`cancelled`, `manager_approver`/`finance_approver` + timestamp pairs, payment
 tracking; **computed** `total_amount` [prefetch-aware — sums cached lines when prefetched, else one aggregate],
 `line_count`, `has_violations`), `ExpenseClaimLine` (`category` [PROTECT], amount, `receipt` FileField [reuses
 `_validate_upload`], + **computed** `policy_violation`/`violation_reason` checking per_claim_limit + receipt
-threshold, None-guarded). **Views** (`apps/hrm/views.py`, `# --- 3.34 Expense Management ---`): `ExpenseCategory`
+threshold, None-guarded). **Views** (`apps/hrm/views/`, `# --- 3.34 Expense Management ---`): `ExpenseCategory`
 CRUD (list `@login_required`, writes `@tenant_admin_required`, delete guarded when lines reference it +
 `on_delete=PROTECT` backstop). `ExpenseClaim` own-vs-admin CRUD (`_ss_scope`/`_ss_child_*`/`_can_manage_own_child`,
 edit/delete draft-only) + **6 workflow actions**: `expenseclaim_submit` (owner, needs ≥1 line), `_manager_approve` +
@@ -494,7 +538,7 @@ Reimbursement→`?status=approved`, Policy Compliance→`expensecategory_list`. 
 + `expenses/expenseclaimline/form.html`.
 
 ### 3.35 Travel Management (3 NEW models) — trip authorization + travel advance + post-trip settlement. **Models**
-(`apps/hrm/models.py`, migration `0050`): `TravelPolicy` (`TenantOwned`; `job_grade` [SET_NULL, blank=all grades],
+(`apps/hrm/models/`, migration `0050`): `TravelPolicy` (`TenantOwned`; `job_grade` [SET_NULL, blank=all grades],
 `trip_type` scope `domestic/international/both`, `travel_class`, `daily_allowance_limit`/`hotel_limit_per_night`/
 `advance_percent_limit` caps — these **drive** `TravelBooking.out_of_policy` + cap advance approval), `TravelRequest`
 (`TRV-`; single-approver machine `draft→pending→approved/rejected/cancelled` then `approved→completed`, `OPEN_STATUSES
@@ -505,7 +549,7 @@ positive = payable to employee, negative = recoverable]), `TravelBooking` (`trav
 `bookings`], `booking_type` flight/hotel/cab/train/other, `travel_class`, `cost`, `document` FileField [reuses
 `_validate_upload`]; **computed** `out_of_policy`/`out_of_policy_reason` via `_policy_check()` — flight class-rank vs
 policy [`_TRAVEL_CLASS_RANK`], hotel cost/nights vs `hotel_limit_per_night` [nights=1 fallback when dates missing → no
-ZeroDivisionError], all None-guarded [no policy / missing fields → False]). **Views** (`apps/hrm/views.py`, `# --- 3.35
+ZeroDivisionError], all None-guarded [no policy / missing fields → False]). **Views** (`apps/hrm/views/`, `# --- 3.35
 Travel Management ---`): `TravelPolicy` CRUD (list/detail `@login_required` + pass `is_admin` to gate the Edit/Delete
 buttons; writes `@tenant_admin_required`; delete guarded when requests reference it). `TravelRequest` own-vs-admin CRUD
 (`_ss_scope`/`_ss_child_*`/`_can_manage_own_child`) + **6 lifecycle wrappers reusing `_hr_request_submit/_cancel/
@@ -528,7 +572,7 @@ Settlement→`?status=completed`. Seeder `_seed_travel` (2 policies + 4 trips: d
 `apps/hrm/tests/test_travel.py` (176).
 
 ### 3.36 Helpdesk (4 tables) — employee HR/IT/Admin/Facilities service desk. **Models**
-(`apps/hrm/models.py`, migrations `0051`+`0052`): `HelpdeskSLAPolicy` (`TenantNumbered`, `HSLA-`; per-priority
+(`apps/hrm/models/`, migrations `0051`+`0052`): `HelpdeskSLAPolicy` (`TenantNumbered`, `HSLA-`; per-priority
 response/resolution hour targets `urgent/high/medium/low_{response,resolution}_hours` + `targets_for(priority)`
 [medium fallback], `is_active`/`is_default` — a **field-for-field mirror of `crm.SlaPolicy`**), `HelpdeskCategory`
 (`TenantOwned`, **not** auto-numbered; `name`, `department` [hr/it/admin/facilities/finance/other], `description`,
@@ -544,7 +588,7 @@ response/resolution hour targets `urgent/high/medium/low_{response,resolution}_h
 `resolution_breached`, `is_breached`, `sla_state` [ok/at_risk/breached/closed], `age_days`), `KnowledgeArticle`
 (`TenantNumbered`, `KBA-`; `title`, `category`→`HelpdeskCategory`, `summary`, `body`, `tags`, `status`
 [draft/published/archived], `owner`→auth `User`, `view_count`/`helpful_count`, `published_at` — **internal-only, no
-public portal token** [trimmed from `crm.KnowledgeArticle`]). **Views** (`apps/hrm/views.py`, `# 3.36 Helpdesk`):
+public portal token** [trimmed from `crm.KnowledgeArticle`]). **Views** (`apps/hrm/views/`, `# 3.36 Helpdesk`):
 `HelpdeskSLAPolicy`/`HelpdeskCategory` catalog CRUD (list/detail `@login_required`, writes `@tenant_admin_required`,
 delete-guarded when referenced by tickets). `HelpdeskTicket` own-vs-admin CRUD (`ticket_create` inherits the
 category's SLA policy + assignee; `ticket_edit`/`ticket_delete` reuse `_hr_request_edit`/`_hr_request_delete`) +
@@ -562,7 +606,7 @@ is `helpdeskticket/`. Seeder `_seed_helpdesk` (dispatched right after `_seed_tra
 `templates/hrm/helpdesk/{helpdeskslapolicy,helpdeskcategory,helpdeskticket,knowledgearticle}/{list,detail,form}.html`.
 
 ### 3.37 Compensation & Benefits (4 tables) — market benchmarks + benefits + equity. **Models**
-(`apps/hrm/models.py`, migrations `0053`+`0054`): `SalaryBenchmark` (`TenantOwned`, **not** auto-numbered; external
+(`apps/hrm/models/`, migrations `0053`+`0054`): `SalaryBenchmark` (`TenantOwned`, **not** auto-numbered; external
 market-percentile data: `job_grade`→`hrm.JobGrade`(null), `designation`→`hrm.Designation`(null), `source`
 [internal/payscale/mercer/radford/other], `region`, `currency`→`accounting.Currency`, `percentile_25/50/75/90`,
 `survey_date`, `notes`; method `compa_ratio(current_pay)` = current_pay / P50 — **builds on** the 3.2 Designation
@@ -585,7 +629,7 @@ form-excluded), `EquityGrant` (`TenantNumbered`, `ESOP-`; ISO/NSO/RSU/ESPP/phant
 `last_exercised_at`, `status` [active/fully_vested/exercised/cancelled/expired]; **COMPUTED, never stored:**
 `vested_shares` [0 before the cliff, then `shares_granted * done_events // total_events` graded by frequency, full at
 the end], `vested_percent`, `unvested_shares`, `exercisable_shares` [= vested − exercised]; the form guards
-`shares_granted >= exercised_shares`). **Views** (`apps/hrm/views.py`, `# 3.37 Compensation & Benefits`):
+`shares_granted >= exercised_shares`). **Views** (`apps/hrm/views/`, `# 3.37 Compensation & Benefits`):
 `SalaryBenchmark`/`BenefitPlan` = admin catalogs (list/detail `@login_required`, writes `@tenant_admin_required`;
 `benefitplan` delete-guarded when enrollments reference it); `EmployeeBenefitEnrollment` = own-vs-admin self-service
 (`_ss_scope`; `_hr_request_edit`/`_hr_request_delete` for **pending-only** owner edit/delete) + **admin-only**
@@ -606,7 +650,7 @@ they're in a HiPo pool, what their 9-box placement is, that they're flagged a fl
 don't sit) on someone's succession bench. Locked in by `test_non_admin_forbidden_on_every_talent_view`
 (`apps/hrm/tests/test_talent.py`) — if you add a 3.38 view, add it to that test.
 
-**Models** (`apps/hrm/models.py`, migration `0055`):
+**Models** (`apps/hrm/models/`, migration `0055`):
 `TalentPool` (`TenantOwned`, **not** auto-numbered; `name` [unique per tenant], `pool_type`
 [hipo/successor/critical_skill/leadership/other], `description`, `owner`→`hrm.EmployeeProfile`(SET_NULL),
 `is_active`; the `active_member_count` property is **ANNOTATION-AWARE** — it returns the `_active_member_count`
@@ -630,7 +674,7 @@ shape: `plan`(CASCADE, related_name `candidates`), `candidate`→`EmployeeProfil
 [ready_now/ready_1_2y/ready_3_5y/development_needed], `rank_order`, `development_notes`;
 `unique_together (tenant, plan, candidate)`).
 
-**Views** (`apps/hrm/views.py`, the `# 3.38 Talent Management & Succession Planning` section): full CRUD for the
+**Views** (`apps/hrm/views/`, the `# 3.38 Talent Management & Succession Planning` section): full CRUD for the
 3 top-level models (`crud_list`/`crud_create`/`crud_edit`/`crud_delete` + bespoke detail views so the review's
 rating lines can be prefetched) + inline `successioncandidate_add`/`_edit`/`_delete` on the plan detail + the
 derived **`talent_nine_box`** grid (rows = potential **high→low**, cols = performance **low→high** — the
@@ -667,7 +711,7 @@ bullet stays a roadmap placeholder (no model, no sidebar entry). (3.40 later add
 inventory — Career Pathing could now build on it.)
 
 ### 3.39 Compliance & Legal (5 tables) — contracts, policies + acknowledgments, grievances, statutory registers
-**Models** (`apps/hrm/models.py`, migrations `0053`/`0054`/`0056`/`0057`):
+**Models** (`apps/hrm/models/`, migrations `0053`/`0054`/`0056`/`0057`):
 `EmploymentContract` (`TenantNumbered`, **`ECON-`**; `employee`→`EmployeeProfile`, `contract_type`
 [permanent/fixed_term/probation/consultant/internship], `start_date`, `end_date` [nullable], `designation`(SET_NULL),
 `notice_period_days`, `status` [draft/active/expired/terminated], `signed_on`, `document`; **COMPUTED**
@@ -685,7 +729,7 @@ related_name `acknowledgments`), `employee`→`EmployeeProfile`, `status` [pendi
 [pending/filed/not_applicable], `document`; **COMPUTED** `is_overdue` = `due_date < today` and status not in
 filed/not_applicable).
 
-**Views** (`apps/hrm/views.py`, `# 3.39 Compliance & Legal`): full CRUD for the 5 models. **Publishing a policy goes
+**Views** (`apps/hrm/views/`, `# 3.39 Compliance & Legal`): full CRUD for the 5 models. **Publishing a policy goes
 ONLY through `hrpolicy_publish`** (POST) — it stamps `published_at` AND raises a pending `PolicyAcknowledgment` for
 every targeted employee (whole tenant, or the `applicable_org_unit` roster), atomic + idempotent (re-publish tops
 up new joiners). Grievance workflow actions: `grievance_assign`/`_resolve`/`_close`. Acknowledgment is employee
@@ -720,7 +764,7 @@ a maker-checker guard so an HR admin who is also the complainant can't investiga
 (`workforce_gap_analysis`, `workforce_analytics`) is `@tenant_admin_required`.** `EmployeeSkill` is the **exception** —
 own-vs-admin self-service (an employee curates their own skills) via `_ss_scope`/`_ss_child_*`.
 
-**Models** (`apps/hrm/models.py`, migrations `0058`/`0059`):
+**Models** (`apps/hrm/models/`, migrations `0058`/`0059`):
 `WorkforcePlan` (`TenantNumbered`, **`WFP-`**; `name` [unique per tenant], `org_unit`(SET_NULL, kind=department;
 blank = whole org), `plan_type` [annual/project/restructuring/custom], `period_start`/`period_end`,
 `growth_assumption_percent`, `owner`→`EmployeeProfile`(SET_NULL), `currency`(SET_NULL), `status`
@@ -739,7 +783,7 @@ related_name `lines`; `plan`(CASCADE), `org_unit`(SET_NULL)/`designation`(SET_NU
 `skill_category`, `proficiency_level`, `years_experience`, `is_certified`/`certification_name`, `last_assessed_date`,
 `is_critical_skill`; `unique_together (tenant, employee, skill_name)`).
 
-**Views** (`apps/hrm/views.py`, `# 3.40 Workforce Planning`): full CRUD for plans (with the inline
+**Views** (`apps/hrm/views/`, `# 3.40 Workforce Planning`): full CRUD for plans (with the inline
 `workforceplanline_add`/`_edit`/`_delete` on the plan detail) + scenarios + skills, plus two derived reports:
 `workforce_gap_analysis` (current vs planned per department across ACTIVE/APPROVED plans, optional `?plan=`) and
 `workforce_analytics` (headcount/skill-coverage/hiring-mix/top-skills). Skills use the `_ss_child_*` helpers;
@@ -786,7 +830,7 @@ because `str(obj)` becomes the admin-readable `AuditLog.target`, **`WellbeingPar
 `changes=None` for one. (Honest limitation, documented on the admin inline: Django-admin/DB access still sees the rows —
 that's a privileged, audited action outside this module.)
 
-**Models** (`apps/hrm/models.py`, migration `0060`):
+**Models** (`apps/hrm/models/`, migration `0060`):
 `SurveyActionPlan` (`TenantNumbered`, **`ACTP-`**; `survey`→3.27 `Survey`(CASCADE), `title`, `focus_area`,
 `owner`→`EmployeeProfile`(**PROTECT**), `department`(SET_NULL), `description`, `related_objective`→3.18
 `Objective`(SET_NULL), `target_date`, `status` [open/in_progress/completed/cancelled]; `save()` auto-manages
@@ -802,7 +846,7 @@ related_name `participations`), `employee`→`EmployeeProfile`(**PROTECT**), `st
 `TravelRequest` clone reusing `_hr_request_*` verbatim — `arrangement_type`, dates, `days_per_week_remote`, `reason`,
 `status` [draft/pending/approved/rejected/cancelled/expired], `OPEN_STATUSES=("draft","pending")`, approver/decision).
 
-**Views** (`apps/hrm/views.py`, `# 3.41 Employee Engagement & Wellbeing`): `SurveyActionPlan` CRUD — list/detail
+**Views** (`apps/hrm/views/`, `# 3.41 Employee Engagement & Wellbeing`): `SurveyActionPlan` CRUD — list/detail
 `@login_required`, create/delete `@tenant_admin_required`, **edit gated by `_can_manage_action_plan`** (owner-OR-admin,
 keyed on `owner` not `employee`); `WellbeingProgram` catalog — list/detail `@login_required`, create/edit/delete
 `@tenant_admin_required`, detail branches on `is_confidential`; inline `wellbeingparticipation_add`/`_edit`/`_delete`
@@ -823,7 +867,7 @@ listed before `EmployeeProfile` in `_seed_tenant`. **Sidebar:** `LIVE_LINKS["3.4
 → `surveyactionplan_list`; Wellbeing/EAP/Culture/Social are `program_type`-filtered `wellbeingprogram_list` slices;
 Work-Life Balance → `flexibleworkarrangement_list`). **Tests:** `apps/hrm/tests/test_engagement.py` (40).
 
-## URLs / routes (`apps/hrm/urls.py`, `app_name="hrm"`)
+## URLs / routes (`apps/hrm/urls/` package, `app_name="hrm"`)
 - Landing: `hrm:hrm_overview` (`/hrm/`).
 - Per model `<entity>` in {`designation`, **`jobgrade`, `department`, `costcenter`** (3.2), `employee`, `leavetype`,
   `leaveallocation`, `leaverequest`, **`leaveencashment`** (3.10), **`timesheet`, `overtimerequest`** (3.11), `publicholiday`, `shift`, `shiftassignment`, `attendancerecord`,
@@ -1095,7 +1139,7 @@ Work-Life Balance → `flexibleworkarrangement_list`). **Tests:** `apps/hrm/test
   `backgroundverification_delete` + `offerlettertemplate_delete` are `@tenant_admin_required`. `offer_create` honors
   `?application=<pk>`; `backgroundverification_create` honors `?offer=<pk>`. Edits redirect to the detail hub.
 
-## Views (`apps/hrm/views.py`)
+## Views (`apps/hrm/views/` package — one file per entity)
 Function-based, `@login_required`, tenant-scoped, built on `apps.core.crud` helpers
 (`crud_list/_create/_edit/_delete`). Notes:
 - `hrm_overview` — headcount / new-this-month / on-leave-today / present/absent-today stat cards + pending leave +
@@ -1205,7 +1249,7 @@ has an Actions column (view/edit/delete-POST+csrf+confirm). **Never render raw `
 `masked_bank_account`.** `employee/form.html` (photo) and `offboarding/separationcase/form.html` (resignation
 letter) are `multipart/form-data`. Right-align numeric cells with the `.text-right` utility.
 
-## Forms (`apps/hrm/forms.py`)
+## Forms (`apps/hrm/forms/` package — one file per entity)
 `TenantModelForm` subclasses (auto tenant-scope FK querysets, theme widgets). Exclude `tenant`, auto `number`, and
 computed fields. **SECURITY: `LeaveRequestForm` excludes `status` and `approver`** (set only by workflow actions —
 prevents self-approval via crafted POST). `EmployeeProfileForm` scopes `party` to person Parties and validates the
