@@ -804,6 +804,13 @@ def payslip_with_pf_a(db, tenant_a, draft_cycle_a, employee_a, active_structure_
     return payslip
 
 
+# ``StatutoryReturn.is_overdue`` is ``status == "pending" and due_date < today``, and the compliance
+# calendar buckets overdue BEFORE pending — so a "pending" fixture must keep its due date in the
+# FUTURE relative to the run, never a hard-coded literal (a literal silently turns these rows overdue
+# the day it passes, which is exactly how the calendar's pending-bucket test started failing).
+STATUTORY_DUE_AHEAD = datetime.timedelta(days=30)
+
+
 @pytest.fixture
 def pending_statutory_return_a(db, tenant_a, draft_cycle_a):
     """A pending, unaggregated PF StatutoryReturn for tenant_a scoped to draft_cycle_a."""
@@ -811,7 +818,7 @@ def pending_statutory_return_a(db, tenant_a, draft_cycle_a):
     return StatutoryReturn.objects.create(
         tenant=tenant_a, scheme="pf", period_type="monthly",
         period_start=draft_cycle_a.period_start, period_end=draft_cycle_a.period_end,
-        cycle=draft_cycle_a, due_date=datetime.date(2026, 7, 15),
+        cycle=draft_cycle_a, due_date=timezone.localdate() + STATUTORY_DUE_AHEAD,
     )
 
 
@@ -822,7 +829,7 @@ def statutory_return_b(db, tenant_b, cycle_b):
     return StatutoryReturn.objects.create(
         tenant=tenant_b, scheme="pf", period_type="monthly",
         period_start=cycle_b.period_start, period_end=cycle_b.period_end,
-        cycle=cycle_b, due_date=datetime.date(2026, 7, 15),
+        cycle=cycle_b, due_date=timezone.localdate() + STATUTORY_DUE_AHEAD,
     )
 
 
