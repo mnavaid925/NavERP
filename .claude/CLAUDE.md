@@ -320,10 +320,22 @@ The backend mirrors the template rule: `models`, `forms`, `views` and `urls` are
    sub-module's models simply get their own `<SubModule>/<Entity>.py`. Accounting's `models_advanced.py` /
    `forms_advanced.py` / `views_advanced.py` were folded away for exactly this reason.
 
-8. **`admin.py`, `apps.py`, `analytics.py` and other single-purpose modules stay flat** at the app root.
-   Migrations are unaffected: models sit deeper than the app root, but Django still derives `app_label` from the
-   app config — a correct split needs **no new migration** (`makemigrations --check` must say "No changes
+8. **`admin.py`, `apps.py`, `analytics.py`, `services.py` and other single-purpose modules stay flat** at the app
+   root. Migrations are unaffected: models sit deeper than the app root, but Django still derives `app_label` from
+   the app config — a correct split needs **no new migration** (`makemigrations --check` must say "No changes
    detected").
+
+9. **Foundation apps (Module 0: `core` / `tenants`) have NO sub-module level** — exactly like their templates
+   (rule 4 above). Module 0 has no NavERP sub-modules, so the entity file sits FLAT at the package root:
+   `apps/core/models/Party.py`, `apps/core/views/Party.py`, `apps/tenants/models/Subscription.py` — never a
+   `<SubModule>/` folder. Shared plumbing still goes in `_base.py` / `_common.py` (e.g. `core/forms/_common.py`
+   holds **`TenantModelForm`**, the base class every other app's forms inherit, plus
+   `ALLOWED_DOC_EXTENSIONS`/`MAX_UPLOAD_BYTES`). `accounts` and `dashboard` remain flat modules.
+
+10. **Don't split a file just for symmetry — split it when it's hard to navigate.** `core/urls.py` and
+    `tenants/urls.py` are deliberately **left as flat modules**: `core/urls.py` is a 37-line `crud(slug, name)`
+    factory that generates the 5 standard routes per model, and expanding it into per-entity `urlpatterns` lists
+    would replace a good abstraction with ~45 duplicated `path()` lines. The factory IS the better structure.
 
 ---
 
