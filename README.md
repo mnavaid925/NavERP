@@ -731,8 +731,9 @@ The four layers line up one-to-one, so a single entity's model, form, view and U
 cross-app imports and every test keep importing `apps.<app>.models` / `.forms` / `.views` unchanged — and since a
 model's `app_label` still derives from the app config, **the split needs no migration**. Imports *inside* a package
 are absolute; cross-sub-module view helpers live in `views/_helpers.py`; there are no `*_advanced.py` sidecars. See
-the "Backend Package Structure" rule in `.claude/CLAUDE.md` and the two reference apps. (`hrm` is still flat and a
-future split candidate; the foundation apps `core`/`accounts`/`tenants`/`dashboard` are intentionally flat.)
+the "Backend Package Structure" rule in `.claude/CLAUDE.md` and the reference apps. All three domain
+modules (`crm`, `accounting`, `hrm`) are converted; the foundation apps `core`/`accounts`/`tenants`/
+`dashboard` are intentionally flat (Module 0 has no NavERP sub-modules).
 
 ### Reusable CRUD layer
 `apps/core/crud.py` centralizes list/create/detail/edit/delete so every module behaves consistently and the
@@ -973,8 +974,11 @@ NavERP/
 │  │  ├─ management/commands/seed_accounting.py
 │  │  └─ tests/
 │  └─ hrm/                  Module 3 — employees, onboarding, offboarding, leave, attendance, holidays
-│     ├─ models.py  forms.py  views.py  urls.py  admin.py   (still flat — a future package-split candidate)
+│     ├─ models/ forms/ views/ urls/   PACKAGES — one folder per sub-module (3.1–3.41), one file per entity
+│     │  └─ <SubModule>/<Entity>.py    e.g. LeaveManagement/Request.py; each <SubModule>/_helpers.py holds
+│     │                                that sub-module's private helpers (entity → _helpers → _base)
 │     ├─ services.py        request-free domain logic (task/clearance generation, leave encashment)
+│     ├─ analytics.py  admin.py        (single-purpose modules stay flat)
 │     ├─ management/commands/seed_hrm.py
 │     └─ tests/
 ├─ templates/
