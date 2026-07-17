@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Supply Chain Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supply Chain Management</h1>
+      <div class="breadcrumb"><span>Supply Chain</span></div>
+      <p class="text-muted">Track the procure-to-pay pipeline — requisitions, RFQs, purchase orders and goods receipts.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:requisition_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Requisition</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ stats.requisitions }}</div>
+      <div class="stat-label">Requisitions · {{ stats.requisitions_pending }} pending</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="mail-question"></i></div>
+      <div class="stat-value">{{ stats.rfqs }}</div>
+      <div class="stat-label">RFQs · {{ stats.rfqs_open }} open</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="shopping-cart"></i></div>
+      <div class="stat-value">{{ stats.orders }}</div>
+      <div class="stat-label">Purchase Orders · {{ stats.orders_pending }} pending approval</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{{ stats.receipts }}</div>
+      <div class="stat-label">Goods Receipts</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ stats.open_order_value|floatformat:2 }}</div>
+      <div class="stat-label">Open Order Value</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Awaiting your approval</h2>
+      <a href="{% url 'scm:requisition_list' %}" class="btn btn-outline">View all</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Requester</th><th>Org Unit</th><th>Required By</th><th>Status</th><th>Estimated Total</th></tr></thead>
+        <tbody>
+          {% for r in awaiting_approval %}
+            <tr>
+              <td><a href="{% url 'scm:requisition_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.title }}</td>
+              <td>{% if r.requester %}{{ r.requester.get_full_name|default:r.requester.username }}{% else %}—{% endif %}</td>
+              <td>{% if r.org_unit %}{{ r.org_unit.name }}{% else %}—{% endif %}</td>
+              <td>{{ r.required_by|date:"M d, Y"|default:"—" }}</td>
+              <td><span class="badge badge-{% if r.status == 'approved' or r.status == 'converted' %}green{% elif r.status == 'pending_approval' %}amber{% elif r.status == 'rejected' or r.status == 'cancelled' %}red{% else %}muted{% endif %}">{{ r.get_status_display }}</span></td>
+              <td>{{ r.estimated_total|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>Nothing awaiting approval</h3><p>Requisitions submitted for approval will appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Receipts needing attention</h2>
+      <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-outline">View all</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Purchase Order</th><th>Vendor</th><th>Receipt Date</th><th>Match Status</th></tr></thead>
+        <tbody>
+          {% for r in unmatched_receipts %}
+            <tr>
+              <td><a href="{% url 'scm:goodsreceipt_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{% if r.purchase_order %}{{ r.purchase_order.number }}{% else %}—{% endif %}</td>
+              <td>{% if r.purchase_order.vendor %}{{ r.purchase_order.vendor.name }}{% else %}—{% endif %}</td>
+              <td>{{ r.receipt_date|date:"M d, Y"|default:"—" }}</td>
+              <td><span class="badge badge-{% if r.match_status == 'matched' %}green{% elif r.match_status == 'price_variance' or r.match_status == 'quantity_variance' %}amber{% elif r.match_status == 'over_received' %}red{% elif r.match_status == 'not_matched' %}muted{% else %}muted{% endif %}">{{ r.get_match_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="package-check"></i><h3>All receipts are matched</h3><p>Receipts with a price, quantity or over-receipt variance will appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Procurement</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:requisition_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Requisitions</a>
+        <a href="{% url 'scm:rfq_list' %}" class="btn btn-outline"><i data-lucide="mail-question"></i> RFQs</a>
+        <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase Orders</a>
+        <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-outline"><i data-lucide="package-check"></i> Goods Receipts</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
