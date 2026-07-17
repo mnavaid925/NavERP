@@ -13,5 +13,6 @@ urlpatterns = [
     path("suppliers/<int:pk>/submit/", views.supplierprofile_submit, name="supplierprofile_submit"),
     path("suppliers/<int:pk>/approve/", views.supplierprofile_approve, name="supplierprofile_approve"),
     path("suppliers/<int:pk>/reject/", views.supplierprofile_reject, name="supplierprofile_reject"),
+    path("suppliers/<int:pk>/reopen/", views.supplierprofile_reopen, name="supplierprofile_reopen"),
     path("suppliers/<int:pk>/suspend/", views.supplierprofile_suspend, name="supplierprofile_suspend"),
 ]
