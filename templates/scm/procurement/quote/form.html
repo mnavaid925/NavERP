@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Quote{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Quote</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:rfq_list' %}">RFQs</a><span class="sep">›</span><a href="{% url 'scm:rfq_detail' rfq.pk %}">{{ rfq.number }}</a><span class="sep">›</span><span>{% if is_edit %}Edit Quote{% else %}New Quote{% endif %}</span></div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <span class="fw-600">{{ rfq.number }}</span> — {{ rfq.title|default:"—" }}
+    <div class="text-muted">This quote answers the request for quotation above.</div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Quoted Lines</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>RFQ Line</th><th>Quantity</th><th>Unit Price</th><th>Lead Time (days)</th><th>Note</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for lf in formset %}
+              <tr>
+                {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ lf.rfq_line }}{% for e in lf.rfq_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_price }}{% for e in lf.unit_price.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.lead_time_days }}</td>
+                <td>{{ lf.note }}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Leave a row blank to skip it; tick Remove to delete an existing line. The quote total is calculated from these lines on save.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:rfq_detail' rfq.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
