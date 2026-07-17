@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management: purchase requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match. Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.2+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) and 4.2 Supplier Relationship Management (supplier onboarding, signal-derived scorecards, contracts, catalogs, risk). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.3+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -8,9 +8,11 @@ description: Work on the SCM module (Module 4 — Supply Chain Management). As-b
 App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_name = "scm"`.
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
-**As-built: only 4.1 Procurement Management.** 4.2–4.19 are roadmap. Build the next one with `/next-module`
-(it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps `apps/crm`/`apps/accounting`
-for the package layout and the mandatory [Module Creation Sequence](../../CLAUDE.md).
+**As-built: 4.1 Procurement Management + 4.2 Supplier Relationship Management.** 4.3–4.19 are roadmap. Build the
+next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference
+apps `apps/crm`/`apps/accounting` for the package layout and the mandatory
+[Module Creation Sequence](../../CLAUDE.md). **4.3 Inventory Management is next, and it needs `core.Item`/`Location`/
+`StockMove`, which still don't exist** — per L28/L29 (ships-first) SCM 4.3 will establish that inventory spine.
 
 ## Overview
 
@@ -94,6 +96,39 @@ real `accounting.Bill` — deliberately short-shipping one line so the match lan
 a per-tenant `PurchaseRequisition` guard; reuses spine rows (suppliers matched by name, existing OrgUnit/Budget/
 GLAccount). `--flush` deletes the linked `accounting.Bill` rows too (they're otherwise orphaned). Login as a tenant
 admin (`admin_acme` / `password`) — the superuser has `tenant=None` and sees nothing.
+
+## 4.2 Supplier Relationship Management  (`apps/scm/*/SupplierRelationshipManagement/`, templates `templates/scm/srm/`)
+
+SRM on the `core.Party` supplier spine. Five models, all reusing `_supplier_parties` (supplier OR vendor role):
+
+- **`SupplierProfiles.py`** — `SupplierProfile` (OneToOne on `core.Party`; SRM extension, distinct from the AP-only
+  `accounting.VendorProfile` — a supplier can carry both). Onboarding lifecycle draft→qualification→due_diligence→
+  approved (+rejected/suspended); a five-`dd_*`-boolean due-diligence checklist with `due_diligence_progress()`;
+  `is_active`/`is_editable`. Actions: submit, approve (tenant-admin, **requires `onboarding_status=='due_diligence'`
+  AND `due_diligence_complete`**), reject (tenant-admin, blocks approved), reopen (tenant-admin, rejected→draft),
+  suspend/reinstate (tenant-admin).
+- **`SupplierScorecards.py`** — `SupplierScorecard` [`SCR-`]. delivery/quality/price/responsiveness each 0-100
+  (MaxValueValidator(100)), a re-weighted `overall_score` + A-F `grade`. `recompute_from_signals()` DERIVES the four
+  from real 4.1 history in the period: on-time `GoodsReceiptNote`s, `GoodsReceiptLine` reject rate, best `RFQQuote`
+  price, quote turnaround — prefetched + aggregated (one query each, not per-row). `manual_override` freezes it;
+  `recompute_overall()` skips its save when unchanged. Actions: recompute (blocked when archived/override), publish.
+- **`SupplierContracts.py`** — `SupplierContract` [`SC-`]. `days_to_expiry()`/`is_expiring_soon()`/`refresh_status()`
+  (date-driven active↔expiring↔expired; terminated/renewed are terminal). List rolls statuses via
+  `_roll_contract_statuses` (one bulk_update, not save-per-row). Actions: activate, renew (drafts a successor),
+  terminate (tenant-admin + reason). `contract_edit` blocks terminated/expired/renewed.
+- **`SupplierCatalogs.py`** — `SupplierCatalog` [`CAT-`] + `SupplierCatalogItem` (free-text, L28). Item formset
+  prefix `items-`. Actions: activate (blocks empty).
+- **`SupplierRiskAssessments.py`** — `SupplierRiskAssessment` [`SRA-`]. Four 1-5 factor scores →
+  `recompute_risk_level()` derives `risk_level`/`risk_index` (**a single 5 forces at least High**). Actions:
+  submit, review (tenant-admin).
+
+**URLs** (`app_name="scm"`): `supplierprofile_*` (/suppliers/) + submit/approve/reject/reopen/suspend;
+`scorecard_*` (/scorecards/) + recompute/publish; `contract_*` (/contracts/) + activate/renew/terminate;
+`catalog_*` (/catalogs/) + activate; `riskassessment_*` (/risk-assessments/) + submit/review.
+**Templates** under `templates/scm/srm/{supplierprofile,scorecard,contract,catalog,riskassessment}/`. Overview page
+has a "Supplier Management" nav card. **LIVE_LINKS["4.2"]** maps the five bullets. **Seeder**: `_seed_srm_tenant`
+(guarded independently of 4.1) seeds a profile/scorecard/contract/catalog/risk per supplier, scorecards derived from
+real 4.1 signals; `--flush` clears the SRM tables.
 
 ## Conventions & gotchas
 
