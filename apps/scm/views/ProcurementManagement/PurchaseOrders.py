@@ -116,6 +116,12 @@ def purchaseorder_detail(request, pk):
         pk=pk, tenant=request.tenant,
     )
     lines = list(obj.lines.select_related("gl_account"))
+    # Resolve every line's received quantity in ONE query and prime each line's memo, so neither
+    # the fully_received check below nor the template's per-row {{ line.received_quantity }} pays
+    # for its own aggregate. Without this a PO with N lines costs ~2N extra queries to render.
+    received_map = obj.received_by_line()
+    for line in lines:
+        line._received_qty_cache = received_map.get(line.pk, Decimal("0"))
     return render(request, "scm/procurement/purchaseorder/detail.html", {
         "obj": obj,
         "lines": lines,
