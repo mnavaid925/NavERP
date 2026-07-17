@@ -76,10 +76,11 @@ class Command(BaseCommand):
                     f"{tenant.name}: procurement data already exists — skipping. Use --flush to re-seed.")
             else:
                 self._seed_tenant(tenant)
-            # 4.2 SRM is guarded independently so it seeds even when 4.1 data already exists.
+            # 4.2 SRM and 4.3 Inventory are guarded independently so they seed even when 4.1 exists.
             self._seed_srm_tenant(tenant)
+            self._seed_inventory_tenant(tenant)
 
-        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement + 4.2 SRM seed complete."))
+        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement + 4.2 SRM + 4.3 inventory seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -180,6 +181,90 @@ class Command(BaseCommand):
             f"(profiles, scorecards, contracts, catalogs, risk assessments)."
         )
 
+    def _seed_inventory_tenant(self, tenant):
+        """4.3 Inventory demo: UOMs, categories, items, locations, opening-balance StockMoves, a
+        completed transfer, a posted adjustment, and reorder rules (one deliberately low so the
+        reorder-alert path shows). Idempotent via a per-tenant Item guard. Exercises the derived
+        on-hand path — nothing stores a quantity."""
+        from apps.scm.models import (
+            Item, ItemCategory, UOM, Location, StockMove, StockTransfer, StockTransferLine,
+            StockAdjustment, StockAdjustmentLine, ReorderRule,
+        )
+        from apps.scm.views._helpers import _post_transfer, _post_adjustment
+        if Item.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: inventory data already exists — skipping.")
+            return
+
+        each, _ = UOM.objects.get_or_create(tenant=tenant, code="EA", defaults={"name": "Each", "factor": 1})
+        box, _ = UOM.objects.get_or_create(tenant=tenant, code="BOX", defaults={"name": "Box of 12", "factor": 12})
+        cat = ItemCategory.objects.create(tenant=tenant, name="IT Equipment")
+
+        # Items with different costing methods so the valuation report shows each path.
+        items = [
+            Item.objects.create(tenant=tenant, sku="WS-16", name="Laptop workstation 16GB", category=cat,
+                                uom=each, costing_method="weighted_avg", standard_cost=Decimal("1200")),
+            Item.objects.create(tenant=tenant, sku="MON-27", name="27-inch monitor", category=cat,
+                                uom=each, costing_method="fifo", standard_cost=Decimal("300")),
+            Item.objects.create(tenant=tenant, sku="DOCK-C", name="USB-C docking station", category=cat,
+                                uom=box, costing_method="weighted_avg", standard_cost=Decimal("150")),
+        ]
+        main = Location.objects.create(tenant=tenant, code="WH-MAIN", name="Main Warehouse",
+                                       location_type="warehouse")
+        store = Location.objects.create(tenant=tenant, code="WH-STORE", name="Retail Store",
+                                        location_type="warehouse")
+
+        # Opening balances as receipt StockMoves through the posting service (rolls average cost).
+        opening = [
+            (items[0], main, Decimal("20"), Decimal("1200")),
+            (items[1], main, Decimal("40"), Decimal("290")),   # a first FIFO layer
+            (items[1], main, Decimal("15"), Decimal("330")),   # a second, dearer FIFO layer
+            (items[2], main, Decimal("8"), Decimal("150")),
+        ]
+        now = timezone.now()
+        with transaction.atomic():
+            for i, (item, loc, qty, cost) in enumerate(opening):
+                item.apply_receipt(qty, cost)
+                StockMove.objects.create(
+                    tenant=tenant, item=item, location=loc, quantity=qty, unit_cost=cost,
+                    move_type="receipt", reference="OPENING",
+                    moved_at=now - datetime.timedelta(days=30 - i))
+
+        # A completed transfer of 5 monitors main -> store, posting the paired moves.
+        transfer = StockTransfer.objects.create(
+            tenant=tenant, from_location=main, to_location=store, status="draft",
+            transfer_date=timezone.localdate(), notes="Store replenishment.")
+        StockTransferLine.objects.create(transfer=transfer, item=items[1], quantity=Decimal("5"))
+        with transaction.atomic():
+            _post_transfer(transfer, self._admin(tenant))
+            transfer.status = "completed"
+            transfer.completed_at = timezone.now()
+            transfer.save(update_fields=["status", "completed_at", "updated_at"])
+
+        # A posted cycle-count adjustment: found 2 extra docks at main.
+        adj = StockAdjustment.objects.create(
+            tenant=tenant, location=main, reason="cycle_count", status="draft",
+            adjustment_date=timezone.localdate(), notes="Cycle count: found 2 extra docks.")
+        StockAdjustmentLine.objects.create(adjustment=adj, item=items[2], quantity_delta=Decimal("2"),
+                                           unit_cost=Decimal("150"))
+        with transaction.atomic():
+            _post_adjustment(adj, self._admin(tenant))
+            adj.status = "posted"
+            adj.posted_at = timezone.now()
+            adj.save(update_fields=["status", "posted_at", "updated_at"])
+
+        # Reorder rules — the dock rule sits above current on-hand so a reorder alert fires.
+        ReorderRule.objects.create(tenant=tenant, item=items[0], location=main,
+                                   reorder_point=Decimal("5"), safety_stock=Decimal("3"),
+                                   reorder_quantity=Decimal("10"))
+        ReorderRule.objects.create(tenant=tenant, item=items[2], location=main,
+                                   reorder_point=Decimal("15"), safety_stock=Decimal("5"),
+                                   reorder_quantity=Decimal("24"))
+
+        self.stdout.write(
+            f"{tenant.name}: seeded inventory ({len(items)} items, 2 locations, opening stock, "
+            f"{transfer.number} transfer, {adj.number} adjustment, 2 reorder rules)."
+        )
+
     def _flush(self):
         # The AP bills this seeder created are reachable only through the receipts that link them,
         # so they must go FIRST — once the GRNs are gone there is no way to tell a seeded bill from
@@ -214,8 +299,24 @@ class Command(BaseCommand):
         SupplierScorecard.objects.all().delete()
         SupplierRiskAssessment.objects.all().delete()
         SupplierProfile.objects.all().delete()
+
+        # 4.3 Inventory — StockMove is PROTECT-referenced by item/location, so delete moves and the
+        # domain docs (transfers/adjustments/reorder rules) before the masters they point at.
+        from apps.scm.models import (
+            Item, ItemCategory, UOM, Location, LotSerial, StockMove,
+            StockTransfer, StockAdjustment, ReorderRule,
+        )
+        StockMove.objects.all().delete()
+        StockTransfer.objects.all().delete()      # lines cascade
+        StockAdjustment.objects.all().delete()    # lines cascade
+        ReorderRule.objects.all().delete()
+        LotSerial.objects.all().delete()
+        Item.objects.all().delete()
+        Location.objects.all().delete()
+        ItemCategory.objects.all().delete()
+        UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
-            f"Flushed all SCM procurement + SRM rows (+{bill_count} linked accounting bill(s))."))
+            f"Flushed all SCM procurement + SRM + inventory rows (+{bill_count} linked accounting bill(s))."))
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
