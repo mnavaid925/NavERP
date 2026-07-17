@@ -98,18 +98,43 @@ class PurchaseOrder(TenantNumbered):
         if save:
             self.save(update_fields=["subtotal", "tax_total", "total", "updated_at"])
 
+    def received_by_line(self):
+        """``{po_line_id: accepted quantity}`` for every line on this order — in ONE query.
+
+        The per-line ``received_quantity()`` costs a query each, which is fine for a single line but
+        multiplies badly in the loops that need the whole picture: re-deriving the order status and
+        re-matching R receipts over N lines is otherwise O(N x R) queries on the receipt-booking
+        write path. Callers that need every line's figure take this map instead.
+        """
+        rows = (
+            PurchaseOrderLine.objects
+            .filter(purchase_order=self)
+            .annotate(received=Sum(
+                "receipt_lines__quantity_received",
+                # Same rule as received_quantity(): a cancelled receipt never counts. Lines with no
+                # receipts at all sum to NULL and fall back to ZERO below.
+                filter=~Q(receipt_lines__goods_receipt__status="cancelled"),
+            ))
+            .values_list("id", "received")
+        )
+        return {pk: (received or ZERO) for pk, received in rows}
+
     def rematch_receipts(self):
         """Re-derive the three-way match on EVERY receipt against this order.
 
-        A receipt's verdict depends on ``po_line.received_quantity()``, which aggregates across all
-        of the order's receipts — so booking or cancelling one receipt can silently invalidate a
-        sibling's stored verdict (e.g. an earlier receipt still reading "Quantity Variance" after a
-        later one pushed the line into over-receipt). Re-matching the whole set keeps them honest.
-        """
-        for receipt in self.receipts.all():
-            receipt.recompute_match()
+        A receipt's verdict depends on the per-line received aggregate across ALL of the order's
+        receipts — so booking or cancelling one receipt can silently invalidate a sibling's stored
+        verdict (e.g. an earlier receipt still reading "Quantity Variance" after a later one pushed
+        the line into over-receipt). Re-matching the whole set keeps them honest.
 
-    def recompute_receipt_status(self):
+        The received map is computed ONCE here and handed to each receipt: it is identical for all
+        of them, and re-deriving it per receipt is what made this O(N x R).
+        """
+        received_map = self.received_by_line()
+        for receipt in self.receipts.all():
+            receipt.recompute_match(received_map=received_map)
+
+    def recompute_receipt_status(self, received_map=None):
         """Derive sent/partially_received/received from booked receipt lines.
 
         Only moves within the receiving part of the lifecycle — never resurrects a cancelled or
@@ -120,8 +145,16 @@ class PurchaseOrder(TenantNumbered):
         rows = list(self.lines.all())
         if not rows:
             return
-        fully = all(r.received_quantity() >= r.quantity for r in rows)
-        any_received = any(r.received_quantity() > ZERO for r in rows)
+        if received_map is None:
+            received_map = self.received_by_line()
+        # One pass: the previous all()/any() pair re-derived the same aggregate twice per line.
+        fully, any_received = True, False
+        for row in rows:
+            received = received_map.get(row.pk, ZERO)
+            if received < row.quantity:
+                fully = False
+            if received > ZERO:
+                any_received = True
         if fully:
             new = "received"
         elif any_received:
@@ -156,14 +189,26 @@ class PurchaseOrderLine(models.Model):
     class Meta:
         ordering = ["id"]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._received_qty_cache = None  # see received_quantity()
+
     def save(self, *args, **kwargs):
         self.line_total = (self.quantity or ZERO) * (self.unit_price or ZERO)
         super().save(*args, **kwargs)
 
     def received_quantity(self):
-        """Total accepted quantity booked against this line across every non-cancelled receipt."""
-        return self.receipt_lines.exclude(goods_receipt__status="cancelled").aggregate(
-            s=Sum("quantity_received"))["s"] or ZERO
+        """Total accepted quantity booked against this line across every non-cancelled receipt.
+
+        Memoized per instance: the PO detail view and its template each ask for this, and Django
+        template loops would otherwise re-issue the aggregate on every render of every row. When
+        you need the figure for EVERY line of an order, use ``PurchaseOrder.received_by_line()``
+        instead — one query for the whole order rather than one per line.
+        """
+        if self._received_qty_cache is None:
+            self._received_qty_cache = self.receipt_lines.exclude(
+                goods_receipt__status="cancelled").aggregate(s=Sum("quantity_received"))["s"] or ZERO
+        return self._received_qty_cache
 
     def outstanding_quantity(self):
         return (self.quantity or ZERO) - self.received_quantity()
