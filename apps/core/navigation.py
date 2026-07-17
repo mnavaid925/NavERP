@@ -787,6 +787,16 @@ LIVE_LINKS = {
         "Supplier Catalog Management": "scm:catalog_list",       # bullet (free-text price lists, pending core.Item)
         "Risk Management": "scm:riskassessment_list",            # bullet (financial/geo/compliance/operational)
     },
+    # 4.3 Inventory Management — SCM owns the inventory SPINE (Item/UOM/Location/StockMove/LotSerial)
+    # ships-first (L29/L36); Module 5 Inventory will extend by FK. On-hand + valuation are DERIVED from
+    # the append-only StockMove ledger, never stored.
+    "4.3": {
+        "Stock Control": "scm:item_list",                        # bullet (items + derived on-hand + lot/serial)
+        "Warehouse Transfer": "scm:stocktransfer_list",          # bullet (between-location transfers, posts StockMove)
+        "Stock Adjustment": "scm:stockadjustment_list",          # bullet (write-off/damage/cycle-count, posts StockMove)
+        "Reorder Point Automation": "scm:reorder_alerts",        # bullet (low-stock alerts + one-click requisition)
+        "Inventory Valuation": "scm:valuation_report",           # bullet (FIFO/LIFO/WAC over StockMove cost layers)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
