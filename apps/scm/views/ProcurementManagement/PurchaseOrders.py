@@ -1,5 +1,7 @@
 """SCM 4.1 Procurement Management — PurchaseOrders views."""
 from apps.scm.views._common import *  # noqa: F401,F403
+# `import *` skips underscore-prefixed names, so private helpers need an explicit import.
+from apps.scm.views._common import _changed
 from apps.scm.views._helpers import _need_tenant, _supplier_parties
 from apps.scm.models import (
     PurchaseOrder,
@@ -75,8 +77,10 @@ def _purchaseorder_form(request, instance, amending=False):
                 formset.save()
                 po.recalc_totals()
             action = "amend" if amending else ("update" if is_edit else "create")
+            # The field-level diff is the whole point of the amendment trail — without it the
+            # version bump records THAT the order changed but never WHAT changed.
             write_audit_log(request.user, po, "update" if is_edit else "create",
-                            {"action": action, "version": po.version})
+                            {"action": action, "version": po.version, **_changed(form)})
             messages.success(request, f"Order {po.number} saved.")
             return redirect("scm:purchaseorder_detail", pk=po.pk)
     else:
@@ -89,12 +93,18 @@ def _purchaseorder_form(request, instance, amending=False):
                    "amending": amending})
 
 
-@login_required
+@tenant_admin_required
 def purchaseorder_amend(request, pk):
     """Edit an already-dispatched order, bumping its version and recording why.
 
     A dispatched PO is a commitment to the vendor, so it is not silently editable — the amendment
     trail (version + reason + the AuditLog field diff) is what makes the change defensible later.
+
+    Tenant-admin gated, like approve and cancel. This is the one path that re-opens the line
+    formset — quantity, unit price, tax, GL account — on an order that has ALREADY cleared the
+    approval gate, and it leaves the order in its dispatched status without re-approval. Leaving it
+    at @login_required let any employee inflate the committed total of a live vendor commitment,
+    which is strictly more dangerous than the cancel it sits next to.
     """
     obj = get_object_or_404(PurchaseOrder, pk=pk, tenant=request.tenant)
     if obj.is_editable:
