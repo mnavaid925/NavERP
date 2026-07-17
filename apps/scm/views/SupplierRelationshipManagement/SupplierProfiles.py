@@ -1,6 +1,5 @@
 """SCM 4.2 SRM — SupplierProfile views (onboarding lifecycle)."""
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.views._common import _changed
 from apps.scm.views._helpers import _need_tenant, _supplier_parties
 from apps.scm.models import SupplierProfile
 from apps.scm.forms import SupplierProfileForm
@@ -35,7 +34,7 @@ def supplierprofile_create(request):
 def supplierprofile_edit(request, pk):
     obj = get_object_or_404(SupplierProfile, pk=pk, tenant=request.tenant)
     if not obj.is_editable:
-        messages.error(request, "An approved or rejected supplier can't be edited — reopen it first.")
+        messages.error(request, "An approved, rejected or suspended supplier can't be edited — reopen it first.")
         return redirect("scm:supplierprofile_detail", pk=pk)
     return crud_edit(
         request, model=SupplierProfile, pk=pk, form_class=SupplierProfileForm,
@@ -88,8 +87,11 @@ def supplierprofile_submit(request, pk):
 def supplierprofile_approve(request, pk):
     """Approve a supplier for use. Tenant-admin gated + due-diligence must be complete."""
     obj = get_object_or_404(SupplierProfile, pk=pk, tenant=request.tenant)
-    if obj.onboarding_status in ("approved",):
-        messages.info(request, "This supplier is already approved.")
+    # Enforce the SOURCE state, not just the terminal one: hiding the button doesn't stop a direct
+    # POST, and approving straight from draft (once the DD boxes are ticked) would skip the formal
+    # due-diligence review stage this gate exists to enforce (security review).
+    if obj.onboarding_status != "due_diligence":
+        messages.error(request, "Only a supplier in due-diligence review can be approved.")
         return redirect("scm:supplierprofile_detail", pk=pk)
     if not obj.due_diligence_complete:
         messages.error(request, "Complete the due-diligence checklist before approving this supplier.")
@@ -108,6 +110,11 @@ def supplierprofile_approve(request, pk):
 @require_POST
 def supplierprofile_reject(request, pk):
     obj = get_object_or_404(SupplierProfile, pk=pk, tenant=request.tenant)
+    # An approved (spend-eligible) supplier is revoked via suspend, not reject — reject is a decision
+    # on a supplier still in onboarding. Guarding the state here, not just in the template.
+    if obj.onboarding_status in ("approved", "rejected"):
+        messages.error(request, "Use suspend to revoke an approved supplier; reject is for onboarding.")
+        return redirect("scm:supplierprofile_detail", pk=pk)
     reason = (request.POST.get("decision_note") or "").strip()
     if not reason:
         messages.error(request, "Give a reason when rejecting a supplier.")
@@ -119,6 +126,29 @@ def supplierprofile_reject(request, pk):
     obj.save(update_fields=["onboarding_status", "approved_by", "approved_at", "decision_note", "updated_at"])
     write_audit_log(request.user, obj, "update", {"action": "reject"})
     messages.success(request, f"{obj.party.name} rejected.")
+    return redirect("scm:supplierprofile_detail", pk=pk)
+
+
+@tenant_admin_required
+@require_POST
+def supplierprofile_reopen(request, pk):
+    """Send a rejected supplier back to draft so it can be revised and re-submitted.
+
+    Without this a rejected supplier is a dead end — Approve needs due_diligence, Reject/Submit/Edit
+    are gated out, Delete needs draft — so there is no way forward. Tenant-admin gated: reopening a
+    rejection is a decision reversal.
+    """
+    obj = get_object_or_404(SupplierProfile, pk=pk, tenant=request.tenant)
+    if obj.onboarding_status != "rejected":
+        messages.info(request, "Only a rejected supplier can be reopened.")
+        return redirect("scm:supplierprofile_detail", pk=pk)
+    obj.onboarding_status = "draft"
+    obj.approved_by = None
+    obj.approved_at = None
+    obj.decision_note = ""
+    obj.save(update_fields=["onboarding_status", "approved_by", "approved_at", "decision_note", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "reopen"})
+    messages.success(request, f"{obj.party.name} reopened as a draft.")
     return redirect("scm:supplierprofile_detail", pk=pk)
 
 
