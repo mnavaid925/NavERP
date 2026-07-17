@@ -23,7 +23,10 @@ def rfq_list(request):
     qs = (RFQ.objects
           .filter(tenant=request.tenant)
           .select_related("requisition", "currency")
-          .annotate(quote_count=Count("quotes", distinct=True)))
+          .annotate(quote_count=Count("quotes", distinct=True))
+          # The Count annotation introduces a GROUP BY that drops Meta.ordering, which makes
+          # pagination non-deterministic (rows can repeat or vanish across pages). Re-assert it.
+          .order_by("-created_at", "-id"))
     return crud_list(
         request, qs, "scm/procurement/rfq/list.html",
         search_fields=["number", "title"],
