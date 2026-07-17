@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'active' or obj.status == 'renewed' %}green{% elif obj.status == 'expiring' %}amber{% elif obj.status == 'expired' or obj.status == 'terminated' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:contract_list' %}">Supplier Contracts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if expiring_soon %}
+    <div class="card" style="border-inline-start: 3px solid var(--warn); background: var(--warn-bg);">
+      <div class="card-body">
+        <div class="fw-600 text-warn"><i data-lucide="alert-triangle"></i> Renewal due in {{ days_to_expiry }} days</div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'expired' %}
+    <div class="card" style="border-inline-start: 3px solid var(--bad); background: var(--bad-bg);">
+      <div class="card-body">
+        <div class="fw-600 text-danger"><i data-lucide="alert-triangle"></i> This contract has expired</div>
+        <p class="text-muted">Ended {{ obj.end_date|date:"M d, Y"|default:"—" }}.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.termination_reason %}
+    <div class="card" style="border-inline-start: 3px solid var(--bad); background: var(--bad-bg);">
+      <div class="card-body">
+        <div class="fw-600 text-danger"><i data-lucide="ban"></i> Terminated {{ obj.terminated_at|date:"M d, Y"|default:"—" }}</div>
+        <p class="text-muted">{{ obj.termination_reason }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Title</dt><dd>{{ obj.title|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ obj.get_contract_type_display }}</span></dd></div>
+      <div class="detail-item"><dt>Start Date</dt><dd>{{ obj.start_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>End Date</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Contract Value</dt><dd class="fw-600">{{ obj.contract_value|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</dd></div>
+      <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Auto Renew</dt><dd>{% if obj.auto_renew %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Renewal Notice</dt><dd>{{ obj.renewal_notice_days|default:"—" }} days</dd></div>
+      <div class="detail-item"><dt>Terms Summary</dt><dd>{{ obj.terms_summary|default:"—"|linebreaksbr }}</dd></div>
+      <div class="detail-item"><dt>Document</dt><dd>{% if obj.document %}{{ obj.document.name|default:"—" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:contract_activate' obj.pk %}" onsubmit="return confirm('Activate this contract?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Activate</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status == 'active' or obj.status == 'expiring' or obj.status == 'expired' %}
+          <form method="post" action="{% url 'scm:contract_renew' obj.pk %}" onsubmit="return confirm('Renew this contract?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i> Renew</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status != 'terminated' and obj.status != 'expired' %}
+          <a href="{% url 'scm:contract_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:contract_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+
+        <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+
+    {% if obj.status == 'active' or obj.status == 'expiring' or obj.status == 'draft' %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="card-body" style="border-top: 1px solid var(--border);">
+          <h3 class="card-title">Terminate this contract</h3>
+          <form method="post" action="{% url 'scm:contract_terminate' obj.pk %}" onsubmit="return confirm('Terminate this contract? This cannot be undone.');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_termination_reason">Termination reason <span class="req">*</span></label>
+              <textarea name="termination_reason" id="id_termination_reason" class="form-textarea" rows="3" required></textarea>
+              <div class="form-help">A reason is required — the termination is rejected without one.</div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Terminate contract</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endblock %}
