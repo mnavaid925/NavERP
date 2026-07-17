@@ -19,6 +19,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.crud import crud_create, crud_delete, crud_detail, crud_edit, crud_list, paginate
+# _changed builds the {field: new_value} diff (with the sensitive-field redaction list applied) that
+# crud_edit records automatically. The scm form views hand-roll their save path so the inline
+# formset commits in the same transaction as its parent, which means they bypass crud_edit — and
+# would silently lose that diff. Import it rather than duplicate the redaction logic.
+from apps.core.crud import _changed
 from apps.core.decorators import tenant_admin_required
 from apps.core.models import Party
 from apps.core.utils import write_audit_log
