@@ -9868,6 +9868,410 @@ skill + README sections were added in the same pass. Known follow-up: a maker-ch
 also the complainant can't self-investigate a grievance (left open — a single-admin tenant may be the only resolver).
 
 ---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.1 Procurement Management — plan from research-scm.md (2026-07-17)
+
+**Brand-new app** (`apps/scm` does not exist yet). This is the FIRST sub-module of Module 4 — only 4.1 is in scope
+this pass; 4.2–4.19 stay on the research doc's deferred list.
+
+## Decisions already made (encode, do not re-litigate)
+
+1. **Ownership:** SCM 4.1 OWNS the procurement transaction tables (`PurchaseRequisition`, `RFQ`, `PurchaseOrder`,
+   `GoodsReceiptNote` + their children). Module 6 (`procurement`, built much later) EXTENDS them by string-FK for
+   strategic sourcing / e-auctions / contract authoring / vendor scorecards / risk — it must NOT re-declare
+   parallel schema. Precedent: lesson **L29** ("the module that ships first owns the spine"). `NavERP-ERD.md` rows
+   for Module 4 (line 466) and Module 6 (line 468) currently say the opposite (Module 6's "Adds" column lists
+   `PurchaseRequisition, RFQ, VendorQuote, VendorScorecard, GoodsReceiptNote`; Module 4's "Reuses" column lists
+   `PurchaseOrder` as if it were spine-shared) — this is a **Close-out** item below, not a build item.
+2. **Vendor Portal bullet — DEFERRED.** Per lesson **L32**, a staff sidebar bullet must never point at a
+   login-gated portal page. This pass does NOT build vendor authentication/login. The 4.1 "Vendor Portal" bullet
+   ("view POs, acknowledge orders, update shipment status") is realized as **staff-facing fields + a staff action**
+   on `PurchaseOrder` (`acknowledged_at`, `acknowledged_note`, `promised_ship_date`, set via a
+   `purchaseorder_acknowledge` view that a staff member submits on the vendor's behalf — phone/email intake, not a
+   vendor login). A true externally-authenticated supplier login is recorded under **Later passes / deferred**.
+3. **As-built facts verified by the research agent (do not re-derive, do not assume the ERD's target shape):**
+   - `core.Item` / `UOM` / `Location` / `StockMove` / `Warehouse` / `GoodsReceipt` do **not exist** anywhere in the
+     codebase. Every line model in this pass stays **free-text** (`item_description` + `sku_hint` + `uom_hint`),
+     mirroring the CRM 1.12 `PurchaseOrderLine.item_name` precedent. Lesson **L28**: when Module 4's own 4.3
+     Inventory sub-module lands `core.Item`, a follow-up migration adds a nullable `item` FK to these four line
+     tables and backfills from `sku_hint`.
+   - `Currency` / `GLAccount` / `TaxCode` / `JournalEntry` / `Bill` / `Budget` live in **`apps.accounting`**
+     (Module 2, already built), not core. FK by string: `'accounting.Currency'`, `'accounting.GLAccount'`,
+     `'accounting.Bill'`, `'accounting.Budget'`.
+   - `accounting.Bill` (`BILL-`, `apps/accounting/models/AccountsPayable/Bills.py`) is the real AP bill — the
+     three-way-match target. `accounting.Budget`/`BudgetLine` (`apps/accounting/models/Budgeting/Budgets.py`,
+     `BudgetLines.py` — `BudgetLine.gl_account` + `BudgetLine.org_unit` + `amount`) is the PR budget-check target.
+     Do **not** invent a `VendorInvoice` or a parallel SCM budget model.
+   - `core.PartyRole.ROLE_CHOICES` has both `vendor` and `supplier` (`apps/core/models/PartyRole.py`). This pass
+     tags/filters suppliers with `role__in=["supplier", "vendor"]` defensively (per the research's Coordination
+     Concern #6 — a real Party may carry both roles once Module 6 exists), not a bare `role="supplier"` equality.
+   - `crm.PurchaseOrder`/`PurchaseOrderLine` already exist (CRM 1.12, `apps/crm/models/InventoryVendor/
+     PurchaseOrders.py`, lightweight quick-order tied to `crm.ProductStock`, own `NUMBER_PREFIX="PO"`).
+     `scm.PurchaseOrder` is a **separate, canonical** model — different app_label (`crm.PurchaseOrder` vs.
+     `scm.PurchaseOrder`), no DB collision (`unique_together(tenant, number)` is per-table). Document this
+     coexistence in both modules' skills so a future pass doesn't "fix" it as a duplicate by accident.
+   - Audit helper is **`write_audit_log(user, obj, action, changes=None, tenant=None)`** from `apps.core.utils` —
+     not `log_action`.
+   - `apps/core/crud.py` gives `crud_list`/`crud_create`/`crud_edit`/`crud_detail`/`crud_delete` — views are THIN
+     wrappers. Context-var contract: list → `object_list` + `page_obj` + `q`; detail/edit → `obj`; form → `form` +
+     `is_edit`. Entities with an inline formset (every parent+lines pair here) can't use `crud_create`/`crud_edit`
+     directly — hand-roll a `_xxx_form()` helper exactly like `apps/accounting/views/AccountsPayable/Bills.py`'s
+     `_bill_form()` (`form.save(commit=False)` → set tenant → save → `formset.instance = obj` → `formset.save()` →
+     recompute totals, all inside `transaction.atomic()`).
+   - `models/_base.py` pattern: mirror `apps/accounting/models/_base.py`'s abstract `TenantOwned`
+     (tenant FK + timestamps, `related_name="+"`) and `TenantNumbered(TenantOwned)` (`NUMBER_PREFIX` + auto
+     `number` via `apps.core.utils.next_number` with a 5-retry `IntegrityError` guard).
+   - Badge classes are **colour-named** — `badge-green`/`badge-red`/`badge-amber`/`badge-info`/`badge-muted`
+     (lesson **L33**) — never `badge-success`/`-danger`/`-warning`. Run
+     `grep -n '\.badge-' static/css/theme.css` before writing any status badge.
+   - Tenant-admin seed password is **`password`** (lesson **L34**), not `password123`.
+   - `MODULE_ICONS[4] = "truck"` already set in `apps/core/navigation.py` — no change needed there.
+   - `settings.AUTH_USER_MODEL` FK is used for "who did this" people fields (`approved_by`, `received_by`, etc.),
+     matching the `accounting.Bill.approved_by` precedent — requester/approver/receiver are internal staff
+     (`User`), not `core.Party` (Party is reserved for the external supplier counterparty).
+
+## Models (from research) — 4 entity files under `models/ProcurementManagement/`
+
+### `PurchaseRequisitions.py` → `PurchaseRequisition` + `PurchaseRequisitionLine`
+- [ ] **`PurchaseRequisition`** (`TenantNumbered`) [`REQ-`]
+  - `requester` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank, `related_name="requisitions_requested"`
+    (driver: PR creation form, all 12 surveyed)
+  - `department` — FK `'core.OrgUnit'`, `SET_NULL`, null/blank, `related_name="purchase_requisitions"` (driver:
+    "cost-center/department coding" — SAP Ariba, NetSuite, Procurify, Precoro)
+  - `status` — `CharField` choices `draft/submitted/approved/rejected/converted/cancelled`, default `draft`
+    (driver: multi-tier approval routing — SAP Ariba, Coupa, Procurify, Precoro; state machine, not a routing
+    engine per research)
+  - `required_date` — `DateField` (driver: PR line-level required-by date, table-stakes)
+  - `justification` — `TextField`, blank (driver: PR business-justification field, table-stakes)
+  - `estimated_total` — `DecimalField(12,2)`, default 0, `editable=False` (recomputed from lines in the form
+    helper, never on the form — mirrors `Bill.subtotal`)
+  - `approved_by` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank, `editable=False`
+  - `approved_at` — `DateTimeField`, null/blank, `editable=False`
+  - `rejection_reason` — `TextField`, blank (driver: approval-routing rejection step)
+  - Reuses `core.OrgUnit`; new tenant-scoped table. Budget check (driver: Procurify/Coupa/Precoro) is a
+    **view-time query** against `accounting.Budget`/`BudgetLine` (`gl_account` ∈ the PR's line `account_code`s,
+    `org_unit=department`) shown as a warning badge on the detail page — **no stored budget FK**, per research
+    ("light integration... don't re-model budgets in SCM"). Duplicate-requisition detection (driver: Coupa-class
+    capability) is a **derived query** on the create form (recent PRs by the same `requester` with an overlapping
+    `department`/similar line `item_description` in the last 7 days) — no new field.
+- [ ] **`PurchaseRequisitionLine`** (`TenantOwned`)
+  - `requisition` — FK `PurchaseRequisition`, `CASCADE`, `related_name="lines"`
+  - `item_description` — `CharField(255)` (free-text — `core.Item` doesn't exist, see decision #3)
+  - `sku_hint` — `CharField(64)`, blank
+  - `uom_hint` — `CharField(32)`, blank, default `"ea"`
+  - `quantity` — `DecimalField(12,2)`, default 1
+  - `estimated_unit_price` — `DecimalField(12,2)`, default 0
+  - `account_code` — FK `'accounting.GLAccount'`, `SET_NULL`, null/blank, `related_name="requisition_lines"`
+    (driver: "cost-center/account coding" — enables the budget-check query above)
+  - `line_total` — `@property` (derived, `quantity * estimated_unit_price`, never stored)
+
+### `Rfqs.py` → `RFQ` + `RFQLine` + `RFQVendor` + `RFQQuote` + `RFQQuoteLine`
+- [ ] **`RFQ`** (`TenantNumbered`) [`RFQ-`]
+  - `requisition` — FK `PurchaseRequisition`, `SET_NULL`, null/blank, `related_name="rfqs"` (RFQs can start
+    standalone, driver: research explicit)
+  - `title` — `CharField(255)`
+  - `status` — choices `draft/sent/closed/awarded/cancelled`, default `draft`
+  - `response_deadline` — `DateField`, null/blank (driver: "deadline, response window" — SAP Ariba/JAGGAER/GEP
+    SMART/Precoro)
+  - `awarded_quote` — FK `'scm.RFQQuote'`, `SET_NULL`, null/blank, `editable=False`, `related_name="+"` (set by
+    the award action; string-FK to a model defined later in the same file is fine)
+  - `notes` — `TextField`, blank
+- [ ] **`RFQLine`** (`TenantOwned`) — `rfq` FK CASCADE `related_name="lines"`, `item_description`, `sku_hint`,
+  `uom_hint` (default `"ea"`), `quantity` — mirrors `PurchaseRequisitionLine` shape (driver: multi-line RFQ)
+- [ ] **`RFQVendor`** (`TenantOwned`) — invited supplier: `rfq` FK CASCADE `related_name="invited_vendors"`,
+  `vendor` FK `'core.Party'` `PROTECT` `related_name="rfq_invitations"` (filtered `role__in=["supplier","vendor"]`
+  in the form), `invited_at` `DateTimeField` null/blank `editable=False`, `responded_at` `DateTimeField` null/blank
+  `editable=False`; `unique_together("rfq","vendor")` (driver: "one RFQ, many invited suppliers" — SAP Ariba,
+  JAGGAER, GEP SMART, Precoro)
+- [ ] **`RFQQuote`** (`TenantOwned`) — `rfq` FK CASCADE `related_name="quotes"`, `vendor` FK `'core.Party'`
+  `PROTECT` `related_name="rfq_quotes"`, `quoted_at` `DateField` null/blank, `valid_until` `DateField` null/blank,
+  `total_amount` `DecimalField(12,2)` default 0 `editable=False` (recomputed from quote lines), `is_selected`
+  `BooleanField` default `False` (view enforces exactly one `True` per RFQ on award), `notes` `TextField` blank
+  (driver: "vendor quote capture" — SAP Ariba, JAGGAER, GEP SMART, Precoro)
+- [ ] **`RFQQuoteLine`** (`TenantOwned`) — `quote` FK CASCADE `related_name="lines"`, `rfq_line` FK `RFQLine`
+  `SET_NULL` null/blank `related_name="quote_lines"` (which RFQ line this responds to — enables line-by-line
+  comparison), `unit_price` `DecimalField(12,2)`, `lead_time_days` `PositiveIntegerField` null/blank, `terms`
+  `CharField(255)` blank (driver: "collect each vendor's price/lead-time/terms per RFQ line and compare" — SAP
+  Ariba, JAGGAER, GEP SMART, Precoro — this is what the `rfq_compare` page renders side-by-side)
+
+### `PurchaseOrders.py` → `PurchaseOrder` + `PurchaseOrderLine`
+- [ ] **`PurchaseOrder`** (`TenantNumbered`) [`PO-`] — **NOT** `crm.PurchaseOrder`, a distinct app-owned model
+  - `vendor` — FK `'core.Party'`, `PROTECT`, `related_name="scm_purchase_orders"` (`role__in=["supplier","vendor"]`
+    filtered in the form)
+  - `rfq_quote` — FK `'scm.RFQQuote'`, `SET_NULL`, null/blank, `editable=False`, `related_name="purchase_orders"`
+    (set by the RFQ-award action, driver: "RFQ→PO conversion (award)")
+  - `requisition` — FK `PurchaseRequisition`, `SET_NULL`, null/blank, `related_name="purchase_orders"` (set when
+    converted directly, no RFQ)
+  - `status` — choices `draft/approved/sent/acknowledged/partially_received/received/closed/cancelled`, default
+    `draft` (driver: full PO lifecycle status machine — all 12 surveyed)
+  - `order_date` — `DateField`
+  - `expected_date` — `DateField`, null/blank
+  - `total_amount` — `DecimalField(12,2)`, default 0, `editable=False` (recomputed from lines)
+  - `version` — `PositiveSmallIntegerField`, default 1, `editable=False` (bumped by the edit view whenever a
+    `draft`/`approved` PO's lines are re-saved — this + `AuditLog`'s per-field diff (`write_audit_log(...,
+    changes=...)`) IS the "amendment trail", not a separate model — driver: "amendment... version trail")
+  - `approved_by` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank, `editable=False`
+  - `acknowledged_at` — `DateTimeField`, null/blank, `editable=False`
+  - `acknowledged_note` — `TextField`, blank (staff-recorded vendor message)
+  - `promised_ship_date` — `DateField`, null/blank (driver: "Vendor Portal" bullet — staff-facing per decision #2)
+  - `cancelled_at` — `DateTimeField`, null/blank, `editable=False`
+  - `cancellation_reason` — `TextField`, blank (set only via the `purchaseorder_cancel` action form)
+  - `notes` — `TextField`, blank
+  - Do **not** reuse `crm.PurchaseOrder` — different identity/number sequence and RFQ/GRN linkage (research
+    Coordination Concern #3); note the two-`PurchaseOrder`-models coexistence in the `scm` skill (Close-out).
+- [ ] **`PurchaseOrderLine`** (`TenantOwned`) — `purchase_order` FK CASCADE `related_name="lines"`,
+  `item_description`, `sku_hint`, `uom_hint` (default `"ea"`), `quantity` `DecimalField(12,2)`, `unit_price`
+  `DecimalField(12,2)`, `account_code` FK `'accounting.GLAccount'` `SET_NULL` null/blank
+  `related_name="purchase_order_lines"`, `received_quantity` `DecimalField(12,2)` default 0 `editable=False`
+  (rollup from `GoodsReceiptLine`, updated by a service function on GRN save), `line_total` `@property` (derived)
+
+### `GoodsReceiptNotes.py` → `GoodsReceiptNote` + `GoodsReceiptLine`
+- [ ] **`GoodsReceiptNote`** (`TenantNumbered`) [`GRN-`]
+  - `purchase_order` — FK `PurchaseOrder`, `PROTECT`, `related_name="receipts"`
+  - `received_date` — `DateField`
+  - `received_by` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank, `related_name="+"`
+  - `status` — choices `pending/partial/complete/rejected`, default `pending`
+  - `bill` — FK `'accounting.Bill'`, `SET_NULL`, null/blank, `related_name="goods_receipts"` (the vendor-invoice
+    leg for 3-way match — **reuses the real AP `Bill`**, never a new `VendorInvoice`)
+  - `match_status` — choices `unmatched/matched/variance`, default `unmatched`, `editable=False` (system-computed
+    by `recompute_match()`)
+  - `match_notes` — `TextField`, blank, `editable=False` (system-written variance detail, e.g. "Qty variance: PO
+    line 1 ordered 10, received 8; Price variance: PO 100.00 vs Bill 105.00 (+5.0%, tolerance 2%)")
+  - `notes` — `TextField`, blank
+  - `recompute_match()` service method: compares each `GoodsReceiptLine` (`ordered_quantity`/`received_quantity`)
+    against its `PurchaseOrderLine` (`quantity`/`unit_price`) and, when `bill` is set, the linked `accounting.Bill`
+    line totals, within a fixed tolerance (qty: received ≤ ordered; price: ±2%) and sets `match_status`/
+    `match_notes` (driver: "automatic variance detection on qty/price" — SAP Ariba, Coupa, NetSuite, Precoro).
+    Triggered by a `goodsreceiptnote_run_match` POST action (manual button, not a cross-app signal — `Bill` lives
+    in `apps.accounting`).
+- [ ] **`GoodsReceiptLine`** (`TenantOwned`) — `receipt` FK CASCADE `related_name="lines"`, `po_line` FK
+  `PurchaseOrderLine` `PROTECT` `related_name="receipt_lines"`, `ordered_quantity` `DecimalField(12,2)`
+  `editable=False` (snapshotted from `po_line.quantity` when the line is created — the PO can still be amended
+  later, so this is a point-in-time record, not a live mirror), `received_quantity` `DecimalField(12,2)` default 0,
+  `quality_status` choices `accepted/rejected/quarantined` default `accepted` (driver: "partial receipts,
+  quantity/quality accept-reject" — all surveyed), `notes` `TextField` blank
+  - On save: bump the parent `po_line.received_quantity` rollup and flip `GoodsReceiptNote.status`/
+    `PurchaseOrder.status` toward `partial`/`received`/`partially_received` as appropriate (service function, not
+    a signal, called from the GRN form helper inside the same `transaction.atomic()`).
+
+*(8 concrete tables total — exactly matches the research's recommended scope, packaged into the 4 entity files the
+task specifies.)*
+
+## Backend (`apps/scm/`)
+
+- [ ] `apps/scm/__init__.py`, `apps/scm/apps.py` (`ScmConfig`, `name = "apps.scm"`, `verbose_name = "Supply Chain
+  Management"`)
+- [ ] `models/_base.py` — django imports + `ZERO = Decimal("0")` + abstract `TenantOwned`/`TenantNumbered` (copy
+  the `apps/accounting/models/_base.py` shape, importing `next_number` from `apps.core.utils`)
+- [ ] `models/ProcurementManagement/PurchaseRequisitions.py`, `Rfqs.py`, `PurchaseOrders.py`,
+  `GoodsReceiptNotes.py` — the 8 model classes above, each `from apps.scm.models._base import *`
+- [ ] `models/ProcurementManagement/__init__.py` — re-export all 8
+- [ ] `models/__init__.py` — `from .ProcurementManagement import *`
+- [ ] `forms/_common.py` — `from apps.core.forms import TenantModelForm` (re-export) + any shared bits
+- [ ] `forms/ProcurementManagement/PurchaseRequisitions.py` — `PurchaseRequisitionForm` (excludes `tenant`,
+  `number`, `status`, `estimated_total`, `approved_by`, `approved_at`, `rejection_reason`) +
+  `PurchaseRequisitionLineFormSet` (`inlineformset_factory`, excludes nothing extra, `extra=1`, `can_delete=True`)
+- [ ] `forms/ProcurementManagement/Rfqs.py` — `RFQForm` (excludes system fields) + `RFQLineFormSet` +
+  `RFQVendorForm` (single-vendor-add, scoped `queryset` to `role__in=["supplier","vendor"]`) + `RFQQuoteForm`
+  (excludes `total_amount`, `is_selected`) + `RFQQuoteLineFormSet`
+- [ ] `forms/ProcurementManagement/PurchaseOrders.py` — `PurchaseOrderForm` (excludes `tenant`, `number`,
+  `status`, `total_amount`, `version`, `approved_by`, `acknowledged_*`, `cancelled_*`) + `PurchaseOrderLineFormSet`
+  + `PurchaseOrderAcknowledgeForm` (`acknowledged_note`, `promised_ship_date` only) + `PurchaseOrderCancelForm`
+  (`cancellation_reason` only)
+- [ ] `forms/ProcurementManagement/GoodsReceiptNotes.py` — `GoodsReceiptNoteForm` (excludes `status`,
+  `match_status`, `match_notes`) + `GoodsReceiptLineFormSet` (`po_line` queryset limited to the parent PO's lines
+  with `received_quantity < quantity`) + `GoodsReceiptBillLinkForm` (`bill` only, queryset filtered to
+  `accounting.Bill.objects.filter(tenant=..., party=purchase_order.vendor)`)
+- [ ] `forms/ProcurementManagement/__init__.py` + `forms/__init__.py` re-exports
+- [ ] `views/_common.py` — shared imports (`login_required`, `tenant_admin_required` from `apps.core.decorators`,
+  `crud_list`/`crud_detail`/`crud_delete` from `apps.core.crud`, `write_audit_log`, `transaction`, `Party`, `Q`)
+- [ ] `views/_helpers.py` — `_supplier_parties(tenant)` (`Party.objects.filter(tenant=t,
+  roles__role__in=["supplier","vendor"]).distinct()`), `_recalc_requisition_total`, `_recalc_po_total`,
+  `_create_po_from_quote(quote, requisition=None)` (RFQ-award service function — copies vendor + quote lines into
+  a new draft `PurchaseOrder`/`PurchaseOrderLine`), `_budget_check(requisition)` (queries
+  `accounting.Budget`/`BudgetLine` for the requisition's `department`/line `account_code`s, returns a warning
+  string or `None`), `_duplicate_requisitions(requester, department, since_days=7)`
+- [ ] `views/ProcurementManagement/PurchaseRequisitions.py` — `purchaserequisition_list/create/edit/detail/delete`
+  (hand-rolled `_requisition_form()` for the inline formset, `crud_list`/`crud_detail`/`crud_delete` otherwise) +
+  `purchaserequisition_submit` (POST, draft→submitted), `purchaserequisition_approve` (POST,
+  `@tenant_admin_required`, submitted→approved, sets `approved_by`/`approved_at`), `purchaserequisition_reject`
+  (POST, `@tenant_admin_required`, requires `rejection_reason`), `purchaserequisition_cancel` (POST),
+  `purchaserequisition_convert_to_po` (POST, approved→converted, creates a draft `PurchaseOrder` + lines copied
+  from the requisition lines, redirects to `purchaseorder_edit` so the user picks a vendor)
+- [ ] `views/ProcurementManagement/Rfqs.py` — `rfq_list/create/edit/detail/delete` (hand-rolled `_rfq_form()`) +
+  `rfq_send` (POST, draft→sent, stamps every `RFQVendor.invited_at`), `rfq_close` (POST), `rfq_invite_vendor`
+  (POST, adds an `RFQVendor` row), `rfq_remove_vendor` (POST), `rfq_quote_create/edit/delete` (hand-rolled
+  `_quote_form()` for the quote-line formset, stamps the vendor's `RFQVendor.responded_at`), `rfq_compare` (GET —
+  side-by-side quote grid, one column per vendor, one row per `RFQLine`), `rfq_award` (POST on a quote pk — sets
+  `is_selected`, flips every sibling quote to `False`, `RFQ.status="awarded"`, `RFQ.awarded_quote`, calls
+  `_create_po_from_quote`, redirects to the new PO's detail page)
+- [ ] `views/ProcurementManagement/PurchaseOrders.py` — `purchaseorder_list/create/edit/detail/delete`
+  (hand-rolled `_po_form()`; `edit` gated to `status in ("draft","approved")`, bumps `version` when
+  `status != "draft"`) + `purchaseorder_approve` (POST, `@tenant_admin_required`), `purchaseorder_send` (POST,
+  approved→sent), `purchaseorder_acknowledge` (GET form + POST, sets `acknowledged_at=now()` +
+  `acknowledged_note`/`promised_ship_date`, status→acknowledged — the "Vendor Portal" staff action), `
+  purchaseorder_cancel` (GET form + POST, requires `cancellation_reason`), `purchaseorder_vendor_ack` (GET, thin
+  redirect to `purchaseorder_list` with `?status=sent` — the distinct "Vendor Portal" sidebar destination, see
+  Wire-up)
+- [ ] `views/ProcurementManagement/GoodsReceiptNotes.py` — `goodsreceiptnote_list/create/edit/detail/delete`
+  (hand-rolled `_grn_form()`; line formset's `po_line` choices limited to the parent PO's open lines; on save,
+  rolls up `PurchaseOrderLine.received_quantity` and advances `PurchaseOrder.status`) + `goodsreceiptnote_run_match`
+  (POST, calls `obj.recompute_match()`), `goodsreceiptnote_link_bill` (GET form + POST, sets `bill`, then calls
+  `recompute_match()`)
+- [ ] `views/ProcurementManagement/__init__.py` + `views/__init__.py` re-exports
+- [ ] `urls/__init__.py` — `app_name = "scm"` + concatenates each entity module's `urlpatterns` (literal routes —
+  `rfq/<int:pk>/compare/`, `rfq/<int:pk>/award/quote/<int:quote_pk>/` — before the generic `<int:pk>/edit/` ones)
+- [ ] `urls/ProcurementManagement/PurchaseRequisitions.py`, `Rfqs.py`, `PurchaseOrders.py`,
+  `GoodsReceiptNotes.py` — the 5 CRUD routes per model + the custom-action routes above
+- [ ] `admin.py` — flat, `ModelAdmin` + `TabularInline` for every model (mirror `apps/accounting/admin.py`'s
+  `BudgetLineInline` shape), `list_display`/`list_filter`/`search_fields`/`readonly_fields=("number", ...)`
+- [ ] Migrations — `python manage.py makemigrations scm` (single initial migration is fine for a new app)
+- [ ] `management/__init__.py`, `management/commands/__init__.py`, `management/commands/seed_scm.py` — idempotent
+  (`if PurchaseRequisition.objects.filter(tenant=tenant).exists(): print("...Use --flush..."); continue`-style
+  per-tenant guard), per tenant (Acme + Globex):
+  - 2–3 `core.Party` + `PartyRole(role="supplier")` suppliers (reuse existing ones if the tenant already has
+    `role="vendor"` Parties from another module's seeder — filter `role__in=["supplier","vendor"]` before
+    creating new ones)
+  - reuse existing `core.OrgUnit` department rows if present, else create 1–2 `kind="department"` rows
+  - 2–3 `PurchaseRequisition` + lines (mixed statuses: draft, submitted, approved)
+  - 1 `RFQ` (from one approved requisition) with 2 invited `RFQVendor` rows, 2 `RFQQuote` + lines, one
+    `is_selected=True`, `status="awarded"`
+  - 1 `PurchaseOrder` created via the RFQ award path + 1 more created directly (`requisition` set, no
+    `rfq_quote`) — mixed statuses (sent, acknowledged)
+  - 1–2 `GoodsReceiptNote` + lines against the POs — one left `match_status="unmatched"` (no bill linked), one
+    linked to a freshly created `accounting.Bill`/`BillLine` (reusing accounting's real model, `party=vendor`)
+    and run through `recompute_match()` to demonstrate both a `"matched"` and a `"variance"` outcome
+  - print tenant-admin login instructions (`admin_acme` / `password`, `admin_globex` / `password`) and the
+    standard "Superuser 'admin' has no tenant" warning
+
+## Wire-up
+
+- [ ] `config/settings.py` `INSTALLED_APPS` — add `"apps.scm"` (after `"apps.hrm"`)
+- [ ] `config/urls.py` — add `path("scm/", include("apps.scm.urls")),  # /scm/, purchase-requisitions/rfqs/pos/grn`
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["4.1"]` — maps the 5 exact NavERP.md 4.1 bullet strings:
+  ```
+  "4.1": {
+      "Purchase Requisition": "scm:purchaserequisition_list",
+      "Request for Quotation (RFQ)": "scm:rfq_list",
+      "Purchase Order (PO) Management": "scm:purchaseorder_list",
+      "Vendor Portal": "scm:purchaseorder_vendor_ack",   # staff-facing (L32) — filtered PO-ack queue, NOT a login-gated portal
+      "Invoice Reconciliation": "scm:goodsreceiptnote_list",
+  },
+  ```
+  (`MODULE_ICONS[4]` already `"truck"` — no change.) L30 human-sidebar-pass: confirm all 5 bullets land on 200
+  staff pages with visibly distinct content (the Vendor Portal redirect must show a *filtered* PO list, not the
+  bare list, to be a meaningfully distinct destination from the PO Management bullet).
+
+## Templates (`templates/scm/procurement/`)
+
+- [ ] `procurement/purchase_requisition/list.html` — filter bar (`status`, `department`) reflecting
+  `request.GET`, Actions column (view/edit/delete — edit/delete only while `draft`), submit/approve/reject/cancel/
+  convert-to-PO buttons per row status, pagination, empty-state
+- [ ] `procurement/purchase_requisition/detail.html` — header + line table, budget-check warning badge (from
+  `_budget_check`), duplicate-requisition warning (from `_duplicate_requisitions`, shown on create too), Actions
+  sidebar (submit/approve/reject/cancel/convert-to-PO conditional on `status`, Back to List)
+- [ ] `procurement/purchase_requisition/form.html` — header form + inline `PurchaseRequisitionLineFormSet` (JS
+  add/remove row, mirrors `accounting/payable/bill/form.html`'s formset pattern)
+- [ ] `procurement/rfq/list.html` — filter bar (`status`), Actions column, empty-state
+- [ ] `procurement/rfq/detail.html` — header, invited vendors (`RFQVendor`) with invite/remove mini-forms,
+  submitted quotes list, Actions sidebar (send/close/award — award links into `compare.html`)
+- [ ] `procurement/rfq/form.html` — header form + inline `RFQLineFormSet`
+- [ ] `procurement/rfq/compare.html` — side-by-side quote comparison grid (rows = `RFQLine`, columns = each
+  vendor's `RFQQuote`/`RFQQuoteLine` price+lead_time+terms, total per vendor), an "Award" button per vendor column
+  (POSTs `rfq_award`)
+- [ ] `procurement/purchase_order/list.html` — filter bar (`status`, `vendor`) reflecting `request.GET`
+  (`?status=sent` must pre-select the Sent option when arriving via the Vendor Portal redirect), Actions column
+- [ ] `procurement/purchase_order/detail.html` — header + line table (`received_quantity` progress), vendor-ack
+  panel (acknowledged_at/note/promised_ship_date), Actions sidebar (approve/send/acknowledge/cancel conditional on
+  `status`, link to any `receipts`)
+- [ ] `procurement/purchase_order/form.html` — header form + inline `PurchaseOrderLineFormSet`
+- [ ] `procurement/goods_receipt_note/list.html` — filter bar (`status`, `match_status`), Actions column
+- [ ] `procurement/goods_receipt_note/detail.html` — header + line table (ordered/received/quality_status),
+  match-status badge (colour-named, L33: `matched`→green, `variance`→amber, `unmatched`→muted) + `match_notes`,
+  "Link Bill" + "Run 3-Way Match" actions
+- [ ] `procurement/goods_receipt_note/form.html` — header form + inline `GoodsReceiptLineFormSet` (PO-line picker
+  limited to open lines)
+- [ ] `templates/scm/scm_overview.html` — module landing page (KPI tiles: open requisitions, RFQs awaiting quotes,
+  POs pending acknowledgement, unmatched GRNs) — standalone page per the Template Folder Structure rule 6
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` + `migrate` (fresh app — confirm one clean initial migration, zero
+  `--check` drift on a second run)
+- [ ] `python manage.py seed_scm` × 2 — second run must be a no-op per tenant (idempotency check)
+- [ ] `python manage.py check` — zero errors
+- [ ] `temp/` smoke sweep: every `scm:*` url name reverses + returns 200/302 (`Client(raise_request_exception=
+  False)`, L8); no `{#`/`{% comment` leaks in any rendered `scm/procurement/*` template; cross-tenant IDOR on
+  every detail/edit/delete (`purchaserequisition`, `rfq`, `rfqquote` via `rfq_compare`, `purchaseorder`,
+  `goodsreceiptnote`) → 404, not the other tenant's data; int-FK filter guard (`?vendor=abc`, `?department=abc`) →
+  no 500 (L11); pagination on page 1 with ≤15 rows doesn't 500 (L9)
+- [ ] Sidebar: log in as `admin_acme`/`password` (L34) and confirm all 5 sub-module 4.1 bullets show **Live**
+  (not "On the roadmap") and land on distinct, populated pages
+
+## Close-out
+
+- [ ] `code-reviewer` → apply findings → commit
+- [ ] `explorer` → apply findings → commit
+- [ ] `frontend-reviewer` → apply findings → commit (pay special attention to badge classes, L33 — this is a
+  brand-new template set with 4 new status-badge families: `PurchaseRequisition.status`, `RFQ.status`,
+  `PurchaseOrder.status`, `GoodsReceiptNote.status`/`match_status`)
+- [ ] `performance-reviewer` → apply findings → commit (watch for the `rfq_compare` grid — N+1 across
+  `quotes__lines__rfq_line`, needs `prefetch_related`)
+- [ ] `qa-smoke-tester` → apply findings → commit
+- [ ] `security-reviewer` → apply findings → commit (mass-assignment on `PurchaseOrderForm`/
+  `PurchaseRequisitionForm` — confirm `status`/`total_amount`/`approved_*`/`version`/`cancelled_*` really are
+  excluded, not just hidden in the template, per lesson L20's "exclude, don't mask" rule)
+- [ ] `test-writer` → apply output → commit
+- [ ] `.claude/skills/scm/SKILL.md` — document the as-built module (models, urls, templates, seeder,
+  conventions, the two-`PurchaseOrder`-models coexistence with `crm`, the deferred vendor-portal-login note, the
+  future `core.Item` migration note) → commit
+- [ ] `README.md` — add `apps/scm` to "What's implemented today", the backend-organization tree, and the module
+  roadmap table (Module 4 row: 4.1 built, 4.2–4.19 roadmap) → commit
+- [ ] **`NavERP-ERD.md` module coverage map update** (the ownership decision, made concrete):
+  - Module 4 row (line 466) "Reuses" column: drop `PurchaseOrder`/`SalesOrder`/`WorkOrder` (not actually spine —
+    `PurchaseOrder` is now Module-4-OWNED, not reused; `SalesOrder`/`WorkOrder` are still-unbuilt future refs, not
+    reuse targets today); add `accounting.Bill` · `accounting.Budget` · `accounting.GLAccount` ·
+    `accounting.Currency` · `core.OrgUnit`. "Adds" column: prepend `PurchaseRequisition, RFQ, RFQQuote,
+    PurchaseOrder, GoodsReceiptNote` ahead of the existing deferred `Shipment, Carrier, RoutePlan, DemandForecast,
+    ReturnAuthorization, BillOfMaterials`.
+  - Module 6 row (line 468) "Reuses" column: replace the implied-parallel `PurchaseOrder` with `scm.
+    PurchaseRequisition` · `scm.RFQ`/`RFQQuote` · `scm.PurchaseOrder` · `scm.GoodsReceiptNote` (extend-by-FK, per
+    decision #1). "Adds" column: drop `PurchaseRequisition, RFQ, GoodsReceiptNote` (now Module 4's); keep
+    `VendorScorecard`; reword `VendorQuote` → "wraps `scm.RFQQuote`" or drop if Module 6's own research later
+    confirms it needs no separate table.
+  - Commit as its own file.
+- [ ] **`.claude/tasks/lessons.md` — new entry (L36)**: "A module that ships transaction tables before the ERD's
+  'intended owner' module exists should update the ERD's module-coverage-map row for BOTH modules in the same
+  pass (not just note the conflict) — SCM 4.1 built `PurchaseRequisition/RFQ/PurchaseOrder/GoodsReceiptNote`
+  before Module 6 (Procurement) exists; `NavERP-ERD.md` line 466/468 said the opposite ownership. Generalizes L29
+  ('the module that ships first owns the spine') into a concrete close-out checklist item, not just a code
+  comment." Commit as its own file.
+
+## Later passes / deferred
+
+- **Vendor self-service portal (real login)** — `Party`-linked portal-user auth (mirrors CRM 1.4/1.12's
+  `CustomerPortalAccess`/`PartnerPortalAccess` pattern) so a supplier can log in directly and acknowledge/upload
+  ASNs themselves, rather than staff recording it on their behalf. Deferred per decision #2/L32.
+- **PO dispatch to vendor (email/EDI)** — Django email send-out is buildable when this pass's core CRUD is done;
+  EDI dispatch is integration/later.
+- **Requisition templates for recurring orders** (`is_template` flag) — low priority, research flagged as
+  fine-to-defer.
+- **Full configurable multi-tier approval-routing engine** (delegation-of-authority, escalation, department-based
+  routing rules) — this pass ships a simple 2-state (submit→approve/reject) machine only; the rule engine is
+  explicitly Module 6 territory per the research's Coordination Concern #1.
+- **Full budget enforcement / encumbrance accounting** (reserve on submit, release on reject/cancel) — this pass
+  ships a read-only warning check against `accounting.Budget`/`BudgetLine` only.
+- **`core.Item` migration** — once 4.3 Inventory Management lands `core.Item`/`UOM`, add a nullable `item` FK to
+  `PurchaseRequisitionLine`/`RFQLine`/`PurchaseOrderLine`/`GoodsReceiptLine` and backfill from `sku_hint`.
+- **Landed cost allocation** (freight/customs/insurance rolled into GRN cost, posted to `JournalEntry`) — needs
+  4.3's valuation first (research 4.18).
+- **4.2–4.19** (SRM, Inventory, WMS, OMS, TMS, Demand Planning, Manufacturing, QMS, Returns, Analytics,
+  Contract & Compliance, Asset Mgmt, Labor, Cold Chain, Customer Portal, 3PL, Finance Integration, API Gateway) —
+  full list and ownership flags already captured in `.claude/tasks/research-scm.md`; carried forward unchanged.
+
+## Review notes
+(filled in at the end)
+
+---
 # Module 3 — HRM — Sub-module 3.41 Employee Engagement & Wellbeing (hrm) — plan from research-engagement-wellbeing.md (2026-07-16)
 
 **EXTENDS the existing `apps/hrm` app (already built through 3.40) — no new Django app, no new
