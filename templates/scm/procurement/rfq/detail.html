@@ -69,7 +69,11 @@
               <td>{{ v.invited_at|date:"M d, Y"|default:"Not sent" }}</td>
               <td>{{ v.contact_note|default:"—" }}</td>
               <td>
-                {% if v.has_responded %}
+                {% comment %}
+                  `responded` is set by rfq_detail from the quotes it already holds. Do NOT use the
+                  RFQVendor.has_responded property here — it costs an .exists() query per row.
+                {% endcomment %}
+                {% if v.responded %}
                   <span class="badge badge-green">Responded</span>
                 {% else %}
                   <span class="badge badge-muted">Awaiting</span>
