@@ -777,6 +777,16 @@ LIVE_LINKS = {
         "Vendor Portal": "scm:purchaseorder_list?status=sent",  # bullet (orders awaiting vendor acknowledgement)
         "Invoice Reconciliation": "scm:goodsreceipt_list",      # bullet (GRN + 3-way match vs accounting.Bill)
     },
+    # 4.2 Supplier Relationship Management — SRM on the core.Party supplier spine (ships-first owner of
+    # the supplier scorecard/contract/risk tables per L29; Module 6 extends by FK). Scorecards derive
+    # delivery/quality/price/responsiveness from real 4.1 GRN + RFQQuote signals.
+    "4.2": {
+        "Supplier Onboarding": "scm:supplierprofile_list",       # bullet (qualification + due diligence)
+        "Supplier Scorecard": "scm:scorecard_list",              # bullet (signal-derived performance rating)
+        "Contract Management": "scm:contract_list",              # bullet (renewal alerts + T&C)
+        "Supplier Catalog Management": "scm:catalog_list",       # bullet (free-text price lists, pending core.Item)
+        "Risk Management": "scm:riskassessment_list",            # bullet (financial/geo/compliance/operational)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
