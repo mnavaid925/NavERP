@@ -12,6 +12,11 @@ from .ProcurementManagement.PurchaseRequisitions import urlpatterns as _procurem
 from .ProcurementManagement.Rfqs import urlpatterns as _procurement_rfqs
 from .ProcurementManagement.PurchaseOrders import urlpatterns as _procurement_purchaseorders
 from .ProcurementManagement.GoodsReceiptNotes import urlpatterns as _procurement_goodsreceiptnotes
+from .SupplierRelationshipManagement.SupplierProfiles import urlpatterns as _srm_supplierprofiles
+from .SupplierRelationshipManagement.SupplierScorecards import urlpatterns as _srm_scorecards
+from .SupplierRelationshipManagement.SupplierContracts import urlpatterns as _srm_contracts
+from .SupplierRelationshipManagement.SupplierCatalogs import urlpatterns as _srm_catalogs
+from .SupplierRelationshipManagement.SupplierRiskAssessments import urlpatterns as _srm_riskassessments
 
 
 app_name = "scm"
@@ -22,4 +27,9 @@ urlpatterns = [
     *_procurement_rfqs,                  # ProcurementManagement/Rfqs (incl. quotes)
     *_procurement_purchaseorders,        # ProcurementManagement/PurchaseOrders
     *_procurement_goodsreceiptnotes,     # ProcurementManagement/GoodsReceiptNotes
+    *_srm_supplierprofiles,              # SupplierRelationshipManagement/SupplierProfiles
+    *_srm_scorecards,                    # SupplierRelationshipManagement/SupplierScorecards
+    *_srm_contracts,                     # SupplierRelationshipManagement/SupplierContracts
+    *_srm_catalogs,                      # SupplierRelationshipManagement/SupplierCatalogs
+    *_srm_riskassessments,               # SupplierRelationshipManagement/SupplierRiskAssessments
 ]
