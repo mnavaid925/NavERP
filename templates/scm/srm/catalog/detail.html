@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'draft' %}slate{% elif obj.status == 'expired' %}red{% elif obj.status == 'archived' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:catalog_list' %}">Supplier Catalogs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Valid From</dt><dd>{{ obj.valid_from|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Valid Until</dt><dd>{{ obj.valid_until|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Items</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>SKU</th><th>UOM</th><th>Unit Price</th><th>Lead Time (days)</th><th>Min Order Qty</th><th>Active</th></tr></thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td>{{ item.item_name|default:"—" }}</td>
+              <td>{{ item.sku|default:"—" }}</td>
+              <td>{{ item.uom|default:"—" }}</td>
+              <td>{{ item.unit_price|floatformat:2 }}</td>
+              <td>{{ item.lead_time_days|default:"—" }}</td>
+              <td>{{ item.min_order_qty|default:"—" }}</td>
+              <td>
+                {% if item.is_active %}
+                  <span class="badge badge-green">Yes</span>
+                {% else %}
+                  <span class="badge badge-muted">No</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list-checks"></i><p>No items on this catalog.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:catalog_activate' obj.pk %}" onsubmit="return confirm('Activate this catalog?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Activate</button>
+          </form>
+        {% endif %}
+        {% if obj.status != 'archived' %}
+          <a href="{% url 'scm:catalog_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'draft' or obj.status == 'archived' %}
+          <form method="post" action="{% url 'scm:catalog_delete' obj.pk %}" onsubmit="return confirm('Delete this catalog?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:catalog_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
