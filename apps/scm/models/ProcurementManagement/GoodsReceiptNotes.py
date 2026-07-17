@@ -57,6 +57,8 @@ class GoodsReceiptNote(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="scm_grn_tenant_status_idx"),
             models.Index(fields=["tenant", "match_status"], name="scm_grn_tenant_match_idx"),
+            # 4.2 SupplierScorecard.recompute_from_signals filters received receipts by date range.
+            models.Index(fields=["tenant", "receipt_date"], name="scm_grn_tenant_date_idx"),
         ]
 
     @property
