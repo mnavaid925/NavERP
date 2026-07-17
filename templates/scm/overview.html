@@ -103,4 +103,17 @@
       </div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Supplier Management</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:supplierprofile_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Suppliers</a>
+        <a href="{% url 'scm:scorecard_list' %}" class="btn btn-outline"><i data-lucide="award"></i> Scorecards</a>
+        <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Contracts</a>
+        <a href="{% url 'scm:catalog_list' %}" class="btn btn-outline"><i data-lucide="book"></i> Catalogs</a>
+        <a href="{% url 'scm:riskassessment_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Risk</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
