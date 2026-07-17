@@ -1,5 +1,7 @@
 """SCM 4.1 Procurement Management — PurchaseRequisitions views."""
 from apps.scm.views._common import *  # noqa: F401,F403
+# `import *` skips underscore-prefixed names, so private helpers need an explicit import.
+from apps.scm.views._common import _changed
 from apps.scm.views._helpers import _need_tenant
 from apps.scm.models import (
     PurchaseRequisition,
@@ -67,7 +69,7 @@ def _requisition_form(request, instance):
                 formset.instance = req
                 formset.save()
                 req.recalc_totals()
-            write_audit_log(request.user, req, "update" if is_edit else "create")
+            write_audit_log(request.user, req, "update" if is_edit else "create", _changed(form))
             messages.success(request, f"Requisition {req.number} saved.")
             return redirect("scm:requisition_detail", pk=req.pk)
     else:
