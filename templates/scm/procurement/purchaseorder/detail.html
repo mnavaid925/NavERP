@@ -149,7 +149,9 @@
         {% endif %}
 
         {% if not obj.is_editable and not obj.is_closed %}
-          <a href="{% url 'scm:purchaseorder_amend' obj.pk %}" class="btn btn-outline"><i data-lucide="file-diff"></i> Amend</a>
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <a href="{% url 'scm:purchaseorder_amend' obj.pk %}" class="btn btn-outline"><i data-lucide="file-diff"></i> Amend</a>
+          {% endif %}
         {% endif %}
 
         {% if obj.status == 'received' %}
