@@ -271,3 +271,92 @@ def bill_b(db, tenant_b, supplier_b, usd):
         tenant=tenant_b, party=supplier_b, bill_date=datetime.date(2026, 1, 12),
         status="approved", currency=usd,
     )
+
+
+# ------------------------------------------------------------------ SCM 4.2 Supplier Relationship Management
+@pytest.fixture
+def supplier_profile_a(db, tenant_a, supplier_a):
+    """A draft SupplierProfile on supplier_a — the default onboarding entry point."""
+    from apps.scm.models import SupplierProfile
+    return SupplierProfile.objects.create(tenant=tenant_a, party=supplier_a, onboarding_status="draft")
+
+
+@pytest.fixture
+def supplier_profile_b(db, tenant_b, supplier_b):
+    from apps.scm.models import SupplierProfile
+    return SupplierProfile.objects.create(tenant=tenant_b, party=supplier_b, onboarding_status="draft")
+
+
+@pytest.fixture
+def supplier_profile_dd_a(db, tenant_a, supplier_a):
+    """A tenant_a SupplierProfile IN due_diligence review with the full DD checklist ticked —
+    the one legal source state approve can act on."""
+    from apps.scm.models import SupplierProfile
+    return SupplierProfile.objects.create(
+        tenant=tenant_a, party=supplier_a, onboarding_status="due_diligence",
+        dd_financials_verified=True, dd_compliance_verified=True, dd_insurance_verified=True,
+        dd_quality_cert_verified=True, dd_references_checked=True,
+    )
+
+
+@pytest.fixture
+def scorecard_a(db, tenant_a, supplier_a):
+    """A draft, unscored scorecard for supplier_a covering January 2026."""
+    from apps.scm.models import SupplierScorecard
+    return SupplierScorecard.objects.create(
+        tenant=tenant_a, party=supplier_a,
+        period_start=datetime.date(2026, 1, 1), period_end=datetime.date(2026, 1, 31),
+    )
+
+
+@pytest.fixture
+def scorecard_b(db, tenant_b, supplier_b):
+    from apps.scm.models import SupplierScorecard
+    return SupplierScorecard.objects.create(
+        tenant=tenant_b, party=supplier_b,
+        period_start=datetime.date(2026, 1, 1), period_end=datetime.date(2026, 1, 31),
+    )
+
+
+@pytest.fixture
+def contract_a(db, tenant_a, supplier_a):
+    from apps.scm.models import SupplierContract
+    return SupplierContract.objects.create(
+        tenant=tenant_a, party=supplier_a, title="Master Supply Agreement", status="draft",
+    )
+
+
+@pytest.fixture
+def contract_b(db, tenant_b, supplier_b):
+    from apps.scm.models import SupplierContract
+    return SupplierContract.objects.create(
+        tenant=tenant_b, party=supplier_b, title="Globex Agreement", status="draft",
+    )
+
+
+@pytest.fixture
+def catalog_a(db, tenant_a, supplier_a):
+    from apps.scm.models import SupplierCatalog
+    return SupplierCatalog.objects.create(tenant=tenant_a, party=supplier_a, name="2026 Price List")
+
+
+@pytest.fixture
+def catalog_b(db, tenant_b, supplier_b):
+    from apps.scm.models import SupplierCatalog
+    return SupplierCatalog.objects.create(tenant=tenant_b, party=supplier_b, name="Globex Price List")
+
+
+@pytest.fixture
+def risk_assessment_a(db, tenant_a, supplier_a):
+    from apps.scm.models import SupplierRiskAssessment
+    return SupplierRiskAssessment.objects.create(
+        tenant=tenant_a, party=supplier_a, assessment_date=datetime.date(2026, 1, 1),
+    )
+
+
+@pytest.fixture
+def risk_assessment_b(db, tenant_b, supplier_b):
+    from apps.scm.models import SupplierRiskAssessment
+    return SupplierRiskAssessment.objects.create(
+        tenant=tenant_b, party=supplier_b, assessment_date=datetime.date(2026, 1, 1),
+    )
