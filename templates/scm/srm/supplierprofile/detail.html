@@ -33,11 +33,11 @@
     <div class="card-header"><h2 class="card-title">Due diligence</h2></div>
     <div class="card-body">
       <dl class="detail-grid">
-        <div class="detail-item"><dt>Financials verified</dt><dd>{% if obj.dd_financials_verified %}<span class="text-ok"><i data-lucide="check"></i></span>{% else %}<span class="text-muted"><i data-lucide="x"></i></span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Compliance verified</dt><dd>{% if obj.dd_compliance_verified %}<span class="text-ok"><i data-lucide="check"></i></span>{% else %}<span class="text-muted"><i data-lucide="x"></i></span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Insurance verified</dt><dd>{% if obj.dd_insurance_verified %}<span class="text-ok"><i data-lucide="check"></i></span>{% else %}<span class="text-muted"><i data-lucide="x"></i></span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Quality certification verified</dt><dd>{% if obj.dd_quality_cert_verified %}<span class="text-ok"><i data-lucide="check"></i></span>{% else %}<span class="text-muted"><i data-lucide="x"></i></span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>References checked</dt><dd>{% if obj.dd_references_checked %}<span class="text-ok"><i data-lucide="check"></i></span>{% else %}<span class="text-muted"><i data-lucide="x"></i></span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Financials verified</dt><dd>{% if obj.dd_financials_verified %}<span class="badge badge-green">Verified</span>{% else %}<span class="badge badge-muted">Not verified</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Compliance verified</dt><dd>{% if obj.dd_compliance_verified %}<span class="badge badge-green">Verified</span>{% else %}<span class="badge badge-muted">Not verified</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Insurance verified</dt><dd>{% if obj.dd_insurance_verified %}<span class="badge badge-green">Verified</span>{% else %}<span class="badge badge-muted">Not verified</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quality certification verified</dt><dd>{% if obj.dd_quality_cert_verified %}<span class="badge badge-green">Verified</span>{% else %}<span class="badge badge-muted">Not verified</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>References checked</dt><dd>{% if obj.dd_references_checked %}<span class="badge badge-green">Verified</span>{% else %}<span class="badge badge-muted">Not verified</span>{% endif %}</dd></div>
       </dl>
       <div class="progress" style="margin-top:1rem;">
         <div class="progress-bar" style="width: {{ dd_progress }}%"></div>
@@ -56,7 +56,7 @@
             <tr>
               <td><a href="{% url 'scm:scorecard_detail' s.pk %}" class="fw-600">{{ s.number|default:"—" }}</a></td>
               <td>{{ s.overall_score|default:"—" }}</td>
-              <td>{{ s.grade|default:"—" }}</td>
+              <td>{% if s.grade %}<span class="badge badge-{% if s.grade == 'A' %}green{% elif s.grade == 'B' %}info{% elif s.grade == 'C' %}amber{% else %}red{% endif %}">{{ s.grade }}</span>{% else %}—{% endif %}</td>
             </tr>
           {% empty %}
             <tr><td colspan="3"><div class="empty-state"><i data-lucide="award"></i><p>No scorecards recorded for this supplier.</p></div></td></tr>
@@ -76,7 +76,7 @@
             <tr>
               <td><a href="{% url 'scm:contract_detail' c.pk %}" class="fw-600">{{ c.number|default:"—" }}</a></td>
               <td>{{ c.title|default:"—" }}</td>
-              <td>{% if c.get_status_display %}<span class="badge badge-muted">{{ c.get_status_display }}</span>{% else %}—{% endif %}</td>
+              <td><span class="badge badge-{% if c.status == 'active' or c.status == 'renewed' %}green{% elif c.status == 'expiring' %}amber{% elif c.status == 'expired' or c.status == 'terminated' %}red{% elif c.status == 'draft' %}slate{% else %}muted{% endif %}">{{ c.get_status_display }}</span></td>
             </tr>
           {% empty %}
             <tr><td colspan="3"><div class="empty-state"><i data-lucide="file-text"></i><p>No contracts on file for this supplier.</p></div></td></tr>
@@ -120,23 +120,23 @@
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
-    <div class="card-body">
-      {% if obj.onboarding_status == 'due_diligence' %}
-        {% if request.user.is_superuser or request.user.is_tenant_admin %}
-          <form method="post" action="{% url 'scm:supplierprofile_approve' obj.pk %}" onsubmit="return confirm('Approve this supplier?');">
-            {% csrf_token %}
-            <div class="form-group">
-              <label class="form-label" for="approve_note">Approval note</label>
-              <textarea name="decision_note" id="approve_note" class="form-textarea" rows="2"></textarea>
-              <div class="form-help">Optional — recorded against the approval. Due diligence must be complete before a supplier can be approved.</div>
-            </div>
-            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
-          </form>
-        {% endif %}
-      {% endif %}
+    {% if obj.onboarding_status == 'due_diligence' and request.user.is_superuser or obj.onboarding_status == 'due_diligence' and request.user.is_tenant_admin %}
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:supplierprofile_approve' obj.pk %}" onsubmit="return confirm('Approve this supplier?');">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="approve_note">Approval note</label>
+            <textarea name="decision_note" id="approve_note" class="form-textarea" rows="2"></textarea>
+            <div class="form-help">Optional — recorded against the approval. Due diligence must be complete before a supplier can be approved.</div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+        </form>
+      </div>
+    {% endif %}
 
-      {% if obj.onboarding_status != 'approved' and obj.onboarding_status != 'rejected' %}
-        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    {% if obj.onboarding_status == 'draft' or obj.onboarding_status == 'qualification' or obj.onboarding_status == 'due_diligence' %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="card-body" style="border-top: 1px solid var(--border);">
           <form method="post" action="{% url 'scm:supplierprofile_reject' obj.pk %}" onsubmit="return confirm('Reject this supplier?');">
             {% csrf_token %}
             <div class="form-group">
@@ -146,18 +146,32 @@
             </div>
             <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Reject</button>
           </form>
-        {% endif %}
+        </div>
       {% endif %}
+    {% endif %}
 
-      {% if obj.onboarding_status == 'approved' or obj.onboarding_status == 'suspended' %}
-        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    {% if obj.onboarding_status == 'rejected' and request.user.is_superuser or obj.onboarding_status == 'rejected' and request.user.is_tenant_admin %}
+      <div class="card-body" style="border-top: 1px solid var(--border);">
+        <form method="post" action="{% url 'scm:supplierprofile_reopen' obj.pk %}" onsubmit="return confirm('Reopen this rejected supplier as a draft?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Reopen as draft</button>
+          <div class="form-help">Sends a rejected supplier back to draft so it can be revised and re-submitted.</div>
+        </form>
+      </div>
+    {% endif %}
+
+    {% if obj.onboarding_status == 'approved' or obj.onboarding_status == 'suspended' %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="card-body" style="border-top: 1px solid var(--border);">
           <form method="post" action="{% url 'scm:supplierprofile_suspend' obj.pk %}" onsubmit="return confirm('Change this supplier’s suspension state?');">
             {% csrf_token %}
             <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> {% if obj.onboarding_status == 'approved' %}Suspend{% else %}Reinstate{% endif %}</button>
           </form>
-        {% endif %}
+        </div>
       {% endif %}
+    {% endif %}
 
+    <div class="card-body" style="border-top: 1px solid var(--border);">
       <div class="form-actions">
         {% if obj.onboarding_status == 'draft' or obj.onboarding_status == 'qualification' %}
           <form method="post" action="{% url 'scm:supplierprofile_submit' obj.pk %}" onsubmit="return confirm('Submit this supplier for review?');">
