@@ -10880,3 +10880,321 @@ into a 3-table pattern. See the Deferred list above.
 
 **This completes the 3.36 -> 3.41 HRM run** (Helpdesk, Compensation, Talent, Compliance, Workforce Planning,
 Engagement & Wellbeing).
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.2 Supplier Relationship Management (SRM) — plan from research-scm-4.2.md (2026-07-17)
+
+**EXTENDS the existing `apps/scm` app (4.1 Procurement Management already built) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries.** `apps/scm` already uses the Backend Package Structure (`models/
+forms/ views/ urls/` as packages, one sub-folder per NavERP sub-module). This pass adds a sibling sub-folder
+`SupplierRelationshipManagement/` next to the existing `ProcurementManagement/` in all four layers, per the
+5-model scope already decided by the launching agent (not re-derived here). Verified against the as-built repo:
+`core.Party`/`PartyRole` (incl. the shared `_supplier_parties(tenant)` helper in `apps/scm/forms/_common.py`),
+`accounting.Currency`/`PaymentTerm` (via `_active_currencies`), `core.Document` (generic attachment),
+`scm.GoodsReceiptNote`/`GoodsReceiptLine`, `scm.RFQQuote`/`RFQVendor` all exist and are grep-confirmed live.
+`core.Item`/UOM do NOT exist (L28) — catalog lines stay free-text, mirroring `PurchaseOrderLine`/`RFQLine`.
+
+## Models (from research — 5)
+
+- [ ] **Coordination note** (goes at the top of `SupplierProfiles.py` as a docstring): `SupplierProfile` (SRM
+  onboarding/tiering/due-diligence) is DISTINCT from `accounting.VendorProfile` (AP-only:
+  `payment_terms`/`default_expense_account`/`currency`/`is_1099`, `related_name="vendor_profile"` — verified in
+  `apps/accounting/models/AccountsPayable/VendorProfiles.py`). Both are legitimate separate `OneToOneField`s on
+  the same `core.Party` — do not merge one into the other or FK them together.
+
+- [ ] **`SupplierProfile`** [no number — `TenantOwned`, not `TenantNumbered`; a status wrapper on an existing
+  `Party`, not a discrete transaction] —
+  `party` = `OneToOneField("core.Party", on_delete=PROTECT, related_name="supplier_profile")`, scoped in the
+  form via the existing `_supplier_parties(tenant)` helper (excluding parties that already have a profile, on
+  create only); `onboarding_status` choices `draft/submitted/under_review/approved/rejected/suspended` default
+  `draft`; `tier` choices `unrated/preferred/approved/probation/blacklisted` default `unrated`; `tax_id`
+  (CharField, blank); `tax_id_verified`/`business_license_verified`/`bank_details_verified`/`insurance_verified`
+  (BooleanField, default `False`, staff-checked manually — NOT derived); `questionnaire_completed_at`
+  (DateTimeField, null/blank); `questionnaire_notes` (TextField, blank); `commodity_categories` (CharField, free
+  text — no taxonomy exists, L28); `onboarded_by`/`onboarded_at`, `reviewed_by`/`reviewed_at` (system-set on
+  transition, `editable=False`); `rejection_reason` (TextField, blank); `notes` (TextField, blank).
+  Drivers: onboarding workflow (table-stakes) + qualification questionnaire + due-diligence checks +
+  segmentation/tiering (SAP Ariba, JAGGAER, Coupa, Graphite Connect, HICX, Kodiak Hub). FKs: `core.Party`
+  (verified). Form excludes: `tenant`, `onboarding_status` (workflow-controlled — see actions below),
+  `onboarded_by`/`onboarded_at`/`reviewed_by`/`reviewed_at` (system-set), `rejection_reason` (set only via the
+  reject action's own small form, never on the main edit form).
+
+- [ ] **`SupplierScorecard`** [`SCR-`, `TenantNumbered`] — `vendor` = FK `core.Party` (`PROTECT`, via
+  `_supplier_parties`); `period_start`/`period_end` (DateField); `delivery_score`/`quality_score`/`price_score`/
+  `responsiveness_score` (PositiveSmallIntegerField, validators `MinValueValidator(0)`/`MaxValueValidator(100)`,
+  pre-filled by `recompute_from_signals()` but staff-editable/overridable per the research's explicit "manual
+  override allowed"); `overall_score` (DecimalField, `editable=False`, weighted average of the four); `grade`
+  (CharField choices `A/B/C/D/F`, `editable=False`, derived from `overall_score` bands); `evaluated_by`/
+  `evaluated_at` (system-set on finalize, `editable=False`); `flagged_for_review` (BooleanField, default
+  `False`); `action_notes` (TextField, blank); `status` choices `draft/finalized` default `draft`.
+  `recompute_from_signals(save=True)` method: **delivery** = on-time-in-full % from `GoodsReceiptNote.receipt_date`
+  vs. the sourcing `PurchaseOrder.expected_date` for this vendor's receipts in `[period_start, period_end]`;
+  **quality** = acceptance rate from `GoodsReceiptLine.quantity_received` vs. `quantity_rejected` over the same
+  window; **price** = competitiveness of this vendor's awarded `RFQQuote.total` against sibling quotes on the
+  same `RFQ`; **responsiveness** = average `RFQVendor.invited_at` → `RFQQuote.received_date` turnaround, scaled
+  to 0–100. When a category has NO signal rows in the period, leave the existing field value untouched (never
+  silently write 0). Drivers: scorecard bullet verbatim + auto-computation from real transaction history (SAP
+  Ariba, Ivalua, GEP SMART, Kodiak Hub) + issue/corrective-action flag (SAP Ariba, JAGGAER). FKs: `core.Party`;
+  derives from `scm.GoodsReceiptNote`/`GoodsReceiptLine`, `scm.RFQQuote`, `scm.RFQVendor` (all verified). Form
+  excludes: `tenant`, `number`, `overall_score`/`grade` (derived), `evaluated_by`/`evaluated_at` (system-set),
+  `status` (workflow — finalize action).
+
+- [ ] **`SupplierContract`** [`SC-`, `TenantNumbered`] — `party` = FK `core.Party` (`PROTECT`, via
+  `_supplier_parties`); `title` (CharField); `contract_type` (CharField choices
+  `master_agreement/blanket_po/nda/sla/other` — named `contract_type`, NOT `type`, to avoid shadowing the Python
+  builtin; this realizes the brief's "type" field); `start_date`/`end_date` (DateField); `auto_renew`
+  (BooleanField, default `False`); `renewal_notice_days` (PositiveIntegerField, default `30`); `contract_value`
+  (DecimalField 18,2); `currency` = FK `accounting.Currency` (`SET_NULL`, scoped via `_active_currencies`);
+  `payment_terms` = FK `accounting.PaymentTerm` (`SET_NULL`); `terms_summary` (TextField, blank — T&C summary);
+  `status` choices `draft/active/expiring/expired/terminated/renewed` default `draft`; `owner` = FK
+  `settings.AUTH_USER_MODEL` (`SET_NULL`, null/blank, defaults to `request.user` on create but stays
+  reassignable); `notes` (TextField, blank). Properties: `is_expiring_soon` (bool — `status == "active"` and
+  `end_date` within `renewal_notice_days` of today, a pure date-derived helper independent of the manually-set
+  `status`, so the list-page badge/filter still warns before anyone flips the status; handles a null `end_date`
+  without raising) and `days_to_expiry` (int or `None`). Attachments: contract/due-diligence files attach via
+  `core.Document`'s existing generic `content_type`/`object_id` FK pointed at this instance — **no new file field
+  is added to the model**. Drivers: central contract repository + renewal/expiry alerts + T&C tracking (bullet
+  verbatim; all ten leaders, clearest in SAP Ariba/Ivalua/JAGGAER) + contract type classification + value &
+  payment terms. FKs: `core.Party`, `accounting.Currency`, `accounting.PaymentTerm`, `core.Document` (all
+  verified). Form excludes: `tenant`, `number`, `status` (workflow — activate/terminate/renew actions).
+
+- [ ] **`SupplierCatalog`** + **`SupplierCatalogItem`** [`CAT-`, `TenantNumbered` header / plain child, same
+  entity module per the "entity file owns the primary model plus its children" rule] —
+  `SupplierCatalog`: `party` = FK `core.Party` (`PROTECT`, via `_supplier_parties`); `name` (CharField);
+  `category` (CharField, blank, free text — no taxonomy, L28); `currency` = FK `accounting.Currency`
+  (`SET_NULL`) at the **header** level (every item on one catalog prices in one currency, matching the
+  `PurchaseOrder`/`RFQ` precedent); `effective_from`/`effective_to` (DateField, null/blank); `status` choices
+  `draft/active/inactive` default `draft`; `notes` (TextField, blank).
+  `SupplierCatalogItem` (child — **no `tenant` FK**, reached only through `catalog` per the `_scope_to_parent`
+  convention documented in `apps/scm/forms/_common.py`): `catalog` = FK `SupplierCatalog` (`CASCADE`,
+  `related_name="items"`); `item_name` (CharField); `sku` (CharField, blank); `uom` (CharField, blank);
+  `unit_price` (DecimalField 14,2); `lead_time_days` (PositiveIntegerField, null/blank); `min_order_qty`
+  (DecimalField 14,4, default `1`); `is_active` (BooleanField, default `True`). No standalone CRUD urls for the
+  item — created only via the catalog's own inline formset (mirrors `PurchaseOrderLineFormSet`/`RFQLineFormSet`).
+  Drivers: supplier-maintained catalog with price/lead time (bullet verbatim; Precoro, Coupa, SAP Ariba) +
+  validity window/active flag (Precoro) + light draft/active/inactive approval gate (Coupa, SAP Ariba). FKs:
+  `core.Party`, `accounting.Currency` (verified); item fields mirror the free-text `PurchaseOrderLine`/`RFQLine`
+  pattern, renamed `item_name`/`sku`/`uom` per the task brief (dropping the `_hint`/`_description` suffix used in
+  4.1). Form excludes: `tenant`, `number` (catalog); the item has no `tenant`/`number` at all.
+
+- [ ] **`SupplierRiskAssessment`** [`SRA-`, `TenantNumbered`] — `party` = FK `core.Party` (`PROTECT`, via
+  `_supplier_parties`); `assessment_date` (DateField); `financial_risk_score`/`geopolitical_risk_score`/
+  `compliance_risk_score` (PositiveSmallIntegerField, validators `MinValueValidator(1)`/`MaxValueValidator(5)` —
+  matches the bullet's three named dimensions verbatim, 1–5 scale per the launcher's decision);
+  `operational_risk_score` (same 1–5 field, null/blank — beyond-the-bullet addition seen in GEP SMART/Kodiak
+  Hub/TealBook, nullable so it never forces data entry); `overall_risk_level` choices
+  `low/medium/high/critical`, `editable=False`, derived by `recompute_risk_level()` from the average/max of
+  whichever of the (3–4) scores are set; `mitigation_plan` (TextField, blank); `risk_notes` (TextField, blank);
+  `next_review_date` (DateField, null/blank); `assessed_by` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`,
+  null/blank, `editable=False` — system-set only by the sign-off action); `status` choices
+  `draft/finalized/superseded` default `draft`. Drivers: multi-dimensional risk assessment bullet verbatim +
+  overall risk level/segmentation + mitigation action tracking (SAP Ariba, GEP SMART, Kodiak Hub, Coupa). FKs:
+  `core.Party` (verified). Form excludes: `tenant`, `number`, `overall_risk_level` (derived), `assessed_by`
+  (system-set on the tenant-admin-gated sign-off action), `status` (workflow — finalize/supersede actions).
+
+## Backend (apps/scm/{models,forms,views,urls}/SupplierRelationshipManagement/)
+
+- [ ] Package init markers (empty files, mirror `ProcurementManagement/__init__.py`):
+  `models/SupplierRelationshipManagement/__init__.py`, `forms/SupplierRelationshipManagement/__init__.py`,
+  `views/SupplierRelationshipManagement/__init__.py`, `urls/SupplierRelationshipManagement/__init__.py`.
+- [ ] `models/SupplierRelationshipManagement/SupplierProfiles.py` — `SupplierProfile`
+  (`from apps.scm.models._base import *`).
+- [ ] `models/SupplierRelationshipManagement/SupplierScorecards.py` — `SupplierScorecard` +
+  `recompute_from_signals()`.
+- [ ] `models/SupplierRelationshipManagement/SupplierContracts.py` — `SupplierContract` +
+  `is_expiring_soon`/`days_to_expiry` properties.
+- [ ] `models/SupplierRelationshipManagement/SupplierCatalogs.py` — `SupplierCatalog` + `SupplierCatalogItem`.
+- [ ] `models/SupplierRelationshipManagement/SupplierRiskAssessments.py` — `SupplierRiskAssessment` +
+  `recompute_risk_level()`.
+- [ ] `forms/SupplierRelationshipManagement/SupplierProfiles.py` — `SupplierProfileForm(TenantModelForm)` (party
+  scoped via `_supplier_parties`, excludes per the Models section above), `SupplierProfileRejectForm`
+  (`rejection_reason` only).
+- [ ] `forms/SupplierRelationshipManagement/SupplierScorecards.py` — `SupplierScorecardForm`.
+- [ ] `forms/SupplierRelationshipManagement/SupplierContracts.py` — `SupplierContractForm` (currency scoped via
+  `_active_currencies`; `party` via `_supplier_parties`).
+- [ ] `forms/SupplierRelationshipManagement/SupplierCatalogs.py` — `SupplierCatalogForm`,
+  `SupplierCatalogItemForm`, `SupplierCatalogItemFormSet` (`inlineformset_factory`, mirrors
+  `PurchaseOrderLineFormSet`).
+- [ ] `forms/SupplierRelationshipManagement/SupplierRiskAssessments.py` — `SupplierRiskAssessmentForm`.
+- [ ] `views/SupplierRelationshipManagement/SupplierProfiles.py` — `supplierprofile_list/create/detail/edit/
+  delete` (via `crud_*`) + `supplierprofile_submit` (`@login_required`) + `supplierprofile_approve`/
+  `supplierprofile_reject`/`supplierprofile_suspend` (`@tenant_admin_required` — "supplier approve/reject" gate
+  from the task brief; hand-rolled, set `reviewed_by`/`reviewed_at`/`onboarded_by`/`onboarded_at` as
+  appropriate, call `write_audit_log` explicitly since these bypass `crud_edit`).
+- [ ] `views/SupplierRelationshipManagement/SupplierScorecards.py` — `scorecard_list/create/detail/edit/delete` +
+  `scorecard_recompute` (`@login_required`, POST, calls `recompute_from_signals()`, redirects back) +
+  `scorecard_finalize` (`@login_required`, sets `status="finalized"`, `evaluated_by`/`evaluated_at`).
+- [ ] `views/SupplierRelationshipManagement/SupplierContracts.py` — `contract_list/create/detail/edit/delete` +
+  `contract_activate` (`@login_required`) + `contract_terminate` (`@tenant_admin_required` — "contract
+  terminate" gate) + `contract_renew` (`@login_required`, extends `end_date` / sets `status="renewed"`).
+- [ ] `views/SupplierRelationshipManagement/SupplierCatalogs.py` — `catalog_list/create/detail/edit/delete` —
+  create/edit hand-rolled with `SupplierCatalogItemFormSet` inline in one transaction (mirrors
+  `purchaseorder_create`/`_edit`'s line-formset pattern); import `_changed` explicitly for the edit-path audit
+  diff since the formset save bypasses `crud_edit`.
+- [ ] `views/SupplierRelationshipManagement/SupplierRiskAssessments.py` — `riskassessment_list/create/detail/
+  edit/delete` + `riskassessment_finalize` (`@tenant_admin_required` — "risk sign-off" gate; sets `assessed_by`,
+  `status="finalized"`, calls `recompute_risk_level()`).
+- [ ] `urls/SupplierRelationshipManagement/SupplierProfiles.py` … `SupplierRiskAssessments.py` — one
+  `urlpatterns` list per entity module; literal action routes (`/submit/`, `/approve/`, `/reject/`,
+  `/suspend/`, `/recompute/`, `/finalize/`, `/activate/`, `/terminate/`, `/renew/`) placed before the trailing
+  `<int:pk>/edit|delete/` siblings within each module (existing convention).
+- [ ] Re-export blocks: add the 5 new models to `models/__init__.py`, the new forms/formsets to
+  `forms/__init__.py`, the new views to `views/__init__.py` — each under a
+  `# 4.2 Supplier Relationship Management (SRM)` comment header (mirrors the existing
+  `# 4.1 Procurement Management` header in each file).
+- [ ] `urls/__init__.py` — import each new entity module's `urlpatterns` (`_srm_supplierprofiles`,
+  `_srm_supplierscorecards`, `_srm_suppliercontracts`, `_srm_suppliercatalogs`, `_srm_supplierriskassessments`)
+  and concatenate them after the existing 4.1 blocks; re-check the WHOLE concatenated list for
+  literal-before-`<int:pk>` ordering (rule 6 — first-match-wins).
+- [ ] `admin.py` — register `SupplierProfileAdmin`, `SupplierScorecardAdmin`, `SupplierContractAdmin`,
+  `SupplierCatalogAdmin` (+ `SupplierCatalogItemInline`), `SupplierRiskAssessmentAdmin`, each with
+  `list_display`/`list_filter=("tenant", ...)`/`search_fields` per the existing 4.1 admin pattern.
+- [ ] `makemigrations scm` (incremental on the existing `0001_initial.py` — expect one new migration adding the
+  5 models / 6 tables).
+- [ ] Extend `apps/scm/management/commands/seed_scm.py`: new `_seed_srm(self, tenant, suppliers, ...)` method
+  called from `_seed_tenant` after the 4.1 procure-to-pay walk — REUSES the two suppliers already created by
+  `self._supplier(tenant, name, kind)` (no new `Party` rows). Idempotent guard:
+  `if SupplierProfile.objects.filter(tenant=tenant).exists(): skip`. Seed content: one `SupplierProfile` per
+  demo supplier (one `approved`+`preferred`, one `submitted`+`unrated` so the approval queue isn't empty); one
+  `SupplierScorecard` per supplier for the current period, calling `recompute_from_signals()` against the real
+  seeded `GoodsReceiptNote`/`RFQQuote` rows so the demo scorecard is genuinely derived, not hand-typed; one
+  `SupplierContract` (`status="active"`, `end_date` inside `renewal_notice_days` of today so `is_expiring_soon`
+  demos `True`); one `SupplierCatalog` with 2–3 `SupplierCatalogItem` rows; one `SupplierRiskAssessment`
+  (`status="finalized"`, mixed risk scores). Add the 5 new models to `_flush()`'s ordered delete list — children
+  first (`SupplierCatalogItem` before `SupplierCatalog`), the rest before `Party`/`PartyRole` deletion (all
+  `PROTECT` on `party`, no conflict with the existing 4.1 flush block).
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["4.2"]` right after the existing `"4.1"` block (exact
+  NavERP.md:741–745 bullet text as keys), with a comment mirroring the `"4.1"` L29 precedent:
+  ```python
+  # 4.2 owns the SUPPLIER master-data spine (profile/scorecard/contract/catalog/risk) per the same L29
+  # "ships-first owns the spine" precedent as 4.1 — Module 6 (Procurement) is expected to EXTEND these
+  # tables by FK for strategic sourcing rather than re-declaring parallel schema (research-scm-4.2.md).
+  "4.2": {
+      "Supplier Onboarding": "scm:supplierprofile_list",
+      "Supplier Scorecard": "scm:scorecard_list",
+      "Contract Management": "scm:contract_list",
+      "Supplier Catalog Management": "scm:catalog_list",
+      "Risk Management": "scm:riskassessment_list",
+  },
+  ```
+- [ ] No `config/settings.py` / `config/urls.py` changes needed — `apps.scm` and its `scm/` include already
+  exist from 4.1.
+
+## Templates (templates/scm/srm/<entity>/{list,detail,form}.html)
+
+- [ ] `templates/scm/srm/supplierprofile/list.html` — filter bar (`onboarding_status`, `tier`, search `q`)
+  reflecting `request.GET`; Actions column = view/edit/delete + conditional Submit/Approve/Reject/Suspend
+  (POST+confirm+csrf, gated on `obj.onboarding_status`); status/tier badges using colour classes
+  (`badge-green`=approved/preferred, `badge-amber`=submitted/under_review/probation,
+  `badge-red`=rejected/blacklisted/suspended, `badge-muted`=draft/unrated); pagination; empty-state.
+- [ ] `templates/scm/srm/supplierprofile/detail.html` — full fields incl. the due-diligence checklist (4
+  booleans), questionnaire block, linked `core.Document` attachments (generic query on this object); Actions
+  sidebar status-gated (Submit while draft; Approve/Reject while submitted/under_review — admin-only; Suspend
+  while approved — admin-only; Edit/Delete; Back to List).
+- [ ] `templates/scm/srm/supplierprofile/form.html` — create/edit (shared); `party` dropdown excludes parties
+  that already have a profile, on create only.
+- [ ] `templates/scm/srm/scorecard/list.html` — filter bar (`vendor`, `status`, `flagged_for_review`, search
+  `q`); `overall_score`/`grade` columns with colour badges; Actions = view/edit/delete + Recompute + Finalize
+  (status-gated); pagination; empty-state.
+- [ ] `templates/scm/srm/scorecard/detail.html` — 4-category score breakdown + overall/grade; flagged banner
+  when `flagged_for_review`; Actions sidebar (Recompute/Finalize while draft, Edit/Delete, Back to List).
+- [ ] `templates/scm/srm/scorecard/form.html` — create/edit (shared); help text noting the 4 scores are
+  pre-filled by Recompute and remain manually overridable.
+- [ ] `templates/scm/srm/contract/list.html` — filter bar (`party`, `contract_type`, `status`, search `q`);
+  expiring-soon badge/row highlight driven by `obj.is_expiring_soon`; Actions = view/edit/delete +
+  Activate/Terminate/Renew (status-gated, Terminate admin-only); pagination; empty-state.
+- [ ] `templates/scm/srm/contract/detail.html` — full fields + `days_to_expiry`; attached `core.Document`s list
+  (generic query); Actions sidebar (Activate/Terminate/Renew status-gated, Edit/Delete, Back to List).
+- [ ] `templates/scm/srm/contract/form.html` — create/edit (shared).
+- [ ] `templates/scm/srm/catalog/list.html` — filter bar (`party`, `status`, search `q`); item-count column;
+  Actions = view/edit/delete; pagination; empty-state.
+- [ ] `templates/scm/srm/catalog/detail.html` — header fields + item table (`item_name`/`sku`/`uom`/
+  `unit_price`/`lead_time_days`/`min_order_qty`/`is_active`); Actions sidebar (Edit/Delete, Back to List).
+- [ ] `templates/scm/srm/catalog/form.html` — create/edit with the inline `SupplierCatalogItemFormSet` (mirrors
+  the `purchaseorder/form.html` line-formset table pattern: extra empty rows, per-row delete checkbox).
+- [ ] `templates/scm/srm/riskassessment/list.html` — filter bar (`party`, `overall_risk_level`, `status`, search
+  `q`); risk-level badges (`badge-red`=critical, `badge-amber`=high, `badge-info`=medium, `badge-green`=low);
+  Actions = view/edit/delete + Finalize (admin-only, status-gated); pagination; empty-state.
+- [ ] `templates/scm/srm/riskassessment/detail.html` — 4 dimension scores + derived overall level; mitigation
+  plan/notes; Actions sidebar (Finalize while draft — admin-only, Edit/Delete, Back to List).
+- [ ] `templates/scm/srm/riskassessment/form.html` — create/edit (shared).
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` → new incremental migration (5 models / 6 tables); `python
+  manage.py migrate`.
+- [ ] `python manage.py seed_scm` ×2 — idempotent (second run prints "already exists" for the SRM rows, no
+  `IntegrityError`).
+- [ ] `python manage.py seed_scm --flush` — confirm no `ProtectedError` (validates the extended flush-order).
+- [ ] `python manage.py check`.
+- [ ] `temp/` smoke sweep as `admin_acme` / `password`: every new `scm:supplierprofile_*`, `scm:scorecard_*`,
+  `scm:contract_*`, `scm:catalog_*`, `scm:riskassessment_*` url returns 200/302; content assertions (no
+  `{#`/`{% comment` leaks, page titles present, at least one seeded record visible per list); workflow actions
+  (submit/approve/reject/suspend, recompute/finalize, activate/terminate/renew, finalize) exercised end to end;
+  `@tenant_admin_required` actions 403/redirect for a plain tenant user; cross-tenant IDOR → 404 on every new
+  entity's detail/edit/delete.
+- [ ] Sidebar: log in as `admin_acme`, confirm all 5 sub-module 4.2 bullets render as **Live** (not "Coming
+  Soon").
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to verify `SupplierScorecard.recompute_from_signals()` never silently zeroes a score
+    when a supplier has NO 4.1 transaction history in the period (must leave the field untouched, not write 0),
+    and that `SupplierContract.is_expiring_soon`/`days_to_expiry` handle a null `end_date` without raising.
+  - Expect `performance-reviewer` to check `recompute_from_signals()`'s query count against
+    `GoodsReceiptNote`/`GoodsReceiptLine`/`RFQQuote`/`RFQVendor` (aggregate queries, not a per-row loop) and
+    that `scorecard_list`/`riskassessment_list`/`contract_list` don't N+1 on `vendor`/`party` `__str__`.
+  - Expect `security-reviewer` to confirm `@tenant_admin_required` actually gates
+    `supplierprofile_approve`/`_reject`/`_suspend`, `contract_terminate`, and `riskassessment_finalize`; and to
+    check cross-tenant IDOR on every new url.
+  - Expect `test-writer` to cover full CRUD on all 5 entities, the onboarding state machine, `
+    recompute_from_signals()` against fixture GRN/RFQQuote data, `is_expiring_soon`/`days_to_expiry` edge cases,
+    `recompute_risk_level()`'s threshold mapping, and the catalog item formset save path.
+- [ ] Reconcile the target-ERD module-coverage map: annotate Module 6 (Procurement)'s eventual coverage notes
+  that `VendorScorecard`/`Contract`/`SupplierRisk` are OWNED by `scm.SupplierScorecard`/`scm.SupplierContract`/
+  `scm.SupplierRiskAssessment` (4.2 ships first, L29) — Module 6 extends by FK, does not re-declare. Mirror the
+  existing `"4.1"` navigation.py comment precedent.
+- [ ] Create `.claude/skills/scm/SKILL.md` — it does not exist yet (4.1 shipped without one, per the task
+  brief); write it fresh covering BOTH 4.1 (Procurement Management: `PurchaseRequisition`/`RFQ`/`PurchaseOrder`/
+  `GoodsReceiptNote`) and 4.2 (SRM: the 5 new models), the shared `_supplier_parties`/`_active_currencies`/
+  `_scope_to_parent` helpers, `seed_scm` contents, and both `LIVE_LINKS` blocks.
+- [ ] Update README (module/sub-module/test counts; add a `4.2` bullet describing the 5 new models + the
+  onboarding-workflow/auto-derived-scorecard/renewal-alert/catalog/risk-scoring shape).
+
+## Later passes / deferred (carried over from research-scm-4.2.md)
+
+- **Spend-under-management dashboards / OTIF trend charts across all suppliers** → 4.11 Supply Chain Analytics;
+  4.2 exposes the raw `SupplierScorecard`/`SupplierRiskAssessment` rows for it to aggregate later.
+- **Full CAPA (corrective/preventive action) workflow** off a low scorecard score or a rejected-goods trend →
+  4.9 QMS / Module 12 Quality; `flagged_for_review`/`action_notes` stay the thin hook, not a parallel CAPA
+  system.
+- **Landed-cost allocation, tax/VAT/customs on supplier goods** → 4.18 Finance & Accounting Integration.
+- **Strategic sourcing scorecards, e-auctions, contract authoring with e-signature, weighted-scoring RFP
+  builder** → Module 6 Procurement — extends `SupplierScorecard`/`SupplierContract`/`SupplierRiskAssessment` by
+  FK when it lands, per L29.
+- **Supplier self-service portal (real external login)** — same L32 pattern as 4.1's Vendor Portal; staff
+  record onboarding/catalog/contract data on the supplier's behalf this pass.
+- **PunchOut / cXML-OCI live catalog integration** — needs an external protocol + live pricing lookups; catalog
+  stays NavERP-hosted data.
+- **E-signature contract authoring workflow** — `crm.ContractDocument` + `SignerRecord` is the sales-side
+  precedent; a supplier-contract equivalent is a legitimate future build, substantial enough to be its own pass.
+- **Automated/continuous risk monitoring with external data feeds** (sanctions screening, credit ratings,
+  cybersecurity scores, geopolitical alerts) — `next_review_date` supports periodic MANUAL reassessment now.
+- **Dynamic qualification-questionnaire builder** (configurable weighted question sets) — this pass ships a
+  fixed due-diligence checklist on `SupplierProfile` instead.
+- **Structured commodity/UNSPSC-style catalog taxonomy** — waits on `core.Item`/UOM landing with Module 5;
+  `SupplierCatalogItem` stays free-text (L28).
+- **Full catalog buyer-approval workflow** (multi-step review before an update goes live) —
+  `SupplierCatalog.status` draft/active/inactive covers a light gate this pass.
+- **Single-source/concentration-risk analytics and peer-supplier benchmarking** — needs either cross-tenant
+  data or a broader analytics layer, belongs with 4.11.
+- **Sanctions/watchlist screening at onboarding** — needs an external data feed; integration/later.
+
+## Review notes
+(filled in at the end)
