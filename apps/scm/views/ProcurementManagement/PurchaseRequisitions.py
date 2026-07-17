@@ -12,9 +12,11 @@ from apps.scm.forms import (
 
 @login_required
 def requisition_list(request):
+    # Only requester/org_unit are dereferenced by the list template — budget/currency are detail-page
+    # concerns, and joining them on every list page is work nobody reads.
     qs = (PurchaseRequisition.objects
           .filter(tenant=request.tenant)
-          .select_related("requester", "org_unit", "budget", "currency"))
+          .select_related("requester", "org_unit"))
     return crud_list(
         request, qs, "scm/procurement/requisition/list.html",
         search_fields=["number", "title", "justification"],
@@ -82,10 +84,12 @@ def requisition_detail(request, pk):
         pk=pk, tenant=request.tenant,
     )
     tier_code, tier_label = obj.approval_tier()
+    # Fetched once and shared with budget_check() — it needs the same rows the template renders.
+    lines = list(obj.lines.select_related("gl_account"))
     return render(request, "scm/procurement/requisition/detail.html", {
         "obj": obj,
-        "lines": obj.lines.select_related("gl_account"),
-        "budget_check": obj.budget_check(),
+        "lines": lines,
+        "budget_check": obj.budget_check(lines=lines),
         "tier_code": tier_code,
         "tier_label": tier_label,
         "rfqs": obj.rfqs.only("id", "number", "title", "status"),
