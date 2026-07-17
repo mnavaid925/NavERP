@@ -5,6 +5,11 @@ that entity's own view module (mirrors apps/accounting/views/_helpers.py).
 """
 from apps.scm.views._common import *  # noqa: F401,F403
 
+# Defined once in the forms toolkit and re-exported here rather than duplicated: the buy-from-party
+# rule (accept BOTH the `supplier` and `vendor` PartyRole spellings) is a single decision, and two
+# copies would drift the day one of them is changed. Views legitimately depend on forms.
+from apps.scm.forms._common import _supplier_parties  # noqa: F401
+
 
 def _need_tenant(request):
     """True (and flashes) when the user has no tenant workspace.
@@ -16,10 +21,3 @@ def _need_tenant(request):
         messages.error(request, "Select a tenant workspace before creating records.")
         return True
     return False
-
-
-def _supplier_parties(tenant):
-    """Parties this tenant can buy from — both PartyRole spellings (see forms/_common.py)."""
-    if tenant is None:
-        return Party.objects.none()
-    return Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).distinct()
