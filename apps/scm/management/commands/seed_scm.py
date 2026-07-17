@@ -74,13 +74,111 @@ class Command(BaseCommand):
             if PurchaseRequisition.objects.filter(tenant=tenant).exists():
                 self.stdout.write(
                     f"{tenant.name}: procurement data already exists — skipping. Use --flush to re-seed.")
-                continue
-            self._seed_tenant(tenant)
+            else:
+                self._seed_tenant(tenant)
+            # 4.2 SRM is guarded independently so it seeds even when 4.1 data already exists.
+            self._seed_srm_tenant(tenant)
 
-        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement seed complete."))
+        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement + 4.2 SRM seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
+
+    def _seed_srm_tenant(self, tenant):
+        """4.2 SRM demo rows for a tenant — a profile/scorecard/contract/catalog/risk per supplier.
+
+        Idempotent via a per-tenant SupplierProfile guard. Reuses the 4.1 suppliers (matched by name)
+        rather than inventing new Party rows, and derives the scorecard from real 4.1 signals so the
+        demo shows the signal path working, not a hand-typed number.
+        """
+        from apps.scm.models import (
+            SupplierProfile, SupplierScorecard, SupplierContract, SupplierCatalog,
+            SupplierCatalogItem, SupplierRiskAssessment,
+        )
+        if SupplierProfile.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: SRM data already exists — skipping.")
+            return
+
+        today = timezone.localdate()
+        admin = self._admin(tenant)
+        currency = Currency.objects.filter(code="USD").first()
+        terms = PaymentTerm.objects.filter(tenant=tenant).order_by("id").first()
+        suppliers = [self._supplier(tenant, name, kind) for name, kind in SUPPLIERS]
+
+        tiers = ["strategic", "preferred"]
+        for i, supplier in enumerate(suppliers):
+            # Onboarding profile — first supplier fully approved with due diligence done, second in review.
+            approved = i == 0
+            profile = SupplierProfile(
+                tenant=tenant, party=supplier, tier=tiers[i % len(tiers)],
+                onboarding_status="approved" if approved else "due_diligence",
+                category="Industrial supplies", legal_name=f"{supplier.name} LLC",
+                primary_contact_name="A. Buyer", primary_contact_email="sales@example.com",
+                country="United States", year_established=2008 + i,
+                dd_financials_verified=True, dd_compliance_verified=True,
+                dd_insurance_verified=approved, dd_quality_cert_verified=approved,
+                dd_references_checked=approved,
+                notes="Seeded SRM profile.",
+            )
+            if approved:
+                profile.approved_by = admin
+                profile.approved_at = timezone.now()
+                profile.decision_note = "Qualified after due diligence."
+            profile.save()
+
+            # Scorecard for the last 90 days — derived from real 4.1 receipts/quotes where they exist.
+            sc = SupplierScorecard(
+                tenant=tenant, party=supplier, period_start=today - datetime.timedelta(days=90),
+                period_end=today, status="draft",
+            )
+            sc.save()
+            sc.recompute_from_signals(save=True)
+            sc.status = "published"
+            sc.save(update_fields=["status", "updated_at"])
+
+            # A contract, the first one expiring soon so the renewal-alert path is visible.
+            end = today + datetime.timedelta(days=20 if i == 0 else 300)
+            contract = SupplierContract(
+                tenant=tenant, party=supplier, title=f"{supplier.name} master agreement",
+                contract_type="master", status="active",
+                start_date=today - datetime.timedelta(days=340), end_date=end,
+                contract_value=Decimal("50000.00"), currency=currency, payment_terms=terms,
+                auto_renew=(i == 0), renewal_notice_days=30,
+                terms_summary="Net 30. Prices held 12 months. Delivery DDP.",
+                notes="Seeded contract.",
+            )
+            contract.save()
+            contract.refresh_status()
+
+            # A price-list catalog with a couple of free-text items.
+            catalog = SupplierCatalog(
+                tenant=tenant, party=supplier, name=f"{supplier.name} 2026 price list",
+                currency=currency, valid_from=today - datetime.timedelta(days=30),
+                valid_until=today + datetime.timedelta(days=335), status="active",
+            )
+            catalog.save()
+            for name, sku, price in [("Laptop workstation", "WS-16", "1250.00"),
+                                     ("27-inch monitor", "MON-27", "310.00")]:
+                SupplierCatalogItem.objects.create(
+                    catalog=catalog, item_name=name, sku=sku, uom="each",
+                    unit_price=Decimal(price), lead_time_days=7 + i, min_order_qty=Decimal("1"),
+                )
+
+            # A risk assessment — second supplier carries a higher compliance flag.
+            risk = SupplierRiskAssessment(
+                tenant=tenant, party=supplier, assessment_date=today, status="reviewed",
+                financial_score=2, geopolitical_score=1 + i,
+                compliance_score=2 if approved else 4, operational_score=2,
+                mitigation_plan="Quarterly review; require updated insurance certificate.",
+                next_review_date=today + datetime.timedelta(days=180), assessed_by=admin,
+            )
+            risk.recompute_risk_level(save=False)
+            risk.save()
+
+        self.stdout.write(
+            f"{tenant.name}: seeded SRM for {len(suppliers)} suppliers "
+            f"(profiles, scorecards, contracts, catalogs, risk assessments)."
+        )
 
     def _flush(self):
         # The AP bills this seeder created are reachable only through the receipts that link them,
@@ -104,8 +202,20 @@ class Command(BaseCommand):
         RFQ.objects.all().delete()
         PurchaseRequisitionLine.objects.all().delete()
         PurchaseRequisition.objects.all().delete()
+
+        # 4.2 SRM rows (children cascade from their parent; profiles/scorecards/etc. cascade from Party
+        # for CASCADE FKs, but SupplierContract.party is PROTECT so delete the SRM tables directly).
+        from apps.scm.models import (
+            SupplierCatalog, SupplierContract, SupplierProfile, SupplierRiskAssessment,
+            SupplierScorecard,
+        )
+        SupplierCatalog.objects.all().delete()   # items cascade
+        SupplierContract.objects.all().delete()
+        SupplierScorecard.objects.all().delete()
+        SupplierRiskAssessment.objects.all().delete()
+        SupplierProfile.objects.all().delete()
         self.stdout.write(self.style.WARNING(
-            f"Flushed all SCM procurement rows (+{bill_count} linked accounting bill(s))."))
+            f"Flushed all SCM procurement + SRM rows (+{bill_count} linked accounting bill(s))."))
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
