@@ -44,3 +44,30 @@ from .SupplierRelationshipManagement.SupplierCatalogs import (  # noqa: F401
 from .SupplierRelationshipManagement.SupplierRiskAssessments import (  # noqa: F401
     SupplierRiskAssessment,
 )
+
+# 4.3 Inventory Management — the spine (owned here ships-first, L29/L36) + domain tables
+from .InventoryManagement.Items import (  # noqa: F401
+    ItemCategory,
+    UOM,
+    Item,
+)
+from .InventoryManagement.Locations import (  # noqa: F401
+    Location,
+)
+from .InventoryManagement.LotSerials import (  # noqa: F401
+    LotSerial,
+)
+from .InventoryManagement.StockMoves import (  # noqa: F401
+    StockMove,
+)
+from .InventoryManagement.StockTransfers import (  # noqa: F401
+    StockTransfer,
+    StockTransferLine,
+)
+from .InventoryManagement.StockAdjustments import (  # noqa: F401
+    StockAdjustment,
+    StockAdjustmentLine,
+)
+from .InventoryManagement.ReorderRules import (  # noqa: F401
+    ReorderRule,
+)
