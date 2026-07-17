@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge badge-{% if obj.status == 'awarded' %}green{% elif obj.status == 'sent' %}amber{% elif obj.status == 'closed' %}info{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:rfq_list' %}">RFQs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if quotes %}
+        <a href="{% url 'scm:rfq_compare' obj.pk %}" class="btn btn-primary"><i data-lucide="columns-3"></i> Compare quotes</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if awarded %}
+    <div style="margin-bottom:1.25rem; padding:1rem; border-radius:var(--radius-sm); background:var(--ok-bg); color:var(--ok);">
+      <i data-lucide="award"></i>
+      <span class="fw-600">Awarded to {{ awarded.party.name }}</span> — quote {{ awarded.number }} at {{ awarded.total|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}.
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+      <div class="detail-item"><dt>Requisition</dt><dd>{% if obj.requisition %}<a href="{% url 'scm:requisition_detail' obj.requisition.pk %}" class="fw-600">{{ obj.requisition.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Issue Date</dt><dd>{{ obj.issue_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Response Due</dt><dd>{{ obj.response_due|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'awarded' %}green{% elif obj.status == 'sent' %}amber{% elif obj.status == 'closed' %}info{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Terms</dt><dd>{{ obj.terms|default:"—"|linebreaksbr }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Description</th><th>SKU</th><th>UOM</th><th>Quantity</th><th>Specification</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600">{{ line.item_description }}</td>
+              <td>{{ line.sku_hint|default:"—" }}</td>
+              <td>{{ line.uom_hint|default:"—" }}</td>
+              <td>{{ line.quantity }}</td>
+              <td>{{ line.specification|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="list-checks"></i><p>No lines on this RFQ.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Invited suppliers</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th>Invited</th><th>Contact Note</th><th>Response</th></tr></thead>
+        <tbody>
+          {% for v in invited_vendors %}
+            <tr>
+              <td class="fw-600">{{ v.party.name }}</td>
+              <td>{{ v.invited_at|date:"M d, Y"|default:"Not sent" }}</td>
+              <td>{{ v.contact_note|default:"—" }}</td>
+              <td>
+                {% if v.has_responded %}
+                  <span class="badge badge-green">Responded</span>
+                {% else %}
+                  <span class="badge badge-muted">Awaiting</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="users"></i><p>No suppliers invited yet. Edit this RFQ to add invites.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Quotes</h2>
+      <a href="{% url 'scm:quote_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add quote</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Their Ref</th><th>Received</th><th>Lead Time</th><th>Total</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for q in quotes %}
+            <tr>
+              <td class="fw-600">{{ q.number }}</td>
+              <td>{{ q.party.name }}</td>
+              <td>{{ q.vendor_reference|default:"—" }}</td>
+              <td>{{ q.received_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{% if q.lead_time_days %}{{ q.lead_time_days }} days{% else %}—{% endif %}</td>
+              <td>{{ q.total|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if q.status == 'awarded' %}green{% elif q.status == 'shortlisted' %}info{% elif q.status == 'rejected' %}red{% elif q.status == 'received' %}slate{% else %}muted{% endif %}">{{ q.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  {% if q.status != 'awarded' %}
+                    <a href="{% url 'scm:quote_edit' q.pk %}" class="btn-icon" title="Edit quote"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:quote_delete' q.pk %}" onsubmit="return confirm('Delete this quote?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-text"></i><h3>No quotes yet</h3><p>Record a supplier response to start comparing prices.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if quotes %}
+      <div class="card-body">
+        <a href="{% url 'scm:rfq_compare' obj.pk %}" class="btn btn-primary"><i data-lucide="columns-3"></i> Compare quotes</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:rfq_send' obj.pk %}" onsubmit="return confirm('Mark this RFQ as sent to the invited suppliers?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send to suppliers</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'sent' %}
+          <form method="post" action="{% url 'scm:rfq_close' obj.pk %}" onsubmit="return confirm('Close this RFQ to further quotes?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:rfq_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:rfq_delete' obj.pk %}" onsubmit="return confirm('Delete this RFQ?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:rfq_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
