@@ -35,12 +35,18 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
   lives in `config/__init__.py`). Run Python through the venv: `venv\Scripts\python.exe manage.py ...`
   (PowerShell) — Django is not on system Python. Tests run under `config.settings_test` (SQLite in-memory) with
   pytest + pytest-django.
-- **Unified core (mandatory — `NavERP-ERD.md`):** customers/vendors/suppliers/employees/leads/contacts are
-  **`PartyRole`s on `Party`** — never a new standalone customer/vendor/employee table. Items/UOM/price
-  lists/locations/currencies/GL accounts/tax codes are **shared masters**. Inventory effects post to **`StockMove`**
-  and financial effects to **`JournalEntry`/`JournalLine`** (append-only) inside `transaction.atomic()` — on-hand
-  quantities and balances are **derived** (aggregate), never stored editable. FK into core entities **by string**
-  (e.g. `models.ForeignKey('core.Party', ...)`). Your module owns only its domain-specific tables.
+- **Unified core (mandatory — `NavERP-ERD.md` is the INTENT; the code is the truth, lessons L28/L29):**
+  customers/vendors/suppliers/employees/leads/contacts are **`PartyRole`s on `Party`** — never a new standalone
+  customer/vendor/employee table. **`apps/accounting` (Module 2) owns the financial ledger** — `Currency`,
+  `GLAccount`, `TaxCode`, `FiscalPeriod`, `JournalEntry`/`JournalLine` (append-only), `Invoice`, `Bill`,
+  `Payment` — financial effects post balanced JEs inside `transaction.atomic()` and FK into `accounting.*`
+  **by string**; balances are **derived** (aggregate), never stored editable. `scm` (4.1) owns
+  `PurchaseRequisition`/`RFQ`/`PurchaseOrder`/`GoodsReceiptNote`. **`Item`/`UOM`/`Location`/`StockMove`/
+  `LotSerial` (Module 5) and `SalesOrder` (Module 8) are NOT built yet** — before FK'ing any spine entity,
+  verify it exists (`grep -rn "^class <Name>" apps/*/models/`); when a planned master is missing, build a
+  documented tenant-scoped stand-in (free-text item fields), never a hard FK to an unbuilt master (L28).
+  FK into core entities **by string** (e.g. `models.ForeignKey('core.Party', ...)`). Your module owns only its
+  domain-specific tables.
 - **App layout:** `apps/<slug>/`, AppConfig `name = 'apps.<slug>'`. Register in `config/settings.py`
   `INSTALLED_APPS` and add `path('<slug>/', include('apps.<slug>.urls'))` to `config/urls.py`.
 - **Backend packages (MANDATORY):** `models/`, `forms/`, `views/`, `urls/` are **packages**, never flat `.py`
@@ -53,10 +59,15 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
   CLAUDE.md "Template Folder Structure"; landing page stays at `templates/<slug>/` root), **extend
   `templates/base.html`**, use the design-system
   classes from `static/css/theme.css`: `.page-header .page-title .breadcrumb .page-actions`, `.card .card-header
-  .card-body`, `.btn .btn-primary .btn-outline .btn-danger .btn-icon`, `.badge .badge-success/.warning/.danger/
-  .info/.muted` (+ color variants), `.table-wrap .table .table-actions`, `.form-group .form-label .form-input
-  .form-select .form-textarea .form-error`, `.stat-card`, `.empty-state`, `.pagination`, `.avatar-initial`,
-  `.progress .progress-bar`. Icons: `<i data-lucide="NAME"></i>`.
+  .card-body`, `.btn .btn-primary .btn-outline .btn-danger .btn-icon`, `.badge .badge-green/.badge-red/
+  .badge-amber/.badge-info/.badge-muted/.badge-slate` (**colour-named ONLY — semantic `-success/-warning/
+  -danger` variants do NOT exist and render unstyled; L33 shipped 3× on exactly this**), `.table-wrap .table
+  .table-actions`, `.form-group .form-label .form-input .form-select .form-textarea .form-error`, `.stat-card`
+  (stat-icon colours: `blue/green/orange/purple/slate` only), `.empty-state`, `.pagination`, `.avatar-initial`,
+  `.progress .progress-bar`. Before using ANY theme.css modifier class, confirm it exists
+  (`grep -oE '\.(badge-[a-z]+|stat-icon(\.[a-z]+)?|text-[a-z]+)' static/css/theme.css | sort -u`) or copy a
+  sibling template's badge line verbatim. Icons: `<i data-lucide="NAME"></i>` (list actions: eye / pencil /
+  trash-2).
 - **Multi-tenancy (mandatory):** every model has `tenant = models.ForeignKey('core.Tenant',
   on_delete=models.CASCADE, related_name='<unique>')`. Every view filters `Model.objects.filter(tenant=request.tenant)`
   — never `.all()`. `request.tenant` is set by `apps.core.middleware.TenantMiddleware`.
@@ -67,20 +78,26 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
   template's filter dropdowns need. pk filters compare with `|stringformat:"d"`.
 - **Seeders:** idempotent (guard `if Model.objects.filter(tenant=tenant).exists()`), `get_or_create`,
   existence-check auto-numbers. Create both `management/__init__.py` and `management/commands/__init__.py`.
-- **Auto-numbers:** human-readable per-tenant numbers like `INV-00001` / `PO-00001` / `NCR-00001` where it fits
-  (mirror `Invoice.save()` in `apps/tenants/models.py`, which generates `INV-00001` per tenant).
+- **Auto-numbers:** human-readable per-tenant numbers like `PO-00001` / `SINV-00001` / `NCR-00001` where it fits
+  — use the app's abstract `TenantNumbered` base in `apps/<slug>/models/_base.py` (crm/accounting/hrm/scm all
+  have one) built on `apps/core/utils.next_number`; the single-model reference is `SubscriptionInvoice.save()`
+  in `apps/tenants/models/SubscriptionInvoice.py` (`SINV-#####` with a concurrent-collision retry).
 - **Git:** at the end, output a **PowerShell-safe one-file-per-commit** snippet (`git add 'f'; git commit -m '...'`).
   Commit per CLAUDE.md / project memory (one file per commit, to `main`); do NOT `git push` — the user pushes.
 - **Security:** flag vulnerabilities with a `# WARNING:` comment + secure alternative.
 
-Reference files to read before building: `NavERP-ERD.md`, `apps/core/navigation.py`, `apps/core/models.py` (the
-core spine), and — for the **mandatory backend package layout** — `apps/crm/` and `apps/accounting/` (both fully
-converted: `models/`, `forms/`, `views/`, `urls/` packages, one folder per sub-module, one file per entity).
-For single-file CRUD/auth patterns: `apps/tenants/models.py`, `apps/tenants/views.py`, `apps/tenants/forms.py`,
-`templates/tenants/*.html`, `static/css/theme.css`, `apps/core/management/commands/seed_demo.py`. Patterns worth
-copying from `apps/tenants`: `Invoice.save()` per-tenant auto-numbering (`INV-00001`),
-`EncryptionKey.generate_secret()` / `.masked`, `OnboardingStep.seed_defaults()`, `RegisterForm.save()` (atomic)
-for form `clean()` password validation, and `HEX_COLOR_VALIDATOR` on `BrandingSetting` colors.
+Reference files to read before building: `NavERP-ERD.md`, `apps/core/navigation.py`, `apps/core/models/` (the
+core spine — a package, entity files at its root), and — for the **mandatory backend package layout** —
+`apps/crm/` and `apps/accounting/` (both fully converted: `models/`, `forms/`, `views/`, `urls/` packages, one
+folder per sub-module, one file per entity). For foundation-style CRUD/auth patterns: `apps/tenants/models/`,
+`apps/tenants/views/`, `apps/tenants/forms/` (packages with entity files at the root, no sub-module level; only
+`urls.py` is flat), `templates/tenants/<entity>/<page>.html`, `static/css/theme.css`, and the seeders
+`apps/core/management/commands/seed_core.py` + `apps/accounts/management/commands/seed_accounts.py` (there is
+NO `seed_demo`). Patterns worth copying from `apps/tenants` / `apps/accounts`: `SubscriptionInvoice.save()`
+per-tenant auto-numbering (`SINV-#####`), `EncryptionKey.generate_plaintext()` / `set_secret()` (stores only
+prefix + SHA-256 hash — the plaintext is never persisted), the `OnboardingForm` wizard
+(`apps/tenants/forms/Onboarding.py`), `TenantRegisterForm` (`apps/accounts/forms.py`) with its
+`transaction.atomic()` registration view, and the `HEX_COLOR` validator on `BrandingSetting` colors.
 
 > ⚠️ **NavERP modules are large — build ONE sub-module per run.** Each module in `NavERP.md` has many sub-modules
 > (e.g. HRM has 41, Accounting 15). **Each `/next-module` run (and each "next"/"new") builds exactly ONE sub-module
@@ -94,12 +111,15 @@ for form `clean()` password validation, and `HEX_COLOR_VALIDATOR` on `BrandingSe
 ## Step 0 — Is the foundation built? (greenfield check)
 
 NavERP starts as a documentation repo. Before any domain module exists, the **foundation (Module 0)** must be
-built: `core` (Tenant + TenantMiddleware + `navigation.py` MODULE_CATALOG 0–13 + AuditLog + decorators +
-the unified-core master tables Party/PartyRole/Item/UOM/Location/Currency/GLAccount/TaxCode + the two ledgers),
-`accounts` (User/Role/Permission/UserInvite + auth/IAM/RBAC), `tenants` (subscription/billing/branding/keys/health),
-`dashboard` (KPI aggregation), plus `config/`, `templates/base.html`, `static/css/theme.css`, and the seeder.
-If `apps/core` / `config/settings.py` do not exist yet, build the foundation first (enter plan mode, follow
-`PROMPT.md` + `NavERP-ERD.md`) — it is the reference every domain module clones.
+built: `core` (Tenant + TenantMiddleware + `navigation.py` (`parse_catalog()` builds the module 0–13 catalog
+from NavERP.md + `MODULE_ICONS` + `LIVE_LINKS`) + AuditLog + decorators + `crud.py`/`utils.py` helpers + the
+as-built spine masters Party/PartyRole/Address/ContactMethod/PartyRelationship/Employment/OrgUnit/Activity/
+Document), `accounts` (User/Role/Permission/UserInvite + auth/IAM/RBAC), `tenants`
+(subscription/billing/branding/keys/health), `dashboard` (KPI aggregation), plus `config/`,
+`templates/base.html`, `static/css/theme.css`, and the seeders. (Item/UOM/StockMove and the financial ledger
+are NOT foundation tables — the ledger landed with Module 2 `accounting`, the rest land with their owning
+modules.) If `apps/core` / `config/settings.py` do not exist yet, build the foundation first (enter plan mode,
+follow `PROMPT.md` + `NavERP-ERD.md`) — it is the reference every domain module clones.
 
 ## Step 1 — Decide which SUB-MODULE to build
 
@@ -148,18 +168,19 @@ If `apps/core` / `config/settings.py` do not exist yet, build the foundation fir
 
 This table is the **module-level** map (app slug + the kinds of models a module owns). For a single-sub-module run,
 build only the **1–4 models that sub-module needs** — not every model listed for the module. Reuse the unified core
-where noted; the models below are each module's **own** domain tables.
+where noted; the models below are each module's **own** domain tables. **The "(… are core)" notes describe the
+INTENDED spine — several masters are not built yet, so always run the verify-grep below before FK'ing one.**
 
 | # | Module | app slug | Suggested tenant-scoped models (own tables; reuse core for Party/Item/ledgers) |
 |---|--------|----------|--------------------------------------------------------------------------------|
 | 1 | Customer Relationship Management | `crm` | Lead[LEAD-], Opportunity[OPP-], Campaign[CAM-], Case[CASE-], Activity — (Account/Contact are `Party` roles; coordinate Opportunity/Quote with Sales) |
-| 2 | Accounting & Finance | `accounting` | FiscalPeriod, Bill[BILL-], BankAccount, BankTransaction, Reconciliation, Budget, TaxReturn — (GLAccount/JournalEntry/Invoice/Payment are the **core** ledger) |
+| 2 | Accounting & Finance | `accounting` | FULLY BUILT (2.1–2.15) — it OWNS the financial ledger: Currency, GLAccount, TaxCode, FiscalPeriod, JournalEntry/JournalLine, Invoice, Bill, Payment, BankAccount, Budget, FixedAsset, PayrollRun — other modules FK `accounting.*` by string (L29) |
 | 3 | Human Resource Management | `hrm` | EmployeeProfile, Department, Designation, LeaveRequest[LV-], AttendanceRecord, PayrollRun[PAY-], PerformanceReview — (Employee is a `Party` role) |
-| 4 | Supply Chain Management | `scm` | Shipment[SHP-], Carrier, RoutePlan, DemandForecast, ReturnAuthorization[RMA-], SupplierScorecard |
-| 5 | Inventory Management System | `inventory` | GoodsReceipt[GRN-], StockAdjustment[ADJ-], StockTransfer[TRF-], CycleCount, ReorderRule — (Item/Location/StockMove/LotSerial/UOM are **core**) |
-| 6 | Procurement Management System | `procurement` | PurchaseRequisition[PR-], RFQ[RFQ-], VendorQuote, Contract[CTR-], VendorScorecard — (PurchaseOrder/GRN post to **core**) |
+| 4 | Supply Chain Management | `scm` | 4.1 BUILT: PurchaseRequisition[PR-], RFQ[RFQ-], PurchaseOrder[PO-], GoodsReceiptNote[GRN-] (scm OWNS procurement, L36); next: Shipment[SHP-], Carrier, RoutePlan, DemandForecast, ReturnAuthorization[RMA-], SupplierScorecard |
+| 5 | Inventory Management System | `inventory` | StockAdjustment[ADJ-], StockTransfer[TRF-], CycleCount, ReorderRule — (Item/Location/StockMove/LotSerial/UOM are NOT built yet — Module 5 will own them; goods receiving already lives in scm.GoodsReceiptNote) |
+| 6 | Procurement Management System | `procurement` | Contract[CTR-], VendorScorecard, sourcing events — (PR/RFQ/VendorQuote/PO/GRN are OWNED by `scm` since 4.1; Module 6 EXTENDS the scm.* tables by FK for its sourcing/contract/scorecard layer — L36, do NOT re-declare them) |
 | 7 | Project Management | `projects` | Project[PRJ-], ProjectTask, Milestone, Timesheet[TS-], RiskItem, ChangeRequest[CR-] |
-| 8 | Sales Management System | `sales` | Opportunity[OPP-], Quote[QUO-], Forecast, Territory, CommissionPlan — (SalesOrder is **core**; coordinate Lead/Opportunity with CRM) |
+| 8 | Sales Management System | `sales` | Opportunity[OPP-], Quote[QUO-], Forecast, Territory, CommissionPlan — (SalesOrder is intended spine but NOT built yet; coordinate Lead/Opportunity with CRM) |
 | 9 | eCommerce Management System | `ecommerce` | Storefront, ProductListing, Cart, Promotion[PROMO-], ProductReview — (catalog Item & orders flow to **core**) |
 | 10 | Business Intelligence | `bi` | DataSource, Dashboard, Report[RPT-], KpiDefinition, ScheduledReport — (reads aggregates over the spine; minimal writes) |
 | 11 | Asset Management System | `assets` | Asset[AST-], AssetCategory, MaintenanceWorkOrder[WO-], DepreciationSchedule, AssetDisposal |
@@ -170,8 +191,8 @@ Aim for **1–4 models** per sub-module pass (the one `N.M` you resolved) so tha
 real list page. Some sub-modules are already covered by the foundation (`accounts:role_list`, `accounts:user_list`,
 `core:audit_log`, all `tenants:*`) or by an earlier sub-module — keep those mappings and only build the missing
 pieces. Before coding, **verify the spine/sibling models you plan to reuse actually exist** (`grep -rn "^class <Name>"
-apps/<slug>/models apps/core/models.py apps/accounting/models`  — note `models` is a **package** in crm/accounting,
-so the grep must be recursive); if a planned parent (e.g. an onboarding
+apps/*/models/` — `models` is a **package** in every app, so the grep must be recursive and target the
+directories, never a nonexistent `models.py`); if a planned parent (e.g. an onboarding
 `AssetAllocation`, a `core.Item`) was researched but never built, make this sub-module self-contained and note the
 future migration (lessons L28/L29).
 
@@ -189,9 +210,9 @@ future migration (lessons L28/L29).
   `LIVE_LINKS["N.M"]` entry**. `makemigrations <slug>` produces a new incremental migration (e.g. `0002_…`).
   - If you are extending an **entity that already exists** (a new field, an extra child model), edit that entity's
     existing `<Entity>.py` in each layer rather than creating a parallel file.
-  - **Legacy apps not yet converted:** `apps/crm` and `apps/accounting` are packaged. If you hit an app that is
-    still flat (`models.py` etc.), convert it to the package layout as part of the run — do **not** append to the
-    monolith and do **not** add a `*_advanced.py` sidecar.
+  - **Legacy flat apps:** all four domain apps (`crm`, `accounting`, `hrm`, `scm`) are packaged. If a future
+    app somehow starts flat (`models.py` etc.), convert it to the package layout as part of the run — do
+    **not** append to the monolith and do **not** add a `*_advanced.py` sidecar.
 - **App does NOT exist (first run for a brand-new module):** scaffold the full app skeleton below (`apps.py`,
   `__init__.py`, `migrations/__init__.py`, the four **packages** with their `__init__.py` + `_base.py`/`_common.py`,
   the `management/commands` tree) AND do the `config/settings.py` + `config/urls.py` wire-up — then build that
@@ -263,8 +284,9 @@ The four layers **line up one-to-one**: `models/GeneralLedger/JournalEntries.py`
 - `config/urls.py` — add `path('<slug>/', include('apps.<slug>.urls'))` **only for a brand-new app** (skip if already present).
 - `apps/core/navigation.py` — add **one `LIVE_LINKS["N.M"]` entry** for the sub-module you built, mapping its exact
   NavERP.md feature-bullet names → `'<slug>:<entity>_list'` (or the most relevant live page). After this the sidebar
-  shows that sub-module as **Live** instead of the roadmap placeholder. Do NOT change `MODULE_CATALOG` (names from
-  NavERP.md are already correct) and do NOT touch other sub-modules' `LIVE_LINKS` entries.
+  shows that sub-module as **Live** instead of the roadmap placeholder. Do NOT touch the NavERP.md-derived
+  catalog machinery (`parse_catalog()` / `MODULE_ICONS` — the names come from NavERP.md and are already correct)
+  and do NOT touch other sub-modules' `LIVE_LINKS` entries.
 
 ### 2c. Frontend (`templates/<slug>/<submodule>/<entity>/<page>.html`)
 - **One folder per sub-module, then one folder per entity, with a bare `list/detail/form.html` page filename
