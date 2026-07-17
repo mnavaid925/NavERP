@@ -423,3 +423,32 @@ of going through a `forms.DecimalField`:
 NaN/Inf/overflow for free) over hand-parsing `request.POST`; when a bespoke action truly needs raw parsing, apply the
 `is_finite()` + magnitude-cap + explicit-None-branch trio. Covered now by `test_travel.py` (NaN/Infinity/garbage →
 no 500; %-cap boundary 800.00 vs 800.01; `advance_requested is None` → rejected; `>= 1e10` → rejected).
+
+## L36 — When a module ships a spine entity the ERD assigned to a LATER module, reconcile the ERD for BOTH modules in the same pass (don't just note the conflict)
+Building SCM 4.1 Procurement Management, the `research` agent recommended (and I agreed) that `apps/scm` OWN the
+procure-to-pay transaction tables — `PurchaseRequisition`, `RFQ`/`RFQQuote`, `PurchaseOrder`, `GoodsReceiptNote` —
+even though **`NavERP-ERD.md` line 468 explicitly listed all four under Module 6 (Procurement)** and gave Module 4
+only the logistics set (Shipment/Carrier/RoutePlan/…). This is the same shape as **L29**: the module that ships
+FIRST owns the shared entity (that is exactly how `accounting` ended up owning the GL ledger the foundation never
+built, and how CRM built its own stand-in `PurchaseOrder` for 1.12). Skipping to a later SCM sub-module just to
+honour the ERD would have violated the "build the lowest unbuilt `N.M`" rule (**L31**) and left 4.1 dark for two more
+modules; the ERD is a *plan* doc that has been wrong about the *as-built* spine before (that is what L28 warns about).
+
+**Rule — the reconciliation is a required close-out step, not an optional note:**
+1. **Make the ownership call explicitly** (ships-first owns it; the later module EXTENDS by FK, never re-declares —
+   a second parallel schema for the same concept is the bug L29 forbids). Decide it before writing code, not after.
+2. **Edit the ERD/plan rows for BOTH modules in the same change** so the doc stops contradicting the code: the
+   owning module's "Adds" column gains the entities (mark them *as-built*), and the later module's row is rewritten
+   to say it *extends* them by FK (its own "Adds" becomes only its genuinely-new layer — for Module 6 that is
+   VendorScorecard / strategic-sourcing / e-auction / supplier-risk, not another PO). Leaving only the owning row
+   updated re-creates the exact contradiction a future run will trip on.
+3. **Encode the call in three durable places** so it survives context loss: a `LIVE_LINKS`/navigation comment, the
+   owning model's docstring, and this lesson. SCM did all three (`apps/core/navigation.py` "4.1" banner,
+   `apps/scm/models/ProcurementManagement/PurchaseOrders.py` header, here).
+4. **Two `PurchaseOrder` classes now coexist on purpose** — `crm.PurchaseOrder` (1.12 lightweight quick-order,
+   free-text items, no approval) and `scm.PurchaseOrder` (canonical: lifecycle + approval + amendment trail +
+   3-way match). Different app_labels/tables, no collision. A future maintainer grepping `class PurchaseOrder` will
+   find both; that is documented, not an accident — do NOT "dedupe" them.
+Also reaffirmed by this build: line items stayed free-text (`item_description`/`sku_hint`/`uom_hint`) because
+`core.Item` still does not exist (**L28** — grep-verified, not trusted from the ERD), with the future migration onto
+`core.Item` recorded in each line model's docstring for when Module 5 Inventory ships. See [[next-builds-one-submodule]].
