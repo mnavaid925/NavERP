@@ -28,14 +28,18 @@ class SupplierScorecard(TenantNumbered):
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
 
     # Each score is 0-100. Nullable so an un-scored dimension is visibly absent rather than a false 0.
+    # MaxValueValidator(100) matches every other 0-100 field in the codebase and stops a hand-entered
+    # (manual_override) value from inflating the derived overall_score/grade or overflowing the
+    # width:<score>% progress bar in the template (security + frontend review).
+    _SCORE_VALIDATORS = [MinValueValidator(ZERO), MaxValueValidator(Decimal("100"))]
     delivery_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
-                                         validators=[MinValueValidator(ZERO)])
+                                         validators=_SCORE_VALIDATORS)
     quality_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
-                                        validators=[MinValueValidator(ZERO)])
+                                        validators=_SCORE_VALIDATORS)
     price_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
-                                      validators=[MinValueValidator(ZERO)])
+                                      validators=_SCORE_VALIDATORS)
     responsiveness_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
-                                               validators=[MinValueValidator(ZERO)])
+                                               validators=_SCORE_VALIDATORS)
     overall_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, editable=False)
     grade = models.CharField(max_length=2, blank=True, editable=False)
 
@@ -63,6 +67,7 @@ class SupplierScorecard(TenantNumbered):
         ]
         present = [(score, weight) for score, weight in parts if score is not None]
         total_weight = sum(weight for _, weight in present)
+        before = (self.overall_score, self.grade)
         if total_weight:
             blended = sum(score * weight for score, weight in present) / total_weight
             self.overall_score = blended.quantize(Decimal("0.01"))
@@ -70,7 +75,9 @@ class SupplierScorecard(TenantNumbered):
         else:
             self.overall_score = None
             self.grade = ""
-        if save:
+        # Skip the write when nothing changed — the detail view calls this on every (read-only) GET,
+        # and an unconditional save() would bump updated_at and issue an UPDATE on every page view.
+        if save and (self.overall_score, self.grade) != before:
             self.save(update_fields=["overall_score", "grade", "updated_at"])
 
     @staticmethod
@@ -99,15 +106,18 @@ class SupplierScorecard(TenantNumbered):
         """
         if self.manual_override:
             return
-        from apps.scm.models import GoodsReceiptNote, RFQQuote
+        from django.db.models import Min
+        from apps.scm.models import GoodsReceiptLine, GoodsReceiptNote, RFQQuote
 
         notes = []
         # --- delivery: share of this supplier's receipts booked on/before the PO expected date ----
+        # prefetch_related("lines") so the quality loop below doesn't re-query per receipt (perf review).
         receipts = list(
             GoodsReceiptNote.objects
             .filter(tenant=self.tenant, purchase_order__vendor=self.party, status="received",
                     receipt_date__range=(self.period_start, self.period_end))
             .select_related("purchase_order")
+            .prefetch_related("lines")
         )
         if receipts:
             on_time = sum(
@@ -120,19 +130,18 @@ class SupplierScorecard(TenantNumbered):
                 notes.append(f"Delivery: {on_time}/{len(datable)} receipts on time.")
 
         # --- quality: 100 minus the reject rate across those receipts' lines --------------------
+        # One aggregate over the prefetched receipts rather than a Python loop that re-queries lines.
         if receipts:
-            received = ZERO
-            rejected = ZERO
-            for r in receipts:
-                for line in r.lines.all():
-                    received += line.quantity_received or ZERO
-                    rejected += line.quantity_rejected or ZERO
+            agg = GoodsReceiptLine.objects.filter(goods_receipt__in=receipts).aggregate(
+                received=Sum("quantity_received"), rejected=Sum("quantity_rejected"))
+            received = agg["received"] or ZERO
+            rejected = agg["rejected"] or ZERO
             total = received + rejected
             if total > ZERO:
                 self.quality_score = (Decimal(100) - rejected * 100 / total).quantize(Decimal("0.01"))
                 notes.append(f"Quality: {rejected} rejected of {total} received.")
 
-        # --- price: how close this supplier's quotes were to the winning price on shared RFQs -----
+        # --- price: how close this supplier's quotes were to the best price on shared RFQs --------
         quotes = list(
             RFQQuote.objects
             .filter(tenant=self.tenant, party=self.party,
@@ -140,10 +149,15 @@ class SupplierScorecard(TenantNumbered):
             .select_related("rfq")
         )
         if quotes:
+            # Resolve the cheapest quote per RFQ in ONE aggregate, not a subquery per quote (perf review).
+            rfq_ids = {q.rfq_id for q in quotes}
+            best_by_rfq = dict(
+                RFQQuote.objects.filter(rfq_id__in=rfq_ids).exclude(total__lte=ZERO)
+                .values("rfq_id").annotate(best=Min("total")).values_list("rfq_id", "best")
+            )
             ratios = []
             for q in quotes:
-                best = (RFQQuote.objects.filter(rfq=q.rfq).exclude(total__lte=ZERO)
-                        .order_by("total").values_list("total", flat=True).first())
+                best = best_by_rfq.get(q.rfq_id)
                 if best and q.total and q.total > ZERO:
                     ratios.append(min(Decimal(1), best / q.total))
             if ratios:
@@ -159,8 +173,10 @@ class SupplierScorecard(TenantNumbered):
             ]
             if turnarounds:
                 avg_days = sum(turnarounds) / len(turnarounds)
-                # 0 days -> 100; degrade ~7 points/day, floored at 0.
-                score = max(Decimal(0), Decimal(100) - Decimal(str(avg_days)) * 7)
+                # 0 days -> 100; degrade ~7 points/day. Clamp to 0-100: a quote dated before its RFQ
+                # (bad data) yields a negative avg and would otherwise push the score past 100.
+                raw = Decimal(100) - Decimal(str(avg_days)) * 7
+                score = min(Decimal(100), max(Decimal(0), raw))
                 self.responsiveness_score = score.quantize(Decimal("0.01"))
                 notes.append(f"Responsiveness: avg {round(avg_days, 1)}d quote turnaround.")
 
