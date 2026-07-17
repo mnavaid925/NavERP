@@ -63,10 +63,16 @@ class GoodsReceiptNote(TenantNumbered):
     def is_editable(self):
         return self.status in self.EDITABLE_STATUSES
 
-    def received_value(self):
-        """What this receipt accepted, priced at the PO's agreed unit prices. NET of tax."""
+    def received_value(self, lines=None):
+        """What this receipt accepted, priced at the PO's agreed unit prices. NET of tax.
+
+        ``lines`` lets a caller that has already fetched the rows (the detail view, and
+        recompute_match below) hand them in rather than pay for the identical query twice.
+        """
+        if lines is None:
+            lines = self.lines.select_related("po_line")
         total = ZERO
-        for line in self.lines.select_related("po_line"):
+        for line in lines:
             if line.po_line_id:
                 total += (line.quantity_received or ZERO) * (line.po_line.unit_price or ZERO)
         return total
@@ -82,11 +88,16 @@ class GoodsReceiptNote(TenantNumbered):
             return ZERO
         return self.bill.subtotal or ZERO
 
-    def recompute_match(self, save=True):
+    def recompute_match(self, save=True, received_map=None):
         """Derive ``match_status`` from PO vs. GRN vs. Bill.
 
         Order matters: an over-receipt is reported even when the money happens to line up, because
         it is the more serious finding — we accepted goods we never ordered.
+
+        ``received_map`` is ``{po_line_id: accepted quantity}`` from
+        ``PurchaseOrder.received_by_line()``. It is identical for every receipt on the order, so
+        ``rematch_receipts()`` builds it once and passes it in; deriving it per line here (twice,
+        for over and short) is what made the receipt-booking path O(N x R) queries.
         """
         notes = []
         if self.status == "cancelled":
@@ -94,14 +105,17 @@ class GoodsReceiptNote(TenantNumbered):
             notes.append("Receipt is cancelled.")
         else:
             lines = list(self.lines.select_related("po_line"))
-            over = [
-                line for line in lines
-                if line.po_line_id and line.po_line.received_quantity() > line.po_line.quantity
-            ]
-            short = [
-                line for line in lines
-                if line.po_line_id and line.po_line.received_quantity() < line.po_line.quantity
-            ]
+            if received_map is None:
+                received_map = self.purchase_order.received_by_line()
+            over, short = [], []
+            for line in lines:
+                if not line.po_line_id:
+                    continue
+                received = received_map.get(line.po_line_id, ZERO)
+                if received > line.po_line.quantity:
+                    over.append(line)
+                elif received < line.po_line.quantity:
+                    short.append(line)
             if over:
                 status = "over_received"
                 notes.append(
@@ -111,7 +125,7 @@ class GoodsReceiptNote(TenantNumbered):
                 status = "not_matched"
                 notes.append("No vendor bill linked yet.")
             else:
-                expected = self.received_value()
+                expected = self.received_value(lines=lines)
                 # Match on the NET goods value: received_value() is ex-tax (quantity x the PO's
                 # agreed unit price), so it must be compared against the bill's ex-tax subtotal.
                 # Comparing it to bill.total would read the tax rate itself as a price variance.
