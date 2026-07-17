@@ -28,8 +28,34 @@ class RFQLineForm(TenantModelForm):
         fields = ["item_description", "sku_hint", "uom_hint", "quantity", "specification"]
 
 
+class BaseRFQLineFormSet(forms.BaseInlineFormSet):
+    """Refuses to remove an RFQ line that a supplier has already priced.
+
+    ``RFQQuoteLine.rfq_line`` is CASCADE and an RFQ stays editable while ``sent`` — which is exactly
+    the window in which quotes arrive. Without this guard, removing a line would silently destroy
+    submitted supplier pricing AND leave the owning quote's cached ``total`` overstated, corrupting
+    the comparison matrix and the award decision. Deleting a priced line is not a thing a buyer
+    should be able to do quietly; re-issue the RFQ instead.
+    """
+
+    def clean(self):
+        super().clean()
+        blocked = [
+            form.instance.item_description
+            for form in self.forms
+            if form.instance.pk
+            and self._should_delete_form(form)
+            and form.instance.quote_lines.exists()
+        ]
+        if blocked:
+            raise forms.ValidationError(
+                "Suppliers have already quoted these lines, so they cannot be removed: "
+                f"{', '.join(blocked)}. Cancel this RFQ and re-issue it instead."
+            )
+
+
 RFQLineFormSet = inlineformset_factory(
-    RFQ, RFQLine, form=RFQLineForm, extra=2, can_delete=True,
+    RFQ, RFQLine, form=RFQLineForm, formset=BaseRFQLineFormSet, extra=2, can_delete=True,
 )
 
 
