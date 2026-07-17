@@ -89,6 +89,12 @@ class RFQVendor(models.Model):
 
     @property
     def has_responded(self):
+        """Whether this supplier has quoted. Costs a query — fine for one instance (admin, tests).
+
+        Do NOT call this in a loop or a template: it is an N+1 across the invite list. ``rfq_detail``
+        resolves the whole list in one pass off the quotes it already holds and sets ``.responded``
+        on each invite instead.
+        """
         return self.rfq.quotes.filter(party_id=self.party_id).exists()
 
     def __str__(self):
