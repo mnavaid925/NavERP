@@ -759,6 +759,24 @@ LIVE_LINKS = {
         "Background Verification": "hrm:backgroundverification_list",  # bullet (BGV records)
         "Pre-boarding": "hrm:offer_list?status=accepted",              # bullet (accepted offers = active preboarding)
     },
+
+    # ========================================= Module 4 — Supply Chain Management (SCM)
+    # 4.1 owns the procure-to-pay transaction chain (PR → RFQ → quote award → PO → GRN → 3-way match
+    # against accounting.Bill). Ownership note: NavERP-ERD.md originally listed PurchaseRequisition/
+    # RFQ/VendorQuote/GoodsReceiptNote under Module 6 (Procurement); SCM ships first, so per the L29
+    # "module that ships first owns the spine" precedent it owns them and Module 6 will EXTEND these
+    # tables by FK (strategic sourcing, e-auctions, contract authoring, scorecards) rather than
+    # re-declaring parallel schema. The ERD rows were updated to match.
+    "4.1": {
+        "Purchase Requisition": "scm:requisition_list",        # bullet (internal requests + approval + budget check)
+        "Request for Quotation (RFQ)": "scm:rfq_list",         # bullet (multi-vendor RFQ + quote comparison)
+        "Purchase Order (PO) Management": "scm:purchaseorder_list",  # bullet (generate/approve/amend/cancel)
+        # The NavERP bullet asks for a supplier self-service portal. A real vendor login is deferred:
+        # lesson L32 bars a STAFF sidebar bullet from pointing at a login-gated portal page, so this
+        # points at the staff-side order list where acknowledgement/ship-date are recorded instead.
+        "Vendor Portal": "scm:purchaseorder_list?status=sent",  # bullet (orders awaiting vendor acknowledgement)
+        "Invoice Reconciliation": "scm:goodsreceipt_list",      # bullet (GRN + 3-way match vs accounting.Bill)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
