@@ -12,18 +12,18 @@
   </div>
 
   {% if obj.cancellation_reason %}
-    <div class="card" style="border-left: 3px solid var(--bad); background: var(--bad-bg);">
+    <div class="card" style="border-inline-start: 3px solid var(--bad); background: var(--bad-bg);">
       <div class="card-body">
-        <div class="fw-600" style="color: var(--bad);"><i data-lucide="ban"></i> Cancelled {{ obj.cancelled_at|date:"M d, Y"|default:"—" }}</div>
+        <div class="fw-600 text-danger"><i data-lucide="ban"></i> Cancelled {{ obj.cancelled_at|date:"M d, Y"|default:"—" }}</div>
         <p class="text-muted">{{ obj.cancellation_reason }}</p>
       </div>
     </div>
   {% endif %}
 
   {% if obj.amendment_reason %}
-    <div class="card" style="border-left: 3px solid var(--warn); background: var(--warn-bg);">
+    <div class="card" style="border-inline-start: 3px solid var(--warn); background: var(--warn-bg);">
       <div class="card-body">
-        <div class="fw-600" style="color: var(--warn);"><i data-lucide="file-diff"></i> Amended — now at version {{ obj.version }}</div>
+        <div class="fw-600 text-warn"><i data-lucide="file-diff"></i> Amended — now at version {{ obj.version }}</div>
         <p class="text-muted">{{ obj.amendment_reason }}</p>
       </div>
     </div>
@@ -97,7 +97,7 @@
               <td><a href="{% url 'scm:goodsreceipt_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
               <td>{{ r.receipt_date|date:"M d, Y"|default:"—" }}</td>
               <td>{{ r.get_status_display }}</td>
-              <td><span class="badge badge-{% if r.match_status == 'matched' %}green{% elif r.match_status == 'price_variance' or r.match_status == 'quantity_variance' %}amber{% elif r.match_status == 'over_received' %}red{% elif r.match_status == 'not_matched' %}slate{% else %}muted{% endif %}">{{ r.get_match_status_display }}</span></td>
+              <td><span class="badge badge-{% if r.match_status == 'matched' %}green{% elif r.match_status == 'price_variance' or r.match_status == 'quantity_variance' %}amber{% elif r.match_status == 'over_received' %}red{% else %}muted{% endif %}">{{ r.get_match_status_display }}</span></td>
               <td>{% if r.bill %}{{ r.bill.number }}{% else %}—{% endif %}</td>
             </tr>
           {% empty %}
@@ -124,11 +124,11 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
-      <div class="page-actions">
+      <div class="form-actions">
         {% if obj.status == 'draft' %}
           <form method="post" action="{% url 'scm:purchaseorder_submit' obj.pk %}" onsubmit="return confirm('Submit this purchase order for approval?');">
             {% csrf_token %}
-            <button class="btn btn-primary" type="submit"><i data-lucide="send-horizontal"></i> Submit for approval</button>
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for approval</button>
           </form>
         {% endif %}
 
