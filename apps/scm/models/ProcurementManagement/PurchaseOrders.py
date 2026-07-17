@@ -98,6 +98,17 @@ class PurchaseOrder(TenantNumbered):
         if save:
             self.save(update_fields=["subtotal", "tax_total", "total", "updated_at"])
 
+    def rematch_receipts(self):
+        """Re-derive the three-way match on EVERY receipt against this order.
+
+        A receipt's verdict depends on ``po_line.received_quantity()``, which aggregates across all
+        of the order's receipts — so booking or cancelling one receipt can silently invalidate a
+        sibling's stored verdict (e.g. an earlier receipt still reading "Quantity Variance" after a
+        later one pushed the line into over-receipt). Re-matching the whole set keeps them honest.
+        """
+        for receipt in self.receipts.all():
+            receipt.recompute_match()
+
     def recompute_receipt_status(self):
         """Derive sent/partially_received/received from booked receipt lines.
 
