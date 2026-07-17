@@ -30,7 +30,7 @@
           <tbody>
             {% for lf in formset %}
               <tr>
-                <td>{% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}{{ lf.item_description }}{% for e in lf.item_description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.item_description }}{% for e in lf.item_description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ lf.sku_hint }}</td>
                 <td>{{ lf.uom_hint }}</td>
                 <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
