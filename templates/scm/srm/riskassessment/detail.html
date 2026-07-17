@@ -12,12 +12,12 @@
     </div>
   </div>
 
-  <div class="card" style="border-inline-start:3px solid var(--brand-500); background:var(--brand-500-bg);">
+  <div class="card" style="border-inline-start:3px solid var(--brand-500); background:var(--brand-100);">
     <div class="card-body">
       <div class="fw-600 text-muted">Overall risk</div>
       <div style="display:flex; align-items:center; gap:1rem; margin-top:.5rem;">
         <span class="badge badge-{% if obj.risk_level == 'low' %}green{% elif obj.risk_level == 'medium' %}amber{% elif obj.risk_level == 'high' or obj.risk_level == 'critical' %}red{% else %}muted{% endif %}">{{ obj.get_risk_level_display }}</span>
-        <span class="page-title" style="margin:0;">{{ obj.risk_index|floatformat:2 }}</span>
+        <span class="fw-600" style="font-size:1.75rem; line-height:1;">{{ obj.risk_index|floatformat:2 }}</span>
         <span class="text-muted">risk index (1.00–5.00)</span>
       </div>
     </div>
