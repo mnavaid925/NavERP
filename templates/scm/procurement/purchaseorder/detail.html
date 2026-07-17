@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}{% if obj.version > 1 %} <span class="text-muted">v{{ obj.version }}</span>{% endif %}
+        <span class="badge badge-{% if obj.status == 'received' or obj.status == 'closed' %}green{% elif obj.status == 'partially_received' or obj.status == 'pending_approval' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% elif obj.status == 'sent' or obj.status == 'acknowledged' or obj.status == 'approved' %}info{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:purchaseorder_list' %}">Purchase Orders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.cancellation_reason %}
+    <div class="card" style="border-left: 3px solid var(--bad); background: var(--bad-bg);">
+      <div class="card-body">
+        <div class="fw-600" style="color: var(--bad);"><i data-lucide="ban"></i> Cancelled {{ obj.cancelled_at|date:"M d, Y"|default:"—" }}</div>
+        <p class="text-muted">{{ obj.cancellation_reason }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.amendment_reason %}
+    <div class="card" style="border-left: 3px solid var(--warn); background: var(--warn-bg);">
+      <div class="card-body">
+        <div class="fw-600" style="color: var(--warn);"><i data-lucide="file-diff"></i> Amended — now at version {{ obj.version }}</div>
+        <p class="text-muted">{{ obj.amendment_reason }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Version</dt><dd>v{{ obj.version }}</dd></div>
+      <div class="detail-item"><dt>Vendor</dt><dd>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Requisition</dt><dd>{% if obj.requisition %}<a href="{% url 'scm:requisition_detail' obj.requisition.pk %}" class="fw-600">{{ obj.requisition.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Quote</dt><dd>{% if obj.quote %}{{ obj.quote.number }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Order Date</dt><dd>{{ obj.order_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Expected Date</dt><dd>{{ obj.expected_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Ship To</dt><dd>{% if obj.ship_to %}{{ obj.ship_to.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Delivery Address</dt><dd>{{ obj.delivery_address|default:"—"|linebreaksbr }}</dd></div>
+      <div class="detail-item"><dt>Approved By</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved At</dt><dd>{{ obj.approved_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Description</th><th>SKU</th><th>UOM</th><th>Quantity</th><th>Unit Price</th><th>Tax %</th><th>Line Total</th><th>GL Account</th><th>Received</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.item_description|default:"—" }}</td>
+              <td>{{ line.sku_hint|default:"—" }}</td>
+              <td>{{ line.uom_hint|default:"—" }}</td>
+              <td>{{ line.quantity|floatformat:2 }}</td>
+              <td>{{ line.unit_price|floatformat:2 }}</td>
+              <td>{{ line.tax_rate_pct }}</td>
+              <td>{{ line.line_total|floatformat:2 }}</td>
+              <td>{% if line.gl_account %}{{ line.gl_account.code }} · {{ line.gl_account.name }}{% else %}—{% endif %}</td>
+              {% comment %}
+                received_quantity / outstanding_quantity are methods — Django calls them
+                automatically, so they are referenced here WITHOUT parentheses.
+              {% endcomment %}
+              <td>{{ line.received_quantity|floatformat:2 }} of {{ line.quantity|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-checks"></i><p>No lines on this purchase order.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="6" class="fw-600">Subtotal</td><td>{{ obj.subtotal|floatformat:2 }}</td><td colspan="2"></td></tr>
+          <tr><td colspan="6" class="fw-600">Tax</td><td>{{ obj.tax_total|floatformat:2 }}</td><td colspan="2"></td></tr>
+          <tr><td colspan="6" class="fw-600">Total</td><td class="fw-600">{{ obj.total|floatformat:2 }}</td><td colspan="2"></td></tr>
+        </tfoot>
+      </table>
+    </div>
+    {% if fully_received %}
+      <div class="card-body text-muted"><i data-lucide="check-circle"></i> Every line on this order has been fully received.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Goods receipts</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Receipt Date</th><th>Status</th><th>Match Status</th><th>Bill</th></tr></thead>
+        <tbody>
+          {% for r in receipts %}
+            <tr>
+              <td><a href="{% url 'scm:goodsreceipt_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.receipt_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ r.get_status_display }}</td>
+              <td><span class="badge badge-{% if r.match_status == 'matched' %}green{% elif r.match_status == 'price_variance' or r.match_status == 'quantity_variance' %}amber{% elif r.match_status == 'over_received' %}red{% elif r.match_status == 'not_matched' %}slate{% else %}muted{% endif %}">{{ r.get_match_status_display }}</span></td>
+              <td>{% if r.bill %}{{ r.bill.number }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="package"></i><p>No goods receipts recorded against this order yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if obj.acknowledged_at %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Vendor acknowledgement</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Acknowledged At</dt><dd>{{ obj.acknowledged_at|date:"M d, Y"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Promised Ship Date</dt><dd>{{ obj.promised_ship_date|date:"M d, Y"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Note</dt><dd>{{ obj.acknowledgement_note|default:"—"|linebreaksbr }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:purchaseorder_submit' obj.pk %}" onsubmit="return confirm('Submit this purchase order for approval?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send-horizontal"></i> Submit for approval</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status == 'pending_approval' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:purchaseorder_approve' obj.pk %}" onsubmit="return confirm('Approve this purchase order?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if obj.status == 'approved' %}
+          <form method="post" action="{% url 'scm:purchaseorder_send' obj.pk %}" onsubmit="return confirm('Send this purchase order to the vendor?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="mail"></i> Send to vendor</button>
+          </form>
+        {% endif %}
+
+        {% if not obj.is_editable and not obj.is_closed %}
+          <a href="{% url 'scm:purchaseorder_amend' obj.pk %}" class="btn btn-outline"><i data-lucide="file-diff"></i> Amend</a>
+        {% endif %}
+
+        {% if obj.status == 'received' %}
+          <form method="post" action="{% url 'scm:purchaseorder_close' obj.pk %}" onsubmit="return confirm('Close this purchase order?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Close</button>
+          </form>
+        {% endif %}
+
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:purchaseorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:purchaseorder_delete' obj.pk %}" onsubmit="return confirm('Delete this purchase order?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+
+        <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+
+    {% if obj.status == 'sent' %}
+      <div class="card-body" style="border-top: 1px solid var(--border);">
+        <h3 class="card-title">Record acknowledgement</h3>
+        <form method="post" action="{% url 'scm:purchaseorder_acknowledge' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="{{ ack_form.acknowledgement_note.id_for_label }}">{{ ack_form.acknowledgement_note.label }}</label>
+              {{ ack_form.acknowledgement_note }}
+              {% for e in ack_form.acknowledgement_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="{{ ack_form.promised_ship_date.id_for_label }}">{{ ack_form.promised_ship_date.label }}</label>
+              {{ ack_form.promised_ship_date }}
+              {% for e in ack_form.promised_ship_date.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+          <div class="form-help">Recorded by staff on the vendor's behalf — the vendor does not enter this themselves.</div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="clipboard-check"></i> Record acknowledgement</button>
+          </div>
+        </form>
+      </div>
+    {% endif %}
+
+    {% if not obj.is_closed %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="card-body" style="border-top: 1px solid var(--border);">
+          <h3 class="card-title">Cancel this order</h3>
+          <form method="post" action="{% url 'scm:purchaseorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel this purchase order? This cannot be undone.');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_cancellation_reason">Cancellation reason <span class="req">*</span></label>
+              <textarea name="cancellation_reason" id="id_cancellation_reason" class="form-textarea" rows="3" required></textarea>
+              <div class="form-help">A reason is required — the cancellation is rejected without one.</div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Cancel order</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endblock %}
