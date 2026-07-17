@@ -107,3 +107,30 @@ from .SupplierRelationshipManagement.SupplierRiskAssessments import (  # noqa: F
     riskassessment_submit,
     riskassessment_review,
 )
+
+# 4.3 Inventory Management
+from .InventoryManagement.Items import (  # noqa: F401
+    item_list, item_create, item_detail, item_edit, item_delete,
+    category_list, category_create, category_edit, category_delete,
+    uom_list, uom_create, uom_edit, uom_delete,
+)
+from .InventoryManagement.Locations import (  # noqa: F401
+    location_list, location_create, location_detail, location_edit, location_delete,
+)
+from .InventoryManagement.LotSerials import (  # noqa: F401
+    lotserial_list, lotserial_create, lotserial_detail, lotserial_edit, lotserial_delete,
+)
+from .InventoryManagement.StockTransfers import (  # noqa: F401
+    stocktransfer_list, stocktransfer_create, stocktransfer_detail, stocktransfer_edit,
+    stocktransfer_delete, stocktransfer_complete, stocktransfer_cancel,
+)
+from .InventoryManagement.StockAdjustments import (  # noqa: F401
+    stockadjustment_list, stockadjustment_create, stockadjustment_detail, stockadjustment_edit,
+    stockadjustment_delete, stockadjustment_post, stockadjustment_cancel,
+)
+from .InventoryManagement.ReorderRules import (  # noqa: F401
+    reorderrule_list, reorderrule_create, reorderrule_edit, reorderrule_delete,
+)
+from .InventoryManagement.Reports import (  # noqa: F401
+    valuation_report, reorder_alerts, stock_ledger, on_hand_by_location,
+)
