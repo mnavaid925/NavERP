@@ -100,21 +100,35 @@ class PurchaseRequisition(TenantNumbered):
         """
         if not self.budget_id:
             return None
-        account_ids = [line.gl_account_id for line in self.lines.all() if line.gl_account_id]
-        if not account_ids:
+        costed_lines = [line for line in self.lines.all() if line.gl_account_id]
+        if not costed_lines:
             return None
+        account_ids = {line.gl_account_id for line in costed_lines}
+
         qs = self.budget.lines.filter(gl_account_id__in=account_ids)
         if self.org_unit_id:
             # A budget line with no org_unit is a company-wide line and applies to every unit.
             qs = qs.filter(Q(org_unit_id=self.org_unit_id) | Q(org_unit__isnull=True))
         budgeted = qs.aggregate(s=Sum("amount"))["s"] or ZERO
+
+        # Committed spend is summed at LINE level, restricted to the same GL accounts. Summing other
+        # requisitions' whole `estimated_total` would count their spend on accounts this check never
+        # budgeted for — on any budget funding more than one account that reads as a phantom overrun
+        # (or hides a real one), and the approver is looking straight at this number.
         committed = (
-            PurchaseRequisition.objects
-            .filter(tenant=self.tenant, budget_id=self.budget_id, status__in=self.COMMITTED_STATUSES)
-            .exclude(pk=self.pk)
-            .aggregate(s=Sum("estimated_total"))["s"] or ZERO
+            PurchaseRequisitionLine.objects
+            .filter(
+                requisition__tenant=self.tenant,
+                requisition__budget_id=self.budget_id,
+                requisition__status__in=self.COMMITTED_STATUSES,
+                gl_account_id__in=account_ids,
+            )
+            .exclude(requisition_id=self.pk)
+            .aggregate(s=Sum("line_total"))["s"] or ZERO
         )
-        requested = self.estimated_total or ZERO
+        # Likewise `requested` counts only the lines this check actually covers, so all three
+        # figures are like-for-like. Uncosted lines (no GL account) are budgeted by nobody.
+        requested = sum((line.line_total for line in costed_lines), ZERO)
         remaining = budgeted - committed - requested
         return {
             "budget": self.budget,
