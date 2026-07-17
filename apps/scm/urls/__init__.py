@@ -17,6 +17,13 @@ from .SupplierRelationshipManagement.SupplierScorecards import urlpatterns as _s
 from .SupplierRelationshipManagement.SupplierContracts import urlpatterns as _srm_contracts
 from .SupplierRelationshipManagement.SupplierCatalogs import urlpatterns as _srm_catalogs
 from .SupplierRelationshipManagement.SupplierRiskAssessments import urlpatterns as _srm_riskassessments
+from .InventoryManagement.Items import urlpatterns as _inv_items
+from .InventoryManagement.Locations import urlpatterns as _inv_locations
+from .InventoryManagement.LotSerials import urlpatterns as _inv_lotserials
+from .InventoryManagement.StockTransfers import urlpatterns as _inv_transfers
+from .InventoryManagement.StockAdjustments import urlpatterns as _inv_adjustments
+from .InventoryManagement.ReorderRules import urlpatterns as _inv_reorderrules
+from .InventoryManagement.Reports import urlpatterns as _inv_reports
 
 
 app_name = "scm"
@@ -32,4 +39,11 @@ urlpatterns = [
     *_srm_contracts,                     # SupplierRelationshipManagement/SupplierContracts
     *_srm_catalogs,                      # SupplierRelationshipManagement/SupplierCatalogs
     *_srm_riskassessments,               # SupplierRelationshipManagement/SupplierRiskAssessments
+    *_inv_items,                         # InventoryManagement/Items (item + category + uom)
+    *_inv_locations,                     # InventoryManagement/Locations
+    *_inv_lotserials,                    # InventoryManagement/LotSerials
+    *_inv_transfers,                     # InventoryManagement/StockTransfers
+    *_inv_adjustments,                   # InventoryManagement/StockAdjustments
+    *_inv_reorderrules,                  # InventoryManagement/ReorderRules
+    *_inv_reports,                       # InventoryManagement/Reports (valuation/reorder/ledger/on-hand)
 ]
