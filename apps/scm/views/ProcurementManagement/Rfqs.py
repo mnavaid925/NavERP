@@ -1,6 +1,6 @@
 """SCM 4.1 Procurement Management — RFQ views (incl. side-by-side quote comparison and award)."""
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.views._helpers import _need_tenant, _supplier_parties
+from apps.scm.views._helpers import _need_tenant
 from apps.scm.models import (
     RFQ,
     RFQQuote,
@@ -191,9 +191,17 @@ def rfq_compare(request, pk):
 
 
 # ------------------------------------------------------------------ quotes (children of an RFQ)
+# Quotes only exist between issuing an RFQ and awarding it: there is nothing to quote against a
+# draft, and re-pricing an awarded/cancelled RFQ would rewrite the basis of a decision already made.
+QUOTABLE_RFQ_STATUSES = ("sent", "closed")
+
+
 @login_required
 def quote_create(request, rfq_pk):
     rfq = get_object_or_404(RFQ, pk=rfq_pk, tenant=request.tenant)
+    if rfq.status not in QUOTABLE_RFQ_STATUSES:
+        messages.error(request, "Quotes can only be recorded against a sent or closed RFQ.")
+        return redirect("scm:rfq_detail", pk=rfq.pk)
     return _quote_form(request, rfq=rfq, instance=None)
 
 
@@ -202,6 +210,9 @@ def quote_edit(request, pk):
     obj = get_object_or_404(RFQQuote.objects.select_related("rfq"), pk=pk, tenant=request.tenant)
     if obj.status == "awarded":
         messages.error(request, "An awarded quote cannot be edited.")
+        return redirect("scm:rfq_detail", pk=obj.rfq_id)
+    if obj.rfq.status not in QUOTABLE_RFQ_STATUSES:
+        messages.error(request, "This RFQ is no longer open to quote changes.")
         return redirect("scm:rfq_detail", pk=obj.rfq_id)
     return _quote_form(request, rfq=obj.rfq, instance=obj)
 
