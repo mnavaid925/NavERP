@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.risk_level == 'low' %}green{% elif obj.risk_level == 'medium' %}amber{% elif obj.risk_level == 'high' or obj.risk_level == 'critical' %}red{% else %}muted{% endif %}">{{ obj.get_risk_level_display }}</span>
+        <span class="badge badge-{% if obj.status == 'reviewed' %}green{% elif obj.status == 'submitted' %}amber{% elif obj.status == 'draft' %}slate{% elif obj.status == 'archived' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:riskassessment_list' %}">Supplier Risk Assessments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="border-inline-start:3px solid var(--brand-500); background:var(--brand-500-bg);">
+    <div class="card-body">
+      <div class="fw-600 text-muted">Overall risk</div>
+      <div style="display:flex; align-items:center; gap:1rem; margin-top:.5rem;">
+        <span class="badge badge-{% if obj.risk_level == 'low' %}green{% elif obj.risk_level == 'medium' %}amber{% elif obj.risk_level == 'high' or obj.risk_level == 'critical' %}red{% else %}muted{% endif %}">{{ obj.get_risk_level_display }}</span>
+        <span class="page-title" style="margin:0;">{{ obj.risk_index|floatformat:2 }}</span>
+        <span class="text-muted">risk index (1.00–5.00)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Assessment Date</dt><dd>{{ obj.assessment_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Assessed By</dt><dd>{% if obj.assessed_by %}{{ obj.assessed_by.get_full_name|default:obj.assessed_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Next Review Date</dt><dd>{{ obj.next_review_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Mitigation Plan</dt><dd>{{ obj.mitigation_plan|default:"—"|linebreaksbr }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Risk factors</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Financial</dt><dd><span class="badge badge-{% if obj.financial_score <= 2 %}green{% elif obj.financial_score == 3 %}amber{% else %}red{% endif %}">{{ obj.get_financial_score_display }}</span></dd></div>
+        <div class="detail-item"><dt>Geopolitical</dt><dd><span class="badge badge-{% if obj.geopolitical_score <= 2 %}green{% elif obj.geopolitical_score == 3 %}amber{% else %}red{% endif %}">{{ obj.get_geopolitical_score_display }}</span></dd></div>
+        <div class="detail-item"><dt>Compliance</dt><dd><span class="badge badge-{% if obj.compliance_score <= 2 %}green{% elif obj.compliance_score == 3 %}amber{% else %}red{% endif %}">{{ obj.get_compliance_score_display }}</span></dd></div>
+        <div class="detail-item"><dt>Operational</dt><dd><span class="badge badge-{% if obj.operational_score <= 2 %}green{% elif obj.operational_score == 3 %}amber{% else %}red{% endif %}">{{ obj.get_operational_score_display }}</span></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:riskassessment_submit' obj.pk %}" onsubmit="return confirm('Submit this risk assessment for review?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for review</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status == 'submitted' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:riskassessment_review' obj.pk %}" onsubmit="return confirm('Sign off on this risk assessment?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Review (sign off)</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if obj.status != 'reviewed' and obj.status != 'archived' %}
+          <a href="{% url 'scm:riskassessment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:riskassessment_delete' obj.pk %}" onsubmit="return confirm('Delete this risk assessment?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+
+        <a href="{% url 'scm:riskassessment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
