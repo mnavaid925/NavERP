@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge badge-{% if obj.status == 'approved' or obj.status == 'converted' %}green{% elif obj.status == 'pending_approval' %}amber{% elif obj.status == 'rejected' %}red{% elif obj.status == 'cancelled' %}muted{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'scm:requisition_list' %}">Purchase Requisitions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+      <div class="detail-item"><dt>Requester</dt><dd>{% if obj.requester %}{{ obj.requester.get_full_name|default:obj.requester.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Department</dt><dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Budget</dt><dd>{% if obj.budget %}{{ obj.budget }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Required By</dt><dd>{{ obj.required_by|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Approval Tier</dt><dd><span class="badge badge-info">{{ tier_label }}</span></dd></div>
+      <div class="detail-item"><dt>Estimated Total</dt><dd class="fw-600">{{ obj.estimated_total|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Justification</dt><dd>{{ obj.justification|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Description</th><th>SKU</th><th>UOM</th><th>Quantity</th><th>Est. Unit Price</th><th>Line Total</th><th>GL Account</th><th>Needed By</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.item_description }}</td>
+              <td>{{ line.sku_hint|default:"—" }}</td>
+              <td>{{ line.uom_hint|default:"—" }}</td>
+              <td>{{ line.quantity }}</td>
+              <td>{{ line.estimated_unit_price|floatformat:2 }}</td>
+              <td>{{ line.line_total|floatformat:2 }}</td>
+              <td>{% if line.gl_account %}{{ line.gl_account.code }} · {{ line.gl_account.name }}{% else %}—{% endif %}</td>
+              <td>{{ line.needed_by|date:"M d, Y"|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-checks"></i><p>No lines on this requisition.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="5" class="fw-600">Estimated Total</td><td class="fw-600">{{ obj.estimated_total|floatformat:2 }}</td><td colspan="2"></td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Budget check</h2>
+      {% if budget_check %}
+        {% if budget_check.over_budget %}
+          <span class="badge badge-red">Over budget</span>
+        {% else %}
+          <span class="badge badge-green">Within budget</span>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% if budget_check %}
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Budget</dt><dd>{{ budget_check.budget }}</dd></div>
+          <div class="detail-item"><dt>Budgeted</dt><dd>{{ budget_check.budgeted|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Already Committed</dt><dd>{{ budget_check.committed|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>This Request</dt><dd>{{ budget_check.requested|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Remaining</dt>
+            <dd>
+              {% if budget_check.over_budget %}
+                <span class="badge badge-red">{{ budget_check.remaining|floatformat:2 }}</span>
+              {% else %}
+                <span class="fw-600">{{ budget_check.remaining|floatformat:2 }}</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    {% else %}
+      <div class="card-body text-muted">No budget is linked to this requisition (or no line carries a GL account), so no budget check was run.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">RFQs raised</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in rfqs %}
+            <tr>
+              <td><a href="{% url 'scm:rfq_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.title|default:"—" }}</td>
+              <td><span class="badge badge-muted">{{ r.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="file-question"></i><p>No RFQs have been raised from this requisition.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Purchase orders</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Vendor</th><th>Status</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for po in purchase_orders %}
+            <tr>
+              <td><a href="{% url 'scm:purchaseorder_detail' po.pk %}" class="fw-600">{{ po.number }}</a></td>
+              <td>{% if po.vendor %}{{ po.vendor.name }}{% else %}—{% endif %}</td>
+              <td><span class="badge badge-muted">{{ po.get_status_display }}</span></td>
+              <td>{{ po.total|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="shopping-cart"></i><p>No purchase orders have been created from this requisition.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if obj.decision_note %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Approver's note</h2></div>
+      <div class="card-body">
+        <p>{{ obj.decision_note }}</p>
+        <p class="text-muted">
+          {% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}
+          · {{ obj.approved_at|date:"M d, Y"|default:"—" }}
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'scm:requisition_submit' obj.pk %}" onsubmit="return confirm('Submit this requisition for approval?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for approval</button>
+        </form>
+      {% endif %}
+
+      {% if obj.status == 'pending_approval' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:requisition_approve' obj.pk %}" onsubmit="return confirm('Approve this requisition?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="approve_note">Approval note</label>
+              <textarea name="decision_note" id="approve_note" class="form-textarea" rows="2"></textarea>
+              <div class="form-help">Optional — recorded against the approval.</div>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+
+          <form method="post" action="{% url 'scm:requisition_reject' obj.pk %}" onsubmit="return confirm('Reject this requisition?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="reject_note">Rejection reason <span class="req">*</span></label>
+              <textarea name="decision_note" id="reject_note" class="form-textarea" rows="2" required></textarea>
+              <div class="form-help">Required — a requisition cannot be rejected without a reason.</div>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+      {% endif %}
+
+      <div class="form-actions">
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:requisition_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:requisition_delete' obj.pk %}" onsubmit="return confirm('Delete this requisition?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:requisition_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
