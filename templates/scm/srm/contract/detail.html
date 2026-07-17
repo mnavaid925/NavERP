@@ -50,7 +50,7 @@
       <div class="detail-item"><dt>Auto Renew</dt><dd>{% if obj.auto_renew %}Yes{% else %}No{% endif %}</dd></div>
       <div class="detail-item"><dt>Renewal Notice</dt><dd>{{ obj.renewal_notice_days|default:"—" }} days</dd></div>
       <div class="detail-item"><dt>Terms Summary</dt><dd>{{ obj.terms_summary|default:"—"|linebreaksbr }}</dd></div>
-      <div class="detail-item"><dt>Document</dt><dd>{% if obj.document %}{{ obj.document.name|default:"—" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Document</dt><dd>{% if obj.document %}{{ obj.document.name }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
     </dl>
   </div></div>
