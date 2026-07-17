@@ -32,8 +32,35 @@ class PurchaseOrderLineForm(TenantModelForm):
                   "tax_rate_pct", "gl_account"]
 
 
+class BasePurchaseOrderLineFormSet(forms.BaseInlineFormSet):
+    """Refuses to remove a line that goods have already been received against.
+
+    ``GoodsReceiptLine.po_line`` is PROTECT, and the amend path is reachable precisely when the
+    order is partially_received/received — so without this guard, ticking Remove on a received line
+    would raise an unhandled ProtectedError (a 500) from formset.save(). Blocking it here turns that
+    into a form error the buyer can act on, and is also the correct rule: you cannot un-order goods
+    that have arrived.
+    """
+
+    def clean(self):
+        super().clean()
+        blocked = [
+            form.instance.item_description
+            for form in self.forms
+            if form.instance.pk
+            and self._should_delete_form(form)
+            and form.instance.receipt_lines.exists()
+        ]
+        if blocked:
+            raise forms.ValidationError(
+                "These lines have goods receipts booked against them and cannot be removed: "
+                f"{', '.join(blocked)}. Cancel the receipt first."
+            )
+
+
 PurchaseOrderLineFormSet = inlineformset_factory(
-    PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=2, can_delete=True,
+    PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm,
+    formset=BasePurchaseOrderLineFormSet, extra=2, can_delete=True,
 )
 
 
