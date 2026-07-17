@@ -18,7 +18,7 @@
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search requisitions…">
         </div>
         <div class="form-group">
-          <select name="status" class="form-select">
+          <select name="status" aria-label="Status" class="form-select">
             <option value="">All statuses</option>
             {% for val, label in status_choices %}
               <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -26,7 +26,7 @@
           </select>
         </div>
         <div class="form-group">
-          <select name="org_unit" class="form-select">
+          <select name="org_unit" aria-label="Department" class="form-select">
             <option value="">All departments</option>
             {% for u in org_units %}
               <option value="{{ u.pk }}" {% if request.GET.org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.name }}</option>
