@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.grade == 'A' %}green{% elif obj.grade == 'B' %}info{% elif obj.grade == 'C' %}amber{% elif obj.grade == 'D' or obj.grade == 'F' %}red{% else %}muted{% endif %}">{{ obj.grade|default:"—" }}</span>
+        <span class="badge badge-{% if obj.status == 'published' %}green{% elif obj.status == 'draft' %}slate{% elif obj.status == 'archived' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:scorecard_list' %}">Supplier Scorecards</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Period</dt><dd>{{ obj.period_start|date:"M d, Y"|default:"—" }} – {{ obj.period_end|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Manual Override</dt><dd>{% if obj.manual_override %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Overall Score</dt><dd class="fw-600">{{ obj.overall_score|floatformat:2|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Grade</dt><dd>{{ obj.grade|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Scores</h2></div>
+    <div class="card-body">
+      <div class="form-group">
+        <div class="form-label">Delivery <span class="text-muted">— {{ obj.delivery_score|floatformat:2|default:"Not scored" }}</span></div>
+        <div class="progress"><div class="progress-bar" style="width: {{ obj.delivery_score|default:0 }}%"></div></div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Quality <span class="text-muted">— {{ obj.quality_score|floatformat:2|default:"Not scored" }}</span></div>
+        <div class="progress"><div class="progress-bar" style="width: {{ obj.quality_score|default:0 }}%"></div></div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Price <span class="text-muted">— {{ obj.price_score|floatformat:2|default:"Not scored" }}</span></div>
+        <div class="progress"><div class="progress-bar" style="width: {{ obj.price_score|default:0 }}%"></div></div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Responsiveness <span class="text-muted">— {{ obj.responsiveness_score|floatformat:2|default:"Not scored" }}</span></div>
+        <div class="progress"><div class="progress-bar" style="width: {{ obj.responsiveness_score|default:0 }}%"></div></div>
+      </div>
+      <div class="form-help">Overall score weights: Delivery 35% / Quality 35% / Price 15% / Responsiveness 15%.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Signal basis</h2></div>
+    <div class="card-body">
+      <p>{{ obj.signal_summary|default:"Not yet computed from signals." }}</p>
+      <p class="text-muted">Scores can be derived from procurement history (deliveries, receipts, three-way match variances) unless manual override is on.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if not obj.manual_override %}
+          <form method="post" action="{% url 'scm:scorecard_recompute' obj.pk %}" onsubmit="return confirm('Recompute scores from procurement signals?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Recompute from signals</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:scorecard_publish' obj.pk %}" onsubmit="return confirm('Publish this scorecard?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Publish</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status != 'archived' %}
+          <a href="{% url 'scm:scorecard_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:scorecard_delete' obj.pk %}" onsubmit="return confirm('Delete this scorecard?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+
+        <a href="{% url 'scm:scorecard_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
