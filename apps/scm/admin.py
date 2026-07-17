@@ -136,3 +136,96 @@ class SupplierRiskAssessmentAdmin(admin.ModelAdmin):
     list_display = ("number", "party", "tenant", "status", "risk_level", "assessment_date")
     list_filter = ("tenant", "status", "risk_level")
     search_fields = ("number", "party__name")
+
+
+# ============================================================ 4.3 Inventory Management
+from apps.scm.models import (  # noqa: E402
+    Item, ItemCategory, UOM, Location, LotSerial, StockMove,
+    StockTransfer, StockTransferLine, StockAdjustment, StockAdjustmentLine, ReorderRule,
+)
+
+
+@admin.register(ItemCategory)
+class ItemCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "tenant", "parent", "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("name",)
+
+
+@admin.register(UOM)
+class UOMAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "tenant", "factor", "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("code", "name")
+
+
+@admin.register(Item)
+class ItemAdmin(admin.ModelAdmin):
+    list_display = ("sku", "name", "tenant", "item_type", "tracking", "costing_method", "average_cost")
+    list_filter = ("tenant", "item_type", "tracking", "costing_method", "is_active")
+    search_fields = ("sku", "name")
+    readonly_fields = ("average_cost",)
+
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "tenant", "location_type", "parent", "is_active")
+    list_filter = ("tenant", "location_type", "is_active")
+    search_fields = ("code", "name")
+
+
+@admin.register(LotSerial)
+class LotSerialAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "tenant", "kind", "status", "expiry_date")
+    list_filter = ("tenant", "kind", "status")
+    search_fields = ("number", "item__sku")
+
+
+@admin.register(StockMove)
+class StockMoveAdmin(admin.ModelAdmin):
+    # Append-only ledger — read-only in the admin, no add/change/delete.
+    list_display = ("item", "location", "tenant", "quantity", "unit_cost", "move_type", "reference", "moved_at")
+    list_filter = ("tenant", "move_type")
+    search_fields = ("reference", "item__sku", "location__code")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class StockTransferLineInline(admin.TabularInline):
+    model = StockTransferLine
+    extra = 0
+
+
+@admin.register(StockTransfer)
+class StockTransferAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "from_location", "to_location", "status", "transfer_date")
+    list_filter = ("tenant", "status")
+    search_fields = ("number",)
+    inlines = [StockTransferLineInline]
+
+
+class StockAdjustmentLineInline(admin.TabularInline):
+    model = StockAdjustmentLine
+    extra = 0
+
+
+@admin.register(StockAdjustment)
+class StockAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "location", "reason", "status", "adjustment_date")
+    list_filter = ("tenant", "status", "reason")
+    search_fields = ("number",)
+    inlines = [StockAdjustmentLineInline]
+
+
+@admin.register(ReorderRule)
+class ReorderRuleAdmin(admin.ModelAdmin):
+    list_display = ("item", "location", "tenant", "reorder_point", "safety_stock", "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("item__sku", "location__code")
