@@ -19,7 +19,7 @@
       <div class="stat-label">Requisitions · {{ stats.requisitions_pending }} pending</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon purple"><i data-lucide="mail-question"></i></div>
+      <div class="stat-icon purple"><i data-lucide="mail"></i></div>
       <div class="stat-value">{{ stats.rfqs }}</div>
       <div class="stat-label">RFQs · {{ stats.rfqs_open }} open</div>
     </div>
@@ -56,7 +56,7 @@
               <td>{% if r.requester %}{{ r.requester.get_full_name|default:r.requester.username }}{% else %}—{% endif %}</td>
               <td>{% if r.org_unit %}{{ r.org_unit.name }}{% else %}—{% endif %}</td>
               <td>{{ r.required_by|date:"M d, Y"|default:"—" }}</td>
-              <td><span class="badge badge-{% if r.status == 'approved' or r.status == 'converted' %}green{% elif r.status == 'pending_approval' %}amber{% elif r.status == 'rejected' or r.status == 'cancelled' %}red{% else %}muted{% endif %}">{{ r.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if r.status == 'approved' or r.status == 'converted' %}green{% elif r.status == 'pending_approval' %}amber{% elif r.status == 'rejected' %}red{% elif r.status == 'draft' %}slate{% else %}muted{% endif %}">{{ r.get_status_display }}</span></td>
               <td>{{ r.estimated_total|floatformat:2 }}</td>
             </tr>
           {% empty %}
@@ -97,7 +97,7 @@
     <div class="card-body">
       <div class="page-actions">
         <a href="{% url 'scm:requisition_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Requisitions</a>
-        <a href="{% url 'scm:rfq_list' %}" class="btn btn-outline"><i data-lucide="mail-question"></i> RFQs</a>
+        <a href="{% url 'scm:rfq_list' %}" class="btn btn-outline"><i data-lucide="mail"></i> RFQs</a>
         <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase Orders</a>
         <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-outline"><i data-lucide="package-check"></i> Goods Receipts</a>
       </div>
