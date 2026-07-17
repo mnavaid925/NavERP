@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Supplier Risk Assessments{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier Risk Assessments</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Supplier Risk Assessments</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:riskassessment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Risk Assessment</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search risk assessments…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select" aria-label="Status">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="risk_level" class="form-select" aria-label="Risk level">
+            <option value="">All risk levels</option>
+            {% for val, label in level_choices %}
+              <option value="{{ val }}" {% if request.GET.risk_level == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="party" class="form-select" aria-label="Supplier">
+            <option value="">All suppliers</option>
+            {% for p in parties %}
+              <option value="{{ p.pk }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:riskassessment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Assessment Date</th><th>Risk Level</th><th>Risk Index</th><th>Status</th><th>Next Review</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:riskassessment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
+              <td>{{ obj.assessment_date|date:"M d, Y"|default:"—" }}</td>
+              <td><span class="badge badge-{% if obj.risk_level == 'low' %}green{% elif obj.risk_level == 'medium' %}amber{% elif obj.risk_level == 'high' or obj.risk_level == 'critical' %}red{% else %}muted{% endif %}">{{ obj.get_risk_level_display }}</span></td>
+              <td>{{ obj.risk_index|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if obj.status == 'reviewed' %}green{% elif obj.status == 'submitted' %}amber{% elif obj.status == 'draft' %}slate{% elif obj.status == 'archived' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.next_review_date|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:riskassessment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status != 'reviewed' and obj.status != 'archived' %}
+                    <a href="{% url 'scm:riskassessment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'scm:riskassessment_delete' obj.pk %}" onsubmit="return confirm('Delete this risk assessment?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield"></i><h3>No risk assessments found</h3><p>Assess your first supplier to start tracking risk.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
