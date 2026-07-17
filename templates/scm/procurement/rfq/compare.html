@@ -12,9 +12,12 @@
   </div>
 
   {% if awarded %}
-    <div style="margin-bottom:1.25rem; padding:1rem; border-radius:var(--radius-sm); background:var(--ok-bg); color:var(--ok);">
-      <i data-lucide="award"></i>
-      <span class="fw-600">Awarded to {{ awarded.party.name }}</span> — quote {{ awarded.number }} at {{ awarded.total|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}. This RFQ is closed to further awards.
+    <div class="card" style="border-inline-start: 3px solid var(--ok); background: var(--ok-bg);">
+      <div class="card-body">
+        <span class="fw-600 text-ok"><i data-lucide="award"></i> Awarded to {{ awarded.party.name }}</span>
+        — quote {{ awarded.number }} at {{ awarded.total|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}.
+        This RFQ is closed to further awards.
+      </div>
     </div>
   {% endif %}
 
