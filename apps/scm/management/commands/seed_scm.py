@@ -83,6 +83,14 @@ class Command(BaseCommand):
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
 
     def _flush(self):
+        # The AP bills this seeder created are reachable only through the receipts that link them,
+        # so they must go FIRST — once the GRNs are gone there is no way to tell a seeded bill from
+        # a real one, and every --flush cycle would strand another set of orphans in accounting.
+        # Scoped to bills actually linked to a receipt, so a hand-entered bill is never touched.
+        orphaned_bills = Bill.objects.filter(scm_goods_receipts__isnull=False).distinct()
+        bill_count = orphaned_bills.count()
+        orphaned_bills.delete()
+
         # Child rows cascade from their parents; delete parents newest-first down the chain so the
         # PROTECT on GoodsReceiptLine.po_line / GoodsReceiptNote.purchase_order never blocks.
         GoodsReceiptLine.objects.all().delete()
@@ -96,7 +104,8 @@ class Command(BaseCommand):
         RFQ.objects.all().delete()
         PurchaseRequisitionLine.objects.all().delete()
         PurchaseRequisition.objects.all().delete()
-        self.stdout.write(self.style.WARNING("Flushed all SCM procurement rows."))
+        self.stdout.write(self.style.WARNING(
+            f"Flushed all SCM procurement rows (+{bill_count} linked accounting bill(s))."))
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
