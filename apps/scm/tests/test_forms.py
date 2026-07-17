@@ -239,3 +239,274 @@ class TestGoodsReceiptNoteFormVendorMatch:
             tenant=tenant_a,
         )
         assert form.is_valid() is True
+
+
+# ================================================================================================
+# SCM 4.2 Supplier Relationship Management
+# ================================================================================================
+
+# ================================================================ Mass-assignment exclusions
+class TestSRMMassAssignmentExclusions:
+    def test_supplierprofile_form_excludes_workflow_and_system_fields(self):
+        from apps.scm.forms import SupplierProfileForm
+        form = SupplierProfileForm(tenant=None)
+        for field in ("onboarding_status", "approved_by", "approved_at", "decision_note"):
+            assert field not in form.fields
+
+    def test_scorecard_form_excludes_status_number_and_derived_fields(self):
+        from apps.scm.forms import SupplierScorecardForm
+        form = SupplierScorecardForm(tenant=None)
+        for field in ("status", "number", "overall_score", "grade", "signal_summary"):
+            assert field not in form.fields
+
+    def test_contract_form_excludes_status_number_and_termination_fields(self):
+        from apps.scm.forms import SupplierContractForm
+        form = SupplierContractForm(tenant=None)
+        for field in ("status", "number", "terminated_at", "termination_reason"):
+            assert field not in form.fields
+
+    def test_catalog_form_excludes_status_and_number(self):
+        from apps.scm.forms import SupplierCatalogForm
+        form = SupplierCatalogForm(tenant=None)
+        assert "status" not in form.fields
+        assert "number" not in form.fields
+
+    def test_catalog_item_form_excludes_catalog_fk(self):
+        from apps.scm.forms import SupplierCatalogItemForm
+        form = SupplierCatalogItemForm(tenant=None)
+        assert "catalog" not in form.fields
+
+    def test_riskassessment_form_excludes_status_derived_and_assessor_fields(self):
+        from apps.scm.forms import SupplierRiskAssessmentForm
+        form = SupplierRiskAssessmentForm(tenant=None)
+        for field in ("status", "number", "risk_level", "risk_index", "assessed_by"):
+            assert field not in form.fields
+
+
+# ================================================================ Scorecard score cap (priority regression)
+class TestScorecardFormScoreCap:
+    """Regression: MaxValueValidator(100) must reject a hand-entered score over 100 at the
+    ModelForm layer, not just the raw model — this is the surface an edit form ships through."""
+
+    def _base_data(self, supplier_a):
+        return {
+            "party": str(supplier_a.pk),
+            "period_start": "2026-01-01",
+            "period_end": "2026-01-31",
+            "delivery_score": "", "quality_score": "", "price_score": "", "responsiveness_score": "",
+            "manual_override": "",
+            "notes": "",
+        }
+
+    def test_delivery_score_of_150_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierScorecardForm
+        data = self._base_data(supplier_a)
+        data["delivery_score"] = "150"
+        form = SupplierScorecardForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "delivery_score" in form.errors
+
+    def test_quality_score_negative_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierScorecardForm
+        data = self._base_data(supplier_a)
+        data["quality_score"] = "-10"
+        form = SupplierScorecardForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "quality_score" in form.errors
+
+    def test_score_of_100_is_valid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierScorecardForm
+        data = self._base_data(supplier_a)
+        data["delivery_score"] = "100"
+        form = SupplierScorecardForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_period_end_before_start_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierScorecardForm
+        data = self._base_data(supplier_a)
+        data["period_start"] = "2026-02-01"
+        data["period_end"] = "2026-01-01"
+        form = SupplierScorecardForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "period_end" in form.errors
+
+
+# ================================================================ SRM supplier scoping
+class TestSRMSupplierScoping:
+    def test_supplierprofile_form_party_field_excludes_non_supplier(
+        self, tenant_a, supplier_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import SupplierProfileForm
+        form = SupplierProfileForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_a.pk in pks
+        assert non_supplier_party_a.pk not in pks
+
+    def test_scorecard_form_party_field_excludes_non_supplier(
+        self, tenant_a, supplier_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import SupplierScorecardForm
+        form = SupplierScorecardForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_a.pk in pks
+        assert non_supplier_party_a.pk not in pks
+
+    def test_contract_form_party_field_excludes_non_supplier(
+        self, tenant_a, supplier_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import SupplierContractForm
+        form = SupplierContractForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_a.pk in pks
+        assert non_supplier_party_a.pk not in pks
+
+    def test_catalog_form_party_field_excludes_non_supplier(
+        self, tenant_a, supplier_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import SupplierCatalogForm
+        form = SupplierCatalogForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_a.pk in pks
+        assert non_supplier_party_a.pk not in pks
+
+    def test_riskassessment_form_party_field_excludes_non_supplier(
+        self, tenant_a, supplier_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import SupplierRiskAssessmentForm
+        form = SupplierRiskAssessmentForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_a.pk in pks
+        assert non_supplier_party_a.pk not in pks
+
+
+# ================================================================ Cross-tenant form scoping
+class TestSRMCrossTenantFormScoping:
+    def test_supplierprofile_form_party_field_excludes_other_tenant(self, tenant_a, supplier_b):
+        from apps.scm.forms import SupplierProfileForm
+        form = SupplierProfileForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_b.pk not in pks
+
+    def test_contract_form_currency_is_global_not_tenant_scoped(self, tenant_a, usd):
+        """Currency has no tenant FK — every tenant legitimately shares the same active list."""
+        from apps.scm.forms import SupplierContractForm
+        form = SupplierContractForm(tenant=tenant_a)
+        pks = set(form.fields["currency"].queryset.values_list("pk", flat=True))
+        assert usd.pk in pks
+
+
+# ================================================================ SupplierProfileForm validation
+class TestSupplierProfileForm:
+    def test_valid_minimal_submission(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierProfileForm
+        data = {
+            "party": str(supplier_a.pk), "tier": "transactional", "category": "Office Supplies",
+            "legal_name": "", "tax_registration": "", "website": "",
+            "primary_contact_name": "", "primary_contact_email": "", "primary_contact_phone": "",
+            "country": "", "year_established": "",
+            "dd_financials_verified": "", "dd_compliance_verified": "", "dd_insurance_verified": "",
+            "dd_quality_cert_verified": "", "dd_references_checked": "", "notes": "",
+        }
+        form = SupplierProfileForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_missing_party_is_invalid(self, tenant_a):
+        from apps.scm.forms import SupplierProfileForm
+        data = {"party": "", "tier": "transactional"}
+        form = SupplierProfileForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "party" in form.errors
+
+
+# ================================================================ SupplierContractForm validation
+class TestSupplierContractForm:
+    def test_end_date_before_start_date_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierContractForm
+        data = {
+            "party": str(supplier_a.pk), "title": "Bad dates", "contract_type": "purchase",
+            "start_date": "2026-06-01", "end_date": "2026-01-01", "contract_value": "0",
+            "currency": "", "payment_terms": "", "auto_renew": "", "renewal_notice_days": "30",
+            "terms_summary": "", "document": "", "notes": "",
+        }
+        form = SupplierContractForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "end_date" in form.errors
+
+    def test_negative_contract_value_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierContractForm
+        data = {
+            "party": str(supplier_a.pk), "title": "Negative value", "contract_type": "purchase",
+            "start_date": "", "end_date": "", "contract_value": "-1.00",
+            "currency": "", "payment_terms": "", "auto_renew": "", "renewal_notice_days": "30",
+            "terms_summary": "", "document": "", "notes": "",
+        }
+        form = SupplierContractForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "contract_value" in form.errors
+
+
+# ================================================================ SupplierCatalogForm + item formset
+class TestSupplierCatalogFormAndFormset:
+    def test_valid_from_after_valid_until_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierCatalogForm
+        data = {
+            "party": str(supplier_a.pk), "name": "Bad dates", "currency": "",
+            "valid_from": "2026-06-01", "valid_until": "2026-01-01", "notes": "",
+        }
+        form = SupplierCatalogForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "valid_until" in form.errors
+
+    def test_item_formset_default_prefix_is_items(self, tenant_a, catalog_a):
+        """SupplierCatalogItem.catalog has related_name='items' — the inline formset's
+        default prefix must be 'items' (BaseInlineFormSet derives it from the accessor)."""
+        from apps.scm.forms import SupplierCatalogItemFormSet
+        formset = SupplierCatalogItemFormSet(instance=catalog_a, form_kwargs={"tenant": tenant_a})
+        assert formset.get_default_prefix() == "items"
+
+    def test_item_formset_saves_new_rows_on_the_catalog(self, tenant_a, catalog_a):
+        from apps.scm.forms import SupplierCatalogItemFormSet
+        data = formset_data("items", [
+            {"id": "", "item_name": "Widget", "sku": "W-1", "uom": "ea",
+             "unit_price": "9.99", "lead_time_days": "5", "min_order_qty": "1", "is_active": "on"},
+            {"id": "", "item_name": "Gadget", "sku": "G-1", "uom": "ea",
+             "unit_price": "19.99", "lead_time_days": "", "min_order_qty": "1", "is_active": "on"},
+        ])
+        formset = SupplierCatalogItemFormSet(data=data, instance=catalog_a, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid() is True
+        formset.save()
+        assert catalog_a.items.count() == 2
+        assert set(catalog_a.items.values_list("item_name", flat=True)) == {"Widget", "Gadget"}
+
+    def test_item_formset_negative_unit_price_is_invalid(self, tenant_a, catalog_a):
+        from apps.scm.forms import SupplierCatalogItemFormSet
+        data = formset_data("items", [
+            {"id": "", "item_name": "Bad price", "sku": "", "uom": "",
+             "unit_price": "-5.00", "lead_time_days": "", "min_order_qty": "1", "is_active": "on"},
+        ])
+        formset = SupplierCatalogItemFormSet(data=data, instance=catalog_a, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid() is False
+
+
+# ================================================================ SupplierRiskAssessmentForm validation
+class TestSupplierRiskAssessmentForm:
+    def test_valid_minimal_submission(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierRiskAssessmentForm
+        data = {
+            "party": str(supplier_a.pk), "assessment_date": "2026-01-01",
+            "financial_score": "3", "geopolitical_score": "2", "compliance_score": "1",
+            "operational_score": "4", "mitigation_plan": "", "next_review_date": "", "notes": "",
+        }
+        form = SupplierRiskAssessmentForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_score_out_of_1_to_5_range_is_invalid(self, tenant_a, supplier_a):
+        from apps.scm.forms import SupplierRiskAssessmentForm
+        data = {
+            "party": str(supplier_a.pk), "assessment_date": "2026-01-01",
+            "financial_score": "9", "geopolitical_score": "2", "compliance_score": "1",
+            "operational_score": "4", "mitigation_plan": "", "next_review_date": "", "notes": "",
+        }
+        form = SupplierRiskAssessmentForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "financial_score" in form.errors
