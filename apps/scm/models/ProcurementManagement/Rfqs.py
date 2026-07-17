@@ -131,6 +131,8 @@ class RFQQuote(TenantNumbered):
         unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "status"], name="scm_quote_tnt_status_idx"),
+            # 4.2 SupplierScorecard.recompute_from_signals filters a supplier's quotes by date range.
+            models.Index(fields=["tenant", "party", "received_date"], name="scm_quote_tnt_party_idx"),
         ]
 
     def recalc_totals(self, save=True):
