@@ -5,12 +5,29 @@ from apps.scm.models import SupplierContract
 from apps.scm.forms import SupplierContractForm
 
 
+def _roll_contract_statuses(request, qs):
+    """Move active↔expiring↔expired for whichever contracts crossed a date boundary — in ONE
+    bulk write, not a save() per row on an unpaginated scan of every tenant contract (perf review).
+
+    A GET that mutates is unusual, but the date-derived status has to catch up somewhere and a page
+    load is the pragmatic trigger; the cost is bounded to the rows that actually changed, wrapped in
+    one atomic bulk_update, so it no longer scales a write with the tenant's whole contract count.
+    """
+    changed = []
+    for c in qs.filter(status__in=SupplierContract.AUTO_STATUSES):
+        old = c.status
+        c.refresh_status(save=False)
+        if c.status != old:
+            changed.append(c)
+    if changed:
+        with transaction.atomic():
+            SupplierContract.objects.bulk_update(changed, ["status", "updated_at"])
+
+
 @login_required
 def contract_list(request):
     qs = SupplierContract.objects.filter(tenant=request.tenant).select_related("party", "currency")
-    # Keep the date-derived status honest on every list load (expiring/expired move silently with time).
-    for c in qs.filter(status__in=SupplierContract.AUTO_STATUSES):
-        c.refresh_status()
+    _roll_contract_statuses(request, qs)
     return crud_list(
         request, qs, "scm/srm/contract/list.html",
         search_fields=["number", "title", "party__name"],
@@ -37,8 +54,10 @@ def contract_create(request):
 @login_required
 def contract_edit(request, pk):
     obj = get_object_or_404(SupplierContract, pk=pk, tenant=request.tenant)
-    if obj.status in ("terminated", "expired"):
-        messages.error(request, "A terminated or expired contract can't be edited.")
+    # renewed is a terminal decision too — a superseded contract has a replacement draft, so its
+    # title/dates/value must not be silently rewritten after the fact (code review).
+    if obj.status in ("terminated", "expired", "renewed"):
+        messages.error(request, "A terminated, expired or renewed contract can't be edited.")
         return redirect("scm:contract_detail", pk=pk)
     return crud_edit(
         request, model=SupplierContract, pk=pk, form_class=SupplierContractForm,
