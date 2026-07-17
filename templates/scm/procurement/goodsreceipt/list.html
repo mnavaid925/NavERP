@@ -18,7 +18,7 @@
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search receipts…">
         </div>
         <div class="form-group">
-          <select name="status" class="form-select">
+          <select name="status" aria-label="Status" class="form-select">
             <option value="">All statuses</option>
             {% for val, label in status_choices %}
               <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -26,7 +26,7 @@
           </select>
         </div>
         <div class="form-group">
-          <select name="match_status" class="form-select">
+          <select name="match_status" aria-label="Match status" class="form-select">
             <option value="">All match states</option>
             {% for val, label in match_status_choices %}
               <option value="{{ val }}" {% if request.GET.match_status == val %}selected{% endif %}>{{ label }}</option>
@@ -34,7 +34,7 @@
           </select>
         </div>
         <div class="form-group">
-          <select name="vendor" class="form-select">
+          <select name="vendor" aria-label="Vendor" class="form-select">
             <option value="">All vendors</option>
             {% for v in vendors %}
               <option value="{{ v.pk }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
