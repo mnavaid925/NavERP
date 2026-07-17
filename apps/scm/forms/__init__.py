@@ -34,3 +34,22 @@ from .ProcurementManagement.GoodsReceiptNotes import (  # noqa: F401
     GoodsReceiptLineForm,
     GoodsReceiptLineFormSet,
 )
+
+# 4.2 Supplier Relationship Management
+from .SupplierRelationshipManagement.SupplierProfiles import (  # noqa: F401
+    SupplierProfileForm,
+)
+from .SupplierRelationshipManagement.SupplierScorecards import (  # noqa: F401
+    SupplierScorecardForm,
+)
+from .SupplierRelationshipManagement.SupplierContracts import (  # noqa: F401
+    SupplierContractForm,
+)
+from .SupplierRelationshipManagement.SupplierCatalogs import (  # noqa: F401
+    SupplierCatalogForm,
+    SupplierCatalogItemForm,
+    SupplierCatalogItemFormSet,
+)
+from .SupplierRelationshipManagement.SupplierRiskAssessments import (  # noqa: F401
+    SupplierRiskAssessmentForm,
+)
