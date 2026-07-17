@@ -284,3 +284,253 @@ class TestPostOnlyActions:
 
     def test_get_quote_award_returns_405(self, client_a, quote_a):
         assert client_a.get(reverse("scm:quote_award", args=[quote_a.pk])).status_code == 405
+
+
+# ================================================================================================
+# SCM 4.2 Supplier Relationship Management
+# ================================================================================================
+
+# ================================================================ Anonymous -> login redirect
+class TestSRMAnonymousRedirect:
+    def test_supplierprofile_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:supplierprofile_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_scorecard_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:scorecard_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_contract_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:contract_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_catalog_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:catalog_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_riskassessment_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:riskassessment_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+
+# ================================================================ @tenant_admin_required gates (priority)
+class TestSRMAdminRequiredGates:
+    def test_supplierprofile_approve_requires_admin(self, member_client, client_a, supplier_profile_dd_a):
+        url = reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_supplierprofile_reject_requires_admin(self, member_client, client_a, supplier_profile_dd_a):
+        url = reverse("scm:supplierprofile_reject", args=[supplier_profile_dd_a.pk])
+        assert member_client.post(url).status_code == 403
+        resp = client_a.post(url, {"decision_note": "Not a fit"})
+        assert resp.status_code != 403
+
+    def test_supplierprofile_reopen_requires_admin(self, member_client, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierProfile
+        sp = SupplierProfile.objects.create(tenant=tenant_a, party=supplier_a, onboarding_status="rejected")
+        url = reverse("scm:supplierprofile_reopen", args=[sp.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_supplierprofile_suspend_requires_admin(self, member_client, client_a, supplier_profile_dd_a):
+        client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk]))
+        url = reverse("scm:supplierprofile_suspend", args=[supplier_profile_dd_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_contract_terminate_requires_admin(self, member_client, client_a, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        url = reverse("scm:contract_terminate", args=[contract_a.pk])
+        assert member_client.post(url, {"termination_reason": "x"}).status_code == 403
+        assert client_a.post(url, {"termination_reason": "x"}).status_code != 403
+
+    def test_riskassessment_review_requires_admin(self, member_client, client_a, risk_assessment_a):
+        risk_assessment_a.status = "submitted"
+        risk_assessment_a.save(update_fields=["status"])
+        url = reverse("scm:riskassessment_review", args=[risk_assessment_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+
+# ================================================================ Plain @login_required actions work for a member
+class TestSRMOrdinaryActionsAllowNonAdmin:
+    def test_member_can_submit_supplier_profile(self, member_client, supplier_profile_a):
+        url = reverse("scm:supplierprofile_submit", args=[supplier_profile_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        supplier_profile_a.refresh_from_db()
+        assert supplier_profile_a.onboarding_status == "due_diligence"
+
+    def test_member_can_recompute_scorecard(self, member_client, scorecard_a):
+        url = reverse("scm:scorecard_recompute", args=[scorecard_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+
+    def test_member_can_activate_contract(self, member_client, contract_a):
+        url = reverse("scm:contract_activate", args=[contract_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        contract_a.refresh_from_db()
+        assert contract_a.status == "active"
+
+    def test_member_can_submit_risk_assessment(self, member_client, risk_assessment_a):
+        url = reverse("scm:riskassessment_submit", args=[risk_assessment_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        risk_assessment_a.refresh_from_db()
+        assert risk_assessment_a.status == "submitted"
+
+    def test_member_can_view_supplier_profile_detail(self, member_client, supplier_profile_a):
+        url = reverse("scm:supplierprofile_detail", args=[supplier_profile_a.pk])
+        assert member_client.get(url).status_code == 200
+
+
+# ================================================================ Cross-tenant IDOR -> 404 (mandatory)
+class TestSRMCrossTenantIDOR:
+    def test_supplierprofile_detail_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.get(
+            reverse("scm:supplierprofile_detail", args=[supplier_profile_b.pk])
+        ).status_code == 404
+
+    def test_supplierprofile_edit_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.get(reverse("scm:supplierprofile_edit", args=[supplier_profile_b.pk])).status_code == 404
+
+    def test_supplierprofile_delete_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.post(reverse("scm:supplierprofile_delete", args=[supplier_profile_b.pk])).status_code == 404
+
+    def test_supplierprofile_approve_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_b.pk])).status_code == 404
+
+    def test_supplierprofile_reject_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.post(reverse("scm:supplierprofile_reject", args=[supplier_profile_b.pk])).status_code == 404
+
+    def test_supplierprofile_reopen_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.post(reverse("scm:supplierprofile_reopen", args=[supplier_profile_b.pk])).status_code == 404
+
+    def test_supplierprofile_suspend_cross_tenant_404(self, client_a, supplier_profile_b):
+        assert client_a.post(reverse("scm:supplierprofile_suspend", args=[supplier_profile_b.pk])).status_code == 404
+
+    def test_scorecard_detail_cross_tenant_404(self, client_a, scorecard_b):
+        assert client_a.get(reverse("scm:scorecard_detail", args=[scorecard_b.pk])).status_code == 404
+
+    def test_scorecard_edit_cross_tenant_404(self, client_a, scorecard_b):
+        assert client_a.get(reverse("scm:scorecard_edit", args=[scorecard_b.pk])).status_code == 404
+
+    def test_scorecard_delete_cross_tenant_404(self, client_a, scorecard_b):
+        assert client_a.post(reverse("scm:scorecard_delete", args=[scorecard_b.pk])).status_code == 404
+
+    def test_scorecard_recompute_cross_tenant_404(self, client_a, scorecard_b):
+        assert client_a.post(reverse("scm:scorecard_recompute", args=[scorecard_b.pk])).status_code == 404
+
+    def test_contract_detail_cross_tenant_404(self, client_a, contract_b):
+        assert client_a.get(reverse("scm:contract_detail", args=[contract_b.pk])).status_code == 404
+
+    def test_contract_edit_cross_tenant_404(self, client_a, contract_b):
+        assert client_a.get(reverse("scm:contract_edit", args=[contract_b.pk])).status_code == 404
+
+    def test_contract_delete_cross_tenant_404(self, client_a, contract_b):
+        assert client_a.post(reverse("scm:contract_delete", args=[contract_b.pk])).status_code == 404
+
+    def test_contract_terminate_cross_tenant_404(self, client_a, contract_b):
+        assert client_a.post(
+            reverse("scm:contract_terminate", args=[contract_b.pk]), {"termination_reason": "x"},
+        ).status_code == 404
+
+    def test_catalog_detail_cross_tenant_404(self, client_a, catalog_b):
+        assert client_a.get(reverse("scm:catalog_detail", args=[catalog_b.pk])).status_code == 404
+
+    def test_catalog_edit_cross_tenant_404(self, client_a, catalog_b):
+        assert client_a.get(reverse("scm:catalog_edit", args=[catalog_b.pk])).status_code == 404
+
+    def test_catalog_delete_cross_tenant_404(self, client_a, catalog_b):
+        assert client_a.post(reverse("scm:catalog_delete", args=[catalog_b.pk])).status_code == 404
+
+    def test_riskassessment_detail_cross_tenant_404(self, client_a, risk_assessment_b):
+        assert client_a.get(reverse("scm:riskassessment_detail", args=[risk_assessment_b.pk])).status_code == 404
+
+    def test_riskassessment_edit_cross_tenant_404(self, client_a, risk_assessment_b):
+        assert client_a.get(reverse("scm:riskassessment_edit", args=[risk_assessment_b.pk])).status_code == 404
+
+    def test_riskassessment_review_cross_tenant_404(self, client_a, risk_assessment_b):
+        assert client_a.post(reverse("scm:riskassessment_review", args=[risk_assessment_b.pk])).status_code == 404
+
+
+# ================================================================ Cross-tenant FORM/FORMSET binding
+class TestSRMCrossTenantFormScoping:
+    def test_supplierprofile_form_party_field_excludes_other_tenant(self, tenant_a, supplier_b):
+        from apps.scm.forms import SupplierProfileForm
+        form = SupplierProfileForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert supplier_b.pk not in pks
+
+    def test_contract_form_document_field_excludes_other_tenant(self, tenant_a, tenant_b, supplier_a):
+        from apps.core.models import Document
+        from apps.scm.forms import SupplierContractForm
+        other_doc = Document.objects.create(tenant=tenant_b, name="Globex NDA.pdf")
+        form = SupplierContractForm(tenant=tenant_a)
+        pks = set(form.fields["document"].queryset.values_list("pk", flat=True))
+        assert other_doc.pk not in pks
+
+    def test_crafted_post_with_other_tenant_party_is_rejected(self, tenant_a, client_a, supplier_b):
+        """A crafted POST naming a Tenant-B party pk on a Tenant-A create must fail validation
+        (the party field's queryset is scoped to the request tenant), not silently bind it."""
+        from apps.scm.models import SupplierProfile
+        data = {
+            "party": str(supplier_b.pk), "tier": "transactional", "category": "",
+            "legal_name": "", "tax_registration": "", "website": "",
+            "primary_contact_name": "", "primary_contact_email": "", "primary_contact_phone": "",
+            "country": "", "year_established": "",
+            "dd_financials_verified": "", "dd_compliance_verified": "", "dd_insurance_verified": "",
+            "dd_quality_cert_verified": "", "dd_references_checked": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:supplierprofile_create"), data)
+        assert resp.status_code == 200  # re-rendered form, not a redirect/save
+        assert not SupplierProfile.objects.filter(party=supplier_b).exists()
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestSRMPostOnlyActions:
+    def test_get_supplierprofile_delete_returns_405(self, client_a, supplier_profile_a):
+        assert client_a.get(reverse("scm:supplierprofile_delete", args=[supplier_profile_a.pk])).status_code == 405
+
+    def test_get_supplierprofile_approve_returns_405(self, client_a, supplier_profile_dd_a):
+        assert client_a.get(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk])).status_code == 405
+
+    def test_get_scorecard_delete_returns_405(self, client_a, scorecard_a):
+        assert client_a.get(reverse("scm:scorecard_delete", args=[scorecard_a.pk])).status_code == 405
+
+    def test_get_contract_terminate_returns_405(self, client_a, contract_a):
+        assert client_a.get(reverse("scm:contract_terminate", args=[contract_a.pk])).status_code == 405
+
+    def test_get_catalog_activate_returns_405(self, client_a, catalog_a):
+        assert client_a.get(reverse("scm:catalog_activate", args=[catalog_a.pk])).status_code == 405
+
+    def test_get_riskassessment_review_returns_405(self, client_a, risk_assessment_a):
+        assert client_a.get(reverse("scm:riskassessment_review", args=[risk_assessment_a.pk])).status_code == 405
+
+
+# ================================================================ CSRF enforcement
+class TestSRMCSRFEnforcement:
+    def test_post_without_csrf_token_is_rejected(self, admin_user, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(
+            reverse("scm:contract_terminate", args=[contract_a.pk]), {"termination_reason": "No CSRF token"},
+        )
+        assert resp.status_code == 403
+        contract_a.refresh_from_db()
+        assert contract_a.status == "active"  # unchanged — the request never reached the view logic
