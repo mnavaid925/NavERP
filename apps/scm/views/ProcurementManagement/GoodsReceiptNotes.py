@@ -128,8 +128,11 @@ def goodsreceipt_receive(request, pk):
     with transaction.atomic():
         obj.status = "received"
         obj.save(update_fields=["status", "updated_at"])
-        obj.recompute_match()
+        # Re-match every receipt on the order, not just this one: this booking changes the
+        # per-line received aggregate that the siblings' verdicts are derived from.
+        obj.purchase_order.rematch_receipts()
         obj.purchase_order.recompute_receipt_status()
+        obj.refresh_from_db(fields=["match_status", "match_notes"])
     write_audit_log(request.user, obj, "update", {"action": "receive"})
     messages.success(request, f"Receipt {obj.number} booked.")
     return redirect("scm:goodsreceipt_detail", pk=pk)
@@ -146,8 +149,11 @@ def goodsreceipt_cancel(request, pk):
     with transaction.atomic():
         obj.status = "cancelled"
         obj.save(update_fields=["status", "updated_at"])
-        obj.recompute_match()
+        # Cancelling drops this receipt out of the received aggregate, so the siblings' verdicts
+        # need re-deriving too.
+        obj.purchase_order.rematch_receipts()
         obj.purchase_order.recompute_receipt_status()
+        obj.refresh_from_db(fields=["match_status", "match_notes"])
     write_audit_log(request.user, obj, "update", {"action": "cancel"})
     messages.success(request, f"Receipt {obj.number} cancelled.")
     return redirect("scm:goodsreceipt_detail", pk=pk)
