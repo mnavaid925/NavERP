@@ -84,12 +84,21 @@ def _rfq_form(request, instance):
 def rfq_detail(request, pk):
     obj = get_object_or_404(
         RFQ.objects.select_related("requisition", "currency"), pk=pk, tenant=request.tenant)
+    quotes = list(obj.quotes.select_related("party", "payment_terms"))
+    # Which suppliers have answered, resolved in ONE pass over the quotes we already hold. The
+    # RFQVendor.has_responded property costs an .exists() per row, which is an N+1 across the
+    # invite list on a page every buyer opens right after sending an RFQ.
+    responded_party_ids = {q.party_id for q in quotes}
+    invited = list(obj.invited_vendors.select_related("party"))
+    for invite in invited:
+        invite.responded = invite.party_id in responded_party_ids
     return render(request, "scm/procurement/rfq/detail.html", {
         "obj": obj,
         "lines": obj.lines.all(),
-        "invited_vendors": obj.invited_vendors.select_related("party"),
-        "quotes": obj.quotes.select_related("party", "payment_terms"),
-        "awarded": obj.awarded_quote(),
+        "invited_vendors": invited,
+        "quotes": quotes,
+        # Resolved from the list already in memory rather than a fresh filter() query.
+        "awarded": next((q for q in quotes if q.status == "awarded"), None),
     })
 
 
@@ -186,7 +195,8 @@ def rfq_compare(request, pk):
         "quotes": quotes,
         "matrix": matrix,
         "best_total": best_total,
-        "awarded": obj.awarded_quote(),
+        # From the list already in memory — awarded_quote() would re-query for a row we hold.
+        "awarded": next((q for q in quotes if q.status == "awarded"), None),
     })
 
 
