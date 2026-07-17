@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Compare quotes · {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Compare quotes</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:rfq_list' %}">RFQs</a><span class="sep">›</span><a href="{% url 'scm:rfq_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Compare</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:rfq_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to RFQ</a>
+    </div>
+  </div>
+
+  {% if awarded %}
+    <div style="margin-bottom:1.25rem; padding:1rem; border-radius:var(--radius-sm); background:var(--ok-bg); color:var(--ok);">
+      <i data-lucide="award"></i>
+      <span class="fw-600">Awarded to {{ awarded.party.name }}</span> — quote {{ awarded.number }} at {{ awarded.total|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}. This RFQ is closed to further awards.
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ obj.title }}</h2>
+      <span class="text-muted">{% if obj.currency %}All amounts in {{ obj.currency.code }}. {% endif %}The cheapest supplier per line is marked Best.</span>
+    </div>
+
+    {% if quotes %}
+      {% comment %}
+        The matrix is one row per RFQ line and one column per quote, so it grows sideways with the
+        supplier count — .table-wrap gives it the horizontal scroll rather than squashing the cells.
+        `is_best` / `best_total` are computed in the view (rfq_compare); this template only renders.
+      {% endcomment %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Line</th>
+              {% for q in quotes %}
+                <th>
+                  <div class="fw-600">{{ q.party.name }}</div>
+                  <div class="text-muted">{{ q.number }}{% if q.lead_time_days %} · {{ q.lead_time_days }} days{% endif %}</div>
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in matrix %}
+              <tr>
+                <td>
+                  <div class="fw-600">{{ row.line.item_description }}</div>
+                  <div class="text-muted">{{ row.line.quantity }}{% if row.line.uom_hint %} {{ row.line.uom_hint }}{% endif %}{% if row.line.sku_hint %} · {{ row.line.sku_hint }}{% endif %}</div>
+                </td>
+                {% for cell in row.cells %}
+                  <td>
+                    {% if cell.line %}
+                      <div class="{% if cell.is_best %}fw-600{% endif %}">{{ cell.line.unit_price|floatformat:2 }}</div>
+                      <div class="text-muted">{{ cell.line.line_total|floatformat:2 }}</div>
+                      {% if cell.is_best %}<span class="badge badge-green">Best</span>{% endif %}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% empty %}
+              <tr><td colspan="{{ quotes|length|add:1 }}"><div class="empty-state"><i data-lucide="list-checks"></i><p>This RFQ has no lines to compare.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td class="fw-600">Total</td>
+              {% for q in quotes %}
+                <td>
+                  <span class="{% if q.total == best_total %}fw-600{% endif %}">{{ q.total|floatformat:2 }}</span>
+                  {% if q.total == best_total %}<span class="badge badge-green">Best</span>{% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+            <tr>
+              <td class="fw-600">Status</td>
+              {% for q in quotes %}
+                <td><span class="badge badge-{% if q.status == 'awarded' %}green{% elif q.status == 'shortlisted' %}info{% elif q.status == 'rejected' %}red{% elif q.status == 'received' %}slate{% else %}muted{% endif %}">{{ q.get_status_display }}</span></td>
+              {% endfor %}
+            </tr>
+            <tr>
+              <td class="fw-600">Award</td>
+              {% for q in quotes %}
+                <td>
+                  {% if awarded %}
+                    {% if q.status == 'awarded' %}
+                      <span class="badge badge-green">Won</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  {% else %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'scm:quote_award' q.pk %}" onsubmit="return confirm('Award this RFQ to {{ q.party.name|escapejs }} for {{ q.total|floatformat:2|escapejs }}? This rejects the other quotes and drafts a purchase order.');">
+                        {% csrf_token %}
+                        <button class="btn btn-primary" type="submit"><i data-lucide="award"></i> Award</button>
+                      </form>
+                    {% else %}
+                      <span class="text-muted"><i data-lucide="shield"></i> Admin only</span>
+                    {% endif %}
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <i data-lucide="columns-3"></i>
+        <h3>No quotes to compare</h3>
+        <p>Record at least one supplier response on this RFQ, then come back to compare them side by side.</p>
+        <a href="{% url 'scm:quote_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add quote</a>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
