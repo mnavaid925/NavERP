@@ -1,5 +1,7 @@
 """SCM 4.1 Procurement Management — GoodsReceiptNotes views (incl. the three-way match)."""
 from apps.scm.views._common import *  # noqa: F401,F403
+# `import *` skips underscore-prefixed names, so private helpers need an explicit import.
+from apps.scm.views._common import _changed
 from apps.scm.views._helpers import _need_tenant, _supplier_parties
 from apps.scm.models import (
     GoodsReceiptNote,
@@ -71,7 +73,7 @@ def _goodsreceipt_form(request, instance):
                 formset.instance = grn
                 formset.save()
                 grn.recompute_match()
-            write_audit_log(request.user, grn, "update" if is_edit else "create")
+            write_audit_log(request.user, grn, "update" if is_edit else "create", _changed(form))
             messages.success(request, f"Receipt {grn.number} saved.")
             return redirect("scm:goodsreceipt_detail", pk=grn.pk)
     else:
@@ -138,9 +140,16 @@ def goodsreceipt_receive(request, pk):
     return redirect("scm:goodsreceipt_detail", pk=pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def goodsreceipt_cancel(request, pk):
+    """Reverse a booked receipt.
+
+    Tenant-admin gated, matching purchaseorder_cancel: cancelling drops the receipt out of the
+    per-line received aggregate, walks the order's status backward, and re-derives the three-way
+    match verdict on every sibling — i.e. it directly moves the control that decides whether a
+    vendor bill should be paid. That is not a plain @login_required action.
+    """
     obj = get_object_or_404(GoodsReceiptNote.objects.select_related("purchase_order"),
                             pk=pk, tenant=request.tenant)
     if obj.status == "cancelled":
