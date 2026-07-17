@@ -17,6 +17,12 @@ from apps.scm.models import (
     RFQQuote,
     RFQQuoteLine,
     RFQVendor,
+    SupplierCatalog,
+    SupplierCatalogItem,
+    SupplierContract,
+    SupplierProfile,
+    SupplierRiskAssessment,
+    SupplierScorecard,
 )
 
 
@@ -88,3 +94,45 @@ class GoodsReceiptNoteAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status", "match_status")
     search_fields = ("number", "delivery_note_ref", "purchase_order__number")
     inlines = [GoodsReceiptLineInline]
+
+
+# ============================================================ 4.2 Supplier Relationship Management
+@admin.register(SupplierProfile)
+class SupplierProfileAdmin(admin.ModelAdmin):
+    list_display = ("party", "tenant", "onboarding_status", "tier", "category")
+    list_filter = ("tenant", "onboarding_status", "tier")
+    search_fields = ("party__name", "legal_name", "category")
+
+
+@admin.register(SupplierScorecard)
+class SupplierScorecardAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "tenant", "status", "overall_score", "grade", "period_end")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "party__name")
+
+
+@admin.register(SupplierContract)
+class SupplierContractAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "party", "tenant", "status", "end_date")
+    list_filter = ("tenant", "status", "contract_type")
+    search_fields = ("number", "title", "party__name")
+
+
+class SupplierCatalogItemInline(admin.TabularInline):
+    model = SupplierCatalogItem
+    extra = 0
+
+
+@admin.register(SupplierCatalog)
+class SupplierCatalogAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "party", "tenant", "status", "valid_until")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "name", "party__name")
+    inlines = [SupplierCatalogItemInline]
+
+
+@admin.register(SupplierRiskAssessment)
+class SupplierRiskAssessmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "tenant", "status", "risk_level", "assessment_date")
+    list_filter = ("tenant", "status", "risk_level")
+    search_fields = ("number", "party__name")
