@@ -68,6 +68,7 @@ from .SupplierRelationshipManagement.SupplierProfiles import (  # noqa: F401
     supplierprofile_submit,
     supplierprofile_approve,
     supplierprofile_reject,
+    supplierprofile_reopen,
     supplierprofile_suspend,
 )
 from .SupplierRelationshipManagement.SupplierScorecards import (  # noqa: F401
