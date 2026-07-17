@@ -53,3 +53,29 @@ from .SupplierRelationshipManagement.SupplierCatalogs import (  # noqa: F401
 from .SupplierRelationshipManagement.SupplierRiskAssessments import (  # noqa: F401
     SupplierRiskAssessmentForm,
 )
+
+# 4.3 Inventory Management
+from .InventoryManagement.Items import (  # noqa: F401
+    ItemCategoryForm,
+    UOMForm,
+    ItemForm,
+)
+from .InventoryManagement.Locations import (  # noqa: F401
+    LocationForm,
+)
+from .InventoryManagement.LotSerials import (  # noqa: F401
+    LotSerialForm,
+)
+from .InventoryManagement.StockTransfers import (  # noqa: F401
+    StockTransferForm,
+    StockTransferLineForm,
+    StockTransferLineFormSet,
+)
+from .InventoryManagement.StockAdjustments import (  # noqa: F401
+    StockAdjustmentForm,
+    StockAdjustmentLineForm,
+    StockAdjustmentLineFormSet,
+)
+from .InventoryManagement.ReorderRules import (  # noqa: F401
+    ReorderRuleForm,
+)
