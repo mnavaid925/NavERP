@@ -67,7 +67,7 @@
         <thead><tr><th>PO Line</th><th>Ordered</th><th>Received</th><th>Rejected</th><th>Rejection Reason</th><th>Notes</th></tr></thead>
         <tbody>
           {% for line in lines %}
-            <tr {% if line.quantity_rejected %}style="background: var(--warn-bg);" title="This line has rejected quantity"{% endif %}>
+            <tr {% if line.quantity_rejected %}class="row-warn" title="This line has rejected quantity"{% endif %}>
               <td>{% if line.po_line %}{{ line.po_line.item_description|default:"—" }}{% else %}—{% endif %}</td>
               <td>{{ line.po_line.quantity|floatformat:2 }}</td>
               <td>{{ line.quantity_received|floatformat:2 }}</td>
@@ -89,7 +89,7 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
-      <div class="page-actions">
+      <div class="form-actions">
         {% if obj.status == 'draft' %}
           <form method="post" action="{% url 'scm:goodsreceipt_receive' obj.pk %}" onsubmit="return confirm('Book this receipt? Stock will be recorded against the order.');">
             {% csrf_token %}
