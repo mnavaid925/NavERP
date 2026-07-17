@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:goodsreceipt_list' %}">Goods Receipts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <span class="badge badge-{% if obj.status == 'received' %}green{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      <span class="badge badge-{% if obj.match_status == 'matched' %}green{% elif obj.match_status == 'price_variance' or obj.match_status == 'quantity_variance' %}amber{% elif obj.match_status == 'over_received' %}red{% elif obj.match_status == 'not_matched' %}muted{% else %}muted{% endif %}">{{ obj.get_match_status_display }}</span>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Purchase Order</dt><dd>{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Vendor</dt><dd>{% if obj.purchase_order.vendor %}{{ obj.purchase_order.vendor.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Receipt Date</dt><dd>{{ obj.receipt_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Delivery Note Ref</dt><dd>{{ obj.delivery_note_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Received By</dt><dd>{% if obj.received_by %}{{ obj.received_by.get_full_name|default:obj.received_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Three-way match</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Ordered</dt><dd class="fw-600">{{ obj.purchase_order.total|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Received value</dt><dd class="fw-600">{{ received_value|floatformat:2 }}</dd></div>
+        <div class="detail-item">
+          <dt>Billed</dt>
+          <dd>
+            {% if billed_total is not None %}
+              <span class="fw-600">{{ billed_total|floatformat:2 }}</span>
+              {% if obj.bill %}<div class="text-muted">{{ obj.bill.number }}</div>{% endif %}
+            {% else %}
+              <span class="text-muted">Not billed</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Match status</dt>
+          <dd><span class="badge badge-{% if obj.match_status == 'matched' %}green{% elif obj.match_status == 'price_variance' or obj.match_status == 'quantity_variance' %}amber{% elif obj.match_status == 'over_received' %}red{% elif obj.match_status == 'not_matched' %}muted{% else %}muted{% endif %}">{{ obj.get_match_status_display }}</span></dd>
+        </div>
+      </dl>
+      <div class="form-group" style="margin-top:1rem;">
+        <div class="form-label">Match explanation</div>
+        <div class="text-muted">{{ obj.match_notes|default:"No match has been evaluated for this receipt yet." }}</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'scm:goodsreceipt_rematch' obj.pk %}" onsubmit="return confirm('Re-check the three-way match for this receipt?');">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Re-check match</button>
+      </form>
+      <div class="form-help">Run this after the linked bill changes — the match is recalculated from the order, this receipt and the bill.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>PO Line</th><th>Ordered</th><th>Received</th><th>Rejected</th><th>Rejection Reason</th><th>Notes</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr {% if line.quantity_rejected %}style="background: var(--warn-bg);" title="This line has rejected quantity"{% endif %}>
+              <td>{% if line.po_line %}{{ line.po_line.item_description|default:"—" }}{% else %}—{% endif %}</td>
+              <td>{{ line.po_line.quantity|floatformat:2 }}</td>
+              <td>{{ line.quantity_received|floatformat:2 }}</td>
+              <td>{{ line.quantity_rejected|floatformat:2 }}</td>
+              <td>{{ line.rejection_reason|default:"—" }}</td>
+              <td>{{ line.notes|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><p>No lines on this receipt.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="5" class="fw-600">Received value</td><td class="fw-600">{{ received_value|floatformat:2 }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:goodsreceipt_receive' obj.pk %}" onsubmit="return confirm('Book this receipt? Stock will be recorded against the order.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Book receipt</button>
+          </form>
+        {% endif %}
+        {% if obj.status != 'cancelled' %}
+          <form method="post" action="{% url 'scm:goodsreceipt_cancel' obj.pk %}" onsubmit="return confirm('Cancel this receipt?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Cancel receipt</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:goodsreceipt_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:goodsreceipt_delete' obj.pk %}" onsubmit="return confirm('Delete this goods receipt?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
