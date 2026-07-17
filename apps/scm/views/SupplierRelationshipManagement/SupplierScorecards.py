@@ -63,6 +63,10 @@ def scorecard_delete(request, pk):
 def scorecard_recompute(request, pk):
     """Derive the four dimension scores from real 4.1 procurement signals for this period."""
     obj = get_object_or_404(SupplierScorecard, pk=pk, tenant=request.tenant)
+    if obj.status == "archived":
+        # Match scorecard_edit's freeze — an archived scorecard is a historical record (security review).
+        messages.error(request, "An archived scorecard can't be recomputed.")
+        return redirect("scm:scorecard_detail", pk=pk)
     if obj.manual_override:
         messages.info(request, "This scorecard is set to manual override — signals are not applied.")
         return redirect("scm:scorecard_detail", pk=pk)
