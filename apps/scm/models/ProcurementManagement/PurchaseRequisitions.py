@@ -91,16 +91,21 @@ class PurchaseRequisition(TenantNumbered):
         if save:
             self.save(update_fields=["estimated_total", "updated_at"])
 
-    def budget_check(self):
+    def budget_check(self, lines=None):
         """Compare this requisition against the matching ``accounting.BudgetLine`` amounts.
 
         A view-time check, not a stored encumbrance — deliberately: the budget is the accounting
         module's to own, and duplicating a committed-balance field here would be a second source of
         truth that drifts. Returns ``None`` when there is nothing to check against.
+
+        ``lines`` lets the detail view hand in the rows it has already fetched for the template
+        instead of paying for the same query twice.
         """
         if not self.budget_id:
             return None
-        costed_lines = [line for line in self.lines.all() if line.gl_account_id]
+        if lines is None:
+            lines = self.lines.all()
+        costed_lines = [line for line in lines if line.gl_account_id]
         if not costed_lines:
             return None
         account_ids = {line.gl_account_id for line in costed_lines}
