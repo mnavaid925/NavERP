@@ -616,3 +616,838 @@ class TestGoodsReceiptStateMachine:
         assert resp.status_code == 302
         goods_receipt_a.refresh_from_db()
         assert goods_receipt_a.match_status == "matched"
+
+
+# ================================================================================================
+# SCM 4.2 Supplier Relationship Management
+# ================================================================================================
+
+# ================================================================ SupplierProfile CRUD
+class TestSupplierProfileCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, supplier_profile_a):
+        resp = client_a.get(reverse("scm:supplierprofile_list"))
+        assert resp.status_code == 200
+        assert supplier_profile_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, supplier_profile_a, supplier_profile_b):
+        resp = client_a.get(reverse("scm:supplierprofile_list"))
+        assert supplier_profile_b not in resp.context["object_list"]
+
+    def test_list_search_by_category(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierProfile
+        sp = SupplierProfile.objects.create(tenant=tenant_a, party=supplier_a, category="Packaging")
+        resp = client_a.get(reverse("scm:supplierprofile_list"), {"q": "Packaging"})
+        assert sp in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:supplierprofile_list"), {"q": "Nothing matches this"})
+        assert sp not in resp2.context["object_list"]
+
+    def test_list_filter_by_onboarding_status(self, client_a, tenant_a, supplier_profile_a, vendor_a):
+        from apps.scm.models import SupplierProfile
+        other = SupplierProfile.objects.create(
+            tenant=tenant_a, party=vendor_a, onboarding_status="due_diligence",
+        )
+        resp = client_a.get(reverse("scm:supplierprofile_list"), {"onboarding_status": "draft"})
+        object_list = list(resp.context["object_list"])
+        assert supplier_profile_a in object_list
+        assert other not in object_list
+
+    def test_list_junk_status_filter_returns_200_not_500(self, client_a, supplier_profile_a):
+        resp = client_a.get(reverse("scm:supplierprofile_list"), {"onboarding_status": "not-a-real-status"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, supplier_profile_a):
+        resp = client_a.get(reverse("scm:supplierprofile_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def _valid_data(self, supplier_a, **overrides):
+        data = {
+            "party": str(supplier_a.pk), "tier": "transactional", "category": "",
+            "legal_name": "", "tax_registration": "", "website": "",
+            "primary_contact_name": "", "primary_contact_email": "", "primary_contact_phone": "",
+            "country": "", "year_established": "",
+            "dd_financials_verified": "", "dd_compliance_verified": "", "dd_insurance_verified": "",
+            "dd_quality_cert_verified": "", "dd_references_checked": "", "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierProfile
+        data = self._valid_data(supplier_a, tier="preferred", category="Packaging materials")
+        resp = client_a.post(reverse("scm:supplierprofile_create"), data)
+        assert resp.status_code == 302
+        sp = SupplierProfile.objects.get(party=supplier_a)
+        assert sp.tenant_id == tenant_a.pk
+        assert sp.tier == "preferred"
+
+    def test_create_ignores_posted_onboarding_status_and_decision_fields(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierProfile
+        data = self._valid_data(supplier_a, onboarding_status="approved", decision_note="hacked in")
+        resp = client_a.post(reverse("scm:supplierprofile_create"), data)
+        assert resp.status_code == 302
+        sp = SupplierProfile.objects.get(party=supplier_a)
+        assert sp.onboarding_status == "draft"
+        assert sp.decision_note == ""
+
+    def test_edit_updates_fields(self, client_a, supplier_profile_a, supplier_a):
+        data = self._valid_data(supplier_a, tier="strategic", category="Updated category")
+        resp = client_a.post(reverse("scm:supplierprofile_edit", args=[supplier_profile_a.pk]), data)
+        assert resp.status_code == 302
+        supplier_profile_a.refresh_from_db()
+        assert supplier_profile_a.tier == "strategic"
+        assert supplier_profile_a.category == "Updated category"
+
+    def test_edit_blocked_once_approved(self, client_a, supplier_profile_dd_a):
+        client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk]))
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "approved"
+        resp = client_a.get(reverse("scm:supplierprofile_edit", args=[supplier_profile_dd_a.pk]))
+        assert resp.status_code == 302  # redirected to detail, not the form
+
+    def test_detail_returns_200(self, client_a, supplier_profile_a):
+        resp = client_a.get(reverse("scm:supplierprofile_detail", args=[supplier_profile_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == supplier_profile_a
+
+    def test_delete_draft_removes_it(self, client_a, supplier_profile_a):
+        pk = supplier_profile_a.pk
+        resp = client_a.post(reverse("scm:supplierprofile_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import SupplierProfile
+        assert not SupplierProfile.objects.filter(pk=pk).exists()
+
+    def test_delete_non_draft_is_refused(self, client_a, supplier_profile_dd_a):
+        from apps.scm.models import SupplierProfile
+        resp = client_a.post(reverse("scm:supplierprofile_delete", args=[supplier_profile_dd_a.pk]))
+        assert resp.status_code == 302
+        assert SupplierProfile.objects.filter(pk=supplier_profile_dd_a.pk).exists()
+
+    def test_get_delete_returns_405_and_does_not_delete(self, client_a, supplier_profile_a):
+        resp = client_a.get(reverse("scm:supplierprofile_delete", args=[supplier_profile_a.pk]))
+        assert resp.status_code == 405
+        from apps.scm.models import SupplierProfile
+        assert SupplierProfile.objects.filter(pk=supplier_profile_a.pk).exists()
+
+
+# ================================================================ SupplierProfile onboarding lifecycle (priority)
+class TestSupplierProfileLifecycle:
+    def test_submit_draft_moves_to_due_diligence(self, client_a, supplier_profile_a):
+        resp = client_a.post(reverse("scm:supplierprofile_submit", args=[supplier_profile_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_a.refresh_from_db()
+        assert supplier_profile_a.onboarding_status == "due_diligence"
+
+    def test_submit_already_decided_is_a_no_op(self, client_a, supplier_profile_dd_a):
+        client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk]))
+        supplier_profile_dd_a.refresh_from_db()
+        resp = client_a.post(reverse("scm:supplierprofile_submit", args=[supplier_profile_dd_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "approved"  # unchanged
+
+    # ---- Regression: approve source-state guard — draft is NOT a legal source state ----
+    def test_approve_from_draft_is_refused_even_with_complete_dd(self, client_a, supplier_profile_a):
+        supplier_profile_a.dd_financials_verified = True
+        supplier_profile_a.dd_compliance_verified = True
+        supplier_profile_a.dd_insurance_verified = True
+        supplier_profile_a.dd_quality_cert_verified = True
+        supplier_profile_a.dd_references_checked = True
+        supplier_profile_a.save()
+        resp = client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_a.refresh_from_db()
+        assert supplier_profile_a.onboarding_status == "draft"  # NOT approved
+
+    def test_approve_from_due_diligence_incomplete_is_refused(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierProfile
+        sp = SupplierProfile.objects.create(tenant=tenant_a, party=supplier_a, onboarding_status="due_diligence")
+        resp = client_a.post(reverse("scm:supplierprofile_approve", args=[sp.pk]))
+        assert resp.status_code == 302
+        sp.refresh_from_db()
+        assert sp.onboarding_status == "due_diligence"
+
+    def test_approve_from_due_diligence_complete_succeeds(self, client_a, supplier_profile_dd_a):
+        resp = client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "approved"
+        assert supplier_profile_dd_a.approved_by is not None
+        assert supplier_profile_dd_a.approved_at is not None
+
+    # ---- Regression: reject is for onboarding only, not an already-approved supplier ----
+    def test_reject_on_approved_profile_is_refused(self, client_a, supplier_profile_dd_a):
+        client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk]))
+        supplier_profile_dd_a.refresh_from_db()
+        resp = client_a.post(
+            reverse("scm:supplierprofile_reject", args=[supplier_profile_dd_a.pk]),
+            {"decision_note": "Changed my mind"},
+        )
+        assert resp.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "approved"  # unchanged
+
+    def test_reject_without_reason_is_refused(self, client_a, supplier_profile_dd_a):
+        resp = client_a.post(reverse("scm:supplierprofile_reject", args=[supplier_profile_dd_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "due_diligence"
+
+    def test_reject_with_reason_succeeds(self, client_a, supplier_profile_dd_a):
+        resp = client_a.post(
+            reverse("scm:supplierprofile_reject", args=[supplier_profile_dd_a.pk]),
+            {"decision_note": "Failed a background check"},
+        )
+        assert resp.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "rejected"
+
+    def test_reopen_rejected_profile_sends_to_draft(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierProfile
+        sp = SupplierProfile.objects.create(tenant=tenant_a, party=supplier_a, onboarding_status="rejected")
+        resp = client_a.post(reverse("scm:supplierprofile_reopen", args=[sp.pk]))
+        assert resp.status_code == 302
+        sp.refresh_from_db()
+        assert sp.onboarding_status == "draft"
+
+    def test_reopen_non_rejected_is_a_no_op(self, client_a, supplier_profile_a):
+        resp = client_a.post(reverse("scm:supplierprofile_reopen", args=[supplier_profile_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_a.refresh_from_db()
+        assert supplier_profile_a.onboarding_status == "draft"
+
+    def test_suspend_approved_profile_then_reinstate(self, client_a, supplier_profile_dd_a):
+        client_a.post(reverse("scm:supplierprofile_approve", args=[supplier_profile_dd_a.pk]))
+        resp = client_a.post(reverse("scm:supplierprofile_suspend", args=[supplier_profile_dd_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "suspended"
+
+        resp2 = client_a.post(reverse("scm:supplierprofile_suspend", args=[supplier_profile_dd_a.pk]))
+        assert resp2.status_code == 302
+        supplier_profile_dd_a.refresh_from_db()
+        assert supplier_profile_dd_a.onboarding_status == "approved"  # toggled back
+
+    def test_suspend_a_draft_is_a_no_op(self, client_a, supplier_profile_a):
+        resp = client_a.post(reverse("scm:supplierprofile_suspend", args=[supplier_profile_a.pk]))
+        assert resp.status_code == 302
+        supplier_profile_a.refresh_from_db()
+        assert supplier_profile_a.onboarding_status == "draft"
+
+
+# ================================================================ SupplierScorecard CRUD
+class TestScorecardCRUD:
+    def test_list_returns_200(self, client_a, scorecard_a):
+        resp = client_a.get(reverse("scm:scorecard_list"))
+        assert resp.status_code == 200
+        assert scorecard_a in resp.context["object_list"]
+
+    def test_list_filter_by_party(self, client_a, scorecard_a, supplier_a):
+        resp = client_a.get(reverse("scm:scorecard_list"), {"party": str(supplier_a.pk)})
+        assert scorecard_a in resp.context["object_list"]
+
+    def test_list_junk_party_filter_returns_200_not_500(self, client_a, scorecard_a):
+        resp = client_a.get(reverse("scm:scorecard_list"), {"party": "abc"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, scorecard_a):
+        resp = client_a.get(reverse("scm:scorecard_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_list_page_2_when_rows_exceed_page_size(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierScorecard
+        for i in range(20):
+            SupplierScorecard.objects.create(
+                tenant=tenant_a, party=supplier_a,
+                period_start=datetime.date(2026, 1, 1), period_end=datetime.date(2026, 1, 31),
+            )
+        resp = client_a.get(reverse("scm:scorecard_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert len(resp.context["object_list"]) > 0
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierScorecard
+        data = {
+            "party": str(supplier_a.pk), "period_start": "2026-01-01", "period_end": "2026-01-31",
+            "delivery_score": "", "quality_score": "", "price_score": "", "responsiveness_score": "",
+            "manual_override": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:scorecard_create"), data)
+        assert resp.status_code == 302
+        sc = SupplierScorecard.objects.get(party=supplier_a)
+        assert sc.tenant_id == tenant_a.pk
+        assert sc.number == "SCR-00001"
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierScorecard
+        data = {
+            "party": str(supplier_a.pk), "period_start": "2026-01-01", "period_end": "2026-01-31",
+            "delivery_score": "", "quality_score": "", "price_score": "", "responsiveness_score": "",
+            "manual_override": "", "notes": "",
+            "status": "published", "number": "SCR-99999", "overall_score": "99.99",
+        }
+        resp = client_a.post(reverse("scm:scorecard_create"), data)
+        assert resp.status_code == 302
+        sc = SupplierScorecard.objects.get(party=supplier_a)
+        assert sc.status == "draft"
+        assert sc.number == "SCR-00001"
+
+    def test_edit_blocked_once_archived(self, client_a, scorecard_a):
+        scorecard_a.status = "archived"
+        scorecard_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:scorecard_edit", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+
+    def test_detail_recomputes_overall(self, client_a, scorecard_a):
+        scorecard_a.delivery_score = Decimal("80.00")
+        scorecard_a.save(update_fields=["delivery_score"])
+        resp = client_a.get(reverse("scm:scorecard_detail", args=[scorecard_a.pk]))
+        assert resp.status_code == 200
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.overall_score == Decimal("80.00")
+
+    def test_delete_draft_removes_it(self, client_a, scorecard_a):
+        pk = scorecard_a.pk
+        resp = client_a.post(reverse("scm:scorecard_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import SupplierScorecard
+        assert not SupplierScorecard.objects.filter(pk=pk).exists()
+
+    def test_delete_non_draft_is_refused(self, client_a, scorecard_a):
+        scorecard_a.status = "published"
+        scorecard_a.save(update_fields=["status"])
+        from apps.scm.models import SupplierScorecard
+        resp = client_a.post(reverse("scm:scorecard_delete", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+        assert SupplierScorecard.objects.filter(pk=scorecard_a.pk).exists()
+
+
+class TestScorecardActions:
+    def test_recompute_updates_scores_from_signals(self, client_a, tenant_a, supplier_a, usd, scorecard_a):
+        from apps.scm.models import PurchaseOrder, PurchaseOrderLine, GoodsReceiptNote, GoodsReceiptLine
+        po = PurchaseOrder.objects.create(
+            tenant=tenant_a, vendor=supplier_a, currency=usd, status="approved",
+            order_date=datetime.date(2026, 1, 1), expected_date=datetime.date(2026, 1, 20),
+        )
+        line = PurchaseOrderLine.objects.create(
+            purchase_order=po, item_description="Widget", quantity=Decimal("10"), unit_price=Decimal("5.00"),
+        )
+        grn = GoodsReceiptNote.objects.create(
+            tenant=tenant_a, purchase_order=po, receipt_date=datetime.date(2026, 1, 15), status="received",
+        )
+        GoodsReceiptLine.objects.create(goods_receipt=grn, po_line=line, quantity_received=Decimal("10"))
+
+        resp = client_a.post(reverse("scm:scorecard_recompute", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.delivery_score == Decimal("100.00")
+
+    def test_recompute_blocked_on_manual_override(self, client_a, scorecard_a):
+        scorecard_a.manual_override = True
+        scorecard_a.delivery_score = Decimal("55.00")
+        scorecard_a.save(update_fields=["manual_override", "delivery_score"])
+        resp = client_a.post(reverse("scm:scorecard_recompute", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.delivery_score == Decimal("55.00")
+
+    def test_recompute_blocked_when_archived(self, client_a, scorecard_a):
+        scorecard_a.status = "archived"
+        scorecard_a.delivery_score = Decimal("55.00")
+        scorecard_a.save(update_fields=["status", "delivery_score"])
+        resp = client_a.post(reverse("scm:scorecard_recompute", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.delivery_score == Decimal("55.00")
+
+    def test_publish_draft_succeeds(self, client_a, scorecard_a):
+        resp = client_a.post(reverse("scm:scorecard_publish", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.status == "published"
+
+    def test_publish_non_draft_is_a_no_op(self, client_a, scorecard_a):
+        scorecard_a.status = "published"
+        scorecard_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:scorecard_publish", args=[scorecard_a.pk]))
+        assert resp.status_code == 302
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.status == "published"
+
+
+# ================================================================ SupplierContract CRUD
+class TestContractCRUD:
+    def test_list_returns_200(self, client_a, contract_a):
+        resp = client_a.get(reverse("scm:contract_list"))
+        assert resp.status_code == 200
+        assert contract_a in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, contract_a):
+        resp = client_a.get(reverse("scm:contract_list"), {"status": "draft"})
+        assert contract_a in resp.context["object_list"]
+
+    def test_list_junk_type_filter_returns_200_not_500(self, client_a, contract_a):
+        resp = client_a.get(reverse("scm:contract_list"), {"contract_type": "not-a-type"})
+        assert resp.status_code == 200
+
+    def test_list_no_n_plus_one_query_blowup(self, client_a, tenant_a, supplier_a, django_assert_max_num_queries):
+        from apps.scm.models import SupplierContract
+        for i in range(8):
+            SupplierContract.objects.create(tenant=tenant_a, party=supplier_a, title=f"Contract {i}")
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:contract_list"))
+        assert resp.status_code == 200
+
+    def _valid_data(self, supplier_a, **overrides):
+        data = {
+            "party": str(supplier_a.pk), "title": "New Deal", "contract_type": "purchase",
+            "start_date": "2026-01-01", "end_date": "2026-12-31", "contract_value": "5000.00",
+            "currency": "", "payment_terms": "", "auto_renew": "", "renewal_notice_days": "30",
+            "terms_summary": "", "document": "", "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierContract
+        resp = client_a.post(reverse("scm:contract_create"), self._valid_data(supplier_a))
+        assert resp.status_code == 302
+        c = SupplierContract.objects.get(title="New Deal")
+        assert c.tenant_id == tenant_a.pk
+        assert c.number == "SC-00001"
+        assert c.status == "draft"
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierContract
+        data = self._valid_data(
+            supplier_a, title="Hack attempt", start_date="", end_date="", contract_value="0",
+            status="active", number="SC-99999",
+        )
+        resp = client_a.post(reverse("scm:contract_create"), data)
+        assert resp.status_code == 302
+        c = SupplierContract.objects.get(title="Hack attempt")
+        assert c.status == "draft"
+        assert c.number == "SC-00001"
+
+    # ---- Regression: renewed/terminated/expired contracts can't be edited ----
+    @pytest.mark.parametrize("locked_status", ["renewed", "terminated", "expired"])
+    def test_edit_blocked_for_locked_statuses(self, client_a, tenant_a, supplier_a, locked_status):
+        from apps.scm.models import SupplierContract
+        c = SupplierContract.objects.create(
+            tenant=tenant_a, party=supplier_a, title="Locked", status=locked_status,
+        )
+        resp = client_a.post(
+            reverse("scm:contract_edit", args=[c.pk]),
+            self._valid_data(supplier_a, title="Tampered title", start_date="", end_date="", contract_value="0"),
+        )
+        assert resp.status_code == 302
+        c.refresh_from_db()
+        assert c.title == "Locked"  # unchanged
+
+    def test_delete_draft_removes_it(self, client_a, contract_a):
+        pk = contract_a.pk
+        resp = client_a.post(reverse("scm:contract_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import SupplierContract
+        assert not SupplierContract.objects.filter(pk=pk).exists()
+
+    def test_delete_active_contract_is_refused(self, client_a, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        from apps.scm.models import SupplierContract
+        resp = client_a.post(reverse("scm:contract_delete", args=[contract_a.pk]))
+        assert resp.status_code == 302
+        assert SupplierContract.objects.filter(pk=contract_a.pk).exists()
+
+
+class TestContractActions:
+    def test_activate_draft_contract(self, client_a, contract_a):
+        resp = client_a.post(reverse("scm:contract_activate", args=[contract_a.pk]))
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.status == "active"
+
+    def test_activate_non_draft_is_a_no_op(self, client_a, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:contract_activate", args=[contract_a.pk]))
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.status == "active"
+
+    def test_renew_creates_draft_and_marks_original_renewed(self, client_a, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:contract_renew", args=[contract_a.pk]))
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.status == "renewed"
+        from apps.scm.models import SupplierContract
+        new = SupplierContract.objects.exclude(pk=contract_a.pk).get(party=contract_a.party)
+        assert new.status == "draft"
+        assert new.number != contract_a.number
+
+    def test_renew_draft_contract_is_refused(self, client_a, contract_a):
+        resp = client_a.post(reverse("scm:contract_renew", args=[contract_a.pk]))
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.status == "draft"  # renew is only valid from active/expiring/expired
+
+    def test_terminate_requires_reason(self, client_a, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:contract_terminate", args=[contract_a.pk]))
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.status == "active"  # unchanged
+
+    def test_terminate_with_reason_succeeds(self, client_a, contract_a):
+        contract_a.status = "active"
+        contract_a.save(update_fields=["status"])
+        resp = client_a.post(
+            reverse("scm:contract_terminate", args=[contract_a.pk]),
+            {"termination_reason": "Vendor breach"},
+        )
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.status == "terminated"
+        assert contract_a.termination_reason == "Vendor breach"
+
+
+# ================================================================ SupplierCatalog CRUD + item formset
+class TestCatalogCRUD:
+    def test_list_returns_200(self, client_a, catalog_a):
+        resp = client_a.get(reverse("scm:catalog_list"))
+        assert resp.status_code == 200
+        assert catalog_a in resp.context["object_list"]
+
+    def test_list_filter_by_party(self, client_a, catalog_a, supplier_a):
+        resp = client_a.get(reverse("scm:catalog_list"), {"party": str(supplier_a.pk)})
+        assert catalog_a in resp.context["object_list"]
+
+    def test_list_junk_party_filter_returns_200_not_500(self, client_a, catalog_a):
+        resp = client_a.get(reverse("scm:catalog_list"), {"party": "xyz"})
+        assert resp.status_code == 200
+
+    def test_create_saves_catalog_and_items_with_tenant(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierCatalog
+        data = {
+            "party": str(supplier_a.pk), "name": "2027 Price List", "currency": "",
+            "valid_from": "", "valid_until": "", "notes": "",
+            **formset_data("items", [
+                {"id": "", "item_name": "Bond paper", "sku": "BP-1", "uom": "ream",
+                 "unit_price": "6.50", "lead_time_days": "3", "min_order_qty": "1", "is_active": "on"},
+            ]),
+        }
+        resp = client_a.post(reverse("scm:catalog_create"), data)
+        assert resp.status_code == 302
+        cat = SupplierCatalog.objects.get(name="2027 Price List")
+        assert cat.tenant_id == tenant_a.pk
+        assert cat.number == "CAT-00001"
+        assert cat.items.count() == 1
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierCatalog
+        data = {
+            "party": str(supplier_a.pk), "name": "Hack list", "currency": "",
+            "valid_from": "", "valid_until": "", "notes": "",
+            "status": "active", "number": "CAT-99999",
+            **formset_data("items", []),
+        }
+        resp = client_a.post(reverse("scm:catalog_create"), data)
+        assert resp.status_code == 302
+        cat = SupplierCatalog.objects.get(name="Hack list")
+        assert cat.status == "draft"
+        assert cat.number == "CAT-00001"
+
+    def test_edit_blocked_once_archived(self, client_a, catalog_a):
+        catalog_a.status = "archived"
+        catalog_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:catalog_edit", args=[catalog_a.pk]))
+        assert resp.status_code == 302
+
+    def test_detail_returns_200(self, client_a, catalog_a):
+        resp = client_a.get(reverse("scm:catalog_detail", args=[catalog_a.pk]))
+        assert resp.status_code == 200
+
+    def test_delete_draft_removes_it(self, client_a, catalog_a):
+        pk = catalog_a.pk
+        resp = client_a.post(reverse("scm:catalog_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import SupplierCatalog
+        assert not SupplierCatalog.objects.filter(pk=pk).exists()
+
+    def test_delete_active_catalog_is_refused(self, client_a, catalog_a):
+        catalog_a.status = "active"
+        catalog_a.save(update_fields=["status"])
+        from apps.scm.models import SupplierCatalog
+        resp = client_a.post(reverse("scm:catalog_delete", args=[catalog_a.pk]))
+        assert resp.status_code == 302
+        assert SupplierCatalog.objects.filter(pk=catalog_a.pk).exists()
+
+
+class TestCatalogActivate:
+    def test_activate_without_items_is_refused(self, client_a, catalog_a):
+        resp = client_a.post(reverse("scm:catalog_activate", args=[catalog_a.pk]))
+        assert resp.status_code == 302
+        catalog_a.refresh_from_db()
+        assert catalog_a.status == "draft"
+
+    def test_activate_with_items_succeeds(self, client_a, catalog_a):
+        from apps.scm.models import SupplierCatalogItem
+        SupplierCatalogItem.objects.create(catalog=catalog_a, item_name="Widget", unit_price=Decimal("5.00"))
+        resp = client_a.post(reverse("scm:catalog_activate", args=[catalog_a.pk]))
+        assert resp.status_code == 302
+        catalog_a.refresh_from_db()
+        assert catalog_a.status == "active"
+
+
+# ================================================================ SupplierRiskAssessment CRUD
+class TestRiskAssessmentCRUD:
+    def test_list_returns_200(self, client_a, risk_assessment_a):
+        resp = client_a.get(reverse("scm:riskassessment_list"))
+        assert resp.status_code == 200
+        assert risk_assessment_a in resp.context["object_list"]
+
+    def test_list_filter_by_risk_level(self, client_a, risk_assessment_a):
+        resp = client_a.get(reverse("scm:riskassessment_list"), {"risk_level": "low"})
+        assert risk_assessment_a in resp.context["object_list"]
+
+    def test_list_junk_risk_level_filter_returns_200_not_500(self, client_a, risk_assessment_a):
+        resp = client_a.get(reverse("scm:riskassessment_list"), {"risk_level": "nonsense"})
+        assert resp.status_code == 200
+
+    def test_create_derives_risk_level_from_factors(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierRiskAssessment
+        data = {
+            "party": str(supplier_a.pk), "assessment_date": "2026-01-01",
+            "financial_score": "5", "geopolitical_score": "1", "compliance_score": "1",
+            "operational_score": "1", "mitigation_plan": "", "next_review_date": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:riskassessment_create"), data)
+        assert resp.status_code == 302
+        ra = SupplierRiskAssessment.objects.get(party=supplier_a)
+        assert ra.tenant_id == tenant_a.pk
+        assert ra.number == "SRA-00001"
+        assert ra.risk_level == "high"  # single critical factor floors at High, not Medium
+        assert ra.assessed_by is not None
+
+    def test_create_ignores_posted_status_and_risk_level(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierRiskAssessment
+        data = {
+            "party": str(supplier_a.pk), "assessment_date": "2026-01-01",
+            "financial_score": "1", "geopolitical_score": "1", "compliance_score": "1",
+            "operational_score": "1", "mitigation_plan": "", "next_review_date": "", "notes": "",
+            "status": "reviewed", "risk_level": "critical", "risk_index": "9.99",
+        }
+        resp = client_a.post(reverse("scm:riskassessment_create"), data)
+        assert resp.status_code == 302
+        ra = SupplierRiskAssessment.objects.get(party=supplier_a)
+        assert ra.status == "draft"
+        assert ra.risk_level == "low"  # derived from the (all-1) factor scores, not the posted value
+
+    def test_edit_blocked_once_reviewed(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierRiskAssessment
+        ra = SupplierRiskAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=datetime.date(2026, 1, 1), status="reviewed",
+        )
+        resp = client_a.get(reverse("scm:riskassessment_edit", args=[ra.pk]))
+        assert resp.status_code == 302
+
+    def test_delete_draft_removes_it(self, client_a, risk_assessment_a):
+        pk = risk_assessment_a.pk
+        resp = client_a.post(reverse("scm:riskassessment_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import SupplierRiskAssessment
+        assert not SupplierRiskAssessment.objects.filter(pk=pk).exists()
+
+    def test_delete_non_draft_is_refused(self, client_a, risk_assessment_a):
+        risk_assessment_a.status = "submitted"
+        risk_assessment_a.save(update_fields=["status"])
+        from apps.scm.models import SupplierRiskAssessment
+        resp = client_a.post(reverse("scm:riskassessment_delete", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 302
+        assert SupplierRiskAssessment.objects.filter(pk=risk_assessment_a.pk).exists()
+
+
+class TestRiskAssessmentActions:
+    def test_submit_draft_moves_to_submitted(self, client_a, risk_assessment_a):
+        resp = client_a.post(reverse("scm:riskassessment_submit", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 302
+        risk_assessment_a.refresh_from_db()
+        assert risk_assessment_a.status == "submitted"
+
+    def test_submit_already_submitted_is_a_no_op(self, client_a, risk_assessment_a):
+        risk_assessment_a.status = "submitted"
+        risk_assessment_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:riskassessment_submit", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 302
+        risk_assessment_a.refresh_from_db()
+        assert risk_assessment_a.status == "submitted"
+
+    def test_review_submitted_assessment_succeeds(self, client_a, risk_assessment_a):
+        risk_assessment_a.status = "submitted"
+        risk_assessment_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:riskassessment_review", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 302
+        risk_assessment_a.refresh_from_db()
+        assert risk_assessment_a.status == "reviewed"
+
+    def test_review_draft_assessment_is_a_no_op(self, client_a, risk_assessment_a):
+        resp = client_a.post(reverse("scm:riskassessment_review", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 302
+        risk_assessment_a.refresh_from_db()
+        assert risk_assessment_a.status == "draft"
+
+
+# ================================================================ Positive GET/edit paths (coverage completeness)
+class TestCatalogEditAndCreateForm:
+    def test_edit_get_renders_form_for_editable_catalog(self, client_a, catalog_a):
+        resp = client_a.get(reverse("scm:catalog_edit", args=[catalog_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+
+    def test_create_get_renders_empty_form(self, client_a):
+        resp = client_a.get(reverse("scm:catalog_create"))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is False
+
+
+class TestContractEditAndDetail:
+    def test_edit_updates_fields(self, client_a, contract_a, supplier_a):
+        data = {
+            "party": str(supplier_a.pk), "title": "Renegotiated Deal", "contract_type": "service",
+            "start_date": "2026-01-01", "end_date": "2026-12-31", "contract_value": "7500.00",
+            "currency": "", "payment_terms": "", "auto_renew": "", "renewal_notice_days": "45",
+            "terms_summary": "", "document": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:contract_edit", args=[contract_a.pk]), data)
+        assert resp.status_code == 302
+        contract_a.refresh_from_db()
+        assert contract_a.title == "Renegotiated Deal"
+        assert contract_a.contract_value == Decimal("7500.00")
+
+    def test_detail_returns_200(self, client_a, contract_a):
+        resp = client_a.get(reverse("scm:contract_detail", args=[contract_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == contract_a
+
+
+class TestContractListRollsStatuses:
+    def test_list_transitions_an_active_contract_past_its_end_date_to_expired(
+        self, client_a, tenant_a, supplier_a,
+    ):
+        from apps.scm.models import SupplierContract
+        from django.utils import timezone
+        past = timezone.now().date() - datetime.timedelta(days=5)
+        c = SupplierContract.objects.create(
+            tenant=tenant_a, party=supplier_a, title="Lapsed", status="active", end_date=past,
+        )
+        resp = client_a.get(reverse("scm:contract_list"))
+        assert resp.status_code == 200
+        c.refresh_from_db()
+        assert c.status == "expired"
+
+
+class TestContractTerminateAlreadyClosed:
+    def test_terminate_an_already_terminated_contract_is_a_no_op(self, client_a, tenant_a, supplier_a):
+        from apps.scm.models import SupplierContract
+        c = SupplierContract.objects.create(
+            tenant=tenant_a, party=supplier_a, title="Already done", status="terminated",
+        )
+        resp = client_a.post(
+            reverse("scm:contract_terminate", args=[c.pk]), {"termination_reason": "Redundant"},
+        )
+        assert resp.status_code == 302
+        c.refresh_from_db()
+        assert c.status == "terminated"
+        assert c.termination_reason == ""  # untouched — the guard fired before the reason was recorded
+
+
+class TestRiskAssessmentEditAndDetail:
+    def test_edit_get_renders_form_for_editable_assessment(self, client_a, risk_assessment_a):
+        resp = client_a.get(reverse("scm:riskassessment_edit", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+
+    def test_create_get_renders_empty_form(self, client_a):
+        resp = client_a.get(reverse("scm:riskassessment_create"))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is False
+
+    def test_detail_returns_200(self, client_a, risk_assessment_a):
+        resp = client_a.get(reverse("scm:riskassessment_detail", args=[risk_assessment_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == risk_assessment_a
+
+
+class TestScorecardEdit:
+    def test_edit_updates_fields(self, client_a, scorecard_a, supplier_a):
+        data = {
+            "party": str(supplier_a.pk), "period_start": "2026-02-01", "period_end": "2026-02-28",
+            "delivery_score": "90", "quality_score": "", "price_score": "", "responsiveness_score": "",
+            "manual_override": "", "notes": "Revised period",
+        }
+        resp = client_a.post(reverse("scm:scorecard_edit", args=[scorecard_a.pk]), data)
+        assert resp.status_code == 302
+        scorecard_a.refresh_from_db()
+        assert scorecard_a.notes == "Revised period"
+        assert scorecard_a.delivery_score == Decimal("90.00")
+
+
+class TestCatalogActivateAlreadyActive:
+    def test_activate_an_already_active_catalog_is_a_no_op(self, client_a, catalog_a):
+        catalog_a.status = "active"
+        catalog_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:catalog_activate", args=[catalog_a.pk]))
+        assert resp.status_code == 302
+        catalog_a.refresh_from_db()
+        assert catalog_a.status == "active"
+
+
+# ================================================================ Create guarded when the user has no tenant
+class TestSRMCreateWithoutTenantWorkspace:
+    """`_need_tenant` — a logged-in user with no tenant workspace (e.g. the bare superuser)
+    must be redirected away from every SRM create view, never allowed to save an orphan row."""
+
+    def _tenantless_client(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email="orphan@example.com", username="orphan", password="x", tenant=None)
+        c = Client()
+        c.force_login(user)
+        return c
+
+    def test_supplierprofile_create_redirects(self, db):
+        from apps.scm.models import SupplierProfile
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:supplierprofile_create"))
+        assert resp.status_code == 302
+        assert SupplierProfile.objects.count() == 0
+
+    def test_scorecard_create_redirects(self, db):
+        from apps.scm.models import SupplierScorecard
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:scorecard_create"))
+        assert resp.status_code == 302
+        assert SupplierScorecard.objects.count() == 0
+
+    def test_contract_create_redirects(self, db):
+        from apps.scm.models import SupplierContract
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:contract_create"))
+        assert resp.status_code == 302
+        assert SupplierContract.objects.count() == 0
+
+    def test_catalog_create_redirects(self, db):
+        from apps.scm.models import SupplierCatalog
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:catalog_create"))
+        assert resp.status_code == 302
+        assert SupplierCatalog.objects.count() == 0
+
+    def test_riskassessment_create_redirects(self, db):
+        from apps.scm.models import SupplierRiskAssessment
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:riskassessment_create"))
+        assert resp.status_code == 302
+        assert SupplierRiskAssessment.objects.count() == 0
