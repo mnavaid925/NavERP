@@ -32,7 +32,7 @@
             {% for lf in formset %}
               <tr>
                 {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
-                <td>{{ lf.item_description }}{% for e in lf.item_description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.item_description }}{% for e in lf.item_description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ lf.sku_hint }}{% for e in lf.sku_hint.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ lf.uom_hint }}{% for e in lf.uom_hint.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
@@ -57,7 +57,7 @@
             {% for vf in vendor_formset %}
               <tr>
                 {% for hidden in vf.hidden_fields %}{{ hidden }}{% endfor %}
-                <td>{{ vf.party }}{% for e in vf.party.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% for e in vf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ vf.party }}{% for e in vf.party.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ vf.contact_note }}{% for e in vf.contact_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{% if vf.instance.pk %}{{ vf.DELETE }}{% endif %}</td>
               </tr>
