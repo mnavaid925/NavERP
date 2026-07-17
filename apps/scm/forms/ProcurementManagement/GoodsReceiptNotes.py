@@ -32,6 +32,22 @@ class GoodsReceiptNoteForm(TenantModelForm):
                 )
             self.fields["purchase_order"].queryset = qs.select_related("vendor")
 
+    def clean(self):
+        cleaned = super().clean()
+        purchase_order = cleaned.get("purchase_order")
+        bill = cleaned.get("bill")
+        # A three-way match is only a control if all three legs are the SAME deal. `bill` is only
+        # tenant-scoped by the base class, so without this a receipt could be matched against a
+        # completely different supplier's bill and recompute_match() would cheerfully report
+        # "matched" — feeding a wrong answer straight into an AP payment decision. Validated here
+        # rather than by narrowing the dropdown because the PO is chosen on this same form.
+        if purchase_order and bill and bill.party_id != purchase_order.vendor_id:
+            self.add_error("bill", (
+                f"That bill is from {bill.party}, but this order is with {purchase_order.vendor}. "
+                "A receipt can only be matched against its own vendor's bill."
+            ))
+        return cleaned
+
 
 class GoodsReceiptLineForm(TenantModelForm):
     class Meta:
