@@ -11198,3 +11198,467 @@ forms/ views/ urls/` as packages, one sub-folder per NavERP sub-module). This pa
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.3 Inventory Management — plan from research-scm-4.3.md (2026-07-18)
+
+**EXTENDS the existing `apps/scm` app (4.1 Procurement + 4.2 SRM already built) — no new Django app, no new
+`INSTALLED_APPS`/`config/urls.py` entries, next migration is `0004`.** This pass ships the **inventory SPINE**
+inside `apps/scm` under a third sub-module package, `InventoryManagement/`, alongside the existing
+`ProcurementManagement/` and `SupplierRelationshipManagement/`. Per L28/L29/L36 (module that ships first owns
+the shared entity — already the precedent 4.1 set for `PurchaseOrder`/`RFQ`/`GoodsReceiptNote`), `Item`,
+`ItemCategory`, `UOM`, `Location`, `LotSerial`, `StockMove` land here even though `NavERP-ERD.md` line 467
+assigns them to Module 5 (Inventory/IMS) — Module 5 and every later module (8 Sales, 9 eCommerce, 11 Assets, 12
+Quality) must FK into `scm.*` by string and EXTEND, never re-declare. `StockAdjustment`/`StockTransfer`/
+`ReorderRule` (also nominally Module 5's per the ERD) ship now too as this sub-module's own domain models,
+leaving only `CycleCount`/`PriceList` as Module 5's genuinely-new remainder (see Close-out ERD reconcile item).
+
+**Spine-verified before planning** (`grep -rn "^class (Item|UOM|Location|StockMove|LotSerial|ItemCategory)\b"
+apps/` → no matches anywhere in the repo, confirmed by research): none of these six tables exist yet, so this
+pass builds them fresh — no "extend an existing master" step. Reused-as-is (grep-verified): `core.Party`
+(`apps/core/models/Party.py`) + `PartyRole` (supplier/vendor roles, via the existing `_supplier_parties(tenant)`
+helper in `apps/scm/forms/_common.py`), `core.Address` (`apps/core/models/Address.py`), `accounting.Currency`
+(not needed this pass — inventory costing stays in the tenant's base currency, no FX conversion), `scm.
+PurchaseRequisition` (4.1, `apps/scm/models/ProcurementManagement/PurchaseRequisitions.py` — target of the
+Reorder Alerts "Create Requisition" action, pre-filled not FK'd). `TenantOwned`/`TenantNumbered` (`apps/scm/
+models/_base.py`) are the same abstract bases 4.1/4.2 already use — master-data models (`ItemCategory`, `UOM`,
+`Item`, `Location`, `LotSerial`, `ReorderRule`) use `TenantOwned` directly (no document number, same as 4.2's
+`SupplierProfile`); transactional models (`StockTransfer` [`TRF-`], `StockAdjustment` [`ADJ-`]) use
+`TenantNumbered`. `StockMove` uses `TenantOwned` (append-only ledger row, no human document number of its own —
+its `reference` field names the source document as free text, mirroring `accounting.JournalEntry.reference`,
+never a `content_type`/`object_id` generic FK).
+
+## Models (from research — 9 top-level entities, 11 concrete tables incl. 2 domain child-line tables)
+
+### Spine (`InventoryManagement/Items.py`, `Locations.py`, `LotSerials.py`, `StockMoves.py`) — owned here, extended by FK from Module 5 onward, never re-declared
+
+- [ ] **`ItemCategory`** [`TenantOwned`, no prefix — master data] — `tenant`, `name` (CharField, max_length 100),
+  `parent` (self FK, `on_delete=SET_NULL`, null/blank — light hierarchy), `description` (TextField, blank),
+  `is_active` (default True) (drivers: item categorization/hierarchy — Odoo product categories, Cin7, NetSuite).
+  `unique_together(tenant, name)`. FKs: self only. Form excludes: `tenant`.
+- [ ] **`UOM`** [`TenantOwned`, no prefix] — `tenant`, `code` (CharField max_length 16, e.g. `EA`/`BOX`), `name`,
+  `base_uom` (self FK, `on_delete=SET_NULL`, null/blank — null means this UOM IS a base unit),
+  `conversion_factor` (DecimalField default `1`, `MinValueValidator(0.0001)` — "1 of this unit = factor base
+  units") (drivers: UOM conversion, stock-in-each/buy-in-box-of-12 — general ERP practice + `NavERP-ERD.md`'s
+  own `UOM_CONVERSION` intent, simplified to one base-unit link per UOM this pass, full N:N matrix deferred).
+  `unique_together(tenant, code)`. FKs: self. Form excludes: `tenant`.
+- [ ] **`Item`** [`TenantOwned`, no prefix] — `tenant`, `sku` (CharField max_length 64), `name`, `description`
+  (TextField, blank), `category` (FK `ItemCategory`, `SET_NULL`, null/blank), `uom` (FK `UOM`, `PROTECT`),
+  `item_type` CHOICES `stockable/non_stockable/service` (default `stockable`), `tracking` CHOICES
+  `none/lot/serial` (default `none` — drives whether `StockMove`/transfer/adjustment lines require a
+  `LotSerial`), `costing_method` CHOICES `fifo/lifo/weighted_avg/standard` (default `weighted_avg`),
+  `standard_cost` (DecimalField, null/blank — only meaningful when `costing_method='standard'`), `average_cost`
+  (DecimalField default 0, **`editable=False`** — cached/derived, updated ONLY by `apply_receipt()` on an
+  inbound post, mirrors the `PurchaseOrderLine.received_quantity` denormalized-rollup precedent), `barcode`
+  (CharField, blank), `preferred_vendor` (FK `core.Party`, `SET_NULL`, null/blank, queryset filtered via
+  `_supplier_parties`), `min_order_qty` (DecimalField default 1), `is_active` (default True) (drivers: per-item
+  costing method — Odoo/Cin7 table-stakes; lot/serial tracking flag — Zoho/NetSuite/Fishbowl/inFlow; barcode —
+  Sortly/Zoho; preferred vendor — pre-fills the Reorder-Alerts "Create Requisition" action). `unique_together
+  (tenant, sku)`. Methods: `on_hand(location=None)` → `Sum(StockMove.quantity, filter item=self[, location=
+  location])` (NEVER stored); `apply_receipt(quantity, unit_cost, save=True)` → weighted-average recompute:
+  `new_avg = (old_on_hand*old_avg + quantity*unit_cost) / (old_on_hand+quantity)` guarding
+  `old_on_hand+quantity <= 0` (falls back to `unit_cost`); `total_value(location=None)` → for
+  `weighted_avg`/`standard`: `(average_cost or standard_cost) * on_hand(location)`; for `fifo`/`lifo`: delegates
+  to the Stock Valuation Report's cost-layer walk (see Reports below) — never a second stored value. FKs:
+  `ItemCategory`, `UOM` (this pass), `core.Party` (verified). Form excludes: `tenant`, `average_cost`.
+- [ ] **`Location`** [`TenantOwned`, no prefix] — `tenant`, `code` (CharField max_length 32), `name`,
+  `location_type` CHOICES `warehouse/zone/bin/staging/transit` (default `warehouse`), `parent` (self FK,
+  `SET_NULL`, null/blank — light warehouse→zone→bin hierarchy), `address` (FK `core.Address`, `SET_NULL`,
+  null/blank — a warehouse's physical address), `is_active` (default True) (drivers: multi-location on-hand —
+  all 10 leaders; light bin precision — NetSuite Advanced Bin, kept lean, full slotting is 4.4 WMS's job).
+  `unique_together(tenant, code)`. Methods: `is_leaf` (property: `not self.children.exists()`), `path` (property:
+  walk `parent` chain → `"Main Warehouse / Zone 1 / Bin 04"`). FKs: self, `core.Address` (verified). Form
+  excludes: `tenant`.
+- [ ] **`LotSerial`** [`TenantOwned`, no prefix] — `tenant`, `item` (FK `Item`, `PROTECT`), `tracking_type`
+  CHOICES `lot/serial`, `code` (CharField max_length 64 — the lot/serial number), `manufacture_date` (DateField,
+  null/blank), `expiry_date` (DateField, null/blank), `status` CHOICES `active/quarantined/expired/consumed`
+  (default `active`), `notes` (TextField, blank) (drivers: batch tracking w/ mfg+expiry+defect traceback — Zoho,
+  Fishbowl, Katana; serial tracking — Zoho/NetSuite/Fishbowl/inFlow; quarantine status — NetSuite recall
+  exposure). `unique_together(tenant, item, code)`. FKs: `Item` (this pass). Form excludes: `tenant`.
+- [ ] **`StockMove`** [`TenantOwned`, no prefix — **append-only, no create/edit/delete UI, no ModelForm at
+  all**] — `tenant`, `item` (FK `Item`, `PROTECT`), `location` (FK `Location`, `PROTECT`), `lot_serial` (FK
+  `LotSerial`, `SET_NULL`, null/blank — REQUIRED by the posting service when `item.tracking != 'none'`),
+  `quantity` (DecimalField max_digits 14 decimal_places 4, **SIGNED** — positive=in, negative=out; on-hand is
+  always `Sum(quantity)`, mirrors `JournalLine`'s signed debit/credit), `unit_cost` (DecimalField max_digits 14
+  decimal_places 4 — the cost layer value at posting time; required on inbound moves), `move_type` CHOICES
+  `receipt/issue/transfer/adjustment/opening_balance` (direction comes from the SIGNED `quantity`, not a
+  separate `_in`/`_out` choice — matches the decided 4-way+opening_balance set, not the more granular
+  transfer_in/transfer_out/adjustment_increase/adjustment_decrease split the research sketched), `moved_at`
+  (DateTimeField, default `timezone.now` — editable so a backdated adjustment/opening-balance posts with a real
+  historical date), `reference` (CharField max_length 32, blank — free text naming the source doc, e.g.
+  `TRF-00001`/`ADJ-00001`/opening-balance note; mirrors `JournalEntry.reference`, deliberately NOT an FK back to
+  `StockTransfer`/`StockAdjustment` — same "plain-text traceability, not a generic content_type/object_id FK"
+  ledger precedent the research flags), `created_by` (FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank).
+  `Meta.indexes = [("tenant","item","location")]`. **No `update`/`delete` view or URL — corrections are always a
+  new offsetting move, exactly like a `JournalEntry` reversal.** FKs: `Item`, `Location`, `LotSerial` (this
+  pass). No form (system-posted only via the shared poster — see "StockMove-posting service logic" below).
+
+### Domain (`InventoryManagement/StockTransfers.py`, `StockAdjustments.py`, `ReorderRules.py`) — this pass's own transactional capabilities, post `StockMove` rows
+
+- [ ] **`StockTransfer`** [`TenantNumbered`, `NUMBER_PREFIX="TRF"`] — `tenant`, `number`, `from_location` (FK
+  `Location`, `PROTECT`), `to_location` (FK `Location`, `PROTECT`), `status` CHOICES
+  `draft/in_transit/completed/cancelled` (default `draft`), `transfer_date` (DateField, default today),
+  `requested_by` (FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank), `notes` (blank). `clean()`:
+  `from_location != to_location`. Property `is_editable` = `status == 'draft'` (mirrors `PurchaseOrder.
+  is_editable`). Form excludes: `tenant`, `number`, `status`, `requested_by` (auto-set to `request.user` at
+  create). **`StockTransferLine`** (plain FK child, no own tenant field) — `transfer` (FK `StockTransfer`,
+  `CASCADE`, `related_name="lines"`), `item` (FK `Item`, `PROTECT`), `quantity` (DecimalField,
+  `MinValueValidator(0.0001)`), `lot_serial` (FK `LotSerial`, `SET_NULL`, null/blank — required by `clean()`
+  when `item.tracking != 'none'`; dropdown scoped to `item` via `_scope_to_parent` in the form, since
+  `LotSerial` has no tenant-independent way to filter by parent item alone otherwise). No `unit_cost` on the
+  line — a transfer posts BOTH legs at the item's current `average_cost` (a transfer never changes valuation,
+  per research). On **complete** (`stocktransfer_complete`, `@tenant_admin_required` POST — moves real stock):
+  guard **cannot transfer more than `on_hand` at `from_location`** per line (loop + `messages.error` + redirect
+  if any line fails BEFORE posting anything), then inside `transaction.atomic()` post a PAIRED `StockMove` per
+  line via the shared poster (`-quantity` at `from_location`, `+quantity` at `to_location`, both `move_type=
+  'transfer'`, `unit_cost=item.average_cost`, `reference=transfer.number`), then `status='completed'`. On
+  **cancel** from `draft` (`@login_required` — nothing has moved yet, reversible) `status='cancelled'`. Drivers:
+  Warehouse Transfer bullet verbatim (Zoho Transfer Orders, Fishbowl, Unleashed, inFlow); batch/serial-level
+  transfer (Zoho). FKs: `Location`, `Item`, `LotSerial` (this pass).
+- [ ] **`StockAdjustment`** [`TenantNumbered`, `NUMBER_PREFIX="ADJ"`] — `tenant`, `number`, `location` (FK
+  `Location`, `PROTECT`), `reason` CHOICES `write_off/damage/cycle_count/found/revaluation/other`, `status`
+  CHOICES `draft/posted/cancelled` (default `draft`), `adjustment_date` (DateField, default today),
+  `adjusted_by` (FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank), `notes` (TextField, blank). `clean()`:
+  require non-blank `notes` when `reason` in `('damage', 'write_off', 'other')` (mirrors `GoodsReceiptLine.
+  clean()`'s existing required-reason-on-rejection pattern — header-level here since `notes` lives on the
+  header, not the line, per the decided field list). Property `is_editable` = `status == 'draft'`. Form
+  excludes: `tenant`, `number`, `status`, `adjusted_by`. **`StockAdjustmentLine`** (plain FK child, no own
+  tenant field) — `adjustment` (FK `StockAdjustment`, `CASCADE`, `related_name="lines"`), `item` (FK `Item`,
+  `PROTECT`), `lot_serial` (FK `LotSerial`, `SET_NULL`, null/blank — required when `item.tracking != 'none'`,
+  scoped to `item` via `_scope_to_parent`), `quantity_delta` (DecimalField, SIGNED — matches `StockMove`'s own
+  convention, positive=found/increase, negative=write-off/damage/decrease), `unit_cost` (DecimalField —
+  initialized in the create view to `item.average_cost`, user-overridable for a `revaluation` reason). Computed
+  (not stored) `value_impact` property = `quantity_delta * unit_cost`. On **post** (`stockadjustment_post`,
+  `@tenant_admin_required` POST — moves real stock) inside `transaction.atomic()`: one `StockMove` per line via
+  the shared poster (`quantity=line.quantity_delta`, `move_type='adjustment'`, `reference=adjustment.number`),
+  then `status='posted'`. On **cancel** from `draft` (`@login_required`) `status='cancelled'`. Drivers: Stock
+  Adjustment bullet verbatim — reason-coded write-offs/damage/cycle-count (Cin7, Zoho, Unleashed, Fishbowl);
+  revaluation as a distinct reason with an overridable `unit_cost` (Cin7); value-impact preview (Cin7,
+  Unleashed). FKs: `Location`, `Item`, `LotSerial` (this pass).
+- [ ] **`ReorderRule`** [`TenantOwned`, no prefix — standing config, same shape as 4.2's `SupplierProfile`] —
+  `tenant`, `item` (FK `Item`, `PROTECT`), `location` (FK `Location`, `SET_NULL`, null/blank = tenant-wide
+  rule), `reorder_point` (DecimalField), `reorder_quantity` (DecimalField), `safety_stock` (DecimalField,
+  default 0), `preferred_vendor` (FK `core.Party`, `SET_NULL`, null/blank, filtered via `_supplier_parties`),
+  `lead_time_days` (PositiveIntegerField, null/blank), `is_active` (default True) (drivers: per-item/per-
+  location reorder point — Cin7, Oracle min-max, Odoo, inFlow; safety-stock buffer — Katana, Oracle order
+  modifiers; active/inactive toggle — general). `unique_together(tenant, item, location)`. Drives the **Reorder
+  Alerts** report (compares live `on_hand` against active rules) + a **Create Requisition** action pre-filling
+  `scm.PurchaseRequisition` (4.1) from `preferred_vendor`/`reorder_quantity`/`item` — convenience redirect, NOT
+  an auto-create and NOT a stored FK on `ReorderRule` itself. FKs: `Item`, `Location` (this pass), `core.Party`
+  (verified). Form excludes: `tenant`.
+
+### List pages (CRUD) vs. reports (no model, read-only)
+- **CRUD (list/create/detail/edit/delete):** `ItemCategory`, `UOM`, `Item`, `Location`, `LotSerial`,
+  `StockTransfer`, `StockAdjustment`, `ReorderRule` — 8 entities.
+- **`StockMove` — list + detail ONLY** (no create/edit/delete anywhere, including Django admin — see Backend).
+  Its filterable list (by item/location/move_type/lot_serial/date range) IS the "Stock Ledger" report named by
+  the research; it does not get a separate standalone report page.
+- **Standalone reports at the sub-module root** (`InventoryManagement/Overview.py`, no model): Inventory
+  Overview/dashboard, Stock Valuation (FIFO/LIFO/WAC layer walk), On-Hand by Location. Reorder Alerts lives with
+  `ReorderRules.py` instead (tightly coupled to the `ReorderRule` model + its Create-Requisition action).
+
+## StockMove-posting service logic (DECISION: a shared view-layer helper, not a model service)
+
+- [ ] **Decision:** `_post_stock_move(*, tenant, item, location, quantity, unit_cost, move_type, reference,
+  moved_at=None, lot_serial=None, user=None)` and a thin `_post_stock_moves(rows)` wrapper (both wrapped in
+  `transaction.atomic()`) live in **`apps/scm/views/_helpers.py`** — NOT a model classmethod/manager method. Two
+  domain views (`StockTransfers.py`'s complete action, `StockAdjustments.py`'s post action) call it today, and
+  it is the exact hook `scm.GoodsReceiptNote.mark_received` (4.1) is meant to call once that follow-up lands
+  (per its own docstring) — `views/_helpers.py` is already the documented home for "helpers used by MORE THAN
+  ONE sub-module/entity" (rule 5 of Backend Package Structure), and this helper will soon be used by a THIRD
+  (`ProcurementManagement`). Pure per-item arithmetic (`apply_receipt`'s weighted-average recompute) stays a
+  model method on `Item` — that piece IS single-model logic and is unit-testable in isolation; only the
+  transactional orchestration (row creation, guards, atomicity, average-cost trigger) lives in the view helper.
+- [ ] `_post_stock_move(...)` does, in order: (1) validate `lot_serial` is set when `item.tracking != 'none'`
+  (raise `ValidationError`, caller catches and flashes); (2) create the `StockMove` row; (3) if
+  `move_type in ('receipt', 'opening_balance')` OR (`move_type == 'adjustment' and quantity > 0`): call
+  `item.apply_receipt(quantity, unit_cost)` to refresh the cached `average_cost` — **never** for `move_type ==
+  'transfer'` (transfer legs post at the item's ALREADY-current `average_cost`, per research "a transfer doesn't
+  change valuation") and never for a negative-quantity (`issue`/outbound `adjustment`) move (outbound moves
+  consume at the existing average, they don't change it).
+- [ ] `_post_stock_moves(rows)` — same validation per row, wraps the whole batch in ONE `transaction.atomic()`
+  (used for `StockTransfer`'s paired in/out legs and `StockAdjustment`'s N lines) so a mid-batch failure leaves
+  no partial `StockMove` rows.
+- [ ] The `StockTransfer.complete` **on-hand guard** ("cannot transfer more than on_hand at source") is checked
+  in the VIEW before calling the poster (loop all lines, compare `line.item.on_hand(location=transfer.
+  from_location)` against `line.quantity`, collect failures, `messages.error` + redirect with NOTHING posted if
+  any line fails) — scoped to `StockTransfer` only, per the decision brief; `StockAdjustment` is deliberately NOT
+  blocked from taking on-hand negative (a correction may legitimately need to record a discovered shortfall).
+
+## Backend (apps/scm/{models,forms,views,urls}/InventoryManagement/)
+
+- [ ] `models/InventoryManagement/Items.py` — `ItemCategory`, `UOM`, `Item` (+ `apply_receipt`/`on_hand`/
+  `total_value` methods). Module docstring records the L28/L29/L36 ships-first spine-ownership call (mirrors
+  `ProcurementManagement/PurchaseOrders.py`'s docstring precedent) so a future Module-5 reader sees it in the
+  code, not just the ERD/navigation comment.
+- [ ] `models/InventoryManagement/Locations.py` — `Location` (+ `is_leaf`/`path`).
+- [ ] `models/InventoryManagement/LotSerials.py` — `LotSerial`.
+- [ ] `models/InventoryManagement/StockMoves.py` — `StockMove` only (no form/create-edit views ever import a
+  `StockMoveForm` because none exists).
+- [ ] `models/InventoryManagement/StockTransfers.py` — `StockTransfer`, `StockTransferLine`.
+- [ ] `models/InventoryManagement/StockAdjustments.py` — `StockAdjustment`, `StockAdjustmentLine`.
+- [ ] `models/InventoryManagement/ReorderRules.py` — `ReorderRule`.
+- [ ] `forms/InventoryManagement/Items.py` — `ItemCategoryForm`, `UOMForm`, `ItemForm` (all `TenantModelForm`
+  subclasses; `ItemForm` scopes `preferred_vendor` via `_supplier_parties(tenant)`).
+- [ ] `forms/InventoryManagement/Locations.py` — `LocationForm`.
+- [ ] `forms/InventoryManagement/LotSerials.py` — `LotSerialForm` (queryset for `item` scoped to tenant by
+  `TenantModelForm` itself, since `Item` has its own `tenant` field).
+- [ ] `forms/InventoryManagement/StockTransfers.py` — `StockTransferForm` + `StockTransferLineFormSet`
+  (`inlineformset_factory(StockTransfer, StockTransferLine, ...)`, `form_kwargs={"tenant": tenant}` passed
+  through like `PurchaseOrderLineFormSet`; `item`/`lot_serial` dropdowns scoped via `_scope_to_parent`).
+- [ ] `forms/InventoryManagement/StockAdjustments.py` — `StockAdjustmentForm` + `StockAdjustmentLineFormSet`
+  (same pattern).
+- [ ] `forms/InventoryManagement/ReorderRules.py` — `ReorderRuleForm` (scopes `preferred_vendor` via
+  `_supplier_parties`).
+- [ ] `views/InventoryManagement/Overview.py` — `inventory_overview` (dashboard: counts + on-hand-value summary
+  + low-stock count, all aggregates), `stock_valuation` (FIFO/LIFO/WAC report — per item, walk that item's
+  inbound `StockMove` rows `asc`/`desc` by `moved_at` as cost layers, consume against current `on_hand()`, sum
+  `qty*unit_cost` per layer; `weighted_avg`/`standard` items just show `average_cost`/`standard_cost *
+  on_hand()` directly — no layer walk needed), `onhand_by_location` (item × location on-hand matrix via one
+  `.values("item","location").annotate(qty=Sum("quantity"))` aggregate query, never per-row `.on_hand()` calls).
+- [ ] `views/InventoryManagement/Items.py` — full CRUD ×3 (`itemcategory_*`, `uom_*`, `item_*`), `item_list`
+  filters: search (`sku`, `name`, `barcode`), `category` (int FK filter), `item_type`, `tracking`,
+  `costing_method`, `is_active`.
+- [ ] `views/InventoryManagement/Locations.py` — full CRUD, `location_list` filters: search (`code`, `name`),
+  `location_type`, `parent` (int FK), `is_active`.
+- [ ] `views/InventoryManagement/LotSerials.py` — full CRUD, `lotserial_list` filters: search (`code`), `item`
+  (int FK), `tracking_type`, `status`.
+- [ ] `views/InventoryManagement/StockMoves.py` — `stockmove_list` (read-only, filters: `item`/`location`/
+  `move_type`/date-range) + `stockmove_detail` — **no create/edit/delete view functions at all**.
+- [ ] `views/InventoryManagement/StockTransfers.py` — full CRUD (create/edit gated on `is_editable`, mirrors
+  `purchaseorder_edit`'s `is_editable` guard) + `stocktransfer_complete` (`@tenant_admin_required`, `@require_POST`)
+  + `stocktransfer_cancel` (`@login_required`, `@require_POST`, only from `draft`).
+- [ ] `views/InventoryManagement/StockAdjustments.py` — full CRUD (create/edit gated on `is_editable`) +
+  `stockadjustment_post` (`@tenant_admin_required`, `@require_POST`) + `stockadjustment_cancel`
+  (`@login_required`, `@require_POST`, only from `draft`).
+- [ ] `views/InventoryManagement/ReorderRules.py` — full CRUD + `reorder_alerts` (`@login_required` — compares
+  live `on_hand()` per active rule's `item`/`location` against `reorder_point`, one aggregate query for the
+  whole tenant, not N queries per rule) + `reorder_create_requisition` (`@login_required`, `@require_POST`,
+  `get_object_or_404(ReorderRule, pk=pk, tenant=request.tenant)` → redirects to `scm:requisition_create` with a
+  querystring prefill built from `rule.item.name`/`rule.item.sku`/`rule.item.uom.code`/`rule.reorder_quantity`).
+- [ ] **Cross-sub-module touch (own commit, called out explicitly):** `views/ProcurementManagement/
+  PurchaseRequisitions.py`'s `requisition_create`/`_requisition_form` — read `request.GET` (`item_description`,
+  `sku_hint`, `uom_hint`, `quantity`) as **initial data for one blank line** when present, so the Reorder-Alerts
+  redirect actually lands pre-filled. Pure UI convenience, no schema change to 4.1 (matches research: "keep the
+  PR line itself free-text this pass... a convenience pre-fill, not a hard FK").
+- [ ] Re-export blocks in all four `apps/scm/{models,forms,views,urls}/__init__.py` — add every new symbol
+  above (models: `ItemCategory, UOM, Item, Location, LotSerial, StockMove, StockTransfer, StockTransferLine,
+  StockAdjustment, StockAdjustmentLine, ReorderRule`; forms: every `*Form`/`*FormSet`; views: every view
+  function including the new actions; urls: nothing re-exported here, `urls/__init__.py` concatenates
+  `urlpatterns` lists instead — see Wire-up).
+- [ ] `apps/scm/admin.py` — register all 11 models. `StockTransferLineInline`/`StockAdjustmentLineInline`
+  (`TabularInline`) under their parents, same shape as `PurchaseOrderLineInline`. **`StockMoveAdmin`: read-only
+  even in Django admin** — `has_add_permission`/`has_change_permission`/`has_delete_permission` all return
+  `False`; rows are created exclusively by `_post_stock_move`/`_post_stock_moves`, never through a form,
+  including the admin's own.
+- [ ] `python manage.py makemigrations scm` → expect `apps/scm/migrations/0004_...` (incremental on the
+  existing app, 11 new tables + indexes).
+- [ ] Extend `apps/scm/management/commands/seed_scm.py` (see Seeder below) — new `_seed_inventory_tenant(tenant)`
+  method, called from `handle()` guarded independently (like `_seed_srm_tenant`) so it seeds even when 4.1/4.2
+  data already exists; extend `_flush()` in FK-safe order (children before parents: `StockMove` → `Stock
+  TransferLine`/`StockAdjustmentLine` → `StockTransfer`/`StockAdjustment` → `ReorderRule` → `LotSerial` → `Item`
+  → `Location` → `UOM` → `ItemCategory`).
+
+## Wire-up
+
+- [ ] `apps/scm/urls/InventoryManagement/{Overview,Items,Locations,LotSerials,StockMoves,StockTransfers,
+  StockAdjustments,ReorderRules}.py` — one `urlpatterns` list per file, literal routes before `<int:pk>` ones
+  within each module (e.g. in `StockTransfers.py`: `stock-transfers/`, `stock-transfers/add/`, `stock-transfers/
+  <int:pk>/`, `stock-transfers/<int:pk>/edit/`, `stock-transfers/<int:pk>/delete/`, `stock-transfers/<int:pk>/
+  complete/`, `stock-transfers/<int:pk>/cancel/`). Path segments: `item-categories/`, `uoms/`, `items/`,
+  `locations/`, `lot-serials/`, `stock-moves/` (list + `<int:pk>/` only), `stock-transfers/`, `stock-
+  adjustments/`, `reorder-rules/` (+ `reorder-rules/<int:pk>/create-requisition/`), `reorder-alerts/`,
+  `inventory-overview/`, `stock-valuation/`, `onhand-by-location/` — none collide with any existing 4.1/4.2
+  literal segment (verified against `urls/ProcurementManagement/*` and `urls/SupplierRelationshipManagement/*`).
+- [ ] `apps/scm/urls/__init__.py` — import each new module's `urlpatterns` (aliased `_inventory_*`) and append to
+  the concatenated list, in the same file-per-file style as the existing 4.1/4.2 imports.
+- [ ] `apps/core/navigation.py` — **one new `LIVE_LINKS["4.3"]` entry**, in the same banner-comment style as the
+  existing `"4.1"`/`"4.2"` blocks (recording the L28/L29/L36 ships-first-owns-the-spine call so a future Module-5
+  reader sees it here too, not just in `research-scm-4.3.md`):
+  ```python
+  "4.3": {
+      # "Stock Control" maps to the on-hand QUANTITY view (real-time tracking of stock quantities is the
+      # bullet's literal ask), not the plain Item master/catalog list.
+      "Stock Control": "scm:onhand_by_location",
+      "Warehouse Transfer": "scm:stocktransfer_list",
+      "Stock Adjustment": "scm:stockadjustment_list",
+      "Reorder Point Automation": "scm:reorder_alerts",
+      "Inventory Valuation": "scm:stock_valuation",
+  },
+  ```
+- [ ] No `config/settings.py` / `config/urls.py` changes — `apps/scm` is already installed and included.
+
+## Templates (templates/scm/inventory/<entity>/{list,detail,form}.html)
+
+- [ ] `templates/scm/inventory/itemcategory/{list,detail,form}.html`
+- [ ] `templates/scm/inventory/uom/{list,detail,form}.html`
+- [ ] `templates/scm/inventory/item/{list,detail,form}.html` — detail page shows `on_hand()` per location (a
+  small table, one query via the `onhand_by_location`-style aggregate scoped to this item) and `total_value()`.
+- [ ] `templates/scm/inventory/location/{list,detail,form}.html` — detail page shows on-hand-by-item at this
+  location + child locations (via `path`/`is_leaf`).
+- [ ] `templates/scm/inventory/lotserial/{list,detail,form}.html`
+- [ ] `templates/scm/inventory/stockmove/{list,detail}.html` — **no `form.html`** (append-only, no create/edit
+  route ever renders one). List = the Stock Ledger: filter bar (item/location/move_type/date range) + no Edit/
+  Delete actions column (view-only row, links to detail).
+- [ ] `templates/scm/inventory/stocktransfer/{list,detail,form}.html` — detail page's Actions sidebar shows
+  Complete/Cancel buttons conditional on `status`, matching the `PurchaseOrder` detail action-button pattern;
+  form.html embeds the `StockTransferLineFormSet`.
+- [ ] `templates/scm/inventory/stockadjustment/{list,detail,form}.html` — detail shows each line's computed
+  `value_impact`; form.html embeds the `StockAdjustmentLineFormSet` with a live "value impact" preview if
+  reasonably cheap in a template, otherwise shown only on the detail page after save.
+- [ ] `templates/scm/inventory/reorderrule/{list,detail,form}.html`
+- [ ] `templates/scm/inventory/dashboard.html` — Inventory Overview/landing page for the sub-module (mirrors
+  `templates/scm/overview.html`'s stats-cards + exception-queue pattern, scoped to inventory).
+- [ ] `templates/scm/inventory/valuation.html` — Stock Valuation report (grouped by item, drill into
+  location/lot).
+- [ ] `templates/scm/inventory/reorder_alerts.html` — rows where `on_hand < reorder_point`, each row's "Create
+  Requisition" button posts to `reorder_create_requisition`.
+- [ ] `templates/scm/inventory/onhand_by_location.html` — item × location on-hand matrix, the "Stock Control"
+  bullet's headline screen.
+- [ ] Every list template: filter bar reflecting `request.GET`, Actions column (view/edit/delete-POST+confirm+
+  csrf, `StockMove`'s list excepted), pagination with `has_previous`/`has_next` guards, empty-state. Badges use
+  the colour-named theme.css classes (`badge-green/red/amber/info/muted/slate` — never `-success`/`-danger`,
+  L33): e.g. `StockTransfer`/`StockAdjustment` `status` (`draft`=slate, `in_transit`/`posted`=info,
+  `completed`=green, `cancelled`=red), `LotSerial.status` (`active`=green, `quarantined`=amber,
+  `expired`/`consumed`=slate).
+
+## Seeder (extend apps/scm/management/commands/seed_scm.py)
+
+- [ ] `_seed_inventory_tenant(tenant)` — guarded independently (`if Item.objects.filter(tenant=tenant).exists():
+  skip`), called from `handle()` after `_seed_srm_tenant(tenant)`. Reuses `self._admin(tenant)` and
+  `self._supplier(tenant, name, kind)` (the same two existing `SUPPLIERS`) — never invents a new Party.
+  - 2 `ItemCategory` rows ("IT Equipment", "Office Supplies").
+  - 2 `UOM` rows: `EA` (base, `base_uom=None`, `conversion_factor=1`), `BOX` (`base_uom=EA`,
+    `conversion_factor=12`).
+  - 3 `Item` rows reusing the EXACT SAME `sku_hint`/description strings as 4.1's `REQUISITION_LINES` (`WS-16`
+    laptop workstation, `DOCK-C` docking station, `MON-27` monitor) — narrative continuity + sets up the
+    flagged-but-deferred future backfill of `item→scm.Item` onto the 4.1 line tables. Laptop workstation is
+    `tracking='serial'` (demonstrates `LotSerial`); the other two are `tracking='none'`. All `costing_method=
+    'weighted_avg'`, `uom=EA`, `preferred_vendor` = one of the two seeded suppliers.
+  - 2 `Location` rows: `WH-MAIN` "Main Warehouse" and `WH-OVERFLOW` "Overflow Warehouse" (both `location_type=
+    'warehouse'`, siblings — clean two-location transfer demo).
+  - **Opening-balance `StockMove`s** via `_post_stock_move(..., move_type='opening_balance', reference=
+    "Opening balance")`: 100 laptops (assign a seeded serial-tracked `LotSerial` per unit or one representative
+    lot row — keep this concrete and small, e.g. 5 individually serialed units rather than 100, to keep the
+    seed fast and the demo legible), 50 dock stations, 80 monitors — all at `WH-MAIN`, `unit_cost=item.
+    standard_cost`.
+  - **One completed `StockTransfer`** (`TRF-`) moving 10 laptop units `WH-MAIN` → `WH-OVERFLOW`, posted via
+    `stocktransfer_complete`'s own logic path (call the same helper the view calls, not a hand-rolled duplicate)
+    so the seeded data exercises the real posting code.
+  - **One posted `StockAdjustment`** (`ADJ-`) at `WH-MAIN`, `reason='damage'`, `notes="Two units damaged in
+    transit — carrier claim filed."`, line: monitor `quantity_delta=-2`.
+  - **2 `ReorderRule`s** (one per a couple of the seeded items at `WH-MAIN`), at least one deliberately set so
+    the post-adjustment `on_hand` is BELOW `reorder_point` (e.g. monitor on-hand lands at 78 after the -2
+    adjustment; set `reorder_point=100` so the Reorder Alerts report has a real hit out of the box) —
+    `preferred_vendor` = a seeded supplier, `reorder_quantity` a sane restock amount, `lead_time_days` set.
+  - Print a one-line summary (`f"{tenant.name}: seeded N items, N locations, opening balances, {transfer.
+    number}, {adjustment.number}, N reorder rules."`), consistent with the existing per-section print style.
+- [ ] Extend `_flush()` — delete new tables in FK-safe child-before-parent order (see Backend item above);
+  `StockMove` has `on_delete=PROTECT` on `item`/`location` so it MUST go first, same reasoning as the existing
+  bills-before-GRNs ordering comment.
+- [ ] Update the final `handle()` success message to mention "4.3 inventory" and keep the existing "Superuser
+  'admin' has no tenant" warning line.
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` (expect `0004_...`, no unexpected changes to 4.1/4.2 models) +
+  `python manage.py migrate`.
+- [ ] `python manage.py seed_scm` ×2 in a row — second run must be a clean idempotent no-op (both the existing
+  4.1/4.2 guards AND the new `_seed_inventory_tenant` guard).
+- [ ] `python manage.py check` — no `ImportError`/`AttributeError` from a missed re-export.
+- [ ] **On-hand math assertion** (`temp/` one-off script or `manage.py shell -c`, run against the seeded tenant):
+  after the seed, `laptop.on_hand(location=WH-MAIN) == 95` (100 opening − 5 transferred, adjust the exact figure
+  to whatever the seeder actually moves) and `laptop.on_hand(location=WH-OVERFLOW) == 5`, with
+  `laptop.on_hand() == 100` (transfer nets to zero across all locations — a transfer must NEVER change the
+  tenant-wide total); `monitor.on_hand(location=WH-MAIN) == 78` (80 opening − 2 adjusted); confirm `average_cost`
+  on the transferred item is UNCHANGED by the transfer (only the receipt/opening-balance leg set it) — this is
+  the concrete proof that `_post_stock_move`'s valuation-trigger scoping (receipt/opening_balance/positive-
+  adjustment only, never transfer) actually holds.
+- [ ] `temp/` smoke sweep as `admin_acme`/**`password`**: every new `scm:*` url (all 8 CRUD entities'
+  list/detail/(create/edit for editable ones) + `stockmove_list`/`detail` + the 4 report pages) returns
+  200/302; no `{#`/`{% comment` leaks; each list page's title + at least one seeded record's identifier
+  (`SKU`, `TRF-00001`, `ADJ-00001`) present in the response body; junk `?category=abc`/`?location=xyz` GET
+  params on `item_list`/`onhand_by_location` don't 500 (L11); page-2 pagination on `stockmove_list` doesn't 500
+  (L9); cross-tenant IDOR — a second tenant's admin hitting `item_detail`/`stocktransfer_detail`/`stock
+  adjustment_detail` by the first tenant's pk → 404.
+- [ ] `python manage.py runserver` → log in as `admin_acme`/`password` → sidebar shows `4.3 Inventory
+  Management` **Live** with all 5 bullets resolving.
+
+## Close-out
+
+- [ ] Run the 7 review agents in order, applying findings + committing after each (one file per commit, no
+  `git push`): `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+  `qa-smoke-tester` → `security-reviewer` → `test-writer`.
+  - Expect `code-reviewer` to check `_post_stock_move`'s lot/serial-required guard actually fires for BOTH
+    `StockTransferLine` and `StockAdjustmentLine` (not just a form-level `clean()` that a hand-rolled save path
+    could route around), and that `Item.apply_receipt`'s divide-by-zero/negative-on-hand guard is airtight.
+  - Expect `performance-reviewer` to check `reorder_alerts`/`onhand_by_location`/`stock_valuation` are each ONE
+    (or a small fixed number of) aggregate queries per report render, not a per-`Item`/per-`ReorderRule` loop
+    calling `.on_hand()` N times (the exact N+1 shape `PurchaseOrder.received_by_line()`'s docstring already
+    warns against).
+  - Expect `security-reviewer` to confirm `@tenant_admin_required` actually gates `stocktransfer_complete`/
+    `stockadjustment_post` (the two actions that write real `StockMove` rows) and to check cross-tenant IDOR on
+    every new url, including `reorder_create_requisition`'s querystring redirect (no `scm:requisition_create`
+    field can be manipulated cross-tenant).
+  - Expect `test-writer` to cover full CRUD on all 8 entities, the transfer/adjustment posting paths
+    (insufficient-stock guard, lot/serial-required guard, average-cost recompute NOT firing on a transfer),
+    `Item.apply_receipt`'s arithmetic directly, and the Reorder Alerts threshold comparison.
+- [ ] **Reconcile `NavERP-ERD.md`** (L36 — do this in the same pass, not a follow-up): line 466 (Module 4 SCM
+  row) — move `Item`/`Location`/`StockMove` out of the "Reuses (core spine)" column (they didn't exist to reuse
+  before this pass) into "Adds", alongside the existing 4.1/4.2 bold entries:
+  `ItemCategory, UOM, Item, Location, LotSerial, StockMove` (4.3 spine) `+ StockTransfer, StockAdjustment,
+  ReorderRule` (4.3 domain). Line 467 (Module 5 Inventory/IMS row) — shrink the "Adds" column from
+  `GoodsReceipt, StockAdjustment, StockTransfer, CycleCount, ReorderRule` down to `CycleCount, PriceList` (its
+  only genuinely-new remainder — `GoodsReceipt` was already `scm.GoodsReceiptNote` from 4.1; `StockAdjustment`/
+  `StockTransfer`/`ReorderRule` are now `scm.*` from this pass) and move `Item`/`ItemCategory`/`UOM`/`Location`/
+  `LotSerial`/`StockMove` from "Reuses" as if newly-declared to "as-built in `scm`, extended by FK" phrasing,
+  matching how line 468 (Module 6) already phrases its relationship to 4.1/4.2.
+- [ ] Add a **lessons.md entry** (next available `L`-number) recording the pattern: "when a sub-module ships a
+  spine entity the ERD assigned to a LATER, not-yet-built module, grep-verify it doesn't already exist anywhere
+  (L28) before building, then reconcile BOTH ERD rows AND the owning models' docstrings AND the navigation.py
+  banner comment in the SAME pass (L36) — SCM 4.3 built `Item`/`Location`/`StockMove`/`StockAdjustment`/
+  `StockTransfer`/`ReorderRule` ahead of Module 5, mirroring the 4.1 precedent for `PurchaseOrder`/`RFQ`."
+- [ ] Update `.claude/skills/scm/SKILL.md` (created for 4.2, already covers 4.1+4.2) — add the 9-model 4.3
+  section: models table (spine vs. domain, which core-spine entities each reuses), the new URL routes, the
+  `templates/scm/inventory/` tree, the `_post_stock_move`/`_post_stock_moves` helper location and what calls it
+  today vs. what will call it later (`mark_received`), the seeder additions, and the `LIVE_LINKS["4.3"]` block.
+- [ ] Update README (module/sub-module/test counts; add a `4.3` bullet describing the 9-model inventory spine +
+  transfer/adjustment/reorder-automation shape, and the ships-first-owns-the-spine note for future Module 5
+  readers).
+
+## Later passes / deferred (carried over from research-scm-4.3.md)
+
+- **Wire `scm.GoodsReceiptNote.mark_received` (4.1) to call `_post_stock_move`** — the GRN docstring already
+  names this exact hook; NOT done this pass (4.3 ships the spine + its own domain models only). Update the
+  docstring's stale "lands with Module 5" note to "lands in `scm`, this pass" at the same time.
+- **Backfill `item→scm.Item` (nullable FK) onto 4.1's free-text line tables** (`PurchaseRequisitionLine`,
+  `RFQLine`, `PurchaseOrderLine`, `GoodsReceiptLine`) — the migration is unblocked now
+  that `scm.Item` exists, but still a deliberate future follow-up, not an automatic side effect of this pass.
+- **Two-step "ship then receive" transfer workflow** (deduct at source on dispatch, credit destination only on
+  confirmed receipt, explicit in-transit valuation) — this pass posts both legs at `complete` in one step.
+- **Landed cost components on receiving** (freight/duty/insurance folded into `StockMove.unit_cost`) — needs 4.18
+  Finance & Accounting Integration.
+- **GL posting of inventory value changes** (perpetual-inventory journal entries) — 4.18, reuses
+  `accounting.JournalEntry`, never a second ledger.
+- **Full N:N UOM conversion matrix** (any unit to any unit) — this pass's single `base_uom`+`conversion_factor`
+  per `UOM` covers the common "stock in each, buy in box-of-12" case only.
+- **Demand-history-driven reorder point calculation** (statistical/ML) — 4.7 Demand Planning & Forecasting;
+  `ReorderRule.reorder_point`/`lead_time_days` stay static inputs this pass.
+- **Scheduled cycle-count program** (assign zones/sections to a counting calendar, track completion) —
+  `NavERP-ERD.md`'s `CycleCount` entity, Module 5's remaining genuinely-new piece; `StockAdjustment
+  (reason='cycle_count')` is this pass's manual building block only.
+- **Bin/slotting optimization and pick-path strategies, inbound dock scheduling, outbound wave/batch/zone
+  picking, packing, shipping labels, yard management** — 4.4 Warehouse Management System entirely.
+- **Auto-transfer-instead-of-purchase when a satellite location is short** (inFlow's pattern) — a natural v2 on
+  `ReorderRule`, not required by the bullet as written (which asks for PO/requisition generation, not transfer
+  generation).
+- **Barcode-scanner hardware/mobile-camera UX** — `Item.barcode` is captured this pass; the scan interaction
+  itself is a later mobile/PWA integration.
+- **System-quantity-vs-counted-quantity snapshot on `StockAdjustmentLine`** (research's refinement over the
+  decided direct signed `quantity_delta` field) — a legitimate later enhancement for a formal cycle-count
+  workflow, not built this pass since the decision brief specifies the simpler direct-delta shape.
+- **`PriceList` / customer-facing sales pricing** — Module 5's remaining genuinely-new piece per the ERD, and/or
+  Module 8 Sales; `Item.standard_cost`/`average_cost` here are *costing* fields only.
+
+## Review notes
+(filled in at the end)
