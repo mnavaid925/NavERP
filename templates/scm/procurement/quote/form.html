@@ -11,7 +11,7 @@
     <div class="text-muted">This quote answers the request for quotation above.</div>
   </div></div>
 
-  <form method="post" novalidate>
+  <form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
     <div class="card"><div class="card-body">
       {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
@@ -38,11 +38,11 @@
             {% for lf in formset %}
               <tr>
                 {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
-                <td>{{ lf.rfq_line }}{% for e in lf.rfq_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.rfq_line }}{% for e in lf.rfq_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ lf.unit_price }}{% for e in lf.unit_price.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
-                <td>{{ lf.lead_time_days }}</td>
-                <td>{{ lf.note }}</td>
+                <td>{{ lf.lead_time_days }}{% for e in lf.lead_time_days.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.note }}{% for e in lf.note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
               </tr>
             {% endfor %}
