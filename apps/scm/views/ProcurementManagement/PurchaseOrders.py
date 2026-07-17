@@ -41,12 +41,26 @@ def purchaseorder_edit(request, pk):
     return _purchaseorder_form(request, instance=obj)
 
 
+# An amendment revises the terms of an existing commitment. Swapping who it is with, or what money
+# it is in, is not an amendment — it is a different order. Locking these on the amend path also
+# closes the tampering hole, since `disabled` makes Django ignore the POSTed value entirely.
+AMEND_LOCKED_FIELDS = ("vendor", "currency", "requisition", "quote")
+
+
+def _lock_identity_fields(form):
+    for name in AMEND_LOCKED_FIELDS:
+        if name in form.fields:
+            form.fields[name].disabled = True
+
+
 def _purchaseorder_form(request, instance, amending=False):
     if instance is None and _need_tenant(request):
         return redirect("scm:purchaseorder_list")
     is_edit = instance is not None
     if request.method == "POST":
         form = PurchaseOrderForm(request.POST, request.FILES, instance=instance, tenant=request.tenant)
+        if amending:
+            _lock_identity_fields(form)
         formset = PurchaseOrderLineFormSet(request.POST, instance=instance,
                                            form_kwargs={"tenant": request.tenant})
         if form.is_valid() and formset.is_valid():
@@ -67,6 +81,8 @@ def _purchaseorder_form(request, instance, amending=False):
             return redirect("scm:purchaseorder_detail", pk=po.pk)
     else:
         form = PurchaseOrderForm(instance=instance, tenant=request.tenant)
+        if amending:
+            _lock_identity_fields(form)
         formset = PurchaseOrderLineFormSet(instance=instance, form_kwargs={"tenant": request.tenant})
     return render(request, "scm/procurement/purchaseorder/form.html",
                   {"form": form, "formset": formset, "is_edit": is_edit, "obj": instance,
