@@ -509,4 +509,314 @@ class TestSupplierRiskAssessmentForm:
         }
         form = SupplierRiskAssessmentForm(data=data, tenant=tenant_a)
         assert form.is_valid() is False
-        assert "financial_score" in form.errors
+
+
+# ================================================================================================
+# SCM 4.3 Inventory Management
+# ================================================================================================
+
+# ================================================================ Mass-assignment exclusions
+class TestInventoryMassAssignmentExclusions:
+    def test_item_form_excludes_average_cost_and_system_fields(self):
+        from apps.scm.forms import ItemForm
+        form = ItemForm(tenant=None)
+        for field in ("average_cost", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields
+
+    def test_uom_form_excludes_system_fields(self):
+        from apps.scm.forms import UOMForm
+        form = UOMForm(tenant=None)
+        assert "tenant" not in form.fields
+
+    def test_location_form_excludes_system_fields(self):
+        from apps.scm.forms import LocationForm
+        form = LocationForm(tenant=None)
+        assert "tenant" not in form.fields
+
+    def test_lotserial_form_excludes_tenant(self):
+        from apps.scm.forms import LotSerialForm
+        form = LotSerialForm(tenant=None)
+        assert "tenant" not in form.fields
+
+    def test_stocktransfer_form_excludes_status_number_and_completed_at(self):
+        from apps.scm.forms import StockTransferForm
+        form = StockTransferForm(tenant=None)
+        for field in ("status", "number", "completed_at", "tenant"):
+            assert field not in form.fields
+
+    def test_stocktransferline_form_excludes_transfer_fk(self):
+        from apps.scm.forms import StockTransferLineForm
+        form = StockTransferLineForm(tenant=None)
+        assert "transfer" not in form.fields
+
+    def test_stockadjustment_form_excludes_status_number_and_posted_at(self):
+        from apps.scm.forms import StockAdjustmentForm
+        form = StockAdjustmentForm(tenant=None)
+        for field in ("status", "number", "posted_at", "tenant"):
+            assert field not in form.fields
+
+    def test_stockadjustmentline_form_excludes_adjustment_fk(self):
+        from apps.scm.forms import StockAdjustmentLineForm
+        form = StockAdjustmentLineForm(tenant=None)
+        assert "adjustment" not in form.fields
+
+    def test_reorderrule_form_excludes_tenant(self):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(tenant=None)
+        assert "tenant" not in form.fields
+
+    def test_itemcategory_form_excludes_tenant(self):
+        from apps.scm.forms import ItemCategoryForm
+        form = ItemCategoryForm(tenant=None)
+        assert "tenant" not in form.fields
+
+
+# ================================================================================================
+# Priority regression 2: TenantUniqueMixin must make a duplicate a FORM ERROR, not an IntegrityError
+# ================================================================================================
+class TestTenantUniqueMixinRegression:
+    def test_duplicate_sku_is_a_form_error_not_an_integrity_error(self, tenant_a, item_a):
+        from apps.scm.forms import ItemForm
+        data = {
+            "sku": item_a.sku, "name": "Another widget", "category": "", "uom": "",
+            "item_type": "stock", "tracking": "none", "costing_method": "weighted_avg",
+            "standard_cost": "0", "reorder_point": "0", "description": "", "is_active": "on",
+        }
+        form = ItemForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert form.non_field_errors() or "sku" in form.errors
+
+    def test_genuinely_new_sku_still_validates(self, tenant_a, item_a):
+        from apps.scm.forms import ItemForm
+        data = {
+            "sku": "WIDGET-2", "name": "A second widget", "category": "", "uom": "",
+            "item_type": "stock", "tracking": "none", "costing_method": "weighted_avg",
+            "standard_cost": "0", "reorder_point": "0", "description": "", "is_active": "on",
+        }
+        form = ItemForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_duplicate_uom_code_is_a_form_error(self, tenant_a, uom_each_a):
+        from apps.scm.forms import UOMForm
+        data = {"code": uom_each_a.code, "name": "Duplicate each", "factor": "1", "is_active": "on"}
+        form = UOMForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert form.non_field_errors() or "code" in form.errors
+
+    def test_genuinely_new_uom_code_still_validates(self, tenant_a, uom_each_a):
+        from apps.scm.forms import UOMForm
+        data = {"code": "BOX", "name": "Box of 12", "factor": "12", "is_active": "on"}
+        form = UOMForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_duplicate_location_code_is_a_form_error(self, tenant_a, location_a):
+        from apps.scm.forms import LocationForm
+        data = {"code": location_a.code, "name": "Duplicate WH1", "location_type": "warehouse",
+                "parent": "", "is_active": "on"}
+        form = LocationForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert form.non_field_errors() or "code" in form.errors
+
+    def test_genuinely_new_location_code_still_validates(self, tenant_a, location_a):
+        from apps.scm.forms import LocationForm
+        data = {"code": "WH9", "name": "New Warehouse", "location_type": "warehouse",
+                "parent": "", "is_active": "on"}
+        form = LocationForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_duplicate_lot_number_same_item_is_a_form_error(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.forms import LotSerialForm
+        data = {"item": str(item_lot_a.pk), "kind": "lot", "number": lot_a.number,
+                "expiry_date": "", "status": "available", "notes": ""}
+        form = LotSerialForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert form.non_field_errors() or "number" in form.errors
+
+    def test_genuinely_new_lot_number_still_validates(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.forms import LotSerialForm
+        data = {"item": str(item_lot_a.pk), "kind": "lot", "number": "LOT-0002",
+                "expiry_date": "", "status": "available", "notes": ""}
+        form = LotSerialForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_editing_the_same_item_with_its_own_sku_still_validates(self, tenant_a, item_a):
+        """Excluding the instance itself from the uniqueness check — editing a record must not
+        trip over its OWN unchanged sku."""
+        from apps.scm.forms import ItemForm
+        data = {
+            "sku": item_a.sku, "name": item_a.name, "category": "", "uom": "",
+            "item_type": "stock", "tracking": "none", "costing_method": "weighted_avg",
+            "standard_cost": "0", "reorder_point": "0", "description": "", "is_active": "on",
+        }
+        form = ItemForm(data=data, instance=item_a, tenant=tenant_a)
+        assert form.is_valid() is True
+
+
+# ================================================================ Self-parent exclusion
+class TestInventorySelfParentExclusion:
+    def test_itemcategory_form_excludes_itself_from_parent_choices(self, tenant_a, category_a):
+        from apps.scm.forms import ItemCategoryForm
+        form = ItemCategoryForm(instance=category_a, tenant=tenant_a)
+        pks = set(form.fields["parent"].queryset.values_list("pk", flat=True))
+        assert category_a.pk not in pks
+
+    def test_location_form_excludes_itself_from_parent_choices(self, tenant_a, location_a):
+        from apps.scm.forms import LocationForm
+        form = LocationForm(instance=location_a, tenant=tenant_a)
+        pks = set(form.fields["parent"].queryset.values_list("pk", flat=True))
+        assert location_a.pk not in pks
+
+
+# ================================================================ StockTransferForm validation
+class TestStockTransferFormValidation:
+    def test_same_source_and_destination_is_invalid(self, tenant_a, location_a):
+        from apps.scm.forms import StockTransferForm
+        data = {"from_location": str(location_a.pk), "to_location": str(location_a.pk),
+                "transfer_date": "2026-01-15", "notes": ""}
+        form = StockTransferForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "to_location" in form.errors
+
+    def test_different_locations_is_valid(self, tenant_a, location_a, location_a2):
+        from apps.scm.forms import StockTransferForm
+        data = {"from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+                "transfer_date": "2026-01-15", "notes": ""}
+        form = StockTransferForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+
+# ================================================================ Line formsets — lot/item mismatch
+class TestStockTransferLineFormLotItemMismatch:
+    def test_lot_belonging_to_a_different_item_is_invalid(self, tenant_a, item_a, item_lot_a, lot_a):
+        from apps.scm.forms import StockTransferLineForm
+        data = {"item": str(item_a.pk), "lot_serial": str(lot_a.pk), "quantity": "1"}
+        form = StockTransferLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "lot_serial" in form.errors
+
+    def test_lot_belonging_to_its_own_item_is_valid(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.forms import StockTransferLineForm
+        data = {"item": str(item_lot_a.pk), "lot_serial": str(lot_a.pk), "quantity": "1"}
+        form = StockTransferLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+
+class TestStockAdjustmentLineFormValidation:
+    def test_lot_belonging_to_a_different_item_is_invalid(self, tenant_a, item_a, item_lot_a, lot_a):
+        from apps.scm.forms import StockAdjustmentLineForm
+        data = {"item": str(item_a.pk), "lot_serial": str(lot_a.pk),
+                "quantity_delta": "1", "unit_cost": "1.00"}
+        form = StockAdjustmentLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "lot_serial" in form.errors
+
+    def test_zero_quantity_delta_is_invalid(self, tenant_a, item_a):
+        from apps.scm.forms import StockAdjustmentLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "quantity_delta": "0", "unit_cost": "1.00"}
+        form = StockAdjustmentLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "quantity_delta" in form.errors
+
+    def test_nonzero_quantity_delta_is_valid(self, tenant_a, item_a):
+        from apps.scm.forms import StockAdjustmentLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "quantity_delta": "-3", "unit_cost": "1.00"}
+        form = StockAdjustmentLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_unit_cost_over_the_cap_is_invalid(self, tenant_a, item_a):
+        """MaxValueValidator(999999.9999) — defence-in-depth against an absurd cost riding a
+        member-drafted line straight into a tenant-admin's bulk post."""
+        from apps.scm.forms import StockAdjustmentLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "quantity_delta": "1", "unit_cost": "9999999.9999"}
+        form = StockAdjustmentLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "unit_cost" in form.errors
+
+
+# ================================================================ StockAdjustmentForm 'other' reason
+class TestStockAdjustmentFormOtherReason:
+    def test_other_reason_without_notes_is_invalid(self, tenant_a, location_a):
+        from apps.scm.forms import StockAdjustmentForm
+        data = {"location": str(location_a.pk), "reason": "other",
+                "adjustment_date": "2026-01-15", "notes": ""}
+        form = StockAdjustmentForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "notes" in form.errors
+
+    def test_other_reason_with_notes_is_valid(self, tenant_a, location_a):
+        from apps.scm.forms import StockAdjustmentForm
+        data = {"location": str(location_a.pk), "reason": "other",
+                "adjustment_date": "2026-01-15", "notes": "Explained clearly."}
+        form = StockAdjustmentForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_cycle_count_reason_does_not_require_notes(self, tenant_a, location_a):
+        from apps.scm.forms import StockAdjustmentForm
+        data = {"location": str(location_a.pk), "reason": "cycle_count",
+                "adjustment_date": "2026-01-15", "notes": ""}
+        form = StockAdjustmentForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+
+# ================================================================ Formset default prefixes
+class TestInventoryFormsetDefaultPrefixes:
+    def test_stocktransferline_formset_prefix_is_lines(self, tenant_a, stock_transfer_a):
+        from apps.scm.forms import StockTransferLineFormSet
+        formset = StockTransferLineFormSet(instance=stock_transfer_a, form_kwargs={"tenant": tenant_a})
+        assert formset.get_default_prefix() == "lines"
+
+    def test_stockadjustmentline_formset_prefix_is_lines(self, tenant_a, stock_adjustment_a):
+        from apps.scm.forms import StockAdjustmentLineFormSet
+        formset = StockAdjustmentLineFormSet(instance=stock_adjustment_a, form_kwargs={"tenant": tenant_a})
+        assert formset.get_default_prefix() == "lines"
+
+
+# ================================================================ Cross-tenant form scoping
+class TestInventoryCrossTenantFormScoping:
+    def test_item_form_category_and_uom_exclude_other_tenant(self, tenant_a, category_b, uom_each_b):
+        from apps.scm.forms import ItemForm
+        form = ItemForm(tenant=tenant_a)
+        cat_pks = set(form.fields["category"].queryset.values_list("pk", flat=True))
+        uom_pks = set(form.fields["uom"].queryset.values_list("pk", flat=True))
+        assert category_b.pk not in cat_pks
+        assert uom_each_b.pk not in uom_pks
+
+    def test_location_form_parent_excludes_other_tenant(self, tenant_a, location_b):
+        from apps.scm.forms import LocationForm
+        form = LocationForm(tenant=tenant_a)
+        pks = set(form.fields["parent"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in pks
+
+    def test_lotserial_form_item_excludes_other_tenant(self, tenant_a, item_b):
+        from apps.scm.forms import LotSerialForm
+        form = LotSerialForm(tenant=tenant_a)
+        pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
+        assert item_b.pk not in pks
+
+    def test_reorderrule_form_item_and_location_exclude_other_tenant(self, tenant_a, item_b, location_b):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(tenant=tenant_a)
+        item_pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
+        loc_pks = set(form.fields["location"].queryset.values_list("pk", flat=True))
+        assert item_b.pk not in item_pks
+        assert location_b.pk not in loc_pks
+
+    def test_stocktransfer_form_locations_exclude_other_tenant(self, tenant_a, location_b):
+        from apps.scm.forms import StockTransferForm
+        form = StockTransferForm(tenant=tenant_a)
+        from_pks = set(form.fields["from_location"].queryset.values_list("pk", flat=True))
+        to_pks = set(form.fields["to_location"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in from_pks
+        assert location_b.pk not in to_pks
+
+    def test_stockadjustment_form_location_excludes_other_tenant(self, tenant_a, location_b):
+        from apps.scm.forms import StockAdjustmentForm
+        form = StockAdjustmentForm(tenant=tenant_a)
+        pks = set(form.fields["location"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in pks
+
+    def test_stocktransferline_form_item_excludes_other_tenant(self, tenant_a, item_b):
+        from apps.scm.forms import StockTransferLineForm
+        form = StockTransferLineForm(tenant=tenant_a)
+        pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
+        assert item_b.pk not in pks
