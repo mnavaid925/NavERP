@@ -2,8 +2,8 @@
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
 from apps.scm.views._helpers import _need_tenant, _post_adjustment
-from apps.scm.models import (CycleCountTask, Location, StockAdjustment, StockAdjustmentLine,
-                             StockMove)
+from apps.scm.models import (CycleCountTask, CycleCountTaskLine, Location, StockAdjustment,
+                             StockAdjustmentLine, StockMove)
 from apps.scm.forms import CycleCountTaskForm, CycleCountTaskLineFormSet
 
 
@@ -42,10 +42,15 @@ def _cyclecounttask_form(request, instance):
     if instance is None and _need_tenant(request):
         return redirect("scm:cyclecounttask_list")
     is_edit = instance is not None
+    # Past 'scheduled' the expected quantities have been snapshotted, so the sheet's composition is
+    # frozen — the counter fills in counts, they don't redefine what is being counted. See
+    # BaseCycleCountTaskLineFormSet for why an un-snapshotted row is a ledger-integrity hole.
+    lock_sheet = is_edit and instance.status != "scheduled"
     if request.method == "POST":
         form = CycleCountTaskForm(request.POST, instance=instance, tenant=request.tenant)
         formset = CycleCountTaskLineFormSet(request.POST, instance=instance,
-                                            form_kwargs={"tenant": request.tenant})
+                                            form_kwargs={"tenant": request.tenant},
+                                            lock_sheet=lock_sheet)
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
                 task = form.save(commit=False)
@@ -58,9 +63,11 @@ def _cyclecounttask_form(request, instance):
             return redirect("scm:cyclecounttask_detail", pk=task.pk)
     else:
         form = CycleCountTaskForm(instance=instance, tenant=request.tenant)
-        formset = CycleCountTaskLineFormSet(instance=instance, form_kwargs={"tenant": request.tenant})
+        formset = CycleCountTaskLineFormSet(instance=instance, form_kwargs={"tenant": request.tenant},
+                                            lock_sheet=lock_sheet)
     return render(request, "scm/warehouse/cyclecounttask/form.html",
-                  {"form": form, "formset": formset, "is_edit": is_edit, "obj": instance})
+                  {"form": form, "formset": formset, "is_edit": is_edit, "obj": instance,
+                   "lock_sheet": lock_sheet})
 
 
 @login_required
@@ -68,11 +75,15 @@ def cyclecounttask_detail(request, pk):
     obj = get_object_or_404(
         CycleCountTask.objects.select_related("location", "assigned_to", "adjustment"),
         pk=pk, tenant=request.tenant)
+    # Fetched ONCE and the totals derived from that same list. variance_count()/net_variance() each
+    # open their own `self.lines.all()`, so calling them here would re-scan the sheet twice more —
+    # three passes over one table for one page (perf review).
+    lines = list(obj.lines.select_related("item", "lot_serial"))
     return render(request, "scm/warehouse/cyclecounttask/detail.html", {
         "obj": obj,
-        "lines": obj.lines.select_related("item", "lot_serial"),
-        "variance_count": obj.variance_count(),
-        "net_variance": obj.net_variance(),
+        "lines": lines,
+        "variance_count": obj.variance_count(lines),
+        "net_variance": obj.net_variance(lines),
     })
 
 
@@ -95,29 +106,35 @@ def cyclecounttask_start(request, pk):
     and never re-derived at reconcile. Re-deriving later would quietly absorb any movement that
     happened during the count and hide the very discrepancy the count exists to find.
     """
-    obj = get_object_or_404(CycleCountTask.objects.select_related("location"),
-                            pk=pk, tenant=request.tenant)
-    if obj.status != "scheduled":
-        messages.info(request, "This count has already been started.")
-        return redirect("scm:cyclecounttask_detail", pk=pk)
-    lines = list(obj.lines.select_related("item", "lot_serial"))
-    if not lines:
-        messages.error(request, "Add at least one item to count before starting.")
-        return redirect("scm:cyclecounttask_detail", pk=pk)
-    # One grouped query for every (item, lot) at this location rather than an aggregate per line.
-    rows = (StockMove.objects
-            .filter(tenant=request.tenant, location=obj.location,
-                    item_id__in=[l.item_id for l in lines])
-            .values("item_id", "lot_serial_id").annotate(q=Sum("quantity")))
-    qty_map = {(r["item_id"], r["lot_serial_id"]): (r["q"] or Decimal("0")) for r in rows}
+    # Locked and re-checked inside the transaction, like every other posting action in 4.4: two
+    # concurrent "Start" submits could otherwise both read 'scheduled' and both write a snapshot,
+    # breaking the snapshotted-exactly-once invariant the whole feature rests on.
     with transaction.atomic():
+        obj = get_object_or_404(
+            CycleCountTask.objects.select_for_update().select_related("location"),
+            pk=pk, tenant=request.tenant)
+        if obj.status != "scheduled":
+            messages.info(request, "This count has already been started.")
+            return redirect("scm:cyclecounttask_detail", pk=pk)
+        lines = list(obj.lines.select_related("item", "lot_serial"))
+        if not lines:
+            messages.error(request, "Add at least one item to count before starting.")
+            return redirect("scm:cyclecounttask_detail", pk=pk)
+        # One grouped query for every (item, lot) at this location rather than an aggregate per line.
+        rows = (StockMove.objects
+                .filter(tenant=request.tenant, location=obj.location,
+                        item_id__in=[l.item_id for l in lines])
+                .values("item_id", "lot_serial_id").annotate(q=Sum("quantity")))
+        qty_map = {(r["item_id"], r["lot_serial_id"]): (r["q"] or Decimal("0")) for r in rows}
         for line in lines:
             if line.lot_serial_id:
                 expected = qty_map.get((line.item_id, line.lot_serial_id), Decimal("0"))
             else:
                 expected = sum((v for (i, _), v in qty_map.items() if i == line.item_id), Decimal("0"))
             line.expected_quantity = expected
-            line.save(update_fields=["expected_quantity"])
+        # One UPDATE for the whole sheet. A 'full' count covers a whole section, so a per-line
+        # save() here would be O(lines) writes on exactly the document built to be large.
+        CycleCountTaskLine.objects.bulk_update(lines, ["expected_quantity"])
         obj.status = "in_progress"
         obj.started_at = timezone.now()
         obj.save(update_fields=["status", "started_at", "updated_at"])
@@ -171,11 +188,13 @@ def cyclecounttask_reconcile(request, pk):
                     tenant=request.tenant, location=obj.location, reason="cycle_count",
                     status="draft", adjustment_date=timezone.localdate(),
                     notes=f"Generated from cycle count {obj.number}.")
-                for line in variances:
-                    StockAdjustmentLine.objects.create(
+                StockAdjustmentLine.objects.bulk_create([
+                    StockAdjustmentLine(
                         adjustment=adjustment, item=line.item, lot_serial=line.lot_serial,
                         quantity_delta=line.variance,
                         unit_cost=line.item.average_cost or Decimal("0"))
+                    for line in variances
+                ])
                 # Post through the SAME service every other adjustment uses.
                 _post_adjustment(adjustment, request.user)
                 adjustment.status = "posted"
