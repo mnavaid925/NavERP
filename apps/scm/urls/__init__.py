@@ -24,6 +24,10 @@ from .InventoryManagement.StockTransfers import urlpatterns as _inv_transfers
 from .InventoryManagement.StockAdjustments import urlpatterns as _inv_adjustments
 from .InventoryManagement.ReorderRules import urlpatterns as _inv_reorderrules
 from .InventoryManagement.Reports import urlpatterns as _inv_reports
+from .WarehouseManagement.PutawayTasks import urlpatterns as _wms_putaway
+from .WarehouseManagement.PickTasks import urlpatterns as _wms_picks
+from .WarehouseManagement.CycleCountTasks import urlpatterns as _wms_cyclecounts
+from .WarehouseManagement.YardVisits import urlpatterns as _wms_yard
 
 
 app_name = "scm"
@@ -46,4 +50,8 @@ urlpatterns = [
     *_inv_adjustments,                   # InventoryManagement/StockAdjustments
     *_inv_reorderrules,                  # InventoryManagement/ReorderRules
     *_inv_reports,                       # InventoryManagement/Reports (valuation/reorder/ledger/on-hand)
+    *_wms_putaway,                       # WarehouseManagement/PutawayTasks
+    *_wms_picks,                         # WarehouseManagement/PickTasks
+    *_wms_cyclecounts,                   # WarehouseManagement/CycleCountTasks
+    *_wms_yard,                          # WarehouseManagement/YardVisits
 ]
