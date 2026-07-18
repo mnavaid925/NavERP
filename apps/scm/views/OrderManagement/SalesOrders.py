@@ -147,10 +147,17 @@ def salesorder_detail(request, pk):
             "allocated": allocated,
             "backordered": backordered if backordered > ZERO else ZERO,
         })
+    # Only queried for the one status that can actually use it — the mark-invoiced picker.
+    linkable_invoices = []
+    if obj.status == "fulfilled":
+        from apps.accounting.models import Invoice
+        linkable_invoices = list(Invoice.objects.filter(tenant=request.tenant, party=obj.customer)
+                                 .order_by("-id")[:25])
     return render(request, "scm/orders/salesorder/detail.html", {
         "obj": obj,
         "rows": rows,
         "has_active_allocations": any(a.status != "cancelled" for a in allocations),
+        "linkable_invoices": linkable_invoices,
     })
 
 
@@ -287,15 +294,34 @@ def salesorder_mark_delivered(request, pk):
 @login_required
 @require_POST
 def salesorder_mark_invoiced(request, pk):
+    """Link the AR invoice and mark the order invoiced, in one step.
+
+    The invoice is chosen HERE rather than on the order form. It used to be an ordinary form field,
+    which made this action unreachable: the form is editable only while the order is `draft`, but
+    this action requires `fulfilled`, so the two conditions could never both hold — and in real life
+    the invoice does not exist until after fulfillment anyway. Accepting it on the POST is what makes
+    the AR hand-off actually work (code review).
+    """
     obj = get_object_or_404(SalesOrder, pk=pk, tenant=request.tenant)
     if obj.status != "fulfilled":
         messages.error(request, "Only a fulfilled order can be marked invoiced.")
         return redirect("scm:salesorder_detail", pk=pk)
+    invoice_pk = (request.POST.get("invoice") or "").strip()
+    fields = ["status", "updated_at"]
+    if invoice_pk:
+        from apps.accounting.models import Invoice
+        # Tenant-scoped lookup, so a crafted pk can't attach another workspace's invoice.
+        invoice = Invoice.objects.filter(pk=invoice_pk, tenant=request.tenant).first()
+        if invoice is None:
+            messages.error(request, "That invoice doesn't exist in this workspace.")
+            return redirect("scm:salesorder_detail", pk=pk)
+        obj.invoice = invoice
+        fields.append("invoice")
     if obj.invoice_id is None:
-        messages.error(request, "Link the accounting invoice on the order first.")
+        messages.error(request, "Pick the accounting invoice to link before marking the order invoiced.")
         return redirect("scm:salesorder_detail", pk=pk)
     obj.status = "invoiced"
-    obj.save(update_fields=["status", "updated_at"])
+    obj.save(update_fields=fields)
     write_audit_log(request.user, obj, "update", {"action": "mark_invoiced", "invoice": obj.invoice_id})
     messages.success(request, f"Order {obj.number} marked invoiced.")
     return redirect("scm:salesorder_detail", pk=pk)
