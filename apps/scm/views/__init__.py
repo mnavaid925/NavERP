@@ -142,7 +142,7 @@ from .WarehouseManagement.PutawayTasks import (  # noqa: F401
 )
 from .WarehouseManagement.PickTasks import (  # noqa: F401
     picktask_list, picktask_create, picktask_detail, picktask_edit, picktask_delete,
-    picktask_release, picktask_confirm, picktask_pack, picktask_cancel,
+    picktask_release, picktask_start, picktask_confirm, picktask_pack, picktask_cancel,
 )
 from .WarehouseManagement.CycleCountTasks import (  # noqa: F401
     cyclecounttask_list, cyclecounttask_create, cyclecounttask_detail, cyclecounttask_edit,
