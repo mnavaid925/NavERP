@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Stock Valuation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Valuation</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Valuation</span></div>
+      <p class="text-muted">Stock value per item, computed from the movement ledger under each item&rsquo;s costing method.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>SKU</th><th>Name</th><th>Costing Method</th><th>On Hand</th><th>Value</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a></td>
+              <td>{{ row.item.name }}</td>
+              <td>{{ row.method }}</td>
+              <td>{{ row.on_hand|floatformat:2 }}</td>
+              <td>{{ row.value|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>Nothing to value</h3><p>No stock items have movements yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr><td colspan="4" class="fw-600">Grand total</td><td class="fw-600">{{ grand_total|floatformat:2 }}</td></tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+{% endblock %}
