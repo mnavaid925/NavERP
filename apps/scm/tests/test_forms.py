@@ -1101,3 +1101,181 @@ class TestWarehouseCrossTenantFormScoping:
         po_pks = set(form.fields["purchase_order"].queryset.values_list("pk", flat=True))
         assert location_b.pk not in door_pks
         assert purchase_order_b.pk not in po_pks
+
+
+# ================================================================================================
+# SCM 4.5 Order Management System
+# ================================================================================================
+
+# ================================================================ Mass-assignment exclusions (priority 6)
+class TestSalesOrderMassAssignmentExclusions:
+    def test_salesorder_form_excludes_workflow_and_system_fields(self):
+        from apps.scm.forms import SalesOrderForm
+        form = SalesOrderForm(tenant=None)
+        for field in ("status", "number", "promised_date", "credit_hold", "fraud_flag", "hold_reason",
+                     "confirmation_sent_at", "shipped_notification_at", "delivered_notification_at",
+                     "invoice", "subtotal", "tax_total", "total", "source_quote", "tenant"):
+            assert field not in form.fields
+
+    def test_salesorderline_form_excludes_parent_fk(self):
+        from apps.scm.forms import SalesOrderLineForm
+        form = SalesOrderLineForm(tenant=None)
+        assert "sales_order" not in form.fields
+
+    def test_salesorderallocation_form_excludes_status_and_parent_fk(self):
+        from apps.scm.forms import SalesOrderAllocationForm
+        form = SalesOrderAllocationForm(tenant=None)
+        assert "status" not in form.fields
+        assert "sales_order_line" not in form.fields
+        assert "tenant" not in form.fields
+        assert "allocated_at" not in form.fields
+
+
+# ================================================================================================
+# Priority regression 1b — ship_to_address is actually usable on a NEW order
+# ================================================================================================
+class TestSalesOrderFormShipToAddressRegression:
+    """`ship_to_address` used to be narrowed to the chosen customer's addresses, which made the
+    field ALWAYS empty on create — no customer is chosen yet when a new-order form is first built.
+    The guard is now `clean()`-based instead of queryset-based (frontend review)."""
+
+    def test_a_new_order_offers_a_non_empty_ship_to_queryset(self, tenant_a, customer_a):
+        from apps.core.models import Address
+        from apps.scm.forms import SalesOrderForm
+        Address.objects.create(tenant=tenant_a, party=customer_a, kind="shipping", line1="1 Main St",
+                               city="Springfield")
+        blank = SalesOrderForm(tenant=tenant_a)  # brand-new order, no instance, no customer chosen yet
+        assert blank.fields["ship_to_address"].queryset.count() > 0
+
+    def test_the_customers_own_address_validates(self, tenant_a, customer_a):
+        from apps.core.models import Address
+        from apps.scm.forms import SalesOrderForm
+        addr = Address.objects.create(tenant=tenant_a, party=customer_a, kind="shipping", line1="1 Main St",
+                                      city="Springfield")
+        form = SalesOrderForm(
+            {"customer": customer_a.pk, "ship_to_address": addr.pk, "source_channel": "manual",
+             "order_date": "2026-01-05"}, tenant=tenant_a)
+        assert form.is_valid() is True, form.errors
+
+    def test_another_partys_address_is_rejected(self, tenant_a, customer_a):
+        from apps.core.models import Address, Party, PartyRole
+        from apps.scm.forms import SalesOrderForm
+        other = Party.objects.create(tenant=tenant_a, name="Someone Else", kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=other, role="customer", status="active")
+        other_addr = Address.objects.create(tenant=tenant_a, party=other, kind="shipping", line1="9 Wrong St",
+                                            city="Shelbyville")
+        form = SalesOrderForm(
+            {"customer": customer_a.pk, "ship_to_address": other_addr.pk, "source_channel": "manual",
+             "order_date": "2026-01-05"}, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "ship_to_address" in form.errors
+
+
+# ================================================================ SalesOrderAllocationForm location scoping
+class TestSalesOrderAllocationFormLocationScoping:
+    def test_rejects_a_non_pickable_location(self, tenant_a, location_a):
+        from apps.scm.forms import SalesOrderAllocationForm
+        location_a.is_pickable = False
+        location_a.save(update_fields=["is_pickable"])
+        form = SalesOrderAllocationForm(data={"location": str(location_a.pk), "quantity": "1", "notes": ""},
+                                        tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "location" in form.errors
+
+    def test_accepts_a_pickable_location(self, tenant_a, location_a):
+        from apps.scm.forms import SalesOrderAllocationForm
+        form = SalesOrderAllocationForm(data={"location": str(location_a.pk), "quantity": "1", "notes": ""},
+                                        tenant=tenant_a)
+        assert form.is_valid() is True
+
+
+# ================================================================================================
+# BaseSalesOrderLineFormSet — refuses to un-order what is already allocated (priority 6)
+# ================================================================================================
+class TestSalesOrderLineFormSetDeleteGuard:
+    def test_deleting_a_line_with_an_active_allocation_is_a_validation_error(
+        self, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.forms import SalesOrderLineFormSet
+        from apps.scm.models import SalesOrderAllocation, SalesOrderLine
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("4"))
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(line.item_id), "description": "", "quantity_ordered": line.quantity_ordered,
+             "unit_price": line.unit_price, "discount_pct": "0", "tax_pct": "0", "DELETE": "on"},
+        ], initial=1)
+        formset = SalesOrderLineFormSet(data=data, instance=sales_order_a, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid() is False
+        assert any("cannot be removed" in e for e in formset.non_form_errors())
+        assert SalesOrderLine.objects.filter(pk=line.pk).exists()
+
+    def test_deleting_a_line_with_no_allocations_is_allowed(self, tenant_a, sales_order_a):
+        from apps.scm.forms import SalesOrderLineFormSet
+        line = sales_order_a.lines.first()
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(line.item_id), "description": "", "quantity_ordered": line.quantity_ordered,
+             "unit_price": line.unit_price, "discount_pct": "0", "tax_pct": "0", "DELETE": "on"},
+        ], initial=1)
+        formset = SalesOrderLineFormSet(data=data, instance=sales_order_a, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid() is True
+
+    def test_shrinking_quantity_below_allocated_is_a_validation_error(
+        self, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.forms import SalesOrderLineFormSet
+        from apps.scm.models import SalesOrderAllocation
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("7"))  # ordered 10
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(line.item_id), "description": "", "quantity_ordered": "5",  # < 7 allocated
+             "unit_price": line.unit_price, "discount_pct": "0", "tax_pct": "0"},
+        ], initial=1)
+        formset = SalesOrderLineFormSet(data=data, instance=sales_order_a, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid() is False
+        assert any("less than is already allocated" in e for e in formset.non_form_errors())
+
+    def test_reducing_quantity_to_exactly_the_allocated_amount_is_allowed(
+        self, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.forms import SalesOrderLineFormSet
+        from apps.scm.models import SalesOrderAllocation
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("7"))
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(line.item_id), "description": "", "quantity_ordered": "7",
+             "unit_price": line.unit_price, "discount_pct": "0", "tax_pct": "0"},
+        ], initial=1)
+        formset = SalesOrderLineFormSet(data=data, instance=sales_order_a, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid() is True
+
+
+# ================================================================ Cross-tenant form scoping
+class TestSalesOrderCrossTenantFormScoping:
+    def test_customer_field_excludes_other_tenant(self, tenant_a, customer_b):
+        from apps.scm.forms import SalesOrderForm
+        form = SalesOrderForm(tenant=tenant_a)
+        pks = set(form.fields["customer"].queryset.values_list("pk", flat=True))
+        assert customer_b.pk not in pks
+
+    def test_ship_to_address_field_excludes_other_tenant(self, tenant_a, tenant_b, customer_b):
+        from apps.core.models import Address
+        from apps.scm.forms import SalesOrderForm
+        addr_b = Address.objects.create(tenant=tenant_b, party=customer_b, kind="shipping", line1="1 Globex Way")
+        form = SalesOrderForm(tenant=tenant_a)
+        pks = set(form.fields["ship_to_address"].queryset.values_list("pk", flat=True))
+        assert addr_b.pk not in pks
+
+    def test_salesorderline_form_item_field_excludes_other_tenant(self, tenant_a, item_b):
+        from apps.scm.forms import SalesOrderLineForm
+        form = SalesOrderLineForm(tenant=tenant_a)
+        pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
+        assert item_b.pk not in pks
+
+    def test_salesorderallocation_form_location_field_excludes_other_tenant(self, tenant_a, location_b):
+        from apps.scm.forms import SalesOrderAllocationForm
+        form = SalesOrderAllocationForm(tenant=tenant_a)
+        pks = set(form.fields["location"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in pks
