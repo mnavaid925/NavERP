@@ -46,11 +46,11 @@ class StockAdjustment(TenantNumbered):
         return self.status in self.EDITABLE_STATUSES
 
     def value_impact(self):
-        """Net value change if posted (Σ quantity_delta × unit_cost across lines)."""
-        total = ZERO
-        for line in self.lines.all():
-            total += (line.quantity_delta or ZERO) * (line.unit_cost or ZERO)
-        return total.quantize(Decimal("0.01"))
+        """Net value change if posted (Σ quantity_delta × unit_cost across lines) — one aggregate."""
+        value = self.lines.aggregate(
+            v=Sum(F("quantity_delta") * F("unit_cost"),
+                  output_field=models.DecimalField(max_digits=20, decimal_places=4)))["v"] or ZERO
+        return value.quantize(Decimal("0.01"))
 
     def clean(self):
         super().clean()
@@ -71,8 +71,11 @@ class StockAdjustmentLine(models.Model):
                                    related_name="adjustment_lines")
     quantity_delta = models.DecimalField(max_digits=16, decimal_places=4,
                                          help_text="Signed: positive adds stock, negative removes it")
+    # Capped as defence-in-depth: a tenant member drafts the line and a tenant-admin posts it, so an
+    # absurd cost would otherwise ride a bulk approval straight into the valuation report.
     unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0,
-                                    validators=[MinValueValidator(ZERO)])
+                                    validators=[MinValueValidator(ZERO),
+                                                MaxValueValidator(Decimal("999999.9999"))])
 
     class Meta:
         ordering = ["id"]
