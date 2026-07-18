@@ -134,3 +134,22 @@ from .InventoryManagement.ReorderRules import (  # noqa: F401
 from .InventoryManagement.Reports import (  # noqa: F401
     valuation_report, reorder_alerts, stock_ledger, on_hand_by_location,
 )
+
+# 4.4 Warehouse Management
+from .WarehouseManagement.PutawayTasks import (  # noqa: F401
+    putawaytask_list, putawaytask_create, putawaytask_detail, putawaytask_edit,
+    putawaytask_delete, putawaytask_start, putawaytask_complete, putawaytask_cancel,
+)
+from .WarehouseManagement.PickTasks import (  # noqa: F401
+    picktask_list, picktask_create, picktask_detail, picktask_edit, picktask_delete,
+    picktask_release, picktask_confirm, picktask_pack, picktask_cancel,
+)
+from .WarehouseManagement.CycleCountTasks import (  # noqa: F401
+    cyclecounttask_list, cyclecounttask_create, cyclecounttask_detail, cyclecounttask_edit,
+    cyclecounttask_delete, cyclecounttask_start, cyclecounttask_complete,
+    cyclecounttask_reconcile, cyclecounttask_cancel,
+)
+from .WarehouseManagement.YardVisits import (  # noqa: F401
+    yardvisit_list, yardvisit_create, yardvisit_detail, yardvisit_edit, yardvisit_delete,
+    yardvisit_arrive, yardvisit_dock, yardvisit_depart, yardvisit_cancel,
+)
