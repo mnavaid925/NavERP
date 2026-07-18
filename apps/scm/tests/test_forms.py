@@ -820,3 +820,284 @@ class TestInventoryCrossTenantFormScoping:
         form = StockTransferLineForm(tenant=tenant_a)
         pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
         assert item_b.pk not in pks
+
+
+# ================================================================================================
+# SCM 4.4 Warehouse Management
+# ================================================================================================
+
+# ================================================================ Mass-assignment exclusions
+class TestWarehouseMassAssignmentExclusions:
+    def test_putawaytask_form_excludes_status_and_completed_at(self):
+        from apps.scm.forms import PutawayTaskForm
+        form = PutawayTaskForm(tenant=None)
+        for field in ("status", "number", "completed_at", "tenant"):
+            assert field not in form.fields
+
+    def test_picktask_form_excludes_status_and_timestamps(self):
+        from apps.scm.forms import PickTaskForm
+        form = PickTaskForm(tenant=None)
+        for field in ("status", "number", "picked_at", "packed_at", "tenant"):
+            assert field not in form.fields
+
+    def test_picktaskline_form_excludes_pick_task_fk(self):
+        from apps.scm.forms import PickTaskLineForm
+        form = PickTaskLineForm(tenant=None)
+        assert "pick_task" not in form.fields
+
+    def test_cyclecounttask_form_excludes_status_timestamps_and_adjustment(self):
+        from apps.scm.forms import CycleCountTaskForm
+        form = CycleCountTaskForm(tenant=None)
+        for field in ("status", "number", "started_at", "counted_at", "reconciled_at",
+                      "adjustment", "tenant"):
+            assert field not in form.fields
+
+    def test_cyclecounttaskline_form_excludes_expected_quantity_and_cycle_count_fk(self):
+        """L20/L22: expected_quantity is snapshotted server-side — exposing it on the form would
+        let a counter see (or type over) the figure the count exists to check them against."""
+        from apps.scm.forms import CycleCountTaskLineForm
+        form = CycleCountTaskLineForm(tenant=None)
+        assert "expected_quantity" not in form.fields
+        assert "cycle_count" not in form.fields
+
+    def test_yardvisit_form_excludes_status_and_timeline_stamps(self):
+        from apps.scm.forms import YardVisitForm
+        form = YardVisitForm(tenant=None)
+        for field in ("status", "number", "arrived_at", "docked_at", "departed_at", "tenant"):
+            assert field not in form.fields
+
+
+# ================================================================ PickTaskLineForm validation
+class TestPickTaskLineFormValidation:
+    def test_over_pick_is_invalid(self, tenant_a, item_a, location_a):
+        from apps.scm.forms import PickTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "from_location": str(location_a.pk),
+                "quantity_requested": "5", "quantity_picked": "6", "notes": ""}
+        form = PickTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "quantity_picked" in form.errors
+
+    def test_short_pick_is_valid(self, tenant_a, item_a, location_a):
+        from apps.scm.forms import PickTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "from_location": str(location_a.pk),
+                "quantity_requested": "5", "quantity_picked": "3", "notes": ""}
+        form = PickTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_picked_equal_to_requested_is_valid(self, tenant_a, item_a, location_a):
+        from apps.scm.forms import PickTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "from_location": str(location_a.pk),
+                "quantity_requested": "5", "quantity_picked": "5", "notes": ""}
+        form = PickTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_lot_belonging_to_a_different_item_is_invalid(
+        self, tenant_a, item_a, item_lot_a, lot_a, location_a,
+    ):
+        from apps.scm.forms import PickTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": str(lot_a.pk), "from_location": str(location_a.pk),
+                "quantity_requested": "5", "quantity_picked": "0", "notes": ""}
+        form = PickTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "lot_serial" in form.errors
+
+    def test_lot_belonging_to_its_own_item_is_valid(self, tenant_a, item_lot_a, lot_a, location_a):
+        from apps.scm.forms import PickTaskLineForm
+        data = {"item": str(item_lot_a.pk), "lot_serial": str(lot_a.pk), "from_location": str(location_a.pk),
+                "quantity_requested": "5", "quantity_picked": "0", "notes": ""}
+        form = PickTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+
+# ================================================================ PutawayTaskForm validation
+class TestPutawayTaskFormValidation:
+    def test_same_source_and_destination_is_invalid(self, tenant_a, location_a, item_a):
+        from apps.scm.forms import PutawayTaskForm
+        data = {"goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+                "from_location": str(location_a.pk), "to_location": str(location_a.pk),
+                "quantity": "5", "strategy": "directed", "assigned_to": "", "notes": ""}
+        form = PutawayTaskForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "to_location" in form.errors
+
+    def test_different_locations_is_valid(self, tenant_a, location_a, location_a2, item_a):
+        from apps.scm.forms import PutawayTaskForm
+        data = {"goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+                "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+                "quantity": "5", "strategy": "directed", "assigned_to": "", "notes": ""}
+        form = PutawayTaskForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_lot_belonging_to_a_different_item_is_invalid(
+        self, tenant_a, item_a, item_lot_a, lot_a, location_a, location_a2,
+    ):
+        from apps.scm.forms import PutawayTaskForm
+        data = {"goods_receipt": "", "item": str(item_a.pk), "lot_serial": str(lot_a.pk),
+                "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+                "quantity": "5", "strategy": "directed", "assigned_to": "", "notes": ""}
+        form = PutawayTaskForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "lot_serial" in form.errors
+
+
+# ================================================================ PickTaskPackForm validation
+class TestPickTaskPackFormValidation:
+    def test_package_weight_over_max_digits_is_invalid(self):
+        from apps.scm.forms import PickTaskPackForm
+        form = PickTaskPackForm(data={"package_count": "1", "package_weight": "9999999999.999",
+                                      "tracking_ref": ""})
+        assert form.is_valid() is False
+        assert "package_weight" in form.errors
+
+    def test_reasonable_package_weight_is_valid(self):
+        from apps.scm.forms import PickTaskPackForm
+        form = PickTaskPackForm(data={"package_count": "2", "package_weight": "3.500",
+                                      "tracking_ref": "TRK1"})
+        assert form.is_valid() is True
+
+    def test_negative_package_weight_is_invalid(self):
+        from apps.scm.forms import PickTaskPackForm
+        form = PickTaskPackForm(data={"package_count": "1", "package_weight": "-1.000", "tracking_ref": ""})
+        assert form.is_valid() is False
+        assert "package_weight" in form.errors
+
+    def test_everything_blank_is_valid_all_fields_optional(self):
+        from apps.scm.forms import PickTaskPackForm
+        form = PickTaskPackForm(data={"package_count": "", "package_weight": "", "tracking_ref": ""})
+        assert form.is_valid() is True
+
+
+# ================================================================ CycleCountTaskLineForm validation
+class TestCycleCountTaskLineFormValidation:
+    def test_lot_belonging_to_a_different_item_is_invalid(self, tenant_a, item_a, item_lot_a, lot_a):
+        from apps.scm.forms import CycleCountTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": str(lot_a.pk), "counted_quantity": "5", "notes": ""}
+        form = CycleCountTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "lot_serial" in form.errors
+
+    def test_lot_belonging_to_its_own_item_is_valid(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.forms import CycleCountTaskLineForm
+        data = {"item": str(item_lot_a.pk), "lot_serial": str(lot_a.pk), "counted_quantity": "5", "notes": ""}
+        form = CycleCountTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+
+    def test_blank_counted_quantity_is_valid_and_cleans_to_none(self, tenant_a, item_a):
+        """Uncounted must stay distinguishable from counted-zero all the way through cleaning."""
+        from apps.scm.forms import CycleCountTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "counted_quantity": "", "notes": ""}
+        form = CycleCountTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+        assert form.cleaned_data["counted_quantity"] is None
+
+    def test_counted_zero_is_valid_and_distinct_from_blank(self, tenant_a, item_a):
+        from apps.scm.forms import CycleCountTaskLineForm
+        data = {"item": str(item_a.pk), "lot_serial": "", "counted_quantity": "0", "notes": ""}
+        form = CycleCountTaskLineForm(data=data, tenant=tenant_a)
+        assert form.is_valid() is True
+        assert form.cleaned_data["counted_quantity"] == Decimal("0")
+
+
+# ================================================================================================
+# Priority regression 1b — the started-count composition freeze
+# ================================================================================================
+class TestCycleCountTaskLineFormSetLockGuard:
+    """BaseCycleCountTaskLineFormSet, exercised directly (see apps/scm/forms/WarehouseManagement/
+    CycleCountTasks.py). Once a count has started, the sheet's item list must be frozen — the
+    counter can still fill in counted_quantity/notes, but can't add a row or swap a line's item."""
+
+    def test_lock_sheet_disables_item_and_lot_fields_on_every_form(self, tenant_a, cyclecounttask_a):
+        from apps.scm.forms import CycleCountTaskLineFormSet
+        formset = CycleCountTaskLineFormSet(instance=cyclecounttask_a, form_kwargs={"tenant": tenant_a},
+                                            lock_sheet=True)
+        assert formset.extra == 0
+        for form in formset.forms:
+            assert form.fields["item"].disabled is True
+            assert form.fields["lot_serial"].disabled is True
+
+    def test_unlocked_formset_leaves_item_and_lot_fields_enabled(self, tenant_a, cyclecounttask_a):
+        from apps.scm.forms import CycleCountTaskLineFormSet
+        formset = CycleCountTaskLineFormSet(instance=cyclecounttask_a, form_kwargs={"tenant": tenant_a},
+                                            lock_sheet=False)
+        for form in formset.forms:
+            assert form.fields["item"].disabled is False
+
+    def test_a_hand_rolled_extra_row_is_rejected_when_locked(self, tenant_a, cyclecounttask_a, item_lot_a):
+        from apps.scm.forms import CycleCountTaskLineFormSet
+        line = cyclecounttask_a.lines.first()
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(line.item_id), "lot_serial": "", "counted_quantity": "5", "notes": ""},
+            {"id": "", "item": str(item_lot_a.pk), "lot_serial": "", "counted_quantity": "3", "notes": ""},
+        ], initial=1)
+        formset = CycleCountTaskLineFormSet(data=data, instance=cyclecounttask_a,
+                                            form_kwargs={"tenant": tenant_a}, lock_sheet=True)
+        assert formset.is_valid() is False
+
+    def test_the_same_extra_row_is_accepted_when_not_locked(self, tenant_a, cyclecounttask_a, item_lot_a):
+        from apps.scm.forms import CycleCountTaskLineFormSet
+        line = cyclecounttask_a.lines.first()
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(line.item_id), "lot_serial": "", "counted_quantity": "", "notes": ""},
+            {"id": "", "item": str(item_lot_a.pk), "lot_serial": "", "counted_quantity": "", "notes": ""},
+        ], initial=1)
+        formset = CycleCountTaskLineFormSet(data=data, instance=cyclecounttask_a,
+                                            form_kwargs={"tenant": tenant_a}, lock_sheet=False)
+        assert formset.is_valid() is True
+
+    def test_item_swap_on_an_existing_row_is_silently_ignored_when_locked(
+        self, tenant_a, cyclecounttask_a, item_lot_a,
+    ):
+        """The disabled field discards the POSTed value and keeps the instance's own — so the
+        crafted swap fails, but the legitimate counted_quantity on the SAME row still saves."""
+        from apps.scm.forms import CycleCountTaskLineFormSet
+        line = cyclecounttask_a.lines.first()
+        original_item_id = line.item_id
+        data = formset_data("lines", [
+            {"id": line.pk, "item": str(item_lot_a.pk), "lot_serial": "", "counted_quantity": "9", "notes": ""},
+        ], initial=1)
+        formset = CycleCountTaskLineFormSet(data=data, instance=cyclecounttask_a,
+                                            form_kwargs={"tenant": tenant_a}, lock_sheet=True)
+        assert formset.is_valid() is True
+        formset.save()
+        line.refresh_from_db()
+        assert line.item_id == original_item_id  # swap ignored
+        assert line.counted_quantity == Decimal("9")  # the count itself still saved
+
+
+# ================================================================ Cross-tenant form scoping
+class TestWarehouseCrossTenantFormScoping:
+    def test_putawaytask_form_locations_and_item_exclude_other_tenant(
+        self, tenant_a, location_b, item_b,
+    ):
+        from apps.scm.forms import PutawayTaskForm
+        form = PutawayTaskForm(tenant=tenant_a)
+        from_pks = set(form.fields["from_location"].queryset.values_list("pk", flat=True))
+        to_pks = set(form.fields["to_location"].queryset.values_list("pk", flat=True))
+        item_pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in from_pks
+        assert location_b.pk not in to_pks
+        assert item_b.pk not in item_pks
+
+    def test_picktaskline_form_item_and_location_exclude_other_tenant(self, tenant_a, item_b, location_b):
+        from apps.scm.forms import PickTaskLineForm
+        form = PickTaskLineForm(tenant=tenant_a)
+        item_pks = set(form.fields["item"].queryset.values_list("pk", flat=True))
+        loc_pks = set(form.fields["from_location"].queryset.values_list("pk", flat=True))
+        assert item_b.pk not in item_pks
+        assert location_b.pk not in loc_pks
+
+    def test_cyclecounttask_form_location_excludes_other_tenant(self, tenant_a, location_b):
+        from apps.scm.forms import CycleCountTaskForm
+        form = CycleCountTaskForm(tenant=tenant_a)
+        pks = set(form.fields["location"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in pks
+
+    def test_yardvisit_form_dock_door_and_purchase_order_exclude_other_tenant(
+        self, tenant_a, location_b, purchase_order_b,
+    ):
+        from apps.scm.forms import YardVisitForm
+        form = YardVisitForm(tenant=tenant_a)
+        door_pks = set(form.fields["dock_door"].queryset.values_list("pk", flat=True))
+        po_pks = set(form.fields["purchase_order"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in door_pks
+        assert purchase_order_b.pk not in po_pks
