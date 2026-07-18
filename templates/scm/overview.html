@@ -125,7 +125,11 @@
             <tr>
               <td><a href="{% url 'scm:item_detail' r.item.pk %}" class="fw-600">{{ r.item.sku }}</a> · {{ r.item.name }}</td>
               <td>{{ r.location.code }}</td>
-              <td>{{ r.current_on_hand|floatformat:2 }}</td>
+              {% comment %}
+                `on_hand` is attached by the view from one grouped query — do NOT switch this to
+                r.current_on_hand, which would issue an aggregate per rendered row.
+              {% endcomment %}
+              <td>{{ r.on_hand|floatformat:2 }}</td>
               <td>{{ r.reorder_point|floatformat:2 }}</td>
             </tr>
           {% empty %}
