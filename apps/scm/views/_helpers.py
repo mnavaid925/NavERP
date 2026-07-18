@@ -118,6 +118,56 @@ def _post_transfer(transfer, user, moved_at=None):
                          reason="Transfer in", moved_at=moved_at)
 
 
+def _post_putaway(task, user, moved_at=None):
+    """Move a putaway task's stock from staging to its destination bin (a −/+ pair). Atomic assumed.
+
+    Guarded against the staging location's live on-hand, so a task can't put away stock that isn't
+    actually there. Cost carries at the item's average so a putaway is value-neutral.
+    """
+    moved_at = moved_at or timezone.now()
+    shortfall = _insufficient_stock(task.item, task.from_location, task.quantity, task.lot_serial)
+    if shortfall:
+        raise ValidationError(shortfall)
+    cost = task.item.average_cost or ZERO
+    _post_stock_move(task.tenant, item=task.item, location=task.from_location,
+                     quantity=-task.quantity, move_type="transfer", unit_cost=cost,
+                     lot_serial=task.lot_serial, reference=task.number,
+                     reason="Putaway out", moved_at=moved_at)
+    _post_stock_move(task.tenant, item=task.item, location=task.to_location,
+                     quantity=task.quantity, move_type="transfer", unit_cost=cost,
+                     lot_serial=task.lot_serial, reference=task.number,
+                     reason="Putaway in", moved_at=moved_at)
+
+
+def _post_pick(task, user, moved_at=None):
+    """Issue each picked line out of its bin. Atomic assumed.
+
+    Only what was actually picked leaves stock — a short pick issues the smaller quantity, not the
+    requested one. Guarded per line against the bin's live on-hand, which reflects lines already
+    issued earlier in this same transaction.
+    """
+    moved_at = moved_at or timezone.now()
+    lines = list(task.lines.select_related("item", "lot_serial", "from_location"))
+    items = _shared_items(lines)
+    posted = 0
+    for line in lines:
+        qty = line.quantity_picked or ZERO
+        if qty <= ZERO:
+            continue  # nothing physically picked on this line
+        item = items[line.item_id]
+        shortfall = _insufficient_stock(item, line.from_location, qty, line.lot_serial)
+        if shortfall:
+            raise ValidationError(shortfall)
+        _post_stock_move(task.tenant, item=item, location=line.from_location,
+                         quantity=-qty, move_type="issue",
+                         unit_cost=item.average_cost or ZERO, lot_serial=line.lot_serial,
+                         reference=task.number, reason="Pick", moved_at=moved_at)
+        posted += 1
+    if not posted:
+        raise ValidationError("Nothing was picked — enter a picked quantity on at least one line.")
+    return posted
+
+
 # ---------------------------------------------------------------------------------------------
 # 4.1 GoodsReceiptNote -> StockMove (wired in 4.4).
 #
