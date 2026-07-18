@@ -229,3 +229,51 @@ class ReorderRuleAdmin(admin.ModelAdmin):
     list_display = ("item", "location", "tenant", "reorder_point", "safety_stock", "is_active")
     list_filter = ("tenant", "is_active")
     search_fields = ("item__sku", "location__code")
+
+
+# ============================================================ 4.4 Warehouse Management
+from apps.scm.models import (  # noqa: E402
+    PutawayTask, PickTask, PickTaskLine, CycleCountTask, CycleCountTaskLine, YardVisit,
+)
+
+
+@admin.register(PutawayTask)
+class PutawayTaskAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "tenant", "from_location", "to_location", "quantity", "status")
+    list_filter = ("tenant", "status", "strategy")
+    search_fields = ("number", "item__sku", "to_location__code")
+
+
+class PickTaskLineInline(admin.TabularInline):
+    model = PickTaskLine
+    extra = 0
+
+
+@admin.register(PickTask)
+class PickTaskAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "strategy", "status", "zone", "wave_ref")
+    list_filter = ("tenant", "status", "strategy")
+    search_fields = ("number", "wave_ref", "ship_to")
+    inlines = [PickTaskLineInline]
+
+
+class CycleCountTaskLineInline(admin.TabularInline):
+    model = CycleCountTaskLine
+    extra = 0
+    # expected_quantity is a server-side snapshot — never hand-editable, even here.
+    readonly_fields = ("expected_quantity",)
+
+
+@admin.register(CycleCountTask)
+class CycleCountTaskAdmin(admin.ModelAdmin):
+    list_display = ("number", "location", "tenant", "scheduled_date", "status", "adjustment")
+    list_filter = ("tenant", "status", "count_method")
+    search_fields = ("number", "location__code")
+    inlines = [CycleCountTaskLineInline]
+
+
+@admin.register(YardVisit)
+class YardVisitAdmin(admin.ModelAdmin):
+    list_display = ("number", "carrier_name", "tenant", "direction", "status", "dock_door")
+    list_filter = ("tenant", "status", "direction")
+    search_fields = ("number", "carrier_name", "vehicle_ref", "trailer_ref")
