@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Allocation{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Allocation</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:salesorderallocation_list' %}">Allocations</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    <p class="text-muted">Reserving {{ line.item.sku }} for order <a href="{% url 'scm:salesorder_detail' order.pk %}">{{ order.number }}</a>.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Line</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Item</span><span class="detail-value">{{ line.item.sku }} · {{ line.item.name }}</span></div>
+        <div><span class="detail-label">Ordered</span><span class="detail-value">{{ line.quantity_ordered|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Already Allocated</span><span class="detail-value">{{ line.quantity_allocated|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Still Backordered</span><span class="detail-value fw-600">{{ line.quantity_backordered|floatformat:2 }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Available to promise</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Location</th><th>Available</th></tr></thead>
+        <tbody>
+          {% for row in atp_rows %}
+            <tr>
+              <td>{{ row.location.code }} · {{ row.location.name }}</td>
+              <td class="fw-600">{{ row.available|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2"><div class="empty-state"><i data-lucide="package-x"></i><h3>Nothing available</h3><p>Every unit of this item is either out of stock or already reserved for another order.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      Availability is on-hand MINUS what other orders have already reserved there — not raw on-hand,
+      which would let two customers be promised the same unit. Incoming purchase orders are not
+      counted: promising stock that has not arrived needs lead-time confidence this module lacks.
+    {% endcomment %}
+    <div class="card-body text-muted">Availability is what is physically on hand at each pickable location minus what other orders have already reserved there. Stock still on order from a supplier is not counted.</div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Reserve</button>
+      <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
