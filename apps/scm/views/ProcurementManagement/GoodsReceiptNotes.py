@@ -135,7 +135,7 @@ def goodsreceipt_receive(request, pk):
             obj.status = "received"
             obj.save(update_fields=["status", "updated_at"])
             # The inventory effect — receipts raise on-hand at the receiving location.
-            posted, unmatched = _post_grn_receipt(obj, request.user)
+            posted, unmatched, blocked = _post_grn_receipt(obj, request.user)
             # Re-match every receipt on the order, not just this one: this booking changes the
             # per-line received aggregate that the siblings' verdicts are derived from.
             obj.purchase_order.rematch_receipts()
@@ -146,6 +146,10 @@ def goodsreceipt_receive(request, pk):
         return redirect("scm:goodsreceipt_detail", pk=pk)
     write_audit_log(request.user, obj, "update", {"action": "receive", "moves_posted": posted})
     messages.success(request, f"Receipt {obj.number} booked — {posted} stock movement(s) posted.")
+    if blocked:
+        # A workspace-level reason nothing could post, kept separate from the per-line SKU misses
+        # below so the two don't read as the same problem.
+        messages.warning(request, f"No stock was posted for this receipt — {blocked}.")
     if unmatched:
         # Surfaced rather than swallowed: 4.1 lines are free text, so a line whose SKU matches no
         # item master row cannot post a move. The buyer needs to know stock did NOT rise for it.
@@ -166,25 +170,32 @@ def goodsreceipt_cancel(request, pk):
     vendor bill should be paid. That is not a plain @login_required action.
 
     Since 4.4 it also unwinds the inventory effect by posting COMPENSATING moves — the ledger is
-    append-only, so a cancellation never deletes the originals.
+    append-only, so a cancellation never deletes the originals. The reversal is guarded: if the
+    received stock has already been put away into a bin, cancelling is REFUSED (the whole
+    transaction rolls back, so the receipt stays 'received') rather than driving the staging
+    location negative. Un-picking that stock is a putaway decision, not a receipt one.
     """
-    with transaction.atomic():
-        obj = get_object_or_404(
-            GoodsReceiptNote.objects.select_for_update().select_related("purchase_order"),
-            pk=pk, tenant=request.tenant)
-        if obj.status == "cancelled":
-            messages.info(request, "This receipt is already cancelled.")
-            return redirect("scm:goodsreceipt_detail", pk=pk)
-        was_received = obj.status == "received"
-        obj.status = "cancelled"
-        obj.save(update_fields=["status", "updated_at"])
-        # Only a receipt that actually posted stock has anything to reverse.
-        reversed_count = _reverse_grn_receipt(obj, request.user) if was_received else 0
-        # Cancelling drops this receipt out of the received aggregate, so the siblings' verdicts
-        # need re-deriving too.
-        obj.purchase_order.rematch_receipts()
-        obj.purchase_order.recompute_receipt_status()
-        obj.refresh_from_db(fields=["match_status", "match_notes"])
+    try:
+        with transaction.atomic():
+            obj = get_object_or_404(
+                GoodsReceiptNote.objects.select_for_update().select_related("purchase_order"),
+                pk=pk, tenant=request.tenant)
+            if obj.status == "cancelled":
+                messages.info(request, "This receipt is already cancelled.")
+                return redirect("scm:goodsreceipt_detail", pk=pk)
+            was_received = obj.status == "received"
+            obj.status = "cancelled"
+            obj.save(update_fields=["status", "updated_at"])
+            # Only a receipt that actually posted stock has anything to reverse.
+            reversed_count = _reverse_grn_receipt(obj, request.user) if was_received else 0
+            # Cancelling drops this receipt out of the received aggregate, so the siblings' verdicts
+            # need re-deriving too.
+            obj.purchase_order.rematch_receipts()
+            obj.purchase_order.recompute_receipt_status()
+            obj.refresh_from_db(fields=["match_status", "match_notes"])
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("scm:goodsreceipt_detail", pk=pk)
     write_audit_log(request.user, obj, "update", {"action": "cancel", "moves_reversed": reversed_count})
     if reversed_count:
         messages.success(request, f"Receipt {obj.number} cancelled — {reversed_count} stock movement(s) reversed.")
