@@ -1,4 +1,8 @@
-"""Seed Supply Chain Management (Module 4) demo data — sub-module 4.1 Procurement Management.
+"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.4.
+
+4.1 Procurement (below), 4.2 Supplier Relationship Management, 4.3 Inventory (the StockMove spine)
+and 4.4 Warehouse Management. `_seed_warehouse_tenant` runs LAST and that ordering is load-bearing,
+not cosmetic: every putaway/pick/count row it creates references the items and locations 4.3 seeds.
 
 Creates, per tenant, a walk down the whole procure-to-pay chain so every 4.1 page has something
 real on it: an approved requisition (budget-checked), an RFQ sent to two suppliers with competing
@@ -52,7 +56,8 @@ REQUISITION_LINES = [
 
 
 class Command(BaseCommand):
-    help = "Seed SCM 4.1 Procurement demo data — idempotent (skips a tenant that already has requisitions)."
+    help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse demo data — "
+            "idempotent (skips a tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -627,6 +632,14 @@ class Command(BaseCommand):
 
         bill = self._bill_for(tenant, po, grn, currency, terms, account, today)
         grn.bill = bill
+        # Deliberately set directly rather than through _post_grn_receipt, and this is the ONE
+        # receipt in the app that is 'received' without matching StockMoves. Two reasons, both
+        # structural: this 4.1 pass runs BEFORE _seed_inventory_tenant, so neither an item master
+        # nor a stock location exists yet to post against; and these PO lines are 4.1 free text
+        # whose sku_hints name procurement demo goods, not 4.3 catalogue items, so the resolver
+        # would match nothing even if it ran. The demo three-way match — the point of this row —
+        # depends only on quantities and value, not on the ledger. Any receipt booked through the
+        # UI does post stock (goodsreceipt_receive → _post_grn_receipt).
         grn.status = "received"
         grn.save(update_fields=["bill", "status", "updated_at"])
         grn.recompute_match()
