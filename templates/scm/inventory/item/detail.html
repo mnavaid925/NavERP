@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.sku }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.sku }}
+        <span class="badge badge-{% if obj.item_type == 'stock' %}green{% elif obj.item_type == 'consumable' %}info{% elif obj.item_type == 'service' %}slate{% else %}muted{% endif %}">{{ obj.get_item_type_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:item_list' %}">Items</a><span class="sep">›</span><span>{{ obj.sku }}</span></div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="box"></i></div>
+      <div class="stat-value">{{ on_hand|floatformat:2 }}</div>
+      <div class="stat-label">On hand{% if obj.uom %} ({{ obj.uom.code }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="bar-chart-3"></i></div>
+      <div class="stat-value">{{ total_value|floatformat:2 }}</div>
+      <div class="stat-label">Stock value ({{ obj.get_costing_method_display }})</div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>SKU</dt><dd>{{ obj.sku }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{% if obj.category %}{{ obj.category.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>UOM</dt><dd>{% if obj.uom %}{{ obj.uom.code }} · {{ obj.uom.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_item_type_display }}</dd></div>
+      <div class="detail-item"><dt>Tracking</dt><dd>{{ obj.get_tracking_display }}</dd></div>
+      <div class="detail-item"><dt>Costing Method</dt><dd>{{ obj.get_costing_method_display }}</dd></div>
+      <div class="detail-item"><dt>Standard Cost</dt><dd>{{ obj.standard_cost|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Average Cost</dt><dd>{{ obj.average_cost|floatformat:4 }}</dd></div>
+      <div class="detail-item"><dt>Reorder Point</dt><dd>{{ obj.reorder_point|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">On hand by location</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Location</th><th>Name</th><th>Quantity</th></tr></thead>
+        <tbody>
+          {% for row in by_location %}
+            <tr>
+              <td class="fw-600">{{ row.location__code|default:"—" }}</td>
+              <td>{{ row.location__name|default:"—" }}</td>
+              <td>{{ row.qty|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="warehouse"></i><p>No stock on hand at any location.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recent movements</h2>
+      <a href="{% url 'scm:stock_ledger' %}?item={{ obj.pk }}" class="btn btn-outline"><i data-lucide="list"></i> Full ledger</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Type</th><th>Location</th><th>Quantity</th><th>Unit Cost</th><th>Reference</th></tr></thead>
+        <tbody>
+          {% for m in recent_moves %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y" }}</td>
+              <td><span class="badge badge-{% if m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}red{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'adjustment' %}amber{% else %}muted{% endif %}">{{ m.get_move_type_display }}</span></td>
+              <td>{{ m.location.code }}</td>
+              <td>{{ m.quantity|floatformat:2 }}</td>
+              <td>{{ m.unit_cost|floatformat:2 }}</td>
+              <td>{{ m.reference|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list"></i><p>No stock movements recorded for this item.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Reorder rules</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Location</th><th>Reorder Point</th><th>Safety Stock</th></tr></thead>
+        <tbody>
+          {% for r in reorder_rules %}
+            <tr>
+              <td>{{ r.location.code }}</td>
+              <td>{{ r.reorder_point|floatformat:2 }}</td>
+              <td>{{ r.safety_stock|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="bell"></i><p>No reorder rules for this item.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if obj.tracking != 'none' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Lots / serials</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Kind</th><th>Status</th><th>Expiry</th></tr></thead>
+          <tbody>
+            {% for l in lot_serials %}
+              <tr>
+                <td><a href="{% url 'scm:lotserial_detail' l.pk %}" class="fw-600">{{ l.number }}</a></td>
+                <td>{{ l.get_kind_display }}</td>
+                <td><span class="badge badge-{% if l.status == 'available' %}green{% elif l.status == 'quarantine' %}amber{% elif l.status == 'expired' %}red{% else %}muted{% endif %}">{{ l.get_status_display }}</span></td>
+                <td>{{ l.expiry_date|date:"M d, Y"|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="layers"></i><p>No lots or serials recorded.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:item_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:item_delete' obj.pk %}" onsubmit="return confirm('Delete this item?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
