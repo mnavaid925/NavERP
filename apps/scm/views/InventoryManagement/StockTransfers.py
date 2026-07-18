@@ -63,9 +63,26 @@ def _stocktransfer_form(request, instance):
 def stocktransfer_detail(request, pk):
     obj = get_object_or_404(
         StockTransfer.objects.select_related("from_location", "to_location"), pk=pk, tenant=request.tenant)
-    lines = obj.lines.select_related("item", "lot_serial")
-    # Show the buyer whether the source can currently cover each line, before they complete.
-    line_rows = [{"line": ln, "available": ln.item.on_hand(location=obj.from_location)} for ln in lines]
+    lines = list(obj.lines.select_related("item", "lot_serial"))
+    # What the source can currently cover per line, shown before the admin completes. Resolved in ONE
+    # grouped query rather than an aggregate per line (perf review), and keyed by (item, lot_serial)
+    # so a lot-tracked line shows THAT lot's availability at THIS location — an item-level figure
+    # would tell the approver a lot is covered when the source never held it (security review).
+    from apps.scm.models import StockMove
+    qty_map = {
+        (row["item_id"], row["lot_serial_id"]): (row["q"] or Decimal("0"))
+        for row in (StockMove.objects
+                    .filter(tenant=request.tenant, location=obj.from_location,
+                            item_id__in=[ln.item_id for ln in lines])
+                    .values("item_id", "lot_serial_id").annotate(q=Sum("quantity")))
+    }
+    line_rows = []
+    for ln in lines:
+        if ln.lot_serial_id:
+            available = qty_map.get((ln.item_id, ln.lot_serial_id), Decimal("0"))
+        else:  # untracked line — the item's whole balance at this location, across all lots
+            available = sum((v for (i, _), v in qty_map.items() if i == ln.item_id), Decimal("0"))
+        line_rows.append({"line": ln, "available": available})
     return render(request, "scm/inventory/stocktransfer/detail.html", {
         "obj": obj,
         "line_rows": line_rows,
@@ -98,16 +115,20 @@ def stocktransfer_complete(request, pk):
     atomic block as the posting, so a mid-transfer shortfall rolls the whole thing back — nothing
     partial is ever committed.
     """
-    obj = get_object_or_404(StockTransfer.objects.select_related("from_location", "to_location"),
-                            pk=pk, tenant=request.tenant)
-    if obj.status not in ("draft", "in_transit"):
-        messages.info(request, "This transfer is already completed or cancelled.")
-        return redirect("scm:stocktransfer_detail", pk=pk)
-    if not obj.lines.exists():
-        messages.error(request, "Add at least one line before completing the transfer.")
-        return redirect("scm:stocktransfer_detail", pk=pk)
     try:
         with transaction.atomic():
+            # Lock the row and re-read status INSIDE the transaction: without this, two concurrent
+            # POSTs (double-click, retry, replay) can both see 'draft' and each post a full set of
+            # StockMoves, silently doubling the stock moved (security review).
+            obj = get_object_or_404(
+                StockTransfer.objects.select_for_update().select_related("from_location", "to_location"),
+                pk=pk, tenant=request.tenant)
+            if obj.status not in ("draft", "in_transit"):
+                messages.info(request, "This transfer is already completed or cancelled.")
+                return redirect("scm:stocktransfer_detail", pk=pk)
+            if not obj.lines.exists():
+                messages.error(request, "Add at least one line before completing the transfer.")
+                return redirect("scm:stocktransfer_detail", pk=pk)
             _post_transfer(obj, request.user)
             obj.status = "completed"
             obj.completed_at = timezone.now()
