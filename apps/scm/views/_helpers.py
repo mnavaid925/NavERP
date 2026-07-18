@@ -118,6 +118,91 @@ def _post_transfer(transfer, user, moved_at=None):
                          reason="Transfer in", moved_at=moved_at)
 
 
+# ---------------------------------------------------------------------------------------------
+# 4.1 GoodsReceiptNote -> StockMove (wired in 4.4).
+#
+# When 4.1 shipped, there was no stock ledger, so booking a receipt only flipped a status and left a
+# TODO. 4.3 then shipped StockMove but nothing went back to close the loop — so a receipt said goods
+# arrived while on-hand never moved, leaving procure-to-pay and inventory disconnected. 4.4 needs
+# received stock to exist before putaway can direct it anywhere, so the wire-up lands here.
+#
+# Item resolution is BEST-EFFORT by design: 4.1's PO/GRN lines are free text (`sku_hint`) because
+# they predate the item master, so a line whose hint matches no Item cannot post a move. Rather than
+# fail the whole receipt (breaking existing 4.1 behaviour) or skip silently (hiding the gap), the
+# helpers report what they couldn't match so the caller can surface it.
+# ---------------------------------------------------------------------------------------------
+def _resolve_grn_item(tenant, po_line):
+    """Best-effort map a free-text 4.1 purchase-order line onto a 4.3 Item via its ``sku_hint``."""
+    from apps.scm.models import Item
+    sku = (getattr(po_line, "sku_hint", "") or "").strip()
+    if not sku:
+        return None
+    return Item.objects.filter(tenant=tenant, sku__iexact=sku).first()
+
+
+def _receiving_location(grn):
+    """Where a receipt's goods land: the GRN's own staging location, else the tenant's first
+    warehouse. Returns None when the tenant has no location at all (nothing can be posted)."""
+    from apps.scm.models import Location
+    if grn.location_id:
+        return grn.location
+    return (Location.objects.filter(tenant=grn.tenant, location_type="warehouse", is_active=True)
+            .order_by("code").first()
+            or Location.objects.filter(tenant=grn.tenant, is_active=True).order_by("code").first())
+
+
+def _post_grn_receipt(grn, user, moved_at=None):
+    """Post one inbound StockMove per received line. Assumes an enclosing transaction.atomic().
+
+    Returns ``(posted, unmatched)`` — how many moves were written and the descriptions of any lines
+    whose free-text SKU matched no Item, so the caller can tell the user rather than fail silently.
+    """
+    location = _receiving_location(grn)
+    if location is None:
+        return 0, ["no stock location exists for this workspace"]
+    moved_at = moved_at or timezone.now()
+    posted, unmatched = 0, []
+    for line in grn.lines.select_related("po_line"):
+        qty = line.quantity_received or ZERO
+        if qty <= ZERO or not line.po_line_id:
+            continue
+        item = _resolve_grn_item(grn.tenant, line.po_line)
+        if item is None:
+            unmatched.append(line.po_line.item_description or line.po_line.sku_hint or "a line")
+            continue
+        # The PO line's agreed price IS the inbound cost layer (the field is `unit_price` on the
+        # order line; StockMove calls the same figure `unit_cost`).
+        _post_stock_move(grn.tenant, item=item, location=location, quantity=qty,
+                         move_type="receipt", unit_cost=line.po_line.unit_price or ZERO,
+                         reference=grn.number, reason="Goods receipt", moved_at=moved_at)
+        posted += 1
+    return posted, unmatched
+
+
+def _reverse_grn_receipt(grn, user, moved_at=None):
+    """Compensate a cancelled receipt by posting the mirror-image negative moves.
+
+    The ledger is append-only, so a cancellation NEVER deletes the original moves — it posts
+    offsetting ones, exactly like a journal reversal. Reverses only what the receipt actually
+    posted (matched by its reference), so a partially-matched receipt unwinds symmetrically.
+    """
+    from apps.scm.models import StockMove
+    moved_at = moved_at or timezone.now()
+    reversed_count = 0
+    originals = StockMove.objects.filter(tenant=grn.tenant, reference=grn.number,
+                                         move_type="receipt").select_related("item", "location")
+    for move in originals:
+        if move.quantity <= ZERO:
+            continue  # already a reversal — don't reverse the reversal
+        _post_stock_move(grn.tenant, item=move.item, location=move.location,
+                         quantity=-move.quantity, move_type="receipt",
+                         unit_cost=move.unit_cost, lot_serial=move.lot_serial,
+                         reference=grn.number, reason="Goods receipt cancelled",
+                         moved_at=moved_at)
+        reversed_count += 1
+    return reversed_count
+
+
 def _post_adjustment(adjustment, user, moved_at=None):
     """Post an adjustment as one StockMove per line (signed quantity_delta). Atomic assumed.
 
