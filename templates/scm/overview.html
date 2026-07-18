@@ -181,6 +181,18 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Orders</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:salesorder_list' %}" class="btn btn-outline"><i data-lucide="shopping-bag"></i> Sales Orders</a>
+        <a href="{% url 'scm:salesorderallocation_list' %}" class="btn btn-outline"><i data-lucide="package-plus"></i> Allocations</a>
+        <a href="{% url 'scm:salesorder_list' %}?status=on_hold" class="btn btn-outline"><i data-lucide="shield-alert"></i> Credit Holds</a>
+        <a href="{% url 'scm:salesorder_list' %}?status=partially_fulfilled" class="btn btn-outline"><i data-lucide="clock"></i> Backorders</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Warehouse</h2></div>
     <div class="card-body">
       <div class="page-actions">
