@@ -61,20 +61,26 @@ class CycleCountTask(TenantNumbered):
     def is_editable(self):
         return self.status in self.EDITABLE_STATUSES
 
-    def variance_count(self):
+    # `lines=None` on all three: a caller that has ALREADY fetched the sheet passes it in rather
+    # than making each of these open its own `self.lines.all()`. The detail page needs the rows, the
+    # count and the net — three separate scans of one table for one render otherwise (perf review).
+    # Same shape as PurchaseOrder.recompute_receipt_status(received_map=None).
+    def variance_count(self, lines=None):
         """How many counted lines disagree with what the ledger expected."""
-        return sum(1 for line in self.lines.all() if line.has_variance)
+        rows = self.lines.all() if lines is None else lines
+        return sum(1 for line in rows if line.has_variance)
 
-    def has_variance(self):
-        return self.variance_count() > 0
+    def has_variance(self, lines=None):
+        return self.variance_count(lines) > 0
 
-    def net_variance(self):
-        """Σ (counted − expected) across counted lines — the net quantity the count would correct."""
-        total = ZERO
-        for line in self.lines.all():
-            if line.counted_quantity is not None:
-                total += line.variance
-        return total
+    def net_variance(self, lines=None):
+        """Σ (counted − expected) across counted lines — the net quantity the count would correct.
+
+        Uncounted lines contribute nothing: `line.variance` is ZERO while counted_quantity is None,
+        so they need no separate filter here.
+        """
+        rows = self.lines.all() if lines is None else lines
+        return sum((line.variance for line in rows), ZERO)
 
     def __str__(self):
         loc = self.location.code if self.location_id else "?"
