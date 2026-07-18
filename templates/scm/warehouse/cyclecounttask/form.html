@@ -47,7 +47,20 @@
         the count is started. Showing it here would turn a blind count into confirming a number on
         screen, which is exactly how a real discrepancy gets papered over.
       {% endcomment %}
-      <div class="card-body text-muted">List what to count now; leave the counted quantity blank until you are on the floor. The expected quantity is captured automatically when the count starts.</div>
+      {% if lock_sheet %}
+        <div class="card-body">
+          <div class="card" style="border-inline-start:3px solid var(--warn); background:var(--warn-bg);">
+            <div class="card-body text-warn">
+              <i data-lucide="lock"></i>
+              This count has started, so its item list is frozen — the expected quantities were
+              snapshotted from the ledger at that moment. Enter the counted quantities here; to
+              count different items, cancel this count and schedule a new one.
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="card-body text-muted">List what to count now; leave the counted quantity blank until you are on the floor. The expected quantity is captured automatically when the count starts.</div>
+      {% endif %}
     </div>
 
     <div class="form-actions">
