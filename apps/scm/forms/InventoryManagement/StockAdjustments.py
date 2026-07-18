@@ -23,9 +23,13 @@ class StockAdjustmentLineForm(TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        item, lot = cleaned.get("item"), cleaned.get("lot_serial")
         # A zero delta is a no-op row — reject it so a blank line isn't posted as a StockMove.
-        if cleaned.get("item") and not cleaned.get("quantity_delta"):
+        if item and not cleaned.get("quantity_delta"):
             self.add_error("quantity_delta", "Enter a non-zero adjustment quantity.")
+        # A lot belonging to a different item would corrupt both items' lot history (code review).
+        if item and lot and lot.item_id != item.pk:
+            self.add_error("lot_serial", f"{lot.number} belongs to {lot.item.sku}, not {item.sku}.")
         return cleaned
 
 
