@@ -45,11 +45,16 @@ class Location(TenantOwned):
         return " › ".join(reversed(parts))
 
     def on_hand_value(self):
-        """Sum of quantity×unit_cost currently at this location — the quick per-location valuation."""
-        total = ZERO
-        for move in self.stock_moves.all():
-            total += (move.quantity or ZERO) * (move.unit_cost or ZERO)
-        return total.quantize(Decimal("0.01"))
+        """Sum of quantity×unit_cost currently at this location — the quick per-location valuation.
+
+        One aggregate, not a Python walk: the ledger is the fastest-growing table in the module, so
+        pulling every move at a location into memory to add it up would become a full scan on a page
+        anyone can open (perf review).
+        """
+        value = self.stock_moves.aggregate(
+            v=Sum(F("quantity") * F("unit_cost"),
+                  output_field=models.DecimalField(max_digits=20, decimal_places=4)))["v"] or ZERO
+        return value.quantize(Decimal("0.01"))
 
     def __str__(self):
         return f"{self.code} · {self.name}"
