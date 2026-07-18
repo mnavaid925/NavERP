@@ -1451,3 +1451,993 @@ class TestSRMCreateWithoutTenantWorkspace:
         resp = c.get(reverse("scm:riskassessment_create"))
         assert resp.status_code == 302
         assert SupplierRiskAssessment.objects.count() == 0
+
+
+# ================================================================================================
+# SCM 4.3 Inventory Management
+# ================================================================================================
+
+# ================================================================ Item CRUD
+class TestItemCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, item_a):
+        resp = client_a.get(reverse("scm:item_list"))
+        assert resp.status_code == 200
+        assert item_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, item_a, item_b):
+        resp = client_a.get(reverse("scm:item_list"))
+        assert item_b not in resp.context["object_list"]
+
+    def test_list_search_by_sku(self, client_a, item_a):
+        resp = client_a.get(reverse("scm:item_list"), {"q": "WIDGET-1"})
+        assert item_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:item_list"), {"q": "Nothing matches this"})
+        assert item_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_item_type(self, client_a, tenant_a, item_a):
+        from apps.scm.models import Item
+        service_item = Item.objects.create(tenant=tenant_a, sku="SVC-1", name="Consulting", item_type="service")
+        resp = client_a.get(reverse("scm:item_list"), {"item_type": "service"})
+        object_list = list(resp.context["object_list"])
+        assert service_item in object_list
+        assert item_a not in object_list
+
+    def test_list_junk_category_filter_returns_200_not_500(self, client_a, item_a):
+        resp = client_a.get(reverse("scm:item_list"), {"category": "not-an-id"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, item_a):
+        resp = client_a.get(reverse("scm:item_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_list_page_2_when_rows_exceed_page_size(self, client_a, tenant_a):
+        from apps.scm.models import Item
+        for i in range(20):
+            Item.objects.create(tenant=tenant_a, sku=f"SKU-{i:03d}", name=f"Item {i}")
+        resp1 = client_a.get(reverse("scm:item_list"))
+        resp2 = client_a.get(reverse("scm:item_list"), {"page": "2"})
+        assert resp1.status_code == 200 and resp2.status_code == 200
+        assert set(o.pk for o in resp1.context["object_list"]) != set(o.pk for o in resp2.context["object_list"])
+
+    def _valid_data(self, **overrides):
+        data = {
+            "sku": "NEW-ITEM", "name": "New Item", "category": "", "uom": "",
+            "item_type": "stock", "tracking": "none", "costing_method": "weighted_avg",
+            "standard_cost": "5.00", "reorder_point": "0", "description": "", "is_active": "on",
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import Item
+        resp = client_a.post(reverse("scm:item_create"), self._valid_data())
+        assert resp.status_code == 302
+        item = Item.objects.get(sku="NEW-ITEM")
+        assert item.tenant_id == tenant_a.pk
+
+    def test_create_ignores_posted_average_cost(self, client_a):
+        from apps.scm.models import Item
+        resp = client_a.post(reverse("scm:item_create"), self._valid_data(average_cost="999999.0000"))
+        assert resp.status_code == 302
+        item = Item.objects.get(sku="NEW-ITEM")
+        assert item.average_cost == Decimal("0")
+
+    def test_edit_updates_fields(self, client_a, item_a):
+        resp = client_a.post(reverse("scm:item_edit", args=[item_a.pk]),
+                             self._valid_data(sku=item_a.sku, name="Renamed Widget"))
+        assert resp.status_code == 302
+        item_a.refresh_from_db()
+        assert item_a.name == "Renamed Widget"
+
+    def test_detail_returns_200_with_context(self, client_a, item_a):
+        resp = client_a.get(reverse("scm:item_detail", args=[item_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == item_a
+        assert resp.context["on_hand"] == Decimal("0")
+
+    def test_delete_with_no_stock_moves_removes_it(self, client_a, item_a):
+        pk = item_a.pk
+        resp = client_a.post(reverse("scm:item_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import Item
+        assert not Item.objects.filter(pk=pk).exists()
+
+    def test_delete_with_stock_moves_is_refused(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        from apps.scm.models import Item
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("1"),
+                         unit_cost=Decimal("1.00"), move_type="receipt")
+        resp = client_a.post(reverse("scm:item_delete", args=[item_a.pk]))
+        assert resp.status_code == 302
+        assert Item.objects.filter(pk=item_a.pk).exists()
+
+    def test_get_delete_returns_405_and_does_not_delete(self, client_a, item_a):
+        resp = client_a.get(reverse("scm:item_delete", args=[item_a.pk]))
+        assert resp.status_code == 405
+        from apps.scm.models import Item
+        assert Item.objects.filter(pk=item_a.pk).exists()
+
+
+# ================================================================ ItemCategory CRUD
+class TestItemCategoryCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, category_a):
+        resp = client_a.get(reverse("scm:category_list"))
+        assert resp.status_code == 200
+        assert category_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, category_a, category_b):
+        resp = client_a.get(reverse("scm:category_list"))
+        assert category_b not in resp.context["object_list"]
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import ItemCategory
+        data = {"name": "Gadgets", "parent": "", "description": "", "is_active": "on"}
+        resp = client_a.post(reverse("scm:category_create"), data)
+        assert resp.status_code == 302
+        cat = ItemCategory.objects.get(name="Gadgets")
+        assert cat.tenant_id == tenant_a.pk
+
+    def test_edit_updates_fields(self, client_a, category_a):
+        data = {"name": "Renamed", "parent": "", "description": "", "is_active": "on"}
+        resp = client_a.post(reverse("scm:category_edit", args=[category_a.pk]), data)
+        assert resp.status_code == 302
+        category_a.refresh_from_db()
+        assert category_a.name == "Renamed"
+
+    def test_delete_removes_it(self, client_a, category_a):
+        pk = category_a.pk
+        resp = client_a.post(reverse("scm:category_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import ItemCategory
+        assert not ItemCategory.objects.filter(pk=pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, category_a):
+        assert client_a.get(reverse("scm:category_delete", args=[category_a.pk])).status_code == 405
+
+
+# ================================================================ UOM CRUD
+class TestUOMCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, uom_each_a):
+        resp = client_a.get(reverse("scm:uom_list"))
+        assert resp.status_code == 200
+        assert uom_each_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, uom_each_a, uom_each_b):
+        resp = client_a.get(reverse("scm:uom_list"))
+        assert uom_each_b not in resp.context["object_list"]
+
+    def test_list_search_by_code(self, client_a, uom_each_a):
+        resp = client_a.get(reverse("scm:uom_list"), {"q": "EA"})
+        assert uom_each_a in resp.context["object_list"]
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import UOM
+        data = {"code": "KG", "name": "Kilogram", "factor": "1", "is_active": "on"}
+        resp = client_a.post(reverse("scm:uom_create"), data)
+        assert resp.status_code == 302
+        uom = UOM.objects.get(code="KG")
+        assert uom.tenant_id == tenant_a.pk
+
+    def test_edit_updates_fields(self, client_a, uom_each_a):
+        data = {"code": uom_each_a.code, "name": "Renamed each", "factor": "1", "is_active": "on"}
+        resp = client_a.post(reverse("scm:uom_edit", args=[uom_each_a.pk]), data)
+        assert resp.status_code == 302
+        uom_each_a.refresh_from_db()
+        assert uom_each_a.name == "Renamed each"
+
+    def test_delete_removes_it(self, client_a, uom_each_a):
+        pk = uom_each_a.pk
+        resp = client_a.post(reverse("scm:uom_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import UOM
+        assert not UOM.objects.filter(pk=pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, uom_each_a):
+        assert client_a.get(reverse("scm:uom_delete", args=[uom_each_a.pk])).status_code == 405
+
+
+# ================================================================ Location CRUD
+class TestLocationCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, location_a):
+        resp = client_a.get(reverse("scm:location_list"))
+        assert resp.status_code == 200
+        assert location_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, location_a, location_b):
+        resp = client_a.get(reverse("scm:location_list"))
+        assert location_b not in resp.context["object_list"]
+
+    def test_list_filter_by_location_type(self, client_a, tenant_a, location_a):
+        from apps.scm.models import Location
+        bin_ = Location.objects.create(tenant=tenant_a, code="BIN-9", name="Bin 9", location_type="bin")
+        resp = client_a.get(reverse("scm:location_list"), {"location_type": "bin"})
+        object_list = list(resp.context["object_list"])
+        assert bin_ in object_list
+        assert location_a not in object_list
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import Location
+        data = {"code": "WH3", "name": "Third Warehouse", "location_type": "warehouse",
+                "parent": "", "is_active": "on"}
+        resp = client_a.post(reverse("scm:location_create"), data)
+        assert resp.status_code == 302
+        loc = Location.objects.get(code="WH3")
+        assert loc.tenant_id == tenant_a.pk
+
+    def test_edit_updates_fields(self, client_a, location_a):
+        data = {"code": location_a.code, "name": "Renamed WH", "location_type": "warehouse",
+                "parent": "", "is_active": "on"}
+        resp = client_a.post(reverse("scm:location_edit", args=[location_a.pk]), data)
+        assert resp.status_code == 302
+        location_a.refresh_from_db()
+        assert location_a.name == "Renamed WH"
+
+    def test_detail_returns_200_with_context(self, client_a, location_a):
+        resp = client_a.get(reverse("scm:location_detail", args=[location_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == location_a
+        assert resp.context["on_hand_value"] == Decimal("0.00")
+
+    def test_delete_with_no_stock_moves_removes_it(self, client_a, location_a):
+        pk = location_a.pk
+        resp = client_a.post(reverse("scm:location_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import Location
+        assert not Location.objects.filter(pk=pk).exists()
+
+    def test_delete_with_stock_moves_is_refused(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        from apps.scm.models import Location
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("1"),
+                         unit_cost=Decimal("1.00"), move_type="receipt")
+        resp = client_a.post(reverse("scm:location_delete", args=[location_a.pk]))
+        assert resp.status_code == 302
+        assert Location.objects.filter(pk=location_a.pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, location_a):
+        assert client_a.get(reverse("scm:location_delete", args=[location_a.pk])).status_code == 405
+
+
+# ================================================================ LotSerial CRUD
+class TestLotSerialCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, lot_a):
+        resp = client_a.get(reverse("scm:lotserial_list"))
+        assert resp.status_code == 200
+        assert lot_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, lot_a, lot_b):
+        resp = client_a.get(reverse("scm:lotserial_list"))
+        assert lot_b not in resp.context["object_list"]
+
+    def test_list_junk_item_filter_returns_200_not_500(self, client_a, lot_a):
+        resp = client_a.get(reverse("scm:lotserial_list"), {"item": "not-an-id"})
+        assert resp.status_code == 200
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, item_lot_a):
+        from apps.scm.models import LotSerial
+        data = {"item": str(item_lot_a.pk), "kind": "lot", "number": "LOT-NEW",
+                "expiry_date": "", "status": "available", "notes": ""}
+        resp = client_a.post(reverse("scm:lotserial_create"), data)
+        assert resp.status_code == 302
+        lot = LotSerial.objects.get(number="LOT-NEW")
+        assert lot.tenant_id == tenant_a.pk
+
+    def test_edit_updates_fields(self, client_a, lot_a, item_lot_a):
+        data = {"item": str(item_lot_a.pk), "kind": "lot", "number": lot_a.number,
+                "expiry_date": "", "status": "quarantine", "notes": "Hold for QA"}
+        resp = client_a.post(reverse("scm:lotserial_edit", args=[lot_a.pk]), data)
+        assert resp.status_code == 302
+        lot_a.refresh_from_db()
+        assert lot_a.status == "quarantine"
+
+    def test_detail_returns_200_with_context(self, client_a, lot_a):
+        resp = client_a.get(reverse("scm:lotserial_detail", args=[lot_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == lot_a
+        assert resp.context["on_hand"] == Decimal("0")
+
+    def test_delete_with_stock_moves_is_refused(self, client_a, tenant_a, item_lot_a, location_a, lot_a):
+        from apps.scm.models import LotSerial
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_lot_a, location=location_a, quantity=Decimal("1"),
+                         unit_cost=Decimal("1.00"), move_type="receipt", lot_serial=lot_a)
+        resp = client_a.post(reverse("scm:lotserial_delete", args=[lot_a.pk]))
+        assert resp.status_code == 302
+        assert LotSerial.objects.filter(pk=lot_a.pk).exists()
+
+    def test_delete_with_no_stock_moves_removes_it(self, client_a, lot_a):
+        pk = lot_a.pk
+        resp = client_a.post(reverse("scm:lotserial_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import LotSerial
+        assert not LotSerial.objects.filter(pk=pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, lot_a):
+        assert client_a.get(reverse("scm:lotserial_delete", args=[lot_a.pk])).status_code == 405
+
+
+# ================================================================ ReorderRule CRUD
+class TestReorderRuleCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, reorder_rule_a):
+        resp = client_a.get(reverse("scm:reorderrule_list"))
+        assert resp.status_code == 200
+        assert reorder_rule_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, reorder_rule_a, reorder_rule_b):
+        resp = client_a.get(reverse("scm:reorderrule_list"))
+        assert reorder_rule_b not in resp.context["object_list"]
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, item_a, location_a2):
+        from apps.scm.models import ReorderRule
+        data = {"item": str(item_a.pk), "location": str(location_a2.pk), "reorder_point": "5",
+                "safety_stock": "2", "reorder_quantity": "10", "is_active": "on"}
+        resp = client_a.post(reverse("scm:reorderrule_create"), data)
+        assert resp.status_code == 302
+        rule = ReorderRule.objects.get(item=item_a, location=location_a2)
+        assert rule.tenant_id == tenant_a.pk
+
+    def test_edit_updates_fields(self, client_a, reorder_rule_a, item_a, location_a):
+        data = {"item": str(item_a.pk), "location": str(location_a.pk), "reorder_point": "99",
+                "safety_stock": "5", "reorder_quantity": "20", "is_active": "on"}
+        resp = client_a.post(reverse("scm:reorderrule_edit", args=[reorder_rule_a.pk]), data)
+        assert resp.status_code == 302
+        reorder_rule_a.refresh_from_db()
+        assert reorder_rule_a.reorder_point == Decimal("99.00")
+
+    def test_delete_removes_it(self, client_a, reorder_rule_a):
+        pk = reorder_rule_a.pk
+        resp = client_a.post(reverse("scm:reorderrule_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import ReorderRule
+        assert not ReorderRule.objects.filter(pk=pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, reorder_rule_a):
+        assert client_a.get(reverse("scm:reorderrule_delete", args=[reorder_rule_a.pk])).status_code == 405
+
+
+# ================================================================ StockTransfer CRUD
+class TestStockTransferCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, stock_transfer_a):
+        resp = client_a.get(reverse("scm:stocktransfer_list"))
+        assert resp.status_code == 200
+        assert stock_transfer_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, stock_transfer_a, stock_transfer_b):
+        resp = client_a.get(reverse("scm:stocktransfer_list"))
+        assert stock_transfer_b not in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, stock_transfer_a):
+        resp = client_a.get(reverse("scm:stocktransfer_list"), {"status": "draft"})
+        assert stock_transfer_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:stocktransfer_list"), {"status": "completed"})
+        assert stock_transfer_a not in resp2.context["object_list"]
+
+    def test_create_get_renders_an_empty_form(self, client_a):
+        resp = client_a.get(reverse("scm:stocktransfer_create"))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is False
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, location_a, location_a2, item_a):
+        from apps.scm.models import StockTransfer
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "5"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 302
+        transfer = StockTransfer.objects.get(tenant=tenant_a)
+        assert transfer.number == "TRF-00001"
+        assert transfer.lines.count() == 1
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, location_a, location_a2, item_a):
+        from apps.scm.models import StockTransfer
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "", "status": "completed", "number": "TRF-99999",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "5"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 302
+        transfer = StockTransfer.objects.get(tenant=tenant_a)
+        assert transfer.status == "draft"
+        assert transfer.number == "TRF-00001"
+
+    def test_edit_updates_fields(self, client_a, stock_transfer_a, location_a, location_a2, item_a):
+        line = stock_transfer_a.lines.first()
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-25", "notes": "Updated",
+            **formset_data("lines", [{"id": line.pk, "item": str(item_a.pk), "lot_serial": "", "quantity": "8"}],
+                           initial=1),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_edit", args=[stock_transfer_a.pk]), data)
+        assert resp.status_code == 302
+        stock_transfer_a.refresh_from_db()
+        assert stock_transfer_a.notes == "Updated"
+        assert stock_transfer_a.lines.first().quantity == Decimal("8")
+
+    def test_edit_blocked_once_completed(self, client_a, tenant_a, stock_transfer_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        resp = client_a.get(reverse("scm:stocktransfer_edit", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302  # redirected to detail, not the form
+
+    def test_detail_returns_200_with_context(self, client_a, stock_transfer_a):
+        resp = client_a.get(reverse("scm:stocktransfer_detail", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == stock_transfer_a
+
+    def test_delete_draft_removes_it(self, client_a, stock_transfer_a):
+        pk = stock_transfer_a.pk
+        resp = client_a.post(reverse("scm:stocktransfer_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import StockTransfer
+        assert not StockTransfer.objects.filter(pk=pk).exists()
+
+    def test_delete_non_draft_is_refused(self, client_a, tenant_a, stock_transfer_a, location_a, item_a):
+        from apps.scm.models import StockTransfer
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        resp = client_a.post(reverse("scm:stocktransfer_delete", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        assert StockTransfer.objects.filter(pk=stock_transfer_a.pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, stock_transfer_a):
+        assert client_a.get(reverse("scm:stocktransfer_delete", args=[stock_transfer_a.pk])).status_code == 405
+
+
+# ================================================================ StockTransfer posting (state machine)
+class TestStockTransferPosting:
+    def test_complete_posts_paired_moves(self, client_a, tenant_a, stock_transfer_a, location_a, location_a2, item_a):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        stock_transfer_a.refresh_from_db()
+        assert stock_transfer_a.status == "completed"
+        assert stock_transfer_a.completed_at is not None
+        assert item_a.on_hand(location=location_a) == Decimal("15")
+        assert item_a.on_hand(location=location_a2) == Decimal("5")
+        assert StockMove.objects.filter(tenant=tenant_a, reference=stock_transfer_a.number).count() == 2
+
+    def test_complete_refused_when_no_lines(self, client_a, tenant_a, location_a, location_a2):
+        from apps.scm.models import StockTransfer
+        empty = StockTransfer.objects.create(tenant=tenant_a, from_location=location_a, to_location=location_a2,
+                                             transfer_date=datetime.date(2026, 1, 20))
+        resp = client_a.post(reverse("scm:stocktransfer_complete", args=[empty.pk]))
+        assert resp.status_code == 302
+        empty.refresh_from_db()
+        assert empty.status == "draft"
+
+    def test_complete_already_completed_is_a_noop(self, client_a, tenant_a, stock_transfer_a, location_a, item_a):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        resp = client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        # Still exactly 2 moves (double-post guard) — not 4.
+        assert StockMove.objects.filter(tenant=tenant_a, reference=stock_transfer_a.number).count() == 2
+
+    def test_complete_refused_when_never_received_anywhere(self, client_a, stock_transfer_a, location_a, item_a):
+        """Absent-prerequisite (L35): the source has NEVER held this item — zero on-hand, not
+        merely insufficient — completion must be refused, not silently treated as unlimited."""
+        resp = client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        stock_transfer_a.refresh_from_db()
+        assert stock_transfer_a.status == "draft"
+        assert item_a.on_hand(location=location_a) == Decimal("0")
+
+    def test_complete_over_transfer_rolls_back_atomically(
+        self, client_a, tenant_a, stock_transfer_a, location_a, location_a2, item_a,
+    ):
+        """The line asks for 5 but the source only has 3 -> refused, draft, on-hand unchanged,
+        and NOTHING partial gets committed (the atomic rollback regression)."""
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("3"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        stock_transfer_a.refresh_from_db()
+        assert stock_transfer_a.status == "draft"
+        assert item_a.on_hand(location=location_a) == Decimal("3")
+        assert item_a.on_hand(location=location_a2) == Decimal("0")
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=stock_transfer_a.number).exists()
+
+    def test_complete_refuses_lot_from_a_location_that_never_held_it(
+        self, client_a, tenant_a, item_lot_a, location_a, location_a2, lot_a,
+    ):
+        """Priority regression 1, end-to-end: the lot's stock sits at location_a; a transfer
+        drawing that SAME lot FROM location_a2 must be refused even though the lot's tenant-wide
+        total would cover it — and location_a2 must never go negative."""
+        from apps.scm.models import StockMove, StockTransfer, StockTransferLine
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_lot_a, location=location_a, quantity=Decimal("50"),
+                         unit_cost=Decimal("10.00"), move_type="receipt", lot_serial=lot_a)
+        transfer = StockTransfer.objects.create(
+            tenant=tenant_a, from_location=location_a2, to_location=location_a,
+            transfer_date=datetime.date(2026, 1, 20),
+        )
+        StockTransferLine.objects.create(transfer=transfer, item=item_lot_a, lot_serial=lot_a, quantity=Decimal("10"))
+        resp = client_a.post(reverse("scm:stocktransfer_complete", args=[transfer.pk]))
+        assert resp.status_code == 302
+        transfer.refresh_from_db()
+        assert transfer.status == "draft"
+        assert item_lot_a.on_hand(location=location_a2) == Decimal("0")
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=transfer.number).exists()
+
+    def test_cancel_draft_becomes_cancelled(self, client_a, stock_transfer_a):
+        resp = client_a.post(reverse("scm:stocktransfer_cancel", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        stock_transfer_a.refresh_from_db()
+        assert stock_transfer_a.status == "cancelled"
+
+    def test_cancel_completed_is_refused(self, client_a, tenant_a, stock_transfer_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk]))
+        resp = client_a.post(reverse("scm:stocktransfer_cancel", args=[stock_transfer_a.pk]))
+        assert resp.status_code == 302
+        stock_transfer_a.refresh_from_db()
+        assert stock_transfer_a.status == "completed"  # unchanged
+
+    def test_get_complete_returns_405(self, client_a, stock_transfer_a):
+        assert client_a.get(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk])).status_code == 405
+
+
+# ================================================================ StockAdjustment CRUD
+class TestStockAdjustmentCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, stock_adjustment_a):
+        resp = client_a.get(reverse("scm:stockadjustment_list"))
+        assert resp.status_code == 200
+        assert stock_adjustment_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, stock_adjustment_a, stock_adjustment_b):
+        resp = client_a.get(reverse("scm:stockadjustment_list"))
+        assert stock_adjustment_b not in resp.context["object_list"]
+
+    def test_list_filter_by_reason(self, client_a, stock_adjustment_a):
+        resp = client_a.get(reverse("scm:stockadjustment_list"), {"reason": "cycle_count"})
+        assert stock_adjustment_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:stockadjustment_list"), {"reason": "damage"})
+        assert stock_adjustment_a not in resp2.context["object_list"]
+
+    def test_create_get_renders_an_empty_form(self, client_a):
+        resp = client_a.get(reverse("scm:stockadjustment_create"))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is False
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, location_a, item_a):
+        from apps.scm.models import StockAdjustment
+        data = {
+            "location": str(location_a.pk), "reason": "cycle_count", "adjustment_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "quantity_delta": "10", "unit_cost": "5.00"}]),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_create"), data)
+        assert resp.status_code == 302
+        adj = StockAdjustment.objects.get(tenant=tenant_a)
+        assert adj.number == "ADJ-00001"
+        assert adj.lines.count() == 1
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, location_a, item_a):
+        from apps.scm.models import StockAdjustment
+        data = {
+            "location": str(location_a.pk), "reason": "cycle_count", "adjustment_date": "2026-01-20",
+            "notes": "", "status": "posted", "number": "ADJ-99999",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "quantity_delta": "10", "unit_cost": "5.00"}]),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_create"), data)
+        assert resp.status_code == 302
+        adj = StockAdjustment.objects.get(tenant=tenant_a)
+        assert adj.status == "draft"
+        assert adj.number == "ADJ-00001"
+
+    def test_edit_updates_fields(self, client_a, stock_adjustment_a, location_a, item_a):
+        line = stock_adjustment_a.lines.first()
+        data = {
+            "location": str(location_a.pk), "reason": "found", "adjustment_date": "2026-01-25",
+            "notes": "Updated",
+            **formset_data("lines", [{"id": line.pk, "item": str(item_a.pk), "lot_serial": "",
+                                      "quantity_delta": "15", "unit_cost": "5.00"}], initial=1),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_edit", args=[stock_adjustment_a.pk]), data)
+        assert resp.status_code == 302
+        stock_adjustment_a.refresh_from_db()
+        assert stock_adjustment_a.reason == "found"
+        assert stock_adjustment_a.lines.first().quantity_delta == Decimal("15")
+
+    def test_edit_blocked_once_posted(self, client_a, stock_adjustment_a):
+        client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        resp = client_a.get(reverse("scm:stockadjustment_edit", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 302  # redirected to detail, not the form
+
+    def test_detail_returns_200_with_context(self, client_a, stock_adjustment_a):
+        resp = client_a.get(reverse("scm:stockadjustment_detail", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == stock_adjustment_a
+        assert resp.context["value_impact"] == Decimal("80.00")
+
+    def test_delete_draft_removes_it(self, client_a, stock_adjustment_a):
+        pk = stock_adjustment_a.pk
+        resp = client_a.post(reverse("scm:stockadjustment_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import StockAdjustment
+        assert not StockAdjustment.objects.filter(pk=pk).exists()
+
+    def test_delete_non_draft_is_refused(self, client_a, stock_adjustment_a):
+        from apps.scm.models import StockAdjustment
+        client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        resp = client_a.post(reverse("scm:stockadjustment_delete", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 302
+        assert StockAdjustment.objects.filter(pk=stock_adjustment_a.pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, stock_adjustment_a):
+        assert client_a.get(reverse("scm:stockadjustment_delete", args=[stock_adjustment_a.pk])).status_code == 405
+
+
+# ================================================================ StockAdjustment posting (state machine)
+class TestStockAdjustmentPosting:
+    def test_post_writes_a_signed_move_and_posts(self, client_a, tenant_a, stock_adjustment_a, item_a, location_a):
+        from apps.scm.models import StockMove
+        resp = client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 302
+        stock_adjustment_a.refresh_from_db()
+        assert stock_adjustment_a.status == "posted"
+        assert stock_adjustment_a.posted_at is not None
+        assert item_a.on_hand(location=location_a) == Decimal("10")
+        assert StockMove.objects.filter(tenant=tenant_a, reference=stock_adjustment_a.number).count() == 1
+
+    def test_post_refused_when_no_lines(self, client_a, tenant_a, location_a):
+        from apps.scm.models import StockAdjustment
+        empty = StockAdjustment.objects.create(tenant=tenant_a, location=location_a,
+                                               adjustment_date=datetime.date(2026, 1, 20))
+        resp = client_a.post(reverse("scm:stockadjustment_post", args=[empty.pk]))
+        assert resp.status_code == 302
+        empty.refresh_from_db()
+        assert empty.status == "draft"
+
+    def test_post_already_posted_is_a_noop(self, client_a, tenant_a, stock_adjustment_a):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        resp = client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 302
+        assert StockMove.objects.filter(tenant=tenant_a, reference=stock_adjustment_a.number).count() == 1
+
+    def test_post_refuses_a_write_off_that_would_go_negative(self, client_a, tenant_a, location_a, item_a):
+        """Absent-prerequisite (L35): no receipt at all has ever been posted for this item at this
+        location — a write-off must be REJECTED outright, never fall through to a posted adjustment."""
+        from apps.scm.models import StockAdjustment, StockAdjustmentLine, StockMove
+        adj = StockAdjustment.objects.create(tenant=tenant_a, location=location_a, reason="write_off",
+                                             adjustment_date=datetime.date(2026, 1, 20))
+        StockAdjustmentLine.objects.create(adjustment=adj, item=item_a, quantity_delta=Decimal("-5"),
+                                           unit_cost=Decimal("5.00"))
+        resp = client_a.post(reverse("scm:stockadjustment_post", args=[adj.pk]))
+        assert resp.status_code == 302
+        adj.refresh_from_db()
+        assert adj.status == "draft"
+        assert item_a.on_hand(location=location_a) == Decimal("0")
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=adj.number).exists()
+
+    def test_post_cumulative_weighted_average_end_to_end(self, client_a, tenant_a, item_a, location_a):
+        """Priority regression 3, full view flow: two lines for the SAME item at different unit
+        costs in one adjustment must blend cumulatively (11.3636), not from a stale pre-post read
+        (10.9091)."""
+        from apps.scm.models import StockAdjustment
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("100"),
+                         unit_cost=Decimal("10.00"), move_type="receipt")
+        data = {
+            "location": str(location_a.pk), "reason": "found", "adjustment_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [
+                {"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity_delta": "5", "unit_cost": "20.00"},
+                {"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity_delta": "5", "unit_cost": "30.00"},
+            ]),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_create"), data)
+        assert resp.status_code == 302
+        adj = StockAdjustment.objects.get(tenant=tenant_a)
+        assert adj.lines.count() == 2
+        resp2 = client_a.post(reverse("scm:stockadjustment_post", args=[adj.pk]))
+        assert resp2.status_code == 302
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("11.3636")
+        assert item_a.on_hand() == Decimal("110")
+
+    def test_cancel_draft_becomes_cancelled(self, client_a, stock_adjustment_a):
+        resp = client_a.post(reverse("scm:stockadjustment_cancel", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 302
+        stock_adjustment_a.refresh_from_db()
+        assert stock_adjustment_a.status == "cancelled"
+
+    def test_cancel_posted_is_refused(self, client_a, stock_adjustment_a):
+        client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        resp = client_a.post(reverse("scm:stockadjustment_cancel", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 302
+        stock_adjustment_a.refresh_from_db()
+        assert stock_adjustment_a.status == "posted"  # unchanged
+
+    def test_get_post_returns_405(self, client_a, stock_adjustment_a):
+        assert client_a.get(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk])).status_code == 405
+
+
+# ================================================================ Reports
+class TestValuationReport:
+    def test_returns_200_and_includes_weighted_average_item(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.get(reverse("scm:valuation_report"))
+        assert resp.status_code == 200
+        rows = {r["item"].pk: r for r in resp.context["rows"]}
+        assert rows[item_a.pk]["on_hand"] == Decimal("10")
+        assert rows[item_a.pk]["value"] == Decimal("50.00")
+
+    def test_fifo_valuation_excludes_transfers(
+        self, client_a, tenant_a, item_fifo_a, location_a, location_a2,
+    ):
+        """Priority regression 4: layers 40@290 + 15@330, then a transfer of 5 between locations —
+        the transfer must NOT consume a FIFO layer. Value stays 16550.00, on_hand stays 55."""
+        from apps.scm.models import StockTransfer, StockTransferLine
+        from apps.scm.views._helpers import _post_stock_move, _post_transfer
+
+        _post_stock_move(tenant_a, item=item_fifo_a, location=location_a, quantity=Decimal("40"),
+                         unit_cost=Decimal("290"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item_fifo_a, location=location_a, quantity=Decimal("15"),
+                         unit_cost=Decimal("330"), move_type="receipt")
+        transfer = StockTransfer.objects.create(
+            tenant=tenant_a, from_location=location_a, to_location=location_a2,
+            transfer_date=datetime.date(2026, 1, 20),
+        )
+        StockTransferLine.objects.create(transfer=transfer, item=item_fifo_a, quantity=Decimal("5"))
+        _post_transfer(transfer, user=None)
+
+        resp = client_a.get(reverse("scm:valuation_report"))
+        assert resp.status_code == 200
+        rows = {r["item"].pk: r for r in resp.context["rows"]}
+        assert rows[item_fifo_a.pk]["on_hand"] == Decimal("55")
+        assert rows[item_fifo_a.pk]["value"] == Decimal("16550.00")
+
+    def test_lifo_valuation_consumes_the_newest_layer_first(self, client_a, tenant_a, location_a):
+        """LIFO: layers 10@100 (older) + 10@200 (newer); an issue of 5 consumes from the NEWEST
+        layer — remaining value = 10*100 + 5*200 = 2000.00, not 10*100 + 5*100."""
+        from django.utils import timezone
+        from apps.scm.models import Item
+        from apps.scm.views._helpers import _post_stock_move
+        item = Item.objects.create(tenant=tenant_a, sku="LIFO-1", name="LIFO Widget", costing_method="lifo")
+        _post_stock_move(tenant_a, item=item, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("100"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("200"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item, location=location_a, quantity=Decimal("-5"),
+                         unit_cost=Decimal("200"), move_type="issue", moved_at=timezone.now())
+        resp = client_a.get(reverse("scm:valuation_report"))
+        rows = {r["item"].pk: r for r in resp.context["rows"]}
+        assert rows[item.pk]["on_hand"] == Decimal("15")
+        assert rows[item.pk]["value"] == Decimal("2000.00")
+
+    def test_zero_stock_item_excluded_from_rows(self, client_a, tenant_a, item_a):
+        """An item with no stock movements at all (on_hand <= 0) must be skipped, not listed at
+        zero value."""
+        resp = client_a.get(reverse("scm:valuation_report"))
+        rows = {r["item"].pk: r for r in resp.context["rows"]}
+        assert item_a.pk not in rows
+
+
+class TestReorderAlerts:
+    def test_returns_200_and_flags_a_low_stock_rule(self, client_a, tenant_a, reorder_rule_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("2"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")  # below reorder_point=10
+        resp = client_a.get(reverse("scm:reorder_alerts"))
+        assert resp.status_code == 200
+        alert_rule_pks = {a["rule"].pk for a in resp.context["alerts"]}
+        assert reorder_rule_a.pk in alert_rule_pks
+
+    def test_excludes_a_rule_above_its_reorder_point(self, client_a, tenant_a, reorder_rule_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("50"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")  # above reorder_point=10
+        resp = client_a.get(reverse("scm:reorder_alerts"))
+        alert_rule_pks = {a["rule"].pk for a in resp.context["alerts"]}
+        assert reorder_rule_a.pk not in alert_rule_pks
+
+    def test_query_count_does_not_scale_with_rule_count(self, client_a, tenant_a, django_assert_max_num_queries):
+        from apps.scm.models import Item, Location, ReorderRule
+        for i in range(20):
+            item = Item.objects.create(tenant=tenant_a, sku=f"RR-{i:03d}", name=f"Reorder item {i}")
+            loc = Location.objects.create(tenant=tenant_a, code=f"RRW-{i:03d}", name=f"Reorder WH {i}")
+            ReorderRule.objects.create(tenant=tenant_a, item=item, location=loc, reorder_point=Decimal("10"))
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:reorder_alerts"))
+        assert resp.status_code == 200
+
+
+class TestStockLedger:
+    def test_returns_200_with_moves(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt", reference="TEST-REF")
+        resp = client_a.get(reverse("scm:stock_ledger"))
+        assert resp.status_code == 200
+        assert len(resp.context["object_list"]) == 1
+
+    def test_filter_by_move_type(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.get(reverse("scm:stock_ledger"), {"move_type": "issue"})
+        assert len(resp.context["object_list"]) == 0
+
+    def test_junk_item_and_location_filters_return_200_not_500(self, client_a):
+        resp = client_a.get(reverse("scm:stock_ledger"), {"item": "abc", "location": "xyz"})
+        assert resp.status_code == 200
+
+    def test_search_by_reference(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt", reference="FIND-ME")
+        resp = client_a.get(reverse("scm:stock_ledger"), {"q": "FIND-ME"})
+        assert len(resp.context["object_list"]) == 1
+        resp2 = client_a.get(reverse("scm:stock_ledger"), {"q": "no-such-reference"})
+        assert len(resp2.context["object_list"]) == 0
+
+
+class TestOnHandByLocation:
+    def test_returns_200_and_groups_by_location(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.get(reverse("scm:on_hand_by_location"))
+        assert resp.status_code == 200
+        assert location_a.code in resp.context["grouped"]
+
+    def test_zero_net_moves_are_excluded(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("-10"),
+                         unit_cost=Decimal("5.00"), move_type="issue")
+        resp = client_a.get(reverse("scm:on_hand_by_location"))
+        assert resp.status_code == 200
+        assert location_a.code not in resp.context["grouped"]
+
+
+class TestOverviewQueryCount:
+    """scm:overview must not scale with the number of reorder rules (on_hand_map perf regression)."""
+
+    def test_query_count_does_not_scale_with_rule_count(self, client_a, tenant_a, django_assert_max_num_queries):
+        from apps.scm.models import Item, Location, ReorderRule
+        for i in range(20):
+            item = Item.objects.create(tenant=tenant_a, sku=f"OV-{i:03d}", name=f"Overview item {i}")
+            loc = Location.objects.create(tenant=tenant_a, code=f"OVW-{i:03d}", name=f"Overview WH {i}")
+            ReorderRule.objects.create(tenant=tenant_a, item=item, location=loc, reorder_point=Decimal("10"))
+        with django_assert_max_num_queries(25):
+            resp = client_a.get(reverse("scm:overview"))
+        assert resp.status_code == 200
+
+
+# ================================================================ Negative-input hardening
+class TestInventoryNegativeInputHardening:
+    def test_stocktransferline_quantity_nan_is_rejected_not_500(self, client_a, location_a, location_a2, item_a):
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "NaN"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 200  # re-rendered form with an error, not a 500
+        from apps.scm.models import StockTransfer
+        assert not StockTransfer.objects.exists()
+
+    def test_stocktransferline_quantity_infinity_is_rejected_not_500(self, client_a, location_a, location_a2, item_a):
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "Infinity"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import StockTransfer
+        assert not StockTransfer.objects.exists()
+
+    def test_stocktransferline_quantity_negative_is_rejected_not_500(self, client_a, location_a, location_a2, item_a):
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "-5"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import StockTransfer
+        assert not StockTransfer.objects.exists()
+
+    def test_stockadjustmentline_unit_cost_garbage_is_rejected_not_500(self, client_a, location_a, item_a):
+        data = {
+            "location": str(location_a.pk), "reason": "cycle_count", "adjustment_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "quantity_delta": "5", "unit_cost": "not-a-number"}]),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import StockAdjustment
+        assert not StockAdjustment.objects.exists()
+
+    def test_stockadjustmentline_unit_cost_over_max_digits_is_rejected_not_500(self, client_a, location_a, item_a):
+        data = {
+            "location": str(location_a.pk), "reason": "cycle_count", "adjustment_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "quantity_delta": "5", "unit_cost": "9999999.9999"}]),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import StockAdjustment
+        assert not StockAdjustment.objects.exists()
+
+    def test_item_standard_cost_nan_is_rejected_not_500(self, client_a):
+        data = {
+            "sku": "BAD-COST", "name": "Bad cost item", "category": "", "uom": "",
+            "item_type": "stock", "tracking": "none", "costing_method": "weighted_avg",
+            "standard_cost": "NaN", "reorder_point": "0", "description": "", "is_active": "on",
+        }
+        resp = client_a.post(reverse("scm:item_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import Item
+        assert not Item.objects.filter(sku="BAD-COST").exists()
+
+    def test_uom_factor_infinity_is_rejected_not_500(self, client_a):
+        data = {"code": "BAD", "name": "Bad UOM", "factor": "Infinity", "is_active": "on"}
+        resp = client_a.post(reverse("scm:uom_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import UOM
+        assert not UOM.objects.filter(code="BAD").exists()
+
+
+# ================================================================ Create guarded when the user has no tenant
+class TestInventoryCreateWithoutTenantWorkspace:
+    def _tenantless_client(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email="orphan2@example.com", username="orphan2", password="x", tenant=None)
+        c = Client()
+        c.force_login(user)
+        return c
+
+    def test_item_create_redirects(self, db):
+        from apps.scm.models import Item
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:item_create"))
+        assert resp.status_code == 302
+        assert Item.objects.count() == 0
+
+    def test_location_create_redirects(self, db):
+        from apps.scm.models import Location
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:location_create"))
+        assert resp.status_code == 302
+        assert Location.objects.count() == 0
+
+    def test_stocktransfer_create_redirects(self, db):
+        from apps.scm.models import StockTransfer
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:stocktransfer_create"))
+        assert resp.status_code == 302
+        assert StockTransfer.objects.count() == 0
+
+    def test_stockadjustment_create_redirects(self, db):
+        from apps.scm.models import StockAdjustment
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:stockadjustment_create"))
+        assert resp.status_code == 302
+        assert StockAdjustment.objects.count() == 0
