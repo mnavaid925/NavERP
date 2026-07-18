@@ -2023,3 +2023,352 @@ class TestPostPickService:
             _post_pick(task, user=None)
         assert not StockMove.objects.filter(tenant=tenant_a, reference=task.number).exists()
         assert item_a.on_hand(location=location_a) == Decimal("2")  # unchanged
+
+
+# ================================================================================================
+# SCM 4.5 Order Management System
+# ================================================================================================
+
+# ================================================================ Auto-numbering
+class TestSalesOrderAutoNumbering:
+    def test_number_prefixed_so_and_sequential_per_tenant(self, tenant_a, tenant_b, customer_a, customer_b):
+        from apps.scm.models import SalesOrder
+        o1 = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a)
+        o2 = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a)
+        o3 = SalesOrder.objects.create(tenant=tenant_b, customer=customer_b)
+        assert o1.number == "SO-00001"
+        assert o2.number == "SO-00002"
+        assert o3.number == "SO-00001"  # separate per-tenant sequence
+
+    def test_number_unique_together(self, tenant_a, customer_a):
+        from apps.scm.models import SalesOrder
+        o1 = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a)
+        with pytest.raises(IntegrityError):
+            SalesOrder.objects.create(tenant=tenant_a, customer=customer_a, number=o1.number)
+
+
+# ================================================================ __str__
+class TestSalesOrderStrRepresentations:
+    def test_salesorder_str(self, sales_order_a, customer_a):
+        s = str(sales_order_a)
+        assert sales_order_a.number in s
+        assert customer_a.name in s
+
+    def test_salesorder_str_without_a_customer_falls_back_to_placeholder(self, tenant_a):
+        from apps.scm.models import SalesOrder
+        order = SalesOrder(tenant=tenant_a)
+        assert str(order) == "SO · ?"
+
+    def test_salesorderline_str_with_item(self, sales_order_a, item_a):
+        line = sales_order_a.lines.first()
+        assert str(line) == f"{item_a.sku} ×{line.quantity_ordered}"
+        assert str(line).startswith("WIDGET-1 ×10")
+
+    def test_salesorderline_str_unmapped_uses_description(self, sales_order_a):
+        from apps.scm.models import SalesOrderLine
+        line = SalesOrderLine.objects.create(sales_order=sales_order_a, item=None,
+                                             description="From a quote", quantity_ordered=Decimal("1"))
+        assert str(line) == "From a quote ×1"
+
+    def test_salesorderline_str_unmapped_with_no_description_falls_back(self, sales_order_a):
+        from apps.scm.models import SalesOrderLine
+        line = SalesOrderLine.objects.create(sales_order=sales_order_a, item=None, quantity_ordered=Decimal("1"))
+        assert str(line) == "unmapped ×1"
+
+    def test_salesorderallocation_str(self, allocation_a, location_a):
+        assert str(allocation_a) == f"{allocation_a.quantity} @ {location_a.code}"
+
+
+# ================================================================ SalesOrder properties
+class TestSalesOrderProperties:
+    def test_is_editable_true_only_while_draft(self, sales_order_a):
+        assert sales_order_a.is_editable is True
+        sales_order_a.status = "submitted"
+        assert sales_order_a.is_editable is False
+
+    def test_is_closed_true_cancelled_and_closed(self, sales_order_a):
+        for status in ("cancelled", "closed"):
+            sales_order_a.status = status
+            assert sales_order_a.is_closed is True
+        sales_order_a.status = "submitted"
+        assert sales_order_a.is_closed is False
+
+    def test_is_held_true_when_either_flag_is_set(self, sales_order_a):
+        assert sales_order_a.is_held is False
+        sales_order_a.credit_hold = True
+        assert sales_order_a.is_held is True
+        sales_order_a.credit_hold = False
+        sales_order_a.fraud_flag = True
+        assert sales_order_a.is_held is True
+
+
+# ================================================================ SalesOrderLine.is_unmapped
+class TestSalesOrderLineIsUnmapped:
+    def test_true_without_an_item(self, sales_order_a):
+        from apps.scm.models import SalesOrderLine
+        line = SalesOrderLine.objects.create(sales_order=sales_order_a, item=None, description="x",
+                                             quantity_ordered=Decimal("1"))
+        assert line.is_unmapped is True
+
+    def test_false_with_an_item(self, sales_order_a):
+        line = sales_order_a.lines.first()
+        assert line.is_unmapped is False
+
+
+# ================================================================================================
+# Derived money — recalc_totals / line_subtotal / line_tax / line_total (priority 5)
+# ================================================================================================
+class TestSalesOrderRecalcTotals:
+    def test_discount_and_tax_produce_exact_decimals_not_integer_truncated(
+        self, tenant_a, sales_order_a, item_a,
+    ):
+        """`recalc_totals` sums lines in PYTHON specifically to avoid the F()-expression
+        integer-division trap on SQLite (see the model docstring) — this pins the exact figures."""
+        from apps.scm.models import SalesOrderLine
+        sales_order_a.lines.all().delete()
+        line = SalesOrderLine.objects.create(
+            sales_order=sales_order_a, item=item_a, quantity_ordered=Decimal("7"),
+            unit_price=Decimal("9.99"), discount_pct=Decimal("15"), tax_pct=Decimal("5"),
+        )
+        assert line.line_subtotal == Decimal("59.4405")
+        assert line.line_tax == Decimal("2.972025")
+        assert line.line_total == Decimal("62.412525")
+        sales_order_a.recalc_totals()
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.subtotal == Decimal("59.44")
+        assert sales_order_a.tax_total == Decimal("2.97")
+        assert sales_order_a.total == Decimal("62.41")
+
+    def test_multiple_lines_are_summed(self, tenant_a, sales_order_a, item_a):
+        from apps.scm.models import SalesOrderLine
+        SalesOrderLine.objects.create(sales_order=sales_order_a, item=item_a, quantity_ordered=Decimal("2"),
+                                      unit_price=Decimal("50.00"))
+        total = sales_order_a.recalc_totals()
+        assert total == Decimal("250.00")  # 10x15 + 2x50
+
+
+class TestSalesOrderLineDerivedQuantities:
+    def test_quantity_allocated_counts_reserved_and_released_not_cancelled(
+        self, tenant_a, sales_order_line_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("3"))
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("2"), status="released")
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("1"), status="cancelled")
+        assert sales_order_line_a.quantity_allocated() == Decimal("5")  # 3 reserved + 2 released
+
+    def test_quantity_backordered_and_is_backordered(self, tenant_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("4"))
+        assert sales_order_line_a.quantity_backordered() == Decimal("6")  # ordered 10 - 4
+        assert sales_order_line_a.is_backordered is True
+
+    def test_fully_allocated_line_is_not_backordered(self, tenant_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("10"))
+        assert sales_order_line_a.quantity_backordered() == Decimal("0")
+        assert sales_order_line_a.is_backordered is False
+
+    def test_no_allocations_at_all_is_zero(self, sales_order_line_a):
+        assert sales_order_line_a.quantity_allocated() == Decimal("0")
+        assert sales_order_line_a.quantity_backordered() == Decimal("10")
+
+
+# ================================================================================================
+# SalesOrderAllocation.clean() — never promise more of a line than was ordered (priority 3)
+# ================================================================================================
+class TestSalesOrderAllocationClean:
+    def test_blocks_allocating_more_than_ordered(self, tenant_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        alloc = SalesOrderAllocation(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                     location=location_a, quantity=Decimal("11"))  # ordered 10
+        with pytest.raises(ValidationError):
+            alloc.clean()
+
+    def test_allows_up_to_the_full_ordered_quantity(self, tenant_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        alloc = SalesOrderAllocation(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                     location=location_a, quantity=Decimal("10"))
+        alloc.clean()  # must not raise
+
+    def test_counts_existing_active_allocations_against_the_cap(
+        self, tenant_a, sales_order_line_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("6"))
+        second = SalesOrderAllocation(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                      location=location_a, quantity=Decimal("5"))  # 6 + 5 > 10
+        with pytest.raises(ValidationError):
+            second.clean()
+
+    def test_excludes_self_on_edit(self, tenant_a, sales_order_line_a, location_a):
+        """Re-cleaning an existing row with the SAME quantity must not double-count itself."""
+        from apps.scm.models import SalesOrderAllocation
+        alloc = SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                                    location=location_a, quantity=Decimal("10"))
+        alloc.notes = "no quantity change"
+        alloc.clean()  # must not raise
+
+    def test_ignores_cancelled_allocations_when_summing_room(
+        self, tenant_a, sales_order_line_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("8"), status="cancelled")
+        alloc = SalesOrderAllocation(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                     location=location_a, quantity=Decimal("10"))
+        alloc.clean()  # the cancelled 8 doesn't count against the cap
+
+
+class TestSalesOrderAllocationProperties:
+    def test_is_active_true_for_reserved_and_released(self, allocation_a):
+        assert allocation_a.is_active is True
+        allocation_a.status = "released"
+        assert allocation_a.is_active is True
+
+    def test_is_active_false_once_cancelled(self, allocation_a):
+        allocation_a.status = "cancelled"
+        assert allocation_a.is_active is False
+
+    def test_sales_order_property_traverses_the_line(self, allocation_a, sales_order_submitted_a):
+        assert allocation_a.sales_order == sales_order_submitted_a
+
+
+# ================================================================================================
+# recompute_allocation_status — the workflow-status derivation (priority 2)
+# ================================================================================================
+class TestRecomputeAllocationStatus:
+    def test_no_allocations_stays_submitted(self, sales_order_submitted_a):
+        assert sales_order_submitted_a.recompute_allocation_status() == "submitted"
+
+    def test_partial_allocation_moves_to_partially_fulfilled(
+        self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("4"))
+        assert sales_order_submitted_a.recompute_allocation_status() == "partially_fulfilled"
+
+    def test_full_allocation_moves_to_allocated_and_stamps_promised_date(
+        self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        assert sales_order_submitted_a.promised_date is None
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("10"))
+        assert sales_order_submitted_a.recompute_allocation_status() == "allocated"
+        sales_order_submitted_a.refresh_from_db()
+        assert sales_order_submitted_a.promised_date is not None
+
+    def test_promised_date_not_moved_by_a_later_recompute(
+        self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("10"))
+        sales_order_submitted_a.recompute_allocation_status()
+        sales_order_submitted_a.refresh_from_db()
+        first_promised = sales_order_submitted_a.promised_date
+        sales_order_submitted_a.recompute_allocation_status()
+        sales_order_submitted_a.refresh_from_db()
+        assert sales_order_submitted_a.promised_date == first_promised
+
+    @pytest.mark.parametrize("terminal_status", [
+        "draft", "on_hold", "fulfilled", "invoiced", "cancelled", "closed",
+    ])
+    def test_leaves_non_allocatable_statuses_untouched(
+        self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a, terminal_status,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("10"))
+        sales_order_submitted_a.status = terminal_status
+        sales_order_submitted_a.save(update_fields=["status", "updated_at"])
+        assert sales_order_submitted_a.recompute_allocation_status() == terminal_status
+        sales_order_submitted_a.refresh_from_db()
+        assert sales_order_submitted_a.status == terminal_status
+
+
+# ================================================================================================
+# Priority regression 1c — recompute_allocation_status / _atp_rows query-count locks
+# ================================================================================================
+class TestRecomputeAllocationStatusQueryCountRegression:
+    """ONE grouped aggregate over every line, not one aggregate per line — the cost at 6 lines
+    must equal the cost at 12 lines."""
+
+    def test_cost_is_flat_across_line_count(self, tenant_a, customer_a, item_a):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.scm.models import SalesOrder, SalesOrderLine
+
+        def _submitted_order(n_lines):
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=datetime.date(2026, 1, 5))
+            for _ in range(n_lines):
+                SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                              unit_price=Decimal("1"))
+            order.recalc_totals()
+            order.status = "submitted"
+            order.save(update_fields=["status", "updated_at"])
+            return order
+
+        six = _submitted_order(6)
+        with CaptureQueriesContext(connection) as ctx6:
+            six.recompute_allocation_status()
+        twelve = _submitted_order(12)
+        with CaptureQueriesContext(connection) as ctx12:
+            twelve.recompute_allocation_status()
+        assert len(ctx6.captured_queries) == len(ctx12.captured_queries)
+
+
+class TestAtpRowsQueryCountRegression:
+    """THREE queries total regardless of location count — the cost at 1 pickable location must
+    equal the cost at 6."""
+
+    def test_cost_is_flat_across_location_count(self, tenant_a, item_a, location_a):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.scm.models import Location
+        from apps.scm.views.OrderManagement.SalesOrderAllocations import _atp_rows
+
+        with CaptureQueriesContext(connection) as ctx1:
+            _atp_rows(tenant_a, item_a)
+        one_location_cost = len(ctx1.captured_queries)
+        for i in range(5):
+            Location.objects.create(tenant=tenant_a, code=f"ATPX-{i}", name=f"ATP extra {i}", is_pickable=True)
+        with CaptureQueriesContext(connection) as ctx6:
+            _atp_rows(tenant_a, item_a)
+        six_location_cost = len(ctx6.captured_queries)
+        assert one_location_cost == six_location_cost
+
+
+# ================================================================================================
+# Priority regression 1d — has_active_allocations must actually run (once raised NameError)
+# ================================================================================================
+class TestHasActiveAllocationsRegression:
+    def test_false_with_no_allocations(self, sales_order_submitted_a):
+        assert sales_order_submitted_a.has_active_allocations() is False
+
+    def test_true_while_reserved(self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("2"))
+        assert sales_order_submitted_a.has_active_allocations() is True
+
+    def test_true_while_released(self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("2"), status="released")
+        assert sales_order_submitted_a.has_active_allocations() is True
+
+    def test_false_once_cancelled(self, tenant_a, sales_order_submitted_a, sales_order_line_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
+                                            location=location_a, quantity=Decimal("2"), status="cancelled")
+        assert sales_order_submitted_a.has_active_allocations() is False
