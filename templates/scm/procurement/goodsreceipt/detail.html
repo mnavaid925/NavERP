@@ -90,11 +90,21 @@
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
       <div class="form-actions">
+        {% comment %}
+          Admin-gated to match the view: booking a receipt posts real stock movements since 4.4, so
+          goodsreceipt_receive gained @tenant_admin_required. Its sibling Cancel button below was
+          updated at the time and this one was missed — an ordinary member saw the button and got a
+          403 on click. Nested rather than `and`/`or` on one line: Django's {% templatetag openblock %} if {% templatetag closeblock %} has no
+          parentheses, so `status == 'draft' and is_superuser or is_tenant_admin` would show the
+          button to any tenant admin whatever the status.
+        {% endcomment %}
         {% if obj.status == 'draft' %}
-          <form method="post" action="{% url 'scm:goodsreceipt_receive' obj.pk %}" onsubmit="return confirm('Book this receipt? Stock will be recorded against the order.');">
-            {% csrf_token %}
-            <button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Book receipt</button>
-          </form>
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:goodsreceipt_receive' obj.pk %}" onsubmit="return confirm('Book this receipt? Stock will be recorded against the order.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Book receipt</button>
+            </form>
+          {% endif %}
         {% endif %}
         {% if obj.status != 'cancelled' %}
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
