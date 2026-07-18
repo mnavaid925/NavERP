@@ -534,3 +534,256 @@ class TestSRMCSRFEnforcement:
         assert resp.status_code == 403
         contract_a.refresh_from_db()
         assert contract_a.status == "active"  # unchanged — the request never reached the view logic
+
+
+# ================================================================================================
+# SCM 4.3 Inventory Management
+# ================================================================================================
+
+# ================================================================ Anonymous -> login redirect
+class TestInventoryAnonymousRedirect:
+    def test_item_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:item_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_location_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:location_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_stocktransfer_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:stocktransfer_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_stockadjustment_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:stockadjustment_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_valuation_report_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:valuation_report"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_reorder_alerts_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:reorder_alerts"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+
+# ================================================================ @tenant_admin_required gates (priority)
+class TestInventoryAdminRequiredGates:
+    def test_stocktransfer_complete_requires_admin(
+        self, member_client, client_a, tenant_a, stock_transfer_a, location_a, item_a,
+    ):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        url = reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_stocktransfer_cancel_requires_admin(self, member_client, client_a, stock_transfer_a):
+        url = reverse("scm:stocktransfer_cancel", args=[stock_transfer_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_stockadjustment_post_requires_admin(self, member_client, client_a, stock_adjustment_a):
+        url = reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_stockadjustment_cancel_requires_admin(self, member_client, client_a, stock_adjustment_a):
+        url = reverse("scm:stockadjustment_cancel", args=[stock_adjustment_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+
+# ================================================================ Plain @login_required actions work for a member
+class TestInventoryOrdinaryActionsAllowNonAdmin:
+    def test_member_can_view_item_list(self, member_client, item_a):
+        assert member_client.get(reverse("scm:item_list")).status_code == 200
+
+    def test_member_can_create_an_item(self, member_client, tenant_a):
+        from apps.scm.models import Item
+        data = {
+            "sku": "MEMBER-1", "name": "Member created item", "category": "", "uom": "",
+            "item_type": "stock", "tracking": "none", "costing_method": "weighted_avg",
+            "standard_cost": "0", "reorder_point": "0", "description": "", "is_active": "on",
+        }
+        resp = member_client.post(reverse("scm:item_create"), data)
+        assert resp.status_code != 403
+        assert Item.objects.filter(tenant=tenant_a, sku="MEMBER-1").exists()
+
+    def test_member_can_create_a_draft_stock_transfer(self, member_client, location_a, location_a2, item_a):
+        url = reverse("scm:stocktransfer_create")
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "5"}]),
+        }
+        resp = member_client.post(url, data)
+        assert resp.status_code != 403
+
+    def test_member_can_view_stocktransfer_detail(self, member_client, stock_transfer_a):
+        url = reverse("scm:stocktransfer_detail", args=[stock_transfer_a.pk])
+        assert member_client.get(url).status_code == 200
+
+
+# ================================================================ Cross-tenant IDOR -> 404 (mandatory)
+class TestInventoryCrossTenantIDOR:
+    def test_item_detail_cross_tenant_404(self, client_a, item_b):
+        assert client_a.get(reverse("scm:item_detail", args=[item_b.pk])).status_code == 404
+
+    def test_item_edit_cross_tenant_404(self, client_a, item_b):
+        assert client_a.get(reverse("scm:item_edit", args=[item_b.pk])).status_code == 404
+
+    def test_item_delete_cross_tenant_404(self, client_a, item_b):
+        assert client_a.post(reverse("scm:item_delete", args=[item_b.pk])).status_code == 404
+
+    def test_category_edit_cross_tenant_404(self, client_a, category_b):
+        assert client_a.get(reverse("scm:category_edit", args=[category_b.pk])).status_code == 404
+
+    def test_uom_edit_cross_tenant_404(self, client_a, uom_each_b):
+        assert client_a.get(reverse("scm:uom_edit", args=[uom_each_b.pk])).status_code == 404
+
+    def test_location_detail_cross_tenant_404(self, client_a, location_b):
+        assert client_a.get(reverse("scm:location_detail", args=[location_b.pk])).status_code == 404
+
+    def test_location_edit_cross_tenant_404(self, client_a, location_b):
+        assert client_a.get(reverse("scm:location_edit", args=[location_b.pk])).status_code == 404
+
+    def test_location_delete_cross_tenant_404(self, client_a, location_b):
+        assert client_a.post(reverse("scm:location_delete", args=[location_b.pk])).status_code == 404
+
+    def test_lotserial_detail_cross_tenant_404(self, client_a, lot_b):
+        assert client_a.get(reverse("scm:lotserial_detail", args=[lot_b.pk])).status_code == 404
+
+    def test_lotserial_edit_cross_tenant_404(self, client_a, lot_b):
+        assert client_a.get(reverse("scm:lotserial_edit", args=[lot_b.pk])).status_code == 404
+
+    def test_reorderrule_edit_cross_tenant_404(self, client_a, reorder_rule_b):
+        assert client_a.get(reverse("scm:reorderrule_edit", args=[reorder_rule_b.pk])).status_code == 404
+
+    def test_stocktransfer_detail_cross_tenant_404(self, client_a, stock_transfer_b):
+        assert client_a.get(reverse("scm:stocktransfer_detail", args=[stock_transfer_b.pk])).status_code == 404
+
+    def test_stocktransfer_edit_cross_tenant_404(self, client_a, stock_transfer_b):
+        assert client_a.get(reverse("scm:stocktransfer_edit", args=[stock_transfer_b.pk])).status_code == 404
+
+    def test_stocktransfer_delete_cross_tenant_404(self, client_a, stock_transfer_b):
+        assert client_a.post(reverse("scm:stocktransfer_delete", args=[stock_transfer_b.pk])).status_code == 404
+
+    def test_stocktransfer_complete_cross_tenant_404(self, client_a, stock_transfer_b):
+        assert client_a.post(reverse("scm:stocktransfer_complete", args=[stock_transfer_b.pk])).status_code == 404
+
+    def test_stocktransfer_cancel_cross_tenant_404(self, client_a, stock_transfer_b):
+        assert client_a.post(reverse("scm:stocktransfer_cancel", args=[stock_transfer_b.pk])).status_code == 404
+
+    def test_stockadjustment_detail_cross_tenant_404(self, client_a, stock_adjustment_b):
+        assert client_a.get(reverse("scm:stockadjustment_detail", args=[stock_adjustment_b.pk])).status_code == 404
+
+    def test_stockadjustment_edit_cross_tenant_404(self, client_a, stock_adjustment_b):
+        assert client_a.get(reverse("scm:stockadjustment_edit", args=[stock_adjustment_b.pk])).status_code == 404
+
+    def test_stockadjustment_delete_cross_tenant_404(self, client_a, stock_adjustment_b):
+        assert client_a.post(reverse("scm:stockadjustment_delete", args=[stock_adjustment_b.pk])).status_code == 404
+
+    def test_stockadjustment_post_cross_tenant_404(self, client_a, stock_adjustment_b):
+        assert client_a.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_b.pk])).status_code == 404
+
+    def test_stockadjustment_cancel_cross_tenant_404(self, client_a, stock_adjustment_b):
+        assert client_a.post(reverse("scm:stockadjustment_cancel", args=[stock_adjustment_b.pk])).status_code == 404
+
+
+# ================================================================ Cross-tenant FORM/FORMSET binding + IDOR list
+class TestInventoryCrossTenantFormScoping:
+    def test_item_list_never_contains_other_tenant_rows(self, client_a, item_a, item_b):
+        resp = client_a.get(reverse("scm:item_list"))
+        assert item_b not in resp.context["object_list"]
+
+    def test_stocktransfer_form_locations_exclude_other_tenant(self, tenant_a, location_b):
+        from apps.scm.forms import StockTransferForm
+        form = StockTransferForm(tenant=tenant_a)
+        pks = set(form.fields["from_location"].queryset.values_list("pk", flat=True))
+        assert location_b.pk not in pks
+
+    def test_crafted_post_with_other_tenant_location_is_rejected(
+        self, tenant_a, client_a, location_b, location_a, item_a,
+    ):
+        """A crafted POST naming a Tenant-B location pk on a Tenant-A transfer create must fail
+        validation (the queryset is scoped to the request tenant), not silently bind it."""
+        from apps.scm.models import StockTransfer
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_b.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "", "quantity": "5"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 200  # re-rendered form, not a redirect/save
+        assert not StockTransfer.objects.filter(to_location=location_b).exists()
+
+    def test_crafted_post_with_other_tenant_item_on_a_line_is_rejected(
+        self, tenant_a, client_a, location_a, location_a2, item_b,
+    ):
+        """The line-level item dropdown is also tenant-scoped (_scope handled by TenantModelForm on
+        the child form) — a Tenant-B item pk on a line must be rejected, not silently accepted."""
+        from apps.scm.models import StockTransfer
+        data = {
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "transfer_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_b.pk), "lot_serial": "", "quantity": "5"}]),
+        }
+        resp = client_a.post(reverse("scm:stocktransfer_create"), data)
+        assert resp.status_code == 200
+        assert not StockTransfer.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_post_with_other_tenant_location_on_adjustment_is_rejected(
+        self, tenant_a, client_a, location_b, item_a,
+    ):
+        from apps.scm.models import StockAdjustment
+        data = {
+            "location": str(location_b.pk), "reason": "cycle_count", "adjustment_date": "2026-01-20", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "quantity_delta": "5", "unit_cost": "1.00"}]),
+        }
+        resp = client_a.post(reverse("scm:stockadjustment_create"), data)
+        assert resp.status_code == 200
+        assert not StockAdjustment.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestInventoryPostOnlyActions:
+    def test_get_item_delete_returns_405(self, client_a, item_a):
+        assert client_a.get(reverse("scm:item_delete", args=[item_a.pk])).status_code == 405
+
+    def test_get_stocktransfer_complete_returns_405(self, client_a, stock_transfer_a):
+        assert client_a.get(reverse("scm:stocktransfer_complete", args=[stock_transfer_a.pk])).status_code == 405
+
+    def test_get_stocktransfer_cancel_returns_405(self, client_a, stock_transfer_a):
+        assert client_a.get(reverse("scm:stocktransfer_cancel", args=[stock_transfer_a.pk])).status_code == 405
+
+    def test_get_stockadjustment_post_returns_405(self, client_a, stock_adjustment_a):
+        assert client_a.get(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk])).status_code == 405
+
+    def test_get_stockadjustment_cancel_returns_405(self, client_a, stock_adjustment_a):
+        assert client_a.get(reverse("scm:stockadjustment_cancel", args=[stock_adjustment_a.pk])).status_code == 405
+
+
+# ================================================================ CSRF enforcement
+class TestInventoryCSRFEnforcement:
+    def test_post_without_csrf_token_is_rejected(self, admin_user, tenant_a, stock_adjustment_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:stockadjustment_post", args=[stock_adjustment_a.pk]))
+        assert resp.status_code == 403
+        stock_adjustment_a.refresh_from_db()
+        assert stock_adjustment_a.status == "draft"  # unchanged — the request never reached the view logic
