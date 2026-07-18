@@ -17,6 +17,9 @@ from apps.scm.models import (
     RFQQuote,
     RFQQuoteLine,
     RFQVendor,
+    SalesOrder,
+    SalesOrderAllocation,
+    SalesOrderLine,
     SupplierCatalog,
     SupplierCatalogItem,
     SupplierContract,
@@ -277,3 +280,24 @@ class YardVisitAdmin(admin.ModelAdmin):
     list_display = ("number", "carrier_name", "tenant", "direction", "status", "dock_door")
     list_filter = ("tenant", "status", "direction")
     search_fields = ("number", "carrier_name", "vehicle_ref", "trailer_ref")
+
+
+# ============================================================ 4.5 Order Management System (OMS)
+class SalesOrderLineInline(admin.TabularInline):
+    model = SalesOrderLine
+    extra = 0
+
+
+@admin.register(SalesOrder)
+class SalesOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "customer", "tenant", "status", "total", "order_date")
+    list_filter = ("tenant", "status", "source_channel")
+    search_fields = ("number", "customer__name")
+    inlines = [SalesOrderLineInline]
+
+
+@admin.register(SalesOrderAllocation)
+class SalesOrderAllocationAdmin(admin.ModelAdmin):
+    list_display = ("sales_order_line", "location", "tenant", "quantity", "status", "allocated_at")
+    list_filter = ("tenant", "status")
+    search_fields = ("sales_order_line__sales_order__number", "sales_order_line__item__sku")
