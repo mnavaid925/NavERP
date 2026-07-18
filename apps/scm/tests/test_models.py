@@ -1023,3 +1023,573 @@ class TestSupplierCatalog:
         SupplierCatalogItem.objects.create(catalog=catalog_a, item_name="Widget", unit_price=Decimal("5.00"))
         SupplierCatalogItem.objects.create(catalog=catalog_a, item_name="Gadget", unit_price=Decimal("10.00"))
         assert catalog_a.item_count() == 2
+
+
+# ================================================================================================
+# SCM 4.3 Inventory Management
+# ================================================================================================
+
+# ================================================================ Auto-numbering (TRF-/ADJ-)
+class TestInventoryAutoNumbering:
+    def test_transfer_numbers_sequential_per_tenant(self, tenant_a, tenant_b, location_a, location_a2, location_b):
+        from apps.scm.models import Location, StockTransfer
+        other_b = Location.objects.create(tenant=tenant_b, code="WH2", name="Globex Overflow")
+        t1 = StockTransfer.objects.create(tenant=tenant_a, from_location=location_a, to_location=location_a2,
+                                          transfer_date=datetime.date(2026, 1, 1))
+        t2 = StockTransfer.objects.create(tenant=tenant_a, from_location=location_a, to_location=location_a2,
+                                          transfer_date=datetime.date(2026, 1, 2))
+        t3 = StockTransfer.objects.create(tenant=tenant_b, from_location=location_b, to_location=other_b,
+                                          transfer_date=datetime.date(2026, 1, 1))
+        assert t1.number == "TRF-00001"
+        assert t2.number == "TRF-00002"
+        assert t3.number == "TRF-00001"  # separate per-tenant sequence
+
+    def test_transfer_number_unique_together(self, tenant_a, location_a, location_a2):
+        from apps.scm.models import StockTransfer
+        t1 = StockTransfer.objects.create(tenant=tenant_a, from_location=location_a, to_location=location_a2,
+                                          transfer_date=datetime.date(2026, 1, 1))
+        with pytest.raises(IntegrityError):
+            StockTransfer.objects.create(tenant=tenant_a, from_location=location_a, to_location=location_a2,
+                                         transfer_date=datetime.date(2026, 1, 2), number=t1.number)
+
+    def test_adjustment_numbers_sequential_per_tenant(self, tenant_a, tenant_b, location_a, location_b):
+        from apps.scm.models import StockAdjustment
+        a1 = StockAdjustment.objects.create(tenant=tenant_a, location=location_a,
+                                            adjustment_date=datetime.date(2026, 1, 1))
+        a2 = StockAdjustment.objects.create(tenant=tenant_a, location=location_a,
+                                            adjustment_date=datetime.date(2026, 1, 2))
+        a3 = StockAdjustment.objects.create(tenant=tenant_b, location=location_b,
+                                            adjustment_date=datetime.date(2026, 1, 1))
+        assert a1.number == "ADJ-00001"
+        assert a2.number == "ADJ-00002"
+        assert a3.number == "ADJ-00001"  # separate per-tenant sequence
+
+    def test_adjustment_number_unique_together(self, tenant_a, location_a):
+        from apps.scm.models import StockAdjustment
+        a1 = StockAdjustment.objects.create(tenant=tenant_a, location=location_a,
+                                            adjustment_date=datetime.date(2026, 1, 1))
+        with pytest.raises(IntegrityError):
+            StockAdjustment.objects.create(tenant=tenant_a, location=location_a,
+                                           adjustment_date=datetime.date(2026, 1, 2), number=a1.number)
+
+
+# ================================================================ unique_together (raw ORM, not the form)
+class TestInventoryUniqueTogether:
+    def test_sku_unique_per_tenant(self, tenant_a, item_a):
+        from apps.scm.models import Item
+        with pytest.raises(IntegrityError):
+            Item.objects.create(tenant=tenant_a, sku=item_a.sku, name="Duplicate SKU")
+
+    def test_uom_code_unique_per_tenant(self, tenant_a, uom_each_a):
+        from apps.scm.models import UOM
+        with pytest.raises(IntegrityError):
+            UOM.objects.create(tenant=tenant_a, code=uom_each_a.code, name="Duplicate code")
+
+    def test_location_code_unique_per_tenant(self, tenant_a, location_a):
+        from apps.scm.models import Location
+        with pytest.raises(IntegrityError):
+            Location.objects.create(tenant=tenant_a, code=location_a.code, name="Duplicate code")
+
+    def test_lot_number_unique_per_tenant_and_item(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.models import LotSerial
+        with pytest.raises(IntegrityError):
+            LotSerial.objects.create(tenant=tenant_a, item=item_lot_a, kind="lot", number=lot_a.number)
+
+    def test_reorder_rule_unique_per_item_and_location(self, tenant_a, reorder_rule_a, item_a, location_a):
+        from apps.scm.models import ReorderRule
+        with pytest.raises(IntegrityError):
+            ReorderRule.objects.create(tenant=tenant_a, item=item_a, location=location_a)
+
+
+# ================================================================ __str__
+class TestInventoryStrRepresentations:
+    def test_item_category_str(self, category_a):
+        assert str(category_a) == "Widgets"
+
+    def test_uom_str(self, uom_each_a):
+        assert str(uom_each_a) == "EA"
+
+    def test_item_str(self, item_a):
+        assert str(item_a) == "WIDGET-1 · Widget"
+
+    def test_location_str(self, location_a):
+        assert str(location_a) == "WH1 · Main Warehouse"
+
+    def test_lot_serial_str(self, lot_a, item_lot_a):
+        assert str(lot_a) == f"{item_lot_a.sku}·{lot_a.number}"
+
+    def test_stock_move_str_positive(self, tenant_a, item_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        move = StockMove.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a, quantity=Decimal("5"),
+            unit_cost=Decimal("1.00"), move_type="receipt", moved_at=timezone.now(),
+        )
+        assert str(move) == f"+5 {item_a.sku} @ {location_a.code}"
+
+    def test_stock_move_str_negative_has_no_extra_sign(self, tenant_a, item_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        move = StockMove.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a, quantity=Decimal("-5"),
+            unit_cost=Decimal("1.00"), move_type="issue", moved_at=timezone.now(),
+        )
+        assert str(move) == f"-5 {item_a.sku} @ {location_a.code}"
+
+    def test_stock_transfer_str_uses_location_codes_not_raw_ids(self, stock_transfer_a, location_a, location_a2):
+        """Regression: __str__ used to interpolate from_location_id/to_location_id (raw pks).
+        It must show the human-readable codes, like every other model's __str__ in this module."""
+        s = str(stock_transfer_a)
+        assert stock_transfer_a.number in s
+        assert location_a.code in s
+        assert location_a2.code in s
+
+    def test_stock_transfer_line_str(self, stock_transfer_a, item_a):
+        line = stock_transfer_a.lines.first()
+        assert str(line) == f"{item_a.sku} ×{line.quantity}"
+        assert str(line).startswith("WIDGET-1 ×5")
+
+    def test_stock_adjustment_str(self, stock_adjustment_a):
+        s = str(stock_adjustment_a)
+        assert stock_adjustment_a.number in s
+        assert "Cycle Count" in s
+
+    def test_stock_adjustment_line_str(self, stock_adjustment_a, item_a):
+        line = stock_adjustment_a.lines.first()
+        assert str(line) == f"{item_a.sku} Δ{line.quantity_delta}"
+        assert str(line).startswith("WIDGET-1 Δ10")
+
+    def test_reorder_rule_str(self, reorder_rule_a, item_a, location_a):
+        s = str(reorder_rule_a)
+        assert item_a.sku in s
+        assert location_a.code in s
+
+
+# ================================================================ Item — derived on-hand / value / average cost
+class TestItemDerivedOnHand:
+    def test_on_hand_defaults_to_zero(self, item_a):
+        assert item_a.on_hand() == Decimal("0")
+
+    def test_on_hand_is_derived_from_stock_move_sum(self, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item_a, location=location_a2, quantity=Decimal("4"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        assert item_a.on_hand() == Decimal("14")
+
+    def test_on_hand_scoped_to_one_location(self, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item_a, location=location_a2, quantity=Decimal("4"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        assert item_a.on_hand(location=location_a) == Decimal("10")
+        assert item_a.on_hand(location=location_a2) == Decimal("4")
+
+    def test_total_value_uses_average_cost(self, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        item_a.refresh_from_db()
+        assert item_a.total_value() == Decimal("50.00")
+
+    def test_total_value_reuses_a_passed_in_on_hand(self, item_a):
+        """Passing on_hand avoids a second aggregate — verify it's actually USED, not ignored."""
+        item_a.average_cost = Decimal("3.5000")
+        assert item_a.total_value(on_hand=Decimal("100")) == Decimal("350.00")
+
+    def test_apply_receipt_rolls_weighted_average_from_empty(self, item_a):
+        assert item_a.average_cost == Decimal("0")
+        item_a.apply_receipt(Decimal("10"), Decimal("4.00"))
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("4.0000")
+
+    def test_apply_receipt_called_twice_without_posting_does_not_accumulate(self, item_a):
+        """apply_receipt reads the PRE-receipt on-hand from the StockMove ledger (never from its
+        own prior call) — calling it twice in a row without ever posting the corresponding moves
+        means on_hand() is still 0 the second time, so the second call simply overwrites, it does
+        not blend. Blending across receipts is the posting service's job (_post_stock_move), which
+        posts the move BETWEEN calls — see test_apply_receipt_blends_a_second_posted_receipt."""
+        item_a.apply_receipt(Decimal("10"), Decimal("4.00"))
+        item_a.refresh_from_db()
+        item_a.apply_receipt(Decimal("10"), Decimal("8.00"))
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("8.0000")
+
+    def test_apply_receipt_blends_a_second_posted_receipt(self, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("4.00"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("8.00"), move_type="receipt")
+        item_a.refresh_from_db()
+        # (10*4 + 10*8) / 20 = 6.0000
+        assert item_a.average_cost == Decimal("6.0000")
+
+    def test_is_stocked_true_for_stock_item_type(self, item_a):
+        assert item_a.item_type == "stock"
+        assert item_a.is_stocked is True
+
+    def test_is_stocked_false_for_service_item_type(self, tenant_a):
+        from apps.scm.models import Item
+        service = Item.objects.create(tenant=tenant_a, sku="SVC-1", name="Consulting", item_type="service")
+        assert service.is_stocked is False
+
+
+class TestStockMoveValue:
+    def test_value_is_quantity_times_unit_cost(self, tenant_a, item_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        move = StockMove.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a, quantity=Decimal("4"),
+            unit_cost=Decimal("2.50"), move_type="receipt", moved_at=timezone.now(),
+        )
+        assert move.value == Decimal("10.00")
+
+    def test_value_is_negative_for_an_outbound_move(self, tenant_a, item_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        move = StockMove.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a, quantity=Decimal("-4"),
+            unit_cost=Decimal("2.50"), move_type="issue", moved_at=timezone.now(),
+        )
+        assert move.value == Decimal("-10.00")
+
+    def test_apply_receipt_does_not_touch_stock_move(self, item_a):
+        """apply_receipt only rolls the cached figure — it must never write a StockMove itself
+        (that is the posting service's job); on_hand stays derived from the ledger alone."""
+        item_a.apply_receipt(Decimal("10"), Decimal("4.00"))
+        assert item_a.on_hand() == Decimal("0")
+
+    def test_apply_receipt_noop_for_zero_quantity(self, item_a):
+        item_a.average_cost = Decimal("10.0000")
+        item_a.save(update_fields=["average_cost"])
+        item_a.apply_receipt(Decimal("0"), Decimal("99.00"))
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("10.0000")
+
+    def test_apply_receipt_noop_for_negative_quantity(self, item_a):
+        item_a.average_cost = Decimal("10.0000")
+        item_a.save(update_fields=["average_cost"])
+        item_a.apply_receipt(Decimal("-5"), Decimal("99.00"))
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("10.0000")
+
+
+# ================================================================ Location — derived hierarchy + value
+class TestLocationDerived:
+    def test_is_leaf_true_without_children(self, location_a):
+        assert location_a.is_leaf is True
+
+    def test_is_leaf_false_with_children(self, tenant_a, location_a):
+        from apps.scm.models import Location
+        Location.objects.create(tenant=tenant_a, code="WH1-A", name="Zone A", parent=location_a)
+        assert location_a.is_leaf is False
+
+    def test_path_walks_full_ancestry(self, tenant_a, location_a):
+        from apps.scm.models import Location
+        zone = Location.objects.create(tenant=tenant_a, code="ZONE-A", name="Zone A",
+                                       location_type="zone", parent=location_a)
+        bin_ = Location.objects.create(tenant=tenant_a, code="BIN-01", name="Bin 1",
+                                       location_type="bin", parent=zone)
+        assert bin_.path() == "WH1 › ZONE-A › BIN-01"
+
+    def test_path_guards_a_malformed_cycle(self, tenant_a, location_a, location_a2):
+        """A pathological self-referential loop (data corruption, or bypassing the form's
+        self-parent guard directly via the ORM) must terminate, not hang the page."""
+        location_a.parent = location_a2
+        location_a.save(update_fields=["parent"])
+        location_a2.parent = location_a
+        location_a2.save(update_fields=["parent"])
+        result = location_a.path()  # must return, not infinite-loop
+        assert location_a.code in result
+        assert location_a2.code in result
+
+    def test_on_hand_value_sums_quantity_times_unit_cost(self, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        _post_stock_move(tenant_a, item=item_a, location=location_a2, quantity=Decimal("100"),
+                         unit_cost=Decimal("9.00"), move_type="receipt")
+        assert location_a.on_hand_value() == Decimal("50.00")  # location_a2's value excluded
+
+    def test_on_hand_value_zero_with_no_moves(self, location_a):
+        assert location_a.on_hand_value() == Decimal("0.00")
+
+    def test_on_hand_value_is_one_query(self, tenant_a, item_a, location_a, django_assert_max_num_queries):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        with django_assert_max_num_queries(1):
+            location_a.on_hand_value()
+
+
+# ================================================================ LotSerial — derived on-hand
+class TestLotSerialDerived:
+    def test_on_hand_defaults_to_zero(self, lot_a):
+        assert lot_a.on_hand() == Decimal("0")
+
+    def test_on_hand_is_derived_from_its_moves(self, tenant_a, item_lot_a, location_a, lot_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_lot_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("2.00"), move_type="receipt", lot_serial=lot_a)
+        _post_stock_move(tenant_a, item=item_lot_a, location=location_a, quantity=Decimal("-6"),
+                         unit_cost=Decimal("2.00"), move_type="issue", lot_serial=lot_a)
+        assert lot_a.on_hand() == Decimal("14")
+
+
+# ================================================================ ReorderRule
+class TestReorderRule:
+    def test_on_hand_map_empty_rules_returns_empty_dict(self, tenant_a):
+        from apps.scm.models import ReorderRule
+        assert ReorderRule.on_hand_map(tenant_a, []) == {}
+
+    def test_on_hand_map_groups_by_item_and_location(self, tenant_a, item_a, location_a, reorder_rule_a):
+        from apps.scm.models import ReorderRule
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("7"),
+                         unit_cost=Decimal("1.00"), move_type="receipt")
+        m = ReorderRule.on_hand_map(tenant_a, [reorder_rule_a])
+        assert m[(item_a.pk, location_a.pk)] == Decimal("7")
+
+    def test_current_on_hand_reuses_a_passed_value(self, reorder_rule_a):
+        assert reorder_rule_a.current_on_hand(on_hand=Decimal("42")) == Decimal("42")
+
+    def test_current_on_hand_falls_back_to_a_live_query(self, tenant_a, item_a, location_a, reorder_rule_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("3"),
+                         unit_cost=Decimal("1.00"), move_type="receipt")
+        assert reorder_rule_a.current_on_hand() == Decimal("3")
+
+    def test_is_below_point_true_at_or_under(self, reorder_rule_a):
+        assert reorder_rule_a.is_below_point(on_hand=Decimal("10")) is True   # == reorder_point
+        assert reorder_rule_a.is_below_point(on_hand=Decimal("5")) is True    # < reorder_point
+
+    def test_is_below_point_false_above(self, reorder_rule_a):
+        assert reorder_rule_a.is_below_point(on_hand=Decimal("11")) is False
+
+    def test_suggested_quantity_uses_fixed_reorder_quantity_when_larger_than_gap(self, reorder_rule_a):
+        # reorder_point=10, safety_stock=5 -> target=15; on_hand=12 -> gap=3; reorder_quantity=20 wins.
+        assert reorder_rule_a.suggested_quantity(on_hand=Decimal("12")) == Decimal("20")
+
+    def test_suggested_quantity_uses_gap_when_larger_than_fixed_quantity(self, tenant_a, item_a, location_a):
+        from apps.scm.models import ReorderRule
+        rule = ReorderRule.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a,
+            reorder_point=Decimal("10"), safety_stock=Decimal("50"), reorder_quantity=Decimal("5"),
+        )
+        # target = 60; on_hand=0 -> gap=60 > fixed reorder_quantity(5) -> gap wins.
+        assert rule.suggested_quantity(on_hand=Decimal("0")) == Decimal("60")
+
+    def test_suggested_quantity_zero_when_on_hand_already_at_target(self, reorder_rule_a):
+        assert reorder_rule_a.suggested_quantity(on_hand=Decimal("15")) == Decimal("0")
+
+    def test_suggested_quantity_falls_back_to_gap_when_no_fixed_quantity(self, tenant_a, item_a, location_a):
+        from apps.scm.models import ReorderRule
+        rule = ReorderRule.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a,
+            reorder_point=Decimal("10"), safety_stock=Decimal("0"), reorder_quantity=Decimal("0"),
+        )
+        assert rule.suggested_quantity(on_hand=Decimal("0")) == Decimal("10")
+
+
+# ================================================================ StockTransfer / StockAdjustment state
+class TestStockTransferProperties:
+    def test_is_editable_only_in_draft(self, stock_transfer_a):
+        assert stock_transfer_a.is_editable is True
+        stock_transfer_a.status = "completed"
+        assert stock_transfer_a.is_editable is False
+
+    def test_clean_rejects_same_source_and_destination(self, tenant_a, location_a):
+        from apps.scm.models import StockTransfer
+        transfer = StockTransfer(tenant=tenant_a, from_location=location_a, to_location=location_a,
+                                 transfer_date=datetime.date(2026, 1, 1))
+        with pytest.raises(ValidationError):
+            transfer.clean()
+
+
+class TestStockAdjustmentProperties:
+    def test_is_editable_only_in_draft(self, stock_adjustment_a):
+        assert stock_adjustment_a.is_editable is True
+        stock_adjustment_a.status = "posted"
+        assert stock_adjustment_a.is_editable is False
+
+    def test_value_impact_sums_signed_delta_times_cost(self, stock_adjustment_a):
+        # One line: +10 @ $8.00
+        assert stock_adjustment_a.value_impact() == Decimal("80.00")
+
+    def test_value_impact_zero_with_no_lines(self, tenant_a, location_a):
+        from apps.scm.models import StockAdjustment
+        adj = StockAdjustment.objects.create(tenant=tenant_a, location=location_a,
+                                             adjustment_date=datetime.date(2026, 1, 1))
+        assert adj.value_impact() == Decimal("0.00")
+
+    def test_clean_requires_notes_when_reason_is_other(self, tenant_a, location_a):
+        from apps.scm.models import StockAdjustment
+        adj = StockAdjustment(tenant=tenant_a, location=location_a, reason="other",
+                              adjustment_date=datetime.date(2026, 1, 1), notes="")
+        with pytest.raises(ValidationError):
+            adj.clean()
+
+    def test_clean_allows_other_with_notes(self, tenant_a, location_a):
+        from apps.scm.models import StockAdjustment
+        adj = StockAdjustment(tenant=tenant_a, location=location_a, reason="other",
+                              adjustment_date=datetime.date(2026, 1, 1), notes="Explained.")
+        adj.clean()  # must not raise
+
+
+# ================================================================================================
+# Priority regressions (posting service) — apps/scm/views/_helpers.py
+# ================================================================================================
+
+# ---------------------------------------------------------------- Regression 1: lot/location guard
+class TestInsufficientStockLotLocationRegression:
+    """`_insufficient_stock` must scope to (item, location, lot) — NOT the lot's tenant-wide total.
+    A lot's global on-hand can cover a draw while the SPECIFIC location asked to release it never
+    held any of that lot at all."""
+
+    def test_refused_when_location_never_held_the_lot_even_though_its_global_total_covers_it(
+        self, tenant_a, item_lot_a, location_a, location_a2, lot_a,
+    ):
+        from apps.scm.views._helpers import _post_stock_move, _insufficient_stock
+        _post_stock_move(tenant_a, item=item_lot_a, location=location_a, quantity=Decimal("50"),
+                         unit_cost=Decimal("10.00"), move_type="receipt", lot_serial=lot_a)
+        # Tenant-wide the lot has plenty...
+        assert lot_a.on_hand() == Decimal("50")
+        # ...but location_a2 never received any of it.
+        shortfall = _insufficient_stock(item_lot_a, location_a2, Decimal("10"), lot_a)
+        assert shortfall != ""
+        assert lot_a.number in shortfall
+        assert location_a2.code in shortfall
+        # And location_a2's on-hand for this item must not have gone negative — nothing was posted.
+        assert item_lot_a.on_hand(location=location_a2) == Decimal("0")
+
+    def test_allowed_when_the_location_actually_holds_enough_of_the_lot(
+        self, tenant_a, item_lot_a, location_a, lot_a,
+    ):
+        from apps.scm.views._helpers import _post_stock_move, _insufficient_stock
+        _post_stock_move(tenant_a, item=item_lot_a, location=location_a, quantity=Decimal("50"),
+                         unit_cost=Decimal("10.00"), move_type="receipt", lot_serial=lot_a)
+        assert _insufficient_stock(item_lot_a, location_a, Decimal("10"), lot_a) == ""
+
+
+# ---------------------------------------------------------------- Regression 3: cumulative weighted average
+class TestCumulativeWeightedAverageRegression:
+    """Two adjustment lines for the SAME item at different unit costs must blend cumulatively
+    against the item's just-updated average — not each roll from a stale, pre-adjustment read."""
+
+    def test_two_lines_same_item_blend_cumulatively(self, tenant_a, item_a, location_a):
+        from apps.scm.models import StockAdjustment, StockAdjustmentLine
+        from apps.scm.views._helpers import _post_stock_move, _post_adjustment
+
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("100"),
+                         unit_cost=Decimal("10.00"), move_type="receipt")
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("10.0000")
+
+        adj = StockAdjustment.objects.create(tenant=tenant_a, location=location_a, reason="found",
+                                             adjustment_date=datetime.date(2026, 1, 20))
+        StockAdjustmentLine.objects.create(adjustment=adj, item=item_a, quantity_delta=Decimal("5"),
+                                           unit_cost=Decimal("20.00"))
+        StockAdjustmentLine.objects.create(adjustment=adj, item=item_a, quantity_delta=Decimal("5"),
+                                           unit_cost=Decimal("30.00"))
+
+        _post_adjustment(adj, user=None)
+        item_a.refresh_from_db()
+        # The stale-read bug gave 10.9091; the cumulative roll gives 11.3636.
+        assert item_a.average_cost == Decimal("11.3636")
+        assert item_a.on_hand() == Decimal("110")
+
+    def test_shared_items_returns_one_instance_per_item_id(self, tenant_a, stock_adjustment_a, item_a):
+        from apps.scm.views._helpers import _shared_items
+        from apps.scm.models import StockAdjustmentLine
+        StockAdjustmentLine.objects.create(adjustment=stock_adjustment_a, item=item_a,
+                                           quantity_delta=Decimal("1"), unit_cost=Decimal("1.00"))
+        lines = list(stock_adjustment_a.lines.select_related("item"))
+        assert len(lines) == 2
+        shared = _shared_items(lines)
+        assert len(shared) == 1  # one Item instance for both lines
+        assert shared[item_a.pk] is lines[0].item
+
+
+# ---------------------------------------------------------------- Regression 5: zero-cost receipt dilutes
+class TestZeroCostReceiptDilutesRegression:
+    """`_post_stock_move` tests ``unit_cost is not None`` — a genuinely free receipt (found stock,
+    a zero-cost sample) must still drag the average DOWN, not be skipped as if no cost were given."""
+
+    def test_zero_unit_cost_dilutes_the_average(self, tenant_a, item_a, location_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("10.00"), move_type="receipt")
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("10.0000")
+
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("0"), move_type="receipt")
+        item_a.refresh_from_db()
+        # (10*10.00 + 10*0) / 20 = 5.0000 — NOT still 10.0000.
+        assert item_a.average_cost == Decimal("5.0000")
+
+    def test_unit_cost_none_explicitly_skips_the_roll(self, tenant_a, item_a, location_a):
+        """A caller that explicitly passes unit_cost=None (cost genuinely unknown) is a DIFFERENT
+        case from unit_cost=0 (a known, free receipt) — the average must NOT move."""
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("10.00"), move_type="receipt")
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("10.0000")
+
+        move = _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                                unit_cost=None, move_type="receipt")
+        item_a.refresh_from_db()
+        assert item_a.average_cost == Decimal("10.0000")  # unchanged — no cost given, no roll
+        assert move.unit_cost == Decimal("0")  # the move row itself still gets a concrete 0
+
+
+# ---------------------------------------------------------------- _post_transfer / _post_adjustment posting
+class TestPostTransferService:
+    def test_posts_a_paired_negative_and_positive_move(self, tenant_a, stock_transfer_a, location_a, location_a2, item_a):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_transfer
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("20"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        _post_transfer(stock_transfer_a, user=None)
+        moves = StockMove.objects.filter(tenant=tenant_a, reference=stock_transfer_a.number).order_by("quantity")
+        assert [m.quantity for m in moves] == [Decimal("-5.0000"), Decimal("5.0000")]
+        assert item_a.on_hand(location=location_a) == Decimal("15")
+        assert item_a.on_hand(location=location_a2) == Decimal("5")
+
+    def test_refuses_an_over_transfer(self, tenant_a, stock_transfer_a, location_a, item_a):
+        """Only 3 on hand at the source but the line asks for 5 -> ValidationError, nothing posted."""
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_transfer
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("3"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        with pytest.raises(ValidationError):
+            _post_transfer(stock_transfer_a, user=None)
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=stock_transfer_a.number).exists()
+
+
+class TestPostAdjustmentService:
+    def test_posts_one_signed_move_per_line(self, tenant_a, stock_adjustment_a, item_a, location_a):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_adjustment
+        _post_adjustment(stock_adjustment_a, user=None)
+        moves = StockMove.objects.filter(tenant=tenant_a, reference=stock_adjustment_a.number)
+        assert moves.count() == 1
+        assert moves.first().quantity == Decimal("10.0000")
+        assert item_a.on_hand(location=location_a) == Decimal("10")
+
+    def test_refuses_a_write_off_that_would_go_negative(self, tenant_a, location_a, item_a):
+        from apps.scm.models import StockAdjustment, StockAdjustmentLine, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_adjustment
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("2"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        adj = StockAdjustment.objects.create(tenant=tenant_a, location=location_a, reason="write_off",
+                                             adjustment_date=datetime.date(2026, 1, 20))
+        StockAdjustmentLine.objects.create(adjustment=adj, item=item_a, quantity_delta=Decimal("-5"),
+                                           unit_cost=Decimal("5.00"))
+        with pytest.raises(ValidationError):
+            _post_adjustment(adj, user=None)
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=adj.number).exists()
