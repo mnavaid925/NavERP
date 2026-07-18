@@ -129,6 +129,16 @@
             <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release</button>
           </form>
         {% endif %}
+        {% if obj.status == 'released' %}
+          {% comment %}
+            Not admin-gated and no confirm dialog: starting moves no stock, it only marks the task
+            as being walked. Confirm (below) is the one that issues stock.
+          {% endcomment %}
+          <form method="post" action="{% url 'scm:picktask_start' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="play"></i> Start picking</button>
+          </form>
+        {% endif %}
         {% if obj.status == 'released' or obj.status == 'picking' %}
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'scm:picktask_confirm' obj.pk %}" onsubmit="return confirm('Confirm the pick and issue the stock?');">
