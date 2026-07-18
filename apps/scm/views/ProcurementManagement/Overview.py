@@ -30,9 +30,17 @@ def overview(request):
     stock_value = StockMove.objects.filter(tenant=tenant).aggregate(
         v=Sum(F("quantity") * F("unit_cost"),
               output_field=models.DecimalField(max_digits=20, decimal_places=4)))["v"] or Decimal("0")
-    # Low-stock: reorder rules whose derived on-hand is at/below their point (Python, small set).
-    low_stock = [r for r in ReorderRule.objects.filter(tenant=tenant, is_active=True)
-                 .select_related("item", "location") if r.is_below_point()]
+    # Low-stock: reorder rules whose derived on-hand is at/below their point. The on-hand figures come
+    # from ONE grouped query (not an aggregate per rule), and the resolved value is attached to each
+    # rule as `.on_hand` so the template renders it without calling back into the DB (perf review).
+    rules = list(ReorderRule.objects.filter(tenant=tenant, is_active=True)
+                 .select_related("item", "location"))
+    qty_map = ReorderRule.on_hand_map(tenant, rules)
+    low_stock = []
+    for rule in rules:
+        rule.on_hand = qty_map.get((rule.item_id, rule.location_id), Decimal("0"))
+        if rule.on_hand <= rule.reorder_point:
+            low_stock.append(rule)
 
     return render(request, "scm/overview.html", {
         "stats": {
