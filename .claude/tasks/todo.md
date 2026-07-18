@@ -11662,3 +11662,383 @@ never a `content_type`/`object_id` generic FK).
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.4 Warehouse Management System (WMS) — plan from research-scm-4.4.md (2026-07-18)
+
+**EXTENDS the existing `apps/scm` app (4.1 Procurement + 4.2 SRM + 4.3 Inventory already built) — no new Django
+app, no new `INSTALLED_APPS`/`config/urls.py` entries.** New sub-module package `WarehouseManagement/` in each of
+`models/forms/views/urls`, alongside `ProcurementManagement/`/`SupplierRelationshipManagement/`/
+`InventoryManagement/`. Templates under `templates/scm/warehouse/<entity>/`.
+
+**Spine re-verified before planning** (`grep -rn "^class " apps/scm/models/`): `scm.Location`
+(`InventoryManagement/Locations.py` — no bin attributes yet, exactly the gap this pass fills),
+`scm.GoodsReceiptNote`+`GoodsReceiptLine` (`ProcurementManagement/GoodsReceiptNotes.py` — confirmed it does
+**NOT** post a `StockMove`; the model docstring (lines 8-10) and the `goodsreceipt_receive` view's own comment
+(lines 119-121) both still say "when `core.StockMove` lands with Module 5" — stale twice over, `StockMove`
+landed in `scm` as 4.3), `scm.StockMove`/`StockAdjustment`+`StockAdjustmentLine`/`StockTransfer`+
+`StockTransferLine`, `scm.Item`/`UOM`/`LotSerial`, `scm.PurchaseOrder` (4.1 — the correct FK target, **not**
+`crm.PurchaseOrder`) all exist, grep-confirmed live. The posting service `apps/scm/views/_helpers.py`
+(`_post_stock_move`/`_post_transfer`/`_post_adjustment`) is the ONLY writer of `StockMove` — every new action
+below calls it, never `StockMove.objects.create()` directly. `GoodsReceiptLine`/`PurchaseOrderLine` are still
+free-text (`sku_hint`, no `item→scm.Item` FK — confirmed, `research-scm-4.3.md`'s deferred backfill still not
+done) — `PutawayTask.item` and the new GRN-receive wire-up both work around this by matching `sku_hint` to
+`Item.sku` at the moment they need it, per research's documented pattern.
+
+## Models (4 new + 2 extensions, from research + task decisions)
+
+- [ ] **`PutawayTask`** [`PUT-`, `TenantNumbered`] — `models/WarehouseManagement/PutawayTasks.py`
+  - `goods_receipt` = FK `scm.GoodsReceiptNote` (`PROTECT`, `null=True`, `blank=True`,
+    `related_name="putaway_tasks"`) — traces back to the receipt that produced this putaway; nullable so
+    fixed/random/cross_dock putaways can also cover a manual/found-stock staging move with no GRN (driver:
+    Inbound Operations — receiving → putaway hand-off)
+  - `item` = FK `scm.Item` (`PROTECT`, `related_name="putaway_tasks"`) — **user-resolved**: pre-filled by
+    matching the goods_receipt's `GoodsReceiptLine.po_line.sku_hint` to an `Item.sku` for the tenant when a GRN
+    is set, but always editable so the user can correct a missing/bad auto-match (driver: the free-text
+    `GoodsReceiptLine`/`PurchaseOrderLine` gap above)
+  - `lot_serial` = FK `scm.LotSerial` (`SET_NULL`, `null=True`, `blank=True`, `related_name="putaway_tasks"`)
+  - `quantity` = `DecimalField(max_digits=16, decimal_places=4, validators=[MinValueValidator(Decimal("0.0001"))])`
+  - `from_location` = FK `scm.Location` (`PROTECT`, `related_name="putaway_tasks_from"`) — the staging/dock
+    location; defaults from `goods_receipt.location` when a GRN is set (driver: dock/door scheduling → staging)
+  - `to_location` = FK `scm.Location` (`PROTECT`, `related_name="putaway_tasks_to"`) — the confirmed bin; for
+    `strategy="cross_dock"` points at an outbound staging `Location` instead of a storage bin (driver:
+    cross-docking)
+  - `strategy` = `[("directed","Directed"),("fixed","Fixed"),("random","Random"),("cross_dock","Cross-Dock")]`,
+    default `"directed"` (drivers: directed/fixed/random putaway table-stakes + cross-docking differentiator —
+    Manhattan, Infor, Oracle, Blue Yonder)
+  - `status` = `[("pending","Pending"),("in_progress","In Progress"),("completed","Completed"),
+    ("cancelled","Cancelled")]`, default `"pending"` — **excluded from form**, workflow-controlled
+  - `assigned_to` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_putaway_tasks"`)
+  - `completed_at` = `DateTimeField(null=True, blank=True, editable=False)` — **excluded from form**, system
+    timestamp (L22), set by the complete action
+  - `notes` = `TextField(blank=True)` (convention parity with every other scm document header)
+  - Completing (`putawaytask_complete`, `@tenant_admin_required`) posts the staging→bin move as **two direct
+    `_post_stock_move()` calls** (negative out of `from_location`, positive into `to_location`,
+    `move_type="transfer"`, cost = `item.average_cost`) — mirroring `_post_transfer()`'s internal per-line
+    pattern rather than calling `_post_transfer()` itself (that helper expects a `StockTransfer`-shaped object
+    with a `.lines` queryset, which `PutawayTask` isn't). Inside `transaction.atomic()` +
+    `select_for_update()` re-reading `status` first (concurrency lesson — mirrors `stockadjustment_post`). Form
+    excludes: `tenant`, `number`, `status`, `completed_at`.
+
+- [ ] **`PickTask`** [`PIK-`, `TenantNumbered`] + **`PickTaskLine`** — `models/WarehouseManagement/PickTasks.py`
+  - Header: `strategy` = `[("single","Single"),("wave","Wave"),("batch","Batch"),("zone","Zone")]`, default
+    `"single"` (drivers: wave/batch/zone picking — NetSuite, Softeon, Manhattan, Infor)
+  - `status` = `[("pending","Pending"),("released","Released"),("picking","Picking"),("picked","Picked"),
+    ("packed","Packed"),("cancelled","Cancelled")]`, default `"pending"` — **excluded from form**
+  - `zone` = FK `scm.Location` (`SET_NULL`, `null=True`, `blank=True`, `related_name="pick_tasks"`) (driver:
+    zone picking)
+  - `assigned_to` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_pick_tasks"`)
+  - `wave_ref` = `CharField(max_length=32, blank=True)` — the wave/batch grouping key (driver: wave/batch
+    picking; not a separate wave-release table this pass)
+  - `package_count` = `PositiveIntegerField(null=True, blank=True)`, `weight` =
+    `DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)`, `tracking_ref` =
+    `CharField(max_length=64, blank=True)` — packing + label-DATA fields (driver: Fishbowl carton capture /
+    label hand-off). `tracking_ref` is the free-text TMS hand-off point — **label rendering, carrier-rate
+    shopping and a real `Carrier` master are 4.6 TMS, not built; this stops at the field.**
+  - Line (`PickTaskLine`): `pick_task` FK `CASCADE` `related_name="lines"`; `item` FK `scm.Item` (`PROTECT`,
+    `related_name="pick_task_lines"`); `lot_serial` FK `scm.LotSerial` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="pick_task_lines"`); `from_location` FK `scm.Location` (`PROTECT`,
+    `related_name="pick_task_lines"`); `quantity_requested` =
+    `DecimalField(16,4, validators=[MinValueValidator(Decimal("0.0001"))])`; `quantity_picked` =
+    `DecimalField(16,4, default=0, validators=[MinValueValidator(ZERO)])` — may be **less** than requested
+    (driver: short-pick handling, all 10 surveyed leaders). **No separate `short` status** — the header
+    `status` set above is fixed at pending/released/picking/picked/packed/cancelled per the task decision; a
+    short pick is visible as `quantity_picked < quantity_requested` on the line, not a header state (diverges
+    from research's suggested extra `short` status — this decision overrides that recommendation).
+  - **`PickTask` posts its own outbound move — no `StockTransfer`/`SalesOrder` link this pass** (task
+    decision: the field list carries no source-document header FK, diverging from research's recommended
+    `PickTask.transfer→scm.StockTransfer` "outbound-demand stand-in"; parked under Later passes below).
+    Confirming the pick (`picktask_confirm_pick`, `@tenant_admin_required`) posts one `move_type="issue"`
+    `StockMove` per line with `quantity_picked > 0` via `_post_stock_move` (negative quantity, cost =
+    `item.average_cost`), guarded by the existing `_insufficient_stock()` check, inside
+    `transaction.atomic()` + `select_for_update()`. Form excludes: `tenant`, `number`, `status`.
+
+- [ ] **`CycleCountTask`** [`CC-`, `TenantNumbered`] + **`CycleCountTaskLine`** —
+  `models/WarehouseManagement/CycleCountTasks.py`
+  - Header: `location` = FK `scm.Location` (`PROTECT`, `related_name="cycle_count_tasks"`) — the section being
+    counted
+  - `scheduled_date` = `DateField()`
+  - `status` = `[("scheduled","Scheduled"),("in_progress","In Progress"),("counted","Counted"),
+    ("reconciled","Reconciled"),("cancelled","Cancelled")]`, default `"scheduled"` — **excluded from form**
+  - `count_method` = `[("full","Full"),("abc","ABC"),("random","Random"),("zone","Zone")]`, default `"full"`
+  - `assigned_to` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_cycle_count_tasks"`)
+  - `notes` = `TextField(blank=True)`
+  - `generated_adjustment` = FK `scm.StockAdjustment` (`SET_NULL`, `null=True`, `blank=True`,
+    `editable=False`, `related_name="cycle_count_task"`) — **excluded from form**, system-set by reconcile
+    (task decision: "link the generated adjustment back via a FK")
+  - Line (`CycleCountTaskLine`): `task` FK `CASCADE` `related_name="lines"`; `item` FK `scm.Item` (`PROTECT`,
+    `related_name="cycle_count_lines"`); `lot_serial` FK `scm.LotSerial` (`SET_NULL`, `null=True`,
+    `blank=True`, `related_name="cycle_count_lines"`); `expected_quantity` = `DecimalField(16,4,
+    editable=False)` — a **SNAPSHOT** of `item.on_hand(location)` (or `lot_serial.on_hand()` when
+    lot-tracked) taken server-side the instant the line is added, **never** a client-submitted value —
+    excluded from the line form, set in the hand-rolled formset save path; `counted_quantity` =
+    `DecimalField(16,4, null=True, blank=True)` — entered separately, nullable until counted; `variance` = a
+    **`@property`** (`counted_quantity - expected_quantity` when `counted_quantity is not None` else `None`)
+    — **never stored** (task decision: "variance (derived)")
+  - `needs_recount` (research's suggested soft-gate flag) is **NOT** in this pass's field list — parked under
+    Later passes.
+  - Reconciling (`cyclecounttask_reconcile`, `@tenant_admin_required`, requires `status="counted"`): inside
+    `transaction.atomic()` with `select_for_update()`, for every line where `counted_quantity is not None and
+    counted_quantity != expected_quantity`, build **ONE** `scm.StockAdjustment(reason="cycle_count",
+    location=task.location, status="draft", adjustment_date=today)` + one `StockAdjustmentLine
+    (quantity_delta=counted-expected, unit_cost=item.average_cost)` per such line, then post it through the
+    **exact same sequence `stockadjustment_post` already runs** (call `_post_adjustment()` from `_helpers.py`,
+    flip `status="posted"`/`posted_at=timezone.now()`) — never a second posting path. Set
+    `task.generated_adjustment = adjustment`, `task.status = "reconciled"`. **If every line matches exactly
+    (no variance), skip creating a `StockAdjustment` entirely** (mirrors `stockadjustment_post`'s own "add at
+    least one line" refusal) — just flip `task.status = "reconciled"` with a "No variance found" message.
+    Re-reconciling an already-`reconciled` task is a no-op (status guard). Form excludes: `tenant`, `number`,
+    `status`, `generated_adjustment`; line form excludes `expected_quantity`.
+
+- [ ] **`YardVisit`** [`YRD-`, `TenantNumbered`] — `models/WarehouseManagement/YardVisits.py`
+  - `carrier_name` = `CharField(max_length=120)`, `vehicle_ref` = `CharField(max_length=64)`, `trailer_ref` =
+    `CharField(max_length=64, blank=True)` (not every visit pulls a trailer), `driver_name` =
+    `CharField(max_length=120)` — all free text; a real `Carrier` master is 4.6 TMS territory (driver:
+    carrier/driver/vehicle identification, all YMS surveyed)
+  - `direction` = `[("inbound","Inbound"),("outbound","Outbound")]`
+  - `dock_door` = FK `scm.Location` (`SET_NULL`, `null=True`, `blank=True`, `related_name="yard_visits"`) —
+    reuses `Location.location_type="staging"`, no new location-type choice needed (driver: dock door assignment)
+  - `purchase_order` = FK `scm.PurchaseOrder` (`PROTECT`, `null=True`, `blank=True`,
+    `related_name="yard_visits"`) — verified existing `scm.PurchaseOrder` (4.1), **NOT** `crm.PurchaseOrder`;
+    the inbound reference (driver: dock/door appointment scheduling tied to the PO)
+  - `status` = `[("scheduled","Scheduled"),("arrived","Arrived"),("at_dock","At Dock"),
+    ("departed","Departed"),("cancelled","Cancelled")]`, default `"scheduled"` — **excluded from form**
+  - `scheduled_at` = `DateTimeField(null=True, blank=True)` — a real editable field (the appointment window,
+    not a system stamp)
+  - `arrived_at`, `docked_at`, `departed_at` = `DateTimeField(null=True, blank=True, editable=False)` —
+    **excluded from form**, system timestamps set by the `yardvisit_arrive`/`_dock`/`_depart` actions (driver:
+    check-in/out with dwell tracking, scheduled-vs-actual)
+  - `notes` = `TextField(blank=True)`
+  - **No `StockMove` posting** — a pure visit/appointment log; all transitions (`yardvisit_arrive/_dock/
+    _depart/_cancel`) are `@login_required` (never move stock). Form excludes: `tenant`, `number`, `status`,
+    `arrived_at`, `docked_at`, `departed_at`.
+
+- [ ] **EXTEND `scm.Location`** (4.3, `InventoryManagement/Locations.py`) — add `capacity` =
+  `DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)`, `pick_sequence` =
+  `PositiveIntegerField(null=True, blank=True)`, `abc_class` = `CharField(max_length=1,
+  choices=[("a","A"),("b","B"),("c","C")], blank=True)`, `is_pickable` = `BooleanField(default=True)`. Bin/
+  slotting attributes only — **do not create a second location model** (drivers: bin capacity + pick-path
+  sequencing + ABC slotting/cycle-count-frequency, every researched leader). Update `LocationForm.Meta.fields`
+  to include the 4 new fields (already uses `TenantUniqueMixin` for `code` uniqueness — unaffected); update
+  `location_list`/`location_detail` templates + `LocationAdmin.list_display`.
+
+- [ ] **EXTEND `scm.GoodsReceiptNote`** (4.1, `ProcurementManagement/GoodsReceiptNotes.py`) — add `location` =
+  FK `scm.Location` (`PROTECT`, `null=True`, `blank=True`, `related_name="goods_receipts"`) — the staging/
+  receiving location goods land in; without it `PutawayTask.from_location` has nothing to move out of. Add to
+  `GoodsReceiptNoteForm.Meta.fields`; the migration is additive-nullable, existing 4.1 rows unaffected.
+
+## GRN → StockMove wire-up (closes the stale 4.1 gap — its own work item + regression test)
+
+- [ ] Add a shared helper **`_post_grn_receipt(grn)`** to `apps/scm/views/_helpers.py` (alongside
+  `_post_stock_move`/`_post_transfer`/`_post_adjustment`): resolves the receiving location (`grn.location`,
+  else the tenant's first `location_type="staging"` `Location`, else its first `location_type="warehouse"`
+  `Location` as a last resort — raise `ValidationError` if none exists); for each `GoodsReceiptLine` with
+  `quantity_received > 0`, matches `po_line.sku_hint` to a `scm.Item.sku` for the tenant (case-insensitive)
+  and, **only for matched lines**, posts `_post_stock_move(tenant=grn.tenant, item=matched_item,
+  location=resolved_location, quantity=line.quantity_received, unit_cost=line.po_line.unit_price,
+  move_type="receipt", reference=grn.number, reason="Goods Receipt")`; returns the skipped (unmatched) lines
+  so the caller can warn. This is the documented workaround for `GoodsReceiptLine`/`PurchaseOrderLine` still
+  being free-text — the same resolution rule `PutawayTask.item` uses above.
+- [ ] Add the symmetric **`_reverse_grn_receipt(grn)`** helper: re-runs the same sku_hint→Item + location
+  resolution and posts one **negative** `move_type="receipt"` `StockMove` per originally-matched line
+  (`reference=grn.number`, `reason="Receipt cancelled — reversal"`) — never deletes a move (append-only
+  ledger, matches `StockMove`'s own docstring: "a mistake is corrected by posting a compensating move, exactly
+  like the accounting JournalEntry reversal pattern").
+- [ ] Rewrite `goodsreceipt_receive` (`apps/scm/views/ProcurementManagement/GoodsReceiptNotes.py`, currently
+  lines ~114-140): move the `get_object_or_404` **inside** `transaction.atomic()` with `.select_for_update()`,
+  re-check `status != "draft"` under the lock (concurrency lesson — mirrors `stockadjustment_post`); call
+  `_post_grn_receipt(obj)` **before** flipping `status="received"`; surface any skipped/unmatched lines via
+  `messages.warning`; keep the existing `rematch_receipts()`/`recompute_receipt_status()` calls. **Change the
+  decorator from `@login_required` to `@tenant_admin_required`** — this now moves stock (constraint: stock-
+  moving actions are tenant-admin gated, matching transfer-complete/adjustment-post) — a documented behaviour
+  change to as-built 4.1.
+- [ ] Rewrite `goodsreceipt_cancel` the same way (already `@tenant_admin_required` and already
+  `select_for_update`-shaped — verify status is re-read under the lock): when cancelling a GRN whose
+  `status == "received"`, call `_reverse_grn_receipt(obj)` **before** flipping `status="cancelled"`, inside
+  the existing atomic block.
+- [ ] Replace the stale comments: model docstring (`apps/scm/models/ProcurementManagement/
+  GoodsReceiptNotes.py` lines 8-10, *"There is no StockMove posting here… when it does, mark_received is the
+  hook…"*) and the view's stale L28 comment (lines 119-121, *"NOTE (L28): when core.StockMove lands with
+  Module 5…"*) — both describe dead state; point them at `_post_grn_receipt`/4.4 instead.
+- [ ] **Regression test (explicit):** booking a `draft` GRN whose lines' `sku_hint`s match seeded `Item.sku`s
+  must raise `Item.on_hand()` by **exactly** the sum of `quantity_received` across matched lines (no more, no
+  less — catches a double-post or a silently-skipped line); cancelling that same booked GRN must bring
+  `on_hand()` back to the pre-receipt baseline exactly via the reversal.
+
+## Backend (apps/scm/{models,forms,views,urls}/WarehouseManagement/)
+
+- [ ] `models/WarehouseManagement/PutawayTasks.py` — `PutawayTask`
+- [ ] `models/WarehouseManagement/PickTasks.py` — `PickTask`, `PickTaskLine`
+- [ ] `models/WarehouseManagement/CycleCountTasks.py` — `CycleCountTask`, `CycleCountTaskLine`
+- [ ] `models/WarehouseManagement/YardVisits.py` — `YardVisit`
+- [ ] `forms/WarehouseManagement/PutawayTasks.py` — `PutawayTaskForm` (plain `TenantModelForm`; **no**
+  `TenantUniqueMixin` needed — `unique_together=("tenant","number")` sits on the non-form, `editable=False`
+  `number` field whose uniqueness is enforced by `TenantNumbered.save()`'s retry loop, same as
+  `StockAdjustmentForm`/`StockTransferForm`/`GoodsReceiptNoteForm`, none of which use the mixin either;
+  confirm no new model adds an *editable* tenant-scoped unique field before skipping it)
+- [ ] `forms/WarehouseManagement/PickTasks.py` — `PickTaskForm`, `PickTaskLineForm`, `PickTaskLineFormSet`
+  (`inlineformset_factory`, mirrors `StockTransferLineFormSet`)
+- [ ] `forms/WarehouseManagement/CycleCountTasks.py` — `CycleCountTaskForm`, `CycleCountTaskLineForm`
+  (excludes `expected_quantity`), `CycleCountTaskLineFormSet`
+- [ ] `forms/WarehouseManagement/YardVisits.py` — `YardVisitForm`
+- [ ] `views/WarehouseManagement/PutawayTasks.py` — `putawaytask_list/create/edit/detail/delete` (`crud_*`
+  wrappers) + `putawaytask_start` (`@login_required`, pending→in_progress) + `putawaytask_complete`
+  (`@tenant_admin_required`, posts the transfer move pair) + `putawaytask_cancel` (`@login_required`)
+- [ ] `views/WarehouseManagement/PickTasks.py` — full CRUD (hand-rolled create/edit for the line formset,
+  atomic parent+child save, `_changed(form)` imported explicitly from `apps.core.crud` — `import *` skips
+  underscore names) + `picktask_release` + `picktask_start_picking` + `picktask_confirm_pick`
+  (`@tenant_admin_required`, posts issue moves) + `picktask_pack` + `picktask_cancel`
+- [ ] `views/WarehouseManagement/CycleCountTasks.py` — full CRUD (hand-rolled line formset save that
+  snapshots `expected_quantity` server-side, never from POST data) + `cyclecounttask_start` +
+  `cyclecounttask_mark_counted` (validates every line has a non-null `counted_quantity`) +
+  `cyclecounttask_reconcile` (`@tenant_admin_required`) + `cyclecounttask_cancel`
+- [ ] `views/WarehouseManagement/YardVisits.py` — full CRUD + `yardvisit_arrive/_dock/_depart/_cancel` (all
+  `@login_required` — no stock impact)
+- [ ] `urls/WarehouseManagement/PutawayTasks.py`, `PickTasks.py`, `CycleCountTasks.py`, `YardVisits.py` —
+  literal action routes (`.../start/`, `.../complete/`, `.../reconcile/`, …) placed before each module's
+  `<int:pk>/edit/`; appended to `apps/scm/urls/__init__.py`'s `urlpatterns` list via new `_wh_*` imports
+- [ ] Re-export blocks in **all four** `apps/scm/{models,forms,views}/__init__.py` (urls handled above) —
+  every new model/form/formset/view added to its package's `__init__.py`, mirroring the existing 4.1/4.2/4.3
+  blocks exactly (missing one is an `ImportError`/`AttributeError` at runtime, not import time)
+- [ ] `apps/scm/admin.py` — register `PutawayTask`, `PickTask` (+`PickTaskLine` inline), `CycleCountTask`
+  (+`CycleCountTaskLine` inline), `YardVisit`; extend `LocationAdmin.list_display` with `pick_sequence`,
+  `abc_class`, `is_pickable`; extend `GoodsReceiptNoteAdmin` fields/list_display with `location`
+- [ ] `makemigrations scm` — one migration for the 4 new models + the `Location`/`GoodsReceiptNote` field
+  additions (all additive/nullable, no data migration needed)
+
+## Seed (extend seed_scm — reuse existing Party/Item/Location rows)
+
+- [ ] **Reorder the receive:** in `_seed_tenant` (4.1 block), stop flipping the seeded GRN straight to
+  `status="received"` inline — leave it `"draft"` (bill still attached, after `_bill_for()`) and drop the
+  now-premature `grn.recompute_match()`/`po.recompute_receipt_status()` calls there. The actual "receive" step
+  moves to the new method below so it runs AFTER `_seed_inventory_tenant` has created the `Item`/`Location`
+  rows the sku_hint match depends on — today `_seed_tenant` runs BEFORE `_seed_inventory_tenant` in
+  `handle()`'s per-tenant loop, so the sku_hint→Item match would find nothing if the receive stayed where it is.
+- [ ] New `_seed_warehouse_tenant(self, tenant)` (4.4), called in `handle()` **after**
+  `_seed_inventory_tenant(tenant)`, guarded by `if PutawayTask.objects.filter(tenant=tenant).exists(): skip`:
+  - create a staging `Location` (`WH-MAIN-DOCK`, `location_type="staging"`, `parent=main`) and 2 bin
+    `Location`s (`WH-MAIN-A1` `pick_sequence=10 abc_class="a"`, `WH-MAIN-A2` `pick_sequence=20 abc_class="b"`,
+    both `location_type="bin"`, `parent=main`, `capacity` set) — reusing the `main`/`store` `Location` rows
+    `_seed_inventory_tenant` already created
+  - fetch the seeded GRN (`delivery_note_ref="DN-88231"`), set `grn.location = staging`, call
+    `_post_grn_receipt(grn)` inside `transaction.atomic()` — **through the same helper the view uses, not
+    hand-rolled**, mirroring the existing "seed opening balances through `_post_stock_move` rather than
+    hand-rolling the move + average roll" precedent (commit `b593464e`) — flip `status="received"`,
+    `grn.recompute_match()`, `po.recompute_receipt_status()`
+  - create one `PutawayTask` (`strategy="directed"`) off the GRN's matched WS-16 line, `from_location=staging`,
+    `to_location=WH-MAIN-A1`; run it through the same posting logic `putawaytask_complete` uses to post the
+    staging→bin move pair and flip `status="completed"`
+  - create one `PickTask` (`strategy="single"`) + `PickTaskLine` picking a few MON-27 units out of `main`; run
+    it through `picktask_confirm_pick`'s posting logic to `status="picked"`, then set
+    `package_count`/`weight`/`tracking_ref` and flip to `"packed"`
+  - create one `CycleCountTask` on `main`, one line on DOCK-C with `counted_quantity` deliberately
+    **different** from the snapshotted `expected_quantity` (mirrors the file's existing "short-ship
+    deliberately" / "reorder rule deliberately low" seeding style) — run it through `mark_counted` then
+    `reconcile` so exactly one `StockAdjustment(reason="cycle_count")` posts and `generated_adjustment` links
+    back
+  - create one `YardVisit` (`direction="inbound"`, `purchase_order=po`, `dock_door=staging`,
+    `carrier_name="Acme Freight"`) taken through `scheduled → arrived → at_dock → departed` so the dwell-time
+    fields are populated
+- [ ] `_flush()`: delete `YardVisit`, `CycleCountTaskLine`/`CycleCountTask`, `PickTaskLine`/`PickTask`,
+  `PutawayTask` **first — before both** the procurement teardown block (they `PROTECT`-reference
+  `GoodsReceiptNote`) **and** the inventory teardown block (they `PROTECT`-reference `Location`/`Item`).
+  Ordering matters: this must sit at the very top of `_flush()`, not appended after either existing block.
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["4.4"]` (new entry, inserted after `"4.3"` at ~line 799):
+  ```python
+  "4.4": {
+      "Inbound Operations": "scm:putawaytask_list",
+      "Outbound Operations": "scm:picktask_list",
+      "Bin/Location Management": "scm:location_list",   # 4.3's page, now carrying bin attributes — reused, not duplicated
+      "Cycle Counting": "scm:cyclecounttask_list",
+      "Yard Management": "scm:yardvisit_list",
+  },
+  ```
+- [ ] No `settings.py`/`config/urls.py` changes — `apps/scm` already installed and wired (4.1 shipped it)
+
+## Templates (templates/scm/warehouse/<entity>/)
+
+- [ ] `warehouse/putawaytask/{list,detail,form}.html` — list: filter bar (status, strategy, assigned_to)
+  reflecting `request.GET`, Actions column (view/edit/delete + Start/Complete/Cancel POST buttons gated by
+  status), pagination with `has_previous`/`has_next` guards, empty-state; badges `badge-amber` pending,
+  `badge-info` in_progress, `badge-green` completed, `badge-red` cancelled, `{% else %}` fallback
+- [ ] `warehouse/picktask/{list,detail,form}.html` — same shape; detail shows the line formset read-only +
+  packing fields once packed
+- [ ] `warehouse/cyclecounttask/{list,detail,form}.html` — detail shows expected vs. counted vs. variance per
+  line (variance colour-coded via `badge-*` classes, not semantic `-danger`/`-success`), a link to
+  `generated_adjustment` once reconciled
+- [ ] `warehouse/yardvisit/{list,detail,form}.html` — detail shows the scheduled/arrived/docked/departed
+  timeline
+- [ ] Update `templates/scm/inventory/location/{list,detail,form}.html` (existing 4.3 templates) to surface
+  the 4 new bin fields (capacity, pick_sequence, abc_class, is_pickable) — no new folder, this is 4.3's page
+  being extended per the "Bin/Location Management" LIVE_LINKS mapping
+- [ ] Update `templates/scm/procurement/goodsreceipt/{form,detail}.html` (existing 4.1 templates) to surface
+  the new `location` field and any "skipped line" warning from `_post_grn_receipt`
+
+## Verify
+
+- [ ] `makemigrations scm` clean, `migrate` applies
+- [ ] `seed_scm` ×2 idempotent (second run: "already exists — skipping" for every guard, no duplicate
+  PUT-/PIK-/CC-/YRD- numbers)
+- [ ] `manage.py check`
+- [ ] **Regression: on-hand rises by exactly the received quantity** on `goodsreceipt_receive`, and falls back
+  to baseline exactly via `goodsreceipt_cancel`'s reversal (see GRN wire-up section above)
+- [ ] **Regression: cycle-count reconcile produces exactly one `StockAdjustment`** — assert the count
+  before/after `cyclecounttask_reconcile`, assert its `lines.count()` equals the number of non-zero-variance
+  lines, assert `task.generated_adjustment_id` is set, assert a second `reconcile` call on an
+  already-`reconciled` task creates no second adjustment
+- [ ] `temp/` smoke sweep as `admin_acme`/`password`: every new `scm:putawaytask_*`/`picktask_*`/
+  `cyclecounttask_*`/`yardvisit_*` URL 200/302; content assertions (no `{#`/`{% comment` leaks, page titles, a
+  seeded record present); cross-tenant IDOR → 404 on each new entity's detail/edit/delete; `scm:location_list`
+  shows the new bin columns; `scm:goodsreceipt_detail` shows the new `location` field
+- [ ] Sidebar shows `4.4` Live with all 5 bullets pointing at real pages
+
+## Close-out
+
+- [ ] Review agents in order: code-reviewer → explorer → frontend-reviewer → performance-reviewer →
+  qa-smoke-tester → security-reviewer → test-writer (each its own commit)
+- [ ] Update `.claude/skills/scm/SKILL.md` — add the 4.4 models/URLs/templates/seeder rows, the
+  `_post_grn_receipt`/`_reverse_grn_receipt` helpers, and the `@tenant_admin_required` change on
+  `goodsreceipt_receive`
+- [ ] README — note 4.4 shipped and that the GRN→StockMove gap is closed (behaviour change flagged)
+- [ ] ERD — add `PutawayTask`, `PickTask`+`PickTaskLine`, `CycleCountTask`+`CycleCountTaskLine`, `YardVisit`,
+  and the `Location`/`GoodsReceiptNote` field extensions
+- [ ] `.claude/tasks/lessons.md` — capture a new lesson if one emerges (candidates: "seed a document through
+  the same posting helper the view uses, in seed-ORDER dependency order" per the `_post_grn_receipt`
+  sequencing fix; "a stock-moving action's `@tenant_admin_required` gate can be a *retrofit* onto an existing
+  view, not just applied to new ones")
+
+## Later passes / deferred (carried from research)
+
+- AI/ML dynamic slotting & "chained moves" re-slotting (Manhattan/Blue Yonder/Deposco tier) — needs `StockMove`
+  velocity history
+- Task interleaving (combined putaway+pick aisle pass) — needs both task types mature first
+- Full wave-release/labor-balancing engine — this pass is a plain `wave_ref` grouping key only
+- Configurable removal strategy (FIFO/LIFO/FEFO) as a first-class rule — defaults to nearest-expiry sort only,
+  not built
+- `Location.capacity` enforcement (no hard block on overfilling a bin)
+- ABC-driven recurring cycle-count scheduler / "bulk-create counts for all A-class bins" action —
+  `Location.abc_class`/`CycleCountTask.count_method="abc"` exist as fields but no automation this pass
+- `CycleCountTaskLine.needs_recount` flag — not in this pass's field list
+- Pick-to-zero → automatic cycle count integration
+- Carrier-rate shopping, label PDF/ZPL rendering, tracking-number sync, self-service carrier appointment
+  portal, live yard map/GPS/RFID tracking — 4.6 TMS / integration-later
+- Voice-directed picking / RF-scanner hardware UX
+- `item→scm.Item` backfill on `PurchaseOrderLine`/`GoodsReceiptLine` — still overdue across 4.3 valuation AND
+  4.4 putaway/GRN-receive; this pass's `PutawayTask.item` resolution and `_post_grn_receipt`'s sku_hint
+  matching are both workarounds, not a fix
+- `PickTask.transfer→scm.StockTransfer` / `sales_order`-source FK — research's recommended outbound-demand
+  stand-in was not adopted this pass (PickTask posts its own `issue` move standalone); revisit once Module
+  8/4.5 lands a real order, or if a StockTransfer-driven pick flow proves necessary
+- Formal quality inspection (criteria/NCR/CAPA) at receiving — 4.9 QMS/Module 12; `GoodsReceiptLine.
+  quantity_rejected`/`rejection_reason` (4.1, existing) already cover the basic accept/reject gate
+- 3PL client billing, self-service carrier appointment portal (external driver/dispatcher login) —
+  integration/later, same posture as 4.1's Vendor Portal (L32)
+
+## Review notes
+(filled in at the end)
