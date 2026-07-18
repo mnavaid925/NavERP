@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'packed' %}green{% elif obj.status == 'picked' %}info{% elif obj.status == 'picking' or obj.status == 'released' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'pending' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:picktask_list' %}">Picks</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.is_short %}
+    <div class="card" style="border-inline-start: 3px solid var(--warn); background: var(--warn-bg);">
+      <div class="card-body">
+        <div class="fw-600 text-warn"><i data-lucide="alert-triangle"></i> Short pick</div>
+        <p class="text-muted">One or more lines picked less than was requested — see the shortfall column below.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Strategy</dt><dd>{{ obj.get_strategy_display }}</dd></div>
+      <div class="detail-item"><dt>Wave</dt><dd>{{ obj.wave_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Zone</dt><dd>{% if obj.zone %}{{ obj.zone.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Ship To</dt><dd>{{ obj.ship_to|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Assigned To</dt><dd>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Picked At</dt><dd>{{ obj.picked_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Packages</dt><dd>{{ obj.package_count|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Weight</dt><dd>{% if obj.package_weight %}{{ obj.package_weight|floatformat:3 }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Tracking Ref</dt><dd>{{ obj.tracking_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Packed At</dt><dd>{{ obj.packed_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Bin</th><th>Lot / Serial</th><th>Requested</th><th>Picked</th><th>Available in bin</th></tr></thead>
+        <tbody>
+          {% for row in line_rows %}
+            <tr>
+              <td class="fw-600">{{ row.line.item.sku }}</td>
+              <td>{{ row.line.from_location.code }}</td>
+              <td>{% if row.line.lot_serial %}{{ row.line.lot_serial.number }}{% else %}—{% endif %}</td>
+              <td>{{ row.line.quantity_requested|floatformat:2 }}</td>
+              <td>
+                {% if row.line.shortfall > 0 %}
+                  <span class="badge badge-amber">{{ row.line.quantity_picked|floatformat:2 }} — short {{ row.line.shortfall|floatformat:2 }}</span>
+                {% else %}
+                  {{ row.line.quantity_picked|floatformat:2 }}
+                {% endif %}
+              </td>
+              <td>
+                {% if row.available < row.line.quantity_requested %}
+                  <span class="badge badge-red">{{ row.available|floatformat:2 }}</span>
+                {% else %}
+                  <span class="badge badge-green">{{ row.available|floatformat:2 }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="box"></i><p>No lines on this pick task.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if obj.status == 'released' or obj.status == 'picking' %}
+      <div class="card-body text-muted">Confirming the pick issues only what was actually picked — enter the picked quantity on each line first.</div>
+    {% endif %}
+  </div>
+
+  {% if obj.status == 'picked' or obj.status == 'packed' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Posted movements</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Location</th><th>Quantity</th><th>Reference</th></tr></thead>
+          <tbody>
+            {% for m in moves %}
+              <tr>
+                <td>{{ m.item.sku }}</td>
+                <td>{{ m.location.code }}</td>
+                <td>{{ m.quantity|floatformat:2 }}</td>
+                <td>{{ m.reference|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="list"></i><p>No movements recorded.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'picked' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Pack</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:picktask_pack' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in pack_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">Label data only — printing and carrier booking arrive with Transportation Management (4.6).</div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Mark packed</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'pending' %}
+          <form method="post" action="{% url 'scm:picktask_release' obj.pk %}" onsubmit="return confirm('Release this pick to the floor?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'released' or obj.status == 'picking' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:picktask_confirm' obj.pk %}" onsubmit="return confirm('Confirm the pick and issue the stock?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Confirm pick</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status == 'pending' or obj.status == 'released' or obj.status == 'picking' %}
+          <form method="post" action="{% url 'scm:picktask_cancel' obj.pk %}" onsubmit="return confirm('Cancel this pick task?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:picktask_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'pending' or obj.status == 'cancelled' %}
+          <form method="post" action="{% url 'scm:picktask_delete' obj.pk %}" onsubmit="return confirm('Delete this pick task?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:picktask_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
