@@ -11,6 +11,14 @@ from apps.scm.forms import SalesOrderAllocationForm
 ZERO = Decimal("0")
 
 
+def _lock_item(item_id):
+    """Take a row lock on the item so an availability check and the reservation that follows are
+    one atomic decision. Must be called inside transaction.atomic()."""
+    from apps.scm.models import Item
+    if item_id is not None:
+        list(Item.objects.select_for_update().filter(pk=item_id))
+
+
 def _available_to_promise(item, location, exclude_pk=None):
     """What can still be promised of ``item`` at ``location``.
 
@@ -96,6 +104,14 @@ def salesorderallocation_create(request, line_pk):
             alloc.sales_order_line = line
             try:
                 with transaction.atomic():
+                    # Lock the ITEM row before reading availability. Without it the check and the
+                    # write are separate statements, so two admins allocating the same item at the
+                    # same moment both read "5 available" and both reserve 5 — 10 units promised
+                    # against 5 on hand, with no error and nothing to show it happened (security
+                    # review). The item is the right granularity: availability is per item+location
+                    # ACROSS orders, so locking only this order's line would not serialize the
+                    # racing pair.
+                    _lock_item(line.item_id)
                     # Two guards, deliberately separate questions: full_clean runs the model's
                     # "not more than was ordered" rule, and the ATP check asks whether the stock is
                     # actually there. An order for 10 with 3 on hand fails the second, not the first.
@@ -140,6 +156,7 @@ def salesorderallocation_edit(request, pk):
             alloc = form.save(commit=False)
             try:
                 with transaction.atomic():
+                    _lock_item(line.item_id)  # see the create path — same race, same lock
                     alloc.full_clean(exclude=["sales_order_line", "tenant"])
                     # exclude_pk: this row's own current reservation must not count against itself.
                     available = _available_to_promise(line.item, alloc.location, exclude_pk=alloc.pk)
@@ -165,12 +182,37 @@ def salesorderallocation_edit(request, pk):
 
 def _atp_rows(tenant, item, exclude_pk=None):
     """Available-to-promise per pickable location, so staff can see where the stock actually is
-    before typing a quantity rather than guessing and being rejected."""
+    before typing a quantity rather than guessing and being rejected.
+
+    THREE queries total regardless of how many locations exist — the locations, one grouped on-hand,
+    one grouped reservation total. Calling _available_to_promise per location instead would cost two
+    aggregates each, and 4.4's bin model means a real warehouse has many pickable locations, not the
+    two or three in the seed data (perf review).
+    """
     if item is None:
         return []
+    locations = list(Location.objects.filter(tenant=tenant, is_active=True,
+                                             is_pickable=True).order_by("code"))
+    if not locations:
+        return []
+    loc_ids = [l.pk for l in locations]
+    on_hand_map = {
+        r["location_id"]: (r["q"] or ZERO)
+        for r in (item.stock_moves.filter(location_id__in=loc_ids)
+                  .values("location_id").annotate(q=Sum("quantity")))
+    }
+    reserved_qs = (SalesOrderAllocation.objects
+                   .filter(sales_order_line__item=item, location_id__in=loc_ids)
+                   .exclude(status="cancelled"))
+    if exclude_pk is not None:
+        reserved_qs = reserved_qs.exclude(pk=exclude_pk)
+    reserved_map = {
+        r["location_id"]: (r["q"] or ZERO)
+        for r in reserved_qs.values("location_id").annotate(q=Sum("quantity"))
+    }
     rows = []
-    for loc in Location.objects.filter(tenant=tenant, is_active=True, is_pickable=True).order_by("code"):
-        available = _available_to_promise(item, loc, exclude_pk=exclude_pk)
+    for loc in locations:
+        available = on_hand_map.get(loc.pk, ZERO) - reserved_map.get(loc.pk, ZERO)
         if available > ZERO:
             rows.append({"location": loc, "available": available})
     return rows
