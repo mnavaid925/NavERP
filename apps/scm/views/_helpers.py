@@ -27,8 +27,8 @@ def _need_tenant(request):
 # 4.3 Inventory — the StockMove posting service.
 #
 # Every stock movement in the module goes through here so on-hand stays a pure aggregate of an
-# append-only ledger. Used by StockTransfer.complete and StockAdjustment.post today, and the
-# documented future hook for 4.1's GoodsReceiptNote.mark_received. Callers MUST already be inside a
+# append-only ledger. Used by StockTransfer.complete, StockAdjustment.post, 4.4's putaway/pick
+# posting and 4.1's GoodsReceiptNote receive/cancel. Callers MUST already be inside a
 # transaction.atomic() block (the actions are) — these helpers create rows but do not open their own
 # transaction, so a partial multi-line post rolls back with its parent.
 # ---------------------------------------------------------------------------------------------
@@ -204,12 +204,20 @@ def _receiving_location(grn):
 def _post_grn_receipt(grn, user, moved_at=None):
     """Post one inbound StockMove per received line. Assumes an enclosing transaction.atomic().
 
-    Returns ``(posted, unmatched)`` — how many moves were written and the descriptions of any lines
-    whose free-text SKU matched no Item, so the caller can tell the user rather than fail silently.
+    Returns ``(posted, unmatched, blocked)`` — how many moves were written, the descriptions of any
+    lines whose free-text SKU matched no Item, and a systemic reason nothing could post at all.
+
+    ``blocked`` exists because a workspace with NO stock location is a different failure from a line
+    whose SKU matches no item, and reporting them with the same "no item matches their SKU" wording
+    is actively misleading (code review). It does NOT block the booking: 4.1 procurement shipped
+    standalone and is legitimately usable without the 4.3 inventory spine — a tenant tracking orders
+    and three-way matching against bills, but not stock, has nothing to post and no reason to be
+    stopped. Refusing here would make 4.1 hard-depend on 4.3 configuration.
     """
     location = _receiving_location(grn)
     if location is None:
-        return 0, ["no stock location exists for this workspace"]
+        return 0, [], ("this workspace has no stock location, so nothing could be posted to the "
+                       "inventory ledger — create a location if you want receipts to raise on-hand")
     moved_at = moved_at or timezone.now()
     posted, unmatched = 0, []
     for line in grn.lines.select_related("po_line"):
@@ -226,7 +234,7 @@ def _post_grn_receipt(grn, user, moved_at=None):
                          move_type="receipt", unit_cost=line.po_line.unit_price or ZERO,
                          reference=grn.number, reason="Goods receipt", moved_at=moved_at)
         posted += 1
-    return posted, unmatched
+    return posted, unmatched, ""
 
 
 def _reverse_grn_receipt(grn, user, moved_at=None):
@@ -235,6 +243,15 @@ def _reverse_grn_receipt(grn, user, moved_at=None):
     The ledger is append-only, so a cancellation NEVER deletes the original moves — it posts
     offsetting ones, exactly like a journal reversal. Reverses only what the receipt actually
     posted (matched by its reference), so a partially-matched receipt unwinds symmetrically.
+
+    GUARDED like every other outbound poster here. Reversing blind is the one case that looks safe
+    and isn't: the received stock does not sit in staging waiting to be un-received — a PutawayTask
+    moves it on to its bin as a matter of course. Cancelling after putaway would then subtract the
+    full original quantity from a staging location that no longer holds it, driving that location
+    negative while the bin keeps the un-reversed stock — a silently wrong ledger from an ordinary
+    receive → putaway → cancel sequence (code + security review agreed independently). Refusing is
+    correct: the stock genuinely moved on, and un-receiving it is now a putaway reversal decision,
+    not a receipt one.
     """
     from apps.scm.models import StockMove
     moved_at = moved_at or timezone.now()
@@ -244,6 +261,11 @@ def _reverse_grn_receipt(grn, user, moved_at=None):
     for move in originals:
         if move.quantity <= ZERO:
             continue  # already a reversal — don't reverse the reversal
+        shortfall = _insufficient_stock(move.item, move.location, move.quantity, move.lot_serial)
+        if shortfall:
+            raise ValidationError(
+                f"Cannot cancel this receipt — some of it has already been moved on. {shortfall}"
+            )
         _post_stock_move(grn.tenant, item=move.item, location=move.location,
                          quantity=-move.quantity, move_type="receipt",
                          unit_cost=move.unit_cost, lot_serial=move.lot_serial,
