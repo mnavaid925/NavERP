@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'fulfilled' or obj.status == 'closed' %}green{% elif obj.status == 'allocated' or obj.status == 'invoiced' %}info{% elif obj.status == 'submitted' or obj.status == 'partially_fulfilled' %}amber{% elif obj.status == 'on_hold' or obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:salesorder_list' %}">Sales Orders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.credit_hold or obj.fraud_flag %}
+    <div class="card" style="border-inline-start:3px solid var(--bad); background:var(--bad-bg);">
+      <div class="card-body">
+        <h3 class="text-danger"><i data-lucide="shield-alert"></i>
+          {% if obj.credit_hold and obj.fraud_flag %}On hold — credit and fraud review{% elif obj.credit_hold %}On hold — credit{% else %}On hold — fraud review{% endif %}
+        </h3>
+        <p style="white-space:pre-line;">{{ obj.hold_reason }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Order</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Customer</span><span class="detail-value">{% if obj.customer %}{{ obj.customer.name }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Channel</span><span class="detail-value">{{ obj.get_source_channel_display }}</span></div>
+        <div><span class="detail-label">Ship To</span><span class="detail-value">{% if obj.ship_to_address %}{{ obj.ship_to_address }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Order Date</span><span class="detail-value">{{ obj.order_date|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">Requested</span><span class="detail-value">{{ obj.requested_date|date:"M d, Y"|default:"—" }}</span></div>
+        {% comment %}
+          promised_date is stamped once, the first time the order is fully allocated — a promise made
+          from what was actually reserved, never re-derived by a later edit.
+        {% endcomment %}
+        <div><span class="detail-label">Promised</span><span class="detail-value">{{ obj.promised_date|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">Currency</span><span class="detail-value">{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Payment Terms</span><span class="detail-value">{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Subtotal</span><span class="detail-value">{{ obj.subtotal|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Tax</span><span class="detail-value">{{ obj.tax_total|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Total</span><span class="detail-value fw-600">{{ obj.total|floatformat:2 }}</span></div>
+        <div><span class="detail-label">From Quote</span><span class="detail-value">{% if obj.source_quote %}<a href="{% url 'crm:quote_detail' obj.source_quote.pk %}">{{ obj.source_quote.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Invoice</span><span class="detail-value">{% if obj.invoice %}<a href="{% url 'accounting:invoice_detail' obj.invoice.pk %}">{{ obj.invoice.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Confirmed</span><span class="detail-value">{{ obj.confirmation_sent_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+        <div><span class="detail-label">Shipped</span><span class="detail-value">{{ obj.shipped_notification_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+        <div><span class="detail-label">Delivered</span><span class="detail-value">{{ obj.delivered_notification_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+      </div>
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Description</th><th>Ordered</th><th>Allocated</th><th>Backordered</th><th>Unit Price</th><th>Line Total</th><th class="table-actions">Allocate</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% if row.line.item %}
+                  <a href="{% url 'scm:item_detail' row.line.item.pk %}" class="fw-600">{{ row.line.item.sku }}</a>
+                {% else %}
+                  {% comment %}
+                    A quote-converted line that nobody has mapped to a stock item yet. Submit refuses
+                    while any line looks like this, so it is a visible to-do, not a silent gap.
+                  {% endcomment %}
+                  <span class="badge badge-amber">Unmapped</span>
+                {% endif %}
+              </td>
+              <td>{{ row.line.description|default:row.line.item.name|default:"—" }}</td>
+              <td>{{ row.line.quantity_ordered|floatformat:2 }}</td>
+              <td>{{ row.allocated|floatformat:2 }}</td>
+              <td>
+                {% if row.backordered > 0 %}
+                  <span class="badge badge-amber">{{ row.backordered|floatformat:2 }}</span>
+                {% else %}
+                  <span class="badge badge-green">0</span>
+                {% endif %}
+              </td>
+              <td>{{ row.line.unit_price|floatformat:2 }}</td>
+              <td>{{ row.line.line_total|floatformat:2 }}</td>
+              <td>
+                <div class="table-actions">
+                  {% if obj.status == 'submitted' or obj.status == 'allocated' or obj.status == 'partially_fulfilled' %}
+                    {% if row.backordered > 0 and row.line.item %}
+                      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <a href="{% url 'scm:salesorderallocation_create' row.line.pk %}" class="btn btn-outline"><i data-lucide="package-plus"></i> Allocate</a>
+                      {% endif %}
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% for alloc in row.allocations %}
+              <tr>
+                <td></td>
+                <td colspan="5" class="text-muted">
+                  <i data-lucide="corner-down-right"></i>
+                  <a href="{% url 'scm:salesorderallocation_detail' alloc.pk %}">{{ alloc.quantity|floatformat:2 }} at {{ alloc.location.code }}</a>
+                  <span class="badge badge-{% if alloc.status == 'reserved' %}info{% elif alloc.status == 'released' %}amber{% elif alloc.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ alloc.get_status_display }}</span>
+                </td>
+                <td colspan="2">
+                  <div class="table-actions">
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      {% if alloc.status == 'reserved' %}
+                        <form method="post" action="{% url 'scm:salesorderallocation_release' alloc.pk %}">
+                          {% csrf_token %}<button class="btn-icon" type="submit" title="Release to the warehouse"><i data-lucide="send"></i></button>
+                        </form>
+                      {% endif %}
+                      {% if alloc.status != 'cancelled' %}
+                        <form method="post" action="{% url 'scm:salesorderallocation_cancel' alloc.pk %}" onsubmit="return confirm('Cancel this allocation? The stock becomes available again.');">
+                          {% csrf_token %}<button class="btn-icon danger" type="submit" title="Cancel"><i data-lucide="x"></i></button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list"></i><h3>No lines</h3><p>Edit the order to add what the customer wants.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:salesorder_submit' obj.pk %}" onsubmit="return confirm('Submit this order? Credit and fraud checks run now.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'on_hold' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:salesorder_release_hold' obj.pk %}">
+              {% csrf_token %}
+              <input type="text" name="release_note" class="form-input" placeholder="Why is it safe to release?" required>
+              <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Release hold</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status == 'allocated' or obj.status == 'partially_fulfilled' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:salesorder_fulfill' obj.pk %}" onsubmit="return confirm('Mark this order fulfilled?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="truck"></i> Mark fulfilled</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.shipped_notification_at and not obj.delivered_notification_at %}
+          <form method="post" action="{% url 'scm:salesorder_mark_delivered' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="package-check"></i> Record delivery</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'fulfilled' %}
+          <form method="post" action="{% url 'scm:salesorder_mark_invoiced' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="receipt"></i> Mark invoiced</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'invoiced' %}
+          <form method="post" action="{% url 'scm:salesorder_close' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="check-circle"></i> Close</button>
+          </form>
+        {% endif %}
+        {% if obj.status != 'fulfilled' and obj.status != 'invoiced' and obj.status != 'cancelled' and obj.status != 'closed' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:salesorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel this order?');">
+              {% csrf_token %}
+              <input type="text" name="cancel_reason" class="form-input" placeholder="Reason" required>
+              <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:salesorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:salesorder_delete' obj.pk %}" onsubmit="return confirm('Delete this draft order?');">
+            {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:salesorder_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+      {% if has_active_allocations %}
+        <p class="text-muted">This order still has stock allocated to it — cancel its allocations before cancelling the order.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
