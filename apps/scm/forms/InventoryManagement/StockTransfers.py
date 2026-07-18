@@ -23,6 +23,15 @@ class StockTransferLineForm(TenantModelForm):
         # item + lot_serial target tenant-scoped models, so the base class scopes both dropdowns.
         fields = ["item", "lot_serial", "quantity"]
 
+    def clean(self):
+        cleaned = super().clean()
+        item, lot = cleaned.get("item"), cleaned.get("lot_serial")
+        # A lot belonging to a different item would silently corrupt BOTH items' lot history, since
+        # LotSerial.on_hand() sums by lot alone (code review).
+        if item and lot and lot.item_id != item.pk:
+            self.add_error("lot_serial", f"{lot.number} belongs to {lot.item.sku}, not {item.sku}.")
+        return cleaned
+
 
 StockTransferLineFormSet = inlineformset_factory(
     StockTransfer, StockTransferLine, form=StockTransferLineForm, extra=3, can_delete=True,
