@@ -148,9 +148,13 @@ class SalesOrder(TenantNumbered):
         return new_status
 
     def has_active_allocations(self):
-        """True when any line still holds a reserved/released claim. Blocks cancellation."""
-        return SalesOrderAllocation.objects.filter(
-            sales_order_line__sales_order=self).exclude(status="cancelled").exists()
+        """True when any line still holds a reserved/released claim. Blocks cancellation.
+
+        Traverses the reverse relation rather than naming SalesOrderAllocation, which lives in a
+        sibling module: importing it here at module scope would be a circular import, and importing
+        inside the method just to run one query is noise when the ORM can walk it.
+        """
+        return self.lines.filter(allocations__status__in=("reserved", "released")).exists()
 
     @property
     def is_editable(self):
