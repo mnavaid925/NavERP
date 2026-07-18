@@ -187,17 +187,29 @@ StockMove FK and the on-hand aggregate in two). `GoodsReceiptNote` gained a stag
   re-derived at reconcile, or mid-count movement would silently absorb the discrepancy. `counted_quantity` is
   nullable so uncounted ≠ counted-zero. Reconciling makes **exactly one** `StockAdjustment(reason='cycle_count')`
   and posts it through the EXISTING adjustment path; a no-variance count reconciles without an empty document.
+  **Past `scheduled` the sheet's COMPOSITION is frozen** (`BaseCycleCountTaskLineFormSet(lock_sheet=True)`:
+  `extra=0`, `item`/`lot_serial`/`DELETE` `disabled`, plus a `clean()` re-check because a hand-rolled POST can
+  inflate `TOTAL_FORMS`). Without it a row added after start carried `expected=0`, so reconcile posted the whole
+  counted quantity as a found-stock variance — a fabricated adjustment against a never-snapshotted item. Freezing
+  is what makes the snapshot mean anything; `counted_quantity`/`notes` stay writable, since that IS the job.
+  `start` takes `select_for_update()` (snapshot-exactly-once) and writes via one `bulk_update`.
 - **`YardVisits.py`** — `YardVisit` [`YRD-`]: scheduled/arrived/at_dock/departed with derived `dwell_minutes()`.
   Posts NO StockMove. `carrier_name` is free text until 4.6.
 
+- **`picktask_start`** (released → picking) is plain `@login_required` — it moves no stock, it only marks who
+  took the task. Added because `picking` was otherwise a status nothing could reach.
+
 **The GRN→StockMove wire-up lives here too** (`_post_grn_receipt`/`_reverse_grn_receipt` in `views/_helpers.py`):
 booking a goods receipt posts an inbound move per received line at the PO line's `unit_price`; cancelling posts
-COMPENSATING moves (never deletes). `goodsreceipt_receive` is now tenant-admin gated because it moves stock. Item
+COMPENSATING moves (never deletes) and is **GUARDED** — if putaway has already moved the stock on, cancelling is
+REFUSED rather than driving staging negative while the bin keeps the un-reversed quantity (`receive → putaway →
+cancel` is an ordinary sequence, not an edge case). A workspace with NO location does **not** block booking —
+4.1 stands alone without the 4.3 spine — it just reports a distinct `blocked` reason (L38). `goodsreceipt_receive` is now tenant-admin gated because it moves stock. Item
 resolution is best-effort via `sku_hint`→`Item.sku` (4.1 lines are free text) and RETURNS unmatched lines so the
 view warns rather than silently posting nothing.
 
 **URLs**: `putawaytask_*` (/putaway/) + `_start`/`_complete`/`_cancel`; `picktask_*` (/picks/) + `_release`/
-`_confirm`/`_pack`/`_cancel`; `cyclecounttask_*` (/cycle-counts/) + `_start`/`_complete`/`_reconcile`/`_cancel`;
+`_start`/`_confirm`/`_pack`/`_cancel`; `cyclecounttask_*` (/cycle-counts/) + `_start`/`_complete`/`_reconcile`/`_cancel`;
 `yardvisit_*` (/yard/) + `_arrive`/`_dock`/`_depart`/`_cancel`. **Seeder**: `_seed_warehouse_tenant` runs AFTER
 `_seed_inventory_tenant` — a real dependency, since every row references its items/locations.
 
