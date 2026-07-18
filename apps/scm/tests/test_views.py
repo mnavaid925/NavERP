@@ -2441,3 +2441,1215 @@ class TestInventoryCreateWithoutTenantWorkspace:
         resp = c.get(reverse("scm:stockadjustment_create"))
         assert resp.status_code == 302
         assert StockAdjustment.objects.count() == 0
+
+
+# ================================================================================================
+# SCM 4.4 Warehouse Management
+# ================================================================================================
+
+# ================================================================ PutawayTask CRUD
+class TestPutawayTaskCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, putawaytask_a):
+        resp = client_a.get(reverse("scm:putawaytask_list"))
+        assert resp.status_code == 200
+        assert putawaytask_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, putawaytask_a, putawaytask_b):
+        resp = client_a.get(reverse("scm:putawaytask_list"))
+        assert putawaytask_b not in resp.context["object_list"]
+
+    def test_list_search_by_item_sku(self, client_a, putawaytask_a, item_a):
+        resp = client_a.get(reverse("scm:putawaytask_list"), {"q": item_a.sku})
+        assert putawaytask_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:putawaytask_list"), {"q": "no-match-at-all"})
+        assert putawaytask_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, putawaytask_a):
+        resp = client_a.get(reverse("scm:putawaytask_list"), {"status": "pending"})
+        assert putawaytask_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:putawaytask_list"), {"status": "completed"})
+        assert putawaytask_a not in resp2.context["object_list"]
+
+    def test_list_junk_to_location_filter_returns_200_not_500(self, client_a, putawaytask_a):
+        resp = client_a.get(reverse("scm:putawaytask_list"), {"to_location": "not-an-id"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, putawaytask_a):
+        resp = client_a.get(reverse("scm:putawaytask_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_list_page_2_when_rows_exceed_page_size(self, client_a, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.models import PutawayTask
+        for i in range(20):
+            PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                       to_location=location_a2, quantity=Decimal("1"))
+        resp1 = client_a.get(reverse("scm:putawaytask_list"))
+        resp2 = client_a.get(reverse("scm:putawaytask_list"), {"page": "2"})
+        assert resp1.status_code == 200 and resp2.status_code == 200
+        assert set(o.pk for o in resp1.context["object_list"]) != set(o.pk for o in resp2.context["object_list"])
+
+    def test_create_get_renders_an_empty_form(self, client_a):
+        resp = client_a.get(reverse("scm:putawaytask_create"))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is False
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.models import PutawayTask
+        data = {
+            "goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "5", "strategy": "directed", "assigned_to": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_create"), data)
+        assert resp.status_code == 302
+        task = PutawayTask.objects.get(tenant=tenant_a)
+        assert task.number == "PUT-00001"
+        assert task.status == "pending"
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.models import PutawayTask
+        data = {
+            "goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "5", "strategy": "directed", "assigned_to": "", "notes": "",
+            "status": "completed", "number": "PUT-99999",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_create"), data)
+        assert resp.status_code == 302
+        task = PutawayTask.objects.get(tenant=tenant_a)
+        assert task.status == "pending"
+        assert task.number == "PUT-00001"
+
+    def test_edit_updates_fields(self, client_a, putawaytask_a, item_a, location_a, location_a2):
+        data = {
+            "goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "9", "strategy": "fixed", "assigned_to": "", "notes": "Updated",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_edit", args=[putawaytask_a.pk]), data)
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.quantity == Decimal("9")
+        assert putawaytask_a.strategy == "fixed"
+        assert putawaytask_a.notes == "Updated"
+
+    def test_edit_blocked_once_completed(self, client_a, tenant_a, putawaytask_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        resp = client_a.get(reverse("scm:putawaytask_edit", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+
+    def test_detail_returns_200_with_context(self, client_a, putawaytask_a):
+        resp = client_a.get(reverse("scm:putawaytask_detail", args=[putawaytask_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == putawaytask_a
+        assert resp.context["available"] == Decimal("0")
+
+    def test_delete_pending_removes_it(self, client_a, putawaytask_a):
+        pk = putawaytask_a.pk
+        resp = client_a.post(reverse("scm:putawaytask_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import PutawayTask
+        assert not PutawayTask.objects.filter(pk=pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, putawaytask_a):
+        assert client_a.get(reverse("scm:putawaytask_delete", args=[putawaytask_a.pk])).status_code == 405
+
+
+# ================================================================ PutawayTask lifecycle
+class TestPutawayTaskLifecycle:
+    def test_start_pending_to_in_progress_claims_assignee(self, client_a, putawaytask_a, admin_user):
+        resp = client_a.post(reverse("scm:putawaytask_start", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "in_progress"
+        assert putawaytask_a.assigned_to_id == admin_user.pk
+
+    def test_start_twice_is_a_noop(self, client_a, putawaytask_a):
+        client_a.post(reverse("scm:putawaytask_start", args=[putawaytask_a.pk]))
+        resp = client_a.post(reverse("scm:putawaytask_start", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "in_progress"
+
+    def test_complete_posts_paired_moves_and_closes(
+        self, client_a, tenant_a, putawaytask_a, location_a, location_a2, item_a,
+    ):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "completed"
+        assert putawaytask_a.completed_at is not None
+        assert item_a.on_hand(location=location_a) == Decimal("5")
+        assert item_a.on_hand(location=location_a2) == Decimal("5")
+        assert StockMove.objects.filter(tenant=tenant_a, reference=putawaytask_a.number).count() == 2
+
+    def test_complete_refused_when_source_never_held_stock(self, client_a, putawaytask_a, location_a, item_a):
+        """Absent-prerequisite (L35): the staging location has never held this item — refused."""
+        resp = client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "pending"
+        assert item_a.on_hand(location=location_a) == Decimal("0")
+
+    def test_complete_already_completed_is_a_noop(
+        self, client_a, tenant_a, putawaytask_a, location_a, item_a,
+    ):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        resp = client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        assert StockMove.objects.filter(tenant=tenant_a, reference=putawaytask_a.number).count() == 2
+
+    def test_cancel_open_task_becomes_cancelled(self, client_a, putawaytask_a):
+        resp = client_a.post(reverse("scm:putawaytask_cancel", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "cancelled"
+
+    def test_cancel_completed_is_refused(self, client_a, tenant_a, putawaytask_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        resp = client_a.post(reverse("scm:putawaytask_cancel", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "completed"  # unchanged
+
+    def test_delete_completed_is_refused(self, client_a, tenant_a, putawaytask_a, location_a, item_a):
+        from apps.scm.models import PutawayTask
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        resp = client_a.post(reverse("scm:putawaytask_delete", args=[putawaytask_a.pk]))
+        assert resp.status_code == 302
+        assert PutawayTask.objects.filter(pk=putawaytask_a.pk).exists()
+
+    def test_get_complete_returns_405(self, client_a, putawaytask_a):
+        assert client_a.get(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk])).status_code == 405
+
+
+# ================================================================ PickTask CRUD
+class TestPickTaskCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, picktask_a):
+        resp = client_a.get(reverse("scm:picktask_list"))
+        assert resp.status_code == 200
+        assert picktask_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, picktask_a, picktask_b):
+        resp = client_a.get(reverse("scm:picktask_list"))
+        assert picktask_b not in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, picktask_a):
+        resp = client_a.get(reverse("scm:picktask_list"), {"status": "pending"})
+        assert picktask_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:picktask_list"), {"status": "packed"})
+        assert picktask_a not in resp2.context["object_list"]
+
+    def test_list_junk_zone_filter_returns_200_not_500(self, client_a, picktask_a):
+        resp = client_a.get(reverse("scm:picktask_list"), {"zone": "not-an-id"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, picktask_a):
+        resp = client_a.get(reverse("scm:picktask_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_create_get_renders_an_empty_form_and_formset(self, client_a):
+        resp = client_a.get(reverse("scm:picktask_create"))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is False
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, location_a, item_a):
+        from apps.scm.models import PickTask
+        data = {
+            "strategy": "single", "zone": "", "wave_ref": "", "assigned_to": "",
+            "ship_to": "Acme HQ", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "from_location": str(location_a.pk),
+                                      "quantity_requested": "5", "quantity_picked": "0", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:picktask_create"), data)
+        assert resp.status_code == 302
+        task = PickTask.objects.get(tenant=tenant_a)
+        assert task.number == "PIK-00001"
+        assert task.lines.count() == 1
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, location_a, item_a):
+        from apps.scm.models import PickTask
+        data = {
+            "strategy": "single", "zone": "", "wave_ref": "", "assigned_to": "",
+            "ship_to": "", "notes": "", "status": "picked", "number": "PIK-99999",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "from_location": str(location_a.pk),
+                                      "quantity_requested": "5", "quantity_picked": "0", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:picktask_create"), data)
+        assert resp.status_code == 302
+        task = PickTask.objects.get(tenant=tenant_a)
+        assert task.status == "pending"
+        assert task.number == "PIK-00001"
+
+    def test_edit_updates_fields(self, client_a, picktask_a, location_a, item_a):
+        line = picktask_a.lines.first()
+        data = {
+            "strategy": "wave", "zone": "", "wave_ref": "WAVE-1", "assigned_to": "",
+            "ship_to": "Updated dest", "notes": "",
+            **formset_data("lines", [{"id": line.pk, "item": str(item_a.pk), "lot_serial": "",
+                                      "from_location": str(location_a.pk),
+                                      "quantity_requested": "5", "quantity_picked": "0", "notes": ""}],
+                           initial=1),
+        }
+        resp = client_a.post(reverse("scm:picktask_edit", args=[picktask_a.pk]), data)
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.wave_ref == "WAVE-1"
+        assert picktask_a.ship_to == "Updated dest"
+
+    def test_edit_blocked_once_picking(self, client_a, picktask_a):
+        picktask_a.status = "picking"
+        picktask_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:picktask_edit", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+
+    def test_detail_returns_200_with_context(self, client_a, picktask_a):
+        resp = client_a.get(reverse("scm:picktask_detail", args=[picktask_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == picktask_a
+        assert len(resp.context["line_rows"]) == 1
+
+    def test_delete_pending_removes_it(self, client_a, picktask_a):
+        pk = picktask_a.pk
+        resp = client_a.post(reverse("scm:picktask_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import PickTask
+        assert not PickTask.objects.filter(pk=pk).exists()
+
+    def test_delete_released_is_refused(self, client_a, picktask_a):
+        from apps.scm.models import PickTask
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_delete", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        assert PickTask.objects.filter(pk=picktask_a.pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, picktask_a):
+        assert client_a.get(reverse("scm:picktask_delete", args=[picktask_a.pk])).status_code == 405
+
+
+# ================================================================ PickTask lifecycle (pick + pack)
+class TestPickTaskLifecycle:
+    def test_release_requires_at_least_one_line(self, client_a, tenant_a):
+        from apps.scm.models import PickTask
+        empty = PickTask.objects.create(tenant=tenant_a)
+        resp = client_a.post(reverse("scm:picktask_release", args=[empty.pk]))
+        assert resp.status_code == 302
+        empty.refresh_from_db()
+        assert empty.status == "pending"
+
+    def test_release_pending_to_released(self, client_a, picktask_a):
+        resp = client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "released"
+
+    def test_release_twice_is_a_noop(self, client_a, picktask_a):
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "released"
+
+    def test_start_released_to_picking(self, client_a, picktask_a):
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_start", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "picking"
+
+    def test_start_before_release_is_refused(self, client_a, picktask_a):
+        resp = client_a.post(reverse("scm:picktask_start", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "pending"
+
+    def test_confirm_from_picking_posts_the_full_pick(
+        self, client_a, tenant_a, picktask_a, location_a, item_a,
+    ):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        client_a.post(reverse("scm:picktask_start", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "picked"
+        assert picktask_a.picked_at is not None
+        assert item_a.on_hand(location=location_a) == Decimal("5")
+        assert StockMove.objects.filter(tenant=tenant_a, reference=picktask_a.number).count() == 1
+
+    def test_confirm_directly_from_released_also_works(
+        self, client_a, tenant_a, picktask_a, location_a, item_a,
+    ):
+        """PICKABLE_STATUSES includes 'released' — a picker may confirm without a separate start."""
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "picked"
+
+    def test_short_pick_sets_is_short_and_warns(self, client_a, tenant_a, picktask_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = Decimal("2")  # requested 5
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]), follow=True)
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "picked"
+        assert picktask_a.is_short() is True
+        msgs = [str(m) for m in resp.context["messages"]]
+        assert any("short" in m.lower() for m in msgs)
+
+    def test_confirm_with_nothing_picked_is_refused(self, client_a, picktask_a):
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "released"  # refused — nothing to confirm
+
+    def test_confirm_over_available_bin_stock_is_refused(
+        self, client_a, tenant_a, picktask_a, location_a, item_a,
+    ):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("2"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = Decimal("5")
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "released"  # refused
+        assert item_a.on_hand(location=location_a) == Decimal("2")  # unchanged
+
+    def test_confirm_twice_does_not_double_post(self, client_a, tenant_a, picktask_a, location_a, item_a):
+        from apps.scm.models import StockMove
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        assert StockMove.objects.filter(tenant=tenant_a, reference=picktask_a.number).count() == 1
+
+    def test_pack_after_picked_captures_details(self, client_a, tenant_a, picktask_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_pack", args=[picktask_a.pk]),
+                             {"package_count": "2", "package_weight": "3.500", "tracking_ref": "TRK123"})
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "packed"
+        assert picktask_a.package_count == 2
+        assert picktask_a.package_weight == Decimal("3.500")
+        assert picktask_a.tracking_ref == "TRK123"
+        assert picktask_a.packed_at is not None
+
+    def test_pack_before_picked_is_refused(self, client_a, picktask_a):
+        resp = client_a.post(reverse("scm:picktask_pack", args=[picktask_a.pk]), {"package_count": "1"})
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "pending"
+        assert picktask_a.package_count is None
+
+    def test_cancel_pending_becomes_cancelled(self, client_a, picktask_a):
+        resp = client_a.post(reverse("scm:picktask_cancel", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "cancelled"
+
+    def test_cancel_picked_task_is_refused(self, client_a, tenant_a, picktask_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested
+        line.save(update_fields=["quantity_picked"])
+        client_a.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        client_a.post(reverse("scm:picktask_confirm", args=[picktask_a.pk]))
+        resp = client_a.post(reverse("scm:picktask_cancel", args=[picktask_a.pk]))
+        assert resp.status_code == 302
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "picked"  # unchanged — stock already moved
+
+    def test_get_confirm_returns_405(self, client_a, picktask_a):
+        assert client_a.get(reverse("scm:picktask_confirm", args=[picktask_a.pk])).status_code == 405
+
+
+# ================================================================ CycleCountTask CRUD
+class TestCycleCountTaskCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, cyclecounttask_a):
+        resp = client_a.get(reverse("scm:cyclecounttask_list"))
+        assert resp.status_code == 200
+        assert cyclecounttask_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, cyclecounttask_a, cyclecounttask_b):
+        resp = client_a.get(reverse("scm:cyclecounttask_list"))
+        assert cyclecounttask_b not in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, cyclecounttask_a):
+        resp = client_a.get(reverse("scm:cyclecounttask_list"), {"status": "scheduled"})
+        assert cyclecounttask_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:cyclecounttask_list"), {"status": "reconciled"})
+        assert cyclecounttask_a not in resp2.context["object_list"]
+
+    def test_list_junk_location_filter_returns_200_not_500(self, client_a, cyclecounttask_a):
+        resp = client_a.get(reverse("scm:cyclecounttask_list"), {"location": "not-an-id"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, cyclecounttask_a):
+        resp = client_a.get(reverse("scm:cyclecounttask_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, location_a, item_a):
+        from apps.scm.models import CycleCountTask
+        data = {
+            "location": str(location_a.pk), "scheduled_date": "2026-01-25", "count_method": "full",
+            "assigned_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "counted_quantity": "", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_create"), data)
+        assert resp.status_code == 302
+        task = CycleCountTask.objects.get(tenant=tenant_a)
+        assert task.number == "CC-00001"
+        assert task.lines.count() == 1
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a, location_a, item_a):
+        from apps.scm.models import CycleCountTask
+        data = {
+            "location": str(location_a.pk), "scheduled_date": "2026-01-25", "count_method": "full",
+            "assigned_to": "", "notes": "", "status": "reconciled", "number": "CC-99999",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "counted_quantity": "", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_create"), data)
+        assert resp.status_code == 302
+        task = CycleCountTask.objects.get(tenant=tenant_a)
+        assert task.status == "scheduled"
+        assert task.number == "CC-00001"
+
+    def test_edit_updates_fields(self, client_a, cyclecounttask_a, item_a):
+        line = cyclecounttask_a.lines.first()
+        data = {
+            "location": str(cyclecounttask_a.location_id), "scheduled_date": "2026-01-30",
+            "count_method": "abc", "assigned_to": "", "notes": "Updated",
+            **formset_data("lines", [{"id": line.pk, "item": str(item_a.pk), "lot_serial": "",
+                                      "counted_quantity": "", "notes": ""}], initial=1),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_a.pk]), data)
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.count_method == "abc"
+        assert cyclecounttask_a.notes == "Updated"
+
+    def test_edit_blocked_once_counted(self, client_a, cyclecounttask_a):
+        cyclecounttask_a.status = "counted"
+        cyclecounttask_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+
+    def test_detail_returns_200_with_context(self, client_a, cyclecounttask_a):
+        resp = client_a.get(reverse("scm:cyclecounttask_detail", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == cyclecounttask_a
+        assert resp.context["variance_count"] == 0
+        assert resp.context["net_variance"] == Decimal("0")
+
+    def test_delete_scheduled_removes_it(self, client_a, cyclecounttask_a):
+        pk = cyclecounttask_a.pk
+        resp = client_a.post(reverse("scm:cyclecounttask_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import CycleCountTask
+        assert not CycleCountTask.objects.filter(pk=pk).exists()
+
+    def test_get_delete_returns_405(self, client_a, cyclecounttask_a):
+        assert client_a.get(reverse("scm:cyclecounttask_delete", args=[cyclecounttask_a.pk])).status_code == 405
+
+
+# ================================================================ CycleCountTask lifecycle
+class TestCycleCountTaskLifecycle:
+    def test_start_snapshots_expected_quantity_from_the_ledger(
+        self, client_a, tenant_a, cyclecounttask_a, location_a, item_a,
+    ):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("12"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        resp = client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "in_progress"
+        assert cyclecounttask_a.started_at is not None
+        line = cyclecounttask_a.lines.first()
+        assert line.expected_quantity == Decimal("12")
+        assert line.counted_quantity is None  # still distinguishable from counted-zero
+
+    def test_start_without_lines_is_refused(self, client_a, tenant_a, location_a):
+        from apps.scm.models import CycleCountTask
+        empty = CycleCountTask.objects.create(tenant=tenant_a, location=location_a,
+                                              scheduled_date=datetime.date(2026, 1, 20))
+        resp = client_a.post(reverse("scm:cyclecounttask_start", args=[empty.pk]))
+        assert resp.status_code == 302
+        empty.refresh_from_db()
+        assert empty.status == "scheduled"
+
+    def test_start_twice_is_a_noop(self, client_a, cyclecounttask_a):
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "in_progress"
+
+    def test_complete_requires_every_line_counted(self, client_a, cyclecounttask_a):
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "in_progress"  # refused, still uncounted
+
+    def test_complete_with_all_lines_counted_moves_to_counted(self, client_a, cyclecounttask_a):
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        line.counted_quantity = Decimal("0")  # counted ZERO — distinct from uncounted (None)
+        line.save(update_fields=["counted_quantity"])
+        resp = client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "counted"
+        assert cyclecounttask_a.counted_at is not None
+
+    def test_reconcile_creates_exactly_one_stock_adjustment(
+        self, client_a, tenant_a, cyclecounttask_a, item_a, location_a,
+    ):
+        from apps.scm.models import StockAdjustment
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        line.counted_quantity = Decimal("8")  # expected 0 -> variance +8
+        line.save(update_fields=["counted_quantity"])
+        client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "reconciled"
+        assert cyclecounttask_a.reconciled_at is not None
+        assert cyclecounttask_a.adjustment is not None
+        assert StockAdjustment.objects.filter(tenant=tenant_a, cycle_counts=cyclecounttask_a).count() == 1
+        assert item_a.on_hand(location=location_a) == Decimal("8")
+
+    def test_reconcile_twice_does_not_double_apply(
+        self, client_a, tenant_a, cyclecounttask_a, item_a, location_a,
+    ):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        line.counted_quantity = Decimal("8")
+        line.save(update_fields=["counted_quantity"])
+        client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        cyclecounttask_a.refresh_from_db()
+        adjustment_number = cyclecounttask_a.adjustment.number
+        resp = client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.adjustment.number == adjustment_number  # no second adjustment
+        assert item_a.on_hand(location=location_a) == Decimal("8")  # not doubled to 16
+        assert StockMove.objects.filter(tenant=tenant_a, reference=adjustment_number).count() == 1
+
+    def test_reconcile_with_no_variance_creates_no_adjustment(self, client_a, tenant_a, cyclecounttask_a):
+        from apps.scm.models import StockAdjustment
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        line.counted_quantity = Decimal("0")  # matches expected (0) exactly
+        line.save(update_fields=["counted_quantity"])
+        client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "reconciled"
+        assert cyclecounttask_a.adjustment is None
+        assert not StockAdjustment.objects.filter(tenant=tenant_a).exists()
+
+    def test_cancel_scheduled_becomes_cancelled(self, client_a, cyclecounttask_a):
+        resp = client_a.post(reverse("scm:cyclecounttask_cancel", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "cancelled"
+
+    def test_cancel_reconciled_is_refused(self, client_a, tenant_a, cyclecounttask_a):
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        line.counted_quantity = Decimal("0")
+        line.save(update_fields=["counted_quantity"])
+        client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_cancel", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "reconciled"  # unchanged
+
+    def test_delete_reconciled_is_refused(self, client_a, tenant_a, cyclecounttask_a):
+        from apps.scm.models import CycleCountTask
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        line.counted_quantity = Decimal("0")
+        line.save(update_fields=["counted_quantity"])
+        client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_delete", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        assert CycleCountTask.objects.filter(pk=cyclecounttask_a.pk).exists()
+
+    def test_get_reconcile_returns_405(self, client_a, cyclecounttask_a):
+        assert client_a.get(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk])).status_code == 405
+
+
+# ================================================================================================
+# Priority regression 1b — the started-count composition freeze (end-to-end via the real view)
+# ================================================================================================
+class TestCycleCountTaskLockRegression:
+    """A CycleCountTask past 'scheduled' must not accept new formset rows or an item swap on an
+    existing line — see BaseCycleCountTaskLineFormSet. The lock must not break ordinary counting."""
+
+    def test_still_scheduled_count_accepts_a_new_line(self, client_a, cyclecounttask_a, item_lot_a):
+        line = cyclecounttask_a.lines.first()
+        data = {
+            "location": str(cyclecounttask_a.location_id), "scheduled_date": "2026-01-20",
+            "count_method": "full", "assigned_to": "", "notes": "",
+            **formset_data("lines", [
+                {"id": line.pk, "item": str(line.item_id), "lot_serial": "",
+                 "counted_quantity": "", "notes": ""},
+                {"id": "", "item": str(item_lot_a.pk), "lot_serial": "",
+                 "counted_quantity": "", "notes": ""},
+            ], initial=1),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_a.pk]), data)
+        assert resp.status_code == 302
+        assert cyclecounttask_a.lines.count() == 2
+
+    def test_extra_row_after_start_is_rejected_line_count_unchanged(
+        self, client_a, cyclecounttask_a, item_lot_a,
+    ):
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "in_progress"
+        line = cyclecounttask_a.lines.first()
+        data = {
+            "location": str(cyclecounttask_a.location_id), "scheduled_date": "2026-01-20",
+            "count_method": "full", "assigned_to": "", "notes": "",
+            **formset_data("lines", [
+                {"id": line.pk, "item": str(line.item_id), "lot_serial": "",
+                 "counted_quantity": "7", "notes": ""},
+                {"id": "", "item": str(item_lot_a.pk), "lot_serial": "",
+                 "counted_quantity": "3", "notes": ""},
+            ], initial=1),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_a.pk]), data)
+        assert resp.status_code == 200  # re-rendered with an error, not saved
+        assert cyclecounttask_a.lines.count() == 1
+        line.refresh_from_db()
+        assert line.counted_quantity is None  # the whole POST was rejected, nothing saved
+
+    def test_item_swap_on_existing_line_is_ignored_but_counted_quantity_still_saves(
+        self, client_a, cyclecounttask_a, item_lot_a,
+    ):
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        cyclecounttask_a.refresh_from_db()
+        line = cyclecounttask_a.lines.first()
+        original_item_id = line.item_id
+        data = {
+            "location": str(cyclecounttask_a.location_id), "scheduled_date": "2026-01-20",
+            "count_method": "full", "assigned_to": "", "notes": "",
+            **formset_data("lines", [
+                {"id": line.pk, "item": str(item_lot_a.pk), "lot_serial": "",
+                 "counted_quantity": "9", "notes": ""},
+            ], initial=1),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_a.pk]), data)
+        assert resp.status_code == 302  # saved — the disabled item field silently kept its original value
+        assert cyclecounttask_a.lines.count() == 1
+        line.refresh_from_db()
+        assert line.item_id == original_item_id  # swap ignored
+        assert line.counted_quantity == Decimal("9")  # the actual job — the count itself — still saved
+
+    def test_reconcile_after_a_rejected_injection_does_not_fabricate_stock_for_the_other_item(
+        self, client_a, tenant_a, cyclecounttask_a, item_lot_a,
+    ):
+        from apps.scm.models import StockAdjustmentLine
+        client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        line = cyclecounttask_a.lines.first()
+        # Attempted injection of a second, un-snapshotted item — rejected by the lock (test above).
+        data = {
+            "location": str(cyclecounttask_a.location_id), "scheduled_date": "2026-01-20",
+            "count_method": "full", "assigned_to": "", "notes": "",
+            **formset_data("lines", [
+                {"id": line.pk, "item": str(line.item_id), "lot_serial": "",
+                 "counted_quantity": "7", "notes": ""},
+                {"id": "", "item": str(item_lot_a.pk), "lot_serial": "",
+                 "counted_quantity": "3", "notes": ""},
+            ], initial=1),
+        }
+        client_a.post(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_a.pk]), data)
+        # Count the only real line properly, then complete + reconcile.
+        line.counted_quantity = Decimal("7")
+        line.save(update_fields=["counted_quantity"])
+        client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_a.pk]))
+        resp = client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+        assert not StockAdjustmentLine.objects.filter(item=item_lot_a).exists()
+        assert item_lot_a.on_hand() == Decimal("0")
+
+
+# ================================================================================================
+# Priority regression 1a — GRN cancel must refuse once its stock has already been put away
+# ================================================================================================
+class TestGoodsReceiptPutawayCancelRegression:
+    """goodsreceipt_cancel must refuse once the received stock has already moved on to a bin via
+    putaway — status stays 'received' and staging never goes negative. A receipt still sitting in
+    staging must still cancel normally and return its stock (the guard must not be over-broad)."""
+
+    def _receive_po_and_grn(self, tenant_a, location_a, item_a, supplier_a, qty=Decimal("10")):
+        from apps.scm.models import GoodsReceiptLine, GoodsReceiptNote, PurchaseOrder, PurchaseOrderLine
+        po = PurchaseOrder.objects.create(tenant=tenant_a, vendor=supplier_a,
+                                          order_date=datetime.date(2026, 1, 5), status="approved")
+        line = PurchaseOrderLine.objects.create(purchase_order=po, item_description=item_a.name,
+                                                sku_hint=item_a.sku, quantity=qty, unit_price=Decimal("5.00"))
+        po.recalc_totals()
+        grn = GoodsReceiptNote.objects.create(tenant=tenant_a, purchase_order=po, location=location_a,
+                                              receipt_date=datetime.date(2026, 1, 10), status="draft")
+        GoodsReceiptLine.objects.create(goods_receipt=grn, po_line=line, quantity_received=qty)
+        return po, grn
+
+    def test_cancel_refused_after_putaway_moved_the_stock_on(
+        self, client_a, tenant_a, location_a, location_a2, item_a, supplier_a,
+    ):
+        from apps.scm.models import PutawayTask
+        _, grn = self._receive_po_and_grn(tenant_a, location_a, item_a, supplier_a)
+        resp = client_a.post(reverse("scm:goodsreceipt_receive", args=[grn.pk]))
+        assert resp.status_code == 302
+        grn.refresh_from_db()
+        assert grn.status == "received"
+        assert item_a.on_hand(location=location_a) == Decimal("10")
+
+        task = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                          to_location=location_a2, quantity=Decimal("10"))
+        resp = client_a.post(reverse("scm:putawaytask_complete", args=[task.pk]))
+        assert resp.status_code == 302
+        task.refresh_from_db()
+        assert task.status == "completed"
+        assert item_a.on_hand(location=location_a) == Decimal("0")
+        assert item_a.on_hand(location=location_a2) == Decimal("10")
+
+        resp = client_a.post(reverse("scm:goodsreceipt_cancel", args=[grn.pk]))
+        assert resp.status_code == 302  # redirected with an error message, never a 500
+        grn.refresh_from_db()
+        assert grn.status == "received"  # refused — NOT cancelled
+        assert item_a.on_hand(location=location_a) == Decimal("0")  # staging never went negative
+        assert item_a.on_hand(location=location_a2) == Decimal("10")  # bin keeps its stock
+
+    def test_cancel_still_works_when_the_stock_is_still_in_staging(
+        self, client_a, tenant_a, location_a, item_a, supplier_a,
+    ):
+        _, grn = self._receive_po_and_grn(tenant_a, location_a, item_a, supplier_a)
+        client_a.post(reverse("scm:goodsreceipt_receive", args=[grn.pk]))
+        grn.refresh_from_db()
+        assert item_a.on_hand(location=location_a) == Decimal("10")
+
+        resp = client_a.post(reverse("scm:goodsreceipt_cancel", args=[grn.pk]))
+        assert resp.status_code == 302
+        grn.refresh_from_db()
+        assert grn.status == "cancelled"
+        assert item_a.on_hand(location=location_a) == Decimal("0")  # stock fully returned
+
+
+# ================================================================ YardVisit CRUD
+class TestYardVisitCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, yardvisit_a):
+        resp = client_a.get(reverse("scm:yardvisit_list"))
+        assert resp.status_code == 200
+        assert yardvisit_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, yardvisit_a, yardvisit_b):
+        resp = client_a.get(reverse("scm:yardvisit_list"))
+        assert yardvisit_b not in resp.context["object_list"]
+
+    def test_list_search_by_carrier_name(self, client_a, yardvisit_a):
+        resp = client_a.get(reverse("scm:yardvisit_list"), {"q": "Acme Haulage"})
+        assert yardvisit_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:yardvisit_list"), {"q": "No match here"})
+        assert yardvisit_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_direction(self, client_a, yardvisit_a):
+        resp = client_a.get(reverse("scm:yardvisit_list"), {"direction": "inbound"})
+        assert yardvisit_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:yardvisit_list"), {"direction": "outbound"})
+        assert yardvisit_a not in resp2.context["object_list"]
+
+    def test_list_junk_dock_door_filter_returns_200_not_500(self, client_a, yardvisit_a):
+        resp = client_a.get(reverse("scm:yardvisit_list"), {"dock_door": "not-an-id"})
+        assert resp.status_code == 200
+
+    def test_list_page_past_the_end_returns_200(self, client_a, yardvisit_a):
+        resp = client_a.get(reverse("scm:yardvisit_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import YardVisit
+        data = {
+            "carrier_name": "Speedy Freight", "vehicle_ref": "TRK-9", "trailer_ref": "",
+            "driver_name": "Sam", "direction": "inbound", "dock_door": "", "purchase_order": "",
+            "scheduled_at": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:yardvisit_create"), data)
+        assert resp.status_code == 302
+        visit = YardVisit.objects.get(tenant=tenant_a, carrier_name="Speedy Freight")
+        assert visit.number == "YRD-00001"
+        assert visit.status == "scheduled"
+
+    def test_create_ignores_posted_status_and_number(self, client_a, tenant_a):
+        from apps.scm.models import YardVisit
+        data = {
+            "carrier_name": "Hacker Freight", "vehicle_ref": "", "trailer_ref": "", "driver_name": "",
+            "direction": "inbound", "dock_door": "", "purchase_order": "", "scheduled_at": "", "notes": "",
+            "status": "departed", "number": "YRD-99999",
+        }
+        resp = client_a.post(reverse("scm:yardvisit_create"), data)
+        assert resp.status_code == 302
+        visit = YardVisit.objects.get(tenant=tenant_a, carrier_name="Hacker Freight")
+        assert visit.status == "scheduled"
+        assert visit.number == "YRD-00001"
+
+    def test_edit_updates_fields(self, client_a, yardvisit_a):
+        data = {
+            "carrier_name": "Renamed Haulage", "vehicle_ref": "TRK-2", "trailer_ref": "",
+            "driver_name": "", "direction": "inbound", "dock_door": "", "purchase_order": "",
+            "scheduled_at": "", "notes": "Updated",
+        }
+        resp = client_a.post(reverse("scm:yardvisit_edit", args=[yardvisit_a.pk]), data)
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.carrier_name == "Renamed Haulage"
+        assert yardvisit_a.notes == "Updated"
+
+    def test_edit_blocked_once_departed(self, client_a, yardvisit_a):
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        client_a.post(reverse("scm:yardvisit_depart", args=[yardvisit_a.pk]))
+        resp = client_a.get(reverse("scm:yardvisit_edit", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+
+    def test_detail_returns_200_with_context(self, client_a, yardvisit_a):
+        resp = client_a.get(reverse("scm:yardvisit_detail", args=[yardvisit_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == yardvisit_a
+        assert resp.context["dwell"] is None  # not yet arrived
+
+    def test_get_delete_returns_405(self, client_a, yardvisit_a):
+        assert client_a.get(reverse("scm:yardvisit_delete", args=[yardvisit_a.pk])).status_code == 405
+
+
+# ================================================================ YardVisit lifecycle
+class TestYardVisitLifecycle:
+    def test_arrive_scheduled_to_arrived_stamps_time(self, client_a, yardvisit_a):
+        resp = client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "arrived"
+        assert yardvisit_a.arrived_at is not None
+
+    def test_arrive_twice_is_a_noop(self, client_a, yardvisit_a):
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        resp = client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "arrived"
+
+    def test_dock_requires_a_dock_door_assigned(self, client_a, yardvisit_a):
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        resp = client_a.post(reverse("scm:yardvisit_dock", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "arrived"  # refused — no dock door
+
+    def test_dock_with_door_assigned_succeeds(self, client_a, yardvisit_a, location_a):
+        yardvisit_a.dock_door = location_a
+        yardvisit_a.save(update_fields=["dock_door"])
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        resp = client_a.post(reverse("scm:yardvisit_dock", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "at_dock"
+        assert yardvisit_a.docked_at is not None
+
+    def test_depart_from_arrived_stops_the_clock(self, client_a, yardvisit_a):
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        resp = client_a.post(reverse("scm:yardvisit_depart", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "departed"
+        assert yardvisit_a.departed_at is not None
+        assert yardvisit_a.dwell_minutes() is not None
+
+    def test_depart_before_arrival_is_refused(self, client_a, yardvisit_a):
+        resp = client_a.post(reverse("scm:yardvisit_depart", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "scheduled"
+
+    def test_cancel_scheduled_becomes_cancelled(self, client_a, yardvisit_a):
+        resp = client_a.post(reverse("scm:yardvisit_cancel", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "cancelled"
+
+    def test_cancel_departed_is_a_noop(self, client_a, yardvisit_a):
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        client_a.post(reverse("scm:yardvisit_depart", args=[yardvisit_a.pk]))
+        resp = client_a.post(reverse("scm:yardvisit_cancel", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "departed"  # unchanged
+
+    def test_delete_scheduled_removes_it(self, client_a, yardvisit_a):
+        pk = yardvisit_a.pk
+        resp = client_a.post(reverse("scm:yardvisit_delete", args=[pk]))
+        assert resp.status_code == 302
+        from apps.scm.models import YardVisit
+        assert not YardVisit.objects.filter(pk=pk).exists()
+
+    def test_delete_arrived_is_refused(self, client_a, yardvisit_a):
+        from apps.scm.models import YardVisit
+        client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk]))
+        resp = client_a.post(reverse("scm:yardvisit_delete", args=[yardvisit_a.pk]))
+        assert resp.status_code == 302
+        assert YardVisit.objects.filter(pk=yardvisit_a.pk).exists()
+
+    def test_get_arrive_returns_405(self, client_a, yardvisit_a):
+        assert client_a.get(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk])).status_code == 405
+
+
+# ================================================================ Negative-input hardening
+class TestWarehouseNegativeInputHardening:
+    def test_putawaytask_quantity_nan_is_rejected_not_500(self, client_a, item_a, location_a, location_a2):
+        data = {
+            "goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "NaN", "strategy": "directed", "assigned_to": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import PutawayTask
+        assert not PutawayTask.objects.exists()
+
+    def test_putawaytask_quantity_infinity_is_rejected_not_500(
+        self, client_a, item_a, location_a, location_a2,
+    ):
+        data = {
+            "goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "Infinity", "strategy": "directed", "assigned_to": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import PutawayTask
+        assert not PutawayTask.objects.exists()
+
+    def test_putawaytask_quantity_negative_is_rejected_not_500(
+        self, client_a, item_a, location_a, location_a2,
+    ):
+        data = {
+            "goods_receipt": "", "item": str(item_a.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "-5", "strategy": "directed", "assigned_to": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import PutawayTask
+        assert not PutawayTask.objects.exists()
+
+    def test_picktaskline_quantity_requested_garbage_is_rejected_not_500(self, client_a, item_a, location_a):
+        data = {
+            "strategy": "single", "zone": "", "wave_ref": "", "assigned_to": "", "ship_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "from_location": str(location_a.pk),
+                                      "quantity_requested": "not-a-number", "quantity_picked": "0",
+                                      "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:picktask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import PickTask
+        assert not PickTask.objects.exists()
+
+    def test_picktaskline_quantity_picked_infinity_is_rejected_not_500(self, client_a, item_a, location_a):
+        data = {
+            "strategy": "single", "zone": "", "wave_ref": "", "assigned_to": "", "ship_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "from_location": str(location_a.pk),
+                                      "quantity_requested": "5", "quantity_picked": "Infinity",
+                                      "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:picktask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import PickTask
+        assert not PickTask.objects.exists()
+
+    def test_cyclecounttaskline_counted_quantity_nan_is_rejected_not_500(self, client_a, location_a, item_a):
+        data = {
+            "location": str(location_a.pk), "scheduled_date": "2026-01-25", "count_method": "full",
+            "assigned_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "counted_quantity": "NaN", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import CycleCountTask
+        assert not CycleCountTask.objects.exists()
+
+    def test_cyclecounttaskline_counted_quantity_negative_is_rejected_not_500(
+        self, client_a, location_a, item_a,
+    ):
+        data = {
+            "location": str(location_a.pk), "scheduled_date": "2026-01-25", "count_method": "full",
+            "assigned_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "counted_quantity": "-3", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_create"), data)
+        assert resp.status_code == 200
+        from apps.scm.models import CycleCountTask
+        assert not CycleCountTask.objects.exists()
+
+    def test_pack_form_package_weight_nan_is_rejected_not_500(self, client_a, tenant_a, item_a, location_a):
+        from apps.scm.models import PickTask, PickTaskLine
+        task = PickTask.objects.create(tenant=tenant_a, status="picked")
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("5"), quantity_picked=Decimal("5"))
+        resp = client_a.post(reverse("scm:picktask_pack", args=[task.pk]),
+                             {"package_count": "1", "package_weight": "NaN", "tracking_ref": ""})
+        assert resp.status_code == 302  # invalid pack form -> redirected with an error, never a 500
+        task.refresh_from_db()
+        assert task.status == "picked"  # unchanged — rejected
+        assert task.package_count is None
+
+    def test_pack_form_package_weight_over_max_digits_is_rejected_not_500(
+        self, client_a, tenant_a, item_a, location_a,
+    ):
+        from apps.scm.models import PickTask, PickTaskLine
+        task = PickTask.objects.create(tenant=tenant_a, status="picked")
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("5"), quantity_picked=Decimal("5"))
+        resp = client_a.post(reverse("scm:picktask_pack", args=[task.pk]),
+                             {"package_count": "1", "package_weight": "9999999999.999", "tracking_ref": ""})
+        assert resp.status_code == 302
+        task.refresh_from_db()
+        assert task.status == "picked"
+        assert task.package_weight is None
+
+
+# ================================================================ Query-count locks
+class TestWarehouseQueryCounts:
+    def test_cyclecounttask_detail_is_flat_regardless_of_line_count(
+        self, client_a, tenant_a, cyclecounttask_a, django_assert_max_num_queries,
+    ):
+        from apps.scm.models import CycleCountTaskLine, Item
+        for i in range(20):
+            extra_item = Item.objects.create(tenant=tenant_a, sku=f"CCQ-{i:03d}", name=f"CC item {i}")
+            CycleCountTaskLine.objects.create(cycle_count=cyclecounttask_a, item=extra_item)
+        with django_assert_max_num_queries(10):
+            resp = client_a.get(reverse("scm:cyclecounttask_detail", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 200
+
+    def test_cyclecounttask_start_bulk_updates_rather_than_o_of_lines_writes(
+        self, client_a, tenant_a, cyclecounttask_a, django_assert_max_num_queries,
+    ):
+        from apps.scm.models import CycleCountTaskLine, Item
+        for i in range(20):
+            extra_item = Item.objects.create(tenant=tenant_a, sku=f"CCS-{i:03d}", name=f"CCS item {i}")
+            CycleCountTaskLine.objects.create(cycle_count=cyclecounttask_a, item=extra_item)
+        # A single bulk_update() for the whole sheet, not one UPDATE per line — 20 lines would blow
+        # this cap if the snapshot ever regressed to a per-line save() loop.
+        with django_assert_max_num_queries(18):
+            resp = client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 302
+
+
+# ================================================================ Create guarded when the user has no tenant
+class TestWarehouseCreateWithoutTenantWorkspace:
+    def _tenantless_client(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email="orphan-wms@example.com", username="orphan_wms",
+                                        password="x", tenant=None)
+        c = Client()
+        c.force_login(user)
+        return c
+
+    def test_putawaytask_create_redirects(self, db):
+        from apps.scm.models import PutawayTask
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:putawaytask_create"))
+        assert resp.status_code == 302
+        assert PutawayTask.objects.count() == 0
+
+    def test_picktask_create_redirects(self, db):
+        from apps.scm.models import PickTask
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:picktask_create"))
+        assert resp.status_code == 302
+        assert PickTask.objects.count() == 0
+
+    def test_cyclecounttask_create_redirects(self, db):
+        from apps.scm.models import CycleCountTask
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:cyclecounttask_create"))
+        assert resp.status_code == 302
+        assert CycleCountTask.objects.count() == 0
+
+    def test_yardvisit_create_redirects(self, db):
+        from apps.scm.models import YardVisit
+        c = self._tenantless_client(db)
+        resp = c.get(reverse("scm:yardvisit_create"))
+        assert resp.status_code == 302
+        assert YardVisit.objects.count() == 0
