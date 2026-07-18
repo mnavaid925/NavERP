@@ -506,3 +506,75 @@ def stock_adjustment_b(db, tenant_b, location_b, item_b):
         tenant=tenant_b, location=location_b, reason="cycle_count",
         adjustment_date=datetime.date(2026, 1, 15),
     )
+
+
+# ------------------------------------------------------------------ SCM 4.4 Warehouse Management
+@pytest.fixture
+def putawaytask_a(db, tenant_a, item_a, location_a, location_a2):
+    """A pending putaway, tenant_a: 5 x item_a from staging (WH1) to bin (WH2). No stock posted
+    yet — individual tests post the underlying receipt as needed."""
+    from apps.scm.models import PutawayTask
+    return PutawayTask.objects.create(
+        tenant=tenant_a, item=item_a, from_location=location_a, to_location=location_a2,
+        quantity=Decimal("5"),
+    )
+
+
+@pytest.fixture
+def putawaytask_b(db, tenant_b, item_b, location_b):
+    from apps.scm.models import Location, PutawayTask
+    bin_b = Location.objects.create(tenant=tenant_b, code="BIN-B", name="Globex Bin")
+    return PutawayTask.objects.create(
+        tenant=tenant_b, item=item_b, from_location=location_b, to_location=bin_b,
+        quantity=Decimal("5"),
+    )
+
+
+@pytest.fixture
+def picktask_a(db, tenant_a, item_a, location_a):
+    """A pending pick, tenant_a, one line requesting 5 x item_a from WH1 (nothing picked yet)."""
+    from apps.scm.models import PickTask, PickTaskLine
+    task = PickTask.objects.create(tenant=tenant_a)
+    PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                quantity_requested=Decimal("5"))
+    return task
+
+
+@pytest.fixture
+def picktask_b(db, tenant_b, item_b, location_b):
+    from apps.scm.models import PickTask, PickTaskLine
+    task = PickTask.objects.create(tenant=tenant_b)
+    PickTaskLine.objects.create(pick_task=task, item=item_b, from_location=location_b,
+                                quantity_requested=Decimal("5"))
+    return task
+
+
+@pytest.fixture
+def cyclecounttask_a(db, tenant_a, location_a, item_a):
+    """A scheduled count, tenant_a, location_a, one line on item_a (uncounted, unsnapshotted)."""
+    from apps.scm.models import CycleCountTask, CycleCountTaskLine
+    task = CycleCountTask.objects.create(tenant=tenant_a, location=location_a,
+                                         scheduled_date=datetime.date(2026, 1, 20))
+    CycleCountTaskLine.objects.create(cycle_count=task, item=item_a)
+    return task
+
+
+@pytest.fixture
+def cyclecounttask_b(db, tenant_b, location_b, item_b):
+    from apps.scm.models import CycleCountTask, CycleCountTaskLine
+    task = CycleCountTask.objects.create(tenant=tenant_b, location=location_b,
+                                         scheduled_date=datetime.date(2026, 1, 20))
+    CycleCountTaskLine.objects.create(cycle_count=task, item=item_b)
+    return task
+
+
+@pytest.fixture
+def yardvisit_a(db, tenant_a):
+    from apps.scm.models import YardVisit
+    return YardVisit.objects.create(tenant=tenant_a, carrier_name="Acme Haulage", direction="inbound")
+
+
+@pytest.fixture
+def yardvisit_b(db, tenant_b):
+    from apps.scm.models import YardVisit
+    return YardVisit.objects.create(tenant=tenant_b, carrier_name="Globex Haulage", direction="inbound")
