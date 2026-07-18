@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Adjustment{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Stock Adjustment</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:stockadjustment_list' %}">Adjustments</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div></div>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Lines</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Item</th><th>Lot / Serial</th><th>Quantity Δ</th><th>Unit Cost</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for lf in formset %}
+              <tr>
+                {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.item }}{% for e in lf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.lot_serial }}{% for e in lf.lot_serial.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.quantity_delta }}{% for e in lf.quantity_delta.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_cost }}{% for e in lf.unit_cost.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">A positive quantity adds stock, a negative one removes it. Stock only moves when the adjustment is posted.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:stockadjustment_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
