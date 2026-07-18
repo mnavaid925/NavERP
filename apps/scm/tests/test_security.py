@@ -794,3 +794,290 @@ class TestInventoryCSRFEnforcement:
         assert resp.status_code == 403
         stock_adjustment_a.refresh_from_db()
         assert stock_adjustment_a.status == "draft"  # unchanged — the request never reached the view logic
+
+
+# ================================================================================================
+# SCM 4.4 Warehouse Management
+# ================================================================================================
+
+# ================================================================ Anonymous -> login redirect
+class TestWarehouseAnonymousRedirect:
+    def test_putawaytask_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:putawaytask_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_picktask_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:picktask_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_cyclecounttask_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:cyclecounttask_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_yardvisit_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:yardvisit_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+
+# ================================================================ @tenant_admin_required gates (priority)
+class TestWarehouseAdminRequiredGates:
+    def test_putawaytask_complete_requires_admin(self, member_client, client_a, putawaytask_a):
+        url = reverse("scm:putawaytask_complete", args=[putawaytask_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_picktask_confirm_requires_admin(self, member_client, client_a, picktask_a):
+        url = reverse("scm:picktask_confirm", args=[picktask_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_cyclecounttask_reconcile_requires_admin(self, member_client, client_a, cyclecounttask_a):
+        url = reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+
+# ================================================================ Plain @login_required actions work for a member
+class TestWarehouseOrdinaryActionsAllowNonAdmin:
+    def test_member_can_start_a_putaway_task(self, member_client, putawaytask_a):
+        url = reverse("scm:putawaytask_start", args=[putawaytask_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "in_progress"
+
+    def test_member_can_start_a_released_pick(self, member_client, picktask_a):
+        """picktask_start moves NO stock — deliberately plain @login_required, unlike confirm."""
+        member_client.post(reverse("scm:picktask_release", args=[picktask_a.pk]))
+        url = reverse("scm:picktask_start", args=[picktask_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        picktask_a.refresh_from_db()
+        assert picktask_a.status == "picking"
+
+    def test_member_can_start_a_cycle_count(self, member_client, cyclecounttask_a):
+        url = reverse("scm:cyclecounttask_start", args=[cyclecounttask_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "in_progress"
+
+    def test_member_can_arrive_a_yard_visit(self, member_client, yardvisit_a):
+        url = reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        yardvisit_a.refresh_from_db()
+        assert yardvisit_a.status == "arrived"
+
+    def test_member_can_view_putawaytask_detail(self, member_client, putawaytask_a):
+        url = reverse("scm:putawaytask_detail", args=[putawaytask_a.pk])
+        assert member_client.get(url).status_code == 200
+
+    def test_member_can_view_picktask_list(self, member_client, picktask_a):
+        assert member_client.get(reverse("scm:picktask_list")).status_code == 200
+
+
+# ================================================================ Cross-tenant IDOR -> 404 (mandatory)
+class TestWarehouseCrossTenantIDOR:
+    def test_putawaytask_detail_cross_tenant_404(self, client_a, putawaytask_b):
+        assert client_a.get(reverse("scm:putawaytask_detail", args=[putawaytask_b.pk])).status_code == 404
+
+    def test_putawaytask_edit_cross_tenant_404(self, client_a, putawaytask_b):
+        assert client_a.get(reverse("scm:putawaytask_edit", args=[putawaytask_b.pk])).status_code == 404
+
+    def test_putawaytask_delete_cross_tenant_404(self, client_a, putawaytask_b):
+        assert client_a.post(reverse("scm:putawaytask_delete", args=[putawaytask_b.pk])).status_code == 404
+
+    def test_putawaytask_start_cross_tenant_404(self, client_a, putawaytask_b):
+        assert client_a.post(reverse("scm:putawaytask_start", args=[putawaytask_b.pk])).status_code == 404
+
+    def test_putawaytask_complete_cross_tenant_404(self, client_a, putawaytask_b):
+        assert client_a.post(reverse("scm:putawaytask_complete", args=[putawaytask_b.pk])).status_code == 404
+
+    def test_putawaytask_cancel_cross_tenant_404(self, client_a, putawaytask_b):
+        assert client_a.post(reverse("scm:putawaytask_cancel", args=[putawaytask_b.pk])).status_code == 404
+
+    def test_picktask_detail_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.get(reverse("scm:picktask_detail", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_edit_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.get(reverse("scm:picktask_edit", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_delete_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.post(reverse("scm:picktask_delete", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_release_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.post(reverse("scm:picktask_release", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_start_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.post(reverse("scm:picktask_start", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_confirm_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.post(reverse("scm:picktask_confirm", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_pack_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.post(reverse("scm:picktask_pack", args=[picktask_b.pk])).status_code == 404
+
+    def test_picktask_cancel_cross_tenant_404(self, client_a, picktask_b):
+        assert client_a.post(reverse("scm:picktask_cancel", args=[picktask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_detail_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.get(reverse("scm:cyclecounttask_detail", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_edit_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.get(reverse("scm:cyclecounttask_edit", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_delete_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.post(reverse("scm:cyclecounttask_delete", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_start_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.post(reverse("scm:cyclecounttask_start", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_complete_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.post(reverse("scm:cyclecounttask_complete", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_reconcile_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_cyclecounttask_cancel_cross_tenant_404(self, client_a, cyclecounttask_b):
+        assert client_a.post(reverse("scm:cyclecounttask_cancel", args=[cyclecounttask_b.pk])).status_code == 404
+
+    def test_yardvisit_detail_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.get(reverse("scm:yardvisit_detail", args=[yardvisit_b.pk])).status_code == 404
+
+    def test_yardvisit_edit_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.get(reverse("scm:yardvisit_edit", args=[yardvisit_b.pk])).status_code == 404
+
+    def test_yardvisit_delete_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.post(reverse("scm:yardvisit_delete", args=[yardvisit_b.pk])).status_code == 404
+
+    def test_yardvisit_arrive_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.post(reverse("scm:yardvisit_arrive", args=[yardvisit_b.pk])).status_code == 404
+
+    def test_yardvisit_dock_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.post(reverse("scm:yardvisit_dock", args=[yardvisit_b.pk])).status_code == 404
+
+    def test_yardvisit_depart_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.post(reverse("scm:yardvisit_depart", args=[yardvisit_b.pk])).status_code == 404
+
+    def test_yardvisit_cancel_cross_tenant_404(self, client_a, yardvisit_b):
+        assert client_a.post(reverse("scm:yardvisit_cancel", args=[yardvisit_b.pk])).status_code == 404
+
+
+# ================================================================ Cross-tenant FORM/FORMSET binding + IDOR list
+class TestWarehouseCrossTenantFormScoping:
+    def test_putawaytask_list_never_contains_other_tenant_rows(self, client_a, putawaytask_a, putawaytask_b):
+        resp = client_a.get(reverse("scm:putawaytask_list"))
+        assert putawaytask_b not in resp.context["object_list"]
+
+    def test_crafted_putawaytask_post_with_other_tenant_item_is_rejected(
+        self, tenant_a, client_a, location_a, location_a2, item_b,
+    ):
+        from apps.scm.models import PutawayTask
+        data = {
+            "goods_receipt": "", "item": str(item_b.pk), "lot_serial": "",
+            "from_location": str(location_a.pk), "to_location": str(location_a2.pk),
+            "quantity": "5", "strategy": "directed", "assigned_to": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:putawaytask_create"), data)
+        assert resp.status_code == 200  # re-rendered form, not saved
+        assert not PutawayTask.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_picktaskline_post_with_other_tenant_location_is_rejected(
+        self, tenant_a, client_a, item_a, location_b,
+    ):
+        from apps.scm.models import PickTask
+        data = {
+            "strategy": "single", "zone": "", "wave_ref": "", "assigned_to": "", "ship_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "from_location": str(location_b.pk),
+                                      "quantity_requested": "5", "quantity_picked": "0", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:picktask_create"), data)
+        assert resp.status_code == 200
+        assert not PickTask.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_cyclecounttask_post_with_other_tenant_location_is_rejected(
+        self, tenant_a, client_a, location_b, item_a,
+    ):
+        from apps.scm.models import CycleCountTask
+        data = {
+            "location": str(location_b.pk), "scheduled_date": "2026-01-25", "count_method": "full",
+            "assigned_to": "", "notes": "",
+            **formset_data("lines", [{"id": "", "item": str(item_a.pk), "lot_serial": "",
+                                      "counted_quantity": "", "notes": ""}]),
+        }
+        resp = client_a.post(reverse("scm:cyclecounttask_create"), data)
+        assert resp.status_code == 200
+        assert not CycleCountTask.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_yardvisit_post_with_other_tenant_dock_door_is_rejected(
+        self, tenant_a, client_a, location_b,
+    ):
+        from apps.scm.models import YardVisit
+        data = {
+            "carrier_name": "Sneaky Freight", "vehicle_ref": "", "trailer_ref": "", "driver_name": "",
+            "direction": "inbound", "dock_door": str(location_b.pk), "purchase_order": "",
+            "scheduled_at": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:yardvisit_create"), data)
+        assert resp.status_code == 200
+        assert not YardVisit.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestWarehousePostOnlyActions:
+    def test_get_putawaytask_delete_returns_405(self, client_a, putawaytask_a):
+        assert client_a.get(reverse("scm:putawaytask_delete", args=[putawaytask_a.pk])).status_code == 405
+
+    def test_get_putawaytask_complete_returns_405(self, client_a, putawaytask_a):
+        assert client_a.get(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk])).status_code == 405
+
+    def test_get_picktask_delete_returns_405(self, client_a, picktask_a):
+        assert client_a.get(reverse("scm:picktask_delete", args=[picktask_a.pk])).status_code == 405
+
+    def test_get_picktask_confirm_returns_405(self, client_a, picktask_a):
+        assert client_a.get(reverse("scm:picktask_confirm", args=[picktask_a.pk])).status_code == 405
+
+    def test_get_cyclecounttask_delete_returns_405(self, client_a, cyclecounttask_a):
+        assert client_a.get(reverse("scm:cyclecounttask_delete", args=[cyclecounttask_a.pk])).status_code == 405
+
+    def test_get_cyclecounttask_reconcile_returns_405(self, client_a, cyclecounttask_a):
+        assert client_a.get(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk])).status_code == 405
+
+    def test_get_yardvisit_delete_returns_405(self, client_a, yardvisit_a):
+        assert client_a.get(reverse("scm:yardvisit_delete", args=[yardvisit_a.pk])).status_code == 405
+
+    def test_get_yardvisit_arrive_returns_405(self, client_a, yardvisit_a):
+        assert client_a.get(reverse("scm:yardvisit_arrive", args=[yardvisit_a.pk])).status_code == 405
+
+
+# ================================================================ CSRF enforcement
+class TestWarehouseCSRFEnforcement:
+    def test_post_without_csrf_token_is_rejected_on_putawaytask_complete(
+        self, admin_user, tenant_a, putawaytask_a,
+    ):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:putawaytask_complete", args=[putawaytask_a.pk]))
+        assert resp.status_code == 403
+        putawaytask_a.refresh_from_db()
+        assert putawaytask_a.status == "pending"
+
+    def test_post_without_csrf_token_is_rejected_on_cyclecounttask_reconcile(
+        self, admin_user, tenant_a, cyclecounttask_a,
+    ):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:cyclecounttask_reconcile", args=[cyclecounttask_a.pk]))
+        assert resp.status_code == 403
+        cyclecounttask_a.refresh_from_db()
+        assert cyclecounttask_a.status == "scheduled"
