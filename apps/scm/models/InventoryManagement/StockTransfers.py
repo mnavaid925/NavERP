@@ -45,7 +45,14 @@ class StockTransfer(TenantNumbered):
             raise ValidationError("A transfer's source and destination must be different locations.")
 
     def __str__(self):
-        return f"{self.number or 'TRF'} · {self.from_location_id} → {self.to_location_id}"
+        # NOTE (bug fix): this used to interpolate from_location_id/to_location_id — the raw numeric
+        # FK ids — instead of the locations' human-readable codes. Every sibling __str__ in this
+        # module (Location, StockMove, ...) renders a code, not a pk; a transfer's own string should
+        # say "WH1 → WH2", not "3 → 7". Not used by any template/admin list today (grepped), so this
+        # is a safe fix rather than a behaviour change anything depends on.
+        from_code = self.from_location.code if self.from_location_id else "?"
+        to_code = self.to_location.code if self.to_location_id else "?"
+        return f"{self.number or 'TRF'} · {from_code} → {to_code}"
 
 
 class StockTransferLine(models.Model):
