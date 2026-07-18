@@ -1,8 +1,9 @@
-"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.4.
+"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.5.
 
-4.1 Procurement (below), 4.2 Supplier Relationship Management, 4.3 Inventory (the StockMove spine)
-and 4.4 Warehouse Management. `_seed_warehouse_tenant` runs LAST and that ordering is load-bearing,
-not cosmetic: every putaway/pick/count row it creates references the items and locations 4.3 seeds.
+4.1 Procurement (below), 4.2 Supplier Relationship Management, 4.3 Inventory (the StockMove spine),
+4.4 Warehouse Management and 4.5 Order Management. The 4.3 pass must run before 4.4 and 4.5, and
+that ordering is load-bearing rather than cosmetic: every putaway/pick/count row and every order
+allocation references the items and locations 4.3 seeds.
 
 Creates, per tenant, a walk down the whole procure-to-pay chain so every 4.1 page has something
 real on it: an approved requisition (budget-checked), an RFQ sent to two suppliers with competing
@@ -56,7 +57,7 @@ REQUISITION_LINES = [
 
 
 class Command(BaseCommand):
-    help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse demo data — "
+    help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders demo data — "
             "idempotent (skips a tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
