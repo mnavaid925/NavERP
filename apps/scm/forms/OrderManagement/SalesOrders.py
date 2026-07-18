@@ -81,12 +81,26 @@ class BaseSalesOrderLineFormSet(forms.BaseInlineFormSet):
 
     def clean(self):
         super().clean()
+        # One grouped query for every existing line's allocated total, rather than an aggregate per
+        # line inside the loop — the same shape fixed in recompute_allocation_status (perf review).
+        from django.db.models import Q, Sum
+        from apps.scm.models import SalesOrderLine as _Line
+        pks = [f.instance.pk for f in self.forms if f.instance.pk]
+        allocated_map = {}
+        if pks:
+            allocated_map = {
+                r["pk"]: (r["a"] or 0)
+                for r in (_Line.objects.filter(pk__in=pks)
+                          .annotate(a=Sum("allocations__quantity",
+                                          filter=~Q(allocations__status="cancelled")))
+                          .values("pk", "a"))
+            }
         removed, shrunk = [], []
         for form in self.forms:
             inst = form.instance
             if not inst.pk:
                 continue
-            allocated = inst.quantity_allocated()
+            allocated = allocated_map.get(inst.pk, 0)
             if allocated <= 0:
                 continue
             label = inst.item.sku if inst.item_id else f"line {inst.pk}"
