@@ -153,3 +153,15 @@ from .WarehouseManagement.YardVisits import (  # noqa: F401
     yardvisit_list, yardvisit_create, yardvisit_detail, yardvisit_edit, yardvisit_delete,
     yardvisit_arrive, yardvisit_dock, yardvisit_depart, yardvisit_cancel,
 )
+
+# 4.5 Order Management System (OMS)
+from .OrderManagement.SalesOrders import (  # noqa: F401
+    salesorder_list, salesorder_create, salesorder_detail, salesorder_edit, salesorder_delete,
+    salesorder_submit, salesorder_release_hold, salesorder_fulfill, salesorder_mark_delivered,
+    salesorder_mark_invoiced, salesorder_cancel, salesorder_close, salesorder_create_from_quote,
+)
+from .OrderManagement.SalesOrderAllocations import (  # noqa: F401
+    salesorderallocation_list, salesorderallocation_detail, salesorderallocation_create,
+    salesorderallocation_edit, salesorderallocation_delete, salesorderallocation_release,
+    salesorderallocation_cancel,
+)
