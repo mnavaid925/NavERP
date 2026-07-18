@@ -91,15 +91,19 @@ def stockadjustment_post(request, pk):
     A negative delta that would drive on-hand below zero is refused inside the atomic block, so a bad
     line rolls back the whole post.
     """
-    obj = get_object_or_404(StockAdjustment.objects.select_related("location"), pk=pk, tenant=request.tenant)
-    if obj.status != "draft":
-        messages.info(request, "This adjustment has already been posted or cancelled.")
-        return redirect("scm:stockadjustment_detail", pk=pk)
-    if not obj.lines.exists():
-        messages.error(request, "Add at least one line before posting.")
-        return redirect("scm:stockadjustment_detail", pk=pk)
     try:
         with transaction.atomic():
+            # Lock the row and re-read status INSIDE the transaction so two concurrent POSTs can't
+            # both see 'draft' and each post a full set of StockMoves (security review).
+            obj = get_object_or_404(
+                StockAdjustment.objects.select_for_update().select_related("location"),
+                pk=pk, tenant=request.tenant)
+            if obj.status != "draft":
+                messages.info(request, "This adjustment has already been posted or cancelled.")
+                return redirect("scm:stockadjustment_detail", pk=pk)
+            if not obj.lines.exists():
+                messages.error(request, "Add at least one line before posting.")
+                return redirect("scm:stockadjustment_detail", pk=pk)
             _post_adjustment(obj, request.user)
             obj.status = "posted"
             obj.posted_at = timezone.now()
