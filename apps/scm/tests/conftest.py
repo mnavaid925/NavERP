@@ -360,3 +360,149 @@ def risk_assessment_b(db, tenant_b, supplier_b):
     return SupplierRiskAssessment.objects.create(
         tenant=tenant_b, party=supplier_b, assessment_date=datetime.date(2026, 1, 1),
     )
+
+
+# ------------------------------------------------------------------ SCM 4.3 Inventory Management
+@pytest.fixture
+def uom_each_a(db, tenant_a):
+    from apps.scm.models import UOM
+    return UOM.objects.create(tenant=tenant_a, code="EA", name="Each")
+
+
+@pytest.fixture
+def uom_each_b(db, tenant_b):
+    from apps.scm.models import UOM
+    return UOM.objects.create(tenant=tenant_b, code="EA", name="Each")
+
+
+@pytest.fixture
+def category_a(db, tenant_a):
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_a, name="Widgets")
+
+
+@pytest.fixture
+def category_b(db, tenant_b):
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_b, name="Globex Widgets")
+
+
+@pytest.fixture
+def item_a(db, tenant_a, category_a, uom_each_a):
+    """A weighted-average, untracked stock item, tenant_a. No stock posted yet."""
+    from apps.scm.models import Item
+    return Item.objects.create(
+        tenant=tenant_a, sku="WIDGET-1", name="Widget", category=category_a, uom=uom_each_a,
+        item_type="stock", tracking="none", costing_method="weighted_avg",
+        standard_cost=Decimal("8.00"), reorder_point=Decimal("10"),
+    )
+
+
+@pytest.fixture
+def item_b(db, tenant_b, uom_each_b):
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_b, sku="WIDGET-1", name="Globex Widget", uom=uom_each_b)
+
+
+@pytest.fixture
+def item_lot_a(db, tenant_a):
+    """A lot-tracked stock item, tenant_a — for LotSerial tests and the lot/location guard regression."""
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="LOT-1", name="Lotted Widget", tracking="lot")
+
+
+@pytest.fixture
+def item_fifo_a(db, tenant_a):
+    """A FIFO-costed stock item, tenant_a — for the FIFO-excludes-transfers valuation regression."""
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="FIFO-1", name="FIFO Widget", costing_method="fifo")
+
+
+@pytest.fixture
+def location_a(db, tenant_a):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant_a, code="WH1", name="Main Warehouse")
+
+
+@pytest.fixture
+def location_a2(db, tenant_a):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant_a, code="WH2", name="Overflow Warehouse")
+
+
+@pytest.fixture
+def location_b(db, tenant_b):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant_b, code="WH1", name="Globex Warehouse")
+
+
+@pytest.fixture
+def lot_a(db, tenant_a, item_lot_a):
+    from apps.scm.models import LotSerial
+    return LotSerial.objects.create(tenant=tenant_a, item=item_lot_a, kind="lot", number="LOT-0001")
+
+
+@pytest.fixture
+def lot_b(db, tenant_b, item_b):
+    from apps.scm.models import LotSerial
+    return LotSerial.objects.create(tenant=tenant_b, item=item_b, kind="lot", number="LOT-0001")
+
+
+@pytest.fixture
+def reorder_rule_a(db, tenant_a, item_a, location_a):
+    from apps.scm.models import ReorderRule
+    return ReorderRule.objects.create(
+        tenant=tenant_a, item=item_a, location=location_a,
+        reorder_point=Decimal("10"), safety_stock=Decimal("5"), reorder_quantity=Decimal("20"),
+    )
+
+
+@pytest.fixture
+def reorder_rule_b(db, tenant_b, item_b, location_b):
+    from apps.scm.models import ReorderRule
+    return ReorderRule.objects.create(tenant=tenant_b, item=item_b, location=location_b)
+
+
+@pytest.fixture
+def stock_transfer_a(db, tenant_a, location_a, location_a2, item_a):
+    """A draft transfer, tenant_a, one line moving 5 x item_a from WH1 to WH2."""
+    from apps.scm.models import StockTransfer, StockTransferLine
+    transfer = StockTransfer.objects.create(
+        tenant=tenant_a, from_location=location_a, to_location=location_a2,
+        transfer_date=datetime.date(2026, 1, 15),
+    )
+    StockTransferLine.objects.create(transfer=transfer, item=item_a, quantity=Decimal("5"))
+    return transfer
+
+
+@pytest.fixture
+def stock_transfer_b(db, tenant_b, location_b, item_b):
+    from apps.scm.models import Location, StockTransfer
+    other = Location.objects.create(tenant=tenant_b, code="WH2", name="Globex Overflow")
+    return StockTransfer.objects.create(
+        tenant=tenant_b, from_location=location_b, to_location=other,
+        transfer_date=datetime.date(2026, 1, 15),
+    )
+
+
+@pytest.fixture
+def stock_adjustment_a(db, tenant_a, location_a, item_a):
+    """A draft cycle-count adjustment, tenant_a, one line adding 10 x item_a at $8.00."""
+    from apps.scm.models import StockAdjustment, StockAdjustmentLine
+    adj = StockAdjustment.objects.create(
+        tenant=tenant_a, location=location_a, reason="cycle_count",
+        adjustment_date=datetime.date(2026, 1, 15),
+    )
+    StockAdjustmentLine.objects.create(
+        adjustment=adj, item=item_a, quantity_delta=Decimal("10"), unit_cost=Decimal("8.00"),
+    )
+    return adj
+
+
+@pytest.fixture
+def stock_adjustment_b(db, tenant_b, location_b, item_b):
+    from apps.scm.models import StockAdjustment
+    return StockAdjustment.objects.create(
+        tenant=tenant_b, location=location_b, reason="cycle_count",
+        adjustment_date=datetime.date(2026, 1, 15),
+    )
