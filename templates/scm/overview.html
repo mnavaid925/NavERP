@@ -38,6 +38,26 @@
       <div class="stat-value">{{ stats.open_order_value|floatformat:2 }}</div>
       <div class="stat-label">Open Order Value</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="building-2"></i></div>
+      <div class="stat-value">{{ stats.suppliers }}</div>
+      <div class="stat-label">Suppliers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="box"></i></div>
+      <div class="stat-value">{{ stats.items }}</div>
+      <div class="stat-label">Active Items</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="bar-chart-3"></i></div>
+      <div class="stat-value">{{ stats.stock_value|floatformat:2 }}</div>
+      <div class="stat-label">Stock Value</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.low_stock }}</div>
+      <div class="stat-label">Low Stock</div>
+    </div>
   </div>
 
   <div class="card">
@@ -93,6 +113,30 @@
   </div>
 
   <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Low stock</h2>
+      <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> View reorder alerts</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>On Hand</th><th>Reorder Point</th></tr></thead>
+        <tbody>
+          {% for r in low_stock %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' r.item.pk %}" class="fw-600">{{ r.item.sku }}</a> · {{ r.item.name }}</td>
+              <td>{{ r.location.code }}</td>
+              <td>{{ r.current_on_hand|floatformat:2 }}</td>
+              <td>{{ r.reorder_point|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="package-check"></i><h3>All stock above reorder points</h3><p>Items falling below their reorder point will appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Procurement</h2></div>
     <div class="card-body">
       <div class="page-actions">
@@ -113,6 +157,21 @@
         <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Contracts</a>
         <a href="{% url 'scm:catalog_list' %}" class="btn btn-outline"><i data-lucide="book"></i> Catalogs</a>
         <a href="{% url 'scm:riskassessment_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Risk</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Inventory</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> Items</a>
+        <a href="{% url 'scm:location_list' %}" class="btn btn-outline"><i data-lucide="warehouse"></i> Locations</a>
+        <a href="{% url 'scm:stocktransfer_list' %}" class="btn btn-outline"><i data-lucide="arrow-right-left"></i> Transfers</a>
+        <a href="{% url 'scm:stockadjustment_list' %}" class="btn btn-outline"><i data-lucide="sliders"></i> Adjustments</a>
+        <a href="{% url 'scm:valuation_report' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Valuation</a>
+        <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> Reorder</a>
+        <a href="{% url 'scm:stock_ledger' %}" class="btn btn-outline"><i data-lucide="list"></i> Ledger</a>
       </div>
     </div>
   </div>
