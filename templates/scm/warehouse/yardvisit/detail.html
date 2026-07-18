@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'departed' %}green{% elif obj.status == 'at_dock' %}info{% elif obj.status == 'arrived' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'scheduled' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:yardvisit_list' %}">Yard</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Carrier</dt><dd>{{ obj.carrier_name }}</dd></div>
+      <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+      <div class="detail-item"><dt>Vehicle</dt><dd>{{ obj.vehicle_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Trailer</dt><dd>{{ obj.trailer_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Driver</dt><dd>{{ obj.driver_name|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Dock Door</dt><dd>{% if obj.dock_door %}{{ obj.dock_door.code }} · {{ obj.dock_door.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Purchase Order</dt><dd>{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Dwell</dt><dd>{% if dwell is not None %}{{ dwell }} minutes{% else %}Not yet arrived{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Timeline</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Stage</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td>Scheduled</td><td>{{ obj.scheduled_at|date:"M d, Y H:i"|default:"—" }}</td></tr>
+          <tr><td>Arrived</td><td>{{ obj.arrived_at|date:"M d, Y H:i"|default:"—" }}</td></tr>
+          <tr><td>At dock</td><td>{{ obj.docked_at|date:"M d, Y H:i"|default:"—" }}</td></tr>
+          <tr><td>Departed</td><td>{{ obj.departed_at|date:"M d, Y H:i"|default:"—" }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'scheduled' %}
+          <form method="post" action="{% url 'scm:yardvisit_arrive' obj.pk %}" onsubmit="return confirm('Check this vehicle in?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="log-in"></i> Check in</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'arrived' %}
+          <form method="post" action="{% url 'scm:yardvisit_dock' obj.pk %}" onsubmit="return confirm('Send this vehicle to its dock?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="warehouse"></i> Send to dock</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'arrived' or obj.status == 'at_dock' %}
+          <form method="post" action="{% url 'scm:yardvisit_depart' obj.pk %}" onsubmit="return confirm('Mark this vehicle as departed?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="log-out"></i> Depart</button>
+          </form>
+        {% endif %}
+        {% if obj.is_open %}
+          <form method="post" action="{% url 'scm:yardvisit_cancel' obj.pk %}" onsubmit="return confirm('Cancel this visit?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:yardvisit_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'scheduled' or obj.status == 'cancelled' %}
+          <form method="post" action="{% url 'scm:yardvisit_delete' obj.pk %}" onsubmit="return confirm('Delete this yard visit?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:yardvisit_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
