@@ -179,4 +179,16 @@
       </div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Warehouse</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:putawaytask_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Putaway</a>
+        <a href="{% url 'scm:picktask_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Picks</a>
+        <a href="{% url 'scm:cyclecounttask_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Cycle Counts</a>
+        <a href="{% url 'scm:yardvisit_list' %}" class="btn btn-outline"><i data-lucide="truck"></i> Yard</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
