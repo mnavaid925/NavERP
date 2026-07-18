@@ -452,3 +452,38 @@ modules; the ERD is a *plan* doc that has been wrong about the *as-built* spine 
 Also reaffirmed by this build: line items stayed free-text (`item_description`/`sku_hint`/`uom_hint`) because
 `core.Item` still does not exist (**L28** — grep-verified, not trusted from the ERD), with the future migration onto
 `core.Item` recorded in each line model's docstring for when Module 5 Inventory ships. See [[next-builds-one-submodule]].
+
+## L37 — SCM 4.3 owns the INVENTORY SPINE (`Item`/`UOM`/`Location`/`LotSerial`/`StockMove`); on-hand is derived, never stored
+Applying **L36** to the biggest spine claim so far. Building SCM 4.3 Inventory Management, `core.Item`, `UOM`,
+`Location`, `StockMove` and `LotSerial` still did not exist (grep-verified, per **L28**) — and unlike 4.1's free-text
+line items, a *stock-control* sub-module genuinely cannot be stubbed: you cannot compute on-hand, transfers or
+valuation over free text. So 4.3 built them, in `apps/scm`, per the ships-first rule.
+
+**Placement — why `apps/scm` and not `apps/core`.** The strongest as-built precedent is the ledger (**L29**):
+`accounting` owns `Currency`/`GLAccount`/`JournalEntry` — equally cross-cutting masters that every module FKs into
+by string (`'accounting.Currency'`) — rather than those being retrofitted into the Module 0 foundation. Adding
+models to `core` is a *foundation* change and outside a `/next-module` run's remit. So the inventory masters live in
+`scm` and later modules FK `'scm.Item'`/`'scm.Location'`/`'scm.StockMove'` by string. **Module 5 (Inventory IMS) —
+which is literally named for this domain — therefore EXTENDS the `scm` spine by FK and adds the operations layer
+(cycle-count programs, putaway/pick, serial genealogy); it must NOT re-declare Item/Location/StockMove.**
+`NavERP-ERD.md` rows 466/467 were rewritten to say exactly that (L36 step 2: reconcile BOTH rows, not just the owner).
+
+**The invariant that makes the spine safe — copy it for any future stock/ledger work:**
+1. `StockMove` is **append-only**: signed quantity (+into / −out of a location), no ModelForm, no edit/delete view,
+   and `has_add/change/delete_permission → False` in the admin. A mistake is corrected by a **compensating move**,
+   exactly like the `JournalEntry` reversal rule.
+2. **On-hand and valuation are ALWAYS aggregates** over that ledger (`Item.on_hand()`, `_item_valuation()`), never a
+   stored editable quantity — so nothing can drift from the ledger. `Item.average_cost` is a *cached display* figure
+   maintained by `apply_receipt()`, explicitly NOT the source of truth for quantity.
+3. `StockMove.unit_cost` **IS** the FIFO/LIFO/WAC cost layer — no separate cost-layer table is needed; the valuation
+   report walks the inbound layers and consumes them by total outbound (oldest-first for FIFO, newest-first for LIFO).
+4. Every stock movement goes through ONE posting service (`views/_helpers.py` `_post_stock_move`/`_post_transfer`/
+   `_post_adjustment`) inside the caller's `transaction.atomic()`, with an insufficient-stock guard that reads the
+   **live** aggregate so it sees moves posted by earlier lines in the same transaction. A shortfall raises
+   `ValidationError` and rolls the whole post back — never a partial move.
+
+**Two bugs this shape actually caught during the build, both invisible to a "does the page load" check:** the
+happy-path transfer worked while the *guard* path 500'd (`ValidationError` wasn't imported into the views toolkit),
+and the overview's stock-value aggregate needed `F`/`models` imports. **Rule:** when a feature's whole value is a
+guard, test the guard, not just the happy path — and re-run the derived-quantity math after every posting change
+(`on_hand` before/after, expecting an exact delta). See [[next-builds-one-submodule]].
