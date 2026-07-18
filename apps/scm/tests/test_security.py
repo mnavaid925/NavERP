@@ -3,8 +3,8 @@
 Covers:
 - Anonymous -> redirect to login.
 - @tenant_admin_required gates: requisition_approve/reject, quote_award,
-  purchaseorder_approve/cancel/amend, goodsreceipt_cancel -> 403 for a non-admin member;
-  admin succeeds. Plain @login_required actions work for a non-admin member.
+  purchaseorder_approve/cancel/amend, goodsreceipt_receive/cancel -> 403 for a non-admin
+  member; admin succeeds. Plain @login_required actions work for a non-admin member.
 - Cross-tenant IDOR: tenant-A admin against tenant-B objects -> 404, on every
   detail/edit route and every POST action route.
 - Cross-tenant FORM/FORMSET binding: a tenant-A form/formset must never accept a
@@ -95,6 +95,20 @@ class TestAdminRequiredGates:
         assert member_client.post(url).status_code == 403
         assert client_a.post(url).status_code != 403
 
+    def test_goodsreceipt_receive_requires_admin(self, member_client, client_a, goods_receipt_a):
+        """Admin-gated since 4.4, when booking a receipt started posting real StockMoves.
+
+        This began life as `test_member_can_receive_goods_receipt` in the ordinary-actions class:
+        before 4.4 the action only flipped a status, so a member doing it was harmless. Once it
+        moved stock it joined transfer-complete and adjustment-post, and the OLD test correctly
+        started failing — it was asserting the pre-4.4 contract, not catching a regression.
+        """
+        url = reverse("scm:goodsreceipt_receive", args=[goods_receipt_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+        goods_receipt_a.refresh_from_db()
+        assert goods_receipt_a.status == "received"
+
 
 # ================================================================ Plain @login_required actions work for a member
 class TestOrdinaryActionsAllowNonAdmin:
@@ -123,13 +137,6 @@ class TestOrdinaryActionsAllowNonAdmin:
         assert resp.status_code != 403
         po.refresh_from_db()
         assert po.status == "pending_approval"
-
-    def test_member_can_receive_goods_receipt(self, member_client, goods_receipt_a):
-        url = reverse("scm:goodsreceipt_receive", args=[goods_receipt_a.pk])
-        resp = member_client.post(url)
-        assert resp.status_code != 403
-        goods_receipt_a.refresh_from_db()
-        assert goods_receipt_a.status == "received"
 
     def test_member_can_view_requisition_detail(self, member_client, requisition_a):
         url = reverse("scm:requisition_detail", args=[requisition_a.pk])
