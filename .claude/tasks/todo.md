@@ -12042,3 +12042,467 @@ done) — `PutawayTask.item` and the new GRN-receive wire-up both work around th
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.5 Order Management System (OMS) — plan from research-scm-4.5.md (2026-07-18)
+
+**EXTENDS the existing `apps/scm` app (4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management
+already built) — no new Django app, no new `INSTALLED_APPS`/`config/urls.py` entries.** New sub-module package
+`OrderManagement/` in each of `models/forms/views/urls`, templates under `templates/scm/orders/<entity>/`.
+
+**Ownership decision carried through from research (do not re-litigate):** `apps/scm` OWNS `SalesOrder` +
+`SalesOrderLine` — ships-first (L28/L29/L36/L37). CRM built the pre-order pipeline (`Lead → Opportunity → Quote`)
+across all 12 of its sub-modules and deliberately stopped at `quote_accept()`; Modules 8/9 remain unbuilt. No
+`crm.SalesOrder`-shaped collision exists (unlike 4.1/`crm.PurchaseOrder`) — this is a clean single-ownership case.
+Module 8.6 "Order Management" is a **different** feature set (commercial amend/cancel/revenue-recognition/reorder
+LAYERED on this order by FK) — not a second order table.
+
+**Spine re-verified before planning** (`grep -rn "^class " apps/`), correcting two research assumptions:
+- `core.Party` (`apps/core/models/Party.py:5`), `core.PartyRole` (`apps/core/models/PartyRole.py:5`, `customer` IS
+  in `ROLE_CHOICES`), `core.Address` (`apps/core/models/Address.py:5`, has `party`+`tenant` FKs) — confirmed live.
+- `accounting.Currency` (`GeneralLedger/Currencies.py:6`), `accounting.PaymentTerm` (`AccountsPayable/
+  PaymentTerms.py:6`), `accounting.CustomerProfile` (`AccountsReceivable/CustomerProfiles.py:5` — OneToOne on
+  `core.Party`, has `credit_limit`/`credit_on_hold`/`payment_terms`/`currency`), `accounting.Invoice`
+  (`AccountsReceivable/Invoices.py:6`, `OPEN_STATUSES = ("sent","partial")`) — confirmed live. The `over_limit`
+  pattern to copy is in `accounting/views/AccountsReceivable/Invoices.py` `invoice_detail` (lines 81-87): sum open
+  `Invoice.total` for the party, compare to `CustomerProfile.credit_limit`.
+- `scm.Item` (`InventoryManagement/Items.py:56`, `on_hand(location=None)` at line 107) and `scm.Location`
+  (`InventoryManagement/Locations.py:10`) — confirmed live, both `TenantOwned`.
+- `crm.Quote`/`QuoteLine` (`SalesForceAutomation/Quotes.py:5,82`) — confirmed live; `quote_accept()`
+  (`SalesForceAutomation/Quotes.py` view, line 132) only flips status, creates nothing downstream — the real gap
+  `source_quote` + a convert action closes.
+- **Correction #1 (research overstated this):** research says *"`PickTask.transfer` (→ `scm.StockTransfer`) is
+  today's stand-in outbound trigger."* Re-checked `models/WarehouseManagement/PickTasks.py` in full — **`PickTask`
+  has NO `transfer` field at all**, and this todo.md's own 4.4 section (Later passes, above) already recorded
+  that the transfer-FK stand-in "was not adopted this pass (`PickTask` posts its own `issue` move standalone)."
+  `PickTask` stands alone with a docstring noting it will gain a nullable order FK once Module 8/4.5 lands (now).
+  Carried into Deferred below with the corrected fact, not research's stale claim.
+- **Correction #2 (a landmine research didn't flag):** `PurchaseOrder`'s URL prefix is **already `orders/`**
+  (`urls/ProcurementManagement/PurchaseOrders.py:9` — `path("orders/", views.purchaseorder_list, ...)`). Both
+  `PurchaseOrder` and the new `SalesOrder` share `app_name="scm"` and one concatenated `urlpatterns` list, so
+  reusing `orders/` for sales orders would collide (Django is first-match-wins — `purchaseorder_list` would
+  permanently shadow `salesorder_list`). **Use `sales-orders/` and `allocations/` as the new prefixes** (grep of
+  every existing `path("...")` literal in `apps/scm/urls/` confirms neither is taken).
+
+## Models (from research — 3: `SalesOrder`, `SalesOrderLine`, `SalesOrderAllocation`)
+
+- [ ] **`SalesOrder`** [`SO-`, `TenantNumbered`] — `models/OrderManagement/SalesOrders.py`
+  - `customer` = FK `core.Party` (`PROTECT`, `related_name="sales_orders"`) — via a **new** `_customer_parties(tenant)`
+    helper in `forms/_common.py` mirroring `_supplier_parties` exactly (`Party.objects.filter(tenant=tenant,
+    roles__role="customer").distinct()`) (driver: Order Capture)
+  - `ship_to_address` = FK `core.Address` (`SET_NULL`, `null=True`, `blank=True`, `related_name="sales_orders_shipped"`)
+    — auto-scoped by `TenantModelForm` (Address has its own `tenant` FK), no hand-scoping needed this pass (driver:
+    Order Capture / ship-to capture — table-stakes across all 9 leaders)
+  - `source_channel` = `[("manual","Manual"),("web","Web"),("marketplace","Marketplace"),("edi","EDI"),
+    ("api","API"),("phone","Phone")]`, default `"manual"` (driver: multi-channel order intake — Sterling,
+    Salesforce OM, Cin7, Linnworks; the tag only this pass, no real ingestion pipeline)
+  - `source_quote` = FK `crm.Quote` (`SET_NULL`, `null=True`, `blank=True`, `related_name="sales_orders"`) — set by
+    the convert action, not hand-picked on the general form (driver: quote-to-order, closes the `quote_accept()`
+    gap)
+  - `order_date` = `DateField(null=True, blank=True)`; `requested_date` = `DateField(null=True, blank=True)` —
+    customer-facing ask (driver: Order Capture / order promising)
+  - `promised_date` = `DateField(null=True, blank=True, editable=False)` — **excluded from form, system-set.** Set
+    ONCE, by `recompute_allocation_status()` (see state machine below) the first time an order reaches
+    `status="allocated"`: `self.promised_date = timezone.localdate()` if not already set — "promised, from what was
+    actually reserved," not a speculative forecast (driver: order promising — Manhattan's named differentiator)
+  - `currency` = FK `accounting.Currency` (`SET_NULL`, `null=True`, `blank=True`) — GLOBAL, no tenant FK, scope via
+    `_active_currencies(form)` (existing helper)
+  - `payment_terms` = FK `accounting.PaymentTerm` (`SET_NULL`, `null=True`, `blank=True`) — auto-scoped
+    (`PaymentTerm` is `TenantOwned`)
+  - `status` = `[("draft","Draft"),("submitted","Submitted"),("on_hold","On Hold"),("allocated","Allocated"),
+    ("partially_fulfilled","Partially Fulfilled"),("fulfilled","Fulfilled"),("invoiced","Invoiced"),
+    ("cancelled","Cancelled"),("closed","Closed")]`, default `"draft"` — **excluded from form**, a 9-state
+    lifecycle matching `PurchaseOrder`'s complexity (research's own framing); see the state-machine section below
+    for exactly what each value means and who sets it
+  - `credit_hold` = `BooleanField(default=False, editable=False)` — **excluded from form**, system-set by
+    `salesorder_submit` (Order Validation)
+  - `fraud_flag` = `BooleanField(default=False, editable=False)` — **excluded from form**, system-set by
+    `salesorder_submit` (Order Validation)
+  - `hold_reason` = `TextField(blank=True, editable=False)` — **excluded from form**, system-set alongside the two
+    booleans above, cleared/appended by `salesorder_release_hold`
+  - `confirmation_sent_at` / `shipped_notification_at` / `delivered_notification_at` = `DateTimeField(null=True,
+    blank=True, editable=False)` — **excluded from form** (L22), data hooks only — NO real email/SMS dispatch this
+    pass (matches 4.4's `YardVisit.carrier_name`/`PickTask.tracking_ref` hand-off-placeholder posture). Stamped by
+    `salesorder_submit` (confirmation, only when the order actually reaches `submitted`, not `on_hold`),
+    `salesorder_fulfill` (shipped), `salesorder_mark_delivered` (delivered)
+  - `invoice` = FK `accounting.Invoice` (`SET_NULL`, `null=True`, `blank=True`, `related_name="sales_orders"`) — a
+    **plain, user-editable form field** (auto-scoped, `Invoice` is `TenantNumbered`); "manual link this pass" per
+    research — the status flip to `invoiced` is a SEPARATE explicit action (`salesorder_mark_invoiced`), so setting
+    the FK alone never silently changes workflow status (driver: AR hand-off)
+  - `subtotal` / `tax_total` / `total` = `DecimalField(max_digits=18, decimal_places=2, default=0, editable=False)`
+    — derived by `recalc_totals()`, **excluded from form**
+  - `notes` = `TextField(blank=True)`
+  - `class Meta`: `ordering = ["-order_date", "-id"]`; `unique_together = ("tenant", "number")`; `indexes =
+    [Index(["tenant","status"]), Index(["tenant","order_date"])]`
+  - `recalc_totals(self, save=True)` — **Python-loop sum over `self.lines.all()`** using each line's Decimal-safe
+    `line_subtotal`/`line_tax` properties, exactly like `crm.Quote.recalc_totals()` — NOT an `F()/100` DB
+    expression (that integer-divides on SQLite and silently drops per-line discount/tax; `crm.Quote`'s docstring
+    calls this out explicitly, copy the same warning into this docstring)
+  - `is_editable` (property) = `status == "draft"` — once submitted, the order is a live customer-facing
+    commitment (mirrors `PurchaseOrder.is_editable` treating `sent` as locked, not `pending_approval`); **no amend
+    flow this pass** — order amendment/cancellation-with-impact-analysis is explicitly Module 8.6's job (research's
+    Ownership decision), not rebuilt here
+  - `is_closed` (property) = `status in ("cancelled", "closed")`
+  - `evaluate_hold()` / `recompute_allocation_status()` — see state-machine section (kept out of the model per the
+    "models never cross-import a peer app" convention — `evaluate_hold`'s accounting reads live in the VIEW, same
+    as `accounting.views.AccountsReceivable.Invoices.invoice_detail`; `recompute_allocation_status` is a normal
+    same-app model method, mirrors `PurchaseOrder.recompute_receipt_status`)
+  - Form fields: `customer`, `ship_to_address`, `source_channel`, `source_quote`, `order_date`, `requested_date`,
+    `currency`, `payment_terms`, `invoice`, `notes`. **Form excludes:** `tenant`, `number`, `status`,
+    `promised_date`, `credit_hold`, `fraud_flag`, `hold_reason`, `confirmation_sent_at`, `shipped_notification_at`,
+    `delivered_notification_at`, `subtotal`, `tax_total`, `total`.
+
+- [ ] **`SalesOrderLine`** — same file, `models/OrderManagement/SalesOrders.py`
+  - `sales_order` = FK `SalesOrder` (`CASCADE`, `related_name="lines"`)
+  - `item` = FK `scm.Item` (`PROTECT`, `related_name="sales_order_lines"`) — **a REAL FK, not the 4.1 free-text
+    pattern**: unlike Procurement (built before 4.3), the item catalog exists now, so no `item_description`/
+    `sku_hint` stand-in is needed. Auto-scoped by `TenantModelForm` (`Item` is `TenantOwned`) — no
+    `_scope_to_parent` hand-scoping required, a genuine simplification vs. `PurchaseOrderLine`/`RFQLine`
+  - `description` = `CharField(max_length=255, blank=True)` — optional override of the item name shown on the
+    order (driver: research's explicit "description (optional override)")
+  - `quantity_ordered` = `DecimalField(max_digits=14, decimal_places=4,
+    validators=[MinValueValidator(Decimal("0.0001"))])`
+  - `unit_price` = `DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(ZERO)])`
+  - `discount_pct` / `tax_pct` = `DecimalField(max_digits=5, decimal_places=2, default=0,
+    validators=[MinValueValidator(0), MaxValueValidator(100)])` — **mirrors `crm.QuoteLine`'s convention exactly**
+    per research
+  - **No own `tenant` field** — reached via `sales_order.tenant`, mirroring the scm sibling convention
+    (`PurchaseOrderLine`/`RFQLine`/`GoodsReceiptLine`, all tenant-less children), not `crm.QuoteLine`'s outlier
+  - `class Meta`: `ordering = ["id"]`
+  - `line_subtotal` / `line_tax` / `line_total` (properties, never stored) — identical formula to
+    `crm.QuoteLine`: `line_subtotal = quantity_ordered * unit_price * (1 - discount_pct/100)`; `line_tax =
+    line_subtotal * tax_pct/100`; `line_total = line_subtotal + line_tax`
+  - `quantity_allocated()` = `self.allocations.exclude(status="cancelled").aggregate(s=Sum("quantity"))["s"] or ZERO`
+    (Backorder Management)
+  - `quantity_backordered()` = `max(self.quantity_ordered - self.quantity_allocated(), ZERO)` (Backorder Management)
+  - `is_backordered` (property) = `self.quantity_backordered() > ZERO` (Backorder Management)
+  - Form fields (via the inline formset): `item`, `description`, `quantity_ordered`, `unit_price`, `discount_pct`,
+    `tax_pct`. No excludes beyond the implicit `sales_order` (set by the formset).
+
+- [ ] **`SalesOrderAllocation`** [`TenantOwned`, no number — a child record like `RFQVendor`] —
+  `models/OrderManagement/SalesOrderAllocations.py` (own file: unlike a pure line item it has its OWN status
+  lifecycle, its own list page and its own URL group, closer to `StockTransfer`/`StockAdjustment` than to
+  `PurchaseOrderLine`)
+  - `sales_order_line` = FK `SalesOrderLine` (`CASCADE`, `related_name="allocations"`)
+  - `location` = FK `scm.Location` (`PROTECT`, `related_name="sales_order_allocations"`) — the specific fulfillment
+    location reserved against (Order Allocation — the single most differentiating capability among the 9 surveyed
+    leaders)
+  - `quantity` = `DecimalField(max_digits=16, decimal_places=4, validators=[MinValueValidator(Decimal("0.0001"))])`
+  - `status` = `[("reserved","Reserved"),("released","Released"),("cancelled","Cancelled")]`, default `"reserved"`
+    — **excluded from form**, action-controlled (see state machine below)
+  - `allocated_at` = `DateTimeField(auto_now_add=True)`
+  - `class Meta`: `indexes = [Index(["tenant","status"]), Index(["tenant","location"])]`
+  - `clean()` — guards `Σ(quantity of every active [status != "cancelled"] allocation on this line, including
+    self) ≤ sales_order_line.quantity_ordered`, raising a friendly `ValidationError` naming how much room is left
+    (research's explicit spec: "Σ quantity ≤ line.quantity_ordered")
+  - **Deliberately NOT a `StockMove`** — a soft reservation only; the append-only ledger stays the sole
+    physical-truth source (L37), the physical pick is 4.4's `PickTask` job
+  - Form fields: `location`, `quantity` only — `sales_order_line` is assigned in the view from the `line_pk` URL
+    kwarg, never a user-choosable field (mirrors `RFQQuote.rfq` being assigned from `rfq_pk`, not form-picked).
+    `location` queryset restricted to `Location.objects.filter(tenant=self.tenant, is_pickable=True)` — reserving
+    into a non-pickable logical location (e.g. `transit`) makes no sense for a fulfillment reservation.
+
+## Allocation state machine — be explicit about what posts nothing vs. what hands off to 4.4
+
+**`SalesOrderAllocation.status`** (soft reservation only — NONE of these three ever posts a `StockMove`; only
+4.4's `PickTask` confirm does that):
+- **`reserved`** (default, set on create by `salesorderallocation_create`) — a non-physical claim on `quantity` at
+  `location`. This is what `SalesOrderLine.quantity_allocated()` counts as "spoken for."
+  `salesorderallocation_create`/`_edit` guard against over-promising with a VIEW-level (not model — needs
+  cross-model `Item` aggregation) `_available_to_promise(item, location, tenant, exclude_pk=None)` helper local to
+  `views/OrderManagement/SalesOrderAllocations.py`: `item.on_hand(location) - Σ(quantity of every OTHER active
+  allocation on the same item+location)`. Reject (friendly message, not a hard crash) if the requested quantity
+  exceeds this — staff then either allocate less (the remainder naturally becomes backordered via
+  `quantity_backordered()`) or pick a different location. This is on-hand-only ATP, exactly the "buildable now"
+  tier research called out (incoming-PO-aware ATP is deferred).
+- **`released`** (`salesorderallocation_release`, `@tenant_admin_required`, POST) — the explicit hand-off marker to
+  4.4: staff flip a reservation to `released` once they have created (outside this model — `PickTask` has no FK to
+  an allocation yet, see Deferred) the corresponding warehouse pick. Still posts NO `StockMove` and still counts
+  toward `quantity_allocated()` — it is bookkeeping that distinguishes "just reserved, untouched" from "sent to the
+  floor," not a physical event.
+- **`cancelled`** (`salesorderallocation_cancel`, `@tenant_admin_required`, POST) — releases the soft claim without
+  fulfilling it (order line reduced, re-allocating to a better location, etc.). No longer counts toward
+  `quantity_allocated()`. Posts NO `StockMove` (nothing physical ever happened).
+- `salesorderallocation_delete` (POST, `@tenant_admin_required`) is a HARD delete, only permitted while
+  `status="reserved"` — mirrors the CRUD-completeness delete requirement without letting a `released` reservation
+  vanish without a trace (use `cancel` for that, which keeps the row).
+
+**`SalesOrder.status`** (set by these transitions ONLY — never a form field):
+- `draft` → **`salesorder_submit`** (`@login_required`, POST; requires ≥1 line) runs `evaluate_hold()` (below),
+  then: `on_hold` if `credit_hold or fraud_flag`, else `submitted` (and only then stamps
+  `confirmation_sent_at=now()` — a held order has not been confirmed to the customer).
+  - `evaluate_hold()` lives in `views/OrderManagement/SalesOrders.py` (NOT the model — models never cross-import a
+    peer app per the codebase-wide convention; this mirrors exactly where `accounting.views...invoice_detail`
+    computes `over_limit`, which is what research says to copy): reads
+    `CustomerProfile.objects.filter(tenant=order.tenant, party=order.customer).first()`; if a profile with a
+    `credit_limit` exists, `outstanding = Σ open accounting.Invoice.total for (tenant, party=customer) +
+    order.total` (the order's OWN total counts as prospective exposure — "before releasing an order," per
+    research), `credit_hold=True` if `outstanding > profile.credit_limit or profile.credit_on_hold`. Simple fraud
+    rule: `fraud_flag=True` if this is the customer's FIRST `SalesOrder` for this tenant AND `order.total >
+    NEW_CUSTOMER_FRAUD_THRESHOLD` (module-level constant, `Decimal("5000.00")`). `hold_reason` joins whichever
+    fired ("Credit limit exceeded", "New customer, high-value first order").
+- `on_hold` → **`salesorder_release_hold`** (`@tenant_admin_required`, POST, requires a note) clears
+  `credit_hold`/`fraud_flag` (staff override), records the note into `hold_reason`, → `submitted`, stamps
+  `confirmation_sent_at` if not already set.
+- `submitted` / `partially_fulfilled` → **`recompute_allocation_status()`** (model method, mirrors
+  `PurchaseOrder.recompute_receipt_status`) — called at the end of every `salesorderallocation_create/_edit/
+  _cancel` — derives: `allocated` if every line's `quantity_backordered() <= 0` AND at least one line has
+  `quantity_allocated() > 0`; `partially_fulfilled` if at least one line has SOME allocation but not full coverage
+  (**this is the Backorder Management state** — some qty reserved, remainder backordered; it does NOT mean
+  "partially shipped," this sub-module never tracks physical shipment); otherwise stays `submitted`. Sets
+  `promised_date` the first time it reaches `allocated` (see field note above). Never touches `fulfilled`/
+  `invoiced`/`cancelled`/`closed`/`draft`/`on_hold` orders.
+- `allocated` / `partially_fulfilled` → **`salesorder_fulfill`** (`@tenant_admin_required`, POST) — a STAFF
+  ATTESTATION that picking/packing/shipping happened via 4.4 (no enforced FK back to a `PickTask` this pass, see
+  Deferred) → `fulfilled`, stamps `shipped_notification_at=now()`.
+- (any status) → **`salesorder_mark_delivered`** (`@login_required`, POST) — stamps `delivered_notification_at`
+  only; does NOT change `status` (delivery isn't part of this model's commercial lifecycle, purely a
+  notification-timing data hook, matching 4.4's `carrier_name` hand-off posture).
+- `fulfilled` (+ `invoice` set) → **`salesorder_mark_invoiced`** (`@login_required`, POST, 400/error if `invoice`
+  is blank) → `invoiced`.
+- (not yet fulfilled/invoiced/closed) → **`salesorder_cancel`** (`@tenant_admin_required`, POST, reason required)
+  → `cancelled` — **BLOCKED if any active (`reserved`/`released`) allocation exists** on any line (mirrors
+  `PurchaseOrder.cancel`'s "receipts exist → refuse" guard: an executing commitment must be un-allocated first,
+  never silently cancelled out from under a reservation).
+- `invoiced` → **`salesorder_close`** (`@login_required`, POST) → `closed`.
+
+## Backend (apps/scm/{models,forms,views,urls}/OrderManagement/)
+
+- [ ] Package init markers (empty files, mirror `WarehouseManagement/__init__.py`):
+  `models/OrderManagement/__init__.py`, `forms/OrderManagement/__init__.py`, `views/OrderManagement/__init__.py`,
+  `urls/OrderManagement/__init__.py`.
+- [ ] `models/OrderManagement/SalesOrders.py` — `SalesOrder` + `SalesOrderLine` (`from apps.scm.models._base
+  import *`).
+- [ ] `models/OrderManagement/SalesOrderAllocations.py` — `SalesOrderAllocation`.
+- [ ] `forms/OrderManagement/SalesOrders.py` — `SalesOrderForm(TenantModelForm)` (`customer` via new
+  `_customer_parties`, `currency` via `_active_currencies`), `SalesOrderLineForm`, `SalesOrderLineFormSet`
+  (`inlineformset_factory`, `formset=BaseSalesOrderLineFormSet`, prefix `lines-`, `extra=1`, `can_delete=True`) —
+  `BaseSalesOrderLineFormSet.clean()` raises a formset `ValidationError` when a deleted/reduced line has ANY active
+  (non-cancelled) allocation, mirroring the `PurchaseOrderLine`/`RFQLine` delete-guard convention.
+- [ ] `forms/OrderManagement/SalesOrderAllocations.py` — `SalesOrderAllocationForm(TenantModelForm)` (`location`
+  restricted to `is_pickable=True`).
+- [ ] `forms/_common.py` — add `_customer_parties(tenant)` right next to `_supplier_parties`, identical shape but
+  `roles__role="customer"` (single role, no vendor/supplier OR-fallback needed).
+- [ ] `views/OrderManagement/SalesOrders.py` — `salesorder_list/create/detail/edit/delete` (via `crud_*` where the
+  save path has no inline formset side-effect — `delete` only permits `status="draft"`, mirrors PO); hand-rolled
+  `_salesorder_form` (create/edit, header + `SalesOrderLineFormSet` in one `transaction.atomic()`, calls
+  `recalc_totals()`, `write_audit_log` with `_changed(form)` imported explicitly since the formset bypasses
+  `crud_edit`); `salesorder_create_from_quote(request, quote_pk)` (`@login_required`, POST-only, `@require_POST`)
+  — copies `crm.Quote` header fields (`account`→`customer` if the quote's account carries the `customer` role,
+  else leave blank; `currency_code`... note `Quote.currency_code` is a plain string, `SalesOrder.currency` is an FK
+  — resolve via `Currency.objects.filter(code=quote.currency_code).first()`) + every `QuoteLine` into a new draft
+  `SalesOrder` + `SalesOrderLine` rows (`item` left blank — `QuoteLine.product` is a CRM `Product`, not `scm.Item`,
+  there is no automatic mapping; the line's `description` is pre-filled from `QuoteLine.description` so nothing is
+  silently lost, and staff pick the real `item` before submitting), sets `source_quote=quote`, redirects to
+  `salesorder_edit` so staff finish mapping items before submit — **first cross-app import from `scm` into `crm`
+  models** (`from apps.crm.models import Quote, QuoteLine` at the top of this views module — precedented by
+  `forms/_common.py`'s existing `from apps.accounting.models import Currency`, just one layer over and one app
+  further); `salesorder_submit`, `salesorder_release_hold`, `salesorder_fulfill`, `salesorder_mark_delivered`,
+  `salesorder_mark_invoiced`, `salesorder_cancel`, `salesorder_close` per the state-machine section above (each
+  `write_audit_log`s its `{"action": ...}`).
+- [ ] `views/OrderManagement/SalesOrderAllocations.py` — `salesorderallocation_list/detail/edit/delete` (via
+  `crud_*`); `salesorderallocation_create(request, line_pk)` (`@tenant_admin_required` — commits an inventory
+  reservation) resolves `line = get_object_or_404(SalesOrderLine, pk=line_pk, sales_order__tenant=request.tenant)`,
+  shows `_available_to_promise` per candidate location, on POST validates the form + the line's `clean()` guard +
+  the ATP guard inside `transaction.atomic()`, then calls `line.sales_order.recompute_allocation_status()`;
+  `salesorderallocation_release`, `salesorderallocation_cancel` (both `@tenant_admin_required`, POST, recompute the
+  parent order's status afterward).
+- [ ] `urls/OrderManagement/SalesOrders.py` — **`sales-orders/`** prefix (NOT `orders/` — already
+  `PurchaseOrder`'s, see Correction #2 above): `sales-orders/` (list), `sales-orders/add/` (create),
+  `sales-orders/from-quote/<int:quote_pk>/` (create-from-quote, POST), `sales-orders/<int:pk>/` (detail),
+  `sales-orders/<int:pk>/edit/`, `/delete/`, `/submit/`, `/release-hold/`, `/fulfill/`, `/mark-delivered/`,
+  `/mark-invoiced/`, `/cancel/`, `/close/` — literal routes before `<int:pk>/`.
+- [ ] `urls/OrderManagement/SalesOrderAllocations.py` — **`allocations/`** prefix (confirmed free): `allocations/`
+  (list), `sales-order-lines/<int:line_pk>/allocations/add/` (create — mirrors `rfqs/<int:rfq_pk>/quotes/add/`),
+  `allocations/<int:pk>/` (detail), `/edit/`, `/delete/`, `/release/`, `/cancel/`.
+- [ ] Re-export blocks (all four `__init__.py`, under a new `# 4.5 Order Management System (OMS)` comment header
+  mirroring the existing `# 4.4 Warehouse Management` headers):
+  `models/__init__.py` — `SalesOrder`, `SalesOrderLine`, `SalesOrderAllocation`;
+  `forms/__init__.py` — `SalesOrderForm`, `SalesOrderLineFormSet`, `SalesOrderAllocationForm`;
+  `views/__init__.py` — every `salesorder_*`/`salesorderallocation_*` view;
+  `urls/__init__.py` — import `urlpatterns as _oms_salesorders` / `_oms_salesorderallocations`, concatenate after
+  the existing `_wms_yard` block, then re-check the WHOLE concatenated list for literal-before-`<int:pk>` ordering.
+- [ ] `admin.py` — `SalesOrderLineInline` (`TabularInline`), `SalesOrderAdmin` (`list_display=("number",
+  "customer", "tenant", "status", "total", "order_date")`, `list_filter=("tenant","status","source_channel")`,
+  `search_fields=("number","customer__name")`, `inlines=[SalesOrderLineInline]`), `SalesOrderAllocationAdmin`
+  (`list_display=("sales_order_line","location","tenant","quantity","status","allocated_at")`,
+  `list_filter=("tenant","status")`) under a new `# 4.5 Order Management System` banner mirroring the existing
+  4.1-4.4 banners.
+- [ ] `makemigrations scm` (incremental — expect one new migration adding 3 tables).
+- [ ] Extend `apps/scm/management/commands/seed_scm.py` — see Seeder section below.
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — add `LIVE_LINKS["4.5"]` right after the existing `"4.4"` block (exact NavERP.md
+  bullet text as keys — `### 4.5 Order Management System (OMS)`, lines 761-767):
+  ```python
+  # 4.5 owns the SalesOrder/SalesOrderLine document (ships-first, L28/L29/L36/L37) — CRM built the
+  # pre-order pipeline (Lead->Opportunity->Quote) across 12 sub-modules and never built an order;
+  # Module 8.6 "Order Management" is a DIFFERENT, later feature set (amend/cancel/revenue-recognition)
+  # that will FK into this order, not re-declare it (research-scm-4.5.md).
+  "4.5": {
+      "Order Capture": "scm:salesorder_list",
+      "Order Validation": "scm:salesorder_list?status=on_hold",       # credit/fraud hold queue
+      "Order Allocation": "scm:salesorderallocation_list",
+      "Backorder Management": "scm:salesorder_list?status=partially_fulfilled",
+      "Customer Notifications": "scm:salesorder_list?status=fulfilled",  # shipped/delivered notify hook
+  },
+  ```
+- [ ] No `config/settings.py` / `config/urls.py` changes — `apps.scm` and its `scm/` include already exist.
+- [ ] `templates/crm/sales/quote/detail.html` — **one small, additive cross-app template touch**: add a "Convert
+  to Sales Order" button, visible only `{% if quote.status == 'accepted' %}`, POSTing to
+  `{% url 'scm:salesorder_create_from_quote' quote_pk=quote.pk %}`. This is what makes "quote-to-order" a real,
+  clickable feature rather than just a backend FK — flagged so it isn't dropped as "not in this app." One file,
+  one commit, per the one-file-per-commit rule.
+
+## Templates (templates/scm/orders/<entity>/{list,detail,form}.html)
+
+- [ ] `templates/scm/orders/salesorder/list.html` — filter bar (`status`, `customer`, `source_channel`, search
+  `q`) reflecting `request.GET`; view passes `status_choices=SalesOrder.STATUS_CHOICES`,
+  `customers=_customer_parties(request.tenant)`, `source_channel_choices=SalesOrder.SOURCE_CHANNEL_CHOICES`.
+  Badges: `fulfilled`/`closed`→green, `submitted`/`partially_fulfilled`→amber, `on_hold`/`cancelled`→red,
+  `draft`→slate, `allocated`/`invoiced`→info, else muted+`{{ obj.get_status_display }}` fallback (L33). Actions
+  column: view/edit(draft only)/delete(draft only) + submit(draft)/cancel(pre-fulfilled) POST buttons gated
+  `{% if request.user.is_superuser or request.user.is_tenant_admin %}` where the target view is
+  `@tenant_admin_required` (L32-adjacent, per SKILL.md's own gotcha). Pagination with `has_previous`/`has_next`
+  guards (L9). Empty-state.
+- [ ] `templates/scm/orders/salesorder/detail.html` — header card; lines table with per-line `quantity_ordered` /
+  `quantity_allocated` / `quantity_backordered` / `is_backordered` badge; an "Allocate" link per backordered line
+  (`{% if order.status in 'submitted,partially_fulfilled' and line.quantity_backordered > 0 %}` →
+  `{% url 'scm:salesorderallocation_create' line_pk=line.pk %}`); nested allocations list (location/quantity/
+  status/release+cancel POST buttons); credit/fraud callout card (`border-inline-start:3px solid var(--x)` per
+  SKILL.md convention, NOT physical `border-left`) shown when `credit_hold or fraud_flag`; Actions sidebar
+  (submit/release-hold/fulfill/mark-delivered/mark-invoiced/cancel/close, each conditional on current `status`);
+  Edit/Delete (draft only) + Back to List.
+- [ ] `templates/scm/orders/salesorder/form.html` — header form + `SalesOrderLineFormSet` (prefix `lines-`,
+  mirrors `purchaseorder/form.html`'s formset table layout).
+- [ ] `templates/scm/orders/salesorderallocation/list.html` — filter bar (`status`, `location`, search
+  `q` over `sales_order__number`/`sales_order_line__item__sku`); view passes
+  `status_choices=SalesOrderAllocation.STATUS_CHOICES`, `locations=Location.objects.filter(tenant=request.tenant)`.
+  Badges: `reserved`→info, `released`→amber, `cancelled`→red/muted. Actions: view/edit(reserved only)/
+  delete(reserved only, POST+confirm) + release/cancel POST buttons (tenant-admin gated).
+- [ ] `templates/scm/orders/salesorderallocation/detail.html` — allocation fields + a link back to
+  `salesorder_detail` of the parent order.
+- [ ] `templates/scm/orders/salesorderallocation/form.html` — `location`/`quantity` fields + an
+  available-to-promise readout (`_available_to_promise` passed in context) so staff can see the ATP number before
+  typing a quantity.
+
+## Seeder (extend apps/scm/management/commands/seed_scm.py)
+
+- [ ] New `_seed_oms_tenant(self, tenant)` method, called from `handle()` **after `_seed_warehouse_tenant(tenant)`**
+  (real dependency: reuses the items `WS-16`/`MON-27`/`DOCK-C` and locations `WH-MAIN`/`WH-STORE` that
+  `_seed_inventory_tenant` creates — matches the task's explicit ordering instruction). Idempotent guard:
+  `if SalesOrder.objects.filter(tenant=tenant).exists(): skip`.
+- [ ] New `_customer(self, tenant, name, kind)` helper mirroring `_supplier` exactly (`role="customer"`), plus a
+  `CustomerProfile.objects.get_or_create(tenant=tenant, party=customer, defaults={...credit_limit=Decimal("15000.00"),
+  currency=usd, payment_terms=terms})` — scm's seeder already writes `accounting.Bill`/`Budget` rows (precedented
+  cross-app seed write, see the imports at the top of the file), so writing `CustomerProfile` here is consistent,
+  not a new pattern.
+- [ ] Seed content — 3 `SalesOrder` rows on one customer ("Fabrikam Retail Group") showing 3 distinct lifecycle
+  points so every OMS page has something real on it:
+  1. **Fully allocated** (`status="allocated"`, `promised_date` set) — orders 5× `WS-16` against `WH-MAIN` (20
+     on-hand from the 4.3 opening balance), fully reserved via a `SalesOrderAllocation`.
+  2. **Partially fulfilled / backordered** (`status="partially_fulfilled"`) — orders more `MON-27` than is
+     on-hand at one location, so the reservation covers only what's available and
+     `SalesOrderLine.quantity_backordered() > 0` — makes the Backorder Management queue non-empty.
+  3. **On hold** (`status="on_hold"`, `credit_hold=True`) — a low `CustomerProfile.credit_limit` (e.g.
+     `Decimal("500.00")`) deliberately below the order total, so the Order Validation queue (`?status=on_hold`)
+     shows something real.
+- [ ] Add `SalesOrderAllocation`/`SalesOrderLine`/`SalesOrder` to `_flush()`'s ordered delete list (children
+  first: allocations → lines → orders, all `CASCADE` from `SalesOrder` so a single `SalesOrder.objects.all().delete()`
+  is actually sufficient, but list it explicitly for clarity matching the existing style). Do **NOT** delete the
+  seeded `CustomerProfile`/customer `Party` on flush — mirrors how the 4.1 supplier `Party` rows are never
+  flushed, only reused via `get_or_create`.
+
+## Verify
+
+- [ ] `makemigrations scm --check` clean after the real `makemigrations scm` is applied; `migrate` applies.
+- [ ] `seed_scm` ×2 idempotent (second run: "already exists — skipping" for the OMS guard too, no duplicate
+  `SO-` numbers).
+- [ ] `manage.py check`.
+- [ ] **Regression: `SalesOrderAllocation.clean()` blocks over-allocation** — allocate up to
+  `line.quantity_ordered`, assert a further allocation attempt (even a small one) raises/`is_valid()==False`.
+- [ ] **Regression: the ATP guard blocks over-promising** — two allocations against the same item+location whose
+  combined quantity exceeds `item.on_hand(location)` must have the second rejected with a friendly message, not a
+  negative "available" number silently accepted.
+- [ ] **Regression: cancelling an allocation frees the ATP** — reserve, cancel, re-reserve the same quantity at the
+  same location succeeds (proves `_available_to_promise` excludes `cancelled` rows).
+- [ ] **Regression: `salesorder_cancel` is blocked while an active allocation exists** (mirrors the PO
+  receipts-exist guard) and succeeds once every allocation is cancelled first.
+- [ ] **Regression: `recompute_allocation_status()` never touches a `fulfilled`/`invoiced`/`cancelled`/`closed`/
+  `draft`/`on_hold` order** even when called directly (mirrors `PurchaseOrder.recompute_receipt_status`'s own
+  terminal-state guard).
+- [ ] `temp/` smoke sweep as `admin_acme`/`password`: every new `scm:salesorder_*`/`scm:salesorderallocation_*` URL
+  200/302; content assertions (no `{#`/`{% comment` leaks, page titles, a seeded record present); cross-tenant
+  IDOR → 404 on `salesorder_detail`/`_edit`/`_delete` and `salesorderallocation_detail`/`_edit`/`_delete`; confirm
+  `/scm/sales-orders/` and `/scm/orders/` (PurchaseOrder) resolve to DIFFERENT pages (regression for Correction #2).
+- [ ] Sidebar shows `4.5` Live with all 5 bullets pointing at real, distinct pages (not all 5 collapsing onto the
+  same URL).
+- [ ] pytest additions to `apps/scm/tests/`: `conftest.py` gets `customer_a`/`customer_b` fixtures (mirror
+  `supplier_a`/`supplier_b`, `role="customer"`) and `sales_order_a`/`sales_order_b` fixtures (mirror
+  `purchase_order_a`/`_b`, reusing `item_a`/`location_a`/`location_a2` which already exist); `test_models.py` gets
+  `recalc_totals`/`quantity_backordered`/`is_backordered`/`clean()` coverage; `test_views.py` gets the full
+  CRUD+action sweep + the state-machine regressions above; `test_security.py` gets the cross-tenant IDOR pair for
+  both new entities (mirrors the existing `purchase_order_b`/`goods_receipt_b` pattern).
+
+## Close-out
+
+- [ ] Review agents in order: code-reviewer → explorer → frontend-reviewer → performance-reviewer →
+  qa-smoke-tester → security-reviewer → test-writer (each its own commit).
+- [ ] Update `.claude/skills/scm/SKILL.md` — add a `## 4.5 Order Management System` section (models/URLs/
+  templates/seeder rows, the `_customer_parties` helper, the `evaluate_hold`/`_available_to_promise` view-layer
+  helpers and WHY they live in views not models) mirroring the existing 4.2/4.3/4.4 sections; update the header
+  line 3 description and the "4.5 OMS is next" note at line 15 (now built, point at 4.6 TMS next).
+- [ ] README — note 4.5 shipped: SCM now owns `SalesOrder` (ships-first), and quote-to-order is a real, clickable
+  conversion.
+- [ ] **`NavERP-ERD.md` reconciliation (L36 step 2) — verify BEFORE editing, research's claim about rows
+  463/470/471 was checked and found already correct:** re-read rows 463 (CRM)/470 (Sales)/471 (eCommerce) —
+  **they already list `SalesOrder` under "Reuses (core spine)", not under "Adds"** (grep-verified during this
+  planning pass), so **no edit is needed there** — research's suggestion to "rewrite them from Adds to reuses" was
+  based on a stale assumption; the as-built doc already reads correctly. The ONE real edit is **row 466 (SCM)**:
+  extend its "Adds" bracket with `· SalesOrder, SalesOrderLine, SalesOrderAllocation (4.5 OMS, as-built — a soft
+  reservation, never a StockMove)`, matching the existing 4.1-4.4 bracket format. Optionally refresh the O2C
+  roadmap row (line 600) since `Quote → SalesOrder` is no longer purely aspirational.
+- [ ] `.claude/tasks/lessons.md` — capture a new lesson if one emerges. Strong candidate from THIS planning pass
+  itself: **"a new sub-module's document-header URL prefix can collide with an EARLIER sub-module's inside the
+  same `app_name`/concatenated urlpatterns list — grep every existing `path(\"...\")` literal before picking a new
+  document's prefix, not just the new sub-module's own folder."** (`orders/` was already `PurchaseOrder`'s; caught
+  here only because this plan re-verified the spine instead of trusting research's silence on it.)
+
+## Later passes / deferred (carried over from research-scm-4.5.md, corrected where re-verification changed a fact)
+
+- **Real email/SMS notification dispatch** (SendGrid/Twilio-class) — the three `*_notification_at`/
+  `confirmation_sent_at` fields are system timestamps only this pass.
+- **Automatic cost/distance/SLA-optimized sourcing/allocation rules engine** — this pass's allocation is entirely
+  staff-selected; the auto-routing logic that differentiates Manhattan/Fluent/Sterling is a later enhancement.
+- **Allocation against incoming supply** (open `PurchaseOrder`s), not just current on-hand — NetSuite AOM's
+  "supply allocation" is more advanced than this pass's on-hand-only ATP.
+- **Auto re-allocation when stock arrives** (Brightpearl's auto-fulfil-on-restock) — needs an event hook off
+  `StockMove` receipts; `is_backordered` is a query-time flag only, no scheduler/signal this pass.
+- **Third-party/ML fraud scoring** — `fraud_flag` is a simple new-customer+threshold rule, not a scoring service.
+- **EDI/marketplace ingestion pipelines** — `source_channel` is a data tag; no real connectors.
+- **`PickTask` gains a nullable FK to `SalesOrderAllocation`** (more precise than a bare `SalesOrder` FK, since one
+  line can split across allocations) — a **4.4 model change**, not part of this pass. **Correction from
+  research:** there is currently no `PickTask.transfer` field to "relax to nullable" alongside it (see Correction
+  #1 above) — `PickTask` stands fully alone today; the future change is purely additive (one new nullable FK), not
+  a relaxation of an existing one.
+- **Order Amendments & Cancellations (impact analysis), Revenue Recognition & Scheduling (ASC 606/IFRS 15), Order
+  History & Reorder/subscription renewal** → **Module 8.6 Order Management (Sales)** — a different feature set
+  layered on this `SalesOrder` by FK, per the Ownership decision.
+- **CPQ/bundling/guided selling, pricing & discount approval, proposal e-signature, quote versioning/portal** →
+  **Module 8.5 Quote & Proposal Management** (layers on the already-built `crm.Quote`).
+- **Territory/quota attribution per order** (future `SalesOrderSplit`, mirrors `crm.OpportunitySplit`) → **Module
+  8.7 Territory & Quota Management**.
+- **Carrier selection, rate shopping, label rendering, GPS tracking, freight audit** → **4.6 Transportation
+  Management System** (this order never selects a carrier or generates a label).
+- **Demand-based statistical safety-stock / forecast-driven pre-emptive allocation** → **4.7 Demand Planning &
+  Forecasting**.
+- **Customer self-service order-status/tracking portal** (external login) → **4.16 Customer Portal / Module 9
+  eCommerce** — no externally-authenticated customer login this pass (L32).
+- **RMA/return authorization, refund processing, disposition, warranty claims** → **4.10 Returns Management** —
+  do not build any return-shaped model here even though it's common OMS vendor territory generally.
+- **Auto-generating `accounting.Invoice` from a fulfilled `SalesOrder`** — `invoice` stays a manual/nullable link
+  this pass.
+
+## Review notes
+(filled in at the end)
