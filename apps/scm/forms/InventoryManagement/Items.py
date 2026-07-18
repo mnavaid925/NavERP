@@ -1,5 +1,6 @@
 """SCM 4.3 Inventory Management — ItemCategory / UOM / Item forms."""
 from apps.scm.forms._common import *  # noqa: F401,F403
+from apps.scm.forms._common import TenantUniqueMixin
 from apps.scm.models import Item, ItemCategory, UOM
 
 
@@ -15,13 +16,13 @@ class ItemCategoryForm(TenantModelForm):
             self.fields["parent"].queryset = self.fields["parent"].queryset.exclude(pk=self.instance.pk)
 
 
-class UOMForm(TenantModelForm):
+class UOMForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = UOM
         fields = ["code", "name", "factor", "is_active"]
 
 
-class ItemForm(TenantModelForm):
+class ItemForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = Item
         # `average_cost` EXCLUDED — it's a derived cached figure maintained by the posting service.
