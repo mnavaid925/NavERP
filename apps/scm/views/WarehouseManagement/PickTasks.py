@@ -122,6 +122,27 @@ def picktask_release(request, pk):
     return redirect("scm:picktask_detail", pk=pk)
 
 
+@login_required
+@require_POST
+def picktask_start(request, pk):
+    """Released -> picking: a picker has taken the task and is walking it.
+
+    Plain @login_required, unlike confirm: this moves NO stock, it just marks who is on the job so
+    a released queue shows what has actually been picked up. Added because 'picking' was otherwise
+    a state nothing could reach — filtering the list by it always returned zero rows (code review) —
+    and both sibling entities (putaway, cycle count) already have the equivalent start action.
+    """
+    obj = get_object_or_404(PickTask, pk=pk, tenant=request.tenant)
+    if obj.status != "released":
+        messages.info(request, "Only a released pick can be started.")
+        return redirect("scm:picktask_detail", pk=pk)
+    obj.status = "picking"
+    obj.save(update_fields=["status", "updated_at"])
+    write_audit_log(request.user, obj, "update", {"action": "start"})
+    messages.success(request, f"Pick {obj.number} started.")
+    return redirect("scm:picktask_detail", pk=pk)
+
+
 @tenant_admin_required
 @require_POST
 def picktask_confirm(request, pk):
