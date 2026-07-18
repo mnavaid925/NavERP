@@ -38,6 +38,9 @@ class StockMove(TenantOwned):
         ordering = ["-moved_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "item", "location"], name="scm_move_tnt_item_loc_idx"),
+            # Mirror index: the ledger is queried by BOTH dimensions (per-item pages and per-location
+            # pages). A (tenant, location) filter can't use the index above — location isn't a prefix.
+            models.Index(fields=["tenant", "location", "item"], name="scm_move_tnt_loc_item_idx"),
             models.Index(fields=["tenant", "moved_at"], name="scm_move_tnt_movedat_idx"),
             models.Index(fields=["tenant", "reference"], name="scm_move_tnt_ref_idx"),
         ]
