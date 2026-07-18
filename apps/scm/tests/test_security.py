@@ -1081,3 +1081,228 @@ class TestWarehouseCSRFEnforcement:
         assert resp.status_code == 403
         cyclecounttask_a.refresh_from_db()
         assert cyclecounttask_a.status == "scheduled"
+
+
+# ================================================================================================
+# SCM 4.5 Order Management System
+# ================================================================================================
+
+# ================================================================ Anonymous -> login redirect
+class TestSalesOrderAnonymousRedirect:
+    def test_salesorder_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:salesorder_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_salesorderallocation_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:salesorderallocation_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+
+# ================================================================ @tenant_admin_required gates (priority)
+class TestSalesOrderAdminRequiredGates:
+    def test_release_hold_requires_admin(self, member_client, client_a, tenant_a, sales_order_a, customer_a):
+        from apps.accounting.models import CustomerProfile
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_limit=Decimal("50.00"))
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        url = reverse("scm:salesorder_release_hold", args=[sales_order_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url, {"release_note": "ok"}).status_code != 403
+
+    def test_fulfill_requires_admin(self, member_client, client_a, sales_order_submitted_a):
+        url = reverse("scm:salesorder_fulfill", args=[sales_order_submitted_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_cancel_requires_admin(self, member_client, client_a, sales_order_submitted_a):
+        url = reverse("scm:salesorder_cancel", args=[sales_order_submitted_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url, {"cancel_reason": "test"}).status_code != 403
+
+    def test_allocation_create_requires_admin(self, member_client, client_a, sales_order_line_a):
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        assert member_client.get(url).status_code == 403
+        assert client_a.get(url).status_code != 403
+
+    def test_allocation_edit_requires_admin(self, member_client, client_a, allocation_a):
+        url = reverse("scm:salesorderallocation_edit", args=[allocation_a.pk])
+        assert member_client.get(url).status_code == 403
+        assert client_a.get(url).status_code != 403
+
+    def test_allocation_release_requires_admin(self, member_client, client_a, allocation_a):
+        url = reverse("scm:salesorderallocation_release", args=[allocation_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_allocation_cancel_requires_admin(self, member_client, client_a, allocation_a):
+        url = reverse("scm:salesorderallocation_cancel", args=[allocation_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_allocation_delete_requires_admin(self, member_client, client_a, allocation_a):
+        url = reverse("scm:salesorderallocation_delete", args=[allocation_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+
+# ================================================================ Plain @login_required actions work for a member
+class TestSalesOrderOrdinaryActionsAllowNonAdmin:
+    def test_submit_is_not_admin_gated(self, member_client, sales_order_a):
+        """`salesorder_submit` is deliberately plain @login_required — any tenant member can place
+        an order, credit/fraud review happens automatically, not via a permission wall."""
+        url = reverse("scm:salesorder_submit", args=[sales_order_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"
+
+    def test_member_can_view_salesorder_detail(self, member_client, sales_order_a):
+        url = reverse("scm:salesorder_detail", args=[sales_order_a.pk])
+        assert member_client.get(url).status_code == 200
+
+    def test_member_can_mark_delivered(self, member_client, client_a, tenant_a, sales_order_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("10"))
+        sales_order_a.recompute_allocation_status()
+        client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_a.pk]))
+        url = reverse("scm:salesorder_mark_delivered", args=[sales_order_a.pk])
+        resp = member_client.post(url)
+        assert resp.status_code != 403
+
+
+# ================================================================ Cross-tenant IDOR -> 404 (mandatory)
+class TestSalesOrderCrossTenantIDOR:
+    def test_salesorder_detail_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.get(reverse("scm:salesorder_detail", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_edit_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.get(reverse("scm:salesorder_edit", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_delete_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_delete", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_submit_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_submit", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_release_hold_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_release_hold", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_fulfill_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_mark_delivered_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_mark_delivered", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_mark_invoiced_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_mark_invoiced", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_cancel_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_cancel", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorder_close_cross_tenant_404(self, client_a, sales_order_b):
+        assert client_a.post(reverse("scm:salesorder_close", args=[sales_order_b.pk])).status_code == 404
+
+    def test_salesorderallocation_detail_cross_tenant_404(self, client_a, allocation_b):
+        assert client_a.get(reverse("scm:salesorderallocation_detail", args=[allocation_b.pk])).status_code == 404
+
+    def test_salesorderallocation_edit_cross_tenant_404(self, client_a, allocation_b):
+        assert client_a.get(reverse("scm:salesorderallocation_edit", args=[allocation_b.pk])).status_code == 404
+
+    def test_salesorderallocation_delete_cross_tenant_404(self, client_a, allocation_b):
+        assert client_a.post(reverse("scm:salesorderallocation_delete", args=[allocation_b.pk])).status_code == 404
+
+    def test_salesorderallocation_release_cross_tenant_404(self, client_a, allocation_b):
+        assert client_a.post(reverse("scm:salesorderallocation_release", args=[allocation_b.pk])).status_code == 404
+
+    def test_salesorderallocation_cancel_cross_tenant_404(self, client_a, allocation_b):
+        assert client_a.post(reverse("scm:salesorderallocation_cancel", args=[allocation_b.pk])).status_code == 404
+
+
+# ================================================================ Cross-tenant FORM/FORMSET binding + IDOR list
+class TestSalesOrderCrossTenantFormScoping:
+    def test_list_never_contains_other_tenant_rows(self, client_a, sales_order_a, sales_order_b):
+        resp = client_a.get(reverse("scm:salesorder_list"))
+        assert sales_order_b not in resp.context["object_list"]
+
+    def test_allocation_list_never_contains_other_tenant_rows(self, client_a, allocation_a, allocation_b):
+        resp = client_a.get(reverse("scm:salesorderallocation_list"))
+        assert allocation_b not in resp.context["object_list"]
+
+    def test_crafted_salesorder_post_with_other_tenant_customer_is_rejected(
+        self, tenant_a, client_a, customer_b,
+    ):
+        from apps.scm.models import SalesOrder
+        data = {
+            "customer": str(customer_b.pk), "ship_to_address": "", "source_channel": "manual",
+            "order_date": "2026-01-05", "requested_date": "", "currency": "", "payment_terms": "",
+            "notes": "",
+            **formset_data("lines", []),
+        }
+        resp = client_a.post(reverse("scm:salesorder_create"), data)
+        assert resp.status_code == 200  # re-rendered form, not saved
+        assert not SalesOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_salesorderallocation_create_with_a_foreign_tenant_line_pk_404s(self, client_a, sales_order_line_b):
+        """`SalesOrderLine` has no tenant column of its own — it is scoped through
+        `sales_order__tenant`, so this needs EXPLICIT coverage rather than relying on the model's
+        own tenant FK like every other cross-tenant IDOR check in this suite."""
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_b.pk])
+        assert client_a.get(url).status_code == 404
+        assert client_a.post(url, {"location": "1", "quantity": "1", "notes": ""}).status_code == 404
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestSalesOrderPostOnlyActions:
+    def test_get_salesorder_delete_returns_405(self, client_a, sales_order_a):
+        assert client_a.get(reverse("scm:salesorder_delete", args=[sales_order_a.pk])).status_code == 405
+
+    def test_get_salesorder_submit_returns_405(self, client_a, sales_order_a):
+        assert client_a.get(reverse("scm:salesorder_submit", args=[sales_order_a.pk])).status_code == 405
+
+    def test_get_salesorder_cancel_returns_405(self, client_a, sales_order_a):
+        assert client_a.get(reverse("scm:salesorder_cancel", args=[sales_order_a.pk])).status_code == 405
+
+    def test_get_salesorder_close_returns_405(self, client_a, sales_order_a):
+        assert client_a.get(reverse("scm:salesorder_close", args=[sales_order_a.pk])).status_code == 405
+
+    def test_get_salesorder_mark_invoiced_returns_405(self, client_a, sales_order_a):
+        assert client_a.get(reverse("scm:salesorder_mark_invoiced", args=[sales_order_a.pk])).status_code == 405
+
+    def test_get_salesorder_create_from_quote_returns_405(self, client_a, tenant_a, customer_a):
+        from apps.crm.models import Quote
+        quote = Quote.objects.create(tenant=tenant_a, name="X", account=customer_a, status="accepted")
+        assert client_a.get(reverse("scm:salesorder_create_from_quote", args=[quote.pk])).status_code == 405
+
+    def test_get_salesorderallocation_release_returns_405(self, client_a, allocation_a):
+        assert client_a.get(reverse("scm:salesorderallocation_release", args=[allocation_a.pk])).status_code == 405
+
+    def test_get_salesorderallocation_cancel_returns_405(self, client_a, allocation_a):
+        assert client_a.get(reverse("scm:salesorderallocation_cancel", args=[allocation_a.pk])).status_code == 405
+
+    def test_get_salesorderallocation_delete_returns_405(self, client_a, allocation_a):
+        assert client_a.get(reverse("scm:salesorderallocation_delete", args=[allocation_a.pk])).status_code == 405
+
+
+# ================================================================ CSRF enforcement
+class TestSalesOrderCSRFEnforcement:
+    def test_post_without_csrf_token_is_rejected_on_salesorder_submit(self, admin_user, tenant_a, sales_order_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        assert resp.status_code == 403
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "draft"
+
+    def test_post_without_csrf_token_is_rejected_on_allocation_cancel(self, admin_user, tenant_a, allocation_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:salesorderallocation_cancel", args=[allocation_a.pk]))
+        assert resp.status_code == 403
+        allocation_a.refresh_from_db()
+        assert allocation_a.status == "reserved"
