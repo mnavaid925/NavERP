@@ -28,6 +28,8 @@ from .WarehouseManagement.PutawayTasks import urlpatterns as _wms_putaway
 from .WarehouseManagement.PickTasks import urlpatterns as _wms_picks
 from .WarehouseManagement.CycleCountTasks import urlpatterns as _wms_cyclecounts
 from .WarehouseManagement.YardVisits import urlpatterns as _wms_yard
+from .OrderManagement.SalesOrders import urlpatterns as _oms_salesorders
+from .OrderManagement.SalesOrderAllocations import urlpatterns as _oms_allocations
 
 
 app_name = "scm"
@@ -54,4 +56,8 @@ urlpatterns = [
     *_wms_picks,                         # WarehouseManagement/PickTasks
     *_wms_cyclecounts,                   # WarehouseManagement/CycleCountTasks
     *_wms_yard,                          # WarehouseManagement/YardVisits
+    # 4.5 uses `sales-orders/`, NOT `orders/` — that prefix is already PurchaseOrder's above and
+    # Django is first-match-wins, so reusing it would permanently shadow the sales order list.
+    *_oms_salesorders,                   # OrderManagement/SalesOrders
+    *_oms_allocations,                   # OrderManagement/SalesOrderAllocations
 ]
