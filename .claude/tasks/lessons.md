@@ -487,3 +487,37 @@ happy-path transfer worked while the *guard* path 500'd (`ValidationError` wasn'
 and the overview's stock-value aggregate needed `F`/`models` imports. **Rule:** when a feature's whole value is a
 guard, test the guard, not just the happy path — and re-run the derived-quantity math after every posting change
 (`on_hand` before/after, expecting an exact delta). See [[next-builds-one-submodule]].
+
+---
+
+## L38 — Apply the review finding, not the biggest hammer that silences it
+
+SCM 4.4's code-reviewer flagged: a goods receipt booked in a workspace with **no stock location** transitions to
+`received` (a one-way status) having posted zero moves, and the systemic failure is reported with the same wording
+as an ordinary per-line SKU miss. Both halves were true.
+
+I fixed it by making `_post_grn_receipt` **raise** when no location exists. That silenced the finding and broke
+something real: 4.1 Procurement shipped standalone and is legitimately usable without the 4.3 inventory spine — a
+tenant tracking orders and three-way matching against bills has nothing to post and no reason to be stopped. My
+change made 4.1 hard-depend on 4.3 *configuration*. **The existing test suite caught it** (four 4.1 GRN tests went
+red), not my own reasoning.
+
+The actual complaint was *"these two failures are indistinguishable to the user"*. The right fix was to return a
+separate `blocked` reason and message it separately — three lines, no behaviour change.
+
+**Rules:**
+1. Before applying a review fix, state the finding's *harm* in one sentence. If your fix prevents more than that
+   harm, you have changed the product, not fixed a bug. "Refuse the operation" is the most tempting over-correction.
+2. A reviewer describes a symptom from inside one sub-module. **You** own the cross-module contract they can't see —
+   an agent reviewing 4.4 has no reason to know 4.1 must stand alone.
+3. When a fix turns previously-green tests red, the default assumption is that **the fix is wrong**, not the tests.
+   Only conclude the test was stale after naming exactly which contract changed and why deliberately (that was the
+   *other* failure in this batch: `test_member_can_receive_goods_receipt` encoded the pre-4.4 rule, and receiving
+   really had become a stock-moving action — so there the test was genuinely obsolete). Both look identical from
+   the failure output; only the reasoning tells them apart.
+
+**Corroborating signal is worth acting on fast.** Two agents reviewing 4.4 independently (code + security) reported
+the same two ledger holes — the unguarded `_reverse_grn_receipt` and the un-frozen cycle-count sheet. Convergence
+from different prompts is much stronger evidence than either report alone; both were real and both were reachable
+by *ordinary* sequences (receive→putaway→cancel; start→add a row→reconcile), not crafted attacks. See
+[[next-builds-one-submodule]].
