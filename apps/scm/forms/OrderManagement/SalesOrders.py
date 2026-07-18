@@ -16,8 +16,11 @@ class SalesOrderForm(TenantModelForm):
 
     class Meta:
         model = SalesOrder
+        # `invoice` is NOT here. It is chosen on the mark-invoiced action instead: this form is
+        # editable only while the order is `draft`, and the invoice does not exist until after
+        # fulfillment, so a field here could never actually be filled in (code review).
         fields = ["customer", "ship_to_address", "source_channel", "order_date", "requested_date",
-                  "currency", "payment_terms", "invoice", "notes"]
+                  "currency", "payment_terms", "notes"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -27,15 +30,27 @@ class SalesOrderForm(TenantModelForm):
         # Currency is GLOBAL (no tenant FK), so it needs the shared explicit scoping helper.
         _active_currencies(self)
         if self.tenant is not None:
-            # Addresses belong to a party; showing another customer's ship-to would be a data leak
-            # between counterparties even inside one tenant.
             from apps.core.models import Address
-            customer_id = self.data.get("customer") or self.initial.get("customer") or \
-                (self.instance.customer_id if self.instance.pk else None)
-            qs = Address.objects.filter(tenant=self.tenant)
             self.fields["ship_to_address"].queryset = (
-                qs.filter(party_id=customer_id) if customer_id else qs.none())
-            self.fields["ship_to_address"].help_text = "Pick the customer first to list their addresses"
+                Address.objects.filter(tenant=self.tenant).select_related("party").order_by("party__name"))
+            self.fields["ship_to_address"].help_text = "Must be an address belonging to the customer"
+
+    def clean(self):
+        """Enforce that the ship-to address belongs to the chosen customer.
+
+        This was originally done by narrowing the queryset to the customer's addresses, which made
+        the field UNUSABLE on create: no customer is chosen yet when the form is first built, so the
+        dropdown was always empty and a new order could never be given a ship-to at all (frontend
+        review). Validating the relationship is the correct guard anyway — a narrowed queryset is
+        only UX, and it is the clean() that actually stops a crafted POST attaching someone else's
+        address.
+        """
+        cleaned = super().clean()
+        customer, address = cleaned.get("customer"), cleaned.get("ship_to_address")
+        if customer and address and address.party_id != customer.pk:
+            self.add_error("ship_to_address",
+                           f"That address belongs to {address.party.name}, not {customer.name}.")
+        return cleaned
 
 
 class SalesOrderLineForm(TenantModelForm):
