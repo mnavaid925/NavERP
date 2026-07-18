@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Reorder Alerts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reorder Alerts</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Reorder Alerts</span></div>
+      <p class="text-muted">Items whose on-hand quantity has fallen to or below their reorder point.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="sliders"></i> Manage rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>On Hand</th><th>Reorder Point</th><th>Shortfall</th><th>Suggested Qty</th><th class="table-actions">Action</th></tr></thead>
+        <tbody>
+          {% for a in alerts %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' a.rule.item.pk %}" class="fw-600">{{ a.rule.item.sku }}</a> · {{ a.rule.item.name }}</td>
+              <td>{{ a.rule.location.code }}</td>
+              <td>{{ a.on_hand|floatformat:2 }}</td>
+              <td>{{ a.rule.reorder_point|floatformat:2 }}</td>
+              <td><span class="badge badge-red">{{ a.shortfall|floatformat:2 }}</span></td>
+              <td class="fw-600">{{ a.suggested|floatformat:2 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:requisition_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Create requisition</a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="package-check"></i><h3>All stock above reorder points</h3><p>Nothing needs reordering right now.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
