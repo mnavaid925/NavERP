@@ -42,6 +42,17 @@ def _supplier_parties(tenant):
     return Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).distinct()
 
 
+def _customer_parties(tenant):
+    """Parties this tenant can sell to (4.5 OMS).
+
+    Single role, unlike ``_supplier_parties``: there is no second spelling of "customer" in
+    ``PartyRole.ROLE_CHOICES`` to fall back on, so no OR is needed here.
+    """
+    if tenant is None:
+        return Party.objects.none()
+    return Party.objects.filter(tenant=tenant, roles__role="customer").distinct()
+
+
 class TenantUniqueMixin:
     """Makes a model's ``unique_together`` that INCLUDES ``tenant`` actually validate on a form.
 
