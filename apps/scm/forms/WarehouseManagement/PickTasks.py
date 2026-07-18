@@ -18,7 +18,11 @@ class PickTaskPackForm(forms.Form):
 
     package_count = forms.IntegerField(min_value=1, required=False,
                                        widget=forms.NumberInput(attrs={"class": "form-input"}))
-    package_weight = forms.DecimalField(min_value=Decimal("0"), required=False, decimal_places=3,
+    # max_digits mirrors the model field (max_digits=12, decimal_places=3). picktask_pack saves with
+    # update_fields and never calls full_clean(), so without the cap here an over-magnitude weight
+    # passes validation and surfaces as a raw database error instead of a field error (code review).
+    package_weight = forms.DecimalField(min_value=Decimal("0"), required=False,
+                                        max_digits=12, decimal_places=3,
                                         widget=forms.NumberInput(attrs={"class": "form-input"}))
     tracking_ref = forms.CharField(max_length=64, required=False,
                                    widget=forms.TextInput(attrs={"class": "form-input"}),
