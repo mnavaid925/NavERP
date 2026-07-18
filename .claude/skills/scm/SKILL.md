@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) and 4.2 Supplier Relationship Management (supplier onboarding, signal-derived scorecards, contracts, catalogs, risk). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.3+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), and 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.4+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -8,11 +8,11 @@ description: Work on the SCM module (Module 4 — Supply Chain Management). As-b
 App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_name = "scm"`.
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
-**As-built: 4.1 Procurement Management + 4.2 Supplier Relationship Management.** 4.3–4.19 are roadmap. Build the
-next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference
-apps `apps/crm`/`apps/accounting` for the package layout and the mandatory
-[Module Creation Sequence](../../CLAUDE.md). **4.3 Inventory Management is next, and it needs `core.Item`/`Location`/
-`StockMove`, which still don't exist** — per L28/L29 (ships-first) SCM 4.3 will establish that inventory spine.
+**As-built: 4.1 Procurement Management + 4.2 Supplier Relationship Management + 4.3 Inventory Management.**
+4.4–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a
+`LIVE_LINKS["4.M"]` entry) — see the reference apps `apps/crm`/`apps/accounting` for the package layout and the
+mandatory [Module Creation Sequence](../../CLAUDE.md). **4.4 WMS is next and builds on 4.3's `Location` hierarchy
+and `StockMove` ledger** (bins/putaway/picking/cycle-count scheduling/yard).
 
 ## Overview
 
@@ -129,6 +129,46 @@ SRM on the `core.Party` supplier spine. Five models, all reusing `_supplier_part
 has a "Supplier Management" nav card. **LIVE_LINKS["4.2"]** maps the five bullets. **Seeder**: `_seed_srm_tenant`
 (guarded independently of 4.1) seeds a profile/scorecard/contract/catalog/risk per supplier, scorecards derived from
 real 4.1 signals; `--flush` clears the SRM tables.
+
+## 4.3 Inventory Management  (`apps/scm/*/InventoryManagement/`, templates `templates/scm/inventory/`)
+
+**SCM owns the INVENTORY SPINE** (ships-first, L29/L36/L37) — Module 5 extends it by FK, never re-declares it.
+
+**Spine models.** `Items.py` = `ItemCategory` + `UOM` (code/name/factor) + `Item` (sku unique per tenant,
+item_type stock/consumable/service, tracking none/lot/serial, costing_method weighted_avg/fifo/lifo,
+`average_cost` = a CACHED display figure from `apply_receipt()`, **not** the quantity source of truth).
+`Locations.py` = `Location` (warehouse/zone/bin/staging/transit, self-parent hierarchy, cycle-guarded `path()`).
+`LotSerials.py` = `LotSerial` (lot/serial, expiry, available/quarantine/expired/consumed).
+`StockMoves.py` = **`StockMove` — the append-only ledger**: signed `quantity` (+into/−out of a location),
+`unit_cost` (IS the FIFO/LIFO/WAC cost layer), move_type receipt/issue/transfer/adjustment, `reference`
+(source doc number). **No form, no edit/delete view, admin write disabled.** Corrections are compensating moves.
+
+**THE RULE: on-hand and valuation are ALWAYS derived** — `Item.on_hand(location=None)`, `Item.total_value()`,
+`Location.on_hand_value()`, `LotSerial.on_hand()`, `_item_valuation()`. There is no stored quantity anywhere.
+Never add one.
+
+**Domain models.** `StockTransfers.py` = `StockTransfer` [`TRF-`] + line (draft/in_transit/completed/cancelled;
+completing posts a PAIRED −/+ move per line). `StockAdjustments.py` = `StockAdjustment` [`ADJ-`] + line
+(draft/posted/cancelled; reason cycle_count/write_off/damage/found/revaluation/other; signed `quantity_delta`;
+`value_impact()`). `ReorderRules.py` = `ReorderRule` (unique per tenant+item+location; `current_on_hand()`,
+`is_below_point()`, `suggested_quantity()`).
+
+**The posting service** lives in `apps/scm/views/_helpers.py` and is the ONLY way stock moves:
+`_post_stock_move` (rolls `apply_receipt` BEFORE writing an inbound move so the average weights correctly),
+`_insufficient_stock` (reads the LIVE aggregate so it sees earlier lines in the same transaction),
+`_post_transfer`, `_post_adjustment`. Callers wrap them in `transaction.atomic()` and catch `ValidationError`
+→ a friendly message; a shortfall rolls the whole post back. This is also the documented future hook for 4.1's
+`GoodsReceiptNote.mark_received`.
+
+**URLs**: `item_*` (/items/), `category_*` (/categories/), `uom_*` (/uoms/), `location_*` (/locations/),
+`lotserial_*` (/lot-serials/), `stocktransfer_*` (/transfers/) + `_complete`/`_cancel`, `stockadjustment_*`
+(/adjustments/) + `_post`/`_cancel`, `reorderrule_*` (/reorder-rules/); reports `valuation_report` (/valuation/),
+`reorder_alerts`, `stock_ledger`, `on_hand_by_location`. **Tenant-admin gated**: transfer complete/cancel and
+adjustment post/cancel (they move real stock). **Templates** under `templates/scm/inventory/<entity>/` with the
+four report pages at that root; the stock ledger deliberately has NO actions column.
+**Seeder**: `_seed_inventory_tenant` (guarded on Item) creates UOMs/categories/3 items across costing methods, two
+locations, opening-balance receipt moves, a completed transfer, a posted cycle-count adjustment, and two reorder
+rules (one below on-hand so an alert fires).
 
 ## Conventions & gotchas
 
