@@ -71,3 +71,19 @@ from .InventoryManagement.StockAdjustments import (  # noqa: F401
 from .InventoryManagement.ReorderRules import (  # noqa: F401
     ReorderRule,
 )
+
+# 4.4 Warehouse Management
+from .WarehouseManagement.PutawayTasks import (  # noqa: F401
+    PutawayTask,
+)
+from .WarehouseManagement.PickTasks import (  # noqa: F401
+    PickTask,
+    PickTaskLine,
+)
+from .WarehouseManagement.CycleCountTasks import (  # noqa: F401
+    CycleCountTask,
+    CycleCountTaskLine,
+)
+from .WarehouseManagement.YardVisits import (  # noqa: F401
+    YardVisit,
+)
