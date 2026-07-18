@@ -79,8 +79,11 @@ class Command(BaseCommand):
             # 4.2 SRM and 4.3 Inventory are guarded independently so they seed even when 4.1 exists.
             self._seed_srm_tenant(tenant)
             self._seed_inventory_tenant(tenant)
+            # 4.4 runs LAST: putaway/picks/counts all reference the items and locations that
+            # _seed_inventory_tenant creates, so this ordering is a real dependency, not cosmetic.
+            self._seed_warehouse_tenant(tenant)
 
-        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement + 4.2 SRM + 4.3 inventory seed complete."))
+        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -265,6 +268,121 @@ class Command(BaseCommand):
             f"{transfer.number} transfer, {adj.number} adjustment, 2 reorder rules)."
         )
 
+    def _seed_warehouse_tenant(self, tenant):
+        """4.4 WMS demo: a completed putaway, a picked+packed task, a cycle count that reconciles
+        into a real StockAdjustment, and a truck at a dock. Idempotent via a PutawayTask guard.
+
+        Runs AFTER _seed_inventory_tenant because every row here references its items/locations.
+        Posts through the real service helpers so the seed exercises the same path the app uses.
+        """
+        from apps.scm.models import (
+            CycleCountTask, CycleCountTaskLine, Item, Location, PickTask, PickTaskLine,
+            PutawayTask, StockAdjustment, StockAdjustmentLine, YardVisit,
+        )
+        from apps.scm.views._helpers import _post_putaway, _post_pick, _post_adjustment
+        if PutawayTask.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: warehouse data already exists — skipping.")
+            return
+
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        if main is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no seeded locations — skipping warehouse seed."))
+            return
+        admin = self._admin(tenant)
+        today = timezone.localdate()
+
+        # A pickable bin under the main warehouse, so slotting attributes actually show up.
+        bin_a, _ = Location.objects.get_or_create(
+            tenant=tenant, code="WH-MAIN-A1",
+            defaults={"name": "Aisle A Bin 1", "location_type": "bin", "parent": main,
+                      "pick_sequence": 10, "abc_class": "a", "capacity": Decimal("500")})
+        door, _ = Location.objects.get_or_create(
+            tenant=tenant, code="DOCK-1",
+            defaults={"name": "Dock Door 1", "location_type": "staging", "parent": main,
+                      "is_pickable": False})
+
+        mon = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        dock_item = Item.objects.filter(tenant=tenant, sku="DOCK-C").first()
+        if not (mon and dock_item):
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: seeded items missing — skipping warehouse seed."))
+            return
+
+        # --- a completed putaway: 5 monitors off the main floor into bin A1 ------------------
+        put = PutawayTask(tenant=tenant, item=mon, from_location=main, to_location=bin_a,
+                          quantity=Decimal("5"), strategy="directed", status="pending",
+                          assigned_to=admin, notes="Seeded putaway.")
+        put.save()
+        with transaction.atomic():
+            _post_putaway(put, admin)
+            put.status = "completed"
+            put.completed_at = timezone.now()
+            put.save(update_fields=["status", "completed_at", "updated_at"])
+
+        # --- a picked + packed wave pulling 2 back out of that bin ---------------------------
+        pick = PickTask(tenant=tenant, strategy="wave", status="released", zone=main,
+                        wave_ref="WAVE-001", assigned_to=admin, ship_to="Acme retail store",
+                        notes="Seeded pick.")
+        pick.save()
+        PickTaskLine.objects.create(pick_task=pick, item=mon, from_location=bin_a,
+                                    quantity_requested=Decimal("2"), quantity_picked=Decimal("2"))
+        with transaction.atomic():
+            _post_pick(pick, admin)
+            pick.status = "picked"
+            pick.picked_at = timezone.now()
+            pick.save(update_fields=["status", "picked_at", "updated_at"])
+        pick.package_count = 1
+        pick.package_weight = Decimal("12.500")
+        pick.status = "packed"
+        pick.packed_at = timezone.now()
+        pick.save(update_fields=["package_count", "package_weight", "status", "packed_at",
+                                 "updated_at"])
+
+        # --- a cycle count that finds one dock short, reconciled into a real adjustment ------
+        count = CycleCountTask(tenant=tenant, location=main, scheduled_date=today,
+                               count_method="full", status="scheduled", assigned_to=admin,
+                               notes="Seeded cycle count.")
+        count.save()
+        expected = dock_item.on_hand(location=main)
+        line = CycleCountTaskLine.objects.create(
+            cycle_count=count, item=dock_item, expected_quantity=expected,
+            counted_quantity=expected - Decimal("1"))
+        count.status = "counted"
+        count.started_at = timezone.now()
+        count.counted_at = timezone.now()
+        count.save(update_fields=["status", "started_at", "counted_at", "updated_at"])
+        with transaction.atomic():
+            adj = StockAdjustment.objects.create(
+                tenant=tenant, location=main, reason="cycle_count", status="draft",
+                adjustment_date=today, notes=f"Generated from cycle count {count.number}.")
+            StockAdjustmentLine.objects.create(
+                adjustment=adj, item=dock_item, quantity_delta=line.variance,
+                unit_cost=dock_item.average_cost or Decimal("0"))
+            _post_adjustment(adj, admin)
+            adj.status = "posted"
+            adj.posted_at = timezone.now()
+            adj.save(update_fields=["status", "posted_at", "updated_at"])
+            count.adjustment = adj
+            count.status = "reconciled"
+            count.reconciled_at = timezone.now()
+            count.save(update_fields=["adjustment", "status", "reconciled_at", "updated_at"])
+
+        # --- a truck currently at a dock door -------------------------------------------------
+        yard = YardVisit(tenant=tenant, carrier_name="Northbound Haulage", vehicle_ref="TRK-4471",
+                         trailer_ref="TRL-88", driver_name="J. Rivera", direction="inbound",
+                         dock_door=door, status="arrived", scheduled_at=timezone.now(),
+                         notes="Seeded yard visit.")
+        yard.save()
+        yard.arrived_at = timezone.now()
+        yard.status = "at_dock"
+        yard.docked_at = timezone.now()
+        yard.save(update_fields=["arrived_at", "status", "docked_at", "updated_at"])
+
+        self.stdout.write(
+            f"{tenant.name}: seeded warehouse ({put.number} putaway, {pick.number} pick, "
+            f"{count.number} count -> {adj.number}, {yard.number} yard visit).")
+
     def _flush(self):
         # The AP bills this seeder created are reachable only through the receipts that link them,
         # so they must go FIRST — once the GRNs are gone there is no way to tell a seeded bill from
@@ -306,6 +424,13 @@ class Command(BaseCommand):
             Item, ItemCategory, UOM, Location, LotSerial, StockMove,
             StockTransfer, StockAdjustment, ReorderRule,
         )
+        # 4.4 warehouse docs go first — their lines PROTECT the 4.3 items/locations below.
+        from apps.scm.models import CycleCountTask, PickTask, PutawayTask, YardVisit
+        CycleCountTask.objects.all().delete()     # lines cascade
+        PickTask.objects.all().delete()           # lines cascade
+        PutawayTask.objects.all().delete()
+        YardVisit.objects.all().delete()
+
         StockMove.objects.all().delete()
         StockTransfer.objects.all().delete()      # lines cascade
         StockAdjustment.objects.all().delete()    # lines cascade
