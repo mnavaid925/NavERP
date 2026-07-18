@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Yard Visits{% endblock %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Yard Visit{% endblock %}
 {% block content %}
   <div class="page-header"><div>
-    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Yard Visits</h1>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Yard Visit</h1>
     <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">&rsaquo;</span><a href="{% url 'scm:yardvisit_list' %}">Yard Visits</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
   </div></div>
   <form method="post" novalidate>
