@@ -1593,3 +1593,433 @@ class TestPostAdjustmentService:
         with pytest.raises(ValidationError):
             _post_adjustment(adj, user=None)
         assert not StockMove.objects.filter(tenant=tenant_a, reference=adj.number).exists()
+
+
+# ================================================================================================
+# SCM 4.4 Warehouse Management
+# ================================================================================================
+
+# ================================================================ Auto-numbering
+class TestWarehouseAutoNumbering:
+    def test_putawaytask_numbers_sequential_per_tenant(self, tenant_a, tenant_b, item_a, location_a,
+                                                        location_a2, item_b, location_b):
+        from apps.scm.models import Location, PutawayTask
+        bin_b = Location.objects.create(tenant=tenant_b, code="BIN-X", name="Globex Bin X")
+        t1 = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                        to_location=location_a2, quantity=Decimal("1"))
+        t2 = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                        to_location=location_a2, quantity=Decimal("1"))
+        t3 = PutawayTask.objects.create(tenant=tenant_b, item=item_b, from_location=location_b,
+                                        to_location=bin_b, quantity=Decimal("1"))
+        assert t1.number == "PUT-00001"
+        assert t2.number == "PUT-00002"
+        assert t3.number == "PUT-00001"  # separate per-tenant sequence
+
+    def test_putawaytask_number_unique_together(self, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.models import PutawayTask
+        t1 = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                        to_location=location_a2, quantity=Decimal("1"))
+        with pytest.raises(IntegrityError):
+            PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                       to_location=location_a2, quantity=Decimal("1"), number=t1.number)
+
+    def test_picktask_number_prefixed_pik(self, tenant_a):
+        from apps.scm.models import PickTask
+        task = PickTask.objects.create(tenant=tenant_a)
+        assert task.number == "PIK-00001"
+
+    def test_picktask_number_unique_together(self, tenant_a):
+        from apps.scm.models import PickTask
+        t1 = PickTask.objects.create(tenant=tenant_a)
+        with pytest.raises(IntegrityError):
+            PickTask.objects.create(tenant=tenant_a, number=t1.number)
+
+    def test_cyclecounttask_number_prefixed_cc(self, tenant_a, location_a):
+        from apps.scm.models import CycleCountTask
+        task = CycleCountTask.objects.create(tenant=tenant_a, location=location_a,
+                                             scheduled_date=datetime.date(2026, 1, 20))
+        assert task.number == "CC-00001"
+
+    def test_cyclecounttask_number_unique_together(self, tenant_a, location_a):
+        from apps.scm.models import CycleCountTask
+        t1 = CycleCountTask.objects.create(tenant=tenant_a, location=location_a,
+                                           scheduled_date=datetime.date(2026, 1, 20))
+        with pytest.raises(IntegrityError):
+            CycleCountTask.objects.create(tenant=tenant_a, location=location_a,
+                                          scheduled_date=datetime.date(2026, 1, 21), number=t1.number)
+
+    def test_yardvisit_number_prefixed_yrd(self, tenant_a):
+        from apps.scm.models import YardVisit
+        visit = YardVisit.objects.create(tenant=tenant_a, carrier_name="Acme Haulage")
+        assert visit.number == "YRD-00001"
+
+    def test_yardvisit_number_unique_together(self, tenant_a):
+        from apps.scm.models import YardVisit
+        v1 = YardVisit.objects.create(tenant=tenant_a, carrier_name="Acme Haulage")
+        with pytest.raises(IntegrityError):
+            YardVisit.objects.create(tenant=tenant_a, carrier_name="Another Haulier", number=v1.number)
+
+
+# ================================================================ __str__
+class TestWarehouseStrRepresentations:
+    def test_putawaytask_str(self, putawaytask_a, item_a, location_a2):
+        s = str(putawaytask_a)
+        assert putawaytask_a.number in s
+        assert item_a.sku in s
+        assert location_a2.code in s
+
+    def test_picktask_str(self, picktask_a):
+        s = str(picktask_a)
+        assert picktask_a.number in s
+        assert "Single Order" in s
+
+    def test_picktaskline_str(self, picktask_a, item_a):
+        line = picktask_a.lines.first()
+        assert str(line) == f"{item_a.sku} ×{line.quantity_requested}"
+        assert str(line).startswith("WIDGET-1 ×5")
+
+    def test_cyclecounttask_str(self, cyclecounttask_a, location_a):
+        s = str(cyclecounttask_a)
+        assert cyclecounttask_a.number in s
+        assert location_a.code in s
+
+    def test_cyclecounttaskline_str(self, cyclecounttask_a, item_a):
+        line = cyclecounttask_a.lines.first()
+        assert str(line) == f"{item_a.sku}: expected {line.expected_quantity}"
+
+    def test_yardvisit_str(self, yardvisit_a):
+        s = str(yardvisit_a)
+        assert yardvisit_a.number in s
+        assert "Acme Haulage" in s
+
+
+# ================================================================ PutawayTask properties
+class TestPutawayTaskProperties:
+    def test_is_editable_true_pending_and_in_progress(self, putawaytask_a):
+        assert putawaytask_a.is_editable is True
+        putawaytask_a.status = "in_progress"
+        assert putawaytask_a.is_editable is True
+
+    def test_is_editable_false_once_completed_or_cancelled(self, putawaytask_a):
+        putawaytask_a.status = "completed"
+        assert putawaytask_a.is_editable is False
+        putawaytask_a.status = "cancelled"
+        assert putawaytask_a.is_editable is False
+
+    def test_is_open_true_pending_and_in_progress(self, putawaytask_a):
+        assert putawaytask_a.is_open is True
+        putawaytask_a.status = "in_progress"
+        assert putawaytask_a.is_open is True
+
+    def test_is_open_false_once_completed_or_cancelled(self, putawaytask_a):
+        putawaytask_a.status = "completed"
+        assert putawaytask_a.is_open is False
+        putawaytask_a.status = "cancelled"
+        assert putawaytask_a.is_open is False
+
+    def test_clean_rejects_same_source_and_destination(self, tenant_a, item_a, location_a):
+        from apps.scm.models import PutawayTask
+        task = PutawayTask(tenant=tenant_a, item=item_a, from_location=location_a,
+                           to_location=location_a, quantity=Decimal("1"))
+        with pytest.raises(ValidationError):
+            task.clean()
+
+    def test_clean_allows_different_locations(self, putawaytask_a):
+        putawaytask_a.clean()  # must not raise
+
+
+# ================================================================ PickTask / PickTaskLine properties
+class TestPickTaskProperties:
+    def test_is_editable_true_pending_and_released(self, picktask_a):
+        assert picktask_a.is_editable is True
+        picktask_a.status = "released"
+        assert picktask_a.is_editable is True
+
+    def test_is_editable_false_once_picking_or_beyond(self, picktask_a):
+        for status in ("picking", "picked", "packed", "cancelled"):
+            picktask_a.status = status
+            assert picktask_a.is_editable is False
+
+    def test_line_count(self, picktask_a):
+        assert picktask_a.line_count() == 1
+
+    def test_is_short_false_when_fully_picked(self, picktask_a):
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested
+        line.save(update_fields=["quantity_picked"])
+        assert picktask_a.is_short() is False
+
+    def test_is_short_true_when_under_picked(self, picktask_a):
+        line = picktask_a.lines.first()
+        line.quantity_picked = line.quantity_requested - Decimal("1")
+        line.save(update_fields=["quantity_picked"])
+        assert picktask_a.is_short() is True
+
+    def test_is_short_false_with_no_lines(self, tenant_a):
+        from apps.scm.models import PickTask
+        empty = PickTask.objects.create(tenant=tenant_a)
+        assert empty.is_short() is False
+
+    def test_picktaskline_shortfall(self, picktask_a):
+        line = picktask_a.lines.first()
+        line.quantity_picked = Decimal("2")
+        assert line.shortfall == Decimal("3")  # requested 5 - picked 2
+
+
+# ================================================================ CycleCountTask / line properties
+class TestCycleCountTaskProperties:
+    def test_is_editable_true_scheduled_and_in_progress(self, cyclecounttask_a):
+        assert cyclecounttask_a.is_editable is True
+        cyclecounttask_a.status = "in_progress"
+        assert cyclecounttask_a.is_editable is True
+
+    def test_is_editable_false_once_counted_or_beyond(self, cyclecounttask_a):
+        for status in ("counted", "reconciled", "cancelled"):
+            cyclecounttask_a.status = status
+            assert cyclecounttask_a.is_editable is False
+
+    def test_variance_count_and_net_variance_with_mixed_lines(self, tenant_a, cyclecounttask_a, item_lot_a):
+        from apps.scm.models import CycleCountTaskLine
+        line1 = cyclecounttask_a.lines.first()
+        line1.expected_quantity = Decimal("10")
+        line1.counted_quantity = Decimal("12")  # variance +2
+        line1.save(update_fields=["expected_quantity", "counted_quantity"])
+        line2 = CycleCountTaskLine.objects.create(
+            cycle_count=cyclecounttask_a, item=item_lot_a,
+            expected_quantity=Decimal("5"), counted_quantity=Decimal("5"),  # no variance
+        )
+        line3 = CycleCountTaskLine.objects.create(
+            cycle_count=cyclecounttask_a, item=item_lot_a, expected_quantity=Decimal("3"),
+        )  # uncounted — contributes nothing
+        assert cyclecounttask_a.variance_count() == 1
+        assert cyclecounttask_a.has_variance() is True
+        assert cyclecounttask_a.net_variance() == Decimal("2")
+
+        # Passing lines= reuses them rather than re-querying — same result.
+        lines = list(cyclecounttask_a.lines.all())
+        assert cyclecounttask_a.variance_count(lines=lines) == 1
+        assert cyclecounttask_a.net_variance(lines=lines) == Decimal("2")
+
+    def test_variance_count_zero_when_nothing_counted(self, cyclecounttask_a):
+        assert cyclecounttask_a.variance_count() == 0
+        assert cyclecounttask_a.has_variance() is False
+        assert cyclecounttask_a.net_variance() == Decimal("0")
+
+    def test_cyclecounttaskline_variance_zero_while_uncounted(self, cyclecounttask_a):
+        line = cyclecounttask_a.lines.first()
+        line.expected_quantity = Decimal("10")
+        assert line.counted_quantity is None
+        assert line.variance == Decimal("0")  # not a phantom shortfall
+        assert line.has_variance is False
+
+    def test_cyclecounttaskline_variance_and_has_variance_once_counted(self, cyclecounttask_a):
+        line = cyclecounttask_a.lines.first()
+        line.expected_quantity = Decimal("10")
+        line.counted_quantity = Decimal("7")
+        assert line.variance == Decimal("-3")
+        assert line.has_variance is True
+
+    def test_cyclecounttaskline_counted_zero_is_not_uncounted(self, cyclecounttask_a):
+        """counted_quantity=0 is a REAL count (nothing there), distinct from None (not yet counted)."""
+        line = cyclecounttask_a.lines.first()
+        line.expected_quantity = Decimal("4")
+        line.counted_quantity = Decimal("0")
+        assert line.variance == Decimal("-4")
+        assert line.has_variance is True
+
+    def test_cyclecounttaskline_no_variance_when_counted_matches_expected(self, cyclecounttask_a):
+        line = cyclecounttask_a.lines.first()
+        line.expected_quantity = Decimal("6")
+        line.counted_quantity = Decimal("6")
+        assert line.variance == Decimal("0")
+        assert line.has_variance is False
+
+
+# ================================================================ YardVisit properties
+class TestYardVisitProperties:
+    def test_is_editable_true_scheduled_arrived_at_dock(self, yardvisit_a):
+        for status in ("scheduled", "arrived", "at_dock"):
+            yardvisit_a.status = status
+            assert yardvisit_a.is_editable is True
+
+    def test_is_editable_false_departed_or_cancelled(self, yardvisit_a):
+        for status in ("departed", "cancelled"):
+            yardvisit_a.status = status
+            assert yardvisit_a.is_editable is False
+
+    def test_is_open_true_scheduled_arrived_at_dock(self, yardvisit_a):
+        for status in ("scheduled", "arrived", "at_dock"):
+            yardvisit_a.status = status
+            assert yardvisit_a.is_open is True
+
+    def test_is_open_false_departed_or_cancelled(self, yardvisit_a):
+        for status in ("departed", "cancelled"):
+            yardvisit_a.status = status
+            assert yardvisit_a.is_open is False
+
+    def test_dwell_minutes_none_before_arrival(self, yardvisit_a):
+        assert yardvisit_a.arrived_at is None
+        assert yardvisit_a.dwell_minutes() is None
+
+    def test_dwell_minutes_computed_between_arrival_and_departure(self, yardvisit_a):
+        from django.utils import timezone
+        arrived = timezone.now() - datetime.timedelta(minutes=90)
+        departed = timezone.now() - datetime.timedelta(minutes=15)
+        yardvisit_a.arrived_at = arrived
+        yardvisit_a.departed_at = departed
+        assert yardvisit_a.dwell_minutes() == 75
+
+    def test_dwell_minutes_falls_back_to_now_while_still_on_site(self, yardvisit_a):
+        from django.utils import timezone
+        yardvisit_a.arrived_at = timezone.now() - datetime.timedelta(minutes=10)
+        yardvisit_a.departed_at = None
+        dwell = yardvisit_a.dwell_minutes()
+        assert dwell is not None
+        assert 9 <= dwell <= 11  # ~10 minutes, tolerant of test execution time
+
+
+# ================================================================================================
+# Priority regression 1a — GRN cancel must refuse once its stock has already been put away
+# ================================================================================================
+class TestReverseGrnReceiptPutawayGuardRegression:
+    """`_reverse_grn_receipt` must refuse once the received stock has moved on to a bin via
+    putaway — reversing blind would drive the staging location negative while the bin keeps the
+    un-reversed stock. A receipt still sitting in staging must still reverse normally (the guard
+    must not be over-broad)."""
+
+    def test_refused_once_the_stock_has_been_put_away_elsewhere(
+        self, tenant_a, goods_receipt_a, location_a, location_a2, item_a,
+    ):
+        from apps.scm.models import PutawayTask, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_putaway, _reverse_grn_receipt
+
+        goods_receipt_a.status = "received"
+        goods_receipt_a.save(update_fields=["status"])
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt", reference=goods_receipt_a.number)
+        task = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                          to_location=location_a2, quantity=Decimal("10"))
+        _post_putaway(task, user=None)
+        assert item_a.on_hand(location=location_a) == Decimal("0")
+        assert item_a.on_hand(location=location_a2) == Decimal("10")
+
+        with pytest.raises(ValidationError):
+            _reverse_grn_receipt(goods_receipt_a, user=None)
+        # Nothing changed by the refused reversal — staging never went negative, the bin keeps its stock.
+        assert item_a.on_hand(location=location_a) == Decimal("0")
+        assert item_a.on_hand(location=location_a2) == Decimal("10")
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=goods_receipt_a.number,
+                                            move_type="receipt", quantity__lt=0).exists()
+
+    def test_allowed_when_the_stock_still_sits_in_staging(self, tenant_a, goods_receipt_a, location_a, item_a):
+        from apps.scm.views._helpers import _post_stock_move, _reverse_grn_receipt
+
+        goods_receipt_a.status = "received"
+        goods_receipt_a.save(update_fields=["status"])
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt", reference=goods_receipt_a.number)
+        reversed_count = _reverse_grn_receipt(goods_receipt_a, user=None)
+        assert reversed_count == 1
+        assert item_a.on_hand(location=location_a) == Decimal("0")  # fully returned
+
+
+# ================================================================================================
+# _post_putaway / _post_pick posting services
+# ================================================================================================
+class TestPostPutawayService:
+    def test_posts_a_paired_move_leaving_tenant_wide_total_unchanged(
+        self, tenant_a, item_a, location_a, location_a2,
+    ):
+        from apps.scm.models import PutawayTask, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_putaway
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        before = item_a.on_hand()
+        task = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                          to_location=location_a2, quantity=Decimal("4"))
+        _post_putaway(task, user=None)
+        assert item_a.on_hand() == before  # unchanged tenant-wide
+        assert item_a.on_hand(location=location_a) == Decimal("6")
+        assert item_a.on_hand(location=location_a2) == Decimal("4")
+        moves = StockMove.objects.filter(tenant=tenant_a, reference=task.number).order_by("quantity")
+        assert [m.quantity for m in moves] == [Decimal("-4.0000"), Decimal("4.0000")]
+
+    def test_refuses_an_over_putaway(self, tenant_a, item_a, location_a, location_a2):
+        from apps.scm.models import PutawayTask, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_putaway
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("3"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        task = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                          to_location=location_a2, quantity=Decimal("5"))
+        with pytest.raises(ValidationError):
+            _post_putaway(task, user=None)
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=task.number).exists()
+        assert item_a.on_hand(location=location_a) == Decimal("3")  # unchanged
+
+    def test_refused_when_staging_never_held_the_item_at_all(self, tenant_a, item_a, location_a, location_a2):
+        """Absent-prerequisite (L35): no receipt has ever landed at the staging location — refused
+        outright, never treated as unlimited."""
+        from apps.scm.models import PutawayTask, StockMove
+        from apps.scm.views._helpers import _post_putaway
+        task = PutawayTask.objects.create(tenant=tenant_a, item=item_a, from_location=location_a,
+                                          to_location=location_a2, quantity=Decimal("1"))
+        with pytest.raises(ValidationError):
+            _post_putaway(task, user=None)
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=task.number).exists()
+
+
+class TestPostPickService:
+    def test_short_pick_issues_only_the_picked_quantity_not_the_requested(
+        self, tenant_a, item_a, location_a,
+    ):
+        from apps.scm.models import PickTask, PickTaskLine, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_pick
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        task = PickTask.objects.create(tenant=tenant_a)
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("8"), quantity_picked=Decimal("5"))
+        posted = _post_pick(task, user=None)
+        assert posted == 1
+        move = StockMove.objects.get(tenant=tenant_a, reference=task.number)
+        assert move.quantity == Decimal("-5.0000")  # picked, NOT the requested 8
+        assert item_a.on_hand(location=location_a) == Decimal("5")
+
+    def test_zero_picked_line_contributes_no_move(self, tenant_a, item_a, location_a):
+        from apps.scm.models import PickTask, PickTaskLine, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_pick
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("10"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        task = PickTask.objects.create(tenant=tenant_a)
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("5"), quantity_picked=Decimal("3"))
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("2"), quantity_picked=Decimal("0"))
+        posted = _post_pick(task, user=None)
+        assert posted == 1
+        assert StockMove.objects.filter(tenant=tenant_a, reference=task.number).count() == 1
+
+    def test_nothing_picked_raises_and_posts_nothing(self, tenant_a, item_a, location_a):
+        """Absent-prerequisite (L35): a task with nothing picked must be REJECTED outright."""
+        from apps.scm.models import PickTask, PickTaskLine, StockMove
+        from apps.scm.views._helpers import _post_pick
+        task = PickTask.objects.create(tenant=tenant_a)
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("5"), quantity_picked=Decimal("0"))
+        with pytest.raises(ValidationError):
+            _post_pick(task, user=None)
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=task.number).exists()
+
+    def test_over_pick_at_the_bin_is_refused(self, tenant_a, item_a, location_a):
+        """Only 2 on hand at the bin but the line records 5 picked -> refused, nothing posted."""
+        from apps.scm.models import PickTask, PickTaskLine, StockMove
+        from apps.scm.views._helpers import _post_stock_move, _post_pick
+        _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("2"),
+                         unit_cost=Decimal("5.00"), move_type="receipt")
+        task = PickTask.objects.create(tenant=tenant_a)
+        PickTaskLine.objects.create(pick_task=task, item=item_a, from_location=location_a,
+                                    quantity_requested=Decimal("5"), quantity_picked=Decimal("5"))
+        with pytest.raises(ValidationError):
+            _post_pick(task, user=None)
+        assert not StockMove.objects.filter(tenant=tenant_a, reference=task.number).exists()
+        assert item_a.on_hand(location=location_a) == Decimal("2")  # unchanged
