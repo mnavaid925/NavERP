@@ -578,3 +578,84 @@ def yardvisit_a(db, tenant_a):
 def yardvisit_b(db, tenant_b):
     from apps.scm.models import YardVisit
     return YardVisit.objects.create(tenant=tenant_b, carrier_name="Globex Haulage", direction="inbound")
+
+
+# ------------------------------------------------------------------ SCM 4.5 Order Management System
+@pytest.fixture
+def customer_a(db, tenant_a):
+    """A tenant_a Party tagged 'customer' — the 4.5 OMS sell-to party."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Acme Retail Customer", kind="organization")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="customer", status="active",
+                             start_date=datetime.date(2026, 1, 1))
+    return party
+
+
+@pytest.fixture
+def customer_b(db, tenant_b):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_b, name="Globex Retail Customer", kind="organization")
+    PartyRole.objects.create(tenant=tenant_b, party=party, role="customer", status="active",
+                             start_date=datetime.date(2026, 1, 1))
+    return party
+
+
+@pytest.fixture
+def sales_order_a(db, tenant_a, customer_a, item_a):
+    """A draft order, tenant_a, one line (10 x $15.00 = $150.00)."""
+    from apps.scm.models import SalesOrder, SalesOrderLine
+    order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                      order_date=datetime.date(2026, 1, 5))
+    SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("10"),
+                                  unit_price=Decimal("15.00"))
+    order.recalc_totals()
+    return order
+
+
+@pytest.fixture
+def sales_order_b(db, tenant_b, customer_b, item_b):
+    from apps.scm.models import SalesOrder, SalesOrderLine
+    order = SalesOrder.objects.create(tenant=tenant_b, customer=customer_b,
+                                      order_date=datetime.date(2026, 1, 5))
+    SalesOrderLine.objects.create(sales_order=order, item=item_b, quantity_ordered=Decimal("5"),
+                                  unit_price=Decimal("20.00"))
+    order.recalc_totals()
+    return order
+
+
+@pytest.fixture
+def sales_order_submitted_a(db, tenant_a, sales_order_a):
+    """sales_order_a advanced straight to 'submitted' (bypassing the credit/fraud walk, which is
+    exercised on its own in TestSalesOrderCreditFraudHold) — a ready base for allocation tests."""
+    from django.utils import timezone
+    sales_order_a.status = "submitted"
+    sales_order_a.confirmation_sent_at = timezone.now()
+    sales_order_a.save(update_fields=["status", "confirmation_sent_at", "updated_at"])
+    return sales_order_a
+
+
+@pytest.fixture
+def sales_order_line_a(db, sales_order_submitted_a):
+    return sales_order_submitted_a.lines.first()
+
+
+@pytest.fixture
+def sales_order_line_b(db, sales_order_b):
+    return sales_order_b.lines.first()
+
+
+@pytest.fixture
+def allocation_a(db, tenant_a, sales_order_line_a, location_a):
+    """A reserved allocation of 4 (of the 10 ordered) against sales_order_line_a at location_a."""
+    from apps.scm.models import SalesOrderAllocation
+    return SalesOrderAllocation.objects.create(
+        tenant=tenant_a, sales_order_line=sales_order_line_a, location=location_a, quantity=Decimal("4"),
+    )
+
+
+@pytest.fixture
+def allocation_b(db, tenant_b, sales_order_line_b, location_b):
+    from apps.scm.models import SalesOrderAllocation
+    return SalesOrderAllocation.objects.create(
+        tenant=tenant_b, sales_order_line=sales_order_line_b, location=location_b, quantity=Decimal("2"),
+    )
