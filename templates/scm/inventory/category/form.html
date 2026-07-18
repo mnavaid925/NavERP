@@ -3,7 +3,7 @@
 {% block content %}
   <div class="page-header"><div>
     <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Category</h1>
-    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:category_list' %}">Categorys</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:category_list' %}">Categories</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
   </div></div>
   <form method="post" novalidate>
     {% csrf_token %}
