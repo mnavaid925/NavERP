@@ -128,9 +128,18 @@ class SalesOrder(TenantNumbered):
         """
         if self.status not in self.ALLOCATABLE_STATUSES:
             return self.status
-        lines = list(self.lines.all())
-        any_allocated = any(l.quantity_allocated() > ZERO for l in lines)
-        fully_covered = lines and all(l.quantity_backordered() <= ZERO for l in lines)
+        # ONE grouped query for every line's allocated total. The obvious version — looping
+        # quantity_allocated()/quantity_backordered() — costs an aggregate per line, and
+        # quantity_backordered() calls quantity_allocated() again, so it re-derives the same figure
+        # twice. This runs after EVERY allocation create/edit/cancel/delete, not once per page, so
+        # that cost lands on a button click. PurchaseOrder.received_by_line() already solved exactly
+        # this and its docstring says why — same shape, same fix (perf review).
+        lines = list(self.lines.annotate(
+            _allocated=Sum("allocations__quantity",
+                           filter=~Q(allocations__status="cancelled"))))
+        any_allocated = any((l._allocated or ZERO) > ZERO for l in lines)
+        fully_covered = bool(lines) and all(
+            (l._allocated or ZERO) >= (l.quantity_ordered or ZERO) for l in lines)
         if fully_covered and any_allocated:
             new_status = "allocated"
         elif any_allocated:
