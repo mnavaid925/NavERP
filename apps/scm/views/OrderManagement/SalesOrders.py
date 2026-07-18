@@ -186,13 +186,16 @@ def salesorder_submit(request, pk):
         if obj.status != "draft":
             messages.info(request, "This order has already been submitted.")
             return redirect("scm:salesorder_detail", pk=pk)
-        if not obj.lines.exists():
+        # One read of the lines answers both questions below — exists() then all() would hit the
+        # table twice for the same rows.
+        lines = list(obj.lines.all())
+        if not lines:
             messages.error(request, "Add at least one line before submitting the order.")
             return redirect("scm:salesorder_detail", pk=pk)
         # A quote-converted line arrives with no stock item (see SalesOrderLine.item). Allocation,
         # picking and every on-hand check key off the item, so an unmapped line would be an order
         # nobody can fulfill — caught here, while it is still an editable draft.
-        unmapped = [l.description or f"line {l.pk}" for l in obj.lines.all() if l.item_id is None]
+        unmapped = [l.description or f"line {l.pk}" for l in lines if l.item_id is None]
         if unmapped:
             messages.error(request, (
                 f"{len(unmapped)} line(s) still have no stock item picked: "
