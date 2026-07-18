@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.code }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.code }}
+        <span class="badge badge-{% if obj.location_type == 'warehouse' %}green{% elif obj.location_type == 'zone' %}info{% elif obj.location_type == 'bin' %}slate{% elif obj.location_type == 'staging' %}amber{% else %}muted{% endif %}">{{ obj.get_location_type_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:location_list' %}">Locations</a><span class="sep">›</span><span>{{ obj.code }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_location_type_display }}</dd></div>
+      <div class="detail-item"><dt>Path</dt><dd>{{ path|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Parent</dt><dd>{% if obj.parent %}{{ obj.parent.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Stock Value</dt><dd>{{ on_hand_value|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Child locations</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead>
+        <tbody>
+          {% for ch in children %}
+            <tr>
+              <td><a href="{% url 'scm:location_detail' ch.pk %}" class="fw-600">{{ ch.code }}</a></td>
+              <td>{{ ch.name }}</td>
+              <td>{{ ch.get_location_type_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="map-pin"></i><p>No child locations.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">On hand by item</h2>
+      <a href="{% url 'scm:stock_ledger' %}?location={{ obj.pk }}" class="btn btn-outline"><i data-lucide="list"></i> Ledger</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>SKU</th><th>Name</th><th>Quantity</th></tr></thead>
+        <tbody>
+          {% for row in by_item %}
+            <tr>
+              <td class="fw-600">{{ row.item__sku }}</td>
+              <td>{{ row.item__name }}</td>
+              <td>{{ row.qty|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="box"></i><p>No stock held at this location.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:location_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:location_delete' obj.pk %}" onsubmit="return confirm('Delete this location?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:location_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
