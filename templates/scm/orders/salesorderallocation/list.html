@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Order Allocations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Order Allocations</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Allocations</span></div>
+      <p class="text-muted">Stock reserved against customer orders. A reservation is a claim, not a movement — on-hand only changes when the warehouse picks.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search order number or item…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:salesorderallocation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Order</th><th>Customer</th><th>Item</th><th>Location</th><th>Quantity</th><th>Reserved</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:salesorder_detail' obj.sales_order_line.sales_order.pk %}" class="fw-600">{{ obj.sales_order_line.sales_order.number }}</a></td>
+              <td>{% if obj.sales_order_line.sales_order.customer %}{{ obj.sales_order_line.sales_order.customer.name }}{% else %}—{% endif %}</td>
+              <td>{% if obj.sales_order_line.item %}{{ obj.sales_order_line.item.sku }}{% else %}—{% endif %}</td>
+              <td>{{ obj.location.code }}</td>
+              <td>{{ obj.quantity|floatformat:2 }}</td>
+              <td>{{ obj.allocated_at|date:"M d, Y" }}</td>
+              <td><span class="badge badge-{% if obj.status == 'reserved' %}info{% elif obj.status == 'released' %}amber{% elif obj.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:salesorderallocation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if obj.status == 'reserved' %}
+                      <a href="{% url 'scm:salesorderallocation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                      <form method="post" action="{% url 'scm:salesorderallocation_delete' obj.pk %}" onsubmit="return confirm('Delete this reservation?');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="package-plus"></i><h3>No allocations</h3><p>Allocate stock from a submitted order's line.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
