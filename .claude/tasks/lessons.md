@@ -521,3 +521,45 @@ the same two ledger holes — the unguarded `_reverse_grn_receipt` and the un-fr
 from different prompts is much stronger evidence than either report alone; both were real and both were reachable
 by *ordinary* sequences (receive→putaway→cancel; start→add a row→reconcile), not crafted attacks. See
 [[next-builds-one-submodule]].
+
+---
+
+## L39 — Check that a feature's preconditions can ever be true at the same time
+
+SCM 4.5's review turned up two defects with one root cause. Both were mine, both passed every test I
+had written, and both made a shipped feature **completely unreachable** rather than merely wrong.
+
+1. **`salesorder_mark_invoiced` could never run.** `invoice` was a field on the order form; the form
+   is editable only while `status == "draft"`; the action requires `status == "fulfilled"`. To set the
+   invoice you had to be draft, to use it you had to be fulfilled — and in reality the invoice doesn't
+   exist until after fulfillment anyway. Every individual rule was defensible. Their conjunction was
+   empty.
+2. **`ship_to_address` could never be chosen on a new order.** I narrowed the queryset to the selected
+   customer's addresses (a real privacy concern — one customer's addresses shouldn't be visible while
+   ordering for another). But on a *create* form no customer is selected yet, so the queryset was
+   always `.none()`. The field rendered, looked fine, and was permanently empty.
+
+**Why my tests missed both.** They exercised each rule in isolation and each rule was correct. The
+write-path script drove the lifecycle but never asserted that a *fresh* form could reach every field,
+and it set `invoice` directly on the model rather than through the UI. Both bugs live in the gap
+*between* correct rules — which is exactly where a happy-path walk-through doesn't look.
+
+**Rules:**
+1. When a field is gated by one condition and the action consuming it is gated by another, write the
+   conjunction down and ask whether anything satisfies it. If the answer is "only if the user does X
+   before Y", check that X is actually possible before Y in the real workflow.
+2. **A restrictive queryset is UX; validation is the guard.** Narrowing choices to prevent a bad
+   selection breaks the moment the narrowing key isn't known yet. Offer the full tenant-scoped set and
+   reject the invalid combination in `clean()` — that also holds against a crafted POST, which a
+   narrowed dropdown never did.
+3. Test forms *unbound* as well as bound. `SalesOrderForm(tenant=t).fields[f].queryset.count() > 0` is
+   one line and would have caught defect 2 immediately.
+4. A dead end is the failure mode this project keeps producing — `crm.Quote.quote_accept()` created
+   nothing downstream for twelve CRM sub-modules before 4.5 finally wired it. When adding an action,
+   ask what it *hands off to* and whether that recipient can be reached.
+
+Also worth keeping: this round ran five reviewers with an adversarial verify pass, and the verifiers
+**refuted 8 of 17 findings** — including two that were really "no problem here" written up as
+findings, and one that was real but whose query-count arithmetic was ~2x overstated (the verifier
+corrected the number while confirming the defect). Single-reviewer output is not a work list; making
+each finding survive a skeptic is what turns it into one. See [[next-builds-one-submodule]].
