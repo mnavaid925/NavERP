@@ -48,7 +48,7 @@ def item_detail(request, pk):
     return render(request, "scm/inventory/item/detail.html", {
         "obj": obj,
         "on_hand": on_hand,
-        "total_value": obj.total_value(),
+        "total_value": obj.total_value(on_hand=on_hand),
         "by_location": [row for row in by_location if row["qty"]],
         "recent_moves": (StockMove.objects.filter(tenant=request.tenant, item=obj)
                          .select_related("location", "lot_serial")[:15]),
