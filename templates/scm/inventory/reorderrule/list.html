@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Reorder Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reorder Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Reorder Rules</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> Reorder alerts</a>
+      <a href="{% url 'scm:reorderrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Reorder Rule</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by item or location…">
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>Reorder Point</th><th>Safety Stock</th><th>Reorder Qty</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.item.sku }}</td>
+              <td>{{ obj.location.code }}</td>
+              <td>{{ obj.reorder_point|floatformat:2 }}</td>
+              <td>{{ obj.safety_stock|floatformat:2 }}</td>
+              <td>{{ obj.reorder_quantity|floatformat:2 }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:reorderrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:reorderrule_delete' obj.pk %}" onsubmit="return confirm('Delete this reorder rule?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="bell"></i><h3>No reorder rules</h3><p>Set a reorder point per item and location to get low-stock alerts.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
