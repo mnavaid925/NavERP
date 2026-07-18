@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}On Hand by Location{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">On Hand by Location</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>On Hand</span></div>
+      <p class="text-muted">Current stock at each location, derived from the movement ledger.</p>
+    </div>
+  </div>
+
+  {% for code, data in grouped.items %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">{{ code }} · {{ data.name|default:"—" }}</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>SKU</th><th>Name</th><th>Quantity</th><th>Value</th></tr></thead>
+          <tbody>
+            {% for row in data.items %}
+              <tr>
+                <td class="fw-600">{{ row.item__sku }}</td>
+                <td>{{ row.item__name }}</td>
+                <td>{{ row.qty|floatformat:2 }}</td>
+                <td>{{ row.value|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="box"></i><p>No stock at this location.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="warehouse"></i><h3>No stock on hand</h3><p>Receive or adjust stock to see it here.</p></div>
+    </div></div>
+  {% endfor %}
+{% endblock %}
