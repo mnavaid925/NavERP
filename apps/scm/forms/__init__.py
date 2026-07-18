@@ -98,3 +98,14 @@ from .WarehouseManagement.CycleCountTasks import (  # noqa: F401
 from .WarehouseManagement.YardVisits import (  # noqa: F401
     YardVisitForm,
 )
+
+# 4.5 Order Management System (OMS)
+from .OrderManagement.SalesOrders import (  # noqa: F401
+    SalesOrderForm,
+    SalesOrderLineForm,
+    BaseSalesOrderLineFormSet,
+    SalesOrderLineFormSet,
+)
+from .OrderManagement.SalesOrderAllocations import (  # noqa: F401
+    SalesOrderAllocationForm,
+)
