@@ -11,6 +11,7 @@ scoped by hand to the parent object, or the select would list every tenant's row
 ``_scope_to_parent``.
 """
 from django import forms
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.forms import inlineformset_factory
 
@@ -37,6 +38,36 @@ def _supplier_parties(tenant):
     if tenant is None:
         return Party.objects.none()
     return Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).distinct()
+
+
+class TenantUniqueMixin:
+    """Makes a model's ``unique_together`` that INCLUDES ``tenant`` actually validate on a form.
+
+    Two separate things both have to be true or the check silently does nothing:
+
+    1. The instance needs its tenant — `tenant` is never a form field and `crud_create`/`crud_edit`
+       only assign it AFTER `is_valid()`, so without this the check would run against `tenant=None`.
+    2. `tenant` must be removed from the validation exclusions — Django skips a `unique_together`
+       entirely if ANY of its fields is excluded, and a non-form field is always excluded. Stamping
+       the tenant alone is NOT enough; this is the half that actually enables the check.
+
+    Without both, a duplicate SKU/code/lot-number passes `is_valid()` and then raises an uncaught
+    IntegrityError (a 500) on `.save()` — an everyday user mistake crashing a mainline CRUD path.
+    Mix this in BEFORE TenantModelForm on any scm form whose model has such a constraint.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None and self.instance.tenant_id is None:
+            self.instance.tenant = self.tenant
+
+    def validate_unique(self):
+        exclude = set(self._get_validation_exclusions())
+        exclude.discard("tenant")
+        try:
+            self.instance.validate_unique(exclude=exclude)
+        except ValidationError as e:
+            self._update_errors(e)
 
 
 def _scope_to_parent(form, field_name, queryset):
