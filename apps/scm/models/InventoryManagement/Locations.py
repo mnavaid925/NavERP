@@ -18,12 +18,30 @@ class Location(TenantOwned):
         ("transit", "In Transit"),
     ]
 
+    ABC_CHOICES = [
+        ("a", "A — fast moving"),
+        ("b", "B — medium"),
+        ("c", "C — slow moving"),
+    ]
+
     code = models.CharField(max_length=32)
     name = models.CharField(max_length=255)
     location_type = models.CharField(max_length=12, choices=LOCATION_TYPES, default="warehouse")
     parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
                                related_name="children")
     is_active = models.BooleanField(default=True)
+
+    # --- 4.4 WMS bin attributes -----------------------------------------------------------
+    # Added to the EXISTING location rather than a parallel "Bin" model: a bin IS a location of
+    # location_type='bin', and splitting them would fork the StockMove FK and the on-hand aggregate.
+    capacity = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                   validators=[MinValueValidator(ZERO)],
+                                   help_text="Storage capacity in the bin's own units (blank = unlimited)")
+    pick_sequence = models.PositiveIntegerField(null=True, blank=True,
+                                                help_text="Walk order for picking; lower is picked first")
+    abc_class = models.CharField(max_length=1, choices=ABC_CHOICES, blank=True,
+                                 help_text="Velocity class used for slotting and count frequency")
+    is_pickable = models.BooleanField(default=True, help_text="Whether stock here can be picked from")
 
     class Meta:
         ordering = ["code"]
