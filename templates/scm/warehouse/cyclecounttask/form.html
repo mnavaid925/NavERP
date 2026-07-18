@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Cycle Count{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Cycle Count</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:cyclecounttask_list' %}">Cycle Counts</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div></div>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Count sheet</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Item</th><th>Lot / Serial</th><th>Counted Quantity</th><th>Notes</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for lf in formset %}
+              <tr>
+                {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.item }}{% for e in lf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.lot_serial }}{% for e in lf.lot_serial.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.counted_quantity }}{% for e in lf.counted_quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.notes }}{% for e in lf.notes.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% comment %}
+        expected_quantity is deliberately absent from this sheet — it is snapshotted server-side when
+        the count is started. Showing it here would turn a blind count into confirming a number on
+        screen, which is exactly how a real discrepancy gets papered over.
+      {% endcomment %}
+      <div class="card-body text-muted">List what to count now; leave the counted quantity blank until you are on the floor. The expected quantity is captured automatically when the count starts.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:cyclecounttask_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
