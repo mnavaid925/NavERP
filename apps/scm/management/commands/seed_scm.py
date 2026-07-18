@@ -190,7 +190,7 @@ class Command(BaseCommand):
             Item, ItemCategory, UOM, Location, StockMove, StockTransfer, StockTransferLine,
             StockAdjustment, StockAdjustmentLine, ReorderRule,
         )
-        from apps.scm.views._helpers import _post_transfer, _post_adjustment
+        from apps.scm.views._helpers import _post_transfer, _post_adjustment, _post_stock_move
         if Item.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"{tenant.name}: inventory data already exists — skipping.")
             return
@@ -222,12 +222,12 @@ class Command(BaseCommand):
         ]
         now = timezone.now()
         with transaction.atomic():
+            # Through the posting service like every other movement — not hand-rolled — so the
+            # weighted-average roll follows the same path the app uses at runtime.
             for i, (item, loc, qty, cost) in enumerate(opening):
-                item.apply_receipt(qty, cost)
-                StockMove.objects.create(
-                    tenant=tenant, item=item, location=loc, quantity=qty, unit_cost=cost,
-                    move_type="receipt", reference="OPENING",
-                    moved_at=now - datetime.timedelta(days=30 - i))
+                _post_stock_move(tenant, item=item, location=loc, quantity=qty, unit_cost=cost,
+                                 move_type="receipt", reference="OPENING",
+                                 moved_at=now - datetime.timedelta(days=30 - i))
 
         # A completed transfer of 5 monitors main -> store, posting the paired moves.
         transfer = StockTransfer.objects.create(
