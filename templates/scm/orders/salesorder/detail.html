@@ -141,7 +141,8 @@
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'scm:salesorder_release_hold' obj.pk %}">
               {% csrf_token %}
-              <input type="text" name="release_note" class="form-input" placeholder="Why is it safe to release?" required>
+              <label class="sr-only" for="id_release_note">Reason for releasing the hold</label>
+              <input type="text" name="release_note" id="id_release_note" class="form-input" placeholder="Why is it safe to release?" required>
               <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Release hold</button>
             </form>
           {% endif %}
@@ -161,8 +162,19 @@
           </form>
         {% endif %}
         {% if obj.status == 'fulfilled' %}
+          {% comment %}
+            The invoice is picked HERE, not on the order form: that form is draft-only, and the
+            invoice does not exist until after fulfillment, so a field there could never be used.
+          {% endcomment %}
           <form method="post" action="{% url 'scm:salesorder_mark_invoiced' obj.pk %}">
             {% csrf_token %}
+            <label class="sr-only" for="id_link_invoice">Invoice to link</label>
+            <select name="invoice" id="id_link_invoice" class="form-select">
+              <option value="">{% if obj.invoice %}Keep {{ obj.invoice.number }}{% else %}Select an invoice…{% endif %}</option>
+              {% for inv in linkable_invoices %}
+                <option value="{{ inv.pk }}">{{ inv.number }} · {{ inv.total|floatformat:2 }}</option>
+              {% endfor %}
+            </select>
             <button class="btn btn-outline" type="submit"><i data-lucide="receipt"></i> Mark invoiced</button>
           </form>
         {% endif %}
@@ -176,7 +188,8 @@
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'scm:salesorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel this order?');">
               {% csrf_token %}
-              <input type="text" name="cancel_reason" class="form-input" placeholder="Reason" required>
+              <label class="sr-only" for="id_cancel_reason">Reason for cancelling</label>
+              <input type="text" name="cancel_reason" id="id_cancel_reason" class="form-input" placeholder="Reason" required>
               <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
             </form>
           {% endif %}
