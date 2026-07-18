@@ -115,10 +115,14 @@ class Item(TenantOwned):
             qs = qs.filter(location=location)
         return qs.aggregate(q=Sum("quantity"))["q"] or ZERO
 
-    def total_value(self):
+    def total_value(self, on_hand=None):
         """On-hand × cached average cost — the quick valuation figure. The Stock Valuation report
-        does the exact FIFO/LIFO/WAC cost-layer walk over StockMove for the authoritative number."""
-        return (self.on_hand() * (self.average_cost or ZERO)).quantize(Decimal("0.01"))
+        does the exact FIFO/LIFO/WAC cost-layer walk over StockMove for the authoritative number.
+
+        Pass ``on_hand`` when the caller already resolved it, so the detail page doesn't pay for the
+        same aggregate twice (perf review)."""
+        qty = self.on_hand() if on_hand is None else on_hand
+        return (qty * (self.average_cost or ZERO)).quantize(Decimal("0.01"))
 
     def apply_receipt(self, quantity, unit_cost):
         """Roll the cached weighted-average cost forward for an inbound quantity at ``unit_cost``.
