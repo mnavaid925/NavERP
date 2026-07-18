@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), and 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.4+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), and 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.5+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -8,11 +8,11 @@ description: Work on the SCM module (Module 4 — Supply Chain Management). As-b
 App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_name = "scm"`.
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
-**As-built: 4.1 Procurement Management + 4.2 Supplier Relationship Management + 4.3 Inventory Management.**
-4.4–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a
-`LIVE_LINKS["4.M"]` entry) — see the reference apps `apps/crm`/`apps/accounting` for the package layout and the
-mandatory [Module Creation Sequence](../../CLAUDE.md). **4.4 WMS is next and builds on 4.3's `Location` hierarchy
-and `StockMove` ledger** (bins/putaway/picking/cycle-count scheduling/yard).
+**As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management.** 4.5–4.19 are roadmap.
+Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the
+reference apps `apps/crm`/`apps/accounting` for the package layout and the mandatory
+[Module Creation Sequence](../../CLAUDE.md). **4.5 OMS is next**; note `SalesOrder` (Module 8) does not exist, so
+it will need the same ships-first stand-in decision 4.1/4.3 made (L28/L29/L36/L37).
 
 ## Overview
 
@@ -169,6 +169,37 @@ four report pages at that root; the stock ledger deliberately has NO actions col
 **Seeder**: `_seed_inventory_tenant` (guarded on Item) creates UOMs/categories/3 items across costing methods, two
 locations, opening-balance receipt moves, a completed transfer, a posted cycle-count adjustment, and two reorder
 rules (one below on-hand so an alert fires).
+
+## 4.4 Warehouse Management  (`apps/scm/*/WarehouseManagement/`, templates `templates/scm/warehouse/`)
+
+Layered ON the 4.3 spine, never beside it. **Bins ARE `Location`s** — 4.4 added `capacity`, `pick_sequence`,
+`abc_class` and `is_pickable` to the existing model rather than forking a Bin table (which would split the
+StockMove FK and the on-hand aggregate in two). `GoodsReceiptNote` gained a staging `location` FK.
+
+- **`PutawayTasks.py`** — `PutawayTask` [`PUT-`]: receipt → staging → bin, strategies directed/fixed/random/
+  cross_dock. Completing (tenant-admin, locked) posts the staging→bin pair via `_post_putaway`.
+- **`PickTasks.py`** — `PickTask` [`PIK-`] + line: single/wave/batch/zone. Lines order by the bin's
+  `pick_sequence`. A line may be SHORT picked, never over-picked. Confirming (tenant-admin, locked) issues only
+  `quantity_picked` via `_post_pick`. Packing records label DATA only — carriers/rendering are 4.6 TMS.
+  Stands alone: no `SalesOrder` FK because Module 8 isn't built.
+- **`CycleCountTasks.py`** — `CycleCountTask` [`CC-`] + line: scheduled → in_progress → counted → reconciled.
+  **`expected_quantity` is snapshotted server-side on START** (not a form field, read-only in admin) — never
+  re-derived at reconcile, or mid-count movement would silently absorb the discrepancy. `counted_quantity` is
+  nullable so uncounted ≠ counted-zero. Reconciling makes **exactly one** `StockAdjustment(reason='cycle_count')`
+  and posts it through the EXISTING adjustment path; a no-variance count reconciles without an empty document.
+- **`YardVisits.py`** — `YardVisit` [`YRD-`]: scheduled/arrived/at_dock/departed with derived `dwell_minutes()`.
+  Posts NO StockMove. `carrier_name` is free text until 4.6.
+
+**The GRN→StockMove wire-up lives here too** (`_post_grn_receipt`/`_reverse_grn_receipt` in `views/_helpers.py`):
+booking a goods receipt posts an inbound move per received line at the PO line's `unit_price`; cancelling posts
+COMPENSATING moves (never deletes). `goodsreceipt_receive` is now tenant-admin gated because it moves stock. Item
+resolution is best-effort via `sku_hint`→`Item.sku` (4.1 lines are free text) and RETURNS unmatched lines so the
+view warns rather than silently posting nothing.
+
+**URLs**: `putawaytask_*` (/putaway/) + `_start`/`_complete`/`_cancel`; `picktask_*` (/picks/) + `_release`/
+`_confirm`/`_pack`/`_cancel`; `cyclecounttask_*` (/cycle-counts/) + `_start`/`_complete`/`_reconcile`/`_cancel`;
+`yardvisit_*` (/yard/) + `_arrive`/`_dock`/`_depart`/`_cancel`. **Seeder**: `_seed_warehouse_tenant` runs AFTER
+`_seed_inventory_tenant` — a real dependency, since every row references its items/locations.
 
 ## Conventions & gotchas
 
