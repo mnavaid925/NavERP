@@ -87,8 +87,11 @@ class Command(BaseCommand):
             # 4.4 runs LAST: putaway/picks/counts all reference the items and locations that
             # _seed_inventory_tenant creates, so this ordering is a real dependency, not cosmetic.
             self._seed_warehouse_tenant(tenant)
+            # 4.5 also depends on 4.3's items/locations (it reserves against them), so it follows.
+            self._seed_oms_tenant(tenant)
 
-        self.stdout.write(self.style.SUCCESS("SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse seed complete."))
+        self.stdout.write(self.style.SUCCESS(
+            "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -388,6 +391,109 @@ class Command(BaseCommand):
             f"{tenant.name}: seeded warehouse ({put.number} putaway, {pick.number} pick, "
             f"{count.number} count -> {adj.number}, {yard.number} yard visit).")
 
+    def _seed_oms_tenant(self, tenant):
+        """4.5 OMS demo: three orders sitting at three different lifecycle points, so the order
+        list, the credit-hold queue and the backorder queue each have something real on them.
+
+        Idempotent via a SalesOrder guard. Runs after _seed_inventory_tenant because every
+        allocation reserves against a real item at a real location.
+
+        Note the deliberate asymmetry with 4.4's seeder: that one posts through the real service
+        helpers because posting IS the behaviour being demonstrated. Here the interesting behaviour
+        is the DERIVED state (allocated vs backordered vs held), so the rows are built directly and
+        then run through the same recompute_allocation_status() the views call — which is what
+        actually decides each order's status.
+        """
+        from apps.scm.models import Item, Location, SalesOrder, SalesOrderLine, SalesOrderAllocation
+        if SalesOrder.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: order data already exists — skipping.")
+            return
+
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        if main is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no seeded locations — skipping order seed."))
+            return
+        ws16 = Item.objects.filter(tenant=tenant, sku="WS-16").first()
+        mon27 = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        if ws16 is None or mon27 is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no seeded items — skipping order seed."))
+            return
+
+        today = timezone.localdate()
+        currency = Currency.objects.filter(code="USD").first()
+        terms = PaymentTerm.objects.filter(tenant=tenant).order_by("id").first()
+        # A healthy credit limit for the ordinary customer, and a deliberately tiny one for the
+        # customer whose order must land in the hold queue.
+        good = self._customer(tenant, "Fabrikam Retail Group", "organization",
+                              credit_limit=Decimal("15000.00"))
+        tight = self._customer(tenant, "Contoso Discount Stores", "organization",
+                               credit_limit=Decimal("500.00"))
+
+        def _order(customer, channel, note):
+            order = SalesOrder(
+                tenant=tenant, customer=customer, source_channel=channel, order_date=today,
+                requested_date=today + datetime.timedelta(days=7),
+                currency=currency, payment_terms=terms, notes=note,
+            )
+            order.save()
+            return order
+
+        # 1) Fully allocated — reserves less than the 4.3 opening balance, so it covers cleanly.
+        on_hand_ws = ws16.on_hand(location=main)
+        qty1 = min(Decimal("5"), on_hand_ws) if on_hand_ws > 0 else Decimal("5")
+        o1 = _order(good, "web", "Seeded: fully allocated order.")
+        l1 = SalesOrderLine.objects.create(
+            sales_order=o1, item=ws16, quantity_ordered=qty1, unit_price=Decimal("1450.00"),
+            tax_pct=Decimal("8.00"))
+        o1.recalc_totals()
+        o1.status = "submitted"
+        o1.confirmation_sent_at = timezone.now()
+        o1.save(update_fields=["status", "confirmation_sent_at", "updated_at"])
+        if qty1 > 0:
+            SalesOrderAllocation.objects.create(
+                tenant=tenant, sales_order_line=l1, location=main, quantity=qty1,
+                notes="Seeded reservation.")
+        o1.recompute_allocation_status()
+
+        # 2) Backordered — deliberately orders MORE than is on hand at this one location, and
+        #    reserves only what is actually there, so quantity_backordered() is genuinely non-zero
+        #    rather than a hand-set status. This is what makes the Backorder queue real.
+        on_hand_mon = mon27.on_hand(location=main)
+        covered = on_hand_mon if on_hand_mon > 0 else Decimal("0")
+        ordered2 = covered + Decimal("15")
+        o2 = _order(good, "marketplace", "Seeded: partially covered, remainder on backorder.")
+        l2 = SalesOrderLine.objects.create(
+            sales_order=o2, item=mon27, quantity_ordered=ordered2, unit_price=Decimal("349.00"),
+            tax_pct=Decimal("8.00"))
+        o2.recalc_totals()
+        o2.status = "submitted"
+        o2.confirmation_sent_at = timezone.now()
+        o2.save(update_fields=["status", "confirmation_sent_at", "updated_at"])
+        if covered > 0:
+            SalesOrderAllocation.objects.create(
+                tenant=tenant, sales_order_line=l2, location=main, quantity=covered,
+                notes="Seeded partial reservation — the rest is backordered.")
+        o2.recompute_allocation_status()
+
+        # 3) On credit hold — the total is well over Contoso's 500 limit, and the flags are set by
+        #    the SAME evaluation the submit view runs, not typed in, so the demo shows the real rule.
+        from apps.scm.views.OrderManagement.SalesOrders import _evaluate_hold
+        o3 = _order(tight, "phone", "Seeded: held for credit review.")
+        SalesOrderLine.objects.create(
+            sales_order=o3, item=ws16, quantity_ordered=Decimal("2"),
+            unit_price=Decimal("1450.00"), tax_pct=Decimal("8.00"))
+        o3.recalc_totals()
+        credit_hold, fraud_flag, reason = _evaluate_hold(o3)
+        o3.credit_hold, o3.fraud_flag, o3.hold_reason = credit_hold, fraud_flag, reason
+        o3.status = "on_hold" if (credit_hold or fraud_flag) else "submitted"
+        o3.save(update_fields=["credit_hold", "fraud_flag", "hold_reason", "status", "updated_at"])
+
+        self.stdout.write(
+            f"{tenant.name}: seeded orders {o1.number} [{o1.get_status_display()}], "
+            f"{o2.number} [{o2.get_status_display()}], {o3.number} [{o3.get_status_display()}].")
+
     def _flush(self):
         # The AP bills this seeder created are reachable only through the receipts that link them,
         # so they must go FIRST — once the GRNs are gone there is no way to tell a seeded bill from
@@ -429,7 +535,14 @@ class Command(BaseCommand):
             Item, ItemCategory, UOM, Location, LotSerial, StockMove,
             StockTransfer, StockAdjustment, ReorderRule,
         )
-        # 4.4 warehouse docs go first — their lines PROTECT the 4.3 items/locations below.
+        # 4.5 orders go before 4.4: SalesOrderLine PROTECTs Item and SalesOrderAllocation
+        # PROTECTs Location, so the whole order tree has to clear before those masters do.
+        from apps.scm.models import SalesOrder, SalesOrderAllocation, SalesOrderLine
+        SalesOrderAllocation.objects.all().delete()
+        SalesOrderLine.objects.all().delete()
+        SalesOrder.objects.all().delete()
+
+        # 4.4 warehouse docs next — their lines PROTECT the 4.3 items/locations below.
         from apps.scm.models import CycleCountTask, PickTask, PutawayTask, YardVisit
         CycleCountTask.objects.all().delete()     # lines cascade
         PickTask.objects.all().delete()           # lines cascade
@@ -446,7 +559,8 @@ class Command(BaseCommand):
         ItemCategory.objects.all().delete()
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
-            f"Flushed all SCM procurement + SRM + inventory rows (+{bill_count} linked accounting bill(s))."))
+            f"Flushed all SCM procurement + SRM + inventory + warehouse + order rows "
+            f"(+{bill_count} linked accounting bill(s))."))
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
@@ -466,6 +580,28 @@ class Command(BaseCommand):
             tenant=tenant, party=party, role="supplier",
             defaults={"status": "active", "start_date": timezone.localdate()},
         )
+        return party
+
+    def _customer(self, tenant, name, kind, credit_limit=None):
+        """Get-or-create a customer Party (+ its accounting CustomerProfile) by NAME.
+
+        Mirrors _supplier, with the `customer` role. Writing an accounting.CustomerProfile from
+        here is consistent with this seeder already creating accounting Bill/Budget rows — and 4.5's
+        credit hold has nothing to check against without one.
+        """
+        from apps.accounting.models import CustomerProfile
+        party = Party.objects.filter(tenant=tenant, name=name).first()
+        if party is None:
+            party = Party.objects.create(tenant=tenant, kind=kind, name=name)
+        PartyRole.objects.get_or_create(
+            tenant=tenant, party=party, role="customer",
+            defaults={"status": "active", "start_date": timezone.localdate()},
+        )
+        if credit_limit is not None:
+            CustomerProfile.objects.get_or_create(
+                tenant=tenant, party=party,
+                defaults={"credit_limit": credit_limit},
+            )
         return party
 
     def _org_unit(self, tenant):
