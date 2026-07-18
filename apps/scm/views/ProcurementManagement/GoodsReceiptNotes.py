@@ -2,7 +2,8 @@
 from apps.scm.views._common import *  # noqa: F401,F403
 # `import *` skips underscore-prefixed names, so private helpers need an explicit import.
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _need_tenant, _supplier_parties
+from apps.scm.views._helpers import (_need_tenant, _supplier_parties,
+                                     _post_grn_receipt, _reverse_grn_receipt)
 from apps.scm.models import (
     GoodsReceiptNote,
 )
@@ -111,60 +112,84 @@ def goodsreceipt_delete(request, pk):
     return crud_delete(request, model=GoodsReceiptNote, pk=pk, success_url="scm:goodsreceipt_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def goodsreceipt_receive(request, pk):
-    """Book the receipt: draft -> received, then re-derive the PO's receipt status and the match.
+    """Book the receipt: draft -> received, post the inbound stock, re-derive status and the match.
 
-    NOTE (L28): when ``core.StockMove`` lands with Module 5, this is where the inventory effect
-    posts — inside the same atomic block, so stock and the receipt can never disagree.
+    Tenant-admin gated since 4.4: this now MOVES STOCK (it raises on-hand), which puts it in the
+    same class as transfer-complete and adjustment-post. The row is locked and its status re-read
+    inside the transaction so two concurrent bookings can't both post the inbound moves.
     """
-    obj = get_object_or_404(GoodsReceiptNote.objects.select_related("purchase_order"),
-                            pk=pk, tenant=request.tenant)
-    if obj.status != "draft":
-        messages.info(request, "This receipt has already been booked.")
+    try:
+        with transaction.atomic():
+            obj = get_object_or_404(
+                GoodsReceiptNote.objects.select_for_update().select_related("purchase_order", "location"),
+                pk=pk, tenant=request.tenant)
+            if obj.status != "draft":
+                messages.info(request, "This receipt has already been booked.")
+                return redirect("scm:goodsreceipt_detail", pk=pk)
+            if not obj.lines.exists():
+                messages.error(request, "Add at least one line before booking the receipt.")
+                return redirect("scm:goodsreceipt_detail", pk=pk)
+            obj.status = "received"
+            obj.save(update_fields=["status", "updated_at"])
+            # The inventory effect — receipts raise on-hand at the receiving location.
+            posted, unmatched = _post_grn_receipt(obj, request.user)
+            # Re-match every receipt on the order, not just this one: this booking changes the
+            # per-line received aggregate that the siblings' verdicts are derived from.
+            obj.purchase_order.rematch_receipts()
+            obj.purchase_order.recompute_receipt_status()
+            obj.refresh_from_db(fields=["match_status", "match_notes"])
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
         return redirect("scm:goodsreceipt_detail", pk=pk)
-    if not obj.lines.exists():
-        messages.error(request, "Add at least one line before booking the receipt.")
-        return redirect("scm:goodsreceipt_detail", pk=pk)
-    with transaction.atomic():
-        obj.status = "received"
-        obj.save(update_fields=["status", "updated_at"])
-        # Re-match every receipt on the order, not just this one: this booking changes the
-        # per-line received aggregate that the siblings' verdicts are derived from.
-        obj.purchase_order.rematch_receipts()
-        obj.purchase_order.recompute_receipt_status()
-        obj.refresh_from_db(fields=["match_status", "match_notes"])
-    write_audit_log(request.user, obj, "update", {"action": "receive"})
-    messages.success(request, f"Receipt {obj.number} booked.")
+    write_audit_log(request.user, obj, "update", {"action": "receive", "moves_posted": posted})
+    messages.success(request, f"Receipt {obj.number} booked — {posted} stock movement(s) posted.")
+    if unmatched:
+        # Surfaced rather than swallowed: 4.1 lines are free text, so a line whose SKU matches no
+        # item master row cannot post a move. The buyer needs to know stock did NOT rise for it.
+        messages.warning(request, (
+            f"No stock posted for {len(unmatched)} line(s) — no item matches their SKU: "
+            f"{', '.join(unmatched[:3])}{'…' if len(unmatched) > 3 else ''}."))
     return redirect("scm:goodsreceipt_detail", pk=pk)
 
 
 @tenant_admin_required
 @require_POST
 def goodsreceipt_cancel(request, pk):
-    """Reverse a booked receipt.
+    """Reverse a booked receipt, including the stock it brought in.
 
     Tenant-admin gated, matching purchaseorder_cancel: cancelling drops the receipt out of the
     per-line received aggregate, walks the order's status backward, and re-derives the three-way
     match verdict on every sibling — i.e. it directly moves the control that decides whether a
     vendor bill should be paid. That is not a plain @login_required action.
+
+    Since 4.4 it also unwinds the inventory effect by posting COMPENSATING moves — the ledger is
+    append-only, so a cancellation never deletes the originals.
     """
-    obj = get_object_or_404(GoodsReceiptNote.objects.select_related("purchase_order"),
-                            pk=pk, tenant=request.tenant)
-    if obj.status == "cancelled":
-        messages.info(request, "This receipt is already cancelled.")
-        return redirect("scm:goodsreceipt_detail", pk=pk)
     with transaction.atomic():
+        obj = get_object_or_404(
+            GoodsReceiptNote.objects.select_for_update().select_related("purchase_order"),
+            pk=pk, tenant=request.tenant)
+        if obj.status == "cancelled":
+            messages.info(request, "This receipt is already cancelled.")
+            return redirect("scm:goodsreceipt_detail", pk=pk)
+        was_received = obj.status == "received"
         obj.status = "cancelled"
         obj.save(update_fields=["status", "updated_at"])
+        # Only a receipt that actually posted stock has anything to reverse.
+        reversed_count = _reverse_grn_receipt(obj, request.user) if was_received else 0
         # Cancelling drops this receipt out of the received aggregate, so the siblings' verdicts
         # need re-deriving too.
         obj.purchase_order.rematch_receipts()
         obj.purchase_order.recompute_receipt_status()
         obj.refresh_from_db(fields=["match_status", "match_notes"])
-    write_audit_log(request.user, obj, "update", {"action": "cancel"})
-    messages.success(request, f"Receipt {obj.number} cancelled.")
+    write_audit_log(request.user, obj, "update", {"action": "cancel", "moves_reversed": reversed_count})
+    if reversed_count:
+        messages.success(request, f"Receipt {obj.number} cancelled — {reversed_count} stock movement(s) reversed.")
+    else:
+        messages.success(request, f"Receipt {obj.number} cancelled.")
     return redirect("scm:goodsreceipt_detail", pk=pk)
 
 
