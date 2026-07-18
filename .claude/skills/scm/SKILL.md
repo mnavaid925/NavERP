@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), and 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.5+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), and 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.6+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -11,8 +11,8 @@ Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1�
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management.** 4.5–4.19 are roadmap.
 Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the
 reference apps `apps/crm`/`apps/accounting` for the package layout and the mandatory
-[Module Creation Sequence](../../CLAUDE.md). **4.5 OMS is next**; note `SalesOrder` (Module 8) does not exist, so
-it will need the same ships-first stand-in decision 4.1/4.3 made (L28/L29/L36/L37).
+[Module Creation Sequence](../../CLAUDE.md). **4.6 TMS is next** — 4.4 and 4.5 both deferred all carrier/label/
+freight work to it (`YardVisit.carrier_name`, `PickTask.tracking_ref` are free-text placeholders waiting on it).
 
 ## Overview
 
@@ -212,6 +212,59 @@ view warns rather than silently posting nothing.
 `_start`/`_confirm`/`_pack`/`_cancel`; `cyclecounttask_*` (/cycle-counts/) + `_start`/`_complete`/`_reconcile`/`_cancel`;
 `yardvisit_*` (/yard/) + `_arrive`/`_dock`/`_depart`/`_cancel`. **Seeder**: `_seed_warehouse_tenant` runs AFTER
 `_seed_inventory_tenant` — a real dependency, since every row references its items/locations.
+
+## 4.5 Order Management System  (`apps/scm/*/OrderManagement/`, templates `templates/scm/orders/`)
+
+**apps/scm OWNS `SalesOrder`/`SalesOrderLine`** (ships-first, L28/L29/L36/L37). The ERD nominally
+assigns them to Modules 1/8/9, but CRM is fully built across all twelve of its sub-modules and
+deliberately stopped at `Lead → Opportunity → Quote`; Modules 8/9 don't exist. Module 8.6 "Order
+Management" is a DIFFERENT, later feature set (amend/cancel with impact analysis, revenue
+recognition) that FKs INTO this order — it does not re-declare it. Unlike `crm.PurchaseOrder` vs
+`scm.PurchaseOrder` there is no order-shaped model in CRM to collide with.
+
+- **`SalesOrders.py`** — `SalesOrder` [`SO-`] + `SalesOrderLine`. Nine states: draft → submitted /
+  on_hold → allocated / partially_fulfilled → fulfilled → invoiced → closed (+ cancelled).
+  `EDITABLE_STATUSES = ("draft",)` — no amend flow, that is 8.6's job.
+  `recompute_allocation_status()` derives submitted/partially_fulfilled/allocated in ONE grouped
+  annotate and refuses to touch any other status (mirrors `PurchaseOrder.recompute_receipt_status`).
+  `partially_fulfilled` means *part-reserved, remainder backordered* — NOT partially shipped; this
+  sub-module never tracks physical shipment. `promised_date` is stamped once, on first reaching
+  `allocated`, and never moved. `recalc_totals()` sums in **Python**, not `F()` — an `F()/100`
+  expression integer-divides on SQLite and silently drops per-line discount/tax.
+  **`SalesOrderLine.item` is nullable ONLY for quote conversion** (see below); `salesorder_submit`
+  refuses while any line is unmapped, so it is a visible draft to-do and never something that ships.
+- **`SalesOrderAllocations.py`** — `SalesOrderAllocation`: a **soft reservation that posts NO
+  StockMove**. On-hand does not move when stock is allocated; what moves is availability-to-promise.
+  Stock physically leaves only via 4.4's `PickTask` confirm — the append-only ledger stays the sole
+  physical truth (L37). `reserved`/`released` both count as allocated (released = sent to the floor);
+  `cancelled` frees the claim. `clean()` guards Σ ≤ line.quantity_ordered.
+
+**Two guards, deliberately separate questions** (`views/OrderManagement/SalesOrderAllocations.py`):
+`clean()` asks *is this more than was ordered?*; `_available_to_promise()` asks *is the stock
+actually there?* = `on_hand(location) − other active allocations there`. An order for 10 with 3 on
+hand fails the second, not the first. Raw on-hand would promise the same unit to two customers.
+Incoming POs are NOT counted (supply-aware ATP is deferred). The create/edit paths take a
+**`select_for_update` row lock on the Item** (`_lock_item`) so the check and the write are one
+decision — the item, not the line, because availability is per item+location ACROSS orders.
+
+**Credit/fraud** live in the VIEW (`_evaluate_hold`), not the model — scm models never cross-import a
+peer app, and this reads `accounting.CustomerProfile`/`Invoice`. It reuses the `over_limit` pattern
+from `accounting.views…invoice_detail`. The order's own total counts toward exposure. A held order's
+`confirmation_sent_at` stays None — it was never confirmed to anyone. `release_hold` APPENDS its
+reason so the original justification survives the override.
+
+**Quote-to-order** (`salesorder_create_from_quote`, the first scm→crm model import): closes the dead
+end where `crm.Quote.quote_accept()` created nothing downstream. **Item mapping is never guessed** —
+`crm.QuoteLine.product` is a CRM `Product` with no mapping to `scm.Item`, so lines arrive with the
+quote's `description` and `item=None` and staff map them before submit. Idempotent: a second attempt
+redirects to the existing order.
+
+**URLs — the prefix is `sales-orders/`, NOT `orders/`** (already `PurchaseOrder`'s; same `app_name`,
+one concatenated list, first-match-wins would shadow it permanently). Allocations live at
+`allocations/`, created via `sales-order-lines/<line_pk>/allocations/add/`.
+**Gotcha:** `SalesOrderLine` has **no tenant column** — always scope it through
+`sales_order__tenant=request.tenant`. **Seeder**: `_seed_oms_tenant` runs after
+`_seed_inventory_tenant`; its three demo orders reach their status by *derivation*, not hand-setting.
 
 ## Conventions & gotchas
 
