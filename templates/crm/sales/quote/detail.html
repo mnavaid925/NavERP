@@ -28,6 +28,16 @@
           {% csrf_token %}
           <button class="btn btn-primary" type="submit"><i data-lucide="file-text"></i> Convert to Invoice</button>
         </form>
+        {% comment %}
+          Accepting a quote used to be a dead end on the fulfillment side — it flipped a status and
+          nothing downstream existed. SCM 4.5 owns the sales order, so this is what turns an accepted
+          quote into something the warehouse can actually act on. The confirm text warns about the
+          item mapping because quote products are CRM records with no automatic link to stock items.
+        {% endcomment %}
+        <form method="post" action="{% url 'scm:salesorder_create_from_quote' obj.pk %}" onsubmit="return confirm('Create a draft sales order from this quote? You will need to pick the stock item on each line.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="shopping-bag"></i> Convert to Sales Order</button>
+        </form>
       {% endif %}
       <a href="{% url 'crm:quote_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'crm:quote_delete' obj.pk %}" onsubmit="return confirm('Delete this quote?');">
