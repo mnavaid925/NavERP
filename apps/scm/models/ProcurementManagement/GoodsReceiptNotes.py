@@ -35,6 +35,11 @@ class GoodsReceiptNote(TenantNumbered):
     PRICE_TOLERANCE_PCT = Decimal("2")
 
     purchase_order = models.ForeignKey("scm.PurchaseOrder", on_delete=models.PROTECT, related_name="receipts")
+    # 4.4 WMS: where the goods physically land on arrival. Booking the receipt posts the inbound
+    # StockMove into this location; 4.4 putaway then moves it from here to its final bin.
+    location = models.ForeignKey("scm.Location", on_delete=models.PROTECT, null=True, blank=True,
+                                 related_name="goods_receipts",
+                                 help_text="Receiving / staging location the goods land in")
     receipt_date = models.DateField()
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
     delivery_note_ref = models.CharField(max_length=64, blank=True, help_text="The vendor's delivery-note number")
