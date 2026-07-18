@@ -999,7 +999,7 @@ NavERP/
 │     ├─ models/ forms/ views/ urls/   PACKAGES — ProcurementManagement/<Entity>.py (one file per entity)
 │     ├─ admin.py           (single-purpose modules stay flat)
 │     ├─ management/commands/seed_scm.py
-│     └─ tests/             392-test suite (models/forms/views/security)
+│     └─ tests/             668-test suite (models/forms/views/security)
 ├─ templates/
 │  ├─ base.html  base_auth.html
 │  ├─ partials/             sidebar, topbar, footer, messages, pagination, customizer
