@@ -807,6 +807,18 @@ LIVE_LINKS = {
         "Cycle Counting": "scm:cyclecounttask_list",             # bullet (scheduled counts -> StockAdjustment)
         "Yard Management": "scm:yardvisit_list",                 # bullet (trucks/trailers + dock doors)
     },
+    # 4.5 OWNS the SalesOrder/SalesOrderLine document (ships-first, L28/L29/L36/L37): CRM built the
+    # pre-order pipeline (Lead -> Opportunity -> Quote) across all twelve of its sub-modules and
+    # deliberately never built an order, and Modules 8/9 don't exist. Module 8.6 "Order Management"
+    # is a DIFFERENT, later feature set (amend/cancel with impact analysis, revenue recognition)
+    # that will FK into this order rather than re-declare it. See research-scm-4.5.md.
+    "4.5": {
+        "Order Capture": "scm:salesorder_list",                       # bullet (manual entry + quote conversion)
+        "Order Validation": "scm:salesorder_list?status=on_hold",     # bullet (the credit/fraud hold queue)
+        "Order Allocation": "scm:salesorderallocation_list",          # bullet (soft reservations per location)
+        "Backorder Management": "scm:salesorder_list?status=partially_fulfilled",  # bullet (part-covered orders)
+        "Customer Notifications": "scm:salesorder_list?status=fulfilled",          # bullet (the notify hooks)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
