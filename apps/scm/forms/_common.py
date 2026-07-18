@@ -10,6 +10,8 @@ have no tenant FK — they are reached through their parent — so any dropdown 
 scoped by hand to the parent object, or the select would list every tenant's rows. See
 ``_scope_to_parent``.
 """
+from decimal import Decimal
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
