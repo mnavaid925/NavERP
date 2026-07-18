@@ -3653,3 +3653,902 @@ class TestWarehouseCreateWithoutTenantWorkspace:
         resp = c.get(reverse("scm:yardvisit_create"))
         assert resp.status_code == 302
         assert YardVisit.objects.count() == 0
+
+
+# ================================================================================================
+# SCM 4.5 Order Management System
+# ================================================================================================
+
+# ================================================================ SalesOrder CRUD
+class TestSalesOrderCRUD:
+    def test_list_returns_200(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_list"))
+        assert resp.status_code == 200
+        assert sales_order_a in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_list"), {"status": "draft"})
+        assert sales_order_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:salesorder_list"), {"status": "cancelled"})
+        assert sales_order_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_customer(self, client_a, sales_order_a, customer_a):
+        resp = client_a.get(reverse("scm:salesorder_list"), {"customer": str(customer_a.pk)})
+        assert sales_order_a in resp.context["object_list"]
+
+    def test_list_search_by_number(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_list"), {"q": sales_order_a.number})
+        assert sales_order_a in resp.context["object_list"]
+
+    def test_list_no_n_plus_one_query_blowup(
+        self, client_a, tenant_a, customer_a, item_a, django_assert_max_num_queries,
+    ):
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        for i in range(8):
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=datetime.date(2026, 1, i + 1))
+            SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                          unit_price=Decimal("1"))
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:salesorder_list"))
+        assert resp.status_code == 200
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, customer_a, item_a):
+        from apps.scm.models import SalesOrder
+        data = {
+            "customer": str(customer_a.pk), "ship_to_address": "", "source_channel": "manual",
+            "order_date": "2026-01-05", "requested_date": "", "currency": "", "payment_terms": "",
+            "notes": "",
+            **formset_data("lines", [
+                {"id": "", "item": str(item_a.pk), "description": "", "quantity_ordered": "4",
+                 "unit_price": "25.00", "discount_pct": "0", "tax_pct": "0"},
+            ]),
+        }
+        resp = client_a.post(reverse("scm:salesorder_create"), data)
+        assert resp.status_code == 302
+        order = SalesOrder.objects.get(customer=customer_a, order_date=datetime.date(2026, 1, 5))
+        assert order.tenant_id == tenant_a.pk
+        assert order.number == "SO-00001"
+        assert order.total == Decimal("100.00")
+
+    def test_edit_redirects_away_from_the_form_once_submitted(self, client_a, sales_order_a):
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.get(reverse("scm:salesorder_edit", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+
+    def test_edit_updates_notes_while_draft(self, client_a, sales_order_a, customer_a):
+        line = sales_order_a.lines.first()
+        data = {
+            "customer": str(customer_a.pk), "ship_to_address": "", "source_channel": "manual",
+            "order_date": "2026-01-05", "requested_date": "", "currency": "", "payment_terms": "",
+            "notes": "edited",
+            **formset_data("lines", [
+                {"id": line.pk, "item": str(line.item_id), "description": "",
+                 "quantity_ordered": line.quantity_ordered, "unit_price": line.unit_price,
+                 "discount_pct": "0", "tax_pct": "0"},
+            ], initial=1),
+        }
+        resp = client_a.post(reverse("scm:salesorder_edit", args=[sales_order_a.pk]), data)
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.notes == "edited"
+
+    def test_delete_draft_removes_it(self, client_a, sales_order_a):
+        from apps.scm.models import SalesOrder
+        resp = client_a.post(reverse("scm:salesorder_delete", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        assert not SalesOrder.objects.filter(pk=sales_order_a.pk).exists()
+
+    def test_delete_submitted_order_is_refused(self, client_a, sales_order_a):
+        from apps.scm.models import SalesOrder
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_delete", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        assert SalesOrder.objects.filter(pk=sales_order_a.pk).exists()
+
+
+class TestSalesOrderDetailContext:
+    def test_detail_shows_rows_and_backorder(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_detail", args=[sales_order_a.pk]))
+        assert resp.status_code == 200
+        assert len(resp.context["rows"]) == 1
+        row = resp.context["rows"][0]
+        assert row["allocated"] == Decimal("0")
+        assert row["backordered"] == sales_order_a.lines.first().quantity_ordered
+
+    def test_linkable_invoices_only_offered_once_fulfilled(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_detail", args=[sales_order_a.pk]))
+        assert resp.context["linkable_invoices"] == []
+
+    def test_detail_groups_an_active_allocation_under_its_line(
+        self, client_a, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("4"))
+        resp = client_a.get(reverse("scm:salesorder_detail", args=[sales_order_a.pk]))
+        assert resp.status_code == 200
+        row = resp.context["rows"][0]
+        assert row["allocated"] == Decimal("4")
+        assert len(row["allocations"]) == 1
+        assert resp.context["has_active_allocations"] is True
+
+    def test_create_form_get_renders_200(self, client_a):
+        resp = client_a.get(reverse("scm:salesorder_create"))
+        assert resp.status_code == 200
+
+    def test_edit_form_get_renders_200_while_draft(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_edit", args=[sales_order_a.pk]))
+        assert resp.status_code == 200
+
+
+# ================================================================ Mass-assignment (priority 6)
+class TestSalesOrderMassAssignment:
+    def test_create_ignores_workflow_and_system_fields(self, client_a, tenant_a, customer_a, item_a):
+        from apps.scm.models import SalesOrder
+        data = {
+            "customer": str(customer_a.pk), "ship_to_address": "", "source_channel": "manual",
+            "order_date": "2026-01-05", "requested_date": "", "currency": "", "payment_terms": "",
+            "notes": "hack attempt",
+            "status": "invoiced", "number": "SO-99999", "promised_date": "2026-01-01",
+            "credit_hold": "on", "fraud_flag": "on", "hold_reason": "forged",
+            "confirmation_sent_at": "2026-01-01T00:00", "subtotal": "1.00", "tax_total": "1.00",
+            "total": "999999.00",
+            **formset_data("lines", [
+                {"id": "", "item": str(item_a.pk), "description": "", "quantity_ordered": "2",
+                 "unit_price": "10.00", "discount_pct": "0", "tax_pct": "0"},
+            ]),
+        }
+        resp = client_a.post(reverse("scm:salesorder_create"), data)
+        assert resp.status_code == 302
+        order = SalesOrder.objects.get(notes="hack attempt")
+        assert order.status == "draft"
+        assert order.number == "SO-00001"
+        assert order.promised_date is None
+        assert order.credit_hold is False
+        assert order.fraud_flag is False
+        assert order.hold_reason == ""
+        assert order.confirmation_sent_at is None
+        assert order.total == Decimal("20.00")
+
+
+# ================================================================================================
+# State machine (priority 2)
+# ================================================================================================
+class TestSalesOrderStateMachine:
+    def test_submit_under_credit_limit_moves_to_submitted_and_stamps_confirmation(self, client_a, sales_order_a):
+        resp = client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"
+        assert sales_order_a.confirmation_sent_at is not None
+
+    def test_submit_without_an_order_date_stamps_todays_date(self, client_a, tenant_a, customer_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a)  # no order_date
+        SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                      unit_price=Decimal("1"))
+        order.recalc_totals()
+        client_a.post(reverse("scm:salesorder_submit", args=[order.pk]))
+        order.refresh_from_db()
+        assert order.status == "submitted"
+        assert order.order_date == timezone.localdate()
+
+    def test_submit_with_an_unmapped_line_is_refused(self, client_a, sales_order_a):
+        from apps.scm.models import SalesOrderLine
+        SalesOrderLine.objects.create(sales_order=sales_order_a, item=None, description="Unmapped",
+                                      quantity_ordered=Decimal("1"), unit_price=Decimal("1"))
+        resp = client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "draft"
+
+    def test_submit_with_no_lines_is_refused(self, client_a, tenant_a, customer_a):
+        from apps.scm.models import SalesOrder
+        empty = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a)
+        resp = client_a.post(reverse("scm:salesorder_submit", args=[empty.pk]))
+        assert resp.status_code == 302
+        empty.refresh_from_db()
+        assert empty.status == "draft"
+
+    def test_submit_twice_is_a_noop(self, client_a, sales_order_a):
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"
+
+    def test_over_credit_limit_lands_on_hold_and_does_not_stamp_confirmation(
+        self, client_a, tenant_a, sales_order_a, customer_a,
+    ):
+        from apps.accounting.models import CustomerProfile
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_limit=Decimal("50.00"))
+        resp = client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "on_hold"
+        assert sales_order_a.credit_hold is True
+        assert "Credit limit exceeded" in sales_order_a.hold_reason
+        assert sales_order_a.confirmation_sent_at is None
+
+    def test_release_hold_without_reason_is_refused(self, client_a, tenant_a, sales_order_a, customer_a):
+        from apps.accounting.models import CustomerProfile
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_limit=Decimal("50.00"))
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_release_hold", args=[sales_order_a.pk]),
+                             {"release_note": ""})
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "on_hold"
+
+    def test_release_hold_appends_to_hold_reason_and_returns_to_submitted(
+        self, client_a, tenant_a, sales_order_a, customer_a,
+    ):
+        from apps.accounting.models import CustomerProfile
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_limit=Decimal("50.00"))
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        sales_order_a.refresh_from_db()
+        original_reason = sales_order_a.hold_reason
+        resp = client_a.post(reverse("scm:salesorder_release_hold", args=[sales_order_a.pk]),
+                             {"release_note": "Prepaid by wire"})
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"
+        assert original_reason in sales_order_a.hold_reason
+        assert "Prepaid by wire" in sales_order_a.hold_reason
+        assert sales_order_a.confirmation_sent_at is not None
+
+    def test_release_hold_on_a_non_held_order_is_a_noop(self, client_a, sales_order_a):
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_release_hold", args=[sales_order_a.pk]),
+                             {"release_note": "no hold to release"})
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"
+
+    def test_fulfill_requires_allocated_or_partially_fulfilled(self, client_a, sales_order_a):
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"  # unchanged — not yet allocated
+
+    def test_fulfill_allocated_order_stamps_shipped_notification(
+        self, client_a, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        sales_order_a.refresh_from_db()  # pick up the status change made by the client POST above
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("10"))
+        sales_order_a.recompute_allocation_status()
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "allocated"
+        resp = client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "fulfilled"
+        assert sales_order_a.shipped_notification_at is not None
+
+    def test_mark_delivered_before_fulfilled_is_refused(self, client_a, sales_order_a):
+        resp = client_a.post(reverse("scm:salesorder_mark_delivered", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.delivered_notification_at is None
+
+    def test_mark_delivered_after_fulfilled_does_not_change_status(
+        self, client_a, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        sales_order_a.refresh_from_db()  # pick up the status change made by the client POST above
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("10"))
+        sales_order_a.recompute_allocation_status()
+        client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_mark_delivered", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.delivered_notification_at is not None
+        assert sales_order_a.status == "fulfilled"
+
+    def test_close_requires_invoiced(self, client_a, sales_order_a):
+        resp = client_a.post(reverse("scm:salesorder_close", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "draft"
+
+    def test_cancel_refused_while_allocation_active_and_allowed_after_cancelling(
+        self, client_a, tenant_a, sales_order_a, location_a,
+    ):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        line = sales_order_a.lines.first()
+        alloc = SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                                     quantity=Decimal("4"))
+        resp = client_a.post(reverse("scm:salesorder_cancel", args=[sales_order_a.pk]),
+                             {"cancel_reason": "changed mind"})
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status != "cancelled"
+        client_a.post(reverse("scm:salesorderallocation_cancel", args=[alloc.pk]))
+        resp2 = client_a.post(reverse("scm:salesorder_cancel", args=[sales_order_a.pk]),
+                              {"cancel_reason": "changed mind"})
+        assert resp2.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "cancelled"
+
+    def test_cancel_without_reason_is_refused(self, client_a, sales_order_a):
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_cancel", args=[sales_order_a.pk]))
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status != "cancelled"
+
+    def test_cancel_fulfilled_order_is_refused(self, client_a, tenant_a, sales_order_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        sales_order_a.refresh_from_db()  # pick up the status change made by the client POST above
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("10"))
+        sales_order_a.recompute_allocation_status()
+        client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_a.pk]))
+        resp = client_a.post(reverse("scm:salesorder_cancel", args=[sales_order_a.pk]),
+                             {"cancel_reason": "too late"})
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "fulfilled"
+
+
+# ================================================================================================
+# Priority regression 1a — salesorder_mark_invoiced is reachable
+# ================================================================================================
+class TestSalesOrderMarkInvoicedRegression:
+    """`invoice` used to be a draft-only form field while this action needs `fulfilled` — the two
+    conditions could never both hold, so the AR hand-off was a dead end (code review)."""
+
+    def _fulfilled_order(self, client_a, tenant_a, sales_order_a, location_a):
+        from apps.scm.models import SalesOrderAllocation
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        sales_order_a.refresh_from_db()  # pick up the status change made by the client POST above
+        line = sales_order_a.lines.first()
+        SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line, location=location_a,
+                                            quantity=Decimal("10"))
+        sales_order_a.recompute_allocation_status()
+        client_a.post(reverse("scm:salesorder_fulfill", args=[sales_order_a.pk]))
+        sales_order_a.refresh_from_db()
+        return sales_order_a
+
+    def test_invoice_is_not_a_form_field(self):
+        from apps.scm.forms import SalesOrderForm
+        form = SalesOrderForm(tenant=None)
+        assert "invoice" not in form.fields
+
+    def test_mark_invoiced_refused_on_a_non_fulfilled_order(self, client_a, tenant_a, sales_order_a, customer_a):
+        from apps.accounting.models import Invoice
+        client_a.post(reverse("scm:salesorder_submit", args=[sales_order_a.pk]))
+        inv = Invoice.objects.create(tenant=tenant_a, party=customer_a, issue_date=datetime.date(2026, 1, 20),
+                                     due_date=datetime.date(2026, 2, 20), status="draft")
+        resp = client_a.post(reverse("scm:salesorder_mark_invoiced", args=[sales_order_a.pk]), {"invoice": inv.pk})
+        assert resp.status_code == 302
+        sales_order_a.refresh_from_db()
+        assert sales_order_a.status == "submitted"
+        assert sales_order_a.invoice_id is None
+
+    def test_mark_invoiced_without_an_invoice_pk_is_refused(self, client_a, tenant_a, sales_order_a, location_a):
+        order = self._fulfilled_order(client_a, tenant_a, sales_order_a, location_a)
+        resp = client_a.post(reverse("scm:salesorder_mark_invoiced", args=[order.pk]))
+        assert resp.status_code == 302
+        order.refresh_from_db()
+        assert order.status == "fulfilled"
+        assert order.invoice_id is None
+
+    def test_linkable_invoices_offered_on_the_detail_page_once_fulfilled(
+        self, client_a, tenant_a, sales_order_a, location_a, customer_a,
+    ):
+        from apps.accounting.models import Invoice
+        order = self._fulfilled_order(client_a, tenant_a, sales_order_a, location_a)
+        inv = Invoice.objects.create(tenant=tenant_a, party=customer_a, issue_date=datetime.date(2026, 1, 20),
+                                     due_date=datetime.date(2026, 2, 20), status="draft")
+        resp = client_a.get(reverse("scm:salesorder_detail", args=[order.pk]))
+        assert resp.status_code == 200
+        assert inv in resp.context["linkable_invoices"]
+
+    def test_mark_invoiced_links_the_invoice_and_advances_the_order(
+        self, client_a, tenant_a, sales_order_a, location_a, customer_a,
+    ):
+        from apps.accounting.models import Invoice
+        order = self._fulfilled_order(client_a, tenant_a, sales_order_a, location_a)
+        inv = Invoice.objects.create(tenant=tenant_a, party=customer_a, issue_date=datetime.date(2026, 1, 20),
+                                     due_date=datetime.date(2026, 2, 20), status="draft")
+        resp = client_a.post(reverse("scm:salesorder_mark_invoiced", args=[order.pk]), {"invoice": inv.pk})
+        assert resp.status_code == 302
+        order.refresh_from_db()
+        assert order.status == "invoiced"
+        assert order.invoice_id == inv.pk
+
+    def test_and_the_order_can_then_be_closed(self, client_a, tenant_a, sales_order_a, location_a, customer_a):
+        from apps.accounting.models import Invoice
+        order = self._fulfilled_order(client_a, tenant_a, sales_order_a, location_a)
+        inv = Invoice.objects.create(tenant=tenant_a, party=customer_a, issue_date=datetime.date(2026, 1, 20),
+                                     due_date=datetime.date(2026, 2, 20), status="draft")
+        client_a.post(reverse("scm:salesorder_mark_invoiced", args=[order.pk]), {"invoice": inv.pk})
+        resp = client_a.post(reverse("scm:salesorder_close", args=[order.pk]))
+        assert resp.status_code == 302
+        order.refresh_from_db()
+        assert order.status == "closed"
+
+    def test_cross_tenant_invoice_pk_is_rejected(self, client_a, tenant_a, tenant_b, sales_order_a, location_a):
+        from apps.accounting.models import Invoice
+        from apps.core.models import Party
+        order = self._fulfilled_order(client_a, tenant_a, sales_order_a, location_a)
+        other_customer = Party.objects.create(tenant=tenant_b, name="Someone Else", kind="organization")
+        foreign_inv = Invoice.objects.create(tenant=tenant_b, party=other_customer,
+                                             issue_date=datetime.date(2026, 1, 20),
+                                             due_date=datetime.date(2026, 2, 20), status="draft")
+        resp = client_a.post(reverse("scm:salesorder_mark_invoiced", args=[order.pk]),
+                             {"invoice": foreign_inv.pk})
+        assert resp.status_code == 302
+        order.refresh_from_db()
+        assert order.status == "fulfilled"
+        assert order.invoice_id is None
+
+
+# ================================================================================================
+# Credit / fraud hold (priority 4)
+# ================================================================================================
+class TestSalesOrderCreditFraudHold:
+    def test_evaluate_hold_trips_on_credit_on_hold_flag(self, tenant_a, sales_order_a, customer_a):
+        from apps.accounting.models import CustomerProfile
+        from apps.scm.views.OrderManagement.SalesOrders import _evaluate_hold
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_on_hold=True)
+        sales_order_a.recalc_totals()
+        credit_hold, fraud_flag, reason = _evaluate_hold(sales_order_a)
+        assert credit_hold is True
+        assert "credit hold" in reason.lower()
+
+    def test_evaluate_hold_trips_over_the_credit_limit(self, tenant_a, sales_order_a, customer_a):
+        from apps.accounting.models import CustomerProfile
+        from apps.scm.views.OrderManagement.SalesOrders import _evaluate_hold
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_limit=Decimal("50.00"))
+        sales_order_a.recalc_totals()  # total = 150.00, over the 50.00 limit
+        credit_hold, fraud_flag, reason = _evaluate_hold(sales_order_a)
+        assert credit_hold is True
+        assert "Credit limit exceeded" in reason
+
+    def test_evaluate_hold_does_not_trip_under_the_credit_limit(self, tenant_a, sales_order_a, customer_a):
+        from apps.accounting.models import CustomerProfile
+        from apps.scm.views.OrderManagement.SalesOrders import _evaluate_hold
+        CustomerProfile.objects.create(tenant=tenant_a, party=customer_a, credit_limit=Decimal("1000.00"))
+        sales_order_a.recalc_totals()
+        credit_hold, fraud_flag, reason = _evaluate_hold(sales_order_a)
+        assert credit_hold is False
+
+    def test_evaluate_hold_trips_new_customer_first_order_over_threshold(self, tenant_a, customer_a, item_a):
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.views.OrderManagement.SalesOrders import _evaluate_hold
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=datetime.date(2026, 1, 5))
+        SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                      unit_price=Decimal("9000"))
+        order.recalc_totals()
+        credit_hold, fraud_flag, reason = _evaluate_hold(order)
+        assert fraud_flag is True
+        assert "New customer" in reason
+
+    def test_evaluate_hold_does_not_trip_fraud_for_a_repeat_customer(self, tenant_a, customer_a, item_a):
+        """A SECOND order for a customer who already has one on file is not a 'first order'."""
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.views.OrderManagement.SalesOrders import _evaluate_hold
+        SalesOrder.objects.create(tenant=tenant_a, customer=customer_a, order_date=datetime.date(2026, 1, 1))
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=datetime.date(2026, 1, 5))
+        SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                      unit_price=Decimal("9000"))
+        order.recalc_totals()
+        credit_hold, fraud_flag, reason = _evaluate_hold(order)
+        assert fraud_flag is False
+
+    def test_first_order_rule_does_not_retrip_on_the_same_order_when_resubmitted(
+        self, client_a, tenant_a, customer_a, item_a,
+    ):
+        """Regression: once released, the order sits at 'submitted' — `salesorder_submit` only
+        evaluates credit/fraud from `draft`, so a normal re-submit attempt on the SAME order is a
+        no-op that skips re-evaluation entirely and can never re-trip its own fraud flag."""
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=datetime.date(2026, 1, 5))
+        SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                      unit_price=Decimal("9000"))
+        order.recalc_totals()
+        client_a.post(reverse("scm:salesorder_submit", args=[order.pk]))
+        order.refresh_from_db()
+        assert order.status == "on_hold" and order.fraud_flag is True
+        client_a.post(reverse("scm:salesorder_release_hold", args=[order.pk]), {"release_note": "Verified"})
+        order.refresh_from_db()
+        assert order.status == "submitted" and order.fraud_flag is False
+        resp = client_a.post(reverse("scm:salesorder_submit", args=[order.pk]))
+        assert resp.status_code == 302
+        order.refresh_from_db()
+        assert order.status == "submitted"
+        assert order.fraud_flag is False
+
+
+# ================================================================================================
+# SalesOrderAllocation CRUD + lifecycle (priority 3)
+# ================================================================================================
+class TestSalesOrderAllocationCRUD:
+    def test_list_returns_200(self, client_a, allocation_a):
+        resp = client_a.get(reverse("scm:salesorderallocation_list"))
+        assert resp.status_code == 200
+        assert allocation_a in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, allocation_a):
+        resp = client_a.get(reverse("scm:salesorderallocation_list"), {"status": "reserved"})
+        assert allocation_a in resp.context["object_list"]
+
+    def test_detail_returns_200(self, client_a, allocation_a):
+        resp = client_a.get(reverse("scm:salesorderallocation_detail", args=[allocation_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == allocation_a
+
+
+class TestSalesOrderAllocationLifecycle:
+    def _stock(self, tenant, item, location, qty):
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant, item=item, location=location, quantity=Decimal(qty),
+                         unit_cost=Decimal("10.00"), move_type="receipt")
+
+    def test_allocation_posts_no_stockmove(self, client_a, tenant_a, sales_order_line_a, location_a, item_a):
+        self._stock(tenant_a, item_a, location_a, "10")
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "5", "notes": ""})
+        assert resp.status_code == 302
+        assert item_a.on_hand(location=location_a) == Decimal("10")  # unchanged — soft reservation
+
+    def test_cannot_allocate_more_than_the_line_ordered(
+        self, client_a, tenant_a, sales_order_line_a, location_a, item_a,
+    ):
+        self._stock(tenant_a, item_a, location_a, "20")
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "11", "notes": ""})  # ordered 10
+        assert resp.status_code == 200  # re-rendered with an error
+        assert sales_order_line_a.allocations.count() == 0
+
+    def test_atp_guard_blocks_promising_stock_another_order_reserved(
+        self, client_a, tenant_a, customer_a, item_a, location_a,
+    ):
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        self._stock(tenant_a, item_a, location_a, "10")
+        order1 = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                           order_date=datetime.date(2026, 1, 5))
+        line1 = SalesOrderLine.objects.create(sales_order=order1, item=item_a, quantity_ordered=Decimal("8"),
+                                              unit_price=Decimal("1"))
+        order1.recalc_totals()
+        client_a.post(reverse("scm:salesorder_submit", args=[order1.pk]))
+        client_a.post(reverse("scm:salesorderallocation_create", args=[line1.pk]),
+                      {"location": location_a.pk, "quantity": "5", "notes": ""})
+
+        order2 = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                           order_date=datetime.date(2026, 1, 5))
+        line2 = SalesOrderLine.objects.create(sales_order=order2, item=item_a, quantity_ordered=Decimal("8"),
+                                              unit_price=Decimal("1"))
+        order2.recalc_totals()
+        client_a.post(reverse("scm:salesorder_submit", args=[order2.pk]))
+        alloc2_url = reverse("scm:salesorderallocation_create", args=[line2.pk])
+        client_a.post(alloc2_url, {"location": location_a.pk, "quantity": "8", "notes": ""})  # only 5 left
+        assert line2.quantity_allocated() == Decimal("0")
+        client_a.post(alloc2_url, {"location": location_a.pk, "quantity": "5", "notes": ""})
+        assert line2.quantity_allocated() == Decimal("5")
+
+    def test_cancelling_an_allocation_frees_atp_for_re_reservation(
+        self, client_a, tenant_a, sales_order_line_a, location_a, item_a,
+    ):
+        self._stock(tenant_a, item_a, location_a, "10")
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(url, {"location": location_a.pk, "quantity": "10", "notes": ""})
+        assert sales_order_line_a.quantity_allocated() == Decimal("10")
+        alloc = sales_order_line_a.allocations.first()
+        client_a.post(reverse("scm:salesorderallocation_cancel", args=[alloc.pk]))
+        assert sales_order_line_a.quantity_allocated() == Decimal("0")
+        client_a.post(url, {"location": location_a.pk, "quantity": "10", "notes": ""})
+        assert sales_order_line_a.quantity_allocated() == Decimal("10")
+
+    def test_release_still_counts_as_allocated_and_posts_no_stockmove(
+        self, client_a, tenant_a, sales_order_line_a, location_a, item_a,
+    ):
+        self._stock(tenant_a, item_a, location_a, "10")
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(url, {"location": location_a.pk, "quantity": "5", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+        resp = client_a.post(reverse("scm:salesorderallocation_release", args=[alloc.pk]))
+        assert resp.status_code == 302
+        alloc.refresh_from_db()
+        assert alloc.status == "released"
+        assert sales_order_line_a.quantity_allocated() == Decimal("5")
+        assert item_a.on_hand(location=location_a) == Decimal("10")
+
+    def test_delete_refused_once_released(self, client_a, tenant_a, sales_order_line_a, location_a, item_a):
+        self._stock(tenant_a, item_a, location_a, "10")
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(url, {"location": location_a.pk, "quantity": "5", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+        client_a.post(reverse("scm:salesorderallocation_release", args=[alloc.pk]))
+        resp = client_a.post(reverse("scm:salesorderallocation_delete", args=[alloc.pk]))
+        assert resp.status_code == 302
+        alloc.refresh_from_db()
+        assert alloc.status == "released"  # unchanged — delete refused for a released row
+
+    def test_delete_reserved_allocation_succeeds(self, client_a, tenant_a, sales_order_line_a, location_a, item_a):
+        from apps.scm.models import SalesOrderAllocation
+        self._stock(tenant_a, item_a, location_a, "10")
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(url, {"location": location_a.pk, "quantity": "5", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+        resp = client_a.post(reverse("scm:salesorderallocation_delete", args=[alloc.pk]))
+        assert resp.status_code == 302
+        assert not SalesOrderAllocation.objects.filter(pk=alloc.pk).exists()
+
+    def test_edit_success_updates_quantity_and_recomputes_order_status(
+        self, client_a, tenant_a, sales_order_line_a, location_a, item_a,
+    ):
+        self._stock(tenant_a, item_a, location_a, "10")
+        create_url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(create_url, {"location": location_a.pk, "quantity": "4", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+        edit_url = reverse("scm:salesorderallocation_edit", args=[alloc.pk])
+        assert client_a.get(edit_url).status_code == 200
+        resp = client_a.post(edit_url, {"location": location_a.pk, "quantity": "10", "notes": "topped up"})
+        assert resp.status_code == 302
+        alloc.refresh_from_db()
+        assert alloc.quantity == Decimal("10")
+        assert alloc.notes == "topped up"
+        sales_order_line_a.sales_order.refresh_from_db()
+        assert sales_order_line_a.sales_order.status == "allocated"  # fully covered now
+
+    def test_edit_re_saving_the_same_quantity_does_not_double_count_itself(
+        self, client_a, tenant_a, sales_order_line_a, location_a, item_a,
+    ):
+        """exclude_pk in the edit path's ATP check — without it, re-saving a row unchanged would
+        count its own existing reservation twice and wrongly reject itself."""
+        self._stock(tenant_a, item_a, location_a, "10")
+        create_url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(create_url, {"location": location_a.pk, "quantity": "10", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+        edit_url = reverse("scm:salesorderallocation_edit", args=[alloc.pk])
+        resp = client_a.post(edit_url, {"location": location_a.pk, "quantity": "10", "notes": "unchanged"})
+        assert resp.status_code == 302
+        alloc.refresh_from_db()
+        assert alloc.quantity == Decimal("10")
+
+    def test_edit_refused_once_released(self, client_a, tenant_a, sales_order_line_a, location_a, item_a):
+        self._stock(tenant_a, item_a, location_a, "10")
+        create_url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(create_url, {"location": location_a.pk, "quantity": "5", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+        client_a.post(reverse("scm:salesorderallocation_release", args=[alloc.pk]))
+        edit_url = reverse("scm:salesorderallocation_edit", args=[alloc.pk])
+        resp = client_a.get(edit_url)
+        assert resp.status_code == 302  # redirected to detail, not the form
+
+    def test_release_an_already_released_allocation_is_a_noop(self, allocation_a, client_a):
+        client_a.post(reverse("scm:salesorderallocation_release", args=[allocation_a.pk]))
+        resp = client_a.post(reverse("scm:salesorderallocation_release", args=[allocation_a.pk]))
+        assert resp.status_code == 302
+        allocation_a.refresh_from_db()
+        assert allocation_a.status == "released"
+
+    def test_cancel_an_already_cancelled_allocation_is_a_noop(self, allocation_a, client_a):
+        client_a.post(reverse("scm:salesorderallocation_cancel", args=[allocation_a.pk]))
+        resp = client_a.post(reverse("scm:salesorderallocation_cancel", args=[allocation_a.pk]))
+        assert resp.status_code == 302
+        allocation_a.refresh_from_db()
+        assert allocation_a.status == "cancelled"
+
+    def test_create_refused_when_the_order_is_not_allocatable(self, client_a, tenant_a, sales_order_a, item_a):
+        """sales_order_a is still `draft` — allocation is only offered from submitted onward."""
+        line = sales_order_a.lines.first()
+        resp = client_a.get(reverse("scm:salesorderallocation_create", args=[line.pk]))
+        assert resp.status_code == 302
+
+    def test_create_refused_when_the_line_item_is_unmapped(self, client_a, tenant_a, sales_order_submitted_a):
+        from apps.scm.models import SalesOrderLine
+        line = SalesOrderLine.objects.create(sales_order=sales_order_submitted_a, item=None,
+                                             description="Unmapped", quantity_ordered=Decimal("1"))
+        resp = client_a.get(reverse("scm:salesorderallocation_create", args=[line.pk]))
+        assert resp.status_code == 302
+
+    def test_create_redirects_when_the_user_has_no_tenant_workspace(self, db, sales_order_line_a):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email="orphan-alloc@example.com", username="orphan_alloc",
+                                        password="x", tenant=None, is_superuser=True)
+        c = Client()
+        c.force_login(user)
+        resp = c.get(reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk]))
+        assert resp.status_code == 302
+
+    def test_edit_atp_guard_blocks_growing_into_stock_another_order_holds(
+        self, client_a, tenant_a, customer_a, item_a, location_a, sales_order_line_a,
+    ):
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        self._stock(tenant_a, item_a, location_a, "10")
+        create_url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        client_a.post(create_url, {"location": location_a.pk, "quantity": "4", "notes": ""})
+        alloc = sales_order_line_a.allocations.first()
+
+        other_order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 order_date=datetime.date(2026, 1, 5))
+        other_line = SalesOrderLine.objects.create(sales_order=other_order, item=item_a,
+                                                    quantity_ordered=Decimal("5"), unit_price=Decimal("1"))
+        other_order.recalc_totals()
+        client_a.post(reverse("scm:salesorder_submit", args=[other_order.pk]))
+        client_a.post(reverse("scm:salesorderallocation_create", args=[other_line.pk]),
+                      {"location": location_a.pk, "quantity": "5", "notes": ""})  # 4 + 5 = 9 of 10 reserved
+
+        edit_url = reverse("scm:salesorderallocation_edit", args=[alloc.pk])
+        resp = client_a.post(edit_url, {"location": location_a.pk, "quantity": "8", "notes": ""})  # only 5 free
+        assert resp.status_code == 200  # re-rendered with an error, not saved
+        alloc.refresh_from_db()
+        assert alloc.quantity == Decimal("4")  # unchanged
+
+
+class TestAvailableToPromiseAndAtpRowsHelpers:
+    def test_available_to_promise_is_zero_without_an_item_or_location(self, location_a, item_a):
+        from apps.scm.views.OrderManagement.SalesOrderAllocations import _available_to_promise
+        assert _available_to_promise(None, location_a) == Decimal("0")
+        assert _available_to_promise(item_a, None) == Decimal("0")
+
+    def test_atp_rows_is_empty_without_an_item(self, tenant_a):
+        from apps.scm.views.OrderManagement.SalesOrderAllocations import _atp_rows
+        assert _atp_rows(tenant_a, None) == []
+
+    def test_atp_rows_is_empty_with_no_pickable_locations(self, tenant_a, item_a):
+        from apps.scm.models import Location
+        from apps.scm.views.OrderManagement.SalesOrderAllocations import _atp_rows
+        Location.objects.filter(tenant=tenant_a).update(is_pickable=False)
+        assert _atp_rows(tenant_a, item_a) == []
+
+
+# ================================================================ Negative-input hardening
+class TestSalesOrderNegativeInputHardening:
+    def test_junk_customer_filter_returns_200_not_500(self, client_a):
+        resp = client_a.get(reverse("scm:salesorder_list"), {"customer": "abc"})
+        assert resp.status_code == 200
+
+    def test_junk_status_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:salesorder_list"), {"status": "not-a-status"})
+        assert resp.status_code == 200
+
+    def test_page_past_the_end_returns_200(self, client_a, sales_order_a):
+        resp = client_a.get(reverse("scm:salesorder_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_page_2_when_rows_exceed_page_size(self, client_a, tenant_a, customer_a, item_a):
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        for i in range(20):
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=datetime.date(2026, 1, (i % 28) + 1))
+            SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=Decimal("1"),
+                                          unit_price=Decimal("1"))
+        resp = client_a.get(reverse("scm:salesorder_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert len(resp.context["object_list"]) > 0
+
+
+class TestSalesOrderAllocationNegativeInputHardening:
+    def test_quantity_nan_is_rejected_not_500(self, client_a, sales_order_line_a, location_a):
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "NaN", "notes": ""})
+        assert resp.status_code == 200
+        assert sales_order_line_a.allocations.count() == 0
+
+    def test_quantity_infinity_is_rejected_not_500(self, client_a, sales_order_line_a, location_a):
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "Infinity", "notes": ""})
+        assert resp.status_code == 200
+        assert sales_order_line_a.allocations.count() == 0
+
+    def test_quantity_garbage_is_rejected_not_500(self, client_a, sales_order_line_a, location_a):
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "abc", "notes": ""})
+        assert resp.status_code == 200
+        assert sales_order_line_a.allocations.count() == 0
+
+    def test_quantity_negative_is_rejected_not_500(self, client_a, sales_order_line_a, location_a):
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "-5", "notes": ""})
+        assert resp.status_code == 200
+        assert sales_order_line_a.allocations.count() == 0
+
+    def test_quantity_over_max_digits_is_rejected_not_500(self, client_a, sales_order_line_a, location_a):
+        url = reverse("scm:salesorderallocation_create", args=[sales_order_line_a.pk])
+        resp = client_a.post(url, {"location": location_a.pk, "quantity": "99999999999999.9999", "notes": ""})
+        assert resp.status_code == 200
+        assert sales_order_line_a.allocations.count() == 0
+
+    def test_junk_status_filter_on_allocation_list_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:salesorderallocation_list"), {"status": "bogus"})
+        assert resp.status_code == 200
+
+    def test_junk_location_filter_on_allocation_list_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:salesorderallocation_list"), {"location": "abc"})
+        assert resp.status_code == 200
+
+
+# ================================================================================================
+# Quote conversion (priority 8)
+# ================================================================================================
+class TestSalesOrderCreateFromQuote:
+    def _accepted_quote(self, tenant, account):
+        from apps.crm.models import Quote, QuoteLine
+        quote = Quote.objects.create(tenant=tenant, name="Q1", account=account, status="accepted",
+                                     currency_code="USD")
+        QuoteLine.objects.create(tenant=tenant, quote=quote, description="Widget", quantity=Decimal("3"),
+                                 unit_price=Decimal("25.00"), discount_pct=Decimal("5"), tax_pct=Decimal("8"))
+        return quote
+
+    def test_copies_lines_with_item_none_and_the_quotes_description(self, client_a, tenant_a, customer_a):
+        from apps.scm.models import SalesOrder
+        quote = self._accepted_quote(tenant_a, customer_a)
+        resp = client_a.post(reverse("scm:salesorder_create_from_quote", args=[quote.pk]))
+        assert resp.status_code == 302
+        order = SalesOrder.objects.get(tenant=tenant_a, source_quote=quote)
+        line = order.lines.first()
+        assert line.item_id is None
+        assert line.description == "Widget"
+        assert order.customer_id == customer_a.pk
+
+    def test_refuses_a_non_accepted_quote(self, client_a, tenant_a, customer_a):
+        from apps.crm.models import Quote
+        from apps.scm.models import SalesOrder
+        quote = Quote.objects.create(tenant=tenant_a, name="Draft Q", account=customer_a, status="draft")
+        resp = client_a.post(reverse("scm:salesorder_create_from_quote", args=[quote.pk]))
+        assert resp.status_code == 302
+        assert not SalesOrder.objects.filter(tenant=tenant_a, source_quote=quote).exists()
+
+    def test_refuses_when_the_account_lacks_the_customer_role(self, client_a, tenant_a):
+        from apps.core.models import Party
+        from apps.crm.models import Quote
+        from apps.scm.models import SalesOrder
+        non_customer = Party.objects.create(tenant=tenant_a, name="Lead Only", kind="organization")
+        quote = Quote.objects.create(tenant=tenant_a, name="Q2", account=non_customer, status="accepted")
+        resp = client_a.post(reverse("scm:salesorder_create_from_quote", args=[quote.pk]))
+        assert resp.status_code == 302
+        assert not SalesOrder.objects.filter(tenant=tenant_a, source_quote=quote).exists()
+
+    def test_idempotent_second_conversion_redirects_to_the_existing_order(self, client_a, tenant_a, customer_a):
+        from apps.scm.models import SalesOrder
+        quote = self._accepted_quote(tenant_a, customer_a)
+        client_a.post(reverse("scm:salesorder_create_from_quote", args=[quote.pk]))
+        order = SalesOrder.objects.get(tenant=tenant_a, source_quote=quote)
+        resp = client_a.post(reverse("scm:salesorder_create_from_quote", args=[quote.pk]))
+        assert resp.status_code == 302
+        assert reverse("scm:salesorder_detail", args=[order.pk]) in resp["Location"]
+        assert SalesOrder.objects.filter(tenant=tenant_a, source_quote=quote).count() == 1
+
+    def test_cross_tenant_quote_pk_404s(self, client_a, tenant_b, customer_b):
+        quote = self._accepted_quote(tenant_b, customer_b)
+        resp = client_a.post(reverse("scm:salesorder_create_from_quote", args=[quote.pk]))
+        assert resp.status_code == 404
+
+
+# ================================================================ Create guarded when the user has no tenant
+class TestSalesOrderCreateWithoutTenantWorkspace:
+    def test_salesorder_create_redirects(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        from apps.scm.models import SalesOrder
+        user = User.objects.create_user(email="orphan-oms@example.com", username="orphan_oms", password="x",
+                                        tenant=None)
+        c = Client()
+        c.force_login(user)
+        resp = c.get(reverse("scm:salesorder_create"))
+        assert resp.status_code == 302
+        assert SalesOrder.objects.count() == 0
