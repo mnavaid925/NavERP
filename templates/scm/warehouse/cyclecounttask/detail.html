@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'reconciled' %}green{% elif obj.status == 'counted' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'scheduled' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:cyclecounttask_list' %}">Cycle Counts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.status == 'counted' and variance_count %}
+    <div class="card" style="border-inline-start: 3px solid var(--warn); background: var(--warn-bg);">
+      <div class="card-body">
+        <div class="fw-600 text-warn"><i data-lucide="alert-triangle"></i> {{ variance_count }} line(s) disagree with the ledger</div>
+        <p class="text-muted">Net variance {{ net_variance|floatformat:2 }}. Reconciling will post a stock adjustment for exactly these differences.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'reconciled' and obj.adjustment %}
+    <div class="card" style="border-inline-start: 3px solid var(--ok); background: var(--ok-bg);">
+      <div class="card-body">
+        <div class="fw-600 text-ok"><i data-lucide="check-circle"></i> Reconciled</div>
+        <p class="text-muted">Stock corrected by adjustment <a href="{% url 'scm:stockadjustment_detail' obj.adjustment.pk %}" class="fw-600">{{ obj.adjustment.number }}</a>.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Location</dt><dd><a href="{% url 'scm:location_detail' obj.location.pk %}" class="fw-600">{{ obj.location.code }}</a> · {{ obj.location.name }}</dd></div>
+      <div class="detail-item"><dt>Scheduled</dt><dd>{{ obj.scheduled_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Method</dt><dd>{{ obj.get_count_method_display }}</dd></div>
+      <div class="detail-item"><dt>Assigned To</dt><dd>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Started</dt><dd>{{ obj.started_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Counted</dt><dd>{{ obj.counted_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Reconciled</dt><dd>{{ obj.reconciled_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Count sheet</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Lot / Serial</th><th>Expected</th><th>Counted</th><th>Variance</th><th>Notes</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600">{{ line.item.sku }}</td>
+              <td>{% if line.lot_serial %}{{ line.lot_serial.number }}{% else %}—{% endif %}</td>
+              <td>{{ line.expected_quantity|floatformat:2 }}</td>
+              <td>{% if line.counted_quantity is not None %}{{ line.counted_quantity|floatformat:2 }}{% else %}<span class="text-muted">Not counted</span>{% endif %}</td>
+              <td>
+                {% if line.has_variance %}
+                  <span class="badge badge-amber">{{ line.variance|floatformat:2 }}</span>
+                {% elif line.counted_quantity is not None %}
+                  <span class="badge badge-green">0.00</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ line.notes|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="clipboard-list"></i><p>No items on this count sheet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if obj.status == 'scheduled' %}
+      <div class="card-body text-muted">Starting the count snapshots the expected quantity for each line from the stock ledger — counters never see it typed in advance.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'scheduled' %}
+          <form method="post" action="{% url 'scm:cyclecounttask_start' obj.pk %}" onsubmit="return confirm('Start this count and snapshot the expected quantities?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start count</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'in_progress' %}
+          <form method="post" action="{% url 'scm:cyclecounttask_complete' obj.pk %}" onsubmit="return confirm('Mark this count as complete?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Complete count</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'counted' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:cyclecounttask_reconcile' obj.pk %}" onsubmit="return confirm('Reconcile this count and adjust stock?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Reconcile</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status != 'reconciled' and obj.status != 'cancelled' %}
+          <form method="post" action="{% url 'scm:cyclecounttask_cancel' obj.pk %}" onsubmit="return confirm('Cancel this count?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:cyclecounttask_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status != 'reconciled' %}
+          <form method="post" action="{% url 'scm:cyclecounttask_delete' obj.pk %}" onsubmit="return confirm('Delete this cycle count?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:cyclecounttask_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
