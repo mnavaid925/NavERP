@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Stock Adjustments{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Adjustments</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Adjustments</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:stockadjustment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Adjustment</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search adjustments…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reason" aria-label="Reason" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.reason == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:stockadjustment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Location</th><th>Reason</th><th>Date</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:stockadjustment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.location.code }}</td>
+              <td>{{ obj.get_reason_display }}</td>
+              <td>{{ obj.adjustment_date|date:"M d, Y" }}</td>
+              <td><span class="badge badge-{% if obj.status == 'posted' %}green{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:stockadjustment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:stockadjustment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'scm:stockadjustment_delete' obj.pk %}" onsubmit="return confirm('Delete this adjustment?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="sliders"></i><h3>No adjustments yet</h3><p>Correct stock for a write-off, damage or cycle count.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
