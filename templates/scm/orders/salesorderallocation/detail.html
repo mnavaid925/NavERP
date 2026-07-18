@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Allocation · {{ order.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Allocation
+        <span class="badge badge-{% if obj.status == 'reserved' %}info{% elif obj.status == 'released' %}amber{% elif obj.status == 'cancelled' %}muted{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:salesorderallocation_list' %}">Allocations</a><span class="sep">›</span><span>{{ order.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Reservation</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Order</span><span class="detail-value"><a href="{% url 'scm:salesorder_detail' order.pk %}">{{ order.number }}</a></span></div>
+        <div><span class="detail-label">Customer</span><span class="detail-value">{% if order.customer %}{{ order.customer.name }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Item</span><span class="detail-value">{% if line.item %}<a href="{% url 'scm:item_detail' line.item.pk %}">{{ line.item.sku }}</a> · {{ line.item.name }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Location</span><span class="detail-value">{{ obj.location.code }} · {{ obj.location.name }}</span></div>
+        <div><span class="detail-label">Quantity</span><span class="detail-value fw-600">{{ obj.quantity|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Line Ordered</span><span class="detail-value">{{ line.quantity_ordered|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Reserved At</span><span class="detail-value">{{ obj.allocated_at|date:"M d, Y H:i" }}</span></div>
+      </div>
+      {% if obj.notes %}<p class="text-muted">{{ obj.notes }}</p>{% endif %}
+      {% comment %}
+        Stated plainly on the page because it is the single most surprising thing about this record:
+        a reservation never moves stock. On-hand changes only when 4.4's pick is confirmed.
+      {% endcomment %}
+      <div class="card" style="border-inline-start:3px solid var(--info); background:var(--info-bg);">
+        <div class="card-body text-muted">
+          This is a soft reservation. It does not move stock — on-hand at {{ obj.location.code }} is
+          unchanged, and only what can still be promised to other orders goes down. Stock physically
+          leaves when the warehouse confirms a pick.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.status == 'reserved' %}
+            <form method="post" action="{% url 'scm:salesorderallocation_release' obj.pk %}" onsubmit="return confirm('Release this reservation to the warehouse?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release to warehouse</button>
+            </form>
+            <a href="{% url 'scm:salesorderallocation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+            <form method="post" action="{% url 'scm:salesorderallocation_delete' obj.pk %}" onsubmit="return confirm('Delete this reservation?');">
+              {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+          {% if obj.status != 'cancelled' %}
+            <form method="post" action="{% url 'scm:salesorderallocation_cancel' obj.pk %}" onsubmit="return confirm('Cancel this allocation? The stock becomes available to other orders.');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Cancel allocation</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:salesorder_detail' order.pk %}" class="btn btn-outline">Back to order</a>
+        <a href="{% url 'scm:salesorderallocation_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
