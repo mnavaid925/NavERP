@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'completed' %}green{% elif obj.status == 'in_transit' %}amber{% elif obj.status == 'cancelled' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:stocktransfer_list' %}">Transfers</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>From</dt><dd><a href="{% url 'scm:location_detail' obj.from_location.pk %}" class="fw-600">{{ obj.from_location.code }}</a> · {{ obj.from_location.name }}</dd></div>
+      <div class="detail-item"><dt>To</dt><dd><a href="{% url 'scm:location_detail' obj.to_location.pk %}" class="fw-600">{{ obj.to_location.code }}</a> · {{ obj.to_location.name }}</dd></div>
+      <div class="detail-item"><dt>Transfer Date</dt><dd>{{ obj.transfer_date|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Completed At</dt><dd>{{ obj.completed_at|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Lot / Serial</th><th>Quantity</th><th>Available at source</th></tr></thead>
+        <tbody>
+          {% for row in line_rows %}
+            <tr>
+              <td class="fw-600">{{ row.line.item.sku }}</td>
+              <td>{% if row.line.lot_serial %}{{ row.line.lot_serial.number }}{% else %}—{% endif %}</td>
+              <td>{{ row.line.quantity|floatformat:2 }}</td>
+              <td>
+                {% if row.available < row.line.quantity %}
+                  <span class="badge badge-red">{{ row.available|floatformat:2 }} — short</span>
+                {% else %}
+                  <span class="badge badge-green">{{ row.available|floatformat:2 }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="box"></i><p>No lines on this transfer.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if obj.status == 'draft' or obj.status == 'in_transit' %}
+      <div class="card-body text-muted">Completing the transfer posts a paired stock movement per line — out of the source and into the destination.</div>
+    {% endif %}
+  </div>
+
+  {% if obj.status == 'completed' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Posted movements</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Location</th><th>Quantity</th><th>Reference</th></tr></thead>
+          <tbody>
+            {% for m in moves %}
+              <tr>
+                <td>{{ m.item.sku }}</td>
+                <td>{{ m.location.code }}</td>
+                <td>{{ m.quantity|floatformat:2 }}</td>
+                <td>{{ m.reference|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="list"></i><p>No movements recorded.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' or obj.status == 'in_transit' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:stocktransfer_complete' obj.pk %}" onsubmit="return confirm('Complete this transfer and move the stock?');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Complete transfer</button>
+            </form>
+            <form method="post" action="{% url 'scm:stocktransfer_cancel' obj.pk %}" onsubmit="return confirm('Cancel this transfer?');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:stocktransfer_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:stocktransfer_delete' obj.pk %}" onsubmit="return confirm('Delete this transfer?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:stocktransfer_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
