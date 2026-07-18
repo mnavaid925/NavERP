@@ -797,6 +797,16 @@ LIVE_LINKS = {
         "Reorder Point Automation": "scm:reorder_alerts",        # bullet (low-stock alerts + one-click requisition)
         "Inventory Valuation": "scm:valuation_report",           # bullet (FIFO/LIFO/WAC over StockMove cost layers)
     },
+    # 4.4 Warehouse Management — layered ON the 4.3 spine: bins are Locations (extended with
+    # capacity/pick_sequence/abc_class), every movement posts through the same StockMove service, and
+    # cycle counts resolve into the existing StockAdjustment rather than a second correction path.
+    "4.4": {
+        "Inbound Operations": "scm:putawaytask_list",            # bullet (receiving -> directed putaway)
+        "Outbound Operations": "scm:picktask_list",              # bullet (wave/batch/zone picking + packing)
+        "Bin/Location Management": "scm:location_list",          # bullet (the 4.3 locations, now with bin attributes)
+        "Cycle Counting": "scm:cyclecounttask_list",             # bullet (scheduled counts -> StockAdjustment)
+        "Yard Management": "scm:yardvisit_list",                 # bullet (trucks/trailers + dock doors)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
