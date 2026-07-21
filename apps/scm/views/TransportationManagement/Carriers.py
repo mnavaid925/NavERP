@@ -89,7 +89,8 @@ def carrier_delete(request, pk):
 @require_POST
 def carrier_recompute_scorecard(request, pk):
     """Re-derive the on-time-delivery score from this carrier's delivered-shipment history."""
-    obj = get_object_or_404(Carrier, pk=pk, tenant=request.tenant)
+    # select_related so write_audit_log -> str(obj) -> Carrier.name -> party.name doesn't chain-fetch.
+    obj = get_object_or_404(Carrier.objects.select_related("party"), pk=pk, tenant=request.tenant)
     obj.recompute_scorecard()
     write_audit_log(request.user, obj, "update",
                     {"action": "recompute_scorecard", "on_time_delivery_pct": str(obj.on_time_delivery_pct)})
