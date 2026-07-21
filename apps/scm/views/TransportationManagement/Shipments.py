@@ -29,7 +29,6 @@ def shipment_create(request):
         request, form_class=ShipmentForm,
         template="scm/transportation/shipment/form.html",
         success_url="scm:shipment_list",
-        extra_context={"is_shipment": True},
     )
 
 
@@ -43,7 +42,6 @@ def shipment_edit(request, pk):
         request, model=Shipment, pk=pk, form_class=ShipmentForm,
         template="scm/transportation/shipment/form.html",
         success_url="scm:shipment_list",
-        extra_context={"is_shipment": True},
     )
 
 
