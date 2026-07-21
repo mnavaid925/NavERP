@@ -1306,3 +1306,315 @@ class TestSalesOrderCSRFEnforcement:
         assert resp.status_code == 403
         allocation_a.refresh_from_db()
         assert allocation_a.status == "reserved"
+
+
+# ================================================================================================
+# SCM 4.6 Transportation Management System
+# ================================================================================================
+
+# ================================================================ Anonymous -> login redirect
+class TestTMSAnonymousRedirect:
+    def test_carrier_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:carrier_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_load_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:load_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_shipment_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:shipment_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_freightinvoice_list_redirects(self):
+        c = Client()
+        resp = c.get(reverse("scm:freightinvoice_list"))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+
+# ================================================================ @tenant_admin_required gates
+class TestTMSAdminRequiredGates:
+    def test_load_dispatch_requires_admin(self, member_client, client_a, load_a):
+        client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        url = reverse("scm:load_dispatch", args=[load_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_load_deliver_requires_admin(self, member_client, client_a, load_a):
+        client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        client_a.post(reverse("scm:load_dispatch", args=[load_a.pk]))
+        url = reverse("scm:load_deliver", args=[load_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_load_cancel_requires_admin(self, member_client, client_a, load_a):
+        url = reverse("scm:load_cancel", args=[load_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_freightinvoice_approve_requires_admin(self, member_client, client_a, freight_invoice_a):
+        url = reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_freightinvoice_reject_requires_admin(self, member_client, client_a, freight_invoice_a):
+        url = reverse("scm:freightinvoice_reject", args=[freight_invoice_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+    def test_freightinvoice_handoff_requires_admin(self, member_client, client_a, freight_invoice_a):
+        url = reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk])
+        assert member_client.post(url).status_code == 403
+        assert client_a.post(url).status_code != 403
+
+
+# ================================================================ Plain @login_required actions work for a member
+class TestTMSOrdinaryActionsAllowNonAdmin:
+    def test_member_can_view_carrier_detail(self, member_client, carrier_a):
+        assert member_client.get(reverse("scm:carrier_detail", args=[carrier_a.pk])).status_code == 200
+
+    def test_member_can_tender_a_load(self, member_client, load_a):
+        resp = member_client.post(reverse("scm:load_tender", args=[load_a.pk]))
+        assert resp.status_code != 403
+
+    def test_member_can_book_a_load(self, member_client, load_a):
+        resp = member_client.post(reverse("scm:load_book", args=[load_a.pk]))
+        assert resp.status_code != 403
+
+    def test_member_can_book_a_shipment(self, member_client, shipment_a):
+        resp = member_client.post(reverse("scm:shipment_book", args=[shipment_a.pk]))
+        assert resp.status_code != 403
+
+    def test_member_can_run_a_freightinvoice_audit(self, member_client, freight_invoice_a):
+        resp = member_client.post(reverse("scm:freightinvoice_run_audit", args=[freight_invoice_a.pk]))
+        assert resp.status_code != 403
+
+    def test_member_can_dispute_a_freightinvoice(self, member_client, freight_invoice_a):
+        resp = member_client.post(reverse("scm:freightinvoice_dispute", args=[freight_invoice_a.pk]),
+                                  {"dispute_reason": "member flagged this"})
+        assert resp.status_code != 403
+
+
+# ================================================================ Cross-tenant IDOR -> 404 (mandatory)
+class TestTMSCrossTenantIDOR:
+    def test_carrier_detail_cross_tenant_404(self, client_a, carrier_b):
+        assert client_a.get(reverse("scm:carrier_detail", args=[carrier_b.pk])).status_code == 404
+
+    def test_carrier_edit_cross_tenant_404(self, client_a, carrier_b):
+        assert client_a.get(reverse("scm:carrier_edit", args=[carrier_b.pk])).status_code == 404
+
+    def test_carrier_delete_cross_tenant_404(self, client_a, carrier_b):
+        assert client_a.post(reverse("scm:carrier_delete", args=[carrier_b.pk])).status_code == 404
+
+    def test_carrier_recompute_scorecard_cross_tenant_404(self, client_a, carrier_b):
+        assert client_a.post(reverse("scm:carrier_recompute_scorecard", args=[carrier_b.pk])).status_code == 404
+
+    def test_load_detail_cross_tenant_404(self, client_a, load_b):
+        assert client_a.get(reverse("scm:load_detail", args=[load_b.pk])).status_code == 404
+
+    def test_load_edit_cross_tenant_404(self, client_a, load_b):
+        assert client_a.get(reverse("scm:load_edit", args=[load_b.pk])).status_code == 404
+
+    def test_load_delete_cross_tenant_404(self, client_a, load_b):
+        assert client_a.post(reverse("scm:load_delete", args=[load_b.pk])).status_code == 404
+
+    def test_load_tender_cross_tenant_404(self, client_a, load_b):
+        assert client_a.post(reverse("scm:load_tender", args=[load_b.pk])).status_code == 404
+
+    def test_load_book_cross_tenant_404(self, client_a, load_b):
+        assert client_a.post(reverse("scm:load_book", args=[load_b.pk])).status_code == 404
+
+    def test_load_dispatch_cross_tenant_404(self, client_a, load_b):
+        assert client_a.post(reverse("scm:load_dispatch", args=[load_b.pk])).status_code == 404
+
+    def test_load_deliver_cross_tenant_404(self, client_a, load_b):
+        assert client_a.post(reverse("scm:load_deliver", args=[load_b.pk])).status_code == 404
+
+    def test_load_cancel_cross_tenant_404(self, client_a, load_b):
+        assert client_a.post(reverse("scm:load_cancel", args=[load_b.pk])).status_code == 404
+
+    def test_shipment_detail_cross_tenant_404(self, client_a, shipment_b):
+        assert client_a.get(reverse("scm:shipment_detail", args=[shipment_b.pk])).status_code == 404
+
+    def test_shipment_edit_cross_tenant_404(self, client_a, shipment_b):
+        assert client_a.get(reverse("scm:shipment_edit", args=[shipment_b.pk])).status_code == 404
+
+    def test_shipment_delete_cross_tenant_404(self, client_a, shipment_b):
+        assert client_a.post(reverse("scm:shipment_delete", args=[shipment_b.pk])).status_code == 404
+
+    def test_shipment_book_cross_tenant_404(self, client_a, shipment_b):
+        assert client_a.post(reverse("scm:shipment_book", args=[shipment_b.pk])).status_code == 404
+
+    def test_shipment_add_event_cross_tenant_404(self, client_a, shipment_b):
+        assert client_a.post(reverse("scm:shipment_add_event", args=[shipment_b.pk]), {}).status_code == 404
+
+    def test_shipment_cancel_cross_tenant_404(self, client_a, shipment_b):
+        assert client_a.post(reverse("scm:shipment_cancel", args=[shipment_b.pk])).status_code == 404
+
+    def test_freightinvoice_detail_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.get(reverse("scm:freightinvoice_detail", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_edit_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.get(reverse("scm:freightinvoice_edit", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_delete_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.post(reverse("scm:freightinvoice_delete", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_run_audit_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.post(reverse("scm:freightinvoice_run_audit", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_dispute_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.post(reverse("scm:freightinvoice_dispute", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_approve_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_reject_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.post(reverse("scm:freightinvoice_reject", args=[freight_invoice_b.pk])).status_code == 404
+
+    def test_freightinvoice_handoff_cross_tenant_404(self, client_a, freight_invoice_b):
+        assert client_a.post(reverse("scm:freightinvoice_handoff", args=[freight_invoice_b.pk])).status_code == 404
+
+
+# ================================================================ Cross-tenant FORM/FORMSET binding + IDOR list
+class TestTMSCrossTenantFormScoping:
+    def test_carrier_list_never_contains_other_tenant_rows(self, client_a, carrier_a, carrier_b):
+        resp = client_a.get(reverse("scm:carrier_list"))
+        assert carrier_b not in resp.context["object_list"]
+
+    def test_load_list_never_contains_other_tenant_rows(self, client_a, load_a, load_b):
+        resp = client_a.get(reverse("scm:load_list"))
+        assert load_b not in resp.context["object_list"]
+
+    def test_shipment_list_never_contains_other_tenant_rows(self, client_a, shipment_a, shipment_b):
+        resp = client_a.get(reverse("scm:shipment_list"))
+        assert shipment_b not in resp.context["object_list"]
+
+    def test_freightinvoice_list_never_contains_other_tenant_rows(
+        self, client_a, freight_invoice_a, freight_invoice_b,
+    ):
+        resp = client_a.get(reverse("scm:freightinvoice_list"))
+        assert freight_invoice_b not in resp.context["object_list"]
+
+    def test_crafted_carrier_post_with_other_tenant_party_is_rejected(self, tenant_a, client_a, carrier_party_b):
+        from apps.scm.models import Carrier
+        data = {
+            "party": str(carrier_party_b.pk), "carrier_type": "asset_based", "primary_mode": "truckload",
+            "service_level": "standard", "scac_code": "", "mc_number": "", "dot_number": "",
+            "insurance_certificate_expiry": "", "primary_contact_name": "", "primary_contact_email": "",
+            "primary_contact_phone": "", "is_preferred": "", "status": "active", "notes": "",
+            **formset_data("rate_cards", []),
+        }
+        resp = client_a.post(reverse("scm:carrier_create"), data)
+        assert resp.status_code == 200  # re-rendered form, not saved
+        assert not Carrier.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_load_post_with_other_tenant_carrier_is_rejected(self, tenant_a, client_a, carrier_b):
+        from apps.scm.models import Load
+        data = {
+            "carrier": str(carrier_b.pk), "mode": "truckload", "equipment_type": "dry_van",
+            "origin_text": "", "destination_text": "", "planned_departure": "", "planned_arrival": "",
+            "distance_km": "", "estimated_fuel_cost": "", "freight_cost_estimate": "",
+            "equipment_capacity_weight_kg": "", "equipment_capacity_volume_cbm": "",
+            "driver_name": "", "vehicle_ref": "", "notes": "",
+            **formset_data("stops", []),
+        }
+        resp = client_a.post(reverse("scm:load_create"), data)
+        assert resp.status_code == 200
+        assert not Load.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_shipment_post_with_other_tenant_carrier_is_rejected(self, tenant_a, client_a, carrier_b):
+        from apps.scm.models import Shipment
+        data = {
+            "direction": "outbound", "carrier": str(carrier_b.pk), "load": "", "sales_order": "",
+            "purchase_order": "", "ship_from_address": "", "ship_to_address": "", "origin_text": "",
+            "destination_text": "", "mode": "truckload", "planned_pickup_date": "",
+            "planned_delivery_date": "", "weight_kg": "", "volume_cbm": "", "package_count": "",
+            "carrier_tracking_number": "", "freight_cost_estimate": "", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:shipment_create"), data)
+        assert resp.status_code == 200
+        assert not Shipment.objects.filter(tenant=tenant_a).exists()
+
+    def test_crafted_freightinvoice_post_with_other_tenant_carrier_is_rejected(self, tenant_a, client_a, carrier_b):
+        from apps.scm.models import FreightInvoice
+        data = {
+            "carrier": str(carrier_b.pk), "load": "", "shipment": "", "carrier_invoice_number": "",
+            "invoice_date": "", "due_date": "", "currency": "", "match_tolerance_pct": "2.00", "notes": "",
+            **formset_data("lines", []),
+        }
+        resp = client_a.post(reverse("scm:freightinvoice_create"), data)
+        assert resp.status_code == 200
+        assert not FreightInvoice.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestTMSPostOnlyActions:
+    def test_get_carrier_delete_returns_405(self, client_a, carrier_a):
+        assert client_a.get(reverse("scm:carrier_delete", args=[carrier_a.pk])).status_code == 405
+
+    def test_get_carrier_recompute_scorecard_returns_405(self, client_a, carrier_a):
+        assert client_a.get(reverse("scm:carrier_recompute_scorecard", args=[carrier_a.pk])).status_code == 405
+
+    def test_get_load_delete_returns_405(self, client_a, load_a):
+        assert client_a.get(reverse("scm:load_delete", args=[load_a.pk])).status_code == 405
+
+    def test_get_load_tender_returns_405(self, client_a, load_a):
+        assert client_a.get(reverse("scm:load_tender", args=[load_a.pk])).status_code == 405
+
+    def test_get_load_cancel_returns_405(self, client_a, load_a):
+        assert client_a.get(reverse("scm:load_cancel", args=[load_a.pk])).status_code == 405
+
+    def test_get_shipment_delete_returns_405(self, client_a, shipment_a):
+        assert client_a.get(reverse("scm:shipment_delete", args=[shipment_a.pk])).status_code == 405
+
+    def test_get_shipment_add_event_returns_405(self, client_a, shipment_a):
+        assert client_a.get(reverse("scm:shipment_add_event", args=[shipment_a.pk])).status_code == 405
+
+    def test_get_shipment_cancel_returns_405(self, client_a, shipment_a):
+        assert client_a.get(reverse("scm:shipment_cancel", args=[shipment_a.pk])).status_code == 405
+
+    def test_get_freightinvoice_delete_returns_405(self, client_a, freight_invoice_a):
+        assert client_a.get(reverse("scm:freightinvoice_delete", args=[freight_invoice_a.pk])).status_code == 405
+
+    def test_get_freightinvoice_approve_returns_405(self, client_a, freight_invoice_a):
+        assert client_a.get(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk])).status_code == 405
+
+    def test_get_freightinvoice_handoff_returns_405(self, client_a, freight_invoice_a):
+        assert client_a.get(reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk])).status_code == 405
+
+
+# ================================================================ CSRF enforcement
+class TestTMSCSRFEnforcement:
+    def test_post_without_csrf_token_is_rejected_on_load_tender(self, admin_user, tenant_a, load_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:load_tender", args=[load_a.pk]))
+        assert resp.status_code == 403
+        load_a.refresh_from_db()
+        assert load_a.status == "planning"
+
+    def test_post_without_csrf_token_is_rejected_on_shipment_book(self, admin_user, tenant_a, shipment_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:shipment_book", args=[shipment_a.pk]))
+        assert resp.status_code == 403
+        shipment_a.refresh_from_db()
+        assert shipment_a.status == "planned"
+
+    def test_post_without_csrf_token_is_rejected_on_freightinvoice_approve(
+        self, admin_user, tenant_a, freight_invoice_a,
+    ):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 403
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "pending"
