@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), and 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.6+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), and 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.7+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -8,11 +8,11 @@ description: Work on the SCM module (Module 4 — Supply Chain Management). As-b
 App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_name = "scm"`.
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
-**As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management.** 4.5–4.19 are roadmap.
-Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the
-reference apps `apps/crm`/`apps/accounting` for the package layout and the mandatory
-[Module Creation Sequence](../../CLAUDE.md). **4.6 TMS is next** — 4.4 and 4.5 both deferred all carrier/label/
-freight work to it (`YardVisit.carrier_name`, `PickTask.tracking_ref` are free-text placeholders waiting on it).
+**As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
+4.6 Transportation Management.** 4.7–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest
+`4.M` without a `LIVE_LINKS["4.M"]` entry — **4.7 Demand Planning & Forecasting** is next) — see the reference apps
+`apps/crm`/`apps/accounting` for the package layout and the mandatory
+[Module Creation Sequence](../../CLAUDE.md).
 
 ## Overview
 
@@ -266,6 +266,68 @@ one concatenated list, first-match-wins would shadow it permanently). Allocation
 `sales_order__tenant=request.tenant`. **Seeder**: `_seed_oms_tenant` runs after
 `_seed_inventory_tenant`; its three demo orders reach their status by *derivation*, not hand-setting.
 
+## 4.6 Transportation Management System (TMS)  (`apps/scm/*/TransportationManagement/`, templates `templates/scm/transportation/`)
+
+The carrier/freight layer 4.4 and 4.5 deferred to it — it's where `YardVisit.carrier_name`/`PickTask.tracking_ref`
+free-text placeholders finally get a real `Carrier` master. Four entities (8 tables). Shared MODE/EQUIPMENT/
+SERVICE_LEVEL choice vocabularies live at the top of `Carriers.py` and are imported by the sibling entity modules
+(one-way, acyclic).
+
+- **`Carriers.py`** — `Carrier` [`CAR-`] + `CarrierRateCard` (tenant-less child). **A carrier is a spine-backed
+  profile on `core.Party`**, NOT a standalone company table — `party` is a REQUIRED FK (PROTECT), scoped by a new
+  `_carrier_parties` helper (`supplier`/`vendor`/`partner` roles) in `forms/_common.py`; `Carrier.name` is a property
+  reading `party.name`. This mirrors 4.2 `SupplierProfile` and keeps the freight→Bill hand-off clean (Bill.party is
+  required). `carrier_type`/`primary_mode`/`service_level`/SCAC/MC/DOT/insurance-expiry + `is_preferred`/status.
+  **`on_time_delivery_pct` is DERIVED** by `recompute_scorecard()` from delivered-shipment history (on-time =
+  `actual_delivery_at.date() <= planned_delivery_date`), editable=False, and — like `SupplierScorecard` — refuses to
+  wipe a real score with a phantom zero when there's no signal. `CarrierRateCard`: lane/mode/equipment/rate_basis +
+  base_rate + `fuel_surcharge_pct` (0–100) + `min_charge` + `rate_with_fuel` property + `currency`→`accounting.Currency`.
+- **`Loads.py`** — `Load` [`LD-`] + `LoadStop` (tenant-less child). The route/trip consolidation unit.
+  status planning→tendered→booked→in_transit→delivered (+cancelled), `EDITABLE_STATUSES = ("planning","tendered")`.
+  **Cube utilization is DERIVED, never stored**: `weight/volume_utilization_pct(planned)` = assigned-shipment total ÷
+  equipment capacity, returns **None** when capacity is 0/None (no division-by-zero). The detail view aggregates BOTH
+  dimensions in ONE `.aggregate(w=Sum, v=Sum)` and passes each precomputed total in so the property never re-queries
+  (never call the no-arg path per row). `LoadStop`: sequence/stop_type/address(+free-text)/status.
+- **`Shipments.py`** — `Shipment` [`SHP-`] + `TrackingEvent` (**append-only**, tenant-less child — no edit/delete
+  views, mirrors the StockMove ledger). Links `sales_order`/`purchase_order` (nullable, outbound/inbound), optional
+  `load` consolidation + `carrier`. status planned→booked→in_transit→exception/delivered (+cancelled),
+  `EDITABLE_STATUSES = ("planned","booked")`. **`apply_tracking_event(event)` projects the latest event onto the
+  summary fields** (`status`/`current_status_text`/`last_known_location`/`actual_pickup_at`/`actual_delivery_at`/POD)
+  — a `pickup` event → in_transit + stamps pickup once; `delivered`/`pod_signed` → delivered (+POD); exception/delayed/
+  customs_hold → exception; a terminal (delivered/cancelled) shipment records the event but is NEVER walked back.
+  Cube inputs (`weight_kg`/`volume_cbm`/`package_count`) live here (Item has no dimensions yet, L28). `is_delayed`
+  property. When a delivery closes a shipment the view calls `carrier.recompute_scorecard()`.
+- **`FreightInvoices.py`** — `FreightInvoice` [`FRT-`] + `FreightInvoiceLine` (tenant-less child). The freight audit.
+  `carrier` PROTECT; `load`/`shipment` nullable (form `clean()` cross-checks their carrier == the billed carrier — a
+  data-integrity guard, not cross-tenant). **All amounts DERIVED from lines**: `recalc_amounts()` sums billed/contract/
+  variance in **Python** (not `F()` — SQLite int-division trap). `run_audit()` sets `match_status` ∈ not_matched/
+  matched/price_variance/duplicate/disputed (mirrors `GoodsReceiptNote.MATCH_STATUS_CHOICES`): within
+  `match_tolerance_pct` → matched, outside → price_variance, a same-carrier + same non-blank `carrier_invoice_number`
+  → duplicate, and an already-`disputed` invoice is left disputed. **The hand-off (`freightinvoice_handoff`) drafts an
+  `accounting.Bill`** (status=`draft`, `party=carrier.party`, one BillLine for the freight total) and links it by
+  nullable FK — **it NEVER posts a JE (L29)**; AP approves/pays the Bill in accounting. `is_editable` = pending &
+  no bill.
+
+**URLs** (`app_name="scm"`, prefixes all unique vs `orders/`/`sales-orders/`):
+- **carrier** — `carrier_*` (/carriers/) + `carrier_recompute_scorecard` (POST).
+- **load** — `load_*` (/loads/) + `load_tender`/`load_book` (POST, `@login_required`, require a carrier) +
+  `load_dispatch`/`load_deliver`/`load_cancel` (POST, `@tenant_admin_required`).
+- **shipment** — `shipment_*` (/shipments/) + `shipment_book` + `shipment_add_event` (appends a TrackingEvent,
+  `recorded_by` = `request.user`) + `shipment_cancel` (all POST, `@login_required`).
+- **freightinvoice** — `freightinvoice_*` (/freight-invoices/) + `freightinvoice_run_audit`/`_dispute` (POST,
+  `@login_required`) + `freightinvoice_approve`/`_reject`/`_handoff` (POST, `@tenant_admin_required`).
+  **approve/reject are pending-only guarded** (a crafted POST can't reject an approved or approve a rejected invoice);
+  **run_audit is is_editable-guarded** (frozen once approved/handed-off).
+
+**Templates** under `templates/scm/transportation/{carrier,load,shipment,freightinvoice}/{list,detail,form}.html`.
+Carrier/load/freightinvoice forms carry an inline formset (rate cards / route stops / charge lines); shipment tracking
+events are appended from the detail page's `TrackingEventForm`, not a formset. Load detail renders cube utilization as
+`.progress`/`.progress-bar` bars (guarded `is not None`, "set a capacity to compute" fallback). Colour-named badges only.
+**Seeder**: `_seed_tms_tenant` runs LAST (after `_seed_oms_tenant`/procurement) so shipments can link the seeded
+SalesOrder/PurchaseOrder; carriers reuse `self._supplier(...)` parties; events go through the real `apply_tracking_event`
+and the invoice through the real `run_audit` (derived state, not hand-set). Idempotent via a `Carrier` guard; `_flush`
+deletes freight-linked draft bills → FreightInvoice → Shipment → Load → Carrier (FreightInvoice.carrier is PROTECT).
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -292,7 +354,7 @@ one concatenated list, first-match-wins would shadow it permanently). Allocation
   `(param, lookup, is_int)` tuple to `filters=`; in the template reflect `request.GET` (pk filters use
   `|stringformat:"d"`).
 - **Extend the seeder**: add rows inside the per-tenant guard in `seed_scm.py`, reusing existing Party/OrgUnit rows.
-- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm -q` (167 tests). Ad-hoc smoke scripts live in `temp/`.
+- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (1,343 tests). Ad-hoc smoke scripts live in `temp/`.
 
 ## Sidebar wiring  (`apps/core/navigation.py`)
 
@@ -300,4 +362,8 @@ one concatenated list, first-match-wins would shadow it permanently). Allocation
 Purchase Requisition→`scm:requisition_list`, Request for Quotation→`scm:rfq_list`,
 Purchase Order Management→`scm:purchaseorder_list`, Vendor Portal→`scm:purchaseorder_list?status=sent`
 (staff-side, no vendor login — L32), Invoice Reconciliation→`scm:goodsreceipt_list`.
+`LIVE_LINKS["4.2"]`–`["4.6"]` map each of those sub-modules' bullets the same way; **`LIVE_LINKS["4.6"]`** →
+Route Planning + Load Optimization both `scm:load_list` (two facets of the load, they co-highlight),
+Freight Audit & Payment `scm:freightinvoice_list`, Carrier Management `scm:carrier_list`,
+Shipment Tracking `scm:shipment_list`.
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
