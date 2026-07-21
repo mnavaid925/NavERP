@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'delivered' %}green{% elif obj.status == 'in_transit' %}info{% elif obj.status == 'booked' %}amber{% elif obj.status == 'exception' or obj.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.pod_received %}<span class="badge badge-green">POD</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:shipment_list' %}">Shipments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.status == 'exception' or obj.is_delayed %}
+    <div class="card" style="border-inline-start:3px solid var(--bad); background:var(--bad-bg);">
+      <div class="card-body"><h3 class="text-danger"><i data-lucide="alert-triangle"></i>
+        {% if obj.status == 'exception' %}Shipment exception — {{ obj.current_status_text }}{% else %}Running late — planned delivery {{ obj.planned_delivery_date|date:"M d, Y" }}{% endif %}
+      </h3></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Shipment</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Direction</span><span class="detail-value">{{ obj.get_direction_display }}</span></div>
+        <div><span class="detail-label">Carrier</span><span class="detail-value">{% if obj.carrier %}<a href="{% url 'scm:carrier_detail' obj.carrier.pk %}">{{ obj.carrier.name }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Load</span><span class="detail-value">{% if obj.load %}<a href="{% url 'scm:load_detail' obj.load.pk %}">{{ obj.load.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Sales Order</span><span class="detail-value">{% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}">{{ obj.sales_order.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Purchase Order</span><span class="detail-value">{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}">{{ obj.purchase_order.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Mode</span><span class="detail-value">{{ obj.get_mode_display }}</span></div>
+        <div><span class="detail-label">Origin</span><span class="detail-value">{{ obj.origin_text|default:obj.ship_from_address|default:"—" }}</span></div>
+        <div><span class="detail-label">Destination</span><span class="detail-value">{{ obj.destination_text|default:obj.ship_to_address|default:"—" }}</span></div>
+        <div><span class="detail-label">Tracking #</span><span class="detail-value">{{ obj.carrier_tracking_number|default:"—" }}</span></div>
+        <div><span class="detail-label">Last Known</span><span class="detail-value">{{ obj.last_known_location|default:"—" }}</span></div>
+        <div><span class="detail-label">Planned Pickup</span><span class="detail-value">{{ obj.planned_pickup_date|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">Planned Delivery</span><span class="detail-value">{{ obj.planned_delivery_date|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">Actual Pickup</span><span class="detail-value">{{ obj.actual_pickup_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+        <div><span class="detail-label">Actual Delivery</span><span class="detail-value">{{ obj.actual_delivery_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+        <div><span class="detail-label">Weight</span><span class="detail-value">{{ obj.weight_kg|floatformat:0|default:"—" }} kg</span></div>
+        <div><span class="detail-label">Volume</span><span class="detail-value">{{ obj.volume_cbm|floatformat:2|default:"—" }} m³</span></div>
+        <div><span class="detail-label">Packages</span><span class="detail-value">{{ obj.package_count|default:"—" }}</span></div>
+        <div><span class="detail-label">POD Received</span><span class="detail-value">{{ obj.pod_received_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+      </div>
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tracking Timeline</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Event</th><th>Location</th><th>GPS</th><th>Source</th><th>By</th></tr></thead>
+        <tbody>
+          {% for ev in events %}
+            <tr>
+              <td>{{ ev.event_at|date:"M d, Y H:i" }}</td>
+              <td><span class="badge badge-{% if ev.event_type == 'delivered' or ev.event_type == 'pod_signed' %}green{% elif ev.event_type == 'exception' or ev.event_type == 'delayed' or ev.event_type == 'customs_hold' %}red{% else %}info{% endif %}">{{ ev.get_event_type_display }}</span></td>
+              <td>{{ ev.location_text|default:"—" }}</td>
+              <td>{% if ev.latitude is not None and ev.longitude is not None %}{{ ev.latitude }}, {{ ev.longitude }}{% else %}—{% endif %}</td>
+              <td>{{ ev.get_source_display }}</td>
+              <td>{{ ev.recorded_by|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="map-pinned"></i><h3>No tracking events</h3><p>Add the first milestone below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not obj.is_closed %}
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:shipment_add_event' obj.pk %}">
+          {% csrf_token %}
+          {% for e in event_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in event_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add tracking event</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'planned' and obj.carrier %}
+          <form method="post" action="{% url 'scm:shipment_book' obj.pk %}">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Book</button></form>
+        {% endif %}
+        {% if not obj.is_closed %}
+          <form method="post" action="{% url 'scm:shipment_cancel' obj.pk %}" onsubmit="return confirm('Cancel this shipment?');">
+            {% csrf_token %}
+            <input type="text" name="cancel_reason" class="form-input" placeholder="Reason (optional)">
+            <button class="btn btn-outline danger" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:shipment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:shipment_delete' obj.pk %}" onsubmit="return confirm('Delete this shipment?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        {% endif %}
+        <a href="{% url 'scm:shipment_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
