@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        <span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'suspended' %}red{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.is_preferred %}<span class="badge badge-info">Preferred</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:carrier_list' %}">Carriers</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.insurance_expired %}
+    <div class="card" style="border-inline-start:3px solid var(--bad); background:var(--bad-bg);">
+      <div class="card-body"><h3 class="text-danger"><i data-lucide="shield-alert"></i> Insurance certificate expired ({{ obj.insurance_certificate_expiry|date:"M d, Y" }})</h3></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Carrier</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Number</span><span class="detail-value">{{ obj.number }}</span></div>
+        <div><span class="detail-label">Party</span><span class="detail-value">{{ obj.party.name }}</span></div>
+        <div><span class="detail-label">Type</span><span class="detail-value">{{ obj.get_carrier_type_display }}</span></div>
+        <div><span class="detail-label">Primary Mode</span><span class="detail-value">{{ obj.get_primary_mode_display }}</span></div>
+        <div><span class="detail-label">Service Level</span><span class="detail-value">{{ obj.get_service_level_display }}</span></div>
+        <div><span class="detail-label">SCAC</span><span class="detail-value">{{ obj.scac_code|default:"—" }}</span></div>
+        <div><span class="detail-label">MC Number</span><span class="detail-value">{{ obj.mc_number|default:"—" }}</span></div>
+        <div><span class="detail-label">DOT Number</span><span class="detail-value">{{ obj.dot_number|default:"—" }}</span></div>
+        <div><span class="detail-label">Insurance Expiry</span><span class="detail-value">{{ obj.insurance_certificate_expiry|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">On-Time Delivery</span><span class="detail-value fw-600">{% if obj.on_time_delivery_pct is not None %}{{ obj.on_time_delivery_pct|floatformat:1 }}%{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Contact</span><span class="detail-value">{{ obj.primary_contact_name|default:"—" }}</span></div>
+        <div><span class="detail-label">Email</span><span class="detail-value">{{ obj.primary_contact_email|default:"—" }}</span></div>
+        <div><span class="detail-label">Phone</span><span class="detail-value">{{ obj.primary_contact_phone|default:"—" }}</span></div>
+      </div>
+      {% if obj.performance_summary %}<p class="text-muted"><i data-lucide="line-chart"></i> {{ obj.performance_summary }}</p>{% endif %}
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rate Cards</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Lane</th><th>Mode</th><th>Equipment</th><th>Basis</th><th>Base Rate</th><th>Fuel %</th><th>All-in</th><th>Transit</th><th>Active</th></tr></thead>
+        <tbody>
+          {% for rc in rate_cards %}
+            <tr>
+              <td>{{ rc.lane_name|default:rc }}</td>
+              <td>{{ rc.get_mode_display }}</td>
+              <td>{{ rc.get_equipment_type_display }}</td>
+              <td>{{ rc.get_rate_basis_display }}</td>
+              <td>{{ rc.base_rate|floatformat:2 }}{% if rc.currency %} {{ rc.currency.code }}{% endif %}</td>
+              <td>{{ rc.fuel_surcharge_pct|floatformat:1 }}%</td>
+              <td>{{ rc.rate_with_fuel|floatformat:2 }}</td>
+              <td>{% if rc.transit_days %}{{ rc.transit_days }}d{% else %}—{% endif %}</td>
+              <td>{% if rc.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list"></i><h3>No rate cards</h3><p>Edit the carrier to add negotiated lane rates.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Shipments</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Direction</th><th>Status</th><th>Planned Delivery</th></tr></thead>
+        <tbody>
+          {% for s in recent_shipments %}
+            <tr>
+              <td><a href="{% url 'scm:shipment_detail' s.pk %}" class="fw-600">{{ s.number }}</a></td>
+              <td>{{ s.get_direction_display }}</td>
+              <td><span class="badge badge-{% if s.status == 'delivered' %}green{% elif s.status == 'in_transit' %}info{% elif s.status == 'exception' or s.status == 'cancelled' %}red{% elif s.status == 'booked' %}amber{% else %}slate{% endif %}">{{ s.get_status_display }}</span></td>
+              <td>{{ s.planned_delivery_date|date:"M d, Y"|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="package"></i><h3>No shipments yet</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <form method="post" action="{% url 'scm:carrier_recompute_scorecard' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Recompute scorecard</button>
+        </form>
+        <a href="{% url 'scm:carrier_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:carrier_delete' obj.pk %}" onsubmit="return confirm('Delete this carrier?');">
+          {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:carrier_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
