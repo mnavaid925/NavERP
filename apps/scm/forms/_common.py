@@ -53,6 +53,19 @@ def _customer_parties(tenant):
     return Party.objects.filter(tenant=tenant, roles__role="customer").distinct()
 
 
+def _carrier_parties(tenant):
+    """Parties this tenant can hire to move freight (4.6 TMS Carrier master).
+
+    A carrier is procured from like a supplier, so the same supplier/vendor roles apply — plus
+    ``partner`` (3PLs are frequently onboarded as partners, not AP vendors). Mirrors
+    ``_supplier_parties`` accepting more than one spelling rather than hiding half the counterparties.
+    """
+    if tenant is None:
+        return Party.objects.none()
+    return Party.objects.filter(
+        tenant=tenant, roles__role__in=("supplier", "vendor", "partner")).distinct()
+
+
 class TenantUniqueMixin:
     """Makes a model's ``unique_together`` that INCLUDES ``tenant`` actually validate on a form.
 
