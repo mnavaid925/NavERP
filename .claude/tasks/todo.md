@@ -12506,3 +12506,479 @@ LAYERED on this order by FK) — not a second order table.
 
 ## Review notes
 (filled in at the end)
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.6 Transportation Management System (TMS) — plan from research-scm-4.6.md (2026-07-22)
+
+**EXTENDS the existing `apps/scm` app** (4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management +
+4.5 Order Management already built) — **no new Django app, no new `INSTALLED_APPS`/`config/urls.py` entries.**
+New sub-module package `TransportationManagement/` in each of `models/forms/views/urls`, templates under
+`templates/scm/transportation/<entity>/`.
+
+**Spine re-verified before planning** (`grep -rn "^class " apps/core/models/ apps/accounting/models/
+apps/scm/models/`), matching research's findings exactly:
+- `core.Party` (`apps/core/models/Party.py:5`), `core.PartyRole` (`apps/core/models/PartyRole.py:5` —
+  `ROLE_CHOICES` = customer/vendor/supplier/employee/lead/candidate/contact/partner, **no `carrier` role** —
+  a 3PL carrier is a `Party` holding `vendor`/`partner`, not a new role), `core.Address`
+  (`apps/core/models/Address.py:5`, owned by a `party` FK) — confirmed live.
+- `accounting.Currency` (`GeneralLedger/Currencies.py:6`), `accounting.Bill` (`AccountsPayable/Bills.py:6`,
+  `TenantNumbered`, `NUMBER_PREFIX="BILL"`, **`party` FK is `PROTECT`/required** — noted below, it constrains
+  the freight hand-off) — confirmed live.
+- `scm.SalesOrder` (`OrderManagement/SalesOrders.py:20`, `NUMBER_PREFIX="SO"`), `scm.PurchaseOrder`
+  (`ProcurementManagement/PurchaseOrders.py:15`, `NUMBER_PREFIX="PO"`) — confirmed live, the correct (spine,
+  not `crm.PurchaseOrder`) FK targets.
+- `scm.GoodsReceiptNote.MATCH_STATUS_CHOICES` (`ProcurementManagement/GoodsReceiptNotes.py:27-33`) — confirmed
+  the exact precedent `FreightInvoice.match_status` mirrors.
+- `scm.YardVisit` (`WarehouseManagement/YardVisits.py:34-37`) — confirmed its `carrier_name`/`vehicle_ref`/
+  `trailer_ref`/`driver_name` are free-text with the explicit docstring note (lines 7-9) that a real `Carrier`
+  master belongs to 4.6. **Migrating those free-text fields to a `Carrier` FK is explicitly OUT of scope this
+  pass** (parked under Later passes) — 4.4 ships as-is.
+- `scm.Item` (`InventoryManagement/Items.py:56`) — confirmed it has **no weight/volume/dimension fields**, so
+  cube inputs (`weight_kg`/`volume_cbm`) live on `Shipment`/`Load` this pass, not a new `Item` extension.
+- No `Carrier`/`Load`/`Shipment`/`TrackingEvent`/`FreightInvoice` exists anywhere under `apps/` — clean build,
+  nothing to extend. `apps/core/navigation.py` confirmed **no `LIVE_LINKS["4.6"]` entry yet**.
+- **URL-prefix collision check** (grep every `path("...")` literal already in `apps/scm/urls/`): `orders/` is
+  `PurchaseOrder`'s, `sales-orders/`/`allocations/` are 4.5's. **This pass uses `carriers/`, `loads/`,
+  `shipments/`, `freight-invoices/`** — none taken, confirmed clean.
+- **Bill hand-off constraint (new finding, not in research):** `accounting.Bill.party` is `on_delete=PROTECT`
+  and **not nullable** — a `FreightInvoice → Bill` hand-off can only succeed when `Carrier.party` is actually
+  set. Since this pass makes `Carrier.party` **optional** (per task direction, overriding research's `PROTECT`
+  suggestion — a carrier is its own master, not forced onto a registered Party), `freightinvoice_send_to_bill`
+  must **reject with a validation message** ("Carrier has no linked Party — link one before creating a Bill")
+  when `carrier.party_id` is `None`, rather than crash. Documented explicitly in the view item below.
+
+## Models (from research — 4: `Carrier`+`CarrierRateCard`, `Load`+`LoadStop`, `Shipment`+`TrackingEvent`,
+`FreightInvoice`+`FreightInvoiceLine`)
+
+- [ ] **`Carrier`** [`CAR-`, `TenantNumbered`] + child **`CarrierRateCard`** — `models/TransportationManagement/Carriers.py`
+  — serves **Carrier Management** (+ feeds the audit baseline for Freight Audit & Payment)
+  - `party` = FK `core.Party` (`SET_NULL`, `null=True`, `blank=True`, `related_name="carrier_profiles"`) —
+    **OPTIONAL, do NOT force it** (task direction overrides research's `PROTECT`): a carrier may also be a
+    registered vendor/partner `Party`, but `Carrier` is its own master (mirrors the `YardVisit.carrier_name`
+    stand-in this model finally replaces) (driver: Carrier master, all 12 surveyed leaders)
+  - `name` = `CharField(max_length=255)` — **required, independent of `party`** since `party` is nullable; the
+    carrier's display name whether or not a `Party` is linked
+  - `carrier_type` = `[("asset_based","Asset-Based"),("broker","Broker"),("3pl","3PL")]` (driver: carrier
+    identity, all surveyed)
+  - `scac_code` = `CharField(max_length=4, blank=True, help_text="Standard Carrier Alpha Code")`
+  - `mc_number` = `CharField(max_length=20, blank=True, help_text="US DOT Motor Carrier number")`
+  - `dot_number` = `CharField(max_length=20, blank=True)` (driver: compliance identifiers — all enterprise TMS)
+  - `primary_mode` = `[("truckload","Truckload"),("ltl","LTL"),("parcel","Parcel"),("ocean","Ocean"),
+    ("air","Air"),("rail","Rail"),("intermodal","Intermodal"),("courier","Courier")]` (driver: mode/service-
+    level capability — full capability matrix deferred, single choice field this pass)
+  - `service_level` = `[("standard","Standard"),("expedited","Expedited"),("economy","Economy")]`
+  - `insurance_certificate_expiry` = `DateField(null=True, blank=True)` (driver: insurance/compliance document
+    tracking — field only, full risk-assessment child table deferred)
+  - `on_time_delivery_pct` = `DecimalField(max_digits=5, decimal_places=2, default=0, editable=False)` —
+    **excluded from form**, derived by `recompute_from_shipments()` off delivered `Shipment` history (mirrors
+    verified `SupplierScorecard.recompute_from_signals()` pattern) (driver: carrier scorecarding)
+  - `is_preferred` = `BooleanField(default=False)`
+  - `status` = `[("active","Active"),("inactive","Inactive"),("suspended","Suspended")]`, default `"active"`
+  - `notes` = `TextField(blank=True)`
+  - `Meta.ordering = ["name"]`; `unique_together = ("tenant", "number")`; index on `(tenant, status)`
+  - `__str__`: `f"{self.number} · {self.name}"`
+  - Form excludes: `tenant`, `number`, `on_time_delivery_pct`, `created_at`, `updated_at`
+  - Child **`CarrierRateCard`** (plain `models.Model`, no tenant FK, reached via `carrier`):
+    `carrier` (`CASCADE`, `related_name="rate_cards"`), `origin_region`/`destination_region`
+    (`CharField(max_length=120)` — free text, no geo-zone master exists), `mode` (same choices as
+    `Carrier.primary_mode`), `equipment_type` (`[("dry_van","Dry Van"),("reefer","Reefer"),
+    ("flatbed","Flatbed"),("container","Container"),("parcel","Parcel")]`), `rate_basis`
+    (`[("per_mile","Per Mile"),("per_kg","Per Kg"),("per_cbm","Per CBM"),("flat","Flat"),
+    ("per_pallet","Per Pallet")]`), `base_rate` (`DecimalField(12,2, default=0)`), `fuel_surcharge_pct`
+    (`DecimalField(5,2, default=0)` — driver: fuel surcharge/accessorial schedule), `currency` (FK
+    `accounting.Currency`, `SET_NULL`, `null=True`, `blank=True`, `related_name="scm_carrier_rate_cards"`),
+    `min_charge` (`DecimalField(12,2, default=0)`), `effective_from` (`DateField()`), `effective_to`
+    (`DateField(null=True, blank=True)`), `is_active` (`BooleanField(default=True)`). `Meta.ordering =
+    ["carrier", "origin_region", "destination_region"]`. Managed as an **inline formset** on the `Carrier`
+    create/edit form (mirrors `PurchaseOrderLineFormSet` — no standalone rate-card CRUD/list page).
+  - FKs: `core.Party` (verified, optional), `accounting.Currency` (verified).
+
+- [ ] **`Load`** [`LD-`, `TenantNumbered`] + child **`LoadStop`** — `models/TransportationManagement/Loads.py`
+  — serves **Route Planning** and **Load Optimization**
+  - `carrier` = FK `scm.Carrier` (`SET_NULL`, `null=True`, `blank=True`, `related_name="loads"`) — nullable
+    until tendered (driver: carrier/vehicle assignment to a planned route)
+  - `mode` = same choice list as `Carrier.primary_mode`
+  - `equipment_type` = same choices as `CarrierRateCard.equipment_type`
+  - `status` = `[("planning","Planning"),("tendered","Tendered"),("booked","Booked"),
+    ("in_transit","In Transit"),("delivered","Delivered"),("cancelled","Cancelled")]`, default `"planning"` —
+    **excluded from form**, workflow-controlled
+  - `planned_departure`/`planned_arrival` = `DateTimeField(null=True, blank=True)`
+  - `actual_departure`/`actual_arrival` = `DateTimeField(null=True, blank=True, editable=False)` — **excluded
+    from form**, system timestamps (L22) set by the `load_depart`/`load_arrive` actions
+  - `origin_address`/`destination_address` = FK `core.Address` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_loads_origin"`/`"scm_loads_destination"`) + `origin_text`/`destination_text`
+    (`CharField(max_length=255, blank=True)`) fallback — mirrors `PurchaseOrder.delivery_address`'s free-text
+    posture since not every dock has a `Party`-owned address (driver: route planning stops)
+  - `distance_km` = `DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)`,
+    `estimated_fuel_cost` = `DecimalField(max_digits=12, decimal_places=2, default=0)` (driver: distance/fuel
+    estimate per route — stored estimate, not live routing)
+  - `equipment_capacity_weight_kg`/`equipment_capacity_volume_cbm` = `DecimalField(max_digits=10,
+    decimal_places=2, default=0)` (driver: equipment/vehicle capacity profiles)
+  - `planned_weight_kg`/`planned_volume_cbm` = `DecimalField(max_digits=10, decimal_places=2, default=0,
+    editable=False)` — **excluded from form**, aggregated by `recompute_planned_quantities()` summing
+    `Shipment.weight_kg`/`volume_cbm` across every `Shipment` FK'd to this `Load` (called from the `Shipment`
+    create/edit/delete views whenever `shipment.load` changes)
+  - `weight_utilization_pct`/`volume_utilization_pct` = **`@property`** (`planned / capacity * 100`, guarded
+    against a zero/`None` capacity — returns `None` rather than dividing by zero) — **never stored** (driver:
+    3D cube/weight load planning — the cube-utilization headline number, aggregate math not true 3D packing)
+  - `freight_cost_estimate` = `DecimalField(max_digits=12, decimal_places=2, default=0)`
+  - `driver_name`/`vehicle_ref` = `CharField(blank=True)` — free text, same stand-in posture as `YardVisit`
+    until a fleet/vehicle master exists
+  - `notes` = `TextField(blank=True)`
+  - `Meta.ordering = ["-planned_departure", "-id"]`; `unique_together = ("tenant", "number")`; index on
+    `(tenant, status)`
+  - Form excludes: `tenant`, `number`, `status`, `actual_departure`, `actual_arrival`, `planned_weight_kg`,
+    `planned_volume_cbm`
+  - Child **`LoadStop`** (plain `models.Model`): `load` (`CASCADE`, `related_name="stops"`), `sequence`
+    (`PositiveIntegerField(default=1)` — driver: multi-stop route sequencing), `stop_type`
+    (`[("pickup","Pickup"),("delivery","Delivery"),("cross_dock","Cross-Dock"),("fuel","Fuel")]`), `address`
+    (FK `core.Address`, `SET_NULL`, `null=True`, `blank=True`, `related_name="scm_load_stops"`) +
+    `address_text` (`CharField(max_length=255, blank=True)`) fallback, `planned_arrival`
+    (`DateTimeField(null=True, blank=True)`), `actual_arrival` (`DateTimeField(null=True, blank=True,
+    editable=False)`), `status` (`[("pending","Pending"),("arrived","Arrived"),("completed","Completed"),
+    ("skipped","Skipped")]`, default `"pending"`). `Meta.ordering = ["load", "sequence"]`. Managed as an
+    **inline formset** on the `Load` create/edit form (mirrors `PurchaseOrderLineFormSet`).
+  - FKs: `scm.Carrier` (this pass), `core.Address` (verified).
+
+- [ ] **`Shipment`** [`SHP-`, `TenantNumbered`] + child **`TrackingEvent`** — `models/TransportationManagement/Shipments.py`
+  — serves **Shipment Tracking** (+ the customer/GRN-facing anchor for the other four bullets)
+  - `direction` = `[("outbound","Outbound"),("inbound","Inbound")]`, default `"outbound"`
+  - `sales_order` = FK `scm.SalesOrder` (`SET_NULL`, `null=True`, `blank=True`, `related_name="shipments"`) —
+    verified existing, outbound
+  - `purchase_order` = FK `scm.PurchaseOrder` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="shipments"`) — verified existing, inbound
+  - `carrier` = FK `scm.Carrier` (`SET_NULL`, `null=True`, `blank=True`, `related_name="shipments"`) — direct
+    assignment for shipments not consolidated onto a `Load`
+  - `load` = FK `scm.Load` (`SET_NULL`, `null=True`, `blank=True`, `related_name="shipments"`) — consolidation
+    (driver: load consolidation — multiple shipments onto one truck/route). Saving/deleting a `Shipment` with a
+    `load` set calls `load.recompute_planned_quantities()` (see `Load` above)
+  - `ship_from_address`/`ship_to_address` = FK `core.Address` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_shipments_from"`/`"scm_shipments_to"`) — reuses the same pattern as
+    `SalesOrder.ship_to_address`
+  - `mode` = same choice list as `Carrier.primary_mode`
+  - `status` = `[("planned","Planned"),("tendered","Tendered"),("booked","Booked"),
+    ("in_transit","In Transit"),("delivered","Delivered"),("exception","Exception"),
+    ("cancelled","Cancelled")]`, default `"planned"` — **excluded from form**, updated from the latest
+    `TrackingEvent` (driver: status milestone timeline)
+  - `planned_pickup_date`/`planned_delivery_date` = `DateField(null=True, blank=True)`
+  - `actual_pickup_at`/`actual_delivery_at` = `DateTimeField(null=True, blank=True, editable=False)` —
+    **excluded from form**, system timestamps set from tracking events
+  - `weight_kg`/`volume_cbm` = `DecimalField(max_digits=10, decimal_places=2, default=0)`, `package_count` =
+    `PositiveIntegerField(default=1)` — captured here since `scm.Item` has no cube dimensions yet, same
+    stand-in posture 4.1 used for line items before `Item` existed (driver: cube-optimization inputs feeding
+    `Load.planned_weight_kg`/`planned_volume_cbm`)
+  - `carrier_tracking_number` = `CharField(max_length=64, blank=True)`
+  - `current_status_text`/`last_known_location` = `CharField(max_length=255, blank=True, editable=False)`,
+    `eta` = `DateTimeField(null=True, blank=True, editable=False)` — **all excluded from form**, updated by
+    `apply_tracking_event(event)` whenever a `TrackingEvent` is recorded (driver: real-time GPS/ELD tracking +
+    predictive ETA — this pass stores whatever is posted, no live feed ingestion)
+  - `pod_received` = `BooleanField(default=False)`, `pod_received_at` = `DateTimeField(null=True, blank=True,
+    editable=False)` — **excluded from form** (`pod_received_at` only; `pod_received` is set via the
+    `shipment_mark_pod` action, not hand-typed) (driver: proof of delivery capture — flag only)
+  - `freight_cost_estimate` = `DecimalField(max_digits=12, decimal_places=2, default=0)`
+  - `notes` = `TextField(blank=True)`
+  - `clean()`: `sales_order` and `purchase_order` not both set (a shipment is outbound XOR inbound, matching
+    `direction`)
+  - `Meta.ordering = ["-planned_pickup_date", "-id"]`; `unique_together = ("tenant", "number")`; indexes on
+    `(tenant, status)`, `(tenant, carrier)`
+  - Form excludes: `tenant`, `number`, `status`, `actual_pickup_at`, `actual_delivery_at`,
+    `current_status_text`, `last_known_location`, `eta`, `pod_received`, `pod_received_at`
+  - Child **`TrackingEvent`** (plain `models.Model`, **append-only — no edit/delete views**, mirrors the
+    `StockMove`/`GoodsReceiptLine` immutable-ledger pattern): `shipment` (`CASCADE`,
+    `related_name="tracking_events"`), `event_type`
+    (`[("pickup","Pickup"),("departed_origin","Departed Origin"),("in_transit","In Transit"),
+    ("arrived_destination","Arrived Destination"),("customs_hold","Customs Hold"),("exception","Exception"),
+    ("delayed","Delayed"),("out_for_delivery","Out For Delivery"),("delivered","Delivered"),
+    ("pod_signed","POD Signed")]`), `event_at` (`DateTimeField()`), `location_text`
+    (`CharField(max_length=255, blank=True)`), `latitude`/`longitude` (`DecimalField(max_digits=9,
+    decimal_places=6, null=True, blank=True)`), `source`
+    (`[("manual","Manual"),("carrier_api","Carrier API"),("edi","EDI"),("driver_app","Driver App"),
+    ("gps_ping","GPS Ping")]`, default `"manual"`), `recorded_by` (FK `settings.AUTH_USER_MODEL`, `SET_NULL`,
+    `null=True`, `blank=True`, `related_name="scm_tracking_events"`), `notes`
+    (`CharField(max_length=255, blank=True)`). `Meta.ordering = ["shipment", "event_at"]`. **Not** a formset —
+    a dedicated create-only action (`shipment_tracking_event_add`, `@login_required`) appends one event and
+    calls `shipment.apply_tracking_event(event)`, which sets `current_status_text`/`last_known_location`/`eta`
+    off the new event and flips `Shipment.status`/`actual_pickup_at`/`actual_delivery_at`/`pod_received(_at)`
+    for the matching `event_type` (`pickup`→`actual_pickup_at`+status `in_transit`; `delivered`→
+    `actual_delivery_at`+status `delivered`; `pod_signed`→`pod_received=True`+`pod_received_at`;
+    `exception`/`delayed`→status `exception`).
+  - FKs: `scm.SalesOrder`, `scm.PurchaseOrder`, `scm.Carrier`, `scm.Load`, `core.Address` (all verified
+    existing or built this pass).
+
+- [ ] **`FreightInvoice`** [`FRT-`, `TenantNumbered`] + child **`FreightInvoiceLine`** —
+  `models/TransportationManagement/FreightInvoices.py` — serves **Freight Audit & Payment**
+  - `carrier` = FK `scm.Carrier` (`PROTECT`, `related_name="freight_invoices"`) — required, this pass
+  - `load` = FK `scm.Load` (`SET_NULL`, `null=True`, `blank=True`, `related_name="freight_invoices"`) — most
+    carrier invoices bill per trip/load
+  - `shipment` = FK `scm.Shipment` (`SET_NULL`, `null=True`, `blank=True`, `related_name="freight_invoices"`)
+    — direct/parcel shipments not consolidated onto a `Load`
+  - `carrier_invoice_number` = `CharField(max_length=64)`, `invoice_date` = `DateField()`, `due_date` =
+    `DateField(null=True, blank=True)`
+  - `currency` = FK `accounting.Currency` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_freight_invoices"`)
+  - `billed_amount` = `DecimalField(max_digits=12, decimal_places=2, default=0)` — the carrier's claimed total
+  - `contract_amount` = `DecimalField(max_digits=12, decimal_places=2, default=0)` — the audit baseline;
+    pre-filled (but still editable) by `match_against_rate_card()`, which looks up the linked `Load`'s
+    carrier/mode/equipment_type against `CarrierRateCard` and sums a lane-rate estimate — **not** `editable=False`
+    (a human can override when no rate card matches or the auto-match is wrong) (driver: 3-way freight match)
+  - `variance_amount` = `DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)` —
+    `billed_amount - contract_amount`, `variance_pct` = `DecimalField(max_digits=6, decimal_places=2,
+    default=0, editable=False)` — both **excluded from form**, recomputed in `save()`
+  - `match_status` = `[("not_matched","Not Matched"),("matched","Matched"),
+    ("price_variance","Price Variance"),("duplicate","Duplicate"),("disputed","Disputed")]`, default
+    `"not_matched"`, `editable=False` — **excluded from form**, mirrors verified
+    `GoodsReceiptNote.MATCH_STATUS_CHOICES` exactly, set by the `freightinvoice_match` action (driver: 3-way
+    freight match + dispute/exception workflow)
+  - `dispute_reason` = `TextField(blank=True)` — set together with `match_status="disputed"` by the
+    `freightinvoice_dispute` action, not hand-typed on the main form
+  - `approval_status` = `[("pending","Pending"),("approved","Approved"),("rejected","Rejected")]`, default
+    `"pending"` — **excluded from form**, workflow-controlled (driver: approval gate before payable)
+  - `approved_by` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="scm_freight_invoices_approved"`), `approved_at` = `DateTimeField(null=True, blank=True,
+    editable=False)` — **excluded from form**, set by `freightinvoice_approve` (`@tenant_admin_required`)
+  - `bill` = FK `accounting.Bill` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="scm_freight_invoices"`) — **excluded from form**, the hand-off point set by
+    `freightinvoice_send_to_bill`; TMS **never** posts its own `JournalEntry`/`Payment` (L29 — accounting owns
+    the ledger). **Guard:** the action checks `carrier.party_id is not None` first (`Bill.party` is
+    `PROTECT`/required) and raises a validation message rather than crashing when the carrier has no linked
+    `Party`
+  - `notes` = `TextField(blank=True)`
+  - `Meta.ordering = ["-invoice_date", "-id"]`; `unique_together = ("tenant", "number")`; indexes on
+    `(tenant, match_status)`, `(tenant, approval_status)`
+  - Form excludes: `tenant`, `number`, `variance_amount`, `variance_pct`, `match_status`, `approval_status`,
+    `approved_by`, `approved_at`, `bill`
+  - Child **`FreightInvoiceLine`** (plain `models.Model`): `freight_invoice` (`CASCADE`, `related_name="lines"`),
+    `charge_type` (`[("linehaul","Linehaul"),("fuel_surcharge","Fuel Surcharge"),
+    ("accessorial","Accessorial"),("detention","Detention"),("demurrage","Demurrage"),("tolls","Tolls"),
+    ("other","Other")]` — driver: charge-level variance breakdown), `description`
+    (`CharField(max_length=255, blank=True)`), `billed_amount`/`contract_amount`
+    (`DecimalField(max_digits=12, decimal_places=2, default=0)`), `variance_amount`
+    (`DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)` — derived in the header's
+    `save()`/`recompute_variance()`). `Meta.ordering = ["freight_invoice", "id"]`. Managed as an **inline
+    formset** on the `FreightInvoice` create/edit form (mirrors `GoodsReceiptLineFormSet`).
+  - FKs: `scm.Carrier`, `scm.Load`, `scm.Shipment`, `accounting.Currency`, `accounting.Bill` (all verified
+    existing or built this pass).
+
+All four FK only into **verified-existing** entities (`core.Party`, `core.Address`, `accounting.Currency`,
+`accounting.Bill`, `scm.SalesOrder`, `scm.PurchaseOrder`) plus each other — no hard FK to an unbuilt master.
+`scm.Item`'s missing weight/volume fields are the one stand-in: cube inputs live on `Shipment`/`Load` this
+pass, same posture 4.1 used for line items before `Item` existed.
+
+## Backend (apps/scm/{models,forms,views,urls}/TransportationManagement/)
+
+- [ ] `models/TransportationManagement/__init__.py` — empty (new sub-module package)
+- [ ] `models/TransportationManagement/Carriers.py` — `Carrier`, `CarrierRateCard` (pulls
+  `from apps.scm.models._base import *`)
+- [ ] `models/TransportationManagement/Loads.py` — `Load`, `LoadStop`
+- [ ] `models/TransportationManagement/Shipments.py` — `Shipment`, `TrackingEvent` (+ `apply_tracking_event()`
+  on `Shipment`)
+- [ ] `models/TransportationManagement/FreightInvoices.py` — `FreightInvoice`, `FreightInvoiceLine` (+
+  `match_against_rate_card()`/`recompute_variance()`)
+- [ ] `forms/TransportationManagement/__init__.py` — empty
+- [ ] `forms/TransportationManagement/Carriers.py` — `CarrierForm` (`TenantModelForm`), `CarrierRateCardForm`,
+  `CarrierRateCardFormSet` (`inlineformset_factory`, mirrors `PurchaseOrderLineFormSet`)
+- [ ] `forms/TransportationManagement/Loads.py` — `LoadForm`, `LoadStopForm`, `LoadStopFormSet`
+- [ ] `forms/TransportationManagement/Shipments.py` — `ShipmentForm`, `TrackingEventForm` (create-only, no
+  formset — fields: `event_type`, `event_at`, `location_text`, `latitude`, `longitude`, `source`, `notes`)
+- [ ] `forms/TransportationManagement/FreightInvoices.py` — `FreightInvoiceForm`, `FreightInvoiceLineForm`,
+  `FreightInvoiceLineFormSet`; `FreightInvoiceDisputeForm` (`forms.Form`, just `dispute_reason`)
+- [ ] `views/TransportationManagement/__init__.py` — empty
+- [ ] `views/TransportationManagement/Carriers.py` — `carrier_list/create/edit/detail/delete` (hand-rolled
+  create/edit for the `CarrierRateCardFormSet`, atomic parent+child save, mirrors `PurchaseOrderForm`'s
+  pattern); `carrier_list` passes `status_choices=Carrier.STATUS_CHOICES`,
+  `carrier_type_choices=Carrier.CARRIER_TYPE_CHOICES`, `mode_choices=Carrier.PRIMARY_MODE_CHOICES` for the
+  filter bar
+- [ ] `views/TransportationManagement/Loads.py` — full CRUD (hand-rolled line formset for `LoadStop`) +
+  `load_depart` (`@login_required`, sets `actual_departure`, status→`in_transit`) + `load_arrive` (sets
+  `actual_arrival`, status→`delivered`) + `load_cancel`; `load_list` passes `status_choices`,
+  `carrier_qs=Carrier.objects.filter(tenant=request.tenant)` for the carrier filter dropdown
+- [ ] `views/TransportationManagement/Shipments.py` — full CRUD + `shipment_tracking_event_add`
+  (`@login_required`, appends one `TrackingEvent`, calls `apply_tracking_event`, redirects back to
+  `shipment_detail`) + `shipment_mark_pod` (`@login_required`, sets `pod_received=True`/`pod_received_at`);
+  saving/deleting a `Shipment` calls `shipment.load.recompute_planned_quantities()` when `load_id` is set (both
+  the old and new load on an edit that reassigns it); `shipment_list` passes `status_choices`, `carrier_qs`,
+  `direction_choices=Shipment.DIRECTION_CHOICES`
+- [ ] `views/TransportationManagement/FreightInvoices.py` — full CRUD (hand-rolled line formset for
+  `FreightInvoiceLine`) + `freightinvoice_match` (`@login_required`, calls `match_against_rate_card()` +
+  `recompute_variance()`, sets `match_status`) + `freightinvoice_approve` (`@tenant_admin_required`, requires
+  `match_status` in `("matched", "price_variance")`, sets `approval_status="approved"`/`approved_by`/
+  `approved_at`) + `freightinvoice_dispute` (`@login_required`, POST `FreightInvoiceDisputeForm`, sets
+  `match_status="disputed"`/`dispute_reason`) + `freightinvoice_send_to_bill` (`@tenant_admin_required`,
+  requires `approval_status="approved"`; **WARNING guard**: if `carrier.party_id is None`, `messages.error`
+  and redirect without creating a `Bill` — never crash on the missing required FK; otherwise creates a draft
+  `accounting.Bill(party=carrier.party, bill_date=invoice_date, currency=currency,
+  total=billed_amount)` and sets `freight_invoice.bill = bill`); `freightinvoice_list` passes
+  `match_status_choices`, `approval_status_choices`, `carrier_qs`
+- [ ] `urls/TransportationManagement/__init__.py` — empty
+- [ ] `urls/TransportationManagement/Carriers.py` — `carriers/`, `carriers/add/`, `carriers/<int:pk>/`,
+  `carriers/<int:pk>/edit/`, `carriers/<int:pk>/delete/`
+- [ ] `urls/TransportationManagement/Loads.py` — `loads/`, `loads/add/`, `loads/<int:pk>/`,
+  `loads/<int:pk>/edit/`, `loads/<int:pk>/delete/`, `loads/<int:pk>/depart/`, `loads/<int:pk>/arrive/`,
+  `loads/<int:pk>/cancel/` (literal action routes before `<int:pk>/edit/`)
+- [ ] `urls/TransportationManagement/Shipments.py` — `shipments/`, `shipments/add/`, `shipments/<int:pk>/`,
+  `shipments/<int:pk>/edit/`, `shipments/<int:pk>/delete/`, `shipments/<int:pk>/tracking/add/`,
+  `shipments/<int:pk>/pod/`
+- [ ] `urls/TransportationManagement/FreightInvoices.py` — `freight-invoices/`, `freight-invoices/add/`,
+  `freight-invoices/<int:pk>/`, `freight-invoices/<int:pk>/edit/`, `freight-invoices/<int:pk>/delete/`,
+  `freight-invoices/<int:pk>/match/`, `freight-invoices/<int:pk>/approve/`,
+  `freight-invoices/<int:pk>/dispute/`, `freight-invoices/<int:pk>/send-to-bill/`
+- [ ] Append to `apps/scm/urls/__init__.py`: four new `_tms_*` imports
+  (`from .TransportationManagement.Carriers import urlpatterns as _tms_carriers`, `...Loads...` as
+  `_tms_loads`, `...Shipments...` as `_tms_shipments`, `...FreightInvoices...` as `_tms_freightinvoices`) and
+  four `*_tms_*` entries appended to the concatenated `urlpatterns` list, each with a one-line comment noting
+  the prefix (`carriers/`/`loads/`/`shipments/`/`freight-invoices/`) doesn't collide with `orders/`/
+  `sales-orders/`/`allocations/`
+- [ ] Re-export blocks in **all four** `apps/scm/{models,forms,views}/__init__.py` under a
+  `# 4.6 Transportation Management System (TMS)` header comment (urls handled above) — every new
+  model/form/formset/view added; missing one is an `ImportError`/`AttributeError` at runtime, not import time
+- [ ] `apps/scm/admin.py` — register `Carrier` (+`CarrierRateCardInline`), `Load` (+`LoadStopInline`),
+  `Shipment` (+`TrackingEventInline`, `readonly_fields` on every field — the ledger is append-only even in
+  admin), `FreightInvoice` (+`FreightInvoiceLineInline`), all under a new
+  `# 4.6 Transportation Management System (TMS)` section
+- [ ] `makemigrations scm` — one migration for the 4 new models + 2 new child tables (all new tables, no data
+  migration needed); `makemigrations --check` must report no further changes
+
+## Seed (extend seed_scm — reuse existing Party/SalesOrder/PurchaseOrder rows)
+
+- [ ] New `_seed_tms_tenant(self, tenant)` (4.6), called in `handle()` **after** `_seed_oms_tenant(tenant)`
+  (needs the seeded `SalesOrder`/`PurchaseOrder` to link shipments to), guarded by
+  `if Carrier.objects.filter(tenant=tenant).exists(): skip`:
+  - create 2 `Carrier` rows: one **with** `party` linked to the existing seeded supplier Party (via
+    `self._supplier(tenant, "Acme Freight Lines", "organization")` — reuses the vendor-role helper, matching
+    the `YardVisit.carrier_name="Acme Freight"` seed row's name so the two connect narratively) —
+    `carrier_type="asset_based"`, `primary_mode="truckload"`; one **without** a `party` (`party=None`,
+    `name="Regional Parcel Co"`, `carrier_type="broker"`, `primary_mode="parcel"`) — demonstrates the optional
+    FK deliberately
+  - one `CarrierRateCard` per carrier (lane `"Acme Warehouse" → "Fabrikam DC"`, `rate_basis="per_mile"`,
+    `base_rate`, `currency` = the tenant's seeded default `Currency`)
+  - one `Load` (`carrier` = the asset-based carrier, `equipment_type="dry_van"`,
+    `equipment_capacity_weight_kg`/`_volume_cbm` set, `status="booked"`) + 2 `LoadStop`s (pickup/delivery,
+    `sequence` 1/2)
+  - one outbound `Shipment` (`direction="outbound"`, `sales_order` = the seeded `SalesOrder`, `carrier`, `load`
+    = the seeded `Load`, `weight_kg`/`volume_cbm` set) — call `load.recompute_planned_quantities()` after — then
+    3 `TrackingEvent`s (`pickup` → `in_transit` → `delivered`) posted through `apply_tracking_event()` (not
+    hand-set fields) so `Shipment.status`/`actual_pickup_at`/`actual_delivery_at`/`current_status_text` are all
+    populated through the real code path, then `shipment_mark_pod`-equivalent sets `pod_received=True`
+  - one inbound `Shipment` (`direction="inbound"`, `purchase_order` = the seeded `PurchaseOrder`, `carrier` =
+    the broker carrier, no `load`) left at `status="in_transit"` with 1 `TrackingEvent`
+  - one `FreightInvoice` against the asset-based carrier + `load`, `billed_amount` slightly above
+    `contract_amount` (deliberately, mirrors the file's "short-ship deliberately" seeding style) run through
+    `match_against_rate_card()`/`recompute_variance()` so `match_status="price_variance"`, then
+    `freightinvoice_approve`'d and `freightinvoice_send_to_bill`'d so a real `accounting.Bill` links back — 2
+    `FreightInvoiceLine`s (`linehaul`, `fuel_surcharge`)
+  - `self.stdout.write` a note that the seed exercises **both** the `party`-linked and `party`-less `Carrier`
+    paths
+- [ ] `_flush()`: delete `FreightInvoiceLine`/`FreightInvoice`, `TrackingEvent`/`Shipment`,
+  `LoadStop`/`Load`, `CarrierRateCard`/`Carrier` **first** — before the OMS/procurement teardown blocks they
+  `SET_NULL`/`PROTECT`-reference (`Carrier.freight_invoices` `PROTECT`s, so `FreightInvoice` rows must go
+  before `Carrier` rows; `Shipment` references `SalesOrder`/`PurchaseOrder` by `SET_NULL` so order there is
+  safe either way, but delete `Shipment` before `Load` since `Load.recompute_planned_quantities()` would
+  otherwise run against a stale shipment mid-teardown)
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` `LIVE_LINKS["4.6"]` (new entry, inserted after `"4.5"`):
+  ```python
+  "4.6": {
+      "Route Planning": "scm:load_list",                    # bullet (multi-stop sequencing + distance/fuel estimate)
+      "Freight Audit & Payment": "scm:freightinvoice_list",  # bullet (3-way match vs CarrierRateCard, Bill hand-off)
+      "Carrier Management": "scm:carrier_list",              # bullet (3PL master + rate cards + scorecard)
+      "Shipment Tracking": "scm:shipment_list",              # bullet (TrackingEvent milestone log + ETA/POD)
+      "Load Optimization": "scm:load_list",                  # bullet (same page as Route Planning — Load carries
+                                                              #   both the stop sequence AND the cube-utilization %)
+  },
+  ```
+- [ ] No `settings.py`/`config/urls.py` changes — `apps/scm` already installed and wired (4.1 shipped it)
+
+## Templates (templates/scm/transportation/<entity>/)
+
+- [ ] `transportation/carrier/{list,detail,form}.html` — list: filter bar (`status`, `carrier_type`,
+  `primary_mode`) reflecting `request.GET`, Actions column (view/edit/delete + POST+confirm+csrf), pagination
+  with `has_previous`/`has_next` guards, empty-state; badges `badge-green` active, `badge-slate` inactive,
+  `badge-red` suspended, `{% else %}` fallback; detail shows the rate-card table + `on_time_delivery_pct`
+- [ ] `transportation/load/{list,detail,form}.html` — list: filter bar (`status`, `carrier`, `equipment_type`),
+  pk-comparison via `|stringformat:"d"`; detail shows the stop sequence + `weight_utilization_pct`/
+  `volume_utilization_pct` as progress-style badges (`badge-green` ≥80%, `badge-amber` 40-79%, `badge-slate`
+  <40%) + Depart/Arrive/Cancel POST buttons gated by `status`
+  - Fulfils **both** the Route Planning bullet (stop sequence, distance/fuel) and the Load Optimization bullet
+    (utilization %) on the same page
+- [ ] `transportation/shipment/{list,detail,form}.html` — list: filter bar (`status`, `direction`, `carrier`);
+  detail shows the `TrackingEvent` timeline (append-only — no edit/delete controls, only an "Add Tracking
+  Event" form) + `current_status_text`/`last_known_location`/`eta` + POD flag; badges `badge-info` in_transit,
+  `badge-green` delivered, `badge-red` exception/cancelled, `badge-amber` tendered/booked, `badge-slate`
+  planned
+- [ ] `transportation/freightinvoice/{list,detail,form}.html` — list: filter bar (`match_status`,
+  `approval_status`, `carrier`); detail shows the charge-line breakdown with `variance_amount` per line,
+  header `billed_amount`/`contract_amount`/`variance_pct`, and Match/Approve/Dispute/Send-to-Bill action
+  buttons gated by `match_status`/`approval_status`; badges `badge-green` matched/approved, `badge-amber`
+  price_variance/pending, `badge-red` disputed/rejected, `badge-muted` not_matched, `{% else %}` fallback
+
+## Verify
+
+- [ ] `makemigrations scm` clean, `migrate` applies
+- [ ] `seed_scm` ×2 idempotent (second run: "already exists — skipping" for the 4.6 guard, no duplicate
+  CAR-/LD-/SHP-/FRT- numbers)
+- [ ] `manage.py check`
+- [ ] **Regression: `Load.recompute_planned_quantities()` matches the sum of its `Shipment`s' `weight_kg`/
+  `volume_cbm`** after adding, editing (reassigning `load`), and deleting a `Shipment`
+- [ ] **Regression: `freightinvoice_send_to_bill` on a party-less `Carrier`** raises the validation message and
+  creates **no** `Bill` — never a `Bill.party` `IntegrityError`/crash
+- [ ] **Regression: `TrackingEvent` is append-only** — no `tracking_event_edit`/`tracking_event_delete` URL
+  exists; posting `event_type="delivered"` sets `Shipment.status="delivered"` and `actual_delivery_at`
+  exactly once
+- [ ] `temp/` smoke sweep as `admin_acme`/`password`: every new `scm:carrier_*`/`load_*`/`shipment_*`/
+  `freightinvoice_*` URL 200/302; content assertions (no `{#`/`{% comment` leaks, page titles, a seeded record
+  present); cross-tenant IDOR → 404 on each new entity's detail/edit/delete; `scm:load_list` shows both
+  Route-Planning columns (stops) and Load-Optimization columns (utilization %)
+- [ ] Sidebar shows `4.6` Live with all 5 bullets pointing at real pages (2 of them sharing `scm:load_list`)
+
+## Close-out
+
+- [ ] Review agents in order: code-reviewer → explorer → frontend-reviewer → performance-reviewer →
+  qa-smoke-tester → security-reviewer → test-writer (each its own commit)
+- [ ] Update `.claude/skills/scm/SKILL.md` — add the 4.6 models/URLs/templates/seeder rows, the
+  `Carrier.party` optional-FK design note, the `apply_tracking_event`/`recompute_planned_quantities`/
+  `match_against_rate_card` helper methods, and the `freightinvoice_send_to_bill` party-guard behaviour
+- [ ] README — note 4.6 shipped and that `YardVisit`'s free-text carrier fields are intentionally NOT migrated
+  to the new `Carrier` FK this pass
+- [ ] ERD — add `Carrier`+`CarrierRateCard`, `Load`+`LoadStop`, `Shipment`+`TrackingEvent`,
+  `FreightInvoice`+`FreightInvoiceLine`
+- [ ] `.claude/tasks/lessons.md` — capture a new lesson if one emerges (candidate: "a nullable/optional FK to
+  a spine entity used elsewhere as a required FK (`Bill.party`) needs an explicit guard at the hand-off point,
+  not just a `null=True` on the new model")
+
+## Later passes / deferred (carried from research)
+
+- Live GPS/ELD/telematics feed ingestion (project44/FourKites-style) — `TrackingEvent` stores whatever is
+  posted; an actual carrier-GPS/ELD API integration is later
+- True 3D bin-packing / interactive load diagram (Cube-IQ/EasyCargo) — this pass computes aggregate
+  weight/volume utilization percentages only
+- Map-based/traffic-aware route optimization engine — `Load.distance_km`/`estimated_fuel_cost` are stored
+  estimates; live routing needs an external maps/routing API
+- Digital freight marketplace / spot-rate auction / carrier tendering (Uber Freight, Kuebix) — needs an
+  external carrier network
+- Automated freight-invoice ingestion (EDI/PDF/e-invoice) + AI variance validation (Trax-style) — this pass's
+  `FreightInvoice` is manually entered
+- Full mode-capability matrix per carrier (a `CarrierMode` join table for "TL + LTL + ocean") — single
+  `primary_mode` choice field this pass
+- Reusable equipment-type capacity lookup table — `Load.equipment_capacity_weight_kg`/`_volume_cbm` stay plain
+  fields
+- Carrier compliance/risk-assessment child table (COI documents, safety ratings, financial risk — mirroring
+  4.2's `SupplierRiskAssessment`) — `Carrier.insurance_certificate_expiry` is a single field this pass
+- Automated exception/delay alert dispatch (email/SMS) — `TrackingEvent.event_type="exception"/"delayed"` is
+  the data hook only
+- Migrating `YardVisit`'s free-text `carrier_name`/`driver_name`/`vehicle_ref` to real `Carrier` FKs — now
+  possible since `Carrier` exists, but changing 4.4's already-shipped model is out of scope this pass
+- Shipping-label rendering (PDF/ZPL) and carrier-rate shopping at pack time → 4.4's `PickTask.tracking_number`
+  hand-off point; label rendering itself is integration/later
+- Return shipment / reverse-logistics pickup scheduling → 4.10 Returns Management (a return shipment can reuse
+  this pass's `Shipment` by `direction` later)
+- Carbon footprint / sustainability reporting → 4.11 Supply Chain Analytics / 4.12 Contract & Compliance
+  Management (this pass stores raw distance/fuel-estimate fields a later analytics pass can aggregate)
+- Import/export trade documentation (Bill of Lading, Commercial Invoice, HazMat compliance) → 4.12 Contract &
+  Compliance Management
+- Yard/dock-door scheduling detail → already owned by 4.4's `YardVisit`; 4.6 does not re-model dock
+  appointments
+
+## Review notes
+(filled in at the end)
