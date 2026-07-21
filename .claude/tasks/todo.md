@@ -12980,5 +12980,32 @@ pass, same posture 4.1 used for line items before `Item` existed.
 - Yard/dock-door scheduling detail → already owned by 4.4's `YardVisit`; 4.6 does not re-model dock
   appointments
 
-## Review notes
-(filled in at the end)
+## Review notes — 4.6 TMS delivered (2026-07-22)
+
+**Built:** 4 entities / 8 tables under `apps/scm/*/TransportationManagement/` + `templates/scm/transportation/`,
+migration `0008`, admin registrations, `_seed_tms_tenant` seeder block, and `LIVE_LINKS["4.6"]`. Verified:
+`makemigrations --check` clean, `manage.py check` clean, seeder idempotent (2nd run skips), every page renders
+200, cross-tenant IDOR → 404, and the full action-flow (load lifecycle, append-only tracking, freight
+audit → approve → **draft accounting.Bill hand-off**) works end-to-end.
+
+**One deliberate deviation from this plan:** the plan (following an early directive) made `Carrier.party` an
+OPTIONAL `SET_NULL` FK with a standalone `name` field. After reading the as-built **4.2 `SupplierProfile`** (the
+codebase's direct precedent), I built `Carrier` as a **spine-backed profile with a REQUIRED `party` FK** (name
+derived from `party.name`) instead — it honors the "never a standalone master" mandate, avoids duplicating
+`Party.name`, and keeps the freight→`Bill` hand-off clean (`Bill.party` is required/PROTECT). Form scoping via a new
+`_carrier_parties` helper (supplier/vendor/partner roles).
+
+**Review-agent pass (Module Creation Sequence, one at a time):**
+- `code-reviewer` → fixed: pending-only guard on `freightinvoice_approve`/`reject` (a crafted POST could
+  reject an approved / approve a rejected invoice); dropped a dead `is_shipment` context var.
+- `explorer` → clean (all url names / context-vars / re-exports / spine FKs / LIVE_LINKS resolve).
+- `frontend-reviewer` → clean (colour-named badges only, no comment leaks, filters/actions correct).
+- `performance-reviewer` → fixed: `select_related("carrier__party")`/`("party")` on the freight/carrier action
+  views (the chained `__str__`→`party.name` audit-log N+1, L18); combined `load_detail`'s two aggregates into one;
+  dropped an unused `bill` join.
+- `qa-smoke-tester` → 83/83 green (URL sweep + 8/8 IDOR + all lifecycle actions incl. the AP Bill hand-off).
+- `security-reviewer` → no Critical/High/Medium; fixed 2 Low: `is_editable` guard on `freightinvoice_run_audit`
+  (defense-in-depth), and a `FreightInvoiceForm.clean()` cross-check that the linked load/shipment's carrier
+  matches the billed carrier.
+- `test-writer` → +228 tests (models/forms/views/security), `apps/scm` suite 1,115 → **1,343**, all green.
+- Skill + README updated; `LIVE_LINKS["4.6"]` live. **Next SCM sub-module: 4.7 Demand Planning & Forecasting.**
