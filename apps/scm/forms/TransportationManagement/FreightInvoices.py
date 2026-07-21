@@ -22,6 +22,21 @@ class FreightInvoiceForm(TenantModelForm):
         super().__init__(*args, **kwargs)
         _active_currencies(self)
 
+    def clean(self):
+        """A freight invoice's linked load/shipment must have been executed by the SAME carrier being
+        billed (an unassigned load/shipment is allowed). Prevents auditing Carrier A's invoice against
+        a trip Carrier B actually ran — a data-integrity guard (security review); the FKs are already
+        tenant-scoped by TenantModelForm, so this is not a cross-tenant control."""
+        cleaned = super().clean()
+        carrier = cleaned.get("carrier")
+        load = cleaned.get("load")
+        shipment = cleaned.get("shipment")
+        if carrier and load and load.carrier_id not in (None, carrier.id):
+            self.add_error("load", "This load was executed by a different carrier.")
+        if carrier and shipment and shipment.carrier_id not in (None, carrier.id):
+            self.add_error("shipment", "This shipment was executed by a different carrier.")
+        return cleaned
+
 
 class FreightInvoiceLineForm(TenantModelForm):
     """One charge line — what the carrier billed vs. what the contract expected (the audit inputs)."""
