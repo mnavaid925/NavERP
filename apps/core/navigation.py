@@ -819,6 +819,18 @@ LIVE_LINKS = {
         "Backorder Management": "scm:salesorder_list?status=partially_fulfilled",  # bullet (part-covered orders)
         "Customer Notifications": "scm:salesorder_list?status=fulfilled",          # bullet (the notify hooks)
     },
+    # 4.6 Transportation Management System (TMS) — Carrier master (spine-backed profile on core.Party),
+    # Load (route + cube utilization), Shipment (append-only TrackingEvent log + POD), FreightInvoice
+    # (3-way freight audit → drafts an accounting.Bill, L29). Route Planning and Load Optimization are
+    # two facets of the same Load page (they co-highlight — the Load detail carries both the route stops
+    # and the derived weight/volume utilization headline).
+    "4.6": {
+        "Route Planning": "scm:load_list",                # bullet (loads + ordered route stops)
+        "Freight Audit & Payment": "scm:freightinvoice_list",  # bullet (billed-vs-contract match → Bill draft)
+        "Carrier Management": "scm:carrier_list",         # bullet (3PL master + rate cards + scorecard)
+        "Shipment Tracking": "scm:shipment_list",         # bullet (status/GPS event log + POD)
+        "Load Optimization": "scm:load_list",             # bullet (cube utilization on the load detail)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
