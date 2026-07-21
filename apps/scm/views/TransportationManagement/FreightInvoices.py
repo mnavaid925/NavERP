@@ -10,8 +10,9 @@ ZERO = Decimal("0")
 
 @login_required
 def freightinvoice_list(request):
+    # No `bill` join: the list template renders only carrier.name + currency.code, not the bill.
     qs = (FreightInvoice.objects.filter(tenant=request.tenant)
-          .select_related("carrier", "carrier__party", "currency", "bill"))
+          .select_related("carrier", "carrier__party", "currency"))
     return crud_list(
         request, qs, "scm/transportation/freightinvoice/list.html",
         search_fields=["number", "carrier_invoice_number", "carrier__party__name"],
@@ -94,7 +95,9 @@ def freightinvoice_delete(request, pk):
 @require_POST
 def freightinvoice_run_audit(request, pk):
     """Re-run the billed-vs-contract match against the tolerance."""
-    obj = get_object_or_404(FreightInvoice, pk=pk, tenant=request.tenant)
+    # select_related so write_audit_log -> str(obj) -> carrier.name -> party.name doesn't chain-fetch.
+    obj = get_object_or_404(FreightInvoice.objects.select_related("carrier__party"),
+                            pk=pk, tenant=request.tenant)
     status = obj.run_audit()
     write_audit_log(request.user, obj, "update", {"action": "run_audit", "match_status": status})
     messages.success(request, f"Audit run — {obj.get_match_status_display()} "
@@ -106,7 +109,8 @@ def freightinvoice_run_audit(request, pk):
 @require_POST
 def freightinvoice_dispute(request, pk):
     """Flag a variant invoice as disputed with a written reason (holds it out of approval)."""
-    obj = get_object_or_404(FreightInvoice, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(FreightInvoice.objects.select_related("carrier__party"),
+                            pk=pk, tenant=request.tenant)
     if obj.approval_status == "approved":
         messages.error(request, "An approved invoice can't be disputed — reject the linked bill in accounting.")
         return redirect("scm:freightinvoice_detail", pk=pk)
@@ -126,7 +130,8 @@ def freightinvoice_dispute(request, pk):
 @require_POST
 def freightinvoice_approve(request, pk):
     """Approve the invoice for payment. Tenant-admin gated; a disputed invoice must be resolved first."""
-    obj = get_object_or_404(FreightInvoice, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(FreightInvoice.objects.select_related("carrier__party"),
+                            pk=pk, tenant=request.tenant)
     if obj.match_status == "disputed":
         messages.error(request, "Resolve the dispute (re-run the audit) before approving.")
         return redirect("scm:freightinvoice_detail", pk=pk)
@@ -148,7 +153,8 @@ def freightinvoice_approve(request, pk):
 @tenant_admin_required
 @require_POST
 def freightinvoice_reject(request, pk):
-    obj = get_object_or_404(FreightInvoice, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(FreightInvoice.objects.select_related("carrier__party"),
+                            pk=pk, tenant=request.tenant)
     # Only a PENDING invoice can be rejected — a crafted POST must not overturn an already-approved
     # invoice (which would leave approved_by/approved_at pointing at the prior approver). The bill_id
     # case is a subset of "not pending" (hand-off requires approval first) but keeps a clearer message.
