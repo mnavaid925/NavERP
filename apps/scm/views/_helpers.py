@@ -23,6 +23,16 @@ def _need_tenant(request):
     return False
 
 
+def _tms_carrier_qs(tenant):
+    """4.6 TMS carrier master, scoped to the tenant — the queryset the Load / Shipment / FreightInvoice
+    list filters share for their carrier dropdown. Defined once here rather than in each of the three
+    entity view modules (they all need the same select_related'd list)."""
+    from apps.scm.models import Carrier
+    if tenant is None:
+        return Carrier.objects.none()
+    return Carrier.objects.filter(tenant=tenant).select_related("party")
+
+
 # ---------------------------------------------------------------------------------------------
 # 4.3 Inventory — the StockMove posting service.
 #
