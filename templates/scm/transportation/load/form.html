@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Load{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Load</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:load_list' %}">Loads</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Route Stops</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Seq</th><th>Type</th><th>Address</th><th>Address (free text)</th><th>Planned Arrival</th><th>Status</th><th>Notes</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for sf in formset %}
+              <tr>
+                {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in sf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ sf.sequence }}</td>
+                <td>{{ sf.stop_type }}</td>
+                <td>{{ sf.address }}</td>
+                <td>{{ sf.address_text }}</td>
+                <td>{{ sf.planned_arrival }}</td>
+                <td>{{ sf.status }}</td>
+                <td>{{ sf.notes }}</td>
+                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Sequence the pickup and delivery stops along the route. Cube utilization is derived from the shipments assigned to this load.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:load_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
