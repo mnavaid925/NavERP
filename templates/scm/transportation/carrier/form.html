@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Carrier{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Carrier</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:carrier_list' %}">Carriers</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Rate Cards</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Lane</th><th>Origin</th><th>Destination</th><th>Mode</th><th>Equipment</th><th>Basis</th><th>Base Rate</th><th>Fuel %</th><th>Min</th><th>Transit</th><th>Currency</th><th>From</th><th>To</th><th>Active</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for rf in formset %}
+              <tr>
+                {% for hidden in rf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in rf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ rf.lane_name }}</td>
+                <td>{{ rf.origin_region }}</td>
+                <td>{{ rf.destination_region }}</td>
+                <td>{{ rf.mode }}</td>
+                <td>{{ rf.equipment_type }}</td>
+                <td>{{ rf.rate_basis }}</td>
+                <td>{{ rf.base_rate }}{% for e in rf.base_rate.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ rf.fuel_surcharge_pct }}</td>
+                <td>{{ rf.min_charge }}</td>
+                <td>{{ rf.transit_days }}</td>
+                <td>{{ rf.currency }}</td>
+                <td>{{ rf.effective_from }}</td>
+                <td>{{ rf.effective_to }}</td>
+                <td>{{ rf.is_active }}</td>
+                <td>{% if rf.instance.pk %}{{ rf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Rate cards are the baseline a carrier's freight invoices are audited against.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:carrier_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
