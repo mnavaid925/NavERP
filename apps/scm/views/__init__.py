@@ -165,3 +165,22 @@ from .OrderManagement.SalesOrderAllocations import (  # noqa: F401
     salesorderallocation_edit, salesorderallocation_delete, salesorderallocation_release,
     salesorderallocation_cancel,
 )
+
+# 4.6 Transportation Management System (TMS)
+from .TransportationManagement.Carriers import (  # noqa: F401
+    carrier_list, carrier_create, carrier_detail, carrier_edit, carrier_delete,
+    carrier_recompute_scorecard,
+)
+from .TransportationManagement.Loads import (  # noqa: F401
+    load_list, load_create, load_detail, load_edit, load_delete,
+    load_tender, load_book, load_dispatch, load_deliver, load_cancel,
+)
+from .TransportationManagement.Shipments import (  # noqa: F401
+    shipment_list, shipment_create, shipment_detail, shipment_edit, shipment_delete,
+    shipment_book, shipment_add_event, shipment_cancel,
+)
+from .TransportationManagement.FreightInvoices import (  # noqa: F401
+    freightinvoice_list, freightinvoice_create, freightinvoice_detail, freightinvoice_edit,
+    freightinvoice_delete, freightinvoice_run_audit, freightinvoice_dispute,
+    freightinvoice_approve, freightinvoice_reject, freightinvoice_handoff,
+)
