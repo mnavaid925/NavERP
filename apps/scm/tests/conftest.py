@@ -659,3 +659,83 @@ def allocation_b(db, tenant_b, sales_order_line_b, location_b):
     return SalesOrderAllocation.objects.create(
         tenant=tenant_b, sales_order_line=sales_order_line_b, location=location_b, quantity=Decimal("2"),
     )
+
+
+# ------------------------------------------------------------------ SCM 4.6 Transportation Management System
+@pytest.fixture
+def carrier_party_a(db, tenant_a):
+    """A tenant_a Party tagged 'vendor' — a carrier is procured from like a supplier (4.6 TMS)."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Acme Trucking Co", kind="organization")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="vendor")
+    return party
+
+
+@pytest.fixture
+def carrier_party_b(db, tenant_b):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_b, name="Globex Freight Co", kind="organization")
+    PartyRole.objects.create(tenant=tenant_b, party=party, role="vendor")
+    return party
+
+
+@pytest.fixture
+def carrier_a(db, tenant_a, carrier_party_a):
+    """An active, truckload carrier, tenant_a, on carrier_party_a."""
+    from apps.scm.models import Carrier
+    return Carrier.objects.create(
+        tenant=tenant_a, party=carrier_party_a, carrier_type="asset_based",
+        primary_mode="truckload", service_level="standard", status="active",
+    )
+
+
+@pytest.fixture
+def carrier_b(db, tenant_b, carrier_party_b):
+    from apps.scm.models import Carrier
+    return Carrier.objects.create(tenant=tenant_b, party=carrier_party_b)
+
+
+@pytest.fixture
+def load_a(db, tenant_a, carrier_a):
+    """A planning-stage load, tenant_a, assigned to carrier_a."""
+    from apps.scm.models import Load
+    return Load.objects.create(
+        tenant=tenant_a, carrier=carrier_a, origin_text="Chicago, IL", destination_text="Dallas, TX",
+    )
+
+
+@pytest.fixture
+def load_b(db, tenant_b, carrier_b):
+    from apps.scm.models import Load
+    return Load.objects.create(
+        tenant=tenant_b, carrier=carrier_b, origin_text="Metropolis", destination_text="Gotham",
+    )
+
+
+@pytest.fixture
+def shipment_a(db, tenant_a, carrier_a):
+    """A planned outbound shipment, tenant_a, executed by carrier_a."""
+    from apps.scm.models import Shipment
+    return Shipment.objects.create(
+        tenant=tenant_a, carrier=carrier_a, direction="outbound",
+        origin_text="Chicago, IL", destination_text="Dallas, TX",
+    )
+
+
+@pytest.fixture
+def shipment_b(db, tenant_b, carrier_b):
+    from apps.scm.models import Shipment
+    return Shipment.objects.create(tenant=tenant_b, carrier=carrier_b, direction="outbound")
+
+
+@pytest.fixture
+def freight_invoice_a(db, tenant_a, carrier_a):
+    """A not-yet-audited freight invoice, tenant_a, from carrier_a (no lines yet)."""
+    from apps.scm.models import FreightInvoice
+    return FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+
+
+@pytest.fixture
+def freight_invoice_b(db, tenant_b, carrier_b):
+    from apps.scm.models import FreightInvoice
+    return FreightInvoice.objects.create(tenant=tenant_b, carrier=carrier_b)
