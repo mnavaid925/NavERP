@@ -5,6 +5,8 @@ from apps.scm.views._helpers import _need_tenant, _tms_carrier_qs
 from apps.scm.models import Load
 from apps.scm.forms import LoadForm, LoadStopFormSet
 
+ZERO = Decimal("0")
+
 
 @login_required
 def load_list(request):
@@ -68,9 +70,11 @@ def load_detail(request, pk):
                             pk=pk, tenant=request.tenant)
     stops = list(obj.stops.select_related("address"))
     shipments = list(obj.shipments.select_related("carrier__party"))
-    # Cube utilization: aggregate the assigned shipments ONCE, then reuse for both dimensions.
-    planned_weight = obj.planned_weight_kg()
-    planned_volume = obj.planned_volume_cbm()
+    # Cube utilization: aggregate BOTH dimensions in ONE query, then pass each precomputed total into
+    # the utilization property so it never re-aggregates (the no-arg path).
+    totals = obj.shipments.aggregate(w=Sum("weight_kg"), v=Sum("volume_cbm"))
+    planned_weight = totals["w"] or ZERO
+    planned_volume = totals["v"] or ZERO
     return render(request, "scm/transportation/load/detail.html", {
         "obj": obj,
         "stops": stops,
