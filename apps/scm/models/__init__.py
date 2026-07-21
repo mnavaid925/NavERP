@@ -96,3 +96,21 @@ from .OrderManagement.SalesOrders import (  # noqa: F401
 from .OrderManagement.SalesOrderAllocations import (  # noqa: F401
     SalesOrderAllocation,
 )
+
+# 4.6 Transportation Management System (TMS)
+from .TransportationManagement.Carriers import (  # noqa: F401
+    Carrier,
+    CarrierRateCard,
+)
+from .TransportationManagement.Loads import (  # noqa: F401
+    Load,
+    LoadStop,
+)
+from .TransportationManagement.Shipments import (  # noqa: F401
+    Shipment,
+    TrackingEvent,
+)
+from .TransportationManagement.FreightInvoices import (  # noqa: F401
+    FreightInvoice,
+    FreightInvoiceLine,
+)
