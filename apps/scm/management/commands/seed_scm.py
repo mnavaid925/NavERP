@@ -1,7 +1,7 @@
-"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.5.
+"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.6.
 
 4.1 Procurement (below), 4.2 Supplier Relationship Management, 4.3 Inventory (the StockMove spine),
-4.4 Warehouse Management and 4.5 Order Management. The 4.3 pass must run before 4.4 and 4.5, and
+4.4 Warehouse Management, 4.5 Order Management and 4.6 Transportation. The 4.3 pass must run before 4.4 and 4.5, and
 that ordering is load-bearing rather than cosmetic: every putaway/pick/count row and every order
 allocation references the items and locations 4.3 seeds.
 
@@ -57,8 +57,9 @@ REQUISITION_LINES = [
 
 
 class Command(BaseCommand):
-    help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders demo data — "
-            "idempotent (skips a tenant that already has the rows each pass creates).")
+    help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
+            "4.6 transportation demo data — idempotent (skips a tenant that already has the rows "
+            "each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -90,9 +91,13 @@ class Command(BaseCommand):
             self._seed_warehouse_tenant(tenant)
             # 4.5 also depends on 4.3's items/locations (it reserves against them), so it follows.
             self._seed_oms_tenant(tenant)
+            # 4.6 TMS follows 4.5/4.1: shipments link the seeded sales/purchase orders, and the
+            # inbound delivered shipment gives the carrier scorecard a real on-time signal.
+            self._seed_tms_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
-            "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders seed complete."))
+            "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
+            "4.6 transportation seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -495,6 +500,126 @@ class Command(BaseCommand):
             f"{tenant.name}: seeded orders {o1.number} [{o1.get_status_display()}], "
             f"{o2.number} [{o2.get_status_display()}], {o3.number} [{o3.get_status_display()}].")
 
+    def _seed_tms_tenant(self, tenant):
+        """4.6 TMS demo: two carriers (+ rate cards), a booked load with a two-stop route, an
+        outbound in-transit shipment consolidated on the load, an inbound delivered shipment (which
+        seeds the carrier's on-time scorecard), and a freight invoice sitting in the price-variance
+        queue — so every 4.6 page has something real on it.
+
+        Idempotent via a Carrier guard. Runs after _seed_oms_tenant / procurement so the shipments can
+        link the seeded SalesOrder / PurchaseOrder. Carriers reuse the supplier-party spine helper —
+        no duplicate company rows. Events go through the real ``apply_tracking_event`` projection and
+        the invoice through the real ``run_audit``, so the derived state is genuine, not hand-set.
+        """
+        import datetime as _dt
+        from apps.scm.models import (
+            Carrier, CarrierRateCard, Load, LoadStop, Shipment, TrackingEvent,
+            FreightInvoice, FreightInvoiceLine, PurchaseOrder, SalesOrder,
+        )
+        if Carrier.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: transportation data already exists — skipping.")
+            return
+
+        today = timezone.localdate()
+        now = timezone.now()
+        usd = Currency.objects.filter(code="USD").first()
+
+        swift_party = self._supplier(tenant, "Swift Freightways", "organization")
+        swift = Carrier.objects.create(
+            tenant=tenant, party=swift_party, carrier_type="asset_based", primary_mode="truckload",
+            service_level="standard", scac_code="SWFT", mc_number="MC-123456", dot_number="DOT-778899",
+            primary_contact_name="Dispatch Desk", primary_contact_email="dispatch@swiftfreight.example",
+            is_preferred=True, status="active",
+            insurance_certificate_expiry=today + _dt.timedelta(days=180))
+        CarrierRateCard.objects.create(
+            carrier=swift, lane_name="Chicago → Dallas", origin_region="Chicago, IL",
+            destination_region="Dallas, TX", mode="truckload", equipment_type="dry_van",
+            rate_basis="flat", base_rate=Decimal("1850.00"), fuel_surcharge_pct=Decimal("12.00"),
+            min_charge=Decimal("500.00"), transit_days=2, currency=usd,
+            effective_from=today - _dt.timedelta(days=30), is_active=True)
+
+        aero_party = self._supplier(tenant, "AeroParcel Express", "organization")
+        aero = Carrier.objects.create(
+            tenant=tenant, party=aero_party, carrier_type="courier", primary_mode="parcel",
+            service_level="expedited", scac_code="AERO", status="active")
+        CarrierRateCard.objects.create(
+            carrier=aero, lane_name="National parcel", mode="parcel", equipment_type="parcel",
+            rate_basis="per_kg", base_rate=Decimal("4.50"), fuel_surcharge_pct=Decimal("8.00"),
+            min_charge=Decimal("15.00"), transit_days=1, currency=usd, is_active=True)
+
+        load = Load.objects.create(
+            tenant=tenant, carrier=swift, mode="truckload", equipment_type="dry_van",
+            origin_text="Main DC, Chicago IL", destination_text="Fabrikam RDC, Dallas TX",
+            planned_departure=now, planned_arrival=now + _dt.timedelta(days=2),
+            distance_km=Decimal("1480.00"), estimated_fuel_cost=Decimal("620.00"),
+            freight_cost_estimate=Decimal("2072.00"),
+            equipment_capacity_weight_kg=Decimal("18000.00"),
+            equipment_capacity_volume_cbm=Decimal("76.000"),
+            driver_name="J. Delgado", vehicle_ref="TRK-4471")
+        LoadStop.objects.create(load=load, sequence=1, stop_type="pickup",
+                                address_text="Main DC, Chicago IL", planned_arrival=now, status="completed")
+        LoadStop.objects.create(load=load, sequence=2, stop_type="delivery",
+                                address_text="Fabrikam RDC, Dallas TX",
+                                planned_arrival=now + _dt.timedelta(days=2), status="pending")
+        load.status = "booked"
+        load.save(update_fields=["status", "updated_at"])
+
+        # Outbound shipment on the load — links a seeded sales order when one exists, in transit.
+        so = SalesOrder.objects.filter(tenant=tenant).order_by("id").first()
+        ship = Shipment.objects.create(
+            tenant=tenant, direction="outbound", carrier=swift, load=load, sales_order=so,
+            origin_text="Main DC, Chicago IL", destination_text="Fabrikam RDC, Dallas TX",
+            mode="truckload", planned_pickup_date=today,
+            planned_delivery_date=today + _dt.timedelta(days=2),
+            weight_kg=Decimal("9200.00"), volume_cbm=Decimal("34.500"), package_count=48,
+            carrier_tracking_number="SWFT-000123", freight_cost_estimate=Decimal("2072.00"))
+        for etype, loc, when in [
+            ("pickup", "Chicago, IL", now - _dt.timedelta(hours=6)),
+            ("in_transit", "St. Louis, MO", now - _dt.timedelta(hours=1)),
+        ]:
+            ev = TrackingEvent.objects.create(shipment=ship, event_type=etype, event_at=when,
+                                              location_text=loc, source="carrier_api")
+            ship.apply_tracking_event(ev)
+
+        # Inbound shipment delivered on time — gives the carrier scorecard a real signal.
+        po = PurchaseOrder.objects.filter(tenant=tenant).order_by("id").first()
+        inbound = Shipment.objects.create(
+            tenant=tenant, direction="inbound", carrier=swift, purchase_order=po,
+            origin_text="Northwind Warehouse", destination_text="Main DC, Chicago IL",
+            mode="ltl", planned_pickup_date=today - _dt.timedelta(days=4),
+            planned_delivery_date=today - _dt.timedelta(days=1),
+            weight_kg=Decimal("3100.00"), volume_cbm=Decimal("12.000"), package_count=12,
+            carrier_tracking_number="SWFT-000090")
+        for etype, loc, when in [
+            ("pickup", "Supplier Dock", now - _dt.timedelta(days=4)),
+            ("delivered", "Main DC, Chicago IL", now - _dt.timedelta(days=1, hours=2)),
+        ]:
+            ev = TrackingEvent.objects.create(shipment=inbound, event_type=etype, event_at=when,
+                                              location_text=loc, source="driver_app")
+            inbound.apply_tracking_event(ev)
+        swift.recompute_scorecard()
+
+        # Freight invoice with a fuel + detention over-billing — lands in the price-variance queue.
+        inv = FreightInvoice.objects.create(
+            tenant=tenant, carrier=swift, load=load, shipment=ship,
+            carrier_invoice_number="SWFT-INV-5567", invoice_date=today,
+            due_date=today + _dt.timedelta(days=30), currency=usd, match_tolerance_pct=Decimal("2.00"))
+        FreightInvoiceLine.objects.create(
+            freight_invoice=inv, charge_type="linehaul", description="Chicago → Dallas linehaul",
+            billed_amount=Decimal("1850.00"), contract_amount=Decimal("1850.00"))
+        FreightInvoiceLine.objects.create(
+            freight_invoice=inv, charge_type="fuel_surcharge", description="Fuel surcharge",
+            billed_amount=Decimal("260.00"), contract_amount=Decimal("222.00"))
+        FreightInvoiceLine.objects.create(
+            freight_invoice=inv, charge_type="detention", description="Detention — 2 hrs",
+            billed_amount=Decimal("90.00"), contract_amount=Decimal("0.00"))
+        inv.run_audit()
+
+        self.stdout.write(
+            f"{tenant.name}: seeded carriers {swift.number}/{aero.number}, load {load.number}, "
+            f"shipments {ship.number}/{inbound.number}, freight invoice {inv.number} "
+            f"[{inv.get_match_status_display()}].")
+
     def _flush(self):
         # The AP bills this seeder created are reachable only through the receipts that link them,
         # so they must go FIRST — once the GRNs are gone there is no way to tell a seeded bill from
@@ -503,6 +628,19 @@ class Command(BaseCommand):
         orphaned_bills = Bill.objects.filter(scm_goods_receipts__isnull=False).distinct()
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
+
+        # 4.6 TMS first (newest module). FreightInvoice.carrier is PROTECT, so freight invoices must
+        # clear before their carriers; children (lines/events/stops/rate-cards) cascade. Any draft AP
+        # bill a freight hand-off created is reachable only through FreightInvoice.bill (SET_NULL), so
+        # drop those bills first — the same orphan-avoidance the GRN block above does.
+        from apps.scm.models import Carrier, FreightInvoice, Load, Shipment
+        freight_bills = Bill.objects.filter(scm_freight_invoices__isnull=False).distinct()
+        freight_bill_count = freight_bills.count()
+        freight_bills.delete()
+        FreightInvoice.objects.all().delete()   # lines cascade
+        Shipment.objects.all().delete()         # tracking events cascade
+        Load.objects.all().delete()             # stops cascade
+        Carrier.objects.all().delete()          # rate cards cascade
 
         # Child rows cascade from their parents; delete parents newest-first down the chain so the
         # PROTECT on GoodsReceiptLine.po_line / GoodsReceiptNote.purchase_order never blocks.
@@ -560,8 +698,8 @@ class Command(BaseCommand):
         ItemCategory.objects.all().delete()
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
-            f"Flushed all SCM procurement + SRM + inventory + warehouse + order rows "
-            f"(+{bill_count} linked accounting bill(s))."))
+            f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation rows "
+            f"(+{bill_count + freight_bill_count} linked accounting bill(s))."))
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
