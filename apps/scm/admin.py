@@ -301,3 +301,71 @@ class SalesOrderAllocationAdmin(admin.ModelAdmin):
     list_display = ("sales_order_line", "location", "tenant", "quantity", "status", "allocated_at")
     list_filter = ("tenant", "status")
     search_fields = ("sales_order_line__sales_order__number", "sales_order_line__item__sku")
+
+
+# ============================================================ 4.6 Transportation Management System (TMS)
+from apps.scm.models import (  # noqa: E402
+    Carrier, CarrierRateCard, Load, LoadStop, Shipment, TrackingEvent,
+    FreightInvoice, FreightInvoiceLine,
+)
+
+
+class CarrierRateCardInline(admin.TabularInline):
+    model = CarrierRateCard
+    extra = 0
+
+
+@admin.register(Carrier)
+class CarrierAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "tenant", "carrier_type", "primary_mode", "status",
+                    "on_time_delivery_pct")
+    list_filter = ("tenant", "status", "carrier_type", "primary_mode")
+    search_fields = ("number", "party__name", "scac_code", "mc_number")
+    readonly_fields = ("on_time_delivery_pct", "performance_summary")
+    inlines = [CarrierRateCardInline]
+
+
+class LoadStopInline(admin.TabularInline):
+    model = LoadStop
+    extra = 0
+
+
+@admin.register(Load)
+class LoadAdmin(admin.ModelAdmin):
+    list_display = ("number", "carrier", "tenant", "mode", "equipment_type", "status", "planned_departure")
+    list_filter = ("tenant", "status", "mode", "equipment_type")
+    search_fields = ("number", "origin_text", "destination_text", "driver_name", "vehicle_ref")
+    inlines = [LoadStopInline]
+
+
+class TrackingEventInline(admin.TabularInline):
+    model = TrackingEvent
+    extra = 0
+    readonly_fields = ("recorded_by",)
+
+
+@admin.register(Shipment)
+class ShipmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "carrier", "tenant", "direction", "status", "planned_delivery_date",
+                    "pod_received")
+    list_filter = ("tenant", "status", "direction", "mode")
+    search_fields = ("number", "carrier_tracking_number", "carrier__party__name")
+    readonly_fields = ("current_status_text", "last_known_location", "eta", "actual_pickup_at",
+                       "actual_delivery_at", "pod_received", "pod_received_at")
+    inlines = [TrackingEventInline]
+
+
+class FreightInvoiceLineInline(admin.TabularInline):
+    model = FreightInvoiceLine
+    extra = 0
+
+
+@admin.register(FreightInvoice)
+class FreightInvoiceAdmin(admin.ModelAdmin):
+    list_display = ("number", "carrier", "tenant", "billed_amount", "variance_amount",
+                    "match_status", "approval_status")
+    list_filter = ("tenant", "match_status", "approval_status")
+    search_fields = ("number", "carrier_invoice_number", "carrier__party__name")
+    readonly_fields = ("billed_amount", "contract_amount", "variance_amount", "variance_pct",
+                       "match_status", "approval_status", "approved_by", "approved_at", "bill")
+    inlines = [FreightInvoiceLineInline]
