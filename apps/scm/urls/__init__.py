@@ -30,6 +30,10 @@ from .WarehouseManagement.CycleCountTasks import urlpatterns as _wms_cyclecounts
 from .WarehouseManagement.YardVisits import urlpatterns as _wms_yard
 from .OrderManagement.SalesOrders import urlpatterns as _oms_salesorders
 from .OrderManagement.SalesOrderAllocations import urlpatterns as _oms_allocations
+from .TransportationManagement.Carriers import urlpatterns as _tms_carriers
+from .TransportationManagement.Loads import urlpatterns as _tms_loads
+from .TransportationManagement.Shipments import urlpatterns as _tms_shipments
+from .TransportationManagement.FreightInvoices import urlpatterns as _tms_freightinvoices
 
 
 app_name = "scm"
@@ -60,4 +64,10 @@ urlpatterns = [
     # Django is first-match-wins, so reusing it would permanently shadow the sales order list.
     *_oms_salesorders,                   # OrderManagement/SalesOrders
     *_oms_allocations,                   # OrderManagement/SalesOrderAllocations
+    # 4.6 TMS prefixes (carriers/ loads/ shipments/ freight-invoices/) are all unique — no
+    # collision with orders/ (PurchaseOrder) or sales-orders/ (SalesOrder) above.
+    *_tms_carriers,                      # TransportationManagement/Carriers
+    *_tms_loads,                         # TransportationManagement/Loads
+    *_tms_shipments,                     # TransportationManagement/Shipments
+    *_tms_freightinvoices,               # TransportationManagement/FreightInvoices
 ]
