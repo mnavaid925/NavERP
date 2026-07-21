@@ -2372,3 +2372,472 @@ class TestHasActiveAllocationsRegression:
         SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=sales_order_line_a,
                                             location=location_a, quantity=Decimal("2"), status="cancelled")
         assert sales_order_submitted_a.has_active_allocations() is False
+
+
+# ================================================================================================
+# SCM 4.6 Transportation Management System
+# ================================================================================================
+
+# ================================================================ Auto-numbering
+class TestTMSAutoNumbering:
+    def test_carrier_numbers_prefixed_car_and_sequential_per_tenant(
+        self, tenant_a, tenant_b, carrier_party_a, carrier_party_b,
+    ):
+        from apps.scm.models import Carrier
+        c1 = Carrier.objects.create(tenant=tenant_a, party=carrier_party_a)
+        c2 = Carrier.objects.create(tenant=tenant_a, party=carrier_party_a)
+        c3 = Carrier.objects.create(tenant=tenant_b, party=carrier_party_b)
+        assert c1.number == "CAR-00001"
+        assert c2.number == "CAR-00002"
+        assert c3.number == "CAR-00001"  # separate per-tenant sequence
+
+    def test_carrier_number_unique_together(self, tenant_a, carrier_party_a):
+        from apps.scm.models import Carrier
+        c1 = Carrier.objects.create(tenant=tenant_a, party=carrier_party_a)
+        with pytest.raises(IntegrityError):
+            Carrier.objects.create(tenant=tenant_a, party=carrier_party_a, number=c1.number)
+
+    def test_load_numbers_prefixed_ld_and_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import Load
+        l1 = Load.objects.create(tenant=tenant_a)
+        l2 = Load.objects.create(tenant=tenant_a)
+        l3 = Load.objects.create(tenant=tenant_b)
+        assert l1.number == "LD-00001"
+        assert l2.number == "LD-00002"
+        assert l3.number == "LD-00001"
+
+    def test_shipment_numbers_prefixed_shp_and_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import Shipment
+        s1 = Shipment.objects.create(tenant=tenant_a)
+        s2 = Shipment.objects.create(tenant=tenant_a)
+        s3 = Shipment.objects.create(tenant=tenant_b)
+        assert s1.number == "SHP-00001"
+        assert s2.number == "SHP-00002"
+        assert s3.number == "SHP-00001"
+
+    def test_freightinvoice_numbers_prefixed_frt_and_sequential_per_tenant(
+        self, tenant_a, tenant_b, carrier_a, carrier_b,
+    ):
+        from apps.scm.models import FreightInvoice
+        f1 = FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+        f2 = FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+        f3 = FreightInvoice.objects.create(tenant=tenant_b, carrier=carrier_b)
+        assert f1.number == "FRT-00001"
+        assert f2.number == "FRT-00002"
+        assert f3.number == "FRT-00001"
+
+
+# ================================================================ __str__
+class TestTMSStrRepresentations:
+    def test_carrier_str_includes_number_and_party_name(self, carrier_a, carrier_party_a):
+        s = str(carrier_a)
+        assert carrier_a.number in s
+        assert carrier_party_a.name in s
+
+    def test_load_str_includes_number_origin_and_destination(self, load_a):
+        s = str(load_a)
+        assert load_a.number in s
+        assert "Chicago, IL" in s
+        assert "Dallas, TX" in s
+
+    def test_shipment_str_includes_number_and_direction(self, shipment_a):
+        s = str(shipment_a)
+        assert shipment_a.number in s
+        assert "Outbound" in s
+
+    def test_freightinvoice_str_includes_number_and_carrier_name(self, freight_invoice_a, carrier_a):
+        s = str(freight_invoice_a)
+        assert freight_invoice_a.number in s
+        assert carrier_a.name in s
+
+    def test_loadstop_str(self, load_a):
+        from apps.scm.models import LoadStop
+        stop = LoadStop.objects.create(load=load_a, sequence=1, stop_type="pickup", address_text="Dock 3")
+        assert str(stop) == "#1 Pickup · Dock 3"
+
+    def test_trackingevent_str(self, shipment_a):
+        from apps.scm.models import TrackingEvent
+        from django.utils import timezone
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="pickup",
+                                             event_at=timezone.now())
+        assert str(event).startswith("Picked Up @")
+
+    def test_carrierratecard_str(self, carrier_a):
+        from apps.scm.models import CarrierRateCard
+        card = CarrierRateCard.objects.create(carrier=carrier_a, lane_name="Chicago → Dallas",
+                                              mode="truckload")
+        assert str(card) == "Chicago → Dallas (Full Truckload (FTL))"
+
+    def test_freightinvoiceline_str(self, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        line = FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a, charge_type="fuel_surcharge",
+                                                  billed_amount=Decimal("50.00"))
+        assert str(line) == "Fuel Surcharge · 50.00"
+
+
+# ================================================================ Carrier properties
+class TestCarrierProperties:
+    def test_name_comes_from_the_party(self, carrier_a, carrier_party_a):
+        assert carrier_a.name == carrier_party_a.name
+
+    def test_name_blank_without_a_party(self, tenant_a):
+        from apps.scm.models import Carrier
+        carrier = Carrier(tenant=tenant_a)
+        assert carrier.name == ""
+
+    def test_is_active_true_only_when_status_active(self, carrier_a):
+        assert carrier_a.is_active is True
+        carrier_a.status = "suspended"
+        assert carrier_a.is_active is False
+
+    def test_insurance_expired_false_without_a_date(self, carrier_a):
+        assert carrier_a.insurance_expired is False
+
+    def test_insurance_expired_true_for_a_past_date(self, carrier_a):
+        from django.utils import timezone
+        carrier_a.insurance_certificate_expiry = timezone.localdate() - datetime.timedelta(days=1)
+        assert carrier_a.insurance_expired is True
+
+    def test_insurance_expired_false_for_a_future_date(self, carrier_a):
+        from django.utils import timezone
+        carrier_a.insurance_certificate_expiry = timezone.localdate() + datetime.timedelta(days=1)
+        assert carrier_a.insurance_expired is False
+
+
+class TestCarrierRateCardProperties:
+    def test_rate_with_fuel_grosses_up_the_base_rate(self, carrier_a):
+        from apps.scm.models import CarrierRateCard
+        card = CarrierRateCard.objects.create(carrier=carrier_a, base_rate=Decimal("1000.00"),
+                                              fuel_surcharge_pct=Decimal("10.00"))
+        assert card.rate_with_fuel == Decimal("1100.000")
+
+    def test_rate_with_fuel_with_no_surcharge_equals_base_rate(self, carrier_a):
+        from apps.scm.models import CarrierRateCard
+        card = CarrierRateCard.objects.create(carrier=carrier_a, base_rate=Decimal("500.00"))
+        assert card.rate_with_fuel == Decimal("500.000")
+
+
+# ================================================================================================
+# Carrier.recompute_scorecard — derived on-time-delivery %, never a phantom-zero wipe
+# ================================================================================================
+class TestCarrierRecomputeScorecard:
+    def test_mixed_on_time_and_late_delivered_shipments_set_the_right_pct(self, tenant_a, carrier_a):
+        from django.utils import timezone
+        from apps.scm.models import Shipment
+        # 2 on-time (delivered on/before planned) + 1 late = 66.67%
+        Shipment.objects.create(
+            tenant=tenant_a, carrier=carrier_a, status="delivered",
+            planned_delivery_date=datetime.date(2026, 1, 10),
+            actual_delivery_at=timezone.make_aware(datetime.datetime(2026, 1, 9, 12, 0)),
+        )
+        Shipment.objects.create(
+            tenant=tenant_a, carrier=carrier_a, status="delivered",
+            planned_delivery_date=datetime.date(2026, 1, 10),
+            actual_delivery_at=timezone.make_aware(datetime.datetime(2026, 1, 10, 12, 0)),
+        )
+        Shipment.objects.create(
+            tenant=tenant_a, carrier=carrier_a, status="delivered",
+            planned_delivery_date=datetime.date(2026, 1, 10),
+            actual_delivery_at=timezone.make_aware(datetime.datetime(2026, 1, 12, 12, 0)),
+        )
+        pct = carrier_a.recompute_scorecard()
+        assert pct == Decimal("66.67")
+        carrier_a.refresh_from_db()
+        assert carrier_a.on_time_delivery_pct == Decimal("66.67")
+        assert "2/3" in carrier_a.performance_summary
+
+    def test_undated_delivered_shipments_never_drag_the_score(self, tenant_a, carrier_a):
+        """A delivered shipment missing a planned date (or an actual-delivery stamp) must not count
+        toward the denominator — only datable, delivered shipments are scored."""
+        from django.utils import timezone
+        from apps.scm.models import Shipment
+        Shipment.objects.create(tenant=tenant_a, carrier=carrier_a, status="delivered")  # no dates at all
+        Shipment.objects.create(
+            tenant=tenant_a, carrier=carrier_a, status="delivered",
+            planned_delivery_date=datetime.date(2026, 1, 10),
+            actual_delivery_at=timezone.make_aware(datetime.datetime(2026, 1, 9, 12, 0)),
+        )
+        pct = carrier_a.recompute_scorecard()
+        assert pct == Decimal("100.00")
+        assert "1/1" in carrier_a.performance_summary
+
+    def test_no_delivered_shipments_leaves_the_score_untouched(self, tenant_a, carrier_a):
+        """No signal yet must never zero out a previously-derived score (no phantom-zero wipe)."""
+        carrier_a.on_time_delivery_pct = Decimal("77.00")
+        carrier_a.performance_summary = "A prior score"
+        carrier_a.save(update_fields=["on_time_delivery_pct", "performance_summary"])
+        result = carrier_a.recompute_scorecard()
+        assert result == Decimal("77.00")
+        carrier_a.refresh_from_db()
+        assert carrier_a.on_time_delivery_pct == Decimal("77.00")
+        assert carrier_a.performance_summary == "No delivered shipments with a planned date yet."
+
+
+# ================================================================ Load properties + utilization
+class TestLoadProperties:
+    def test_is_editable_true_while_planning_or_tendered(self, load_a):
+        assert load_a.is_editable is True
+        load_a.status = "tendered"
+        assert load_a.is_editable is True
+        load_a.status = "booked"
+        assert load_a.is_editable is False
+
+    def test_is_closed_true_delivered_and_cancelled(self, load_a):
+        for status in ("delivered", "cancelled"):
+            load_a.status = status
+            assert load_a.is_closed is True
+        load_a.status = "in_transit"
+        assert load_a.is_closed is False
+
+
+class TestLoadUtilization:
+    def test_weight_and_volume_utilization_pct_from_assigned_shipments(self, tenant_a, load_a, carrier_a):
+        from apps.scm.models import Shipment
+        load_a.equipment_capacity_weight_kg = Decimal("1000.00")
+        load_a.equipment_capacity_volume_cbm = Decimal("10.000")
+        load_a.save(update_fields=["equipment_capacity_weight_kg", "equipment_capacity_volume_cbm"])
+        Shipment.objects.create(tenant=tenant_a, carrier=carrier_a, load=load_a,
+                                weight_kg=Decimal("300.00"), volume_cbm=Decimal("2.000"))
+        Shipment.objects.create(tenant=tenant_a, carrier=carrier_a, load=load_a,
+                                weight_kg=Decimal("200.00"), volume_cbm=Decimal("1.000"))
+        assert load_a.weight_utilization_pct() == Decimal("50.0")
+        assert load_a.volume_utilization_pct() == Decimal("30.0")
+
+    def test_utilization_accepts_a_precomputed_planned_total(self, load_a):
+        load_a.equipment_capacity_weight_kg = Decimal("1000.00")
+        assert load_a.weight_utilization_pct(Decimal("250")) == Decimal("25.0")
+
+    def test_utilization_returns_none_when_capacity_is_none(self, load_a):
+        load_a.equipment_capacity_weight_kg = None
+        load_a.equipment_capacity_volume_cbm = None
+        assert load_a.weight_utilization_pct() is None
+        assert load_a.volume_utilization_pct() is None
+
+    def test_utilization_returns_none_when_capacity_is_zero(self, load_a):
+        load_a.equipment_capacity_weight_kg = Decimal("0")
+        load_a.equipment_capacity_volume_cbm = Decimal("0")
+        assert load_a.weight_utilization_pct() is None
+        assert load_a.volume_utilization_pct() is None
+
+    def test_planned_weight_and_volume_are_zero_with_no_shipments(self, load_a):
+        assert load_a.planned_weight_kg() == Decimal("0")
+        assert load_a.planned_volume_cbm() == Decimal("0")
+
+
+# ================================================================ Shipment properties
+class TestShipmentProperties:
+    def test_is_editable_true_while_planned_or_booked(self, shipment_a):
+        assert shipment_a.is_editable is True
+        shipment_a.status = "booked"
+        assert shipment_a.is_editable is True
+        shipment_a.status = "in_transit"
+        assert shipment_a.is_editable is False
+
+    def test_is_closed_true_delivered_and_cancelled(self, shipment_a):
+        for status in ("delivered", "cancelled"):
+            shipment_a.status = status
+            assert shipment_a.is_closed is True
+        shipment_a.status = "exception"
+        assert shipment_a.is_closed is False
+
+    def test_is_delayed_true_past_planned_delivery_while_still_moving(self, shipment_a):
+        from django.utils import timezone
+        shipment_a.planned_delivery_date = timezone.localdate() - datetime.timedelta(days=1)
+        shipment_a.status = "in_transit"
+        assert shipment_a.is_delayed is True
+
+    def test_is_delayed_false_once_delivered(self, shipment_a):
+        from django.utils import timezone
+        shipment_a.planned_delivery_date = timezone.localdate() - datetime.timedelta(days=1)
+        shipment_a.status = "delivered"
+        assert shipment_a.is_delayed is False
+
+    def test_is_delayed_false_without_a_planned_date(self, shipment_a):
+        shipment_a.planned_delivery_date = None
+        shipment_a.status = "in_transit"
+        assert shipment_a.is_delayed is False
+
+
+# ================================================================================================
+# Shipment.apply_tracking_event — the event projects onto the shipment's summary/status fields
+# ================================================================================================
+class TestShipmentApplyTrackingEvent:
+    def test_pickup_event_moves_booked_shipment_to_in_transit_and_stamps_pickup_once(
+        self, tenant_a, shipment_a,
+    ):
+        from django.utils import timezone
+        from apps.scm.models import TrackingEvent
+        shipment_a.status = "booked"
+        shipment_a.save(update_fields=["status"])
+        t1 = timezone.now()
+        event1 = TrackingEvent.objects.create(shipment=shipment_a, event_type="pickup", event_at=t1)
+        shipment_a.apply_tracking_event(event1)
+        assert shipment_a.status == "in_transit"
+        assert shipment_a.actual_pickup_at == t1
+
+        # A second pickup event must not re-stamp the actual pickup time.
+        t2 = t1 + datetime.timedelta(hours=3)
+        event2 = TrackingEvent.objects.create(shipment=shipment_a, event_type="pickup", event_at=t2)
+        shipment_a.apply_tracking_event(event2)
+        assert shipment_a.actual_pickup_at == t1
+
+    def test_delivered_event_closes_the_shipment_and_stamps_delivery(self, tenant_a, shipment_a):
+        from django.utils import timezone
+        from apps.scm.models import TrackingEvent
+        t = timezone.now()
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="delivered", event_at=t)
+        shipment_a.apply_tracking_event(event)
+        assert shipment_a.status == "delivered"
+        assert shipment_a.actual_delivery_at == t
+
+    def test_pod_signed_event_also_records_proof_of_delivery(self, tenant_a, shipment_a):
+        from django.utils import timezone
+        from apps.scm.models import TrackingEvent
+        t = timezone.now()
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="pod_signed", event_at=t)
+        shipment_a.apply_tracking_event(event)
+        assert shipment_a.status == "delivered"
+        assert shipment_a.pod_received is True
+        assert shipment_a.pod_received_at == t
+
+    def test_exception_event_flags_the_shipment(self, tenant_a, shipment_a):
+        from django.utils import timezone
+        from apps.scm.models import TrackingEvent
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="exception",
+                                             event_at=timezone.now())
+        shipment_a.apply_tracking_event(event)
+        assert shipment_a.status == "exception"
+
+    def test_event_on_a_delivered_shipment_is_recorded_but_status_is_not_dragged_backwards(
+        self, tenant_a, shipment_a,
+    ):
+        from django.utils import timezone
+        from apps.scm.models import TrackingEvent
+        shipment_a.status = "delivered"
+        shipment_a.actual_delivery_at = timezone.now()
+        shipment_a.save(update_fields=["status", "actual_delivery_at"])
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="exception",
+                                             event_at=timezone.now())
+        shipment_a.apply_tracking_event(event)
+        assert shipment_a.status == "delivered"  # terminal-state guard
+        assert shipment_a.current_status_text == event.get_event_type_display()
+
+    def test_event_on_a_cancelled_shipment_does_not_change_status_or_stamp_pickup(
+        self, tenant_a, shipment_a,
+    ):
+        from django.utils import timezone
+        from apps.scm.models import TrackingEvent
+        shipment_a.status = "cancelled"
+        shipment_a.save(update_fields=["status"])
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="pickup",
+                                             event_at=timezone.now())
+        shipment_a.apply_tracking_event(event)
+        assert shipment_a.status == "cancelled"
+        assert shipment_a.actual_pickup_at is None
+
+
+# ================================================================ FreightInvoice properties
+class TestFreightInvoiceProperties:
+    def test_is_editable_true_while_pending_and_not_handed_off(self, freight_invoice_a):
+        assert freight_invoice_a.is_editable is True
+        freight_invoice_a.approval_status = "approved"
+        assert freight_invoice_a.is_editable is False
+
+    def test_is_over_billed_true_only_for_a_positive_variance(self, freight_invoice_a):
+        freight_invoice_a.variance_amount = Decimal("10.00")
+        assert freight_invoice_a.is_over_billed is True
+        freight_invoice_a.variance_amount = Decimal("-10.00")
+        assert freight_invoice_a.is_over_billed is False
+        freight_invoice_a.variance_amount = Decimal("0.00")
+        assert freight_invoice_a.is_over_billed is False
+
+
+# ================================================================================================
+# FreightInvoice.recalc_amounts — sums billed/contract from lines in Python
+# ================================================================================================
+class TestFreightInvoiceRecalcAmounts:
+    def test_recalc_sums_billed_and_contract_and_derives_variance(self, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a, charge_type="linehaul",
+                                          billed_amount=Decimal("500.00"), contract_amount=Decimal("480.00"))
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a, charge_type="fuel_surcharge",
+                                          billed_amount=Decimal("50.00"), contract_amount=Decimal("50.00"))
+        freight_invoice_a.recalc_amounts()
+        assert freight_invoice_a.billed_amount == Decimal("550.00")
+        assert freight_invoice_a.contract_amount == Decimal("530.00")
+        assert freight_invoice_a.variance_amount == Decimal("20.00")
+        assert freight_invoice_a.variance_pct == Decimal("3.77")
+
+    def test_recalc_with_zero_contract_leaves_variance_pct_none(self, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a,
+                                          billed_amount=Decimal("100.00"), contract_amount=Decimal("0"))
+        freight_invoice_a.recalc_amounts()
+        assert freight_invoice_a.variance_pct is None
+
+    def test_recalc_with_no_lines_is_all_zero(self, freight_invoice_a):
+        freight_invoice_a.recalc_amounts()
+        assert freight_invoice_a.billed_amount == Decimal("0")
+        assert freight_invoice_a.contract_amount == Decimal("0")
+        assert freight_invoice_a.variance_amount == Decimal("0")
+
+
+# ================================================================================================
+# FreightInvoice.run_audit — the freight three-way-adjacent match verdict
+# ================================================================================================
+class TestFreightInvoiceRunAudit:
+    def test_within_tolerance_is_matched(self, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a,
+                                          billed_amount=Decimal("510.00"), contract_amount=Decimal("500.00"))
+        status = freight_invoice_a.run_audit()
+        assert status == "matched"
+        assert freight_invoice_a.match_status == "matched"
+
+    def test_outside_tolerance_is_price_variance(self, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a,
+                                          billed_amount=Decimal("600.00"), contract_amount=Decimal("500.00"))
+        status = freight_invoice_a.run_audit()
+        assert status == "price_variance"
+
+    def test_zero_contract_amount_is_not_matched(self, freight_invoice_a):
+        status = freight_invoice_a.run_audit()  # no lines -> contract_amount stays 0
+        assert status == "not_matched"
+
+    def test_second_invoice_with_the_same_carrier_and_invoice_number_is_flagged_duplicate(
+        self, tenant_a, carrier_a,
+    ):
+        from apps.scm.models import FreightInvoice, FreightInvoiceLine
+        inv1 = FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a,
+                                             carrier_invoice_number="CARR-INV-100")
+        FreightInvoiceLine.objects.create(freight_invoice=inv1, billed_amount=Decimal("100"),
+                                          contract_amount=Decimal("100"))
+        assert inv1.run_audit() == "matched"
+
+        inv2 = FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a,
+                                             carrier_invoice_number="CARR-INV-100")
+        FreightInvoiceLine.objects.create(freight_invoice=inv2, billed_amount=Decimal("100"),
+                                          contract_amount=Decimal("100"))
+        assert inv2.run_audit() == "duplicate"
+
+    def test_blank_carrier_invoice_number_never_triggers_the_duplicate_check(self, tenant_a, carrier_a):
+        from apps.scm.models import FreightInvoice, FreightInvoiceLine
+        inv1 = FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+        FreightInvoiceLine.objects.create(freight_invoice=inv1, billed_amount=Decimal("100"),
+                                          contract_amount=Decimal("100"))
+        inv1.run_audit()
+        inv2 = FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+        FreightInvoiceLine.objects.create(freight_invoice=inv2, billed_amount=Decimal("100"),
+                                          contract_amount=Decimal("100"))
+        assert inv2.run_audit() == "matched"
+
+    def test_disputed_invoice_stays_disputed_even_when_back_within_tolerance(self, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a,
+                                          billed_amount=Decimal("500.00"), contract_amount=Decimal("500.00"))
+        freight_invoice_a.match_status = "disputed"
+        freight_invoice_a.dispute_reason = "carrier overcharged on a prior audit"
+        freight_invoice_a.save(update_fields=["match_status", "dispute_reason"])
+        status = freight_invoice_a.run_audit()
+        assert status == "disputed"
