@@ -98,6 +98,12 @@ def freightinvoice_run_audit(request, pk):
     # select_related so write_audit_log -> str(obj) -> carrier.name -> party.name doesn't chain-fetch.
     obj = get_object_or_404(FreightInvoice.objects.select_related("carrier__party"),
                             pk=pk, tenant=request.tenant)
+    # The lines + tolerance are frozen once the invoice leaves the editable state, so re-auditing a
+    # post-approval invoice is a no-op today — but guard it anyway (the button is is_editable-gated in
+    # the template, and hiding a button never stops a direct POST). Defense-in-depth (security review).
+    if not obj.is_editable:
+        messages.error(request, "This invoice has been approved or handed off — the audit is frozen.")
+        return redirect("scm:freightinvoice_detail", pk=pk)
     status = obj.run_audit()
     write_audit_log(request.user, obj, "update", {"action": "run_audit", "match_status": status})
     messages.success(request, f"Audit run — {obj.get_match_status_display()} "
