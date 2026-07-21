@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.match_status == 'matched' %}green{% elif obj.match_status == 'price_variance' %}amber{% elif obj.match_status == 'duplicate' or obj.match_status == 'disputed' %}red{% else %}slate{% endif %}">{{ obj.get_match_status_display }}</span>
+        <span class="badge badge-{% if obj.approval_status == 'approved' %}green{% elif obj.approval_status == 'rejected' %}red{% else %}amber{% endif %}">{{ obj.get_approval_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:freightinvoice_list' %}">Freight Invoices</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  {% if obj.match_status == 'disputed' %}
+    <div class="card" style="border-inline-start:3px solid var(--bad); background:var(--bad-bg);">
+      <div class="card-body"><h3 class="text-danger"><i data-lucide="alert-triangle"></i> Disputed</h3><p style="white-space:pre-line;">{{ obj.dispute_reason }}</p></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Freight Invoice</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Carrier</span><span class="detail-value"><a href="{% url 'scm:carrier_detail' obj.carrier.pk %}">{{ obj.carrier.name }}</a></span></div>
+        <div><span class="detail-label">Carrier Invoice #</span><span class="detail-value">{{ obj.carrier_invoice_number|default:"—" }}</span></div>
+        <div><span class="detail-label">Load</span><span class="detail-value">{% if obj.load %}<a href="{% url 'scm:load_detail' obj.load.pk %}">{{ obj.load.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Shipment</span><span class="detail-value">{% if obj.shipment %}<a href="{% url 'scm:shipment_detail' obj.shipment.pk %}">{{ obj.shipment.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Invoice Date</span><span class="detail-value">{{ obj.invoice_date|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">Due Date</span><span class="detail-value">{{ obj.due_date|date:"M d, Y"|default:"—" }}</span></div>
+        <div><span class="detail-label">Tolerance</span><span class="detail-value">{{ obj.match_tolerance_pct|floatformat:2 }}%</span></div>
+        <div><span class="detail-label">Billed</span><span class="detail-value fw-600">{{ obj.billed_amount|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</span></div>
+        <div><span class="detail-label">Contract</span><span class="detail-value">{{ obj.contract_amount|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Variance</span><span class="detail-value">{{ obj.variance_amount|floatformat:2 }}{% if obj.variance_pct is not None %} ({{ obj.variance_pct|floatformat:2 }}%){% endif %}</span></div>
+        <div><span class="detail-label">Approved By</span><span class="detail-value">{{ obj.approved_by|default:"—" }}{% if obj.approved_at %} · {{ obj.approved_at|date:"M d, Y" }}{% endif %}</span></div>
+        <div><span class="detail-label">Bill (AP)</span><span class="detail-value">{% if obj.bill %}<a href="{% url 'accounting:bill_detail' obj.bill.pk %}">{{ obj.bill.number }}</a>{% else %}—{% endif %}</span></div>
+      </div>
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Charge Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Charge Type</th><th>Description</th><th>Billed</th><th>Contract</th><th>Variance</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.get_charge_type_display }}</td>
+              <td>{{ line.description|default:"—" }}</td>
+              <td>{{ line.billed_amount|floatformat:2 }}</td>
+              <td>{{ line.contract_amount|floatformat:2 }}</td>
+              <td>{% if line.variance_amount %}<span class="badge badge-{% if line.variance_amount > 0 %}red{% else %}green{% endif %}">{{ line.variance_amount|floatformat:2 }}</span>{% else %}0.00{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="list"></i><h3>No charge lines</h3><p>Edit the invoice to add linehaul, fuel and accessorial charges.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.is_editable %}
+          <form method="post" action="{% url 'scm:freightinvoice_run_audit' obj.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="scale"></i> Run audit</button></form>
+        {% endif %}
+        {% if obj.approval_status != 'approved' and obj.match_status != 'disputed' %}
+          <form method="post" action="{% url 'scm:freightinvoice_dispute' obj.pk %}">
+            {% csrf_token %}
+            <input type="text" name="dispute_reason" class="form-input" placeholder="Dispute reason" required>
+            <button class="btn btn-outline danger" type="submit"><i data-lucide="flag"></i> Dispute</button>
+          </form>
+        {% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.approval_status == 'pending' and obj.match_status != 'disputed' %}
+            <form method="post" action="{% url 'scm:freightinvoice_approve' obj.pk %}" onsubmit="return confirm('Approve this freight invoice for payment?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Approve</button></form>
+          {% endif %}
+          {% if obj.approval_status == 'pending' and not obj.bill %}
+            <form method="post" action="{% url 'scm:freightinvoice_reject' obj.pk %}" onsubmit="return confirm('Reject this freight invoice?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="x-circle"></i> Reject</button></form>
+          {% endif %}
+          {% if obj.approval_status == 'approved' and not obj.bill %}
+            <form method="post" action="{% url 'scm:freightinvoice_handoff' obj.pk %}" onsubmit="return confirm('Draft an AP bill for this freight invoice?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="landmark"></i> Hand off to AP bill</button></form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:freightinvoice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:freightinvoice_delete' obj.pk %}" onsubmit="return confirm('Delete this freight invoice?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        {% endif %}
+        <a href="{% url 'scm:freightinvoice_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
