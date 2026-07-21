@@ -130,8 +130,11 @@ def freightinvoice_approve(request, pk):
     if obj.match_status == "disputed":
         messages.error(request, "Resolve the dispute (re-run the audit) before approving.")
         return redirect("scm:freightinvoice_detail", pk=pk)
-    if obj.approval_status == "approved":
-        messages.info(request, "This invoice is already approved.")
+    # Only a PENDING invoice can be approved — never re-approve an already-approved one, and never
+    # push a rejected one straight to approved via a crafted POST without going back through edit/audit
+    # (mirrors requisition_approve's status guard; the button is pending-only in the template too).
+    if obj.approval_status != "pending":
+        messages.info(request, f"This invoice is already {obj.get_approval_status_display().lower()}.")
         return redirect("scm:freightinvoice_detail", pk=pk)
     obj.approval_status = "approved"
     obj.approved_by = request.user
@@ -146,8 +149,14 @@ def freightinvoice_approve(request, pk):
 @require_POST
 def freightinvoice_reject(request, pk):
     obj = get_object_or_404(FreightInvoice, pk=pk, tenant=request.tenant)
+    # Only a PENDING invoice can be rejected — a crafted POST must not overturn an already-approved
+    # invoice (which would leave approved_by/approved_at pointing at the prior approver). The bill_id
+    # case is a subset of "not pending" (hand-off requires approval first) but keeps a clearer message.
     if obj.bill_id is not None:
         messages.error(request, "This invoice has already been handed off to a bill and can't be rejected here.")
+        return redirect("scm:freightinvoice_detail", pk=pk)
+    if obj.approval_status != "pending":
+        messages.info(request, f"This invoice is already {obj.get_approval_status_display().lower()}.")
         return redirect("scm:freightinvoice_detail", pk=pk)
     obj.approval_status = "rejected"
     obj.save(update_fields=["approval_status", "updated_at"])
