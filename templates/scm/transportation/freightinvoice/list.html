@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Freight Audit{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Freight Audit &amp; Payment</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Freight Invoices</span></div>
+      <p class="text-muted">Audit carrier invoices against contract rates, then hand off to Accounts Payable.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:freightinvoice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Freight Invoice</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, carrier invoice # or carrier…">
+        </div>
+        <div class="form-group">
+          <select name="match_status" aria-label="Match status" class="form-select">
+            <option value="">All match statuses</option>
+            {% for val, label in match_status_choices %}
+              <option value="{{ val }}" {% if request.GET.match_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="approval_status" aria-label="Approval" class="form-select">
+            <option value="">All approvals</option>
+            {% for val, label in approval_status_choices %}
+              <option value="{{ val }}" {% if request.GET.approval_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="carrier" aria-label="Carrier" class="form-select">
+            <option value="">All carriers</option>
+            {% for c in carriers %}
+              <option value="{{ c.pk }}" {% if request.GET.carrier == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:freightinvoice_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Carrier</th><th>Carrier Inv #</th><th>Billed</th><th>Variance</th><th>Match</th><th>Approval</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:freightinvoice_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.carrier.name }}</td>
+              <td>{{ obj.carrier_invoice_number|default:"—" }}</td>
+              <td>{{ obj.billed_amount|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</td>
+              <td>{% if obj.variance_amount %}<span class="badge badge-{% if obj.is_over_billed %}red{% else %}green{% endif %}">{{ obj.variance_amount|floatformat:2 }}</span>{% else %}<span class="badge badge-green">0.00</span>{% endif %}</td>
+              <td><span class="badge badge-{% if obj.match_status == 'matched' %}green{% elif obj.match_status == 'price_variance' %}amber{% elif obj.match_status == 'duplicate' or obj.match_status == 'disputed' %}red{% else %}slate{% endif %}">{{ obj.get_match_status_display }}</span></td>
+              <td><span class="badge badge-{% if obj.approval_status == 'approved' %}green{% elif obj.approval_status == 'rejected' %}red{% else %}amber{% endif %}">{{ obj.get_approval_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:freightinvoice_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:freightinvoice_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:freightinvoice_delete' obj.pk %}" onsubmit="return confirm('Delete this freight invoice?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="receipt"></i><h3>No freight invoices</h3><p>Enter a carrier invoice to audit it against the contract rate.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
