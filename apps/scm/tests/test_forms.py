@@ -1279,3 +1279,161 @@ class TestSalesOrderCrossTenantFormScoping:
         form = SalesOrderAllocationForm(tenant=tenant_a)
         pks = set(form.fields["location"].queryset.values_list("pk", flat=True))
         assert location_b.pk not in pks
+
+
+# ================================================================================================
+# SCM 4.6 Transportation Management System
+# ================================================================================================
+
+# ================================================================ Mass-assignment exclusions
+class TestTMSMassAssignmentExclusions:
+    def test_carrier_form_excludes_number_and_derived_scorecard_fields(self):
+        from apps.scm.forms import CarrierForm
+        form = CarrierForm(tenant=None)
+        for field in ("number", "on_time_delivery_pct", "performance_summary"):
+            assert field not in form.fields
+
+    def test_load_form_excludes_number_status_and_actual_timestamps(self):
+        from apps.scm.forms import LoadForm
+        form = LoadForm(tenant=None)
+        for field in ("number", "status", "actual_departure", "actual_arrival"):
+            assert field not in form.fields
+
+    def test_shipment_form_excludes_number_status_and_tracking_derived_fields(self):
+        from apps.scm.forms import ShipmentForm
+        form = ShipmentForm(tenant=None)
+        for field in ("number", "status", "actual_pickup_at", "actual_delivery_at",
+                     "current_status_text", "last_known_location", "eta",
+                     "pod_received", "pod_received_at"):
+            assert field not in form.fields
+
+    def test_trackingevent_form_excludes_shipment_and_recorded_by(self):
+        from apps.scm.forms import TrackingEventForm
+        form = TrackingEventForm(tenant=None)
+        assert "shipment" not in form.fields
+        assert "recorded_by" not in form.fields
+
+    def test_freightinvoice_form_excludes_number_derived_amounts_and_approval_fields(self):
+        from apps.scm.forms import FreightInvoiceForm
+        form = FreightInvoiceForm(tenant=None)
+        for field in ("number", "billed_amount", "contract_amount", "variance_amount", "variance_pct",
+                     "match_status", "approval_status", "dispute_reason", "approved_by",
+                     "approved_at", "bill"):
+            assert field not in form.fields
+
+
+# ================================================================ Carrier party scoping (_carrier_parties)
+class TestCarrierPartyScoping:
+    def test_carrier_parties_accepts_supplier_and_vendor_roles(self, tenant_a, supplier_a, vendor_a):
+        from apps.scm.forms._common import _carrier_parties
+        pks = set(_carrier_parties(tenant_a).values_list("pk", flat=True))
+        assert supplier_a.pk in pks
+        assert vendor_a.pk in pks
+
+    def test_carrier_parties_excludes_a_customer_only_party(self, tenant_a, non_supplier_party_a):
+        from apps.scm.forms._common import _carrier_parties
+        pks = set(_carrier_parties(tenant_a).values_list("pk", flat=True))
+        assert non_supplier_party_a.pk not in pks
+
+    def test_carrier_parties_none_tenant_returns_empty(self):
+        from apps.scm.forms._common import _carrier_parties
+        assert _carrier_parties(None).count() == 0
+
+    def test_carrierform_party_field_uses_carrier_parties_scoping(
+        self, tenant_a, carrier_party_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import CarrierForm
+        form = CarrierForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert carrier_party_a.pk in pks
+        assert non_supplier_party_a.pk not in pks
+
+
+# ================================================================ FreightInvoiceForm.clean() cross-check
+class TestFreightInvoiceFormCarrierCrossCheck:
+    """A freight invoice's linked load/shipment must have been executed by the SAME carrier being
+    billed — a data-integrity guard added in the security review (an unassigned load/shipment is
+    still allowed)."""
+
+    def _base_data(self, carrier, **overrides):
+        data = {
+            "carrier": str(carrier.pk), "load": "", "shipment": "", "carrier_invoice_number": "",
+            "invoice_date": "", "due_date": "", "currency": "", "match_tolerance_pct": "2.00",
+            "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_rejects_a_load_executed_by_a_different_carrier(self, tenant_a, carrier_a, carrier_party_a):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import Carrier, Load
+        other_party = Party.objects.create(tenant=tenant_a, name="Other Carrier Co", kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=other_party, role="vendor")
+        other_carrier = Carrier.objects.create(tenant=tenant_a, party=other_party)
+        load = Load.objects.create(tenant=tenant_a, carrier=other_carrier)
+
+        from apps.scm.forms import FreightInvoiceForm
+        form = FreightInvoiceForm(data=self._base_data(carrier_a, load=str(load.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "load" in form.errors
+
+    def test_rejects_a_shipment_executed_by_a_different_carrier(self, tenant_a, carrier_a):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import Carrier, Shipment
+        other_party = Party.objects.create(tenant=tenant_a, name="Other Carrier Co 2", kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=other_party, role="vendor")
+        other_carrier = Carrier.objects.create(tenant=tenant_a, party=other_party)
+        shipment = Shipment.objects.create(tenant=tenant_a, carrier=other_carrier)
+
+        from apps.scm.forms import FreightInvoiceForm
+        form = FreightInvoiceForm(data=self._base_data(carrier_a, shipment=str(shipment.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "shipment" in form.errors
+
+    def test_allows_a_load_with_no_carrier_assigned_yet(self, tenant_a, carrier_a):
+        from apps.scm.models import Load
+        load = Load.objects.create(tenant=tenant_a)  # unassigned
+        from apps.scm.forms import FreightInvoiceForm
+        form = FreightInvoiceForm(data=self._base_data(carrier_a, load=str(load.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_allows_a_load_executed_by_the_same_carrier(self, tenant_a, carrier_a, load_a):
+        from apps.scm.forms import FreightInvoiceForm
+        form = FreightInvoiceForm(data=self._base_data(carrier_a, load=str(load_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+
+# ================================================================ Cross-tenant FORM binding
+class TestTMSCrossTenantFormScoping:
+    def test_carrierform_party_field_excludes_other_tenant(self, tenant_a, carrier_party_b):
+        from apps.scm.forms import CarrierForm
+        form = CarrierForm(tenant=tenant_a)
+        pks = set(form.fields["party"].queryset.values_list("pk", flat=True))
+        assert carrier_party_b.pk not in pks
+
+    def test_loadform_carrier_field_excludes_other_tenant(self, tenant_a, carrier_b):
+        from apps.scm.forms import LoadForm
+        form = LoadForm(tenant=tenant_a)
+        pks = set(form.fields["carrier"].queryset.values_list("pk", flat=True))
+        assert carrier_b.pk not in pks
+
+    def test_shipmentform_carrier_field_excludes_other_tenant(self, tenant_a, carrier_b):
+        from apps.scm.forms import ShipmentForm
+        form = ShipmentForm(tenant=tenant_a)
+        pks = set(form.fields["carrier"].queryset.values_list("pk", flat=True))
+        assert carrier_b.pk not in pks
+
+    def test_freightinvoiceform_carrier_field_excludes_other_tenant(self, tenant_a, carrier_b):
+        from apps.scm.forms import FreightInvoiceForm
+        form = FreightInvoiceForm(tenant=tenant_a)
+        pks = set(form.fields["carrier"].queryset.values_list("pk", flat=True))
+        assert carrier_b.pk not in pks
+
+    def test_crafted_carrier_post_with_other_tenant_party_is_rejected(self, tenant_a, carrier_party_b):
+        from apps.scm.forms import CarrierForm
+        form = CarrierForm(data={
+            "party": str(carrier_party_b.pk), "carrier_type": "asset_based", "primary_mode": "truckload",
+            "service_level": "standard", "status": "active",
+        }, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "party" in form.errors
