@@ -4552,3 +4552,743 @@ class TestSalesOrderCreateWithoutTenantWorkspace:
         resp = c.get(reverse("scm:salesorder_create"))
         assert resp.status_code == 302
         assert SalesOrder.objects.count() == 0
+
+
+# ================================================================================================
+# SCM 4.6 Transportation Management System
+# ================================================================================================
+
+# ================================================================ Carrier CRUD
+class TestCarrierCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, carrier_a):
+        resp = client_a.get(reverse("scm:carrier_list"))
+        assert resp.status_code == 200
+        assert carrier_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, carrier_a, carrier_b):
+        resp = client_a.get(reverse("scm:carrier_list"))
+        assert carrier_b not in resp.context["object_list"]
+
+    def test_list_search_by_scac_code(self, client_a, carrier_a):
+        carrier_a.scac_code = "ACME"
+        carrier_a.save(update_fields=["scac_code"])
+        resp = client_a.get(reverse("scm:carrier_list"), {"q": "ACME"})
+        assert carrier_a in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, carrier_a):
+        resp = client_a.get(reverse("scm:carrier_list"), {"status": "active"})
+        assert carrier_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:carrier_list"), {"status": "suspended"})
+        assert carrier_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_primary_mode(self, client_a, carrier_a):
+        resp = client_a.get(reverse("scm:carrier_list"), {"primary_mode": "truckload"})
+        assert carrier_a in resp.context["object_list"]
+
+    def _valid_data(self, party, **overrides):
+        data = {
+            "party": str(party.pk), "carrier_type": "asset_based", "primary_mode": "truckload",
+            "service_level": "standard", "scac_code": "", "mc_number": "", "dot_number": "",
+            "insurance_certificate_expiry": "", "primary_contact_name": "", "primary_contact_email": "",
+            "primary_contact_phone": "", "is_preferred": "", "status": "active", "notes": "",
+            **formset_data("rate_cards", []),
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, carrier_party_a):
+        from apps.scm.models import Carrier
+        resp = client_a.post(reverse("scm:carrier_create"), self._valid_data(carrier_party_a))
+        assert resp.status_code == 302
+        carrier = Carrier.objects.get(tenant=tenant_a, party=carrier_party_a)
+        assert carrier.number == "CAR-00001"
+
+    def test_edit_updates_fields(self, client_a, carrier_a, carrier_party_a):
+        resp = client_a.post(reverse("scm:carrier_edit", args=[carrier_a.pk]),
+                             self._valid_data(carrier_party_a, notes="edited", is_preferred="on"))
+        assert resp.status_code == 302
+        carrier_a.refresh_from_db()
+        assert carrier_a.notes == "edited"
+        assert carrier_a.is_preferred is True
+
+    def test_delete_removes_a_carrier_with_no_freight_invoices(self, client_a, carrier_a):
+        from apps.scm.models import Carrier
+        resp = client_a.post(reverse("scm:carrier_delete", args=[carrier_a.pk]))
+        assert resp.status_code == 302
+        assert not Carrier.objects.filter(pk=carrier_a.pk).exists()
+
+    def test_delete_blocked_when_the_carrier_has_freight_invoices(self, client_a, tenant_a, carrier_a):
+        from apps.scm.models import Carrier, FreightInvoice
+        FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+        resp = client_a.post(reverse("scm:carrier_delete", args=[carrier_a.pk]))
+        assert resp.status_code == 302
+        assert Carrier.objects.filter(pk=carrier_a.pk).exists()
+
+    def test_get_create_form_renders_200(self, client_a):
+        assert client_a.get(reverse("scm:carrier_create")).status_code == 200
+
+    def test_get_edit_form_renders_200(self, client_a, carrier_a):
+        assert client_a.get(reverse("scm:carrier_edit", args=[carrier_a.pk])).status_code == 200
+
+
+class TestCarrierScorecard:
+    def test_recompute_scorecard_action_updates_the_pct(self, client_a, tenant_a, carrier_a):
+        from django.utils import timezone
+        from apps.scm.models import Shipment
+        Shipment.objects.create(
+            tenant=tenant_a, carrier=carrier_a, status="delivered",
+            planned_delivery_date=datetime.date(2026, 1, 10),
+            actual_delivery_at=timezone.make_aware(datetime.datetime(2026, 1, 9, 12, 0)),
+        )
+        resp = client_a.post(reverse("scm:carrier_recompute_scorecard", args=[carrier_a.pk]))
+        assert resp.status_code == 302
+        carrier_a.refresh_from_db()
+        assert carrier_a.on_time_delivery_pct == Decimal("100.00")
+
+    def test_detail_shows_rate_cards_and_recent_shipments(self, client_a, carrier_a, shipment_a):
+        from apps.scm.models import CarrierRateCard
+        CarrierRateCard.objects.create(carrier=carrier_a, lane_name="Chicago → Dallas")
+        resp = client_a.get(reverse("scm:carrier_detail", args=[carrier_a.pk]))
+        assert resp.status_code == 200
+        assert len(resp.context["rate_cards"]) == 1
+        assert shipment_a in resp.context["recent_shipments"]
+
+
+# ================================================================ Load CRUD
+class TestLoadCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, load_a):
+        resp = client_a.get(reverse("scm:load_list"))
+        assert resp.status_code == 200
+        assert load_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, load_a, load_b):
+        resp = client_a.get(reverse("scm:load_list"))
+        assert load_b not in resp.context["object_list"]
+
+    def test_list_search_by_number(self, client_a, load_a):
+        resp = client_a.get(reverse("scm:load_list"), {"q": load_a.number})
+        assert load_a in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, load_a):
+        resp = client_a.get(reverse("scm:load_list"), {"status": "planning"})
+        assert load_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:load_list"), {"status": "delivered"})
+        assert load_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_carrier(self, client_a, load_a, carrier_a):
+        resp = client_a.get(reverse("scm:load_list"), {"carrier": str(carrier_a.pk)})
+        assert load_a in resp.context["object_list"]
+
+    def _valid_data(self, carrier=None, **overrides):
+        data = {
+            "carrier": str(carrier.pk) if carrier else "", "mode": "truckload", "equipment_type": "dry_van",
+            "origin_text": "", "destination_text": "", "planned_departure": "", "planned_arrival": "",
+            "distance_km": "", "estimated_fuel_cost": "", "freight_cost_estimate": "",
+            "equipment_capacity_weight_kg": "", "equipment_capacity_volume_cbm": "",
+            "driver_name": "", "vehicle_ref": "", "notes": "",
+            **formset_data("stops", []),
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, carrier_a):
+        from apps.scm.models import Load
+        resp = client_a.post(reverse("scm:load_create"), self._valid_data(carrier_a, origin_text="Chicago"))
+        assert resp.status_code == 302
+        load = Load.objects.get(tenant=tenant_a, origin_text="Chicago")
+        assert load.number == "LD-00001"
+        assert load.status == "planning"
+
+    def test_edit_updates_notes_while_planning(self, client_a, load_a, carrier_a):
+        resp = client_a.post(reverse("scm:load_edit", args=[load_a.pk]),
+                             self._valid_data(carrier_a, notes="edited"))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.notes == "edited"
+
+    def test_edit_blocked_once_booked(self, client_a, load_a):
+        client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        resp = client_a.get(reverse("scm:load_edit", args=[load_a.pk]))
+        assert resp.status_code == 302
+
+    def test_delete_while_planning_removes_it(self, client_a, load_a):
+        from apps.scm.models import Load
+        resp = client_a.post(reverse("scm:load_delete", args=[load_a.pk]))
+        assert resp.status_code == 302
+        assert not Load.objects.filter(pk=load_a.pk).exists()
+
+    def test_delete_blocked_once_booked(self, client_a, load_a):
+        from apps.scm.models import Load
+        client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        resp = client_a.post(reverse("scm:load_delete", args=[load_a.pk]))
+        assert resp.status_code == 302
+        assert Load.objects.filter(pk=load_a.pk).exists()
+
+    def test_detail_shows_utilization_context(self, client_a, load_a):
+        resp = client_a.get(reverse("scm:load_detail", args=[load_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["weight_util"] is None  # no equipment capacity set on the fixture
+        assert resp.context["planned_weight"] == Decimal("0")
+
+
+class TestLoadLifecycle:
+    def test_tender_requires_a_carrier(self, client_a, tenant_a):
+        from apps.scm.models import Load
+        load = Load.objects.create(tenant=tenant_a)
+        resp = client_a.post(reverse("scm:load_tender", args=[load.pk]))
+        assert resp.status_code == 302
+        load.refresh_from_db()
+        assert load.status == "planning"
+
+    def test_tender_with_a_carrier_moves_to_tendered(self, client_a, load_a):
+        resp = client_a.post(reverse("scm:load_tender", args=[load_a.pk]))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.status == "tendered"
+
+    def test_book_from_planning_moves_to_booked(self, client_a, load_a):
+        resp = client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.status == "booked"
+
+    def test_book_without_a_carrier_is_refused(self, client_a, tenant_a):
+        from apps.scm.models import Load
+        load = Load.objects.create(tenant=tenant_a)
+        resp = client_a.post(reverse("scm:load_book", args=[load.pk]))
+        load.refresh_from_db()
+        assert load.status == "planning"
+
+    def test_dispatch_from_booked_moves_to_in_transit_and_stamps_departure(self, client_a, load_a):
+        client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        resp = client_a.post(reverse("scm:load_dispatch", args=[load_a.pk]))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.status == "in_transit"
+        assert load_a.actual_departure is not None
+
+    def test_deliver_from_in_transit_moves_to_delivered_and_stamps_arrival(self, client_a, load_a):
+        client_a.post(reverse("scm:load_book", args=[load_a.pk]))
+        client_a.post(reverse("scm:load_dispatch", args=[load_a.pk]))
+        resp = client_a.post(reverse("scm:load_deliver", args=[load_a.pk]))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.status == "delivered"
+        assert load_a.actual_arrival is not None
+
+    def test_illegal_transition_is_refused_gracefully(self, client_a, load_a):
+        resp = client_a.post(reverse("scm:load_deliver", args=[load_a.pk]))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.status == "planning"
+
+    def test_cancel_from_planning_moves_to_cancelled(self, client_a, load_a):
+        resp = client_a.post(reverse("scm:load_cancel", args=[load_a.pk]))
+        assert resp.status_code == 302
+        load_a.refresh_from_db()
+        assert load_a.status == "cancelled"
+
+    def test_cancel_already_closed_load_is_refused(self, client_a, load_a):
+        client_a.post(reverse("scm:load_cancel", args=[load_a.pk]))
+        resp = client_a.post(reverse("scm:load_cancel", args=[load_a.pk]))
+        assert resp.status_code == 302
+
+
+# ================================================================ Shipment CRUD
+class TestShipmentCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, shipment_a):
+        resp = client_a.get(reverse("scm:shipment_list"))
+        assert resp.status_code == 200
+        assert shipment_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, shipment_a, shipment_b):
+        resp = client_a.get(reverse("scm:shipment_list"))
+        assert shipment_b not in resp.context["object_list"]
+
+    def test_list_search_by_number(self, client_a, shipment_a):
+        resp = client_a.get(reverse("scm:shipment_list"), {"q": shipment_a.number})
+        assert shipment_a in resp.context["object_list"]
+
+    def test_list_filter_by_direction(self, client_a, shipment_a):
+        resp = client_a.get(reverse("scm:shipment_list"), {"direction": "outbound"})
+        assert shipment_a in resp.context["object_list"]
+        resp2 = client_a.get(reverse("scm:shipment_list"), {"direction": "inbound"})
+        assert shipment_a not in resp2.context["object_list"]
+
+    def test_list_filter_by_carrier(self, client_a, shipment_a, carrier_a):
+        resp = client_a.get(reverse("scm:shipment_list"), {"carrier": str(carrier_a.pk)})
+        assert shipment_a in resp.context["object_list"]
+
+    def _valid_data(self, carrier=None, **overrides):
+        data = {
+            "direction": "outbound", "carrier": str(carrier.pk) if carrier else "", "load": "",
+            "sales_order": "", "purchase_order": "", "ship_from_address": "", "ship_to_address": "",
+            "origin_text": "", "destination_text": "", "mode": "truckload",
+            "planned_pickup_date": "", "planned_delivery_date": "", "weight_kg": "", "volume_cbm": "",
+            "package_count": "", "carrier_tracking_number": "", "freight_cost_estimate": "", "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant(self, client_a, tenant_a, carrier_a):
+        from apps.scm.models import Shipment
+        resp = client_a.post(reverse("scm:shipment_create"),
+                             self._valid_data(carrier_a, origin_text="Chicago"))
+        assert resp.status_code == 302
+        shipment = Shipment.objects.get(tenant=tenant_a, origin_text="Chicago")
+        assert shipment.number == "SHP-00001"
+        assert shipment.status == "planned"
+
+    def test_edit_updates_notes_while_planned(self, client_a, shipment_a, carrier_a):
+        resp = client_a.post(reverse("scm:shipment_edit", args=[shipment_a.pk]),
+                             self._valid_data(carrier_a, notes="edited"))
+        assert resp.status_code == 302
+        shipment_a.refresh_from_db()
+        assert shipment_a.notes == "edited"
+
+    def test_edit_blocked_once_in_transit(self, client_a, shipment_a):
+        client_a.post(reverse("scm:shipment_book", args=[shipment_a.pk]))
+        from apps.scm.models import TrackingEvent
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="pickup")
+        shipment_a.apply_tracking_event(event)
+        resp = client_a.get(reverse("scm:shipment_edit", args=[shipment_a.pk]))
+        assert resp.status_code == 302
+
+    def test_delete_while_planned_removes_it(self, client_a, shipment_a):
+        from apps.scm.models import Shipment
+        resp = client_a.post(reverse("scm:shipment_delete", args=[shipment_a.pk]))
+        assert resp.status_code == 302
+        assert not Shipment.objects.filter(pk=shipment_a.pk).exists()
+
+    def test_delete_blocked_once_in_transit(self, client_a, shipment_a):
+        from apps.scm.models import Shipment, TrackingEvent
+        client_a.post(reverse("scm:shipment_book", args=[shipment_a.pk]))
+        event = TrackingEvent.objects.create(shipment=shipment_a, event_type="pickup")
+        shipment_a.apply_tracking_event(event)
+        resp = client_a.post(reverse("scm:shipment_delete", args=[shipment_a.pk]))
+        assert resp.status_code == 302
+        assert Shipment.objects.filter(pk=shipment_a.pk).exists()
+
+    def test_detail_shows_events_and_the_event_form(self, client_a, shipment_a):
+        resp = client_a.get(reverse("scm:shipment_detail", args=[shipment_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["events"] == []
+        assert resp.context["event_form"] is not None
+
+
+class TestShipmentLifecycle:
+    def test_book_requires_a_carrier(self, client_a, tenant_a):
+        from apps.scm.models import Shipment
+        shipment = Shipment.objects.create(tenant=tenant_a)
+        resp = client_a.post(reverse("scm:shipment_book", args=[shipment.pk]))
+        shipment.refresh_from_db()
+        assert shipment.status == "planned"
+
+    def test_book_with_a_carrier_moves_to_booked(self, client_a, shipment_a):
+        resp = client_a.post(reverse("scm:shipment_book", args=[shipment_a.pk]))
+        assert resp.status_code == 302
+        shipment_a.refresh_from_db()
+        assert shipment_a.status == "booked"
+
+    def test_add_pickup_event_moves_booked_shipment_to_in_transit(self, client_a, shipment_a):
+        client_a.post(reverse("scm:shipment_book", args=[shipment_a.pk]))
+        resp = client_a.post(reverse("scm:shipment_add_event", args=[shipment_a.pk]), {
+            "event_type": "pickup", "event_at": "2026-01-05T09:00", "location_text": "Chicago DC",
+            "latitude": "", "longitude": "", "source": "manual", "notes": "",
+        })
+        assert resp.status_code == 302
+        shipment_a.refresh_from_db()
+        assert shipment_a.status == "in_transit"
+        assert shipment_a.actual_pickup_at is not None
+
+    def test_add_delivered_event_closes_shipment_and_recomputes_carrier_scorecard(
+        self, client_a, shipment_a, carrier_a,
+    ):
+        shipment_a.planned_delivery_date = datetime.date(2026, 1, 10)
+        shipment_a.save(update_fields=["planned_delivery_date"])
+        resp = client_a.post(reverse("scm:shipment_add_event", args=[shipment_a.pk]), {
+            "event_type": "delivered", "event_at": "2026-01-09T14:00", "location_text": "Dallas DC",
+            "latitude": "", "longitude": "", "source": "manual", "notes": "",
+        })
+        assert resp.status_code == 302
+        shipment_a.refresh_from_db()
+        assert shipment_a.status == "delivered"
+        assert shipment_a.actual_delivery_at is not None
+        carrier_a.refresh_from_db()
+        assert carrier_a.on_time_delivery_pct == Decimal("100.00")
+
+    def test_add_event_blocked_once_shipment_is_closed(self, client_a, shipment_a):
+        from apps.scm.models import TrackingEvent
+        shipment_a.status = "delivered"
+        shipment_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:shipment_add_event", args=[shipment_a.pk]), {
+            "event_type": "exception", "event_at": "2026-01-05T09:00", "location_text": "",
+            "latitude": "", "longitude": "", "source": "manual", "notes": "",
+        })
+        assert resp.status_code == 302
+        assert not TrackingEvent.objects.filter(shipment=shipment_a).exists()
+
+    def test_add_event_with_invalid_data_does_not_500(self, client_a, shipment_a):
+        resp = client_a.post(reverse("scm:shipment_add_event", args=[shipment_a.pk]), {
+            "event_type": "not-a-real-type", "event_at": "", "location_text": "",
+            "latitude": "", "longitude": "", "source": "manual", "notes": "",
+        })
+        assert resp.status_code == 302
+
+    def test_cancel_with_a_reason_appends_it_to_notes(self, client_a, shipment_a):
+        resp = client_a.post(reverse("scm:shipment_cancel", args=[shipment_a.pk]),
+                             {"cancel_reason": "customer request"})
+        assert resp.status_code == 302
+        shipment_a.refresh_from_db()
+        assert shipment_a.status == "cancelled"
+        assert "customer request" in shipment_a.notes
+
+    def test_cancel_already_closed_shipment_is_refused(self, client_a, shipment_a):
+        client_a.post(reverse("scm:shipment_cancel", args=[shipment_a.pk]))
+        resp = client_a.post(reverse("scm:shipment_cancel", args=[shipment_a.pk]))
+        assert resp.status_code == 302
+
+
+# ================================================================ FreightInvoice CRUD
+class TestFreightInvoiceCRUD:
+    def test_list_returns_200_and_contains_own_tenant_row(self, client_a, freight_invoice_a):
+        resp = client_a.get(reverse("scm:freightinvoice_list"))
+        assert resp.status_code == 200
+        assert freight_invoice_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, freight_invoice_a, freight_invoice_b):
+        resp = client_a.get(reverse("scm:freightinvoice_list"))
+        assert freight_invoice_b not in resp.context["object_list"]
+
+    def test_list_search_by_carrier_invoice_number(self, client_a, freight_invoice_a):
+        freight_invoice_a.carrier_invoice_number = "CARR-42"
+        freight_invoice_a.save(update_fields=["carrier_invoice_number"])
+        resp = client_a.get(reverse("scm:freightinvoice_list"), {"q": "CARR-42"})
+        assert freight_invoice_a in resp.context["object_list"]
+
+    def test_list_filter_by_match_status(self, client_a, freight_invoice_a):
+        resp = client_a.get(reverse("scm:freightinvoice_list"), {"match_status": "not_matched"})
+        assert freight_invoice_a in resp.context["object_list"]
+
+    def test_list_filter_by_carrier(self, client_a, freight_invoice_a, carrier_a):
+        resp = client_a.get(reverse("scm:freightinvoice_list"), {"carrier": str(carrier_a.pk)})
+        assert freight_invoice_a in resp.context["object_list"]
+
+    def _valid_data(self, carrier, **overrides):
+        data = {
+            "carrier": str(carrier.pk), "load": "", "shipment": "", "carrier_invoice_number": "",
+            "invoice_date": "", "due_date": "", "currency": "", "match_tolerance_pct": "2.00", "notes": "",
+            **formset_data("lines", []),
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_saves_with_request_tenant_and_runs_the_audit(self, client_a, tenant_a, carrier_a):
+        from apps.scm.models import FreightInvoice
+        data = self._valid_data(carrier_a, notes="fresh invoice",
+                                **formset_data("lines", [
+                                    {"id": "", "charge_type": "linehaul", "description": "",
+                                     "billed_amount": "500.00", "contract_amount": "500.00"},
+                                ]))
+        resp = client_a.post(reverse("scm:freightinvoice_create"), data)
+        assert resp.status_code == 302
+        inv = FreightInvoice.objects.get(tenant=tenant_a, notes="fresh invoice")
+        assert inv.number == "FRT-00001"
+        assert inv.billed_amount == Decimal("500.00")
+        assert inv.match_status == "matched"
+
+    def test_edit_blocked_once_approved(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        resp = client_a.get(reverse("scm:freightinvoice_edit", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+
+    def test_delete_removes_a_pending_invoice(self, client_a, freight_invoice_a):
+        from apps.scm.models import FreightInvoice
+        resp = client_a.post(reverse("scm:freightinvoice_delete", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        assert not FreightInvoice.objects.filter(pk=freight_invoice_a.pk).exists()
+
+    def test_delete_blocked_once_approved(self, client_a, freight_invoice_a):
+        from apps.scm.models import FreightInvoice
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        resp = client_a.post(reverse("scm:freightinvoice_delete", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        assert FreightInvoice.objects.filter(pk=freight_invoice_a.pk).exists()
+
+    def test_detail_shows_lines(self, client_a, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a, billed_amount=Decimal("100"),
+                                          contract_amount=Decimal("100"))
+        resp = client_a.get(reverse("scm:freightinvoice_detail", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 200
+        assert len(resp.context["lines"]) == 1
+
+
+class TestFreightInvoiceLifecycleActions:
+    def test_run_audit_action_recomputes_match_status(self, client_a, freight_invoice_a):
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a,
+                                          billed_amount=Decimal("600"), contract_amount=Decimal("500"))
+        resp = client_a.post(reverse("scm:freightinvoice_run_audit", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.match_status == "price_variance"
+
+    def test_run_audit_is_frozen_once_approved(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        resp = client_a.post(reverse("scm:freightinvoice_run_audit", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+
+    def test_dispute_requires_a_reason(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_dispute", args=[freight_invoice_a.pk]), {"dispute_reason": ""})
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.match_status != "disputed"
+
+    def test_dispute_with_a_reason_sets_disputed(self, client_a, freight_invoice_a):
+        resp = client_a.post(reverse("scm:freightinvoice_dispute", args=[freight_invoice_a.pk]),
+                             {"dispute_reason": "carrier overcharged"})
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.match_status == "disputed"
+        assert freight_invoice_a.dispute_reason == "carrier overcharged"
+
+    def test_dispute_blocked_once_approved(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        client_a.post(reverse("scm:freightinvoice_dispute", args=[freight_invoice_a.pk]),
+                      {"dispute_reason": "too late"})
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.match_status != "disputed"
+
+    def test_approve_blocked_while_disputed(self, client_a, freight_invoice_a):
+        freight_invoice_a.match_status = "disputed"
+        freight_invoice_a.save(update_fields=["match_status"])
+        resp = client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "pending"
+
+
+# ================================================================================================
+# FreightInvoice approve/reject state machine — the code-review regression: a crafted POST must
+# never overturn an already-decided invoice.
+# ================================================================================================
+class TestFreightInvoiceApprovalStateMachine:
+    def test_reject_on_an_approved_invoice_is_blocked(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "approved"
+
+        resp = client_a.post(reverse("scm:freightinvoice_reject", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "approved"  # unchanged
+
+    def test_approve_on_a_rejected_invoice_is_blocked(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_reject", args=[freight_invoice_a.pk]))
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "rejected"
+
+        resp = client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "rejected"  # unchanged
+
+    def test_reject_already_handed_off_invoice_is_blocked(self, client_a, freight_invoice_a):
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        client_a.post(reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk]))
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.bill_id is not None
+
+        resp = client_a.post(reverse("scm:freightinvoice_reject", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.approval_status == "approved"
+
+
+# ================================================================================================
+# FreightInvoice.handoff — drafts an accounting.Bill, never posts a journal entry, and is idempotent.
+# ================================================================================================
+class TestFreightInvoiceHandoff:
+    def test_handoff_creates_exactly_one_draft_bill_for_the_carrier_party(
+        self, client_a, tenant_a, freight_invoice_a, carrier_a,
+    ):
+        from apps.accounting.models import Bill
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a, billed_amount=Decimal("500.00"),
+                                          contract_amount=Decimal("500.00"))
+        freight_invoice_a.run_audit()
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+
+        resp = client_a.post(reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.bill_id is not None
+        bill = freight_invoice_a.bill
+        assert bill.party_id == carrier_a.party_id
+        assert bill.status == "draft"
+        assert bill.journal_entry_id is None
+        assert Bill.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_second_handoff_is_a_no_op_and_does_not_duplicate_the_bill(
+        self, client_a, tenant_a, freight_invoice_a,
+    ):
+        from apps.accounting.models import Bill
+        from apps.scm.models import FreightInvoiceLine
+        FreightInvoiceLine.objects.create(freight_invoice=freight_invoice_a, billed_amount=Decimal("500.00"),
+                                          contract_amount=Decimal("500.00"))
+        freight_invoice_a.run_audit()
+        client_a.post(reverse("scm:freightinvoice_approve", args=[freight_invoice_a.pk]))
+        client_a.post(reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk]))
+        first_bill_id = freight_invoice_a.__class__.objects.get(pk=freight_invoice_a.pk).bill_id
+
+        client_a.post(reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk]))
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.bill_id == first_bill_id
+        assert Bill.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_handoff_requires_approval_first(self, client_a, freight_invoice_a):
+        resp = client_a.post(reverse("scm:freightinvoice_handoff", args=[freight_invoice_a.pk]))
+        assert resp.status_code == 302
+        freight_invoice_a.refresh_from_db()
+        assert freight_invoice_a.bill_id is None
+
+
+# ================================================================================================
+# Negative-input hardening (L11/L9) — junk FK/status filters and out-of-range pages must 200, not 500.
+# ================================================================================================
+class TestTMSNegativeInputHardening:
+    def test_carrier_list_junk_carrier_type_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:carrier_list"), {"carrier_type": "not-a-real-type"})
+        assert resp.status_code == 200
+
+    def test_carrier_list_junk_status_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:carrier_list"), {"status": "nonsense"})
+        assert resp.status_code == 200
+
+    def test_carrier_list_page_past_the_end_returns_200(self, client_a, carrier_a):
+        resp = client_a.get(reverse("scm:carrier_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_load_list_junk_carrier_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:load_list"), {"carrier": "abc"})
+        assert resp.status_code == 200
+
+    def test_load_list_junk_status_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:load_list"), {"status": "nonsense"})
+        assert resp.status_code == 200
+
+    def test_load_list_page_2_returns_200_when_rows_exceed_page_size(self, client_a, tenant_a, carrier_a):
+        from apps.scm.models import Load
+        for _ in range(20):
+            Load.objects.create(tenant=tenant_a, carrier=carrier_a)
+        resp = client_a.get(reverse("scm:load_list"), {"page": "2"})
+        assert resp.status_code == 200
+
+    def test_shipment_list_junk_carrier_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:shipment_list"), {"carrier": "abc"})
+        assert resp.status_code == 200
+
+    def test_shipment_list_junk_status_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:shipment_list"), {"status": "nonsense"})
+        assert resp.status_code == 200
+
+    def test_shipment_list_page_past_the_end_returns_200(self, client_a, shipment_a):
+        resp = client_a.get(reverse("scm:shipment_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+    def test_freightinvoice_list_junk_carrier_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:freightinvoice_list"), {"carrier": "abc"})
+        assert resp.status_code == 200
+
+    def test_freightinvoice_list_junk_match_status_filter_returns_200(self, client_a):
+        resp = client_a.get(reverse("scm:freightinvoice_list"), {"match_status": "nonsense"})
+        assert resp.status_code == 200
+
+    def test_freightinvoice_list_page_past_the_end_returns_200(self, client_a, freight_invoice_a):
+        resp = client_a.get(reverse("scm:freightinvoice_list"), {"page": "999"})
+        assert resp.status_code == 200
+
+
+# ================================================================================================
+# List-view N+1 guards (locks in the select_related as rows grow)
+# ================================================================================================
+class TestTMSListQueryCounts:
+    def test_carrier_list_no_n_plus_one_query_blowup(self, client_a, tenant_a, django_assert_max_num_queries):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import Carrier
+        for i in range(8):
+            party = Party.objects.create(tenant=tenant_a, name=f"Carrier {i}", kind="organization")
+            PartyRole.objects.create(tenant=tenant_a, party=party, role="vendor")
+            Carrier.objects.create(tenant=tenant_a, party=party)
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:carrier_list"))
+        assert resp.status_code == 200
+
+    def test_load_list_no_n_plus_one_query_blowup(
+        self, client_a, tenant_a, carrier_a, django_assert_max_num_queries,
+    ):
+        from apps.scm.models import Load
+        for _ in range(8):
+            Load.objects.create(tenant=tenant_a, carrier=carrier_a)
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:load_list"))
+        assert resp.status_code == 200
+
+    def test_shipment_list_no_n_plus_one_query_blowup(
+        self, client_a, tenant_a, carrier_a, django_assert_max_num_queries,
+    ):
+        from apps.scm.models import Shipment
+        for _ in range(8):
+            Shipment.objects.create(tenant=tenant_a, carrier=carrier_a)
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:shipment_list"))
+        assert resp.status_code == 200
+
+    def test_freightinvoice_list_no_n_plus_one_query_blowup(
+        self, client_a, tenant_a, carrier_a, django_assert_max_num_queries,
+    ):
+        from apps.scm.models import FreightInvoice
+        for _ in range(8):
+            FreightInvoice.objects.create(tenant=tenant_a, carrier=carrier_a)
+        with django_assert_max_num_queries(15):
+            resp = client_a.get(reverse("scm:freightinvoice_list"))
+        assert resp.status_code == 200
+
+
+# ================================================================ Create guarded when the user has no tenant
+class TestTMSCreateWithoutTenantWorkspace:
+    def test_carrier_create_redirects(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        from apps.scm.models import Carrier
+        user = User.objects.create_user(email="orphan-tms@example.com", username="orphan_tms", password="x",
+                                        tenant=None)
+        c = Client()
+        c.force_login(user)
+        resp = c.get(reverse("scm:carrier_create"))
+        assert resp.status_code == 302
+        assert Carrier.objects.count() == 0
+
+    def test_load_create_redirects(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        from apps.scm.models import Load
+        user = User.objects.create_user(email="orphan-tms2@example.com", username="orphan_tms2", password="x",
+                                        tenant=None)
+        c = Client()
+        c.force_login(user)
+        resp = c.get(reverse("scm:load_create"))
+        assert resp.status_code == 302
+        assert Load.objects.count() == 0
+
+    def test_freightinvoice_create_redirects(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        from apps.scm.models import FreightInvoice
+        user = User.objects.create_user(email="orphan-tms3@example.com", username="orphan_tms3", password="x",
+                                        tenant=None)
+        c = Client()
+        c.force_login(user)
+        resp = c.get(reverse("scm:freightinvoice_create"))
+        assert resp.status_code == 302
+        assert FreightInvoice.objects.count() == 0
