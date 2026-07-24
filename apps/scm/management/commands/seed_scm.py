@@ -94,10 +94,14 @@ class Command(BaseCommand):
             # 4.6 TMS follows 4.5/4.1: shipments link the seeded sales/purchase orders, and the
             # inbound delivered shipment gives the carrier scorecard a real on-time signal.
             self._seed_tms_tenant(tenant)
+            # 4.7 LAST: it back-dates demand history onto 4.5's sales orders, fits a forecast on
+            # that derived history, and recalculates 4.3's reorder rules — so every one of those
+            # must already exist.
+            self._seed_demand_planning_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation seed complete."))
+            "4.6 transportation + 4.7 demand planning seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -500,6 +504,239 @@ class Command(BaseCommand):
             f"{tenant.name}: seeded orders {o1.number} [{o1.get_status_display()}], "
             f"{o2.number} [{o2.get_status_display()}], {o3.number} [{o3.get_status_display()}].")
 
+    # ---------------------------------------------------------------- 4.7 Demand Planning
+    #: Monthly demand shape for the seeded history — a real Q4-peaking curve, so the derived
+    #: seasonality indices and the statistical fit both have something honest to find.
+    SEASONAL_SHAPE = [Decimal(s) for s in
+                      ("0.80", "0.80", "0.90", "0.90", "1.00", "1.00",
+                       "1.00", "1.05", "1.10", "1.20", "1.40", "1.50")]
+
+    def _seed_demand_history(self, tenant, item, customer, months, base_qty, unit_price):
+        """Back-date ``months`` of closed sales orders so demand history actually EXISTS.
+
+        4.7 derives every history series from ``SalesOrderLine`` — it stores none of its own — and
+        4.5's seeder only creates today's orders. Without a back-dated trail the forecast, the
+        seasonality derivation and the safety-stock calculator would all correctly compute zero, and
+        every 4.7 page would demo nothing. These are ordinary closed orders, so they flush with the
+        rest of 4.5's rows and no 4.7-only history table is introduced.
+        """
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        today = timezone.localdate()
+        created = 0
+        for offset in range(months, 0, -1):
+            total = today.year * 12 + (today.month - 1) - offset
+            year, month = divmod(total, 12)
+            order_date = datetime.date(year, month + 1, 12)
+            factor = self.SEASONAL_SHAPE[month]
+            # A gentle year-on-year lift so the trend engines have a slope to find.
+            growth = Decimal("1") + Decimal("0.10") * Decimal((months - offset) // 12)
+            quantity = (base_qty * factor * growth).quantize(Decimal("1"))
+            order = SalesOrder(tenant=tenant, customer=customer, source_channel="web",
+                               order_date=order_date, notes="Seeded demand history.")
+            order.save()
+            SalesOrderLine.objects.create(sales_order=order, item=item,
+                                          quantity_ordered=quantity, unit_price=unit_price)
+            order.recalc_totals()
+            order.status = "closed"
+            order.save(update_fields=["status", "updated_at"])
+            created += 1
+        return created
+
+    def _seed_demand_planning_tenant(self, tenant):
+        """4.7 Demand Planning demo: back-dated demand history, a seasonal curve and a promotion, an
+        approved forecast driven through the REAL generate/consensus code paths, three signals at
+        three triage points, three consensus adjustments, and reorder rules switched onto a
+        service-level safety-stock policy with a calculated-but-not-applied recommendation.
+
+        Idempotent via a DemandForecast guard. Runs last: it needs 4.3's items/locations/reorder
+        rules and 4.5's sales orders to exist first.
+
+        Everything is produced through the same methods the views call — ``generate_periods()``,
+        ``apply_to_forecast()``, ``recompute_consensus()``, ``detect_order_surge()``,
+        ``calculate()`` — so the demo data is exactly what the app would have produced, not
+        hand-set fields that happen to look plausible.
+        """
+        from apps.scm.models import (DemandForecast, DemandSignal, ForecastAdjustment, Item,
+                                     Location, ReorderRule, SeasonalityIndex, SeasonalityProfile,
+                                     SupplierCatalogItem)
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        if DemandForecast.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: demand planning data already exists — skipping.")
+            return
+
+        ws16 = Item.objects.filter(tenant=tenant, sku="WS-16").first()
+        mon27 = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        if ws16 is None or mon27 is None or main is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no seeded items/locations — skipping demand planning seed."))
+            return
+
+        admin = self._admin(tenant)
+        today = timezone.localdate()
+        currency = Currency.objects.filter(code="USD").first()
+        customer = self._customer(tenant, "Fabrikam Retail Group", "organization")
+        history_months = 24
+        orders = self._seed_demand_history(tenant, ws16, customer, history_months,
+                                           Decimal("20"), Decimal("1450.00"))
+        orders += self._seed_demand_history(tenant, mon27, customer, history_months,
+                                            Decimal("35"), Decimal("349.00"))
+
+        # 1) A recurring seasonal curve, derived from the history that now exists.
+        seasonal = SeasonalityProfile(tenant=tenant, name="Workstation Q4 seasonality",
+                                      profile_type="seasonal", bucket="month", scope="item",
+                                      item=ws16, derived_from_years=2,
+                                      notes="Derived from two years of closed sales orders.")
+        seasonal.save()
+        for index, factor in enumerate(self.SEASONAL_SHAPE, start=1):
+            SeasonalityIndex.objects.create(
+                profile=seasonal, period_number=index,
+                period_label=datetime.date(2000, index, 1).strftime("%b"), index_factor=factor)
+
+        # 2) A finite promotional window — the SAME table, a different profile_type. Exercises the
+        #    other half of the Seasonality Analysis bullet without a second model.
+        promo_start = datetime.date(today.year, 11, 1) if today.month <= 11 else \
+            datetime.date(today.year + 1, 11, 1)
+        SeasonalityProfile.objects.create(
+            tenant=tenant, name="Black Friday monitor promotion", profile_type="promotion",
+            bucket="month", scope="item", item=mon27,
+            event_start=promo_start, event_end=promo_start + datetime.timedelta(days=29),
+            uplift_pct=Decimal("25.00"), promotion_mechanic="price_discount",
+            cannibalization_pct=Decimal("10.00"), cannibalized_category=ws16.category,
+            notes="Seeded: 25% uplift inside the window, 10% taken from the sibling category.")
+
+        # 3) The plan of record — generated through the real code path, then submitted and approved.
+        #    The horizon deliberately OPENS THREE MONTHS AGO and runs six months, so the demo has
+        #    elapsed periods (the accuracy panel and league table score against real actuals), the
+        #    current month (the order-surge detector has a live period to compare against), and
+        #    future periods (the signals and consensus adjustments have something to move).
+        next_month = datetime.date(today.year + (today.month // 12), (today.month % 12) + 1, 1)
+        horizon_start = self._add_months(datetime.date(today.year, today.month, 1), -3)
+        forecast = DemandForecast(
+            tenant=tenant, name="Workstation demand — rolling 6 months", item=ws16, location=main,
+            demand_source="sales_orders", bucket="month", horizon_start=horizon_start,
+            horizon_end=self._month_end(self._add_months(horizon_start, 5)),
+            history_months=history_months,
+            method="moving_average", method_parameter=Decimal("3"), seasonality_profile=seasonal,
+            currency=currency, scenario="baseline",
+            notes="Seeded: fitted on derived sales history, seasonalised by the Q4 curve.")
+        forecast.save()
+        forecast.generate_periods()
+        for period in forecast.periods.all():
+            period.unit_price = Decimal("1450.00")
+            period.save(update_fields=["unit_price"])
+        forecast.status = "in_review"
+        forecast.save(update_fields=["status", "updated_at"])
+        forecast.status, forecast.approved_by, forecast.approved_at = "approved", admin, timezone.now()
+        forecast.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+
+        # 4) A second forecast left in draft so the list shows two statuses and the action gating.
+        draft = DemandForecast(
+            tenant=tenant, name="Monitor demand — best fit trial", item=mon27,
+            demand_source="sales_orders", bucket="month", horizon_start=next_month,
+            horizon_end=self._month_end(self._add_months(next_month, 2)),
+            history_months=history_months, method="best_fit", currency=currency,
+            scenario="optimistic", notes="Seeded: left in draft — generate it to see best fit run.")
+        draft.save()
+
+        # 5) Signals at three triage points. The surge one is produced by the REAL detector reading
+        #    live sales orders, which is what proves demand sensing works with zero integrations.
+        detected = detect_order_surge(tenant)
+        for signal in detected:
+            signal.status, signal.reviewed_by, signal.reviewed_at = ("under_review", admin,
+                                                                     timezone.now())
+            signal.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
+            signal.apply_to_forecast(forecast)
+        DemandSignal.objects.create(
+            tenant=tenant, signal_type="customer_forecast", source="customer",
+            source_reference="Fabrikam CPFR week 12", item=ws16, location=main, customer=customer,
+            observed_at=timezone.now(), effective_from=next_month,
+            effective_to=self._month_end(next_month), horizon_days=30,
+            signal_value=Decimal("26"), baseline_value=Decimal("20"), impact_direction="increase",
+            impact_pct=Decimal("30.00"), impact_quantity=Decimal("6"), confidence="high",
+            notes="Seeded: customer shared their own forecast for next month.")
+        DemandSignal.objects.create(
+            tenant=tenant, signal_type="weather", source="weather_service",
+            source_reference="Regional cold snap advisory", category=ws16.category,
+            observed_at=timezone.now(), horizon_days=21, signal_value=Decimal("0"),
+            baseline_value=Decimal("0"), impact_direction="decrease", impact_pct=Decimal("8.00"),
+            impact_quantity=Decimal("3"), confidence="low",
+            notes="Seeded: sits in the triage queue as New.")
+
+        # 6) Consensus adjustments — one accepted (so the roll-up is genuinely non-zero), one
+        #    awaiting review, one rejected.
+        # Aim the period-level adjustments at a FUTURE period — overriding a month that has already
+        # elapsed would be nonsense on a demo screen (and would skew its accuracy score).
+        first_period = (forecast.periods.filter(period_start=next_month).first()
+                        or forecast.periods.order_by("-sequence").first())
+        org_unit = self._org_unit(tenant)
+        ForecastAdjustment.objects.create(
+            tenant=tenant, forecast=forecast, period=first_period, contributor_function="sales",
+            submitted_by=admin, org_unit=org_unit, adjustment_type="delta",
+            proposed_quantity=Decimal("8"), reason_code="new_customer", confidence="high",
+            status="accepted", reviewed_by=admin, reviewed_at=timezone.now(),
+            review_note="Seeded: accepted — the pipeline supports it.",
+            rationale="A new regional reseller signed this quarter and their first order lands in "
+                      "the opening period.")
+        ForecastAdjustment.objects.create(
+            tenant=tenant, forecast=forecast, contributor_function="marketing",
+            submitted_by=admin, org_unit=org_unit, adjustment_type="percent",
+            adjustment_pct=Decimal("12.00"), reason_code="promotion", confidence="medium",
+            rationale="Q4 campaign spend is up on last year; expecting a broad lift across the "
+                      "horizon rather than one period.")
+        ForecastAdjustment.objects.create(
+            tenant=tenant, forecast=forecast, period=first_period, contributor_function="finance",
+            submitted_by=admin, org_unit=org_unit, adjustment_type="absolute",
+            proposed_quantity=Decimal("40"), reason_code="budget_target", confidence="low",
+            status="rejected", reviewed_by=admin, reviewed_at=timezone.now(),
+            review_note="Seeded: rejected — that is the budget target, not a demand signal.",
+            rationale="Budget commits to 40 units in the opening period.")
+        forecast.recompute_consensus()
+
+        # 7) Switch the existing 4.3 rules onto a real safety-stock policy and CALCULATE — without
+        #    applying, so the report has a genuine computed-vs-live variance and the Apply button
+        #    has something to do. This is the whole compute-then-accept contract in the seed data.
+        rules = list(ReorderRule.objects.filter(tenant=tenant).select_related("item"))
+        ReorderRule.assign_abc_classes(tenant, rules)
+        for rule in rules:
+            catalog_lead = (SupplierCatalogItem.objects
+                            .filter(catalog__tenant=tenant, lead_time_days__gt=0)
+                            .values_list("lead_time_days", flat=True).first())
+            rule.safety_stock_method = "service_level"
+            rule.service_level_pct = Decimal("95.00")
+            rule.lead_time_days = catalog_lead or 7
+            rule.lead_time_variability_days = Decimal("2.00")
+            rule.review_period_days = 7
+            if rule.item_id == ws16.pk:
+                rule.seasonality_profile = seasonal
+                rule.demand_forecast = forecast
+            rule.calculate()
+            rule.save(update_fields=[
+                "safety_stock_method", "service_level_pct", "lead_time_days",
+                "lead_time_variability_days", "review_period_days", "seasonality_profile",
+                "demand_forecast", "avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
+                "computed_safety_stock", "computed_reorder_point", "last_calculated_at",
+                "updated_at"])
+
+        self.stdout.write(
+            f"{tenant.name}: seeded demand planning ({orders} back-dated history orders, "
+            f"2 seasonality profiles, forecast {forecast.number} [approved] + {draft.number} "
+            f"[draft], {len(detected) + 2} demand signals, 3 consensus adjustments, "
+            f"{len(rules)} reorder rules calculated but NOT applied).")
+        self.stdout.write(
+            "  Demand history is DERIVED from those sales orders — 4.7 stores no history table.")
+
+    @staticmethod
+    def _add_months(value, months):
+        total = value.year * 12 + (value.month - 1) + months
+        year, month = divmod(total, 12)
+        return datetime.date(year, month + 1, 1)
+
+    @staticmethod
+    def _month_end(value):
+        following = Command._add_months(datetime.date(value.year, value.month, 1), 1)
+        return following - datetime.timedelta(days=1)
+
     def _seed_tms_tenant(self, tenant):
         """4.6 TMS demo: two carriers (+ rate cards), a booked load with a two-stop route, an
         outbound in-transit shipment consolidated on the load, an inbound delivered shipment (which
@@ -629,7 +866,19 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.6 TMS first (newest module). FreightInvoice.carrier is PROTECT, so freight invoices must
+        # 4.7 Demand Planning first (newest module). DemandForecast.item is PROTECT, so the whole
+        # forecast tree has to clear before 4.3's items below; ForecastAdjustment.forecast and
+        # DemandSignal.applied_to_forecast point AT the forecast, so they go first. ReorderRule's
+        # 4.7 links are SET_NULL, so the existing rule teardown below needs no change.
+        from apps.scm.models import (DemandForecast, DemandForecastPeriod, DemandSignal,
+                                     ForecastAdjustment, SeasonalityProfile)
+        ForecastAdjustment.objects.all().delete()
+        DemandSignal.objects.all().delete()
+        DemandForecastPeriod.objects.all().delete()
+        DemandForecast.objects.all().delete()
+        SeasonalityProfile.objects.all().delete()   # index rows cascade
+
+        # 4.6 TMS next. FreightInvoice.carrier is PROTECT, so freight invoices must
         # clear before their carriers; children (lines/events/stops/rate-cards) cascade. Any draft AP
         # bill a freight hand-off created is reachable only through FreightInvoice.bill (SET_NULL), so
         # drop those bills first — the same orphan-avoidance the GRN block above does.
@@ -698,8 +947,8 @@ class Command(BaseCommand):
         ItemCategory.objects.all().delete()
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
-            f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation rows "
-            f"(+{bill_count + freight_bill_count} linked accounting bill(s))."))
+            f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
+            f"demand planning rows (+{bill_count + freight_bill_count} linked accounting bill(s))."))
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
