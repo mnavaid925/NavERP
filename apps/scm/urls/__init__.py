@@ -34,6 +34,11 @@ from .TransportationManagement.Carriers import urlpatterns as _tms_carriers
 from .TransportationManagement.Loads import urlpatterns as _tms_loads
 from .TransportationManagement.Shipments import urlpatterns as _tms_shipments
 from .TransportationManagement.FreightInvoices import urlpatterns as _tms_freightinvoices
+from .DemandPlanning.SeasonalityProfiles import urlpatterns as _dp_seasonality
+from .DemandPlanning.DemandForecasts import urlpatterns as _dp_forecasts
+from .DemandPlanning.DemandSignals import urlpatterns as _dp_signals
+from .DemandPlanning.ForecastAdjustments import urlpatterns as _dp_adjustments
+from .DemandPlanning.Reports import urlpatterns as _dp_reports
 
 
 app_name = "scm"
@@ -70,4 +75,14 @@ urlpatterns = [
     *_tms_loads,                         # TransportationManagement/Loads
     *_tms_shipments,                     # TransportationManagement/Shipments
     *_tms_freightinvoices,               # TransportationManagement/FreightInvoices
+    # 4.7 prefixes (seasonality/ forecasts/ demand-signals/ forecast-adjustments/ safety-stock/
+    # forecast-accuracy/) are all first-segment-unique against everything above — in particular
+    # `forecasts/` does not collide with 4.1's `orders/`, 4.5's `sales-orders/` or 4.3's
+    # `reorder-rules/`/`reorder-alerts/`, and `forecast-adjustments/`/`forecast-accuracy/` are
+    # separate segments from `forecasts/`, so no pk route can swallow them.
+    *_dp_seasonality,                    # DemandPlanning/SeasonalityProfiles
+    *_dp_forecasts,                      # DemandPlanning/DemandForecasts
+    *_dp_signals,                        # DemandPlanning/DemandSignals
+    *_dp_adjustments,                    # DemandPlanning/ForecastAdjustments
+    *_dp_reports,                        # DemandPlanning/Reports (safety stock + accuracy)
 ]
