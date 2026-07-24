@@ -32,8 +32,11 @@ class DemandSignalForm(TenantUniqueMixin, TenantModelForm):
 class DemandSignalApplyForm(forms.Form):
     """Which forecast this signal moves, and by how much.
 
-    The forecast queryset is scoped to the tenant AND to the statuses whose periods may still move —
-    a draft has no grid yet and an archived plan is history, so neither should be offered.
+    The forecast queryset is scoped to the tenant, to the statuses whose periods may still move (a
+    draft has no grid yet and an archived plan is history), AND — when the signal names an item — to
+    that item. Same tenant is not enough: an observation about item A carries A's units, and writing
+    them into item B's plan would be a silently wrong forecast with no trace of where the number came
+    from. A category- or network-wide signal (no item) is deliberately broader and stays unnarrowed.
     """
 
     forecast = forms.ModelChoiceField(queryset=DemandForecast.objects.none(),
@@ -43,13 +46,15 @@ class DemandSignalApplyForm(forms.Form):
         label="Units to apply (signed)",
         help_text="Leave blank to use the signal's own impact, carrying its direction.")
 
-    def __init__(self, *args, tenant=None, **kwargs):
+    def __init__(self, *args, tenant=None, signal=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["forecast"].queryset = (
-            DemandForecast.objects.none() if tenant is None else
-            DemandForecast.objects.filter(tenant=tenant,
-                                          status__in=DemandForecast.ADJUSTABLE_STATUSES)
-            .select_related("item"))
+        queryset = (DemandForecast.objects.none() if tenant is None else
+                    DemandForecast.objects
+                    .filter(tenant=tenant, status__in=DemandForecast.ADJUSTABLE_STATUSES)
+                    .select_related("item"))
+        if signal is not None and signal.item_id:
+            queryset = queryset.filter(item_id=signal.item_id)
+        self.fields["forecast"].queryset = queryset
 
 
 class DemandSignalDismissForm(forms.Form):
