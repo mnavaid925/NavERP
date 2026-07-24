@@ -327,9 +327,20 @@ class ReorderRule(TenantOwned):
         return f"Reorder {self.item_id and self.item.sku} @ {self.location_id and self.location.code}"
 
 
+#: Column ceilings — DecimalField(max_digits=14, decimal_places=2 / 4).
+_MAX_Q2 = Decimal("9999999999.99")
+_MAX_Q4 = Decimal("9999999999.9999")
+
+
 def _q2(value):
-    return Decimal(value or ZERO).quantize(Decimal("0.01"))
+    """Quantize AND clamp to what the column holds.
+
+    An overflow here raises DataError inside `bulk_update`, which takes the ENTIRE batch
+    recalculation down — one item with an absurd order quantity would break safety stock for every
+    other rule in the tenant. Clamping degrades that one row instead.
+    """
+    return min(max(Decimal(value or ZERO), -_MAX_Q2), _MAX_Q2).quantize(Decimal("0.01"))
 
 
 def _q4(value):
-    return Decimal(value or ZERO).quantize(Decimal("0.0001"))
+    return min(max(Decimal(value or ZERO), -_MAX_Q4), _MAX_Q4).quantize(Decimal("0.0001"))
