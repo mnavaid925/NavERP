@@ -55,7 +55,7 @@
         <input type="hidden" name="item" value="{{ request.GET.item|default:'' }}">
         <input type="hidden" name="location" value="{{ request.GET.location|default:'' }}">
         <button class="btn btn-primary" type="submit"><i data-lucide="calculator"></i> Recalculate these rules</button>
-        {% if uncalculated %}<span class="text-muted" style="margin-left:.75rem;">{{ uncalculated }} rule(s) have never been calculated.</span>{% endif %}
+        {% if uncalculated %}<span class="text-muted" style="margin-inline-start:.75rem;">{{ uncalculated }} rule(s) have never been calculated.</span>{% endif %}
       </form>
     </div>
 
