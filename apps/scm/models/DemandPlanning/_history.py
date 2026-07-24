@@ -142,3 +142,53 @@ def demand_series(tenant, *, item, location=None, customer=None, source="sales_o
         clipped = clip_outliers([qty for _, qty in series], Decimal(str(sigma or 3)))
         series = [(period_start, qty) for (period_start, _), qty in zip(series, clipped)]
     return series
+
+
+def demand_series_map(tenant, items, *, start, end, bucket="month", source="sales_orders"):
+    """``{item_id: [(period_start, quantity)]}`` for MANY items in ONE grouped query.
+
+    The batch form of ``demand_series``, for pages that size or score every item at once (the
+    safety-stock recalculation, the forecast-accuracy league table). Calling ``demand_series`` per row
+    there would fire one aggregate per item — the exact N+1 that ``ReorderRule.on_hand_map()`` exists
+    to avoid.
+
+    Deliberately item-level: there is no ``location``/``customer`` narrowing here. For the default
+    ``sales_orders`` source that changes nothing (an order line has no location), and for
+    ``stock_issues`` the caller gets the item's whole network movement — which is the right figure for
+    a network-wide policy pass and is documented rather than silently different.
+    """
+    from apps.scm.models import SalesOrderLine, StockMove
+
+    item_ids = {getattr(item, "pk", item) for item in (items or [])}
+    if tenant is None or not item_ids or not start or not end or end < start:
+        return {}
+    bucket = bucket if bucket in _TRUNC else "month"
+    buckets = [period_start for period_start, _ in period_range(start, end, bucket)]
+    empty = {period_start: ZERO for period_start in buckets}
+    out = {item_id: dict(empty) for item_id in item_ids}
+    trunc = _TRUNC[bucket]
+
+    if source == "manual":
+        pass
+    elif source == "stock_issues":
+        rows = (StockMove.objects
+                .filter(tenant=tenant, item_id__in=item_ids, move_type="issue",
+                        moved_at__date__range=(start, end))
+                .annotate(period=trunc("moved_at", output_field=DateField()))
+                .values("item_id", "period").annotate(total=Sum("quantity")))
+        for row in rows:
+            if row["period"] in out.get(row["item_id"], {}):
+                out[row["item_id"]][row["period"]] = -(row["total"] or ZERO)
+    else:
+        rows = (SalesOrderLine.objects
+                .filter(sales_order__tenant=tenant, item_id__in=item_ids,
+                        sales_order__order_date__range=(start, end))
+                .exclude(sales_order__status__in=("draft", "cancelled"))
+                .annotate(period=trunc("sales_order__order_date", output_field=DateField()))
+                .values("item_id", "period").annotate(total=Sum("quantity_ordered")))
+        for row in rows:
+            if row["period"] in out.get(row["item_id"], {}):
+                out[row["item_id"]][row["period"]] = row["total"] or ZERO
+
+    return {item_id: [(period_start, totals[period_start]) for period_start in buckets]
+            for item_id, totals in out.items()}
