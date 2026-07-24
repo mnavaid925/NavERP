@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Forecast Accuracy{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Forecast Accuracy</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Forecast Accuracy</span></div>
+      <p class="text-muted">Error and bias per forecast, scored against live sales history for the periods that have fully elapsed.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:demandforecast_list' %}" class="btn btn-outline"><i data-lucide="line-chart"></i> Forecasts</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Forecasts scored</span><span class="detail-value fw-600">{{ scored }}</span></div>
+        <div><span class="detail-label">Exceptions</span><span class="detail-value"><span class="badge badge-{% if exceptions %}red{% else %}green{% endif %}">{{ exceptions }}</span></span></div>
+        <div><span class="detail-label">Exception thresholds</span><span class="detail-value">|bias| &gt; {{ bias_threshold }}% or |tracking signal| &gt; {{ signal_threshold }}</span></div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Item</th><th>Method</th><th>Periods</th><th>MAPE</th><th>WMAPE</th><th>Bias</th><th>Tracking signal</th><th>FVA</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:demandforecast_detail' row.forecast.pk %}" class="fw-600">{{ row.forecast.number }}</a>
+                {% if row.is_exception %} <span class="badge badge-red">Exception</span>{% endif %}
+              </td>
+              <td>{{ row.forecast.name }}</td>
+              <td>{{ row.forecast.item.sku }}</td>
+              <td>{{ row.forecast.effective_method }}</td>
+              <td>{{ row.metrics.points }}</td>
+              <td>{% if row.metrics.mape is not None %}{{ row.metrics.mape|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="fw-600">{% if row.metrics.wmape is not None %}{{ row.metrics.wmape|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.metrics.bias_pct is None %}<span class="text-muted">—</span>
+                {% elif row.metrics.bias_pct > 20 or row.metrics.bias_pct < -20 %}<span class="badge badge-red">{{ row.metrics.bias_pct|floatformat:1 }}%</span>
+                {% else %}<span class="badge badge-green">{{ row.metrics.bias_pct|floatformat:1 }}%</span>{% endif %}
+              </td>
+              <td>
+                {% if row.metrics.tracking_signal is None %}<span class="text-muted">—</span>
+                {% elif row.metrics.tracking_signal > 4 or row.metrics.tracking_signal < -4 %}<span class="badge badge-red">{{ row.metrics.tracking_signal|floatformat:2 }}</span>
+                {% else %}<span class="badge badge-green">{{ row.metrics.tracking_signal|floatformat:2 }}</span>{% endif %}
+              </td>
+              <td>
+                {% if row.metrics.fva is None %}<span class="text-muted">—</span>
+                {% elif row.metrics.fva > 0 %}<span class="badge badge-green">+{{ row.metrics.fva|floatformat:1 }}</span>
+                {% else %}<span class="badge badge-amber">{{ row.metrics.fva|floatformat:1 }}</span>{% endif %}
+              </td>
+              <td><span class="badge badge-{% if row.forecast.status == 'approved' %}green{% elif row.forecast.status == 'statistical' %}info{% elif row.forecast.status == 'in_review' %}amber{% elif row.forecast.status == 'archived' %}slate{% else %}muted{% endif %}">{{ row.forecast.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="target"></i><h3>Nothing to score</h3><p>Generate and submit a forecast; accuracy appears once a period of its horizon has elapsed.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Positive bias means the forecast ran high. A tracking signal beyond ±4 says the model is drifting rather than just noisy. Forecast value added compares the final number's error against the statistical baseline's — negative means the overrides made the plan worse.
+    </div>
+  </div>
+{% endblock %}
