@@ -211,8 +211,9 @@ def detect_order_surge(tenant, threshold_pct=SURGE_THRESHOLD_PCT):
         if period is None or (period.final_quantity or ZERO) <= ZERO:
             continue
         reference = f"{forecast.number}:{period.sequence}"
-        if DemandSignal.objects.filter(tenant=tenant, source_reference=reference).exclude(
-                status="dismissed").exists():
+        # Dismissed signals count too — a planner who has already decided this deviation is noise
+        # should not be handed it again every time somebody presses the button.
+        if DemandSignal.objects.filter(tenant=tenant, source_reference=reference).exists():
             continue
         elapsed = Decimal((today - period.period_start).days + 1)
         total_days = Decimal((period.period_end - period.period_start).days + 1)
@@ -238,7 +239,10 @@ def detect_order_surge(tenant, threshold_pct=SURGE_THRESHOLD_PCT):
             signal_value=run_rate.quantize(Decimal("0.0001")),
             baseline_value=expected,
             impact_direction="increase" if deviation_pct > ZERO else "decrease",
-            impact_pct=abs(deviation_pct).quantize(Decimal("0.01")),
+            # Clamped to what the DecimalField(6, 2) column holds. A tiny forecast against a real
+            # order (2 planned, 250 ordered) yields a five-figure percentage, and an overflow here
+            # would take the whole detection batch down with a DataError.
+            impact_pct=min(abs(deviation_pct), Decimal("9999.99")).quantize(Decimal("0.01")),
             impact_quantity=abs(run_rate - expected).quantize(Decimal("0.0001")),
             confidence="high" if abs(deviation_pct) >= threshold_pct * 2 else "medium",
             notes=(f"Detected from live sales orders: {actual} ordered in "
