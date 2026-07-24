@@ -247,6 +247,10 @@ class ReorderRule(TenantOwned):
         """Rank ``rules`` A/B/C by the revenue their item earned, in ONE grouped query.
 
         Pareto split on cumulative revenue: A covers the first 80 %, B the next 15 %, C the tail.
+        The band is decided by the cumulative share the item STARTS at, not the one it ends at —
+        otherwise a single-item (or top-earning) rule whose own revenue already crosses 80 % would be
+        classed C, which is exactly backwards.
+
         Batch by nature — a rule's class only means something relative to its siblings — so this is a
         static method the report calls once, not a per-row property.
 
@@ -272,9 +276,9 @@ class ReorderRule(TenantOwned):
             if total <= ZERO:
                 rule.abc_class = ""
             else:
+                share = cumulative * Decimal("100") / total  # where this item STARTS on the curve
+                rule.abc_class = "A" if share < Decimal("80") else ("B" if share < Decimal("95") else "C")
                 cumulative += revenue.get(rule.item_id, ZERO)
-                share = cumulative * Decimal("100") / total
-                rule.abc_class = "A" if share <= Decimal("80") else ("B" if share <= Decimal("95") else "C")
             classes[rule.pk] = rule.abc_class
         return classes
 
