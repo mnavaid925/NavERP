@@ -13,16 +13,16 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">The Override</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Forecast</span><span class="detail-value"><a href="{% url 'scm:demandforecast_detail' obj.forecast.pk %}">{{ obj.forecast.number }}</a> · {{ obj.forecast.item.sku }}</span></div>
-        <div><span class="detail-label">Period</span><span class="detail-value">{% if obj.period %}{{ obj.period.period_label|default:obj.period.period_start|date:"M Y" }}{% else %}Whole horizon (split pro-rata){% endif %}</span></div>
-        <div><span class="detail-label">Type</span><span class="detail-value">{{ obj.get_adjustment_type_display }}</span></div>
-        <div><span class="detail-label">Proposed quantity</span><span class="detail-value">{{ obj.proposed_quantity|floatformat:2 }}</span></div>
-        <div><span class="detail-label">Percent</span><span class="detail-value">{{ obj.adjustment_pct|floatformat:2 }}%</span></div>
-        <div><span class="detail-label">Measured against</span><span class="detail-value">{{ base_quantity|floatformat:2 }}</span></div>
-        <div><span class="detail-label">Resolved delta</span><span class="detail-value fw-600">{{ obj.resolved_quantity|floatformat:2 }}</span></div>
-        <div><span class="detail-label">Confidence</span><span class="detail-value"><span class="badge badge-{% if obj.confidence == 'high' %}green{% elif obj.confidence == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_confidence_display }}</span></span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Forecast</dt><dd><a href="{% url 'scm:demandforecast_detail' obj.forecast.pk %}">{{ obj.forecast.number }}</a> · {{ obj.forecast.item.sku }}</dd></div>
+        <div class="detail-item"><dt>Period</dt><dd>{% if obj.period %}{{ obj.period.period_label|default:obj.period.period_start|date:"M Y" }}{% else %}Whole horizon (split pro-rata){% endif %}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_adjustment_type_display }}</dd></div>
+        <div class="detail-item"><dt>Proposed quantity</dt><dd>{{ obj.proposed_quantity|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Percent</dt><dd>{{ obj.adjustment_pct|floatformat:2 }}%</dd></div>
+        <div class="detail-item"><dt>Measured against</dt><dd>{{ base_quantity|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Resolved delta</dt><dd class="fw-600">{{ obj.resolved_quantity|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Confidence</dt><dd><span class="badge badge-{% if obj.confidence == 'high' %}green{% elif obj.confidence == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_confidence_display }}</span></dd></div>
+      </dl>
       <p class="text-muted">Whatever type the contributor used, the override is stored as a single signed delta — that is what makes the consensus roll-up a plain sum of the accepted proposals.</p>
     </div>
   </div>
@@ -30,12 +30,12 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Rationale</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Contributor function</span><span class="detail-value">{{ obj.get_contributor_function_display }}</span></div>
-        <div><span class="detail-label">Submitted by</span><span class="detail-value">{% if obj.submitted_by %}{{ obj.submitted_by.get_username }}{% else %}—{% endif %} · {{ obj.created_at|date:"M d, Y" }}</span></div>
-        <div><span class="detail-label">Org unit</span><span class="detail-value">{{ obj.org_unit.name|default:"—" }}</span></div>
-        <div><span class="detail-label">Reason code</span><span class="detail-value">{{ obj.get_reason_code_display }}</span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Contributor function</dt><dd>{{ obj.get_contributor_function_display }}</dd></div>
+        <div class="detail-item"><dt>Submitted by</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_username }}{% else %}—{% endif %} · {{ obj.created_at|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Org unit</dt><dd>{{ obj.org_unit.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Reason code</dt><dd>{{ obj.get_reason_code_display }}</dd></div>
+      </dl>
       <p style="white-space:pre-line;">{{ obj.rationale }}</p>
     </div>
   </div>
@@ -44,10 +44,10 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Review</h2></div>
       <div class="card-body">
-        <div class="detail-grid">
-          <div><span class="detail-label">Reviewed by</span><span class="detail-value">{% if obj.reviewed_by %}{{ obj.reviewed_by.get_username }}{% else %}—{% endif %}</span></div>
-          <div><span class="detail-label">Reviewed at</span><span class="detail-value">{{ obj.reviewed_at|date:"M d, Y H:i"|default:"—" }}</span></div>
-        </div>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Reviewed by</dt><dd>{% if obj.reviewed_by %}{{ obj.reviewed_by.get_username }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Reviewed at</dt><dd>{{ obj.reviewed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        </dl>
         {% if obj.review_note %}<p style="white-space:pre-line;">{{ obj.review_note }}</p>{% endif %}
       </div>
     </div>
@@ -63,9 +63,14 @@
             <label class="form-label" for="{{ review_form.review_note.id_for_label }}">{{ review_form.review_note.label }}</label>
             {{ review_form.review_note }}
           </div>
+          {% comment %}
+            Both buttons submit THIS form (and its review note); the form's own action accepts, and
+            Reject retargets via formaction. Both are terminal — once reviewed, the adjustment can no
+            longer be edited or deleted — so both confirm.
+          {% endcomment %}
           <div class="form-actions">
-            <button class="btn btn-primary" type="submit" formaction="{% url 'scm:forecastadjustment_accept' obj.pk %}"><i data-lucide="check-circle"></i> Accept</button>
-            <button class="btn btn-outline danger" type="submit" formaction="{% url 'scm:forecastadjustment_reject' obj.pk %}"><i data-lucide="x-circle"></i> Reject</button>
+            <button class="btn btn-primary" type="submit" onclick="return confirm('Accept this adjustment into the consensus? A reviewed proposal can no longer be edited or deleted.');"><i data-lucide="check-circle"></i> Accept</button>
+            <button class="btn btn-outline danger" type="submit" formaction="{% url 'scm:forecastadjustment_reject' obj.pk %}" onclick="return confirm('Reject this adjustment? A reviewed proposal can no longer be edited or deleted.');"><i data-lucide="x-circle"></i> Reject</button>
           </div>
         </form>
       {% endif %}
