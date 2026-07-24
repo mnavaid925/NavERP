@@ -14,15 +14,15 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Scope</span><span class="detail-value">{{ obj.get_scope_display }}</span></div>
-        <div><span class="detail-label">Item</span><span class="detail-value">{% if obj.item %}{{ obj.item.sku }} · {{ obj.item.name }}{% else %}—{% endif %}</span></div>
-        <div><span class="detail-label">Category</span><span class="detail-value">{{ obj.category.name|default:"—" }}</span></div>
-        <div><span class="detail-label">Location</span><span class="detail-value">{{ obj.location.code|default:"—" }}</span></div>
-        <div><span class="detail-label">Bucket</span><span class="detail-value">{{ obj.get_bucket_display }}</span></div>
-        <div><span class="detail-label">Derived from</span><span class="detail-value">{{ obj.derived_from_years }} year(s) of history</span></div>
-        <div><span class="detail-label">Last derived</span><span class="detail-value">{{ obj.last_derived_at|date:"M d, Y H:i"|default:"Never — indices typed by hand" }}</span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Scope</dt><dd>{{ obj.get_scope_display }}</dd></div>
+        <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}{{ obj.item.sku }} · {{ obj.item.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.category.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{{ obj.location.code|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Bucket</dt><dd>{{ obj.get_bucket_display }}</dd></div>
+        <div class="detail-item"><dt>Derived from</dt><dd>{{ obj.derived_from_years }} year(s) of history</dd></div>
+        <div class="detail-item"><dt>Last derived</dt><dd>{{ obj.last_derived_at|date:"M d, Y H:i"|default:"Never — indices typed by hand" }}</dd></div>
+      </dl>
     </div>
   </div>
 
@@ -30,12 +30,12 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Promotion / Event</h2></div>
       <div class="card-body">
-        <div class="detail-grid">
-          <div><span class="detail-label">Window</span><span class="detail-value">{% if obj.event_start %}{{ obj.event_start|date:"M d, Y" }} – {{ obj.event_end|date:"M d, Y" }}{% else %}Recurring (no window){% endif %}</span></div>
-          <div><span class="detail-label">Mechanic</span><span class="detail-value">{{ obj.get_promotion_mechanic_display|default:"—" }}</span></div>
-          <div><span class="detail-label">Uplift</span><span class="detail-value fw-600">{{ obj.uplift_pct|floatformat:1 }}%</span></div>
-          <div><span class="detail-label">Cannibalization</span><span class="detail-value">{{ obj.cannibalization_pct|floatformat:1 }}%{% if obj.cannibalized_category %} of {{ obj.cannibalized_category.name }}{% endif %}</span></div>
-        </div>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Window</dt><dd>{% if obj.event_start %}{{ obj.event_start|date:"M d, Y" }} – {{ obj.event_end|date:"M d, Y" }}{% else %}Recurring (no window){% endif %}</dd></div>
+          <div class="detail-item"><dt>Mechanic</dt><dd>{{ obj.get_promotion_mechanic_display|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Uplift</dt><dd class="fw-600">{{ obj.uplift_pct|floatformat:1 }}%</dd></div>
+          <div class="detail-item"><dt>Cannibalization</dt><dd>{{ obj.cannibalization_pct|floatformat:1 }}%{% if obj.cannibalized_category %} of {{ obj.cannibalized_category.name }}{% endif %}</dd></div>
+        </dl>
         <p class="text-muted">A windowed profile contributes its uplift as a separate event column on the forecast, so the seasonal curve and the promotion never get collapsed into one number. Cannibalization is entered by hand — automatic detection is a later pass.</p>
       </div>
     </div>
@@ -81,7 +81,7 @@
               <td>{{ f.name }}</td>
               <td>{{ f.item.sku }}</td>
               <td>{{ f.horizon_start|date:"M Y" }} – {{ f.horizon_end|date:"M Y" }}</td>
-              <td><span class="badge badge-{% if f.status == 'approved' %}green{% elif f.status == 'statistical' %}info{% elif f.status == 'in_review' %}amber{% elif f.status == 'archived' %}slate{% else %}muted{% endif %}">{{ f.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if f.status == 'approved' %}green{% elif f.status == 'statistical' %}info{% elif f.status == 'in_review' %}amber{% elif f.status == 'draft' %}slate{% else %}muted{% endif %}">{{ f.get_status_display }}</span></td>
             </tr>
           {% empty %}
             <tr><td colspan="5"><div class="empty-state"><i data-lucide="line-chart"></i><h3>Not used yet</h3><p>Pick this profile on a forecast to apply its curve.</p></div></td></tr>
