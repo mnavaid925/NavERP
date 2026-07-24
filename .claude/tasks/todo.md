@@ -13009,3 +13009,713 @@ derived from `party.name`) instead — it honors the "never a standalone master"
   matches the billed carrier.
 - `test-writer` → +228 tests (models/forms/views/security), `apps/scm` suite 1,115 → **1,343**, all green.
 - Skill + README updated; `LIVE_LINKS["4.6"]` live. **Next SCM sub-module: 4.7 Demand Planning & Forecasting.**
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.7 Demand Planning & Forecasting — plan from research-scm-4.7.md (2026-07-25)
+
+**EXTENDS the existing `apps/scm` app** (4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse + 4.5 OMS +
+4.6 TMS already built) — **no new Django app, no `INSTALLED_APPS` / `config/urls.py` change.** New sub-module
+package `DemandPlanning/` in each of `models/ forms/ views/ urls/`; templates under
+`templates/scm/demandplanning/<entity>/`.
+
+**Spine re-verified before planning (L28 — the grep is the truth, not the research file, not the docs):**
+- `grep -rn "^class " apps/scm/models/` → `Item` (`InventoryManagement/Items.py:56`, `TenantOwned`, has `sku`,
+  `name`, `category`, `uom`, `item_type`, `costing_method`, `reorder_point`, `is_active`; `on_hand()` is a
+  DERIVED aggregate over `StockMove` — no stored quantity anywhere), `ItemCategory` (`Items.py:17`), `UOM`
+  (`Items.py:34`), `Location` (`Locations.py:10`), `StockMove` (`StockMoves.py:13`), `SalesOrder`
+  (`OrderManagement/SalesOrders.py:20`, `order_date` = `DateField(null=True)`, `STATUS_CHOICES` =
+  draft/submitted/on_hold/allocated/partially_fulfilled/fulfilled/invoiced/cancelled/closed), `SalesOrderLine`
+  (`SalesOrders.py:185`, **tenant-less child**, `item` FK nullable `PROTECT`, `quantity_ordered`
+  `DecimalField(14,4)`, `unit_price`), `ReorderRule` (`InventoryManagement/ReorderRules.py:11`),
+  `SupplierCatalogItem` (`SupplierRelationshipManagement/SupplierCatalogs.py:46`) — **all confirmed live.**
+- `grep -rn "^class " apps/core/models/ apps/accounting/models/` → `core.Party` (`Party.py:5`), `core.PartyRole`
+  (`PartyRole.py:5`), `core.OrgUnit` (`OrgUnit.py:5`), `accounting.Currency`
+  (`GeneralLedger/Currencies.py:6`), `accounting.Budget` (`Budgeting/Budgets.py:6`) — **all confirmed live.**
+  Every FK in this plan resolves to a verified entity or to a model built in this pass — **no stand-in needed**
+  (unlike 4.1/4.6, this sub-module ships after the item catalog AND the sales order).
+- **`ReorderRule` as-built is confirmed to have ONLY** `item`, `location`, `reorder_point`, `safety_stock`,
+  `reorder_quantity`, `is_active` + the derived `on_hand_map()`/`current_on_hand()`/`is_below_point()`/
+  `suggested_quantity()`; `unique_together = ("tenant","item","location")`; index `scm_reorder_tnt_active_idx`.
+  **The 4.3 research file's claim that `lead_time_days`/`preferred_vendor` were already built is WRONG** —
+  `grep -rn "lead_time_days" apps/scm` hits only `SupplierCatalogItem`, `RFQQuote`, `RFQQuoteLine`. This pass
+  adds lead time to the rule (L28: verify, never trust the docs).
+- `grep -rni "forecast|demand|seasonal|consensus" apps/` → **nothing** named `DemandForecast`/
+  `SeasonalityProfile`/`DemandSignal`/`ForecastAdjustment`/`SafetyStockPolicy` under `apps/`. Existing hits are
+  different objects and must NOT be merged or re-pointed: `crm:forecast` (1.2 sales-pipeline weighting),
+  `accounting:cash_forecast` (2.5 cash flow), `hrm:workforceplan_list` (3.40 headcount). Clean build.
+- `apps/core/navigation.py` — **no `LIVE_LINKS["4.7"]` key** (last entry is `"4.6"`, line 827). Confirmed target.
+- **Auto-number prefixes** (`grep -rn 'NUMBER_PREFIX = "'` → PR RFQ QT PO GRN SC SCR SRA CAT TRF ADJ PUT PIK CC
+  YRD SO CAR LD SHP FRT): **`DF` `SEA` `DS` `FA` are free.** All fit `number = CharField(max_length=20)`.
+- **URL-prefix collision check** (every `path("…")` literal already in `apps/scm/urls/`: orders/ sales-orders/
+  sales-order-lines/ allocations/ requisitions/ rfqs/ quotes/ receipts/ suppliers/ scorecards/ contracts/
+  catalogs/ risk-assessments/ items/ categories/ uoms/ locations/ lot-serials/ transfers/ adjustments/
+  reorder-rules/ valuation/ reorder-alerts/ stock-ledger/ on-hand/ putaway/ picks/ cycle-counts/ yard/
+  carriers/ loads/ shipments/ freight-invoices/): **this pass uses `forecasts/`, `seasonality/`,
+  `demand-signals/`, `forecast-adjustments/`, `safety-stock/`, `forecast-accuracy/` — none taken.**
+- Template sub-module folder convention confirmed from disk (`templates/scm/` = `procurement/ srm/ inventory/
+  warehouse/ orders/ transportation/` — single lowercase word, entity folder inside, reports flat at the
+  sub-module root e.g. `inventory/valuation_report.html`). **This pass uses `demandplanning/`.**
+- Next migration number: **`0009`** (`0008_carrier_carrierratecard_freightinvoice_and_more.py` is the latest).
+- Badge classes confirmed present in `static/css/theme.css:285-290`: **`badge-green` `badge-red` `badge-amber`
+  `badge-info` `badge-muted` `badge-slate` ONLY** — no `-success`/`-danger` (L33).
+
+**Scope guard:** 4 new primary models (+2 tenant-less children) + an ADDITIVE extension of the verified-existing
+`scm.ReorderRule` + 2 computed report pages. The safety-stock policy is deliberately **not** a 5th model — a
+`SafetyStockPolicy` table would duplicate `ReorderRule`'s `(tenant, item, location)` grain and its
+`safety_stock` column; 4.4 already set the precedent by extending 4.3's `Location` with bin attributes.
+**No new demand-history table** — history is ALWAYS an aggregate over `SalesOrderLine` (through
+`sales_order__order_date`, excluding `draft`/`cancelled`) or `StockMove` (`move_type="issue"`, negated),
+matching the derived-never-stored rule that governs `Item.on_hand()` and `SalesOrderLine.quantity_allocated()`.
+
+**Trim order if the pass runs long** (research's own guidance): (1) `abc_class`/`xyz_class` on `ReorderRule`
+— two derived fields + a ranking service that nothing else depends on; (2) `scm:forecast_accuracy_report` —
+not a NavERP.md bullet; (3) `holt_winters` + `best_fit` methods (keep naive/seasonal_naive/moving_average/
+weighted_moving_average/exponential_smoothing/holt_linear/like_item/manual).
+
+## Models (from research — 4 new: `DemandForecast`+`DemandForecastPeriod`, `SeasonalityProfile`+`SeasonalityIndex`, `DemandSignal`, `ForecastAdjustment`; + `ReorderRule` extended in place)
+
+- [ ] **`DemandForecast`** [`DF-`, `TenantNumbered`] + child **`DemandForecastPeriod`** —
+  `models/DemandPlanning/DemandForecasts.py` — serves **Sales Forecasting** (`scm:demandforecast_list`) and is
+  the spine the other three models hang off
+  - `name` = `CharField(max_length=255)`
+  - `item` = FK `scm.Item` (`PROTECT`, `related_name="demand_forecasts"`) — required, the forecast grain
+    (driver: SKU × location × period grid — all 12 leaders)
+  - `location` = FK `scm.Location` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="demand_forecasts"`) — **nullable = network-level** (driver: RELEX/Slim4 SKU-location
+    differentiation)
+  - `customer` = FK `core.Party` (`SET_NULL`, `null=True`, `blank=True`, `related_name="demand_forecasts"`) —
+    nullable = all channels; form queryset scoped by the existing `_customer_parties(tenant)` helper in
+    `forms/_common.py` (driver: channel/customer-level planning — o9/Anaplan)
+  - `demand_source` = `[("sales_orders","Sales Orders"),("stock_issues","Stock Issues"),("manual","Manual")]`,
+    default `"sales_orders"` — **which verified ledger the derived history series reads from** (driver: history
+    derived from real transactions, never re-keyed — SAP IBP/Oracle/Netstock)
+  - `bucket` = `[("day","Day"),("week","Week"),("month","Month"),("quarter","Quarter")]`, default `"month"`
+  - `horizon_start`/`horizon_end` = `DateField()` — the forecast window
+  - `history_months` = `PositiveIntegerField(default=24)` — how far back the derived series reaches
+  - `method` = `[("naive","Naive"),("seasonal_naive","Seasonal Naive"),("moving_average","Moving Average"),
+    ("weighted_moving_average","Weighted Moving Average"),("exponential_smoothing","Exponential Smoothing"),
+    ("holt_linear","Holt Linear Trend"),("holt_winters","Holt-Winters"),("like_item","Like-Item Copy"),
+    ("manual","Manual"),("best_fit","Best Fit")]`, default `"moving_average"` (driver: per-item statistical
+    method library — Anaplan 26 methods / SAP IBP forecast profiles / Inventory Planner model-per-product)
+  - `method_parameter` = `DecimalField(max_digits=8, decimal_places=4, default=3)` — window N **or** α, one
+    field (help_text spells out which per method)
+  - `selected_method` = `CharField(max_length=32, blank=True, editable=False)` — **excluded from form**, what
+    `best_fit` actually chose (driver: automatic best-fit selection — Anaplan/SAP IBP/John Galt/Slim4)
+  - `seasonality_profile` = FK `scm.SeasonalityProfile` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="forecasts"`) — this pass
+  - `reference_item` = FK `scm.Item` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="forecast_references"`) + `reference_scale_pct` = `DecimalField(max_digits=6,
+    decimal_places=2, default=100)` (driver: new-product/no-history forecasting from a "like" item — RELEX/
+    John Galt/Anaplan; attribute-similarity matching deferred)
+  - `exclude_outliers` = `BooleanField(default=False)`, `outlier_threshold_sigma` =
+    `DecimalField(max_digits=4, decimal_places=2, default=3)` (driver: outlier detection/correction on history
+    — SAP IBP/Logility/Inventory Planner spike-and-dip exclusion)
+  - `currency` = FK `accounting.Currency` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_demand_forecasts"`) — **display/valuation only, no JournalEntry, no second budget
+    (L29)**; scoped by the existing `_active_currencies(form)` helper (`Currency` is global, no tenant FK)
+  - `scenario` = `[("baseline","Baseline"),("optimistic","Optimistic"),("pessimistic","Pessimistic"),
+    ("custom","Custom")]`, default `"baseline"` (driver: what-if scenarios — Kinaxis/o9/Anaplan; a full
+    compare/merge workbench is deferred)
+  - `revision` = `PositiveIntegerField(default=1, editable=False)` + `supersedes` = self-FK
+    (`"scm.DemandForecast"`, `SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="superseded_by"`) — **both excluded from form**, set by `demandforecast_revise` (driver:
+    plan-of-record versioning — o9/SAP IBP/Anaplan/Kinaxis)
+  - `status` = `[("draft","Draft"),("statistical","Statistical"),("in_review","In Review"),
+    ("approved","Approved"),("archived","Archived")]`, default `"draft"`, `editable=False` — **excluded from
+    form**, action-driven (mirrors verified `SalesOrder.status`); add `EDITABLE_STATUSES = ("draft",
+    "statistical", "in_review")` so an approved/archived forecast is read-only
+  - `generated_at` = `DateTimeField(null=True, blank=True, editable=False)`, `approved_by` = FK
+    `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="scm_forecasts_approved"`), `approved_at` = `DateTimeField(null=True, blank=True,
+    editable=False)` — **all excluded from form** (L22 system timestamps)
+  - `notes` = `TextField(blank=True)`
+  - **Derived, NEVER stored** (mirrors `Item.on_hand()`): `history_series()` (delegates to `_history.py`),
+    `actual_quantity(period)`, `mape()`, `wmape()`, `bias_pct()`, `tracking_signal()`,
+    `forecast_value_added()` (baseline error vs. final error — driver: FVA, Logility/Netstock/S&OP practice),
+    plus a **batch** `period_actuals_map()` in the exact shape of the verified `ReorderRule.on_hand_map()` so a
+    list/report page does not fire one aggregate per period (L18 / perf review)
+  - `Meta.ordering = ["-horizon_start", "-id"]`; `unique_together = ("tenant", "number")`; indexes
+    `scm_df_tnt_status_idx` on `("tenant","status")` and `scm_df_tnt_item_idx` on `("tenant","item")`
+    (**index names ≤ 30 chars** — Django hard limit, matching `scm_reorder_tnt_active_idx`)
+  - `__str__`: `f"{self.number} · {self.item.sku}"` (guard `item_id`)
+  - **Form excludes:** `tenant`, `number`, `selected_method`, `revision`, `supersedes`, `status`,
+    `generated_at`, `approved_by`, `approved_at`, `created_at`, `updated_at`
+  - Child **`DemandForecastPeriod`** (plain `models.Model`, **no tenant FK** — reached via `forecast.tenant`,
+    matching the verified tenant-less-child convention of `SalesOrderLine`/`PurchaseOrderLine`/`LoadStop`):
+    `forecast` (`CASCADE`, `related_name="periods"`), `sequence` (`PositiveIntegerField(default=1)`),
+    `period_start`/`period_end` (`DateField()`), `period_label` (`CharField(max_length=32, blank=True)`),
+    `historical_quantity` (`DecimalField(14,4, default=0, editable=False)` — the snapshot the model was fitted
+    on), `baseline_quantity` (`DecimalField(14,4, default=0)`), `seasonal_index_applied`
+    (`DecimalField(8,4, default=1)`), `event_uplift_quantity` (`DecimalField(14,4, default=0)`),
+    `signal_adjustment_quantity` (`DecimalField(14,4, default=0, editable=False)` — written by
+    `demandsignal_apply`), `consensus_quantity` (`DecimalField(14,4, default=0, editable=False)` — rolled up
+    from ACCEPTED `ForecastAdjustment`s), `final_quantity` (`DecimalField(14,4, default=0)`), `unit_price`
+    (`DecimalField(14,2, default=0)` — driver: revenue-valued forecast alongside units, Anaplan/o9/Logility),
+    `is_locked` (`BooleanField(default=False)` — a locked period survives regeneration).
+    `Meta.ordering = ["forecast", "sequence"]`; `unique_together = ("forecast", "sequence")`.
+    **The separate columns ARE the explainability feature** (driver: Oracle's baseline/trend/seasonality/causal
+    decomposition + Blue Yonder's "glass box") — the detail page renders the waterfall
+    `historical → baseline → × seasonal_index → + event_uplift → + signal_adjustment → consensus → final`;
+    never overwrite one shared `quantity` column. Managed as an **inline formset** (`extra=0`) on the forecast
+    edit form; the `demandforecast_generate` action (re)builds the rows.
+  - FKs: `scm.Item` ×2, `scm.Location`, `core.Party`, `accounting.Currency`, `scm.SeasonalityProfile`,
+    self — all verified existing or built this pass.
+
+- [ ] **`SeasonalityProfile`** [`SEA-`, `TenantNumbered`] + child **`SeasonalityIndex`** —
+  `models/DemandPlanning/SeasonalityProfiles.py` — serves **Seasonality Analysis**
+  (`scm:seasonalityprofile_list`). **One table covers both halves of the bullet** (seasonal peaks AND
+  promotional events): a recurring seasonal curve and a windowed promotion are the same thing at different
+  `profile_type`s, so the bullet gets one real page
+  - `name` = `CharField(max_length=255)`
+  - `profile_type` = `[("seasonal","Seasonal"),("promotion","Promotion"),("event","Event"),
+    ("lifecycle","Lifecycle")]`, default `"seasonal"` (drivers: reusable seasonal index curve; promotional
+    uplift with a date window — RELEX/Blue Yonder/Logility/Anaplan; product lifecycle ramp/decay — John
+    Galt/Oracle)
+  - `bucket` = `[("week","Week"),("month","Month"),("quarter","Quarter"),
+    ("period_from_launch","Period From Launch")]`, default `"month"` — `period_from_launch` is what makes the
+    same index rows serve a lifecycle curve
+  - `scope` = `[("item","Item"),("category","Category"),("location","Location"),("global","Global")]`,
+    default `"item"`
+  - `item` = FK `scm.Item` (`SET_NULL`, `null=True`, `blank=True`, `related_name="seasonality_profiles"`);
+    `category` = FK `scm.ItemCategory` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="seasonality_profiles"`); `location` = FK `scm.Location` (`SET_NULL`, `null=True`,
+    `blank=True`, `related_name="seasonality_profiles"`) — nullable = applies everywhere
+  - `event_start`/`event_end` = `DateField(null=True, blank=True)` — the finite window for
+    `promotion`/`event` types
+  - `uplift_pct` = `DecimalField(max_digits=6, decimal_places=2, default=0)`
+  - `cannibalization_pct` = `DecimalField(max_digits=6, decimal_places=2, default=0)` + `cannibalized_category`
+    = FK `scm.ItemCategory` (`SET_NULL`, `null=True`, `blank=True`, `related_name="cannibalized_by_profiles"`)
+    (driver: cannibalization/halo — RELEX/Blue Yonder; **manual entry only**, automatic ML detection deferred)
+  - `promotion_mechanic` = `[("price_discount","Price Discount"),("bogo","BOGO"),("display","Display"),
+    ("advert","Advertising"),("bundle","Bundle"),("other","Other")]`, `blank=True` (driver: RELEX promotion
+    attributes)
+  - `derived_from_years` = `PositiveIntegerField(default=2)` — an INPUT (how many prior years the derive
+    action reads), stays on the form; `last_derived_at` = `DateTimeField(null=True, blank=True,
+    editable=False)` — **excluded from form** (driver: auto-derive indices from history — Netstock/Slim4/
+    RELEX/Oracle)
+  - `is_active` = `BooleanField(default=True)`, `notes` = `TextField(blank=True)`
+  - `clean()`: `profile_type in ("promotion","event")` requires `event_start`/`event_end` and
+    `event_end >= event_start`; `scope="item"` requires `item`, `scope="category"` requires `category`,
+    `scope="location"` requires `location`
+  - `Meta.ordering = ["name"]`; `unique_together = ("tenant", "number")`; index `scm_sea_tnt_type_idx` on
+    `("tenant","profile_type")`
+  - **Form excludes:** `tenant`, `number`, `last_derived_at`, `created_at`, `updated_at`
+  - Child **`SeasonalityIndex`** (plain `models.Model`, no tenant FK — same tenant-less-child convention):
+    `profile` (`CASCADE`, `related_name="indices"`), `period_number` (`PositiveIntegerField()` — 1–12 / 1–53 /
+    1–4 / months-from-launch), `period_label` (`CharField(max_length=32, blank=True)`), `index_factor`
+    (`DecimalField(max_digits=8, decimal_places=4, default=1)` — 1.0000 = neutral), `sample_size`
+    (`PositiveIntegerField(default=0, editable=False)` — how many history points the derive action averaged).
+    `Meta.ordering = ["profile", "period_number"]`; `unique_together = ("profile", "period_number")`.
+    Managed as an **inline formset** on the profile create/edit form (12 monthly rows typed by hand) **plus**
+    the `seasonalityprofile_derive` action that fills them from the derived history series.
+  - FKs: `scm.Item`, `scm.ItemCategory` ×2, `scm.Location` — all verified existing.
+
+- [ ] **`DemandSignal`** [`DS-`, `TenantNumbered`] — `models/DemandPlanning/DemandSignals.py` — serves
+  **Demand Sensing** (`scm:demandsignal_list`). A short-horizon observation log with a triage workflow,
+  **deliberately separate from `DemandForecast`** (SAP IBP runs demand sensing as a distinct engine over a
+  rolling 4–8-week window: different cadence, different lifecycle, different list page). Same "store whatever
+  is posted, wire the feed later" posture as the verified 4.6 `TrackingEvent`
+  - `signal_type` = `[("order_surge","Order Surge"),("order_dropoff","Order Drop-Off"),
+    ("pos_sell_through","POS Sell-Through"),("channel_inventory","Channel Inventory"),
+    ("customer_forecast","Customer Forecast"),("weather","Weather"),("competitor_action","Competitor Action"),
+    ("market_index","Market Index"),("social_sentiment","Social Sentiment"),("promotion_live","Promotion Live"),
+    ("supply_disruption","Supply Disruption"),("other","Other")]` (drivers: downstream POS/channel-inventory
+    signals — RELEX/Blue Yonder/Logility; order-pattern deviation — SAP IBP/Kinaxis; external weather/
+    competitor/macro/social — Kinaxis/Blue Yonder/o9; CPFR customer forecasts — John Galt/o9/Anaplan)
+  - `source` = `[("internal_orders","Internal Orders"),("internal_stock","Internal Stock"),
+    ("customer","Customer"),("retailer_pos","Retailer POS"),("market_data","Market Data"),
+    ("weather_service","Weather Service"),("manual","Manual"),("api","API")]`, default `"manual"`;
+    `source_reference` = `CharField(max_length=255, blank=True)`
+  - `item` = FK `scm.Item` (`SET_NULL`, `null=True`, `blank=True`, `related_name="demand_signals"`) — nullable
+    = a category-wide signal; `category` = FK `scm.ItemCategory` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="demand_signals"`); `location` = FK `scm.Location` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="demand_signals"`); `customer` = FK `core.Party` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="demand_signals"`, form queryset via `_customer_parties(tenant)`) — a customer is a
+    `PartyRole`, **never a duplicated table**
+  - `observed_at` = `DateTimeField()`; `effective_from`/`effective_to` = `DateField(null=True, blank=True)`;
+    `horizon_days` = `PositiveIntegerField(default=28)` (driver: SAP IBP's rolling 4–8-week sensing window)
+  - `signal_value`/`baseline_value` = `DecimalField(max_digits=14, decimal_places=4, default=0)`
+  - `impact_direction` = `[("increase","Increase"),("decrease","Decrease"),("neutral","Neutral")]`, default
+    `"increase"`; `impact_pct` = `DecimalField(max_digits=6, decimal_places=2, default=0)`; `impact_quantity` =
+    `DecimalField(max_digits=14, decimal_places=4, default=0)`
+  - `confidence` = `[("low","Low"),("medium","Medium"),("high","High")]`, default `"medium"`
+  - `status` = `[("new","New"),("under_review","Under Review"),("applied","Applied"),
+    ("dismissed","Dismissed"),("expired","Expired")]`, default `"new"`, `editable=False` — **excluded from
+    form**, action-driven (driver: review → apply → measure triage — Blue Yonder exception management /
+    Logility anomaly review / Slim4 exception-based planning)
+  - `applied_to_forecast` = FK `scm.DemandForecast` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="applied_signals"`) — **excluded from the main form**, set by `demandsignal_apply` (which
+    picks the forecast in its own small `forms.Form`) and writes into
+    `DemandForecastPeriod.signal_adjustment_quantity`
+  - `reviewed_by` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="scm_demand_signals_reviewed"`), `reviewed_at` = `DateTimeField(null=True, blank=True,
+    editable=False)` — **excluded from form** (L22)
+  - `notes` = `TextField(blank=True)`
+  - `Meta.ordering = ["-observed_at", "-id"]`; `unique_together = ("tenant", "number")`; indexes
+    `scm_ds_tnt_status_idx` on `("tenant","status")`, `scm_ds_tnt_type_idx` on `("tenant","signal_type")`
+  - **Form excludes:** `tenant`, `number`, `status`, `applied_to_forecast`, `reviewed_by`, `reviewed_at`,
+    `created_at`, `updated_at`
+  - **One real working detector ships:** `detect_order_surge(tenant)` (module-level service in this file)
+    compares recent `SalesOrderLine` volume (verified-existing 4.5 data, excluding `draft`/`cancelled`) against
+    the active approved forecast's `final_quantity` for the current period and creates `order_surge`/
+    `order_dropoff` rows beyond a ±20 % threshold — **no external integration required.** Every other signal
+    type is hand-entered now / fed later.
+  - FKs: `scm.Item`, `scm.ItemCategory`, `scm.Location`, `core.Party`, `scm.DemandForecast` — all verified
+    existing or built this pass.
+
+- [ ] **`ForecastAdjustment`** [`FA-`, `TenantNumbered`] — `models/DemandPlanning/ForecastAdjustments.py` —
+  serves **Collaborative Planning** (`scm:forecastadjustment_list`, which doubles as the consensus review queue
+  via `?status=proposed`)
+  - `forecast` = FK `scm.DemandForecast` (`CASCADE`, `related_name="adjustments"`) — required
+  - `period` = FK `scm.DemandForecastPeriod` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="adjustments"`) — nullable = applies across the whole horizon. **Form queryset MUST be
+    hand-scoped to `forecast.periods` via the existing `_scope_to_parent()` helper in `forms/_common.py`** —
+    `DemandForecastPeriod` has no tenant FK, so `TenantModelForm` cannot scope it and the select would
+    otherwise list every tenant's periods
+  - `contributor_function` = `[("sales","Sales"),("marketing","Marketing"),("finance","Finance"),
+    ("supply_chain","Supply Chain"),("operations","Operations"),("executive","Executive"),
+    ("customer","Customer")]` (driver: structured overrides from named business functions — Anaplan unites
+    sales/marketing/finance, Kinaxis stakeholder input, o9/SAP IBP/Logility/Netstock)
+  - `submitted_by` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="scm_forecast_adjustments"`) — **excluded from form**, stamped from `request.user` (the
+    verified `PurchaseRequisition.requester` pattern)
+  - `org_unit` = FK `core.OrgUnit` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="scm_forecast_adjustments"`) — verified existing, the same FK HRM 3.40 `WorkforcePlan` uses
+  - `adjustment_type` = `[("absolute","Absolute"),("delta","Delta"),("percent","Percent")]`, default
+    `"absolute"` (driver: different functions think in different units — Anaplan/o9/Netstock/Kinaxis)
+  - `proposed_quantity` = `DecimalField(max_digits=14, decimal_places=4, default=0)`; `adjustment_pct` =
+    `DecimalField(max_digits=6, decimal_places=2, default=0)`
+  - `resolved_quantity` = `DecimalField(max_digits=14, decimal_places=4, default=0, editable=False)` —
+    **excluded from form**, derived in `save()` from `adjustment_type` + the period's pre-adjustment number
+  - `reason_code` = `[("promotion","Promotion"),("new_customer","New Customer"),
+    ("lost_customer","Lost Customer"),("price_change","Price Change"),("market_shift","Market Shift"),
+    ("competitor_action","Competitor Action"),("product_launch","Product Launch"),
+    ("discontinuation","Discontinuation"),("budget_target","Budget Target"),("known_bias","Known Bias"),
+    ("supply_constraint","Supply Constraint"),("other","Other")]` + `rationale` = `TextField()` **required on
+    the form** (`forms.CharField(required=True)`) — an unexplained override is untraceable (driver: o9's
+    tracked assumptions "explainable and auditable", Oracle plan-discussion documentation, Logility, Anaplan)
+  - `confidence` = `[("low","Low"),("medium","Medium"),("high","High")]`, default `"medium"`
+  - `status` = `[("proposed","Proposed"),("accepted","Accepted"),("rejected","Rejected"),
+    ("superseded","Superseded")]`, default `"proposed"`, `editable=False` — **excluded from form**,
+    action-driven (driver: accept/reject gate producing the consensus number — o9/SAP IBP/Anaplan/Kinaxis)
+  - `reviewed_by` = FK `settings.AUTH_USER_MODEL` (`SET_NULL`, `null=True`, `blank=True`, `editable=False`,
+    `related_name="scm_forecast_adjustments_reviewed"`), `reviewed_at` = `DateTimeField(null=True, blank=True,
+    editable=False)`, `review_note` = `TextField(blank=True, editable=False)` — **all excluded from the main
+    form**; `review_note` is captured by the accept/reject action's own small `forms.Form`
+  - `clean()`: `forecast` and `period` must agree (`period.forecast_id == forecast_id`) — a crafted POST must
+    not attach an adjustment to another forecast's period
+  - `Meta.ordering = ["-created_at", "-id"]`; `unique_together = ("tenant", "number")`; indexes
+    `scm_fa_tnt_status_idx` on `("tenant","status")`, `scm_fa_tnt_fcst_idx` on `("tenant","forecast")`
+  - **Form excludes:** `tenant`, `number`, `submitted_by`, `resolved_quantity`, `status`, `reviewed_by`,
+    `reviewed_at`, `review_note`, `created_at`, `updated_at`
+  - **Roll-up:** accepting an adjustment calls `forecast.recompute_consensus(period=None)` which re-sums
+    ACCEPTED adjustments into each `DemandForecastPeriod.consensus_quantity` and refreshes `final_quantity`
+    for unlocked periods — a status-guarded roll-up in the exact shape of the verified
+    `SalesOrder.recompute_allocation_status()`. **Per-contributor accuracy/FVA is DERIVED** on the list page
+    (accepted-adjustment error vs. baseline error) — no new columns.
+  - FKs: `scm.DemandForecast`, `scm.DemandForecastPeriod`, `core.OrgUnit`, `settings.AUTH_USER_MODEL` — all
+    verified existing or built this pass.
+
+- [ ] **`ReorderRule` EXTENSION (no new model)** — edit the EXISTING
+  `models/InventoryManagement/ReorderRules.py` in place; serves **Safety Stock Calculation** via the report
+  page `scm:safety_stock_report` (the verified `scm:reorder_alerts` / `scm:valuation_report` precedent — a
+  NavERP.md bullet may point at a computed report). **Additive nullable/defaulted fields ONLY**, so 4.3's live
+  `reorderrule_list`/`reorder_alerts` pages and its existing tests keep working unchanged
+  - `safety_stock_method` = `[("fixed","Fixed"),("service_level","Service Level"),
+    ("periodic_review","Periodic Review"),("avg_max","Average-Max"),("forecast_error","Forecast Error")]`,
+    default `"fixed"` — `fixed` preserves today's behaviour exactly (drivers: Z × σ_d × √L service-level
+    formula — Netstock/Slim4/Inventory Planner; periodic-review Z × σ_d × √(T+L); max-average method;
+    forecast-error sizing — the tie-in that makes 4.7 more than "4.3 with extra fields")
+  - `service_level_pct` = `DecimalField(max_digits=5, decimal_places=2, default=95)` (driver: Slim4's dynamic
+    safety stock driven by a target service level)
+  - `lead_time_days` = `PositiveIntegerField(default=0)` — **NEW, contra the 4.3 research file's wrong claim**;
+    seeded/defaultable from the verified `SupplierCatalogItem.lead_time_days`
+  - `lead_time_variability_days` = `DecimalField(max_digits=8, decimal_places=2, default=0)` (driver: σ of lead
+    time matters as much as σ of demand — Netstock supplier performance; deriving it from real PO→GRN history
+    is deferred)
+  - `review_period_days` = `PositiveIntegerField(default=0)` — the `T` in the periodic-review branch
+  - `seasonality_profile` = FK `"scm.SeasonalityProfile"` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="reorder_rules"`) — **string FK, no import** (driver: seasonal safety stock — size the buffer
+    from the comparable prior period, Netstock's "use last December when planning this December")
+  - `demand_forecast` = FK `"scm.DemandForecast"` (`SET_NULL`, `null=True`, `blank=True`,
+    `related_name="reorder_rules"`) — **string FK**, the source of forecast-error sizing
+  - **Derived set, all `editable=False` and excluded from the form:** `avg_daily_demand`
+    (`DecimalField(14,4, default=0)`), `demand_std_dev` (`DecimalField(14,4, default=0)`), `abc_class`
+    (`CharField(max_length=1, blank=True)` — revenue rank over `SalesOrderLine`), `xyz_class`
+    (`CharField(max_length=1, blank=True)` — coefficient of variation of demand), `computed_safety_stock`
+    (`DecimalField(14,2, default=0)`), `computed_reorder_point` (`DecimalField(14,2, default=0)`),
+    `last_calculated_at` (`DateTimeField(null=True, blank=True)`).
+    **NOTE:** `Location.abc_class` already exists but is a 4.4 **bin-velocity** attribute — a different axis.
+    Do not overload or reuse it.
+  - New method `calculate(self, series=None)` — computes the derived set from the demand series per
+    `safety_stock_method`; **does NOT write into `safety_stock`/`reorder_point`.** A separate reviewed
+    **apply** action copies `computed_* → safety_stock`/`reorder_point`, so 4.3's `reorder_alerts` keeps
+    working off the same two columns (driver: recalculate-and-apply, never a silent overwrite — Netstock/Slim4/
+    Inventory Planner "recommendations the buyer accepts")
+  - Model-level imports of `_forecasting`/`_history` go **INSIDE the method body** (the verified
+    `ReorderRule.on_hand_map()` does exactly this with `from apps.scm.models import StockMove`) — avoids the
+    import cycle, since `models/__init__.py` loads `InventoryManagement` before `DemandPlanning`
+  - **`ReorderRuleForm` (existing, `forms/InventoryManagement/ReorderRules.py`) gains** the 7 editable policy
+    fields; the 7 derived ones stay off it
+
+- [ ] **`models/DemandPlanning/_history.py`** — private, ORM-level demand-history aggregation shared by all
+  three consumers (forecast generation, seasonality derivation, safety-stock calculation). One function,
+  `demand_series(tenant, *, item, location=None, customer=None, source="sales_orders", start, end,
+  bucket="month", exclude_outliers=False, sigma=3)` → an ordered list of `(period_start, quantity)` Decimals.
+  - `source="sales_orders"` → `SalesOrderLine.objects.filter(sales_order__tenant=…,
+    sales_order__order_date__range=…).exclude(sales_order__status__in=("draft","cancelled"))` grouped by
+    truncated `sales_order__order_date`, summing `quantity_ordered`
+  - `source="stock_issues"` → `StockMove.objects.filter(tenant=…, move_type="issue", moved_at__range=…)`
+    grouped by truncated `moved_at`, summing **`-quantity`** (issues are signed negative)
+  - **All model imports INSIDE the function** (`from apps.scm.models import SalesOrderLine, StockMove`) — the
+    `on_hand_map()` precedent; keeps `ReorderRules.py` importable before `DemandPlanning` loads
+  - **This file declares NO model and is therefore NOT added to the `models/__init__.py` re-export block** —
+    it is imported by explicit path (`from apps.scm.models.DemandPlanning._history import demand_series`)
+- [ ] **`models/DemandPlanning/_forecasting.py`** — private, **pure-Python `Decimal` arithmetic, zero ORM,
+  zero numpy/pandas/scikit**: `naive`, `seasonal_naive`, `moving_average`, `weighted_moving_average`,
+  `exponential_smoothing`, `holt_linear`, `holt_winters`, `linear_trend`; the accuracy metrics `mape`,
+  `wmape`, `bias_pct`, `tracking_signal`; `mean`, `std_dev`, `clip_outliers(series, sigma)`;
+  `best_fit(series, horizon)` (runs the buildable methods on a holdout, returns `(method_name, values)` for the
+  lowest MAPE); and `z_for_service_level(pct)` (90→1.28, 95→1.65, 97.5→1.96, 99→2.33, nearest-below lookup).
+  Same "not re-exported, it declares no model" note as `_history.py`.
+
+## Backend (apps/scm/{models,forms,views,urls}/DemandPlanning/)
+
+- [ ] `apps/scm/models/DemandPlanning/__init__.py` — empty (new sub-module package; still its own commit)
+- [ ] `apps/scm/models/DemandPlanning/_history.py` — `demand_series()` (lazy in-function model imports)
+- [ ] `apps/scm/models/DemandPlanning/_forecasting.py` — pure-Decimal method library + metrics + Z lookup
+- [ ] `apps/scm/models/DemandPlanning/SeasonalityProfiles.py` — `SeasonalityProfile`, `SeasonalityIndex`
+  (**build first** — `DemandForecast` and `ReorderRule` both FK it) — `from apps.scm.models._base import *`
+- [ ] `apps/scm/models/DemandPlanning/DemandForecasts.py` — `DemandForecast`, `DemandForecastPeriod` +
+  `generate_periods()`, `recompute_consensus()`, `period_actuals_map()`, the accuracy/FVA properties
+- [ ] `apps/scm/models/DemandPlanning/DemandSignals.py` — `DemandSignal` + `apply_to_forecast(forecast)` +
+  the module-level `detect_order_surge(tenant)` service
+- [ ] `apps/scm/models/DemandPlanning/ForecastAdjustments.py` — `ForecastAdjustment` + `resolve_quantity()`
+- [ ] `apps/scm/models/InventoryManagement/ReorderRules.py` — **EDIT in place**: 7 policy fields + 7
+  `editable=False` derived fields + `calculate()` + `apply_computed()`; string FKs to `scm.SeasonalityProfile`
+  and `scm.DemandForecast`; docstring updated to say 4.7 owns the calculation
+- [ ] `apps/scm/models/__init__.py` — **re-export block** under a `# 4.7 Demand Planning & Forecasting` header:
+  `SeasonalityProfile, SeasonalityIndex, DemandForecast, DemandForecastPeriod, DemandSignal,
+  ForecastAdjustment` (import `SeasonalityProfiles` **before** `DemandForecasts`). Missing one is an
+  ImportError/AttributeError at runtime, not import time
+- [ ] `apps/scm/forms/DemandPlanning/__init__.py` — empty
+- [ ] `apps/scm/forms/DemandPlanning/SeasonalityProfiles.py` — `SeasonalityProfileForm` (`TenantUniqueMixin` +
+  `TenantModelForm`), `SeasonalityIndexForm`, `SeasonalityIndexFormSet` (`inlineformset_factory`, mirrors
+  `PurchaseOrderLineFormSet`)
+- [ ] `apps/scm/forms/DemandPlanning/DemandForecasts.py` — `DemandForecastForm` (calls `_active_currencies`,
+  scopes `customer` via `_customer_parties`), `DemandForecastPeriodForm`, `DemandForecastPeriodFormSet`
+  (`extra=0`), `DemandForecastGenerateForm` (`forms.Form`: `regenerate_locked` bool)
+- [ ] `apps/scm/forms/DemandPlanning/DemandSignals.py` — `DemandSignalForm` (scopes `customer`),
+  `DemandSignalApplyForm` (`forms.Form`: `forecast` ModelChoiceField scoped to `tenant` + approved/statistical
+  statuses, `impact_quantity`), `DemandSignalDismissForm` (`forms.Form`: `notes`)
+- [ ] `apps/scm/forms/DemandPlanning/ForecastAdjustments.py` — `ForecastAdjustmentForm` (**`period` queryset
+  hand-scoped with `_scope_to_parent(self, "period", forecast.periods.all())`, falling back to `.none()` when
+  there is no forecast yet — never the unscoped default**), `ForecastAdjustmentReviewForm` (`forms.Form`:
+  `review_note`)
+- [ ] `apps/scm/forms/InventoryManagement/ReorderRules.py` — **EDIT**: add the 7 policy fields to
+  `ReorderRuleForm.Meta.fields`; scope `seasonality_profile`/`demand_forecast` by tenant (both have a tenant
+  FK, so `TenantModelForm` handles it — verify, don't assume)
+- [ ] `apps/scm/forms/__init__.py` — **re-export block** (`# 4.7 …`) for every new form + formset
+- [ ] `apps/scm/views/DemandPlanning/__init__.py` — empty
+- [ ] `apps/scm/views/DemandPlanning/SeasonalityProfiles.py` — `seasonalityprofile_list/create/detail/edit/
+  delete` (hand-rolled create/edit for the `SeasonalityIndexFormSet`, atomic parent+child save, mirrors the
+  `PurchaseOrder` pattern) + `seasonalityprofile_derive` (`@login_required`, `@require_POST`; fills
+  `SeasonalityIndex` rows from `demand_series()`, sets `last_derived_at`/`sample_size`). List context:
+  `type_choices`, `scope_choices`, `bucket_choices`, `items`, `categories`, `locations`
+- [ ] `apps/scm/views/DemandPlanning/DemandForecasts.py` — `demandforecast_list/create/detail/edit/delete`
+  (hand-rolled formset save) + `demandforecast_generate` (`@login_required`, `@require_POST` — builds the
+  period grid from `bucket`/`horizon_start`/`horizon_end`, fills `historical_quantity`/`baseline_quantity` via
+  `_history` + `_forecasting`, applies `seasonality_profile` indices → `seasonal_index_applied`/
+  `event_uplift_quantity`, writes `selected_method` when `method="best_fit"`, **skips `is_locked` periods**,
+  sets `generated_at`, status `draft`→`statistical`) + `demandforecast_submit_review` +
+  `demandforecast_approve` (**`@tenant_admin_required`** — approving the plan of record is a privileged write;
+  sets `approved_by`/`approved_at`) + `demandforecast_archive` + `demandforecast_revise` (clones the header +
+  periods, `revision + 1`, `supersedes` = the original, original → `archived`). List context: `status_choices`,
+  `method_choices`, `bucket_choices`, `scenario_choices`, `items`, `locations`
+- [ ] `apps/scm/views/DemandPlanning/DemandSignals.py` — `demandsignal_list/create/detail/edit/delete` +
+  `demandsignal_detect` (`@login_required`, `@require_POST`; runs `detect_order_surge(request.tenant)`,
+  messages how many rows were created) + `demandsignal_review` (→ `under_review`, stamps `reviewed_by`/
+  `reviewed_at`) + `demandsignal_apply` (POST `DemandSignalApplyForm`; **guard: only from `new`/`under_review`**
+  — a crafted POST must not re-apply an applied/dismissed signal; writes
+  `DemandForecastPeriod.signal_adjustment_quantity` for the periods overlapping
+  `effective_from`/`effective_to`, sets `applied_to_forecast`, status → `applied`) + `demandsignal_dismiss`.
+  List context: `status_choices`, `type_choices`, `source_choices`, `direction_choices`, `items`, `locations`
+- [ ] `apps/scm/views/DemandPlanning/ForecastAdjustments.py` — `forecastadjustment_list/create/detail/edit/
+  delete` (create stamps `submitted_by = request.user`) + `forecastadjustment_accept` (**proposed-only guard**,
+  stamps `reviewed_by`/`reviewed_at`/`review_note`, calls `forecast.recompute_consensus()`) +
+  `forecastadjustment_reject` (proposed-only guard). List context: `status_choices`, `function_choices`,
+  `reason_choices`, `type_choices`, `forecasts` (tenant-scoped queryset for the FK filter dropdown)
+- [ ] `apps/scm/views/DemandPlanning/Reports.py` — mirrors the verified `InventoryManagement/Reports.py`
+  (multiple computed report views in one module):
+  - `safety_stock_report` (`@login_required`) — every active `ReorderRule` with computed-vs-current
+    `safety_stock`/`reorder_point`, the method, service level, lead time, ABC/XYZ, and a variance column;
+    **filter bar** on `safety_stock_method`, `item`, `location`, plus `q`; **must use
+    `ReorderRule.on_hand_map()` + one batched `demand_series` pass — no per-rule aggregate (L18)**;
+    `select_related("item", "location", "seasonality_profile", "demand_forecast")`
+  - `safety_stock_recalculate` (`@login_required`, `@require_POST`) — runs `calculate()` across the filtered
+    set, writes only the `computed_*`/`last_calculated_at` fields, calls `write_audit_log`
+  - `safety_stock_apply` (`@tenant_admin_required`, `@require_POST`, per-rule `<int:pk>`) — copies
+    `computed_safety_stock`/`computed_reorder_point` into the live `safety_stock`/`reorder_point`; **a
+    reviewed hand-off, never a silent overwrite**; `write_audit_log` with the before/after diff
+  - `forecast_accuracy_report` (`@login_required`) — MAPE/WMAPE/bias/tracking-signal/FVA league table across
+    forecasts with an exception highlight (|bias| > 20 %, |tracking signal| > 4); **NOT a NavERP.md bullet** —
+    the module's exception-management landing spot (trim #2 if the pass runs long)
+- [ ] `apps/scm/views/__init__.py` — **re-export block** (`# 4.7 …`) for every new view name
+- [ ] `apps/scm/urls/DemandPlanning/__init__.py` — empty
+- [ ] `apps/scm/urls/DemandPlanning/SeasonalityProfiles.py` — `seasonality/`, `seasonality/add/`,
+  `seasonality/<int:pk>/`, `seasonality/<int:pk>/edit/`, `seasonality/<int:pk>/delete/`,
+  `seasonality/<int:pk>/derive/`
+- [ ] `apps/scm/urls/DemandPlanning/DemandForecasts.py` — `forecasts/`, `forecasts/add/`,
+  `forecasts/<int:pk>/`, `forecasts/<int:pk>/edit/`, `forecasts/<int:pk>/delete/`,
+  `forecasts/<int:pk>/generate/`, `forecasts/<int:pk>/submit-review/`, `forecasts/<int:pk>/approve/`,
+  `forecasts/<int:pk>/archive/`, `forecasts/<int:pk>/revise/` (**literal `forecasts/add/` before
+  `forecasts/<int:pk>/`** — first-match-wins)
+- [ ] `apps/scm/urls/DemandPlanning/DemandSignals.py` — `demand-signals/`, `demand-signals/add/`,
+  **`demand-signals/detect/` (literal — MUST precede `demand-signals/<int:pk>/`)**, `demand-signals/<int:pk>/`,
+  `demand-signals/<int:pk>/edit/`, `demand-signals/<int:pk>/delete/`, `demand-signals/<int:pk>/review/`,
+  `demand-signals/<int:pk>/apply/`, `demand-signals/<int:pk>/dismiss/`
+- [ ] `apps/scm/urls/DemandPlanning/ForecastAdjustments.py` — `forecast-adjustments/`,
+  `forecast-adjustments/add/`, `forecast-adjustments/<int:pk>/`, `forecast-adjustments/<int:pk>/edit/`,
+  `forecast-adjustments/<int:pk>/delete/`, `forecast-adjustments/<int:pk>/accept/`,
+  `forecast-adjustments/<int:pk>/reject/`
+- [ ] `apps/scm/urls/DemandPlanning/Reports.py` — `safety-stock/`, **`safety-stock/recalculate/` (literal,
+  before the pk route)**, `safety-stock/<int:pk>/apply/`, `forecast-accuracy/`
+- [ ] `apps/scm/urls/__init__.py` — append 5 `_dp_*` imports (`from .DemandPlanning.SeasonalityProfiles import
+  urlpatterns as _dp_seasonality`, `…DemandForecasts…` `_dp_forecasts`, `…DemandSignals…` `_dp_signals`,
+  `…ForecastAdjustments…` `_dp_adjustments`, `…Reports…` `_dp_reports`) + 5 `*_dp_*` entries in the
+  concatenated `urlpatterns`, each with a one-line comment noting the prefix is collision-free against
+  `orders/` / `sales-orders/` / `reorder-rules/` / `reorder-alerts/`
+- [ ] `apps/scm/admin.py` — new `# 4.7 Demand Planning & Forecasting` section registering `DemandForecast`
+  (+`DemandForecastPeriodInline`), `SeasonalityProfile` (+`SeasonalityIndexInline`), `DemandSignal`,
+  `ForecastAdjustment`; add the new policy fields to the existing `ReorderRule` admin
+- [ ] `makemigrations scm` → **`0009`**: 6 new tables (`DemandForecast`, `DemandForecastPeriod`,
+  `SeasonalityProfile`, `SeasonalityIndex`, `DemandSignal`, `ForecastAdjustment`) + **14 `AddField`s on
+  `scm_reorderrule`, all nullable or defaulted** so existing rows migrate cleanly and 4.3's pages are
+  unaffected. `makemigrations --check` must then report "No changes detected"
+- [ ] **Audit logging:** every hand-rolled save path (all 4 formset/action-bearing create/edit views + all 14
+  action views + `safety_stock_recalculate`/`safety_stock_apply`) calls `write_audit_log` itself — only the
+  `crud_*` helpers in `apps/core/crud.py` do it automatically. Use `_changed` (already imported in
+  `views/_common.py`) for the edit diffs rather than re-deriving the redaction list
+- [ ] **Every view tenant-scoped** (`.filter(tenant=request.tenant)`), `@login_required` on all,
+  `@tenant_admin_required` on the privileged writes (`demandforecast_approve`, `safety_stock_apply`),
+  `@require_POST` on every action + delete
+
+## Seed (extend the existing apps/scm/management/commands/seed_scm.py — idempotent, reuses existing rows)
+
+- [ ] New `_seed_demand_planning_tenant(self, tenant)` (4.7), called in `handle()` **after**
+  `self._seed_tms_tenant(tenant)` (needs 4.3's `Item`/`Location`/`ReorderRule` and 4.5's `SalesOrder`/
+  `SalesOrderLine` history to exist first), guarded by
+  `if DemandForecast.objects.filter(tenant=tenant).exists(): return` + the standard
+  "already exists — skipping" `stdout.write`
+  - 1 `SeasonalityProfile` `profile_type="seasonal"`, `bucket="month"`, `scope="item"` on the existing seeded
+    stock item + 12 `SeasonalityIndex` rows (a real Q4-peaking curve averaging 1.0)
+  - 1 `SeasonalityProfile` `profile_type="promotion"`, a finite `event_start`/`event_end` window,
+    `uplift_pct=25`, `promotion_mechanic="price_discount"`, `cannibalization_pct=10` +
+    `cannibalized_category` = the sibling seeded `ItemCategory` — exercises BOTH halves of the Seasonality
+    bullet from one table
+  - 1 `DemandForecast` on the seeded item (`method="moving_average"`, `bucket="month"`, 6-month horizon,
+    `seasonality_profile` = the seasonal one, `currency` = the tenant's seeded default `Currency`) driven
+    through the **real `generate_periods()` code path** (not hand-set fields) so `historical_quantity`/
+    `baseline_quantity`/`seasonal_index_applied`/`final_quantity`/`generated_at`/`status="statistical"` are all
+    populated the way the app populates them; then submitted + approved so `approved_by`/`approved_at` are real
+  - 1 `DemandForecast` left at `status="draft"` on a second item (so the list page shows two statuses and the
+    Edit/Delete action gating is visible)
+  - 3 `DemandSignal` rows: one `order_surge` produced by actually calling `detect_order_surge(tenant)` against
+    the seeded `SalesOrderLine` history (proves the internal detector works with zero integration), one
+    hand-entered `customer_forecast` linked to the existing seeded customer `Party` via `self._customer(...)`,
+    one `weather` row left at `status="new"` for the triage queue; apply the surge one to the approved forecast
+    through `demandsignal_apply`'s code path so `signal_adjustment_quantity` is non-zero
+  - 3 `ForecastAdjustment` rows against the approved forecast — `sales` (`delta`, accepted, so
+    `consensus_quantity`/`final_quantity` are really rolled up), `marketing` (`percent`, proposed — populates
+    the `?status=proposed` review queue), `finance` (`absolute`, rejected) — each with a real `reason_code` +
+    `rationale`, `org_unit` from the existing `self._org_unit(tenant)` helper, `submitted_by` = the tenant admin
+    from `self._admin(tenant)`
+  - **Extend the existing seeded `ReorderRule` rows in place** (do NOT create parallel ones): set
+    `safety_stock_method="service_level"`, `service_level_pct=95`, `lead_time_days` copied from the seeded
+    `SupplierCatalogItem.lead_time_days` where one exists (else 7), `lead_time_variability_days=2`,
+    `seasonality_profile` = the seasonal profile on the matching item; then call `calculate()` so
+    `computed_safety_stock`/`computed_reorder_point`/`last_calculated_at` are populated **without** touching
+    `safety_stock`/`reorder_point` — the report page then has a real computed-vs-current variance to show and
+    the Apply button has something to do
+  - `self.stdout.write` a note that history is DERIVED from `SalesOrderLine` — re-running the seeder does not
+    create a second history source
+- [ ] `_flush()` — delete the 4.7 rows **BEFORE** the 4.5 OMS and 4.3 inventory teardown blocks (order matters:
+  `DemandForecast.item` is `PROTECT`): `ForecastAdjustment` → `DemandSignal` → `DemandForecastPeriod` /
+  `DemandForecast` → `SeasonalityIndex` / `SeasonalityProfile`. `ReorderRule.seasonality_profile`/
+  `demand_forecast` are `SET_NULL` so the existing rule teardown needs no change
+- [ ] Idempotency: no bare `.create()` on `TenantNumbered` models — follow the file's existing
+  `filter(tenant=…, number=…).first()` / `get_or_create` style so a second run creates **no** duplicate
+  `DF-`/`SEA-`/`DS-`/`FA-` numbers
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **one new `LIVE_LINKS["4.7"]` entry** inserted after `"4.6"`, keys matching
+  the `NavERP.md:776-780` bullet text **exactly**:
+  ```python
+  # 4.7 Demand Planning & Forecasting — DemandForecast (+period grid) is the spine; SeasonalityProfile
+  # doubles as the promotional-event window; DemandSignal is the short-horizon sensing log; and Safety
+  # Stock Calculation points at a computed REPORT over the extended 4.3 ReorderRule (the
+  # scm:reorder_alerts / scm:valuation_report precedent — a bullet may be a report, not a CRUD list).
+  "4.7": {
+      "Sales Forecasting": "scm:demandforecast_list",          # bullet (statistical forecast + period grid)
+      "Seasonality Analysis": "scm:seasonalityprofile_list",   # bullet (seasonal curves AND promo events)
+      "Demand Sensing": "scm:demandsignal_list",               # bullet (short-horizon signal triage log)
+      "Collaborative Planning": "scm:forecastadjustment_list", # bullet (consensus queue, ?status=proposed)
+      "Safety Stock Calculation": "scm:safety_stock_report",   # bullet (computed policy over ReorderRule)
+  },
+  ```
+- [ ] **No `config/settings.py` / `config/urls.py` change** — `apps/scm` is already installed and included
+  (4.1 shipped it). Confirm, don't re-add
+- [ ] All 5 targets are STAFF-facing management pages, no login-gated portal view (L32)
+
+## Templates (templates/scm/demandplanning/ — matches the on-disk scm convention: procurement/ srm/ inventory/ warehouse/ orders/ transportation/)
+
+Every list page: filter bar reflecting `request.GET` (string fields `== value`; **FK/pk fields
+`|stringformat:"d"`, NEVER `|slugify`**) + Actions column (view / edit / delete-POST + `confirm()` +
+`{% csrf_token %}`) + pagination guarded by `has_previous`/`has_next` (L9) + empty-state row. Badges use ONLY
+the colour-named theme.css classes (`badge-green/red/amber/info/muted/slate` — verified at
+`static/css/theme.css:285-290`; `-success`/`-danger` do NOT exist, L33) with an `{% else %}`
+`{{ obj.get_x_display }}` fallback. `{% extends "base.html" %}` unchanged.
+
+- [ ] `demandplanning/demandforecast/list.html` — filters: `q`, `status`, `method`, `bucket`, `scenario`,
+  `item`, `location`; columns number/name/item/location/bucket/horizon/method/status/MAPE; badges
+  `badge-muted` draft, `badge-info` statistical, `badge-amber` in_review, `badge-green` approved,
+  `badge-slate` archived
+- [ ] `demandplanning/demandforecast/detail.html` — the **period waterfall table** (historical → baseline →
+  × seasonal index → + event uplift → + signal adjustment → consensus → final → value = final × unit_price),
+  the accuracy panel (MAPE / WMAPE / bias % / tracking signal / **FVA**), the linked signals + adjustments
+  lists, and the Actions sidebar: Generate / Submit for Review / Approve / Archive / Revise / Edit / Delete —
+  each a POST form with csrf, **gated on `status`**
+- [ ] `demandplanning/demandforecast/form.html` — header fields + the `DemandForecastPeriodFormSet` grid
+  (`extra=0`); `historical_quantity`/`signal_adjustment_quantity`/`consensus_quantity` shown **read-only**, not
+  as inputs
+- [ ] `demandplanning/seasonalityprofile/list.html` — filters: `q`, `profile_type`, `scope`, `bucket`, `item`,
+  `category`, `location`, `is_active`; badges `badge-info` seasonal, `badge-amber` promotion, `badge-green`
+  event, `badge-slate` lifecycle
+- [ ] `demandplanning/seasonalityprofile/detail.html` — the index curve as a labelled bar/percentage row
+  (index_factor vs. 1.0000) + sample_size, the promotion window + uplift/cannibalization panel, and a
+  **Derive From History** POST button
+- [ ] `demandplanning/seasonalityprofile/form.html` — header + `SeasonalityIndexFormSet`
+- [ ] `demandplanning/demandsignal/list.html` — filters: `q`, `status`, `signal_type`, `source`,
+  `impact_direction`, `item`, `location`; a **Detect Order Surges** POST button in the toolbar; badges
+  `badge-info` new, `badge-amber` under_review, `badge-green` applied, `badge-muted` dismissed, `badge-slate`
+  expired
+- [ ] `demandplanning/demandsignal/detail.html` — signal vs. baseline value + impact panel, the effective
+  window / horizon, and Review / Apply-to-Forecast / Dismiss actions gated on `status`
+- [ ] `demandplanning/demandsignal/form.html`
+- [ ] `demandplanning/forecastadjustment/list.html` — filters: `q`, `status`, `contributor_function`,
+  `reason_code`, `adjustment_type`, `forecast`; **doubles as the consensus review queue** (`?status=proposed`
+  quick-link chip in the toolbar); badges `badge-amber` proposed, `badge-green` accepted, `badge-red` rejected,
+  `badge-slate` superseded
+- [ ] `demandplanning/forecastadjustment/detail.html` — the override (type / proposed / pct / resolved), the
+  reason code + rationale, contributor + org unit, and Accept / Reject POST forms gated on
+  `status == "proposed"`
+- [ ] `demandplanning/forecastadjustment/form.html`
+- [ ] `demandplanning/safety_stock_report.html` — **standalone report at the sub-module root** (rule 6, the
+  verified `inventory/valuation_report.html` / `reorder_alerts.html` precedent): filter bar
+  (`safety_stock_method`, `item`, `location`, `q`), columns item/location/method/service level/lead time/
+  avg daily demand/σ/ABC/XYZ/current vs. computed safety stock + reorder point/variance, a **Recalculate All**
+  POST button and a per-row **Apply** POST form (confirm + csrf); variance badges `badge-green` within 5 %,
+  `badge-amber` 5–25 %, `badge-red` beyond 25 %; empty-state pointing at `scm:reorderrule_list`
+- [ ] `demandplanning/forecast_accuracy_report.html` — standalone report: MAPE / WMAPE / bias / tracking
+  signal / FVA per forecast, exception rows highlighted (|bias| > 20 %, |tracking signal| > 4)
+- [ ] `templates/scm/inventory/reorderrule/form.html` — **EDIT**: add the 7 new policy fields (grouped under a
+  "Safety Stock Policy" fieldset) and a read-only computed panel; `templates/scm/inventory/reorderrule/
+  list.html` gains a `safety_stock_method` column + filter
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` produces `0009`; `python manage.py migrate` applies clean;
+  `makemigrations --check` then reports "No changes detected"
+- [ ] `python manage.py seed_scm` **×2** — second run prints the 4.7 "already exists — skipping" guard, creates
+  no duplicate `DF-`/`SEA-`/`DS-`/`FA-` numbers, and does not re-extend the `ReorderRule` rows
+- [ ] `python manage.py check` clean
+- [ ] **Regression: 4.3 is untouched** — `scm:reorderrule_list`, `scm:reorder_alerts` and
+  `scm:valuation_report` still render 200 with the same numbers; existing `apps/scm` tests still green (the 14
+  `ReorderRule` `AddField`s are all nullable/defaulted, `safety_stock_method="fixed"` preserves behaviour)
+- [ ] **Regression: no demand-history table was created** — `grep -rn "class .*History" apps/scm/models/`
+  returns nothing; `demand_series()` is the only history source and it reads `SalesOrderLine`/`StockMove`
+- [ ] **Regression: `safety_stock_apply` is the ONLY writer of `safety_stock`/`reorder_point`** —
+  `safety_stock_recalculate` leaves both columns untouched (assert before/after)
+- [ ] **Regression: `demandforecast_generate` respects `is_locked`** — a locked period keeps its
+  `final_quantity` across a regenerate
+- [ ] **Regression: accepting a `ForecastAdjustment` rolls up** — `consensus_quantity`/`final_quantity` change;
+  rejecting one does not; a second accept is refused (proposed-only guard)
+- [ ] **Regression: crafted-POST FK rejection** — a `ForecastAdjustment` whose `period` belongs to a different
+  forecast is rejected by `clean()`; `demandsignal_apply` against an already-`applied` signal is refused
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`**: every new `scm:demandforecast_*` /
+  `seasonalityprofile_*` / `demandsignal_*` / `forecastadjustment_*` / `safety_stock_*` /
+  `forecast_accuracy_report` URL returns 200/302; content assertions (no `{#` or `{% comment` leaks, correct
+  page titles, a seeded `DF-`/`SEA-`/`DS-`/`FA-` record visible on each list); **cross-tenant IDOR → 404** on
+  every new entity's detail/edit/delete/action URL; anonymous → login redirect; `safety_stock_apply` as a
+  non-admin tenant user → 403/redirect
+- [ ] Sidebar shows **4.7 Live** with all 5 bullets pointing at real, resolving pages
+
+## Close-out
+
+- [ ] Review agents in order, one at a time, each its own commit: code-reviewer → explorer → frontend-reviewer
+  → performance-reviewer → qa-smoke-tester → security-reviewer → test-writer
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — the 4.7 models/URLs/templates/seeder rows, the
+  derived-history-never-stored rule and where `demand_series()` lives, the `_forecasting.py` method library +
+  Z-table, the `ReorderRule` extension and the **compute-then-apply** (never silent overwrite) contract, and
+  the `LIVE_LINKS["4.7"]` map
+- [ ] README — record 4.7 Demand Planning & Forecasting complete; note that safety stock is computed by 4.7 but
+  still consumed by 4.3's `scm:reorder_alerts` through the same two columns
+- [ ] ERD — add `DemandForecast`+`DemandForecastPeriod`, `SeasonalityProfile`+`SeasonalityIndex`,
+  `DemandSignal`, `ForecastAdjustment`, and the new `ReorderRule` policy/derived fields
+- [ ] `.claude/tasks/lessons.md` — capture a lesson if one emerges (candidates: "a sibling research file is not
+  evidence — 4.3's file claimed `ReorderRule.lead_time_days` shipped and it never did (L28 again)"; "a
+  computed-vs-live column pair needs an explicit reviewed apply action, never a silent overwrite of the live
+  column another sub-module already reads")
+
+## Later passes / deferred (carried from research — nothing lost)
+
+- **ML / ensemble / Bayesian forecast engines** (Oracle Bayesian weighting, John Galt RL, Blue Yonder/o9/Kinaxis
+  AI) — this pass ships deterministic, auditable `Decimal` arithmetic only; **no numpy/pandas/scikit dependency
+  is introduced**
+- **Live external signal feeds** (POS/retailer EDI, weather services, market indices, social sentiment) —
+  `DemandSignal` stores whatever is posted and `detect_order_surge` actually runs; every external feed is an
+  integration (the 4.6 `TrackingEvent` posture)
+- **Automatic cannibalization/halo detection** (RELEX's headline ML) — manual `cannibalization_pct` only
+- **True multi-level hierarchy planning** with proportional top-down / bottom-up / middle-out disaggregation —
+  needs an allocation engine; this pass forecasts at item (× optional location × optional customer) and rolls
+  up for reporting only
+- **Multi-echelon inventory optimization (MEIO)** — single-echelon per `(item, location)` only
+- **Attribute-similarity new-product matching** — the simple `reference_item` + scale copy ships; `Item` has no
+  attribute framework to match on
+- **Deriving supplier lead-time variability from real PO→GRN history** — `lead_time_days` /
+  `lead_time_variability_days` are entered (defaultable from `SupplierCatalogItem.lead_time_days`) this pass
+- **Hard link between the revenue-valued forecast and `accounting.Budget`/`BudgetLine`** — both verified to
+  exist, but the join needs a GL-account ↔ item-category mapping that does not; `contributor_function="finance"`
+  is the interim seam (L29 — accounting owns money)
+- **Spreadsheet import/export of history and forecast grids** (Anaplan Excel add-in, Netstock/Inventory Planner
+  CSV) — an `import.html` secondary action on `demandplanning/demandforecast/`, later
+- **Full multi-scenario compare/merge and simulation** (Kinaxis's signature) — `scenario` + `supersedes` give
+  cheap side-by-side versions; an interactive workbench is out of scope for a Django/HTMX CRUD pass
+- **Per-contributor accuracy weighting of consensus inputs** (Anaplan) — `ForecastAdjustment` stores the data;
+  the weighting engine is later
+- **Notification / mention / approval routing on collaborative plans** — `core.Activity` + `core.Document`
+  cover lightweight notes/attachments; real dispatch follows 4.5's "hook now, wire later" posture
+- **Scheduled / automatic forecast regeneration** (nightly re-forecast, rolling horizon roll-forward) — this
+  pass regenerates on an explicit user action; a management command / scheduler is a follow-up
+- **`abc_class`/`xyz_class`** — in scope but **trim #1** if the pass runs long; nothing else depends on it
+
+### Parked for sibling sub-modules (do NOT pull in)
+
+- Automated PO/requisition generation from a forecast shortfall → **4.1 Procurement** + 4.3's existing
+  `scm:reorder_alerts` → `requisition_create` hand-off. 4.7 computes and applies the *policy numbers* only
+- Supply-side planning: capacity checks, constrained supply plan, MRP netting, DRP → **4.8 Manufacturing /
+  Production**. 4.7 is demand-side only
+- Inventory turnover / dead-stock / aging / demand-spike dashboards → **4.11 Supply Chain Analytics**. This
+  pass ships two focused report pages, not an analytics suite
+- Sales-pipeline / quota forecasting → already built as **CRM 1.2** (`crm:forecast`, `crm.SalesQuota`) —
+  different object (deals, not SKUs). Do not merge or re-point
+- Cash-flow forecasting → already built as **Accounting 2.5** (`accounting:cash_forecast`)
+- Allocating forecasted (not on-hand) stock to open orders → **4.5 OMS** owns `SalesOrderAllocation`
+- Headcount/workforce demand forecasting → **HRM 3.40** (`hrm:workforceplan_list`), already built
+- Promotion budget/spend and campaign execution → **CRM 1.3**; 4.7 models only a promotion's demand-uplift
+  window
+
+## Review notes
+
+(filled in at the end)
