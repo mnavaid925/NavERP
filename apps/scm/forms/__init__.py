@@ -130,3 +130,25 @@ from .TransportationManagement.FreightInvoices import (  # noqa: F401
     FreightInvoiceLineForm,
     FreightInvoiceLineFormSet,
 )
+
+# 4.7 Demand Planning & Forecasting
+from .DemandPlanning.SeasonalityProfiles import (  # noqa: F401
+    SeasonalityProfileForm,
+    SeasonalityIndexForm,
+    SeasonalityIndexFormSet,
+)
+from .DemandPlanning.DemandForecasts import (  # noqa: F401
+    DemandForecastForm,
+    DemandForecastPeriodForm,
+    DemandForecastPeriodFormSet,
+    DemandForecastGenerateForm,
+)
+from .DemandPlanning.DemandSignals import (  # noqa: F401
+    DemandSignalForm,
+    DemandSignalApplyForm,
+    DemandSignalDismissForm,
+)
+from .DemandPlanning.ForecastAdjustments import (  # noqa: F401
+    ForecastAdjustmentForm,
+    ForecastAdjustmentReviewForm,
+)
