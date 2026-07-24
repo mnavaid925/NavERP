@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'accepted' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'proposed' %}amber{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:forecastadjustment_list' %}">Consensus Adjustments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The Override</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Forecast</span><span class="detail-value"><a href="{% url 'scm:demandforecast_detail' obj.forecast.pk %}">{{ obj.forecast.number }}</a> · {{ obj.forecast.item.sku }}</span></div>
+        <div><span class="detail-label">Period</span><span class="detail-value">{% if obj.period %}{{ obj.period.period_label|default:obj.period.period_start|date:"M Y" }}{% else %}Whole horizon (split pro-rata){% endif %}</span></div>
+        <div><span class="detail-label">Type</span><span class="detail-value">{{ obj.get_adjustment_type_display }}</span></div>
+        <div><span class="detail-label">Proposed quantity</span><span class="detail-value">{{ obj.proposed_quantity|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Percent</span><span class="detail-value">{{ obj.adjustment_pct|floatformat:2 }}%</span></div>
+        <div><span class="detail-label">Measured against</span><span class="detail-value">{{ base_quantity|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Resolved delta</span><span class="detail-value fw-600">{{ obj.resolved_quantity|floatformat:2 }}</span></div>
+        <div><span class="detail-label">Confidence</span><span class="detail-value"><span class="badge badge-{% if obj.confidence == 'high' %}green{% elif obj.confidence == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_confidence_display }}</span></span></div>
+      </div>
+      <p class="text-muted">Whatever type the contributor used, the override is stored as a single signed delta — that is what makes the consensus roll-up a plain sum of the accepted proposals.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rationale</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Contributor function</span><span class="detail-value">{{ obj.get_contributor_function_display }}</span></div>
+        <div><span class="detail-label">Submitted by</span><span class="detail-value">{% if obj.submitted_by %}{{ obj.submitted_by.get_username }}{% else %}—{% endif %} · {{ obj.created_at|date:"M d, Y" }}</span></div>
+        <div><span class="detail-label">Org unit</span><span class="detail-value">{{ obj.org_unit.name|default:"—" }}</span></div>
+        <div><span class="detail-label">Reason code</span><span class="detail-value">{{ obj.get_reason_code_display }}</span></div>
+      </div>
+      <p style="white-space:pre-line;">{{ obj.rationale }}</p>
+    </div>
+  </div>
+
+  {% if obj.reviewed_by or obj.review_note %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Review</h2></div>
+      <div class="card-body">
+        <div class="detail-grid">
+          <div><span class="detail-label">Reviewed by</span><span class="detail-value">{% if obj.reviewed_by %}{{ obj.reviewed_by.get_username }}{% else %}—{% endif %}</span></div>
+          <div><span class="detail-label">Reviewed at</span><span class="detail-value">{{ obj.reviewed_at|date:"M d, Y H:i"|default:"—" }}</span></div>
+        </div>
+        {% if obj.review_note %}<p style="white-space:pre-line;">{{ obj.review_note }}</p>{% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if obj.is_reviewable %}
+        <form method="post" action="{% url 'scm:forecastadjustment_accept' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="{{ review_form.review_note.id_for_label }}">{{ review_form.review_note.label }}</label>
+            {{ review_form.review_note }}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit" formaction="{% url 'scm:forecastadjustment_accept' obj.pk %}"><i data-lucide="check-circle"></i> Accept</button>
+            <button class="btn btn-outline danger" type="submit" formaction="{% url 'scm:forecastadjustment_reject' obj.pk %}"><i data-lucide="x-circle"></i> Reject</button>
+          </div>
+        </form>
+      {% endif %}
+      <div class="form-actions" style="margin-top:1.5rem;">
+        {% if obj.is_reviewable %}
+          <a href="{% url 'scm:forecastadjustment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        <form method="post" action="{% url 'scm:forecastadjustment_delete' obj.pk %}" onsubmit="return confirm('Delete this adjustment?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        <a href="{% url 'scm:forecastadjustment_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
