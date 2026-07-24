@@ -134,6 +134,14 @@ class ReorderRule(TenantOwned):
 
         ``series`` may be passed in by a batch caller (the safety-stock report calculates every rule
         in one pass) so a page does not re-derive the same item's history per rule.
+
+        SCOPE (documented, not accidental): the series is ITEM-level. ``location`` is passed through
+        but ``demand_series`` can only honour it for the ``stock_issues`` source — a
+        ``SalesOrderLine`` has no location, so demand ordered against this item is network-wide.
+        For a single-warehouse tenant that is exactly right; for a multi-location one it sizes each
+        site's buffer against total network demand, i.e. **conservatively high**. Splitting demand
+        per site needs a fulfilment-location rule that does not exist yet, and guessing one would be
+        worse than a documented over-estimate.
         """
         if series is not None:
             return series
