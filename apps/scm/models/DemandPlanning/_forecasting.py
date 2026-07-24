@@ -171,22 +171,6 @@ def holt_winters(series, horizon, period=12, alpha=Decimal("0.3"), beta=Decimal(
     return [level + trend * Decimal(i + 1) + seasonals[(start + i) % period] for i in range(horizon)]
 
 
-def linear_trend(series, horizon):
-    """Ordinary least-squares straight line through the series, projected forward."""
-    series = [_d(v) for v in series]
-    n = len(series)
-    if n < 2:
-        return naive(series, horizon)
-    xs = [Decimal(i) for i in range(n)]
-    x_bar, y_bar = mean(xs), mean(series)
-    denominator = sum(((x - x_bar) ** 2 for x in xs), ZERO)
-    if denominator <= ZERO:
-        return [y_bar] * horizon
-    slope = sum(((x - x_bar) * (y - y_bar) for x, y in zip(xs, series)), ZERO) / denominator
-    intercept = y_bar - slope * x_bar
-    return [intercept + slope * Decimal(n + i) for i in range(horizon)]
-
-
 def _clamp_fraction(value, default):
     """Smoothing constants must live in (0, 1] — a hand-typed 0 or 7 would silently break the fit."""
     value = _d(value)
@@ -196,20 +180,6 @@ def _clamp_fraction(value, default):
 
 
 # ----------------------------------------------------------------------------- method dispatch
-#: Methods ``run_method`` can actually execute, mapped to how ``method_parameter`` is read.
-METHOD_PARAMETER_HELP = {
-    "naive": "unused",
-    "seasonal_naive": "season length (periods)",
-    "moving_average": "window N",
-    "weighted_moving_average": "window N",
-    "exponential_smoothing": "alpha 0-1",
-    "holt_linear": "alpha 0-1",
-    "holt_winters": "season length (periods)",
-    "like_item": "unused (scale % is its own field)",
-    "manual": "unused",
-    "best_fit": "unused",
-}
-
 #: The engines ``best_fit`` competes. ``like_item``/``manual`` are copy/typed, not fitted, and
 #: ``best_fit`` obviously cannot compete against itself.
 _FITTABLE = ("naive", "seasonal_naive", "moving_average", "weighted_moving_average",
@@ -236,8 +206,6 @@ def run_method(method, series, horizon, parameter=None, season_period=12):
         return holt_linear(series, horizon, parameter or Decimal("0.3"))
     if method == "holt_winters":
         return holt_winters(series, horizon, int(parameter or season_period))
-    if method == "linear_trend":
-        return linear_trend(series, horizon)
     return moving_average(series, horizon, int(parameter or 3))
 
 
