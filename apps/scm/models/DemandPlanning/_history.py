@@ -111,8 +111,12 @@ def demand_series(tenant, *, item, location=None, customer=None, source="sales_o
 
     trunc = _TRUNC[bucket]
     if source == "stock_issues":
+        # Half-open datetime range, NOT `moved_at__date__range`: the __date lookup wraps the column
+        # in CAST(CONVERT_TZ(...)), which makes scm_move_tnt_movedat_idx unusable on the module's
+        # fastest-growing table.
         moves = StockMove.objects.filter(tenant=tenant, item=item, move_type="issue",
-                                         moved_at__date__range=(start, end))
+                                         moved_at__gte=start,
+                                         moved_at__lt=end + timedelta(days=1))
         if location is not None:
             moves = moves.filter(location=location)
         # Filters BEFORE .values()/.annotate() — a .filter() after the grouping becomes a HAVING
@@ -173,7 +177,7 @@ def demand_series_map(tenant, items, *, start, end, bucket="month", source="sale
     elif source == "stock_issues":
         rows = (StockMove.objects
                 .filter(tenant=tenant, item_id__in=item_ids, move_type="issue",
-                        moved_at__date__range=(start, end))
+                        moved_at__gte=start, moved_at__lt=end + timedelta(days=1))
                 .annotate(period=trunc("moved_at", output_field=DateField()))
                 .values("item_id", "period").annotate(total=Sum("quantity")))
         for row in rows:
