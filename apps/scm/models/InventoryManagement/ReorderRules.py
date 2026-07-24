@@ -150,10 +150,10 @@ class ReorderRule(TenantOwned):
         from apps.scm.models.DemandPlanning._history import demand_series
         end = timezone.localdate()
         start = end - timedelta(days=30 * self.CALC_HISTORY_MONTHS)
-        return demand_series(self.tenant, item=self.item, location=self.location,
+        return demand_series(self.tenant_id, item=self.item, location=self.location,
                              source="sales_orders", start=start, end=end, bucket="month")
 
-    def calculate(self, series=None):
+    def calculate(self, series=None, forecast_error_pct=None):
         """Compute the safety stock and reorder point this rule's policy implies.
 
         Writes ONLY the ``computed_*``/statistics columns — never ``safety_stock``/``reorder_point``,
@@ -192,7 +192,8 @@ class ReorderRule(TenantOwned):
             max_lead = lead + sigma_lead
             safety = max(max_daily * max_lead - avg_daily * lead, ZERO)
         elif self.safety_stock_method == "forecast_error":
-            safety = self._forecast_error_safety(avg_daily, sigma_daily, lead, sigma_lead)
+            safety = self._forecast_error_safety(avg_daily, sigma_daily, lead, sigma_lead,
+                                                 forecast_error_pct)
         else:  # fixed — the buyer's number stands, exactly as it did before 4.7
             safety = self.safety_stock or ZERO
 
@@ -214,15 +215,21 @@ class ReorderRule(TenantOwned):
             return ZERO
         return z * variance.sqrt()
 
-    def _forecast_error_safety(self, avg_daily, sigma_daily, lead, sigma_lead):
+    def _forecast_error_safety(self, avg_daily, sigma_daily, lead, sigma_lead,
+                               forecast_error_pct=None):
         """Size the buffer from the linked forecast's measured error, falling back to σ of history.
 
         A plan that has been running 30 % wrong needs a buffer built on 30 %, not on how noisy the
         raw history looked — that is the whole point of tying safety stock to the forecast.
+
+        ``forecast_error_pct`` lets a batch caller pass the WMAPE it already computed. Many rules
+        share one forecast, and ``accuracy_metrics()`` costs several queries, so recomputing it per
+        rule is the difference between one query and five per row.
         """
         from apps.scm.models.DemandPlanning import _forecasting as fx
         if self.demand_forecast_id:
-            error_pct = self.demand_forecast.accuracy_metrics().get("wmape")
+            error_pct = (forecast_error_pct if forecast_error_pct is not None
+                         else self.demand_forecast.accuracy_metrics().get("wmape"))
             if error_pct is not None:
                 z = fx.z_for_service_level(self.service_level_pct)
                 lead_window = lead if lead > ZERO else Decimal("1")
