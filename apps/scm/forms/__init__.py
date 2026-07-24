@@ -140,6 +140,7 @@ from .DemandPlanning.SeasonalityProfiles import (  # noqa: F401
 from .DemandPlanning.DemandForecasts import (  # noqa: F401
     DemandForecastForm,
     DemandForecastPeriodForm,
+    BaseDemandForecastPeriodFormSet,
     DemandForecastPeriodFormSet,
     DemandForecastGenerateForm,
 )
