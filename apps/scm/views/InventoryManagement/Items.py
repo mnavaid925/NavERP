@@ -54,6 +54,9 @@ def item_detail(request, pk):
                          .select_related("location", "lot_serial")[:15]),
         "reorder_rules": obj.reorder_rules.select_related("location"),
         "lot_serials": obj.lot_serials.all()[:20],
+        # 4.7 Demand Planning reads back into the item: the forecasts planned against it, so the
+        # item page answers "what do we expect to sell" next to "what do we hold".
+        "demand_forecasts": obj.demand_forecasts.select_related("location")[:10],
     })
 
 
