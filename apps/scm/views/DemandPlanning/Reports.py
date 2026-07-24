@@ -145,19 +145,25 @@ def forecast_accuracy_report(request):
                      .exclude(status="draft")
                      .select_related("item", "location")
                      .prefetch_related("periods"))
-    # Group by bucket so the actuals for every forecast in a bucket come from ONE grouped query
-    # (at most four, one per bucket) instead of one per forecast.
-    by_bucket = {}
+    # Group by (bucket, demand_source) so the actuals for every forecast in a group come from ONE
+    # grouped query instead of one per forecast. The SOURCE has to be part of the key: scoring a
+    # stock-issues forecast against sales orders would report a different WMAPE here than the same
+    # forecast's own detail page, which reads its own configured ledger.
+    grouped = {}
     for forecast in forecasts:
-        by_bucket.setdefault(forecast.bucket, []).append(forecast)
+        grouped.setdefault((forecast.bucket, forecast.demand_source), []).append(forecast)
     rows = []
-    for bucket, group in by_bucket.items():
+    for (bucket, source), group in grouped.items():
         start = min(f.horizon_start for f in group)
         end = max(f.horizon_end for f in group)
         series_map = demand_series_map(request.tenant, {f.item_id for f in group},
-                                       start=start, end=end, bucket=bucket)
+                                       start=start, end=end, bucket=bucket, source=source)
         for forecast in group:
-            actuals = dict(series_map.get(forecast.item_id, []))
+            # The batch map is item-level. A customer-scoped forecast must not be graded against
+            # every channel's demand, so it pays for its own exact series — rare enough that one
+            # extra query beats a wrong number on a league table.
+            actuals = (forecast.period_actuals_map() if forecast.customer_id
+                       else dict(series_map.get(forecast.item_id, [])))
             periods = list(forecast.periods.all())
             metrics = forecast.accuracy_metrics(periods=periods, actuals=actuals)
             bias, signal = metrics["bias_pct"], metrics["tracking_signal"]
