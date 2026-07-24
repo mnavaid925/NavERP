@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Safety Stock Calculation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Safety Stock Calculation</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Safety Stock</span></div>
+      <p class="text-muted">Buffer stock sized from demand variability and lead time. Recalculating never changes what buyers see — apply a row to promote it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="sliders"></i> Manage rules</a>
+      <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> Reorder alerts</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search item or location…">
+        </div>
+        <div class="form-group">
+          <select name="safety_stock_method" aria-label="Method" class="form-select">
+            <option value="">All methods</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.safety_stock_method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      <form method="post" action="{% url 'scm:safety_stock_recalculate' %}" style="margin-top:1rem;">
+        {% csrf_token %}
+        {# Carry the on-screen filters into the POST so Recalculate acts on exactly these rows. #}
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="safety_stock_method" value="{{ request.GET.safety_stock_method|default:'' }}">
+        <input type="hidden" name="item" value="{{ request.GET.item|default:'' }}">
+        <input type="hidden" name="location" value="{{ request.GET.location|default:'' }}">
+        <button class="btn btn-primary" type="submit"><i data-lucide="calculator"></i> Recalculate these rules</button>
+        {% if uncalculated %}<span class="text-muted" style="margin-left:.75rem;">{{ uncalculated }} rule(s) have never been calculated.</span>{% endif %}
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>Method</th><th>Service</th><th>Lead time</th><th>Avg daily</th><th>σ</th><th>ABC</th><th>XYZ</th><th>On hand</th><th>Safety (live)</th><th>Safety (calc)</th><th>ROP (live)</th><th>ROP (calc)</th><th>Variance</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.rule.item.pk %}" class="fw-600">{{ row.rule.item.sku }}</a></td>
+              <td>{{ row.rule.location.code }}</td>
+              <td>{{ row.rule.get_safety_stock_method_display }}</td>
+              <td>{{ row.rule.service_level_pct|floatformat:1 }}%</td>
+              <td>{{ row.rule.lead_time_days }}d ± {{ row.rule.lead_time_variability_days|floatformat:1 }}</td>
+              <td>{{ row.rule.avg_daily_demand|floatformat:2 }}</td>
+              <td>{{ row.rule.demand_std_dev|floatformat:2 }}</td>
+              <td>{% if row.rule.abc_class %}<span class="badge badge-slate">{{ row.rule.abc_class }}</span>{% else %}—{% endif %}</td>
+              <td>{% if row.rule.xyz_class %}<span class="badge badge-slate">{{ row.rule.xyz_class }}</span>{% else %}—{% endif %}</td>
+              <td>{{ row.on_hand|floatformat:2 }}</td>
+              <td>{{ row.rule.safety_stock|floatformat:2 }}</td>
+              <td class="fw-600">{{ row.rule.computed_safety_stock|floatformat:2 }}</td>
+              <td>{{ row.rule.reorder_point|floatformat:2 }}</td>
+              <td class="fw-600">{{ row.rule.computed_reorder_point|floatformat:2 }}</td>
+              <td>
+                {% if row.variance_pct is None %}
+                  <span class="badge badge-muted">{{ row.variance|floatformat:2 }}</span>
+                {% elif row.variance_pct <= 5 and row.variance_pct >= -5 %}
+                  <span class="badge badge-green">{{ row.variance_pct|floatformat:1 }}%</span>
+                {% elif row.variance_pct <= 25 and row.variance_pct >= -25 %}
+                  <span class="badge badge-amber">{{ row.variance_pct|floatformat:1 }}%</span>
+                {% else %}
+                  <span class="badge badge-red">{{ row.variance_pct|floatformat:1 }}%</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:reorderrule_edit' row.rule.pk %}" class="btn-icon" title="Edit policy"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if row.rule.last_calculated_at %}
+                      <form method="post" action="{% url 'scm:safety_stock_apply' row.rule.pk %}" onsubmit="return confirm('Apply the calculated safety stock and reorder point? This changes what buyers reorder against.');">
+                        {% csrf_token %}
+                        <input type="hidden" name="q" value="{{ q }}">
+                        <input type="hidden" name="safety_stock_method" value="{{ request.GET.safety_stock_method|default:'' }}">
+                        <input type="hidden" name="item" value="{{ request.GET.item|default:'' }}">
+                        <input type="hidden" name="location" value="{{ request.GET.location|default:'' }}">
+                        <button class="btn-icon" type="submit" title="Apply calculated policy"><i data-lucide="check"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="16"><div class="empty-state"><i data-lucide="shield"></i><h3>No active reorder rules</h3><p>Create a reorder rule for an item and location first — safety stock is a policy on that rule.</p><a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline">Manage reorder rules</a></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The calculated columns are recommendations. Applying one copies it into the live safety stock and reorder point that 4.1 purchasing reorders against, which is why it is a separate, confirmed action rather than a side effect of recalculating.
+    </div>
+  </div>
+{% endblock %}
