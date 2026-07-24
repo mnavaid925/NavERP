@@ -556,10 +556,11 @@ class Command(BaseCommand):
         ``calculate()`` — so the demo data is exactly what the app would have produced, not
         hand-set fields that happen to look plausible.
         """
-        from apps.scm.models import (DemandForecast, DemandSignal, ForecastAdjustment, Item,
-                                     Location, ReorderRule, SeasonalityIndex, SeasonalityProfile,
-                                     SupplierCatalogItem)
+        from apps.scm.models import (DemandForecast, DemandForecastPeriod, DemandSignal,
+                                     ForecastAdjustment, Item, Location, ReorderRule,
+                                     SeasonalityIndex, SeasonalityProfile, SupplierCatalogItem)
         from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        from apps.scm.models.DemandPlanning._history import demand_series_map
         if DemandForecast.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"{tenant.name}: demand planning data already exists — skipping.")
             return
@@ -622,9 +623,10 @@ class Command(BaseCommand):
             notes="Seeded: fitted on derived sales history, seasonalised by the Q4 curve.")
         forecast.save()
         forecast.generate_periods()
-        for period in forecast.periods.all():
+        periods = list(forecast.periods.all())
+        for period in periods:
             period.unit_price = Decimal("1450.00")
-            period.save(update_fields=["unit_price"])
+        DemandForecastPeriod.objects.bulk_update(periods, ["unit_price"])
         forecast.status = "in_review"
         forecast.save(update_fields=["status", "updated_at"])
         forecast.status, forecast.approved_by, forecast.approved_at = "approved", admin, timezone.now()
@@ -696,12 +698,19 @@ class Command(BaseCommand):
         # 7) Switch the existing 4.3 rules onto a real safety-stock policy and CALCULATE — without
         #    applying, so the report has a genuine computed-vs-live variance and the Apply button
         #    has something to do. This is the whole compute-then-accept contract in the seed data.
-        rules = list(ReorderRule.objects.filter(tenant=tenant).select_related("item"))
+        rules = list(ReorderRule.objects.filter(tenant=tenant)
+                     .select_related("item").prefetch_related("seasonality_profile__indices"))
         ReorderRule.assign_abc_classes(tenant, rules)
+        # Hoisted out of the loop — it does not depend on the rule — and the history comes from ONE
+        # batched query, mirroring what safety_stock_recalculate does at runtime.
+        catalog_lead = (SupplierCatalogItem.objects
+                        .filter(catalog__tenant=tenant, lead_time_days__gt=0)
+                        .values_list("lead_time_days", flat=True).first())
+        calc_end = timezone.localdate()
+        calc_start = calc_end - datetime.timedelta(days=30 * ReorderRule.CALC_HISTORY_MONTHS)
+        series_map = demand_series_map(tenant, {rule.item_id for rule in rules},
+                                       start=calc_start, end=calc_end, bucket="month")
         for rule in rules:
-            catalog_lead = (SupplierCatalogItem.objects
-                            .filter(catalog__tenant=tenant, lead_time_days__gt=0)
-                            .values_list("lead_time_days", flat=True).first())
             rule.safety_stock_method = "service_level"
             rule.service_level_pct = Decimal("95.00")
             rule.lead_time_days = catalog_lead or 7
@@ -710,13 +719,12 @@ class Command(BaseCommand):
             if rule.item_id == ws16.pk:
                 rule.seasonality_profile = seasonal
                 rule.demand_forecast = forecast
-            rule.calculate()
-            rule.save(update_fields=[
-                "safety_stock_method", "service_level_pct", "lead_time_days",
-                "lead_time_variability_days", "review_period_days", "seasonality_profile",
-                "demand_forecast", "avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
-                "computed_safety_stock", "computed_reorder_point", "last_calculated_at",
-                "updated_at"])
+            rule.calculate(series=series_map.get(rule.item_id, []))
+        ReorderRule.objects.bulk_update(rules, [
+            "safety_stock_method", "service_level_pct", "lead_time_days",
+            "lead_time_variability_days", "review_period_days", "seasonality_profile",
+            "demand_forecast", "avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
+            "computed_safety_stock", "computed_reorder_point", "last_calculated_at"])
 
         self.stdout.write(
             f"{tenant.name}: seeded demand planning ({orders} back-dated history orders, "
