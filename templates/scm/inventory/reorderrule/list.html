@@ -8,6 +8,7 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> Reorder alerts</a>
+      <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline"><i data-lucide="shield"></i> Safety stock</a>
       <a href="{% url 'scm:reorderrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Reorder Rule</a>
     </div>
   </div>
@@ -16,6 +17,14 @@
       <form method="get" class="filter-bar">
         <div class="form-group" style="flex:1; min-width:200px;">
           <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by item or location…">
+        </div>
+        <div class="form-group">
+          <select name="safety_stock_method" aria-label="Safety stock method" class="form-select">
+            <option value="">All methods</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.safety_stock_method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="form-group">
           <select name="is_active" aria-label="Active" class="form-select">
@@ -30,7 +39,7 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Item</th><th>Location</th><th>Reorder Point</th><th>Safety Stock</th><th>Reorder Qty</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Item</th><th>Location</th><th>Reorder Point</th><th>Safety Stock</th><th>Method</th><th>Reorder Qty</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -38,6 +47,9 @@
               <td>{{ obj.location.code }}</td>
               <td>{{ obj.reorder_point|floatformat:2 }}</td>
               <td>{{ obj.safety_stock|floatformat:2 }}</td>
+              <td>
+                <span class="badge badge-{% if obj.safety_stock_method == 'fixed' %}muted{% else %}info{% endif %}">{{ obj.get_safety_stock_method_display }}</span>
+              </td>
               <td>{{ obj.reorder_quantity|floatformat:2 }}</td>
               <td>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
               <td>
@@ -50,7 +62,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="7"><div class="empty-state"><i data-lucide="bell"></i><h3>No reorder rules</h3><p>Set a reorder point per item and location to get low-stock alerts.</p></div></td></tr>
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="bell"></i><h3>No reorder rules</h3><p>Set a reorder point per item and location to get low-stock alerts.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
