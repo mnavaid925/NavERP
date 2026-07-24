@@ -112,6 +112,9 @@ class DemandSignal(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="scm_ds_tnt_status_idx"),
             models.Index(fields=["tenant", "signal_type"], name="scm_ds_tnt_type_idx"),
+            # source_reference is the detector's de-dupe key, hit by an equality lookup on every
+            # detection pass — the same shape StockMove already indexes as scm_move_tnt_ref_idx.
+            models.Index(fields=["tenant", "source_reference"], name="scm_ds_tnt_ref_idx"),
         ]
 
     def clean(self):
@@ -196,9 +199,12 @@ def expire_stale_signals(tenant):
     if tenant is None:
         return 0
     today = timezone.localdate()
-    stale = [signal for signal
-             in DemandSignal.objects.filter(tenant=tenant, status__in=DemandSignal.OPEN_STATUSES)
-             if signal.effective_window()[1] < today]
+    # Narrow in SQL to the rows that can possibly qualify (a stated end already past, or none
+    # stated), then resolve the horizon fallback in Python for just those.
+    candidates = (DemandSignal.objects
+                  .filter(tenant=tenant, status__in=DemandSignal.OPEN_STATUSES)
+                  .filter(Q(effective_to__lt=today) | Q(effective_to__isnull=True)))
+    stale = [signal for signal in candidates if signal.effective_window()[1] < today]
     for signal in stale:
         signal.status = "expired"
     if stale:
@@ -225,20 +231,33 @@ def detect_order_surge(tenant, threshold_pct=SURGE_THRESHOLD_PCT):
     if tenant is None:
         return []
     today = timezone.localdate()
-    forecasts = (DemandForecast.objects
-                 .filter(tenant=tenant, status="approved",
-                         horizon_start__lte=today, horizon_end__gte=today)
-                 .select_related("item", "location", "customer"))
-    created = []
+    forecasts = list(DemandForecast.objects
+                     .filter(tenant=tenant, status="approved",
+                             horizon_start__lte=today, horizon_end__gte=today)
+                     .select_related("item", "location", "customer")
+                     .prefetch_related("periods"))
+    # Resolve every forecast's current period first, then de-dupe in ONE query. Forecasting is
+    # per-item, so a large catalogue means many forecasts — asking per forecast would be 2 queries
+    # per SKU on a button press.
+    current = {}
     for forecast in forecasts:
         period = next((row for row in forecast.periods.all()
                        if row.period_start <= today <= row.period_end), None)
-        if period is None or (period.final_quantity or ZERO) <= ZERO:
+        if period is not None and (period.final_quantity or ZERO) > ZERO:
+            current[forecast.pk] = period
+    references = {f"{f.number}:{current[f.pk].sequence}" for f in forecasts if f.pk in current}
+    # Dismissed signals count too — a planner who has already decided this deviation is noise
+    # should not be handed it again every time somebody presses the button.
+    seen = set(DemandSignal.objects.filter(tenant=tenant, source_reference__in=references)
+               .values_list("source_reference", flat=True)) if references else set()
+
+    created = []
+    for forecast in forecasts:
+        period = current.get(forecast.pk)
+        if period is None:
             continue
         reference = f"{forecast.number}:{period.sequence}"
-        # Dismissed signals count too — a planner who has already decided this deviation is noise
-        # should not be handed it again every time somebody presses the button.
-        if DemandSignal.objects.filter(tenant=tenant, source_reference=reference).exists():
+        if reference in seen:
             continue
         elapsed = Decimal((today - period.period_start).days + 1)
         total_days = Decimal((period.period_end - period.period_start).days + 1)
