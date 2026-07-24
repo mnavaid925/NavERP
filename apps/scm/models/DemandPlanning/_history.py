@@ -62,11 +62,35 @@ def period_label(value, bucket):
     return value.strftime("%d %b %Y")
 
 
-def period_range(start, end, bucket):
+def period_count(start, end, bucket):
+    """How many buckets ``start``..``end`` spans — computed ARITHMETICALLY, never by walking.
+
+    This is what a caller uses to *reject* an absurd span: asking ``len(period_range(...))`` would
+    have to build the three-million-tuple list first (and overflow on a year-9999 end date), which
+    is the very thing the check exists to prevent.
+    """
+    if not start or not end or end < start:
+        return 0
+    first = bucket_start(start, bucket)
+    if bucket == "week":
+        return (end - first).days // 7 + 1
+    if bucket == "month":
+        return (end.year - first.year) * 12 + (end.month - first.month) + 1
+    if bucket == "quarter":
+        return ((end.year - first.year) * 4
+                + (end.month - 1) // 3 - (first.month - 1) // 3 + 1)
+    return (end - first).days + 1
+
+
+def period_range(start, end, bucket, limit=None):
     """Every ``(period_start, period_end)`` pair covering ``start``..``end`` inclusive.
 
     ``period_end`` is the LAST day inside the bucket, not the next bucket's first day, so a period's
     stored dates read the way a planner writes them (1–31 Jan, not 1 Jan – 1 Feb).
+
+    ``limit`` stops the walk after that many buckets. Callers that turn the result into DB rows pass
+    one; a runaway span would otherwise be an unbounded list and an unbounded INSERT. Use
+    ``period_count`` to *test* a span rather than building it.
     """
     if not start or not end or end < start:
         return []
@@ -75,6 +99,8 @@ def period_range(start, end, bucket):
         following = next_bucket(cursor, bucket)
         out.append((cursor, following - timedelta(days=1)))
         cursor = following
+        if limit is not None and len(out) >= limit:
+            break
     return out
 
 
