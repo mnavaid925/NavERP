@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Consensus Adjustments{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Consensus Adjustments</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Consensus Adjustments</span></div>
+      <p class="text-muted">Collaborative planning — sales, marketing, finance and operations propose overrides; only accepted ones move the plan.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:forecastadjustment_list' %}?status=proposed" class="btn btn-outline"><i data-lucide="inbox"></i> Review queue{% if proposed_count %} ({{ proposed_count }}){% endif %}</a>
+      <a href="{% url 'scm:forecastadjustment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Propose Adjustment</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, rationale or forecast…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="contributor_function" aria-label="Function" class="form-select">
+            <option value="">All functions</option>
+            {% for val, label in function_choices %}
+              <option value="{{ val }}" {% if request.GET.contributor_function == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reason_code" aria-label="Reason" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.reason_code == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="adjustment_type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.adjustment_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="forecast" aria-label="Forecast" class="form-select">
+            <option value="">All forecasts</option>
+            {% for f in forecasts %}
+              <option value="{{ f.pk }}" {% if request.GET.forecast == f.pk|stringformat:"d" %}selected{% endif %}>{{ f.number }} · {{ f.item.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:forecastadjustment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Forecast</th><th>Period</th><th>Function</th><th>Type</th><th>Resolved Δ</th><th>Reason</th><th>Confidence</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:forecastadjustment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'scm:demandforecast_detail' obj.forecast.pk %}">{{ obj.forecast.number }}</a> <span class="text-muted">{{ obj.forecast.item.sku }}</span></td>
+              <td>{% if obj.period %}{{ obj.period.period_label|default:obj.period.period_start|date:"M Y" }}{% else %}<span class="text-muted">Whole horizon</span>{% endif %}</td>
+              <td>{{ obj.get_contributor_function_display }}</td>
+              <td>{{ obj.get_adjustment_type_display }}</td>
+              <td class="fw-600">{{ obj.resolved_quantity|floatformat:2 }}</td>
+              <td>{{ obj.get_reason_code_display }}</td>
+              <td><span class="badge badge-{% if obj.confidence == 'high' %}green{% elif obj.confidence == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_confidence_display }}</span></td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'accepted' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'proposed' %}amber{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:forecastadjustment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_reviewable %}
+                    <a href="{% url 'scm:forecastadjustment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  <form method="post" action="{% url 'scm:forecastadjustment_delete' obj.pk %}" onsubmit="return confirm('Delete this adjustment?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="users"></i><h3>No adjustments</h3><p>Propose an override against a forecast — every one needs a reason code and a written rationale.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
