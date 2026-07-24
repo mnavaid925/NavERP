@@ -280,14 +280,16 @@ def detect_order_surge(tenant, threshold_pct=SURGE_THRESHOLD_PCT):
             observed_at=timezone.now(),
             effective_from=today, effective_to=period.period_end,
             horizon_days=max((period.period_end - today).days + 1, 1),
-            signal_value=run_rate.quantize(Decimal("0.0001")),
+            signal_value=min(max(run_rate, Decimal("-9999999999.9999")),
+                             Decimal("9999999999.9999")).quantize(Decimal("0.0001")),
             baseline_value=expected,
             impact_direction="increase" if deviation_pct > ZERO else "decrease",
             # Clamped to what the DecimalField(6, 2) column holds. A tiny forecast against a real
             # order (2 planned, 250 ordered) yields a five-figure percentage, and an overflow here
             # would take the whole detection batch down with a DataError.
             impact_pct=min(abs(deviation_pct), Decimal("9999.99")).quantize(Decimal("0.01")),
-            impact_quantity=abs(run_rate - expected).quantize(Decimal("0.0001")),
+            impact_quantity=min(abs(run_rate - expected),
+                                Decimal("9999999999.9999")).quantize(Decimal("0.0001")),
             confidence="high" if abs(deviation_pct) >= threshold_pct * 2 else "medium",
             notes=(f"Detected from live sales orders: {actual} ordered in "
                    f"{elapsed} of {total_days} days against a forecast of {expected}."),
