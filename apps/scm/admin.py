@@ -229,9 +229,13 @@ class StockAdjustmentAdmin(admin.ModelAdmin):
 
 @admin.register(ReorderRule)
 class ReorderRuleAdmin(admin.ModelAdmin):
-    list_display = ("item", "location", "tenant", "reorder_point", "safety_stock", "is_active")
-    list_filter = ("tenant", "is_active")
+    list_display = ("item", "location", "tenant", "reorder_point", "safety_stock",
+                    "safety_stock_method", "computed_safety_stock", "is_active")
+    list_filter = ("tenant", "is_active", "safety_stock_method", "abc_class", "xyz_class")
     search_fields = ("item__sku", "location__code")
+    # The 4.7 calculated set — produced by calculate(), promoted only by the explicit apply action.
+    readonly_fields = ("avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
+                       "computed_safety_stock", "computed_reorder_point", "last_calculated_at")
 
 
 # ============================================================ 4.4 Warehouse Management
@@ -369,3 +373,63 @@ class FreightInvoiceAdmin(admin.ModelAdmin):
     readonly_fields = ("billed_amount", "contract_amount", "variance_amount", "variance_pct",
                        "match_status", "approval_status", "approved_by", "approved_at", "bill")
     inlines = [FreightInvoiceLineInline]
+
+
+# ============================================================ 4.7 Demand Planning & Forecasting
+from apps.scm.models import (  # noqa: E402
+    SeasonalityProfile, SeasonalityIndex, DemandForecast, DemandForecastPeriod,
+    DemandSignal, ForecastAdjustment,
+)
+
+
+class SeasonalityIndexInline(admin.TabularInline):
+    model = SeasonalityIndex
+    extra = 0
+    readonly_fields = ("sample_size",)
+
+
+@admin.register(SeasonalityProfile)
+class SeasonalityProfileAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "tenant", "profile_type", "scope", "bucket", "is_active")
+    list_filter = ("tenant", "profile_type", "scope", "bucket", "is_active")
+    search_fields = ("number", "name", "item__sku")
+    readonly_fields = ("last_derived_at",)
+    inlines = [SeasonalityIndexInline]
+
+
+class DemandForecastPeriodInline(admin.TabularInline):
+    model = DemandForecastPeriod
+    extra = 0
+    # The waterfall columns the app owns: a history snapshot, the signal engine's output and the
+    # consensus roll-up. Typing them here would make the decomposition lie.
+    readonly_fields = ("historical_quantity", "signal_adjustment_quantity", "consensus_quantity")
+
+
+@admin.register(DemandForecast)
+class DemandForecastAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "tenant", "item", "bucket", "method", "status",
+                    "horizon_start", "horizon_end")
+    list_filter = ("tenant", "status", "method", "bucket", "scenario")
+    search_fields = ("number", "name", "item__sku", "item__name")
+    readonly_fields = ("selected_method", "revision", "supersedes", "generated_at",
+                       "approved_by", "approved_at")
+    inlines = [DemandForecastPeriodInline]
+
+
+@admin.register(DemandSignal)
+class DemandSignalAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "signal_type", "source", "item", "impact_direction",
+                    "impact_pct", "status", "observed_at")
+    list_filter = ("tenant", "status", "signal_type", "source", "impact_direction", "confidence")
+    search_fields = ("number", "source_reference", "item__sku")
+    readonly_fields = ("applied_to_forecast", "reviewed_by", "reviewed_at")
+
+
+@admin.register(ForecastAdjustment)
+class ForecastAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "forecast", "contributor_function", "adjustment_type",
+                    "resolved_quantity", "reason_code", "status")
+    list_filter = ("tenant", "status", "contributor_function", "reason_code", "adjustment_type")
+    search_fields = ("number", "rationale", "forecast__number")
+    readonly_fields = ("submitted_by", "resolved_quantity", "reviewed_by", "reviewed_at",
+                       "review_note")
