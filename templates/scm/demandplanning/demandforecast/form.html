@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Demand Forecast{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Demand Forecast</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:demandforecast_list' %}">Demand Forecasts</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Period Grid</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>#</th><th>Start</th><th>End</th><th>Label</th><th>Last year</th><th>Baseline</th><th>× Season</th><th>+ Event</th><th>+ Signal</th><th>+ Consensus</th><th>Final</th><th>Unit Price</th><th>Locked</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for pf in formset %}
+              <tr>
+                {% for hidden in pf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in pf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ pf.sequence }}</td>
+                <td>{{ pf.period_start }}</td>
+                <td>{{ pf.period_end }}</td>
+                <td>{{ pf.period_label }}</td>
+                <td class="text-muted">{{ pf.instance.historical_quantity|floatformat:2 }}</td>
+                <td>{{ pf.baseline_quantity }}</td>
+                <td>{{ pf.seasonal_index_applied }}</td>
+                <td>{{ pf.event_uplift_quantity }}</td>
+                <td class="text-muted">{{ pf.instance.signal_adjustment_quantity|floatformat:2 }}</td>
+                <td class="text-muted">{{ pf.instance.consensus_quantity|floatformat:2 }}</td>
+                <td>{{ pf.final_quantity }}</td>
+                <td>{{ pf.unit_price }}</td>
+                <td>{{ pf.is_locked }}</td>
+                <td>{% if pf.instance.pk %}{{ pf.DELETE }}{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="14"><div class="empty-state"><i data-lucide="table"></i><h3>No periods yet</h3><p>Save the forecast, then run Generate on its detail page to build the grid from history.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Last year, signal and consensus are shown read-only — they are a history snapshot, the demand-sensing engine's output and the accepted-adjustment roll-up respectively.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:demandforecast_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
