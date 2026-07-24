@@ -38,7 +38,13 @@ def _filtered_rules(request, data=None):
     """
     data = request.GET if data is None else data
     qs = (ReorderRule.objects.filter(tenant=request.tenant, is_active=True)
-          .select_related("item", "location", "seasonality_profile", "demand_forecast"))
+          # `calculate()` walks BOTH FKs' own relations: the profile's index rows and the forecast's
+          # periods/item/location/customer. select_related on the FK alone loads the row but leaves
+          # every hop past it lazy, which is one-to-five queries PER RULE inside the recalculate loop.
+          .select_related("item", "location", "seasonality_profile", "demand_forecast",
+                          "demand_forecast__item", "demand_forecast__location",
+                          "demand_forecast__customer")
+          .prefetch_related("seasonality_profile__indices", "demand_forecast__periods"))
     q = data.get("q", "").strip()
     if q:
         qs = qs.filter(Q(item__sku__icontains=q) | Q(item__name__icontains=q)
@@ -77,8 +83,14 @@ def safety_stock_report(request):
             "variance_pct": rule.safety_stock_variance_pct,
         })
     rows.sort(key=lambda row: abs(row["variance"]), reverse=True)
+    # Paginated, unlike its 4.3 siblings: `reorder_alerts` and `valuation_report` are self-limiting
+    # (only breached rules / non-zero stock), but a rule exists for every item × location, so this
+    # is the one SCM report whose row count is unbounded.
+    page_obj = paginate(request, rows, per_page=30)
     return render(request, "scm/demandplanning/safety_stock_report.html", {
-        "rows": rows,
+        "rows": page_obj.object_list,
+        "page_obj": page_obj,
+        "total_rules": len(rows),
         "method_choices": ReorderRule.SAFETY_STOCK_METHOD_CHOICES,
         "items": _item_qs(request.tenant),
         "locations": _location_qs(request.tenant),
@@ -108,9 +120,22 @@ def safety_stock_recalculate(request):
     # per rule would be one aggregate per row.
     series_map = demand_series_map(request.tenant, {rule.item_id for rule in rules},
                                    start=start, end=end, bucket="month")
-    ReorderRule.assign_abc_classes(request.tenant, rules)
+    # ABC is ranked over EVERY active rule, not just the filtered ones — a Pareto class computed
+    # against a one-item filter would call that item "A" by definition. Only the filtered rules are
+    # then saved.
+    classes = ReorderRule.assign_abc_classes(
+        request.tenant, ReorderRule.objects.filter(tenant=request.tenant, is_active=True))
+    # WMAPE once per distinct forecast, not once per rule: many rules point at the same plan and
+    # accuracy_metrics() is several queries.
+    error_map = {}
     for rule in rules:
-        rule.calculate(series=series_map.get(rule.item_id, []))
+        if rule.safety_stock_method == "forecast_error" and rule.demand_forecast_id \
+                and rule.demand_forecast_id not in error_map:
+            error_map[rule.demand_forecast_id] = rule.demand_forecast.accuracy_metrics().get("wmape")
+    for rule in rules:
+        rule.abc_class = classes.get(rule.pk, rule.abc_class)
+        rule.calculate(series=series_map.get(rule.item_id, []),
+                       forecast_error_pct=error_map.get(rule.demand_forecast_id))
     ReorderRule.objects.bulk_update(
         rules, ["avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
                 "computed_safety_stock", "computed_reorder_point", "last_calculated_at"])
@@ -149,17 +174,20 @@ def forecast_accuracy_report(request):
     forecasts = list(DemandForecast.objects
                      .filter(tenant=request.tenant)
                      .exclude(status="draft")
-                     .select_related("item", "location")
+                     .select_related("item", "location", "customer")
                      .prefetch_related("periods"))
-    # Group by (bucket, demand_source) so the actuals for every forecast in a group come from ONE
-    # grouped query instead of one per forecast. The SOURCE has to be part of the key: scoring a
-    # stock-issues forecast against sales orders would report a different WMAPE here than the same
-    # forecast's own detail page, which reads its own configured ledger.
+    # Group by (bucket, demand_source, horizon year) so the actuals for every forecast in a group
+    # come from ONE grouped query instead of one per forecast. The SOURCE has to be part of the key:
+    # scoring a stock-issues forecast against sales orders would report a different WMAPE here than
+    # the same forecast's own detail page, which reads its own configured ledger. The YEAR is in the
+    # key so one archived 2015 plan can't force a dense 130-bucket series to be built for every item
+    # sharing its bucket.
     grouped = {}
     for forecast in forecasts:
-        grouped.setdefault((forecast.bucket, forecast.demand_source), []).append(forecast)
+        key = (forecast.bucket, forecast.demand_source, forecast.horizon_start.year)
+        grouped.setdefault(key, []).append(forecast)
     rows = []
-    for (bucket, source), group in grouped.items():
+    for (bucket, source, _year), group in grouped.items():
         start = min(f.horizon_start for f in group)
         end = max(f.horizon_end for f in group)
         series_map = demand_series_map(request.tenant, {f.item_id for f in group},
