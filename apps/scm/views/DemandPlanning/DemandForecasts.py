@@ -1,8 +1,8 @@
 """SCM 4.7 Demand Planning — DemandForecast views (sales forecasting + the period waterfall)."""
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _need_tenant
-from apps.scm.models import DemandForecast, DemandForecastPeriod, Item, Location
+from apps.scm.views._helpers import _item_qs, _location_qs, _need_tenant
+from apps.scm.models import DemandForecast, DemandForecastPeriod
 from apps.scm.forms import (DemandForecastForm, DemandForecastGenerateForm,
                             DemandForecastPeriodFormSet)
 
@@ -24,8 +24,8 @@ def demandforecast_list(request):
             "method_choices": DemandForecast.METHOD_CHOICES,
             "bucket_choices": DemandForecast.BUCKET_CHOICES,
             "scenario_choices": DemandForecast.SCENARIO_CHOICES,
-            "items": Item.objects.filter(tenant=request.tenant),
-            "locations": Location.objects.filter(tenant=request.tenant),
+            "items": _item_qs(request.tenant),
+            "locations": _location_qs(request.tenant),
         },
     )
 
