@@ -58,8 +58,8 @@ REQUISITION_LINES = [
 
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation demo data — idempotent (skips a tenant that already has the rows "
-            "each pass creates).")
+            "4.6 transportation + 4.7 demand planning demo data — idempotent (skips a tenant that "
+            "already has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
