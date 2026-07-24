@@ -23,6 +23,26 @@ def _need_tenant(request):
     return False
 
 
+def _item_qs(tenant):
+    """4.3 item master, scoped to the tenant — the queryset every list page's item filter shares.
+
+    Defined once here (the `_tms_carrier_qs` precedent) rather than repeated in each of the 4.7 view
+    modules, and returning `.none()` for a tenant-less user rather than a filter on NULL.
+    """
+    from apps.scm.models import Item
+    if tenant is None:
+        return Item.objects.none()
+    return Item.objects.filter(tenant=tenant)
+
+
+def _location_qs(tenant):
+    """4.3 location master, scoped to the tenant — the sibling of ``_item_qs``."""
+    from apps.scm.models import Location
+    if tenant is None:
+        return Location.objects.none()
+    return Location.objects.filter(tenant=tenant)
+
+
 def _tms_carrier_qs(tenant):
     """4.6 TMS carrier master, scoped to the tenant — the queryset the Load / Shipment / FreightInvoice
     list filters share for their carrier dropdown. Defined once here rather than in each of the three
