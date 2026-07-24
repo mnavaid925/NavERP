@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">{{ obj.number }}
-        <span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'statistical' %}info{% elif obj.status == 'in_review' %}amber{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'statistical' %}info{% elif obj.status == 'in_review' %}amber{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
         {% if obj.revision > 1 %}<span class="badge badge-slate">Rev {{ obj.revision }}</span>{% endif %}
       </h1>
       <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:demandforecast_list' %}">Demand Forecasts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
@@ -14,24 +14,24 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Item</span><span class="detail-value"><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a> · {{ obj.item.name }}</span></div>
-        <div><span class="detail-label">Location</span><span class="detail-value">{% if obj.location %}{{ obj.location.code }}{% else %}Whole network{% endif %}</span></div>
-        <div><span class="detail-label">Customer</span><span class="detail-value">{% if obj.customer %}{{ obj.customer.name }}{% else %}All channels{% endif %}</span></div>
-        <div><span class="detail-label">History source</span><span class="detail-value">{{ obj.get_demand_source_display }} · last {{ obj.history_months }} months</span></div>
-        <div><span class="detail-label">Bucket</span><span class="detail-value">{{ obj.get_bucket_display }}</span></div>
-        <div><span class="detail-label">Horizon</span><span class="detail-value">{{ obj.horizon_start|date:"M d, Y" }} – {{ obj.horizon_end|date:"M d, Y" }}</span></div>
-        <div><span class="detail-label">Method</span><span class="detail-value">{{ obj.get_method_display }}{% if obj.selected_method %} → <span class="fw-600">{{ obj.selected_method }}</span> (best fit){% endif %}</span></div>
-        <div><span class="detail-label">Parameter</span><span class="detail-value">{{ obj.method_parameter|floatformat:"-4" }}</span></div>
-        <div><span class="detail-label">Seasonality</span><span class="detail-value">{% if obj.seasonality_profile %}<a href="{% url 'scm:seasonalityprofile_detail' obj.seasonality_profile.pk %}">{{ obj.seasonality_profile.name }}</a>{% else %}—{% endif %}</span></div>
-        <div><span class="detail-label">Like-item source</span><span class="detail-value">{% if obj.reference_item %}{{ obj.reference_item.sku }} @ {{ obj.reference_scale_pct|floatformat:0 }}%{% else %}—{% endif %}</span></div>
-        <div><span class="detail-label">Outliers</span><span class="detail-value">{% if obj.exclude_outliers %}Clamped beyond {{ obj.outlier_threshold_sigma|floatformat:1 }}σ{% else %}Kept as-is{% endif %}</span></div>
-        <div><span class="detail-label">Scenario</span><span class="detail-value">{{ obj.get_scenario_display }}</span></div>
-        <div><span class="detail-label">Generated</span><span class="detail-value">{{ obj.generated_at|date:"M d, Y H:i"|default:"Not generated yet" }}</span></div>
-        <div><span class="detail-label">Approved by</span><span class="detail-value">{% if obj.approved_by %}{{ obj.approved_by.get_username }} · {{ obj.approved_at|date:"M d, Y" }}{% else %}—{% endif %}</span></div>
-        <div><span class="detail-label">Supersedes</span><span class="detail-value">{% if obj.supersedes %}<a href="{% url 'scm:demandforecast_detail' obj.supersedes.pk %}">{{ obj.supersedes.number }}</a>{% else %}—{% endif %}</span></div>
-        <div><span class="detail-label">Total forecast</span><span class="detail-value fw-600">{{ total_quantity|floatformat:2 }}{% if obj.currency %} units · {{ total_value|floatformat:2 }} {{ obj.currency.code }}{% endif %}</span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a> · {{ obj.item.name }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}{{ obj.location.code }}{% else %}Whole network{% endif %}</dd></div>
+        <div class="detail-item"><dt>Customer</dt><dd>{% if obj.customer %}{{ obj.customer.name }}{% else %}All channels{% endif %}</dd></div>
+        <div class="detail-item"><dt>History source</dt><dd>{{ obj.get_demand_source_display }} · last {{ obj.history_months }} months</dd></div>
+        <div class="detail-item"><dt>Bucket</dt><dd>{{ obj.get_bucket_display }}</dd></div>
+        <div class="detail-item"><dt>Horizon</dt><dd>{{ obj.horizon_start|date:"M d, Y" }} – {{ obj.horizon_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Method</dt><dd>{{ obj.get_method_display }}{% if obj.selected_method %} → <span class="fw-600">{{ obj.effective_method_display }}</span> (best fit){% endif %}</dd></div>
+        <div class="detail-item"><dt>Parameter</dt><dd>{{ obj.method_parameter|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Seasonality</dt><dd>{% if obj.seasonality_profile %}<a href="{% url 'scm:seasonalityprofile_detail' obj.seasonality_profile.pk %}">{{ obj.seasonality_profile.name }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Like-item source</dt><dd>{% if obj.reference_item %}{{ obj.reference_item.sku }} @ {{ obj.reference_scale_pct|floatformat:0 }}%{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Outliers</dt><dd>{% if obj.exclude_outliers %}Clamped beyond {{ obj.outlier_threshold_sigma|floatformat:1 }}σ{% else %}Kept as-is{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scenario</dt><dd>{{ obj.get_scenario_display }}</dd></div>
+        <div class="detail-item"><dt>Generated</dt><dd>{{ obj.generated_at|date:"M d, Y H:i"|default:"Not generated yet" }}</dd></div>
+        <div class="detail-item"><dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_username }} · {{ obj.approved_at|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supersedes</dt><dd>{% if obj.supersedes %}<a href="{% url 'scm:demandforecast_detail' obj.supersedes.pk %}">{{ obj.supersedes.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Total forecast</dt><dd class="fw-600">{{ total_quantity|floatformat:2 }} units{% if obj.currency %} · {{ total_value|floatformat:2 }} {{ obj.currency.code }}{% endif %}</dd></div>
+      </dl>
       {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
     </div>
   </div>
@@ -40,14 +40,14 @@
     <div class="card-header"><h2 class="card-title">Forecast Accuracy</h2></div>
     <div class="card-body">
       {% if accuracy.points %}
-        <div class="detail-grid">
-          <div><span class="detail-label">MAPE</span><span class="detail-value fw-600">{% if accuracy.mape is not None %}{{ accuracy.mape|floatformat:1 }}%{% else %}—{% endif %}</span></div>
-          <div><span class="detail-label">WMAPE</span><span class="detail-value fw-600">{% if accuracy.wmape is not None %}{{ accuracy.wmape|floatformat:1 }}%{% else %}—{% endif %}</span></div>
-          <div><span class="detail-label">Bias</span><span class="detail-value">{% if accuracy.bias_pct is not None %}<span class="badge badge-{% if accuracy.bias_pct > 20 or accuracy.bias_pct < -20 %}red{% else %}green{% endif %}">{{ accuracy.bias_pct|floatformat:1 }}%</span>{% else %}—{% endif %}</span></div>
-          <div><span class="detail-label">Tracking signal</span><span class="detail-value">{% if accuracy.tracking_signal is not None %}<span class="badge badge-{% if accuracy.tracking_signal > 4 or accuracy.tracking_signal < -4 %}red{% else %}green{% endif %}">{{ accuracy.tracking_signal|floatformat:2 }}</span>{% else %}—{% endif %}</span></div>
-          <div><span class="detail-label">Forecast value added</span><span class="detail-value">{% if accuracy.fva is not None %}<span class="badge badge-{% if accuracy.fva > 0 %}green{% else %}amber{% endif %}">{{ accuracy.fva|floatformat:1 }} pts</span>{% else %}—{% endif %}</span></div>
-          <div><span class="detail-label">Periods scored</span><span class="detail-value">{{ accuracy.points }}</span></div>
-        </div>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>MAPE</dt><dd class="fw-600">{% if accuracy.mape is not None %}{{ accuracy.mape|floatformat:1 }}%{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>WMAPE</dt><dd class="fw-600">{% if accuracy.wmape is not None %}{{ accuracy.wmape|floatformat:1 }}%{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Bias</dt><dd>{% if accuracy.bias_pct is not None %}<span class="badge badge-{% if accuracy.bias_pct > 20 or accuracy.bias_pct < -20 %}red{% else %}green{% endif %}">{{ accuracy.bias_pct|floatformat:1 }}%</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Tracking signal</dt><dd>{% if accuracy.tracking_signal is not None %}<span class="badge badge-{% if accuracy.tracking_signal > 4 or accuracy.tracking_signal < -4 %}red{% else %}green{% endif %}">{{ accuracy.tracking_signal|floatformat:2 }}</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Forecast value added</dt><dd>{% if accuracy.fva is not None %}<span class="badge badge-{% if accuracy.fva > 0 %}green{% else %}amber{% endif %}">{{ accuracy.fva|floatformat:1 }} pts</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Periods scored</dt><dd>{{ accuracy.points }}</dd></div>
+        </dl>
         <p class="text-muted">Scored against live sales history for the periods that have fully elapsed. Forecast value added compares the final number's error against the statistical baseline's — positive means the overrides helped.</p>
       {% else %}
         <div class="empty-state"><i data-lucide="target"></i><h3>Nothing scored yet</h3><p>Accuracy appears once a period of the horizon has fully elapsed.</p></div>
