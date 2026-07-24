@@ -11,8 +11,11 @@ when someone asks why the plan diverged from the statistics, and forecast-value-
 input actually beat the model?) can only be argued from documented assumptions.
 
 ``resolved_quantity`` is always stored as a **signed delta** whatever the contributor typed — an
-absolute target, a delta or a percentage all reduce to "move the number by this much", which is what
-makes the roll-up a plain sum.
+absolute target, a delta or a percentage all reduce to "move the number by this much". It is a
+resolved-at-the-time figure: ``DemandForecast.recompute_consensus()`` re-resolves every accepted
+adjustment against the number as it stands when its turn comes and writes the result back, so an
+"absolute" override still means *end at this figure* after the baseline moves or another
+contributor's proposal is accepted ahead of it.
 """
 from apps.scm.models._base import *  # noqa: F401,F403
 
@@ -115,13 +118,23 @@ class ForecastAdjustment(TenantNumbered):
             return ZERO
         return sum((row.pre_adjustment_quantity for row in self.forecast.periods.all()), ZERO)
 
-    def resolve_quantity(self):
-        """Reduce whichever type the contributor used to a single signed delta."""
+    def delta_against(self, base):
+        """Reduce whichever type the contributor used to a single signed delta, measured against
+        ``base``.
+
+        The roll-up passes the number as it stands when this adjustment's turn comes, so "absolute
+        40" always means *end at 40* — replaying a delta that was resolved days ago would land
+        somewhere else entirely once the baseline or an earlier adjustment moved.
+        """
         if self.adjustment_type == "delta":
             return self.proposed_quantity or ZERO
         if self.adjustment_type == "percent":
-            return self.base_quantity() * (self.adjustment_pct or ZERO) / Decimal("100")
-        return (self.proposed_quantity or ZERO) - self.base_quantity()
+            return Decimal(base or ZERO) * (self.adjustment_pct or ZERO) / Decimal("100")
+        return (self.proposed_quantity or ZERO) - Decimal(base or ZERO)
+
+    def resolve_quantity(self):
+        """The delta as it stands right now — the preview shown before the roll-up runs."""
+        return self.delta_against(self.base_quantity())
 
     @property
     def is_reviewable(self):
