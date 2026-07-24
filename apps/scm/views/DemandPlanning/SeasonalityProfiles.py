@@ -5,7 +5,7 @@ from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
 from apps.scm.views._helpers import _item_qs, _location_qs, _need_tenant
 from apps.scm.models import ItemCategory, SeasonalityIndex, SeasonalityProfile
-from apps.scm.models.DemandPlanning._history import demand_series
+from apps.scm.models.DemandPlanning._history import demand_series_map
 from apps.scm.forms import SeasonalityIndexFormSet, SeasonalityProfileForm
 
 ZERO = Decimal("0")
@@ -98,8 +98,12 @@ def seasonalityprofile_delete(request, pk):
 def _derive_source_series(profile, years):
     """The history this profile's indices are averaged from — derived, never a stored table.
 
-    An item-scoped profile reads its item; a category-scoped one sums its category's items (one
-    derivation per item — bounded, and this is an explicit user-triggered action, not a page render).
+    An item-scoped profile reads its item; a category-scoped one sums its category's items through
+    the BATCHED ``demand_series_map`` — one grouped query for the whole category rather than one
+    aggregate per SKU, which a 300-item category would otherwise turn into 300 round trips inside a
+    single synchronous POST. Nothing is lost by going item-level here: the source is
+    ``sales_orders``, for which ``demand_series`` ignores ``location`` anyway.
+
     A location- or global-scoped profile has no single demand stream to fit, so it returns nothing
     and the caller says so rather than inventing a curve.
     """
@@ -109,16 +113,17 @@ def _derive_source_series(profile, years):
     # period_from_launch is a lifecycle grain, not a calendar one — derive it monthly.
     bucket = profile.bucket if profile.bucket in ("week", "month", "quarter") else "month"
     if profile.item_id:
-        items = [profile.item]
+        item_ids = [profile.item_id]
     elif profile.category_id:
-        items = list(ItemModel.objects.filter(tenant=profile.tenant, category_id=profile.category_id))
+        item_ids = list(ItemModel.objects.filter(tenant_id=profile.tenant_id,
+                                                 category_id=profile.category_id)
+                        .values_list("pk", flat=True))
     else:
         return [], bucket
+    series_map = demand_series_map(profile.tenant_id, item_ids, start=start, end=end, bucket=bucket)
     combined = {}
-    for item in items:
-        for period_start, qty in demand_series(profile.tenant, item=item, location=profile.location,
-                                               source="sales_orders", start=start, end=end,
-                                               bucket=bucket):
+    for series in series_map.values():
+        for period_start, qty in series:
             combined[period_start] = combined.get(period_start, ZERO) + qty
     return sorted(combined.items()), bucket
 
@@ -152,13 +157,18 @@ def seasonalityprofile_derive(request, pk):
         labels.setdefault(profile.period_number_for(period_start), label_for(period_start, _bucket))
     with transaction.atomic():
         existing = {row.period_number: row for row in profile.indices.all()}
+        created, updated = [], []
         for number, values in grouped.items():
             factor = (sum(values, ZERO) / Decimal(len(values)) / overall).quantize(Decimal("0.0001"))
             row = existing.get(number) or SeasonalityIndex(profile=profile, period_number=number)
             row.index_factor = factor
             row.sample_size = len(values)
             row.period_label = row.period_label or labels.get(number, "")
-            row.save()
+            (updated if row.pk else created).append(row)
+        SeasonalityIndex.objects.bulk_create(created)
+        if updated:
+            SeasonalityIndex.objects.bulk_update(
+                updated, ["index_factor", "sample_size", "period_label"])
         profile.last_derived_at = timezone.now()
         profile.save(update_fields=["last_derived_at", "updated_at"])
     write_audit_log(request.user, profile, "update",
