@@ -81,8 +81,8 @@
       <div class="form-actions" style="margin-top:1.5rem;">
         {% if obj.is_open %}
           <a href="{% url 'scm:demandsignal_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:demandsignal_delete' obj.pk %}" onsubmit="return confirm('Delete this demand signal?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
         {% endif %}
-        <form method="post" action="{% url 'scm:demandsignal_delete' obj.pk %}" onsubmit="return confirm('Delete this demand signal?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
         <a href="{% url 'scm:demandsignal_list' %}" class="btn btn-outline">Back to list</a>
       </div>
     </div>
