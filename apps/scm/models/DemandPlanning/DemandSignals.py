@@ -181,6 +181,31 @@ class DemandSignal(TenantNumbered):
         return f"{self.number or 'DS'} · {self.get_signal_type_display()} · {what}"
 
 
+# ------------------------------------------------------------------------------- sweeps
+def expire_stale_signals(tenant):
+    """Retire open signals whose effective window has already passed. Returns how many moved.
+
+    A sensing signal is only actionable inside its window — after it closes, applying it to a
+    forecast would move periods the observation never described. Without this, ``expired`` would be a
+    status nothing ever set and the triage queue would accumulate dead rows forever.
+
+    ``effective_to`` is nullable, so rows without one are resolved through ``effective_window()``
+    (observation date + horizon) in Python rather than filtered in SQL — the open set is small by
+    definition, since anything actioned has already left it.
+    """
+    if tenant is None:
+        return 0
+    today = timezone.localdate()
+    stale = [signal for signal
+             in DemandSignal.objects.filter(tenant=tenant, status__in=DemandSignal.OPEN_STATUSES)
+             if signal.effective_window()[1] < today]
+    for signal in stale:
+        signal.status = "expired"
+    if stale:
+        DemandSignal.objects.bulk_update(stale, ["status"])
+    return len(stale)
+
+
 # ------------------------------------------------------------------------------- the live detector
 def detect_order_surge(tenant, threshold_pct=SURGE_THRESHOLD_PCT):
     """Raise ``order_surge`` / ``order_dropoff`` signals from LIVE sales orders vs. approved forecasts.
