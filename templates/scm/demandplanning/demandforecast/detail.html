@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'statistical' %}info{% elif obj.status == 'in_review' %}amber{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.revision > 1 %}<span class="badge badge-slate">Rev {{ obj.revision }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:demandforecast_list' %}">Demand Forecasts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Item</span><span class="detail-value"><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a> · {{ obj.item.name }}</span></div>
+        <div><span class="detail-label">Location</span><span class="detail-value">{% if obj.location %}{{ obj.location.code }}{% else %}Whole network{% endif %}</span></div>
+        <div><span class="detail-label">Customer</span><span class="detail-value">{% if obj.customer %}{{ obj.customer.name }}{% else %}All channels{% endif %}</span></div>
+        <div><span class="detail-label">History source</span><span class="detail-value">{{ obj.get_demand_source_display }} · last {{ obj.history_months }} months</span></div>
+        <div><span class="detail-label">Bucket</span><span class="detail-value">{{ obj.get_bucket_display }}</span></div>
+        <div><span class="detail-label">Horizon</span><span class="detail-value">{{ obj.horizon_start|date:"M d, Y" }} – {{ obj.horizon_end|date:"M d, Y" }}</span></div>
+        <div><span class="detail-label">Method</span><span class="detail-value">{{ obj.get_method_display }}{% if obj.selected_method %} → <span class="fw-600">{{ obj.selected_method }}</span> (best fit){% endif %}</span></div>
+        <div><span class="detail-label">Parameter</span><span class="detail-value">{{ obj.method_parameter|floatformat:"-4" }}</span></div>
+        <div><span class="detail-label">Seasonality</span><span class="detail-value">{% if obj.seasonality_profile %}<a href="{% url 'scm:seasonalityprofile_detail' obj.seasonality_profile.pk %}">{{ obj.seasonality_profile.name }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Like-item source</span><span class="detail-value">{% if obj.reference_item %}{{ obj.reference_item.sku }} @ {{ obj.reference_scale_pct|floatformat:0 }}%{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Outliers</span><span class="detail-value">{% if obj.exclude_outliers %}Clamped beyond {{ obj.outlier_threshold_sigma|floatformat:1 }}σ{% else %}Kept as-is{% endif %}</span></div>
+        <div><span class="detail-label">Scenario</span><span class="detail-value">{{ obj.get_scenario_display }}</span></div>
+        <div><span class="detail-label">Generated</span><span class="detail-value">{{ obj.generated_at|date:"M d, Y H:i"|default:"Not generated yet" }}</span></div>
+        <div><span class="detail-label">Approved by</span><span class="detail-value">{% if obj.approved_by %}{{ obj.approved_by.get_username }} · {{ obj.approved_at|date:"M d, Y" }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Supersedes</span><span class="detail-value">{% if obj.supersedes %}<a href="{% url 'scm:demandforecast_detail' obj.supersedes.pk %}">{{ obj.supersedes.number }}</a>{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Total forecast</span><span class="detail-value fw-600">{{ total_quantity|floatformat:2 }}{% if obj.currency %} units · {{ total_value|floatformat:2 }} {{ obj.currency.code }}{% endif %}</span></div>
+      </div>
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Forecast Accuracy</h2></div>
+    <div class="card-body">
+      {% if accuracy.points %}
+        <div class="detail-grid">
+          <div><span class="detail-label">MAPE</span><span class="detail-value fw-600">{% if accuracy.mape is not None %}{{ accuracy.mape|floatformat:1 }}%{% else %}—{% endif %}</span></div>
+          <div><span class="detail-label">WMAPE</span><span class="detail-value fw-600">{% if accuracy.wmape is not None %}{{ accuracy.wmape|floatformat:1 }}%{% else %}—{% endif %}</span></div>
+          <div><span class="detail-label">Bias</span><span class="detail-value">{% if accuracy.bias_pct is not None %}<span class="badge badge-{% if accuracy.bias_pct > 20 or accuracy.bias_pct < -20 %}red{% else %}green{% endif %}">{{ accuracy.bias_pct|floatformat:1 }}%</span>{% else %}—{% endif %}</span></div>
+          <div><span class="detail-label">Tracking signal</span><span class="detail-value">{% if accuracy.tracking_signal is not None %}<span class="badge badge-{% if accuracy.tracking_signal > 4 or accuracy.tracking_signal < -4 %}red{% else %}green{% endif %}">{{ accuracy.tracking_signal|floatformat:2 }}</span>{% else %}—{% endif %}</span></div>
+          <div><span class="detail-label">Forecast value added</span><span class="detail-value">{% if accuracy.fva is not None %}<span class="badge badge-{% if accuracy.fva > 0 %}green{% else %}amber{% endif %}">{{ accuracy.fva|floatformat:1 }} pts</span>{% else %}—{% endif %}</span></div>
+          <div><span class="detail-label">Periods scored</span><span class="detail-value">{{ accuracy.points }}</span></div>
+        </div>
+        <p class="text-muted">Scored against live sales history for the periods that have fully elapsed. Forecast value added compares the final number's error against the statistical baseline's — positive means the overrides helped.</p>
+      {% else %}
+        <div class="empty-state"><i data-lucide="target"></i><h3>Nothing scored yet</h3><p>Accuracy appears once a period of the horizon has fully elapsed.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Period Waterfall</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Period</th><th>Last year</th><th>Baseline</th><th>× Season</th><th>+ Event</th><th>+ Signal</th><th>+ Consensus</th><th>Final</th><th>Value</th><th>Actual</th><th>Locked</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.period.sequence }}</td>
+              <td class="fw-600">{{ r.period.period_label|default:r.period.period_start|date:"M Y" }}</td>
+              <td>{{ r.period.historical_quantity|floatformat:2 }}</td>
+              <td>{{ r.period.baseline_quantity|floatformat:2 }}</td>
+              <td>{{ r.period.seasonal_index_applied|floatformat:4 }}</td>
+              <td>{{ r.period.event_uplift_quantity|floatformat:2 }}</td>
+              <td>{{ r.period.signal_adjustment_quantity|floatformat:2 }}</td>
+              <td>{{ r.period.consensus_quantity|floatformat:2 }}</td>
+              <td class="fw-600">{{ r.period.final_quantity|floatformat:2 }}</td>
+              <td>{{ r.period.forecast_value|floatformat:2 }}</td>
+              <td>{% if r.actual is not None %}{{ r.actual|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if r.period.is_locked %}<span class="badge badge-amber">Locked</span>{% else %}<span class="badge badge-muted">Open</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="12"><div class="empty-state"><i data-lucide="table"></i><h3>No period grid yet</h3><p>Run Generate to build the horizon from derived demand history.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">Each column is kept separately on purpose: baseline → seasonal index → event uplift → demand signals → consensus → final. A locked period survives a regenerate untouched.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Applied Demand Signals</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Source</th><th>Direction</th><th>Impact</th><th>Observed</th></tr></thead>
+        <tbody>
+          {% for s in signals %}
+            <tr>
+              <td><a href="{% url 'scm:demandsignal_detail' s.pk %}" class="fw-600">{{ s.number }}</a></td>
+              <td>{{ s.get_signal_type_display }}</td>
+              <td>{{ s.get_source_display }}</td>
+              <td><span class="badge badge-{% if s.impact_direction == 'increase' %}green{% elif s.impact_direction == 'decrease' %}red{% else %}muted{% endif %}">{{ s.get_impact_direction_display }}</span></td>
+              <td>{{ s.impact_quantity|floatformat:2 }} ({{ s.impact_pct|floatformat:1 }}%)</td>
+              <td>{{ s.observed_at|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="radio"></i><h3>No signals applied</h3><p>Triage a demand signal to move this forecast's short-horizon periods.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Consensus Adjustments</h2>
+      <a href="{% url 'scm:forecastadjustment_create' %}?forecast={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Propose adjustment</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Function</th><th>Period</th><th>Type</th><th>Resolved Δ</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in adjustments %}
+            <tr>
+              <td><a href="{% url 'scm:forecastadjustment_detail' a.pk %}" class="fw-600">{{ a.number }}</a></td>
+              <td>{{ a.get_contributor_function_display }}</td>
+              <td>{% if a.period %}{{ a.period.period_label|default:a.period.period_start|date:"M Y" }}{% else %}<span class="text-muted">Whole horizon</span>{% endif %}</td>
+              <td>{{ a.get_adjustment_type_display }}</td>
+              <td class="fw-600">{{ a.resolved_quantity|floatformat:2 }}</td>
+              <td>{{ a.get_reason_code_display }}</td>
+              <td><span class="badge badge-{% if a.status == 'accepted' %}green{% elif a.status == 'rejected' %}red{% elif a.status == 'proposed' %}amber{% else %}slate{% endif %}">{{ a.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="users"></i><h3>No adjustments</h3><p>Sales, marketing and finance propose overrides here; only accepted ones move the plan.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if obj.is_editable %}
+        <form method="post" action="{% url 'scm:demandforecast_generate' obj.pk %}" class="form-group" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <label class="form-label" for="{{ generate_form.regenerate_locked.id_for_label }}">{{ generate_form.regenerate_locked.label }}</label>
+          {{ generate_form.regenerate_locked }}
+          <div class="form-help">{{ generate_form.regenerate_locked.help_text }}</div>
+          <button class="btn btn-primary" type="submit" style="margin-top:.5rem;"><i data-lucide="refresh-cw"></i> Generate periods</button>
+        </form>
+      {% endif %}
+      <div class="form-actions">
+        {% if obj.status == 'draft' or obj.status == 'statistical' %}
+          <form method="post" action="{% url 'scm:demandforecast_submit_review' obj.pk %}">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for review</button></form>
+        {% endif %}
+        {% if obj.status == 'statistical' or obj.status == 'in_review' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:demandforecast_approve' obj.pk %}" onsubmit="return confirm('Approve this forecast as the plan of record?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Approve</button></form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status != 'archived' %}
+          <form method="post" action="{% url 'scm:demandforecast_revise' obj.pk %}" onsubmit="return confirm('Create a new revision and archive this one?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="copy"></i> Revise</button></form>
+          <form method="post" action="{% url 'scm:demandforecast_archive' obj.pk %}" onsubmit="return confirm('Archive this forecast?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button></form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:demandforecast_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:demandforecast_delete' obj.pk %}" onsubmit="return confirm('Delete this forecast and its period grid?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        {% endif %}
+        <a href="{% url 'scm:demandforecast_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
