@@ -82,10 +82,10 @@
               <td>{% if obj.location %}{{ obj.location.code }}{% else %}<span class="text-muted">Network</span>{% endif %}</td>
               <td>{{ obj.get_bucket_display }}</td>
               <td>{{ obj.horizon_start|date:"M Y" }} – {{ obj.horizon_end|date:"M Y" }}</td>
-              <td>{{ obj.get_method_display }}{% if obj.selected_method %} <span class="text-muted">→ {{ obj.selected_method }}</span>{% endif %}</td>
+              <td>{{ obj.get_method_display }}{% if obj.selected_method %} <span class="text-muted">→ {{ obj.effective_method_display }}</span>{% endif %}</td>
               <td>{{ obj.revision }}</td>
               <td>
-                <span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'statistical' %}info{% elif obj.status == 'in_review' %}amber{% elif obj.status == 'archived' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+                <span class="badge badge-{% if obj.status == 'approved' %}green{% elif obj.status == 'statistical' %}info{% elif obj.status == 'in_review' %}amber{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
               </td>
               <td>
                 <div class="table-actions">
