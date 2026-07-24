@@ -84,6 +84,13 @@ class DemandForecast(TenantNumbered):
     # An approved forecast is the plan of record and an archived one is history — neither may be
     # edited in place. Revise it instead (which clones it and supersedes the original).
     EDITABLE_STATUSES = ("draft", "statistical", "in_review")
+    #: A horizon may not exceed this many buckets. The grid is ONE DB ROW PER BUCKET, so an
+    #: unbounded span is an unbounded bulk_create: a 1900→9999 daily horizon is ~3 million rows in
+    #: one statement, which any logged-in planner could trigger by pressing Generate. 520 is 10
+    #: years of weeks / 43 years of months — far past any real plan.
+    MAX_HORIZON_PERIODS = 520
+    #: Guards `history_window()`'s date arithmetic, which raises OverflowError below year 1.
+    MIN_HORIZON_YEAR = 1900
     #: Statuses whose periods a signal or adjustment may still move.
     ADJUSTABLE_STATUSES = ("statistical", "in_review", "approved")
 
@@ -146,8 +153,23 @@ class DemandForecast(TenantNumbered):
 
     def clean(self):
         errors = {}
-        if self.horizon_start and self.horizon_end and self.horizon_end < self.horizon_start:
-            errors["horizon_end"] = "The horizon cannot end before it starts."
+        if self.horizon_start and self.horizon_end:
+            if self.horizon_end < self.horizon_start:
+                errors["horizon_end"] = "The horizon cannot end before it starts."
+            elif self.horizon_start.year < self.MIN_HORIZON_YEAR:
+                errors["horizon_start"] = (
+                    f"The horizon must start in {self.MIN_HORIZON_YEAR} or later.")
+            else:
+                # The span is bounded HERE rather than in the view, so the form, the seeder and
+                # `revise` all inherit the cap. period_COUNT, not len(period_range()): building the
+                # range to measure it is the runaway allocation this check exists to stop.
+                from apps.scm.models.DemandPlanning._history import period_count
+                span = period_count(self.horizon_start, self.horizon_end, self.bucket)
+                if span > self.MAX_HORIZON_PERIODS:
+                    errors["horizon_end"] = (
+                        f"That horizon is {span} {self.get_bucket_display().lower()} periods; the "
+                        f"maximum is {self.MAX_HORIZON_PERIODS}. Use a coarser bucket or a shorter "
+                        f"horizon.")
         if self.method == "like_item" and self.reference_item_id is None:
             errors["reference_item"] = "A like-item forecast needs a reference item to copy from."
         if self.reference_item_id and self.reference_item_id == self.item_id:
@@ -212,9 +234,13 @@ class DemandForecast(TenantNumbered):
         """
         from apps.scm.models.DemandPlanning import _forecasting as fx
         from apps.scm.models.DemandPlanning._history import (period_label, period_range,
-                                                             periods_per_year)
+                                                             periods_per_year)  # noqa: F401
 
-        buckets = period_range(self.horizon_start, self.horizon_end, self.bucket)
+        # Capped at the walk, not after it — belt and braces behind clean(), since generate is also
+        # reachable on rows written before the cap existed or outside a form, and this is the call
+        # that turns a span into DB rows.
+        buckets = period_range(self.horizon_start, self.horizon_end, self.bucket,
+                               limit=self.MAX_HORIZON_PERIODS)
         if not buckets:
             return 0
         horizon = len(buckets)
@@ -428,6 +454,14 @@ class DemandForecastPeriod(models.Model):
         return f"{self.period_label or self.period_start} · {self.final_quantity}"
 
 
+#: Ceiling of the DecimalField(max_digits=14, decimal_places=4) quantity columns.
+_MAX_Q4 = Decimal("9999999999.9999")
+
+
 def _q4(value):
-    """Quantize to the 4dp the quantity columns store, so a long Decimal never fails to save."""
-    return Decimal(value or ZERO).quantize(Decimal("0.0001"))
+    """Quantize to the 4dp the quantity columns store, and CLAMP to what they hold.
+
+    Both the length and the magnitude matter: a long Decimal fails to save, and an over-range one
+    raises DataError inside `bulk_update` — which would fail the whole period grid, not one row.
+    """
+    return min(max(Decimal(value or ZERO), -_MAX_Q4), _MAX_Q4).quantize(Decimal("0.0001"))
