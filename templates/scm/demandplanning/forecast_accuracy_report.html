@@ -14,11 +14,11 @@
 
   <div class="card">
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Forecasts scored</span><span class="detail-value fw-600">{{ scored }}</span></div>
-        <div><span class="detail-label">Exceptions</span><span class="detail-value"><span class="badge badge-{% if exceptions %}red{% else %}green{% endif %}">{{ exceptions }}</span></span></div>
-        <div><span class="detail-label">Exception thresholds</span><span class="detail-value">|bias| &gt; {{ bias_threshold }}% or |tracking signal| &gt; {{ signal_threshold }}</span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Forecasts scored</dt><dd class="fw-600">{{ scored }}</dd></div>
+        <div class="detail-item"><dt>Exceptions</dt><dd><span class="badge badge-{% if exceptions %}red{% else %}green{% endif %}">{{ exceptions }}</span></dd></div>
+        <div class="detail-item"><dt>Exception thresholds</dt><dd>|bias| &gt; {{ bias_threshold }}% or |tracking signal| &gt; {{ signal_threshold }}</dd></div>
+      </dl>
     </div>
     <div class="table-wrap">
       <table class="table">
@@ -32,7 +32,7 @@
               </td>
               <td>{{ row.forecast.name }}</td>
               <td>{{ row.forecast.item.sku }}</td>
-              <td>{{ row.forecast.effective_method }}</td>
+              <td>{{ row.forecast.effective_method_display }}</td>
               <td>{{ row.metrics.points }}</td>
               <td>{% if row.metrics.mape is not None %}{{ row.metrics.mape|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td class="fw-600">{% if row.metrics.wmape is not None %}{{ row.metrics.wmape|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
@@ -51,7 +51,7 @@
                 {% elif row.metrics.fva > 0 %}<span class="badge badge-green">+{{ row.metrics.fva|floatformat:1 }}</span>
                 {% else %}<span class="badge badge-amber">{{ row.metrics.fva|floatformat:1 }}</span>{% endif %}
               </td>
-              <td><span class="badge badge-{% if row.forecast.status == 'approved' %}green{% elif row.forecast.status == 'statistical' %}info{% elif row.forecast.status == 'in_review' %}amber{% elif row.forecast.status == 'archived' %}slate{% else %}muted{% endif %}">{{ row.forecast.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if row.forecast.status == 'approved' %}green{% elif row.forecast.status == 'statistical' %}info{% elif row.forecast.status == 'in_review' %}amber{% elif row.forecast.status == 'draft' %}slate{% else %}muted{% endif %}">{{ row.forecast.get_status_display }}</span></td>
             </tr>
           {% empty %}
             <tr><td colspan="11"><div class="empty-state"><i data-lucide="target"></i><h3>Nothing to score</h3><p>Generate and submit a forecast; accuracy appears once a period of its horizon has elapsed.</p></div></td></tr>
