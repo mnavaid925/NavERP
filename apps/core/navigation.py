@@ -831,6 +831,18 @@ LIVE_LINKS = {
         "Shipment Tracking": "scm:shipment_list",         # bullet (status/GPS event log + POD)
         "Load Optimization": "scm:load_list",             # bullet (cube utilization on the load detail)
     },
+    # 4.7 Demand Planning & Forecasting — DemandForecast (+ its period waterfall) is the spine;
+    # SeasonalityProfile doubles as the promotional-event window; DemandSignal is the short-horizon
+    # sensing log; and Safety Stock Calculation points at a computed REPORT over the 4.3 ReorderRule
+    # that 4.7 extended (the scm:reorder_alerts / scm:valuation_report precedent — a bullet may be a
+    # report rather than a CRUD list).
+    "4.7": {
+        "Sales Forecasting": "scm:demandforecast_list",          # bullet (statistical forecast + period grid)
+        "Seasonality Analysis": "scm:seasonalityprofile_list",   # bullet (seasonal curves AND promo events)
+        "Demand Sensing": "scm:demandsignal_list",               # bullet (short-horizon signal triage log)
+        "Collaborative Planning": "scm:forecastadjustment_list", # bullet (consensus queue, ?status=proposed)
+        "Safety Stock Calculation": "scm:safety_stock_report",   # bullet (computed policy over ReorderRule)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
