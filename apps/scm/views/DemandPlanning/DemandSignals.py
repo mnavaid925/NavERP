@@ -68,6 +68,17 @@ def demandsignal_detail(request, pk):
 @login_required
 @require_POST
 def demandsignal_delete(request, pk):
+    """Only an OPEN signal may be deleted.
+
+    An applied signal's impact already sits in the forecast periods' ``signal_adjustment_quantity``;
+    deleting it would leave the "+ Signal" column on the waterfall with nothing to point at. A
+    dismissed one is the record of a decision. Both are closed observations, not drafts.
+    """
+    obj = get_object_or_404(DemandSignal, pk=pk, tenant=request.tenant)
+    if not obj.is_open:
+        messages.error(request, "An applied or dismissed signal is part of the record and can't be "
+                                "deleted.")
+        return redirect("scm:demandsignal_detail", pk=pk)
     return crud_delete(request, model=DemandSignal, pk=pk, success_url="scm:demandsignal_list")
 
 
