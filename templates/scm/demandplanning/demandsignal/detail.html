@@ -13,18 +13,18 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">{{ obj.get_signal_type_display }}</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Source</span><span class="detail-value">{{ obj.get_source_display }}</span></div>
-        <div><span class="detail-label">Reference</span><span class="detail-value">{{ obj.source_reference|default:"—" }}</span></div>
-        <div><span class="detail-label">Item</span><span class="detail-value">{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>{% else %}—{% endif %}</span></div>
-        <div><span class="detail-label">Category</span><span class="detail-value">{{ obj.category.name|default:"—" }}</span></div>
-        <div><span class="detail-label">Location</span><span class="detail-value">{{ obj.location.code|default:"—" }}</span></div>
-        <div><span class="detail-label">Customer</span><span class="detail-value">{{ obj.customer.name|default:"—" }}</span></div>
-        <div><span class="detail-label">Observed</span><span class="detail-value">{{ obj.observed_at|date:"M d, Y H:i" }}</span></div>
-        <div><span class="detail-label">Effective window</span><span class="detail-value">{{ window_from|date:"M d, Y" }} – {{ window_to|date:"M d, Y" }}</span></div>
-        <div><span class="detail-label">Sensing horizon</span><span class="detail-value">{{ obj.horizon_days }} days</span></div>
-        <div><span class="detail-label">Reviewed by</span><span class="detail-value">{% if obj.reviewed_by %}{{ obj.reviewed_by.get_username }} · {{ obj.reviewed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}</dd></div>
+        <div class="detail-item"><dt>Reference</dt><dd>{{ obj.source_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.category.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{{ obj.location.code|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Customer</dt><dd>{{ obj.customer.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Observed</dt><dd>{{ obj.observed_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Effective window</dt><dd>{{ window_from|date:"M d, Y" }} – {{ window_to|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Sensing horizon</dt><dd>{{ obj.horizon_days }} days</dd></div>
+        <div class="detail-item"><dt>Reviewed by</dt><dd>{% if obj.reviewed_by %}{{ obj.reviewed_by.get_username }} · {{ obj.reviewed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      </dl>
       {% if obj.notes %}<p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
     </div>
   </div>
@@ -32,14 +32,14 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Signal vs. Baseline</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><span class="detail-label">Observed value</span><span class="detail-value fw-600">{{ obj.signal_value|floatformat:2 }}</span></div>
-        <div><span class="detail-label">Expected baseline</span><span class="detail-value">{{ obj.baseline_value|floatformat:2 }}</span></div>
-        <div><span class="detail-label">Direction</span><span class="detail-value"><span class="badge badge-{% if obj.impact_direction == 'increase' %}green{% elif obj.impact_direction == 'decrease' %}red{% else %}muted{% endif %}">{{ obj.get_impact_direction_display }}</span></span></div>
-        <div><span class="detail-label">Impact</span><span class="detail-value fw-600">{{ obj.signed_impact_quantity|floatformat:2 }} units ({{ obj.impact_pct|floatformat:1 }}%)</span></div>
-        <div><span class="detail-label">Confidence</span><span class="detail-value"><span class="badge badge-{% if obj.confidence == 'high' %}green{% elif obj.confidence == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_confidence_display }}</span></span></div>
-        <div><span class="detail-label">Applied to</span><span class="detail-value">{% if obj.applied_to_forecast %}<a href="{% url 'scm:demandforecast_detail' obj.applied_to_forecast.pk %}">{{ obj.applied_to_forecast.number }}</a>{% else %}—{% endif %}</span></div>
-      </div>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Observed value</dt><dd class="fw-600">{{ obj.signal_value|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Expected baseline</dt><dd>{{ obj.baseline_value|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd><span class="badge badge-{% if obj.impact_direction == 'increase' %}green{% elif obj.impact_direction == 'decrease' %}red{% else %}muted{% endif %}">{{ obj.get_impact_direction_display }}</span></dd></div>
+        <div class="detail-item"><dt>Impact</dt><dd class="fw-600">{{ obj.signed_impact_quantity|floatformat:2 }} units ({{ obj.impact_pct|floatformat:1 }}%)</dd></div>
+        <div class="detail-item"><dt>Confidence</dt><dd><span class="badge badge-{% if obj.confidence == 'high' %}green{% elif obj.confidence == 'medium' %}info{% else %}muted{% endif %}">{{ obj.get_confidence_display }}</span></dd></div>
+        <div class="detail-item"><dt>Applied to</dt><dd>{% if obj.applied_to_forecast %}<a href="{% url 'scm:demandforecast_detail' obj.applied_to_forecast.pk %}">{{ obj.applied_to_forecast.number }}</a>{% else %}—{% endif %}</dd></div>
+      </dl>
       <p class="text-muted">Applying spreads the impact across the forecast periods this window overlaps, pro-rata by each period's seasonalised baseline, and writes it to the separate signal column.</p>
     </div>
   </div>
