@@ -15,7 +15,8 @@ from urllib.parse import urlencode
 from django.urls import reverse
 
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.models import DemandForecast, Item, Location, ReorderRule
+from apps.scm.views._helpers import _item_qs, _location_qs, _need_tenant
+from apps.scm.models import DemandForecast, ReorderRule
 from apps.scm.models.DemandPlanning._history import demand_series_map
 
 ZERO = Decimal("0")
@@ -79,8 +80,8 @@ def safety_stock_report(request):
     return render(request, "scm/demandplanning/safety_stock_report.html", {
         "rows": rows,
         "method_choices": ReorderRule.SAFETY_STOCK_METHOD_CHOICES,
-        "items": Item.objects.filter(tenant=request.tenant),
-        "locations": Location.objects.filter(tenant=request.tenant),
+        "items": _item_qs(request.tenant),
+        "locations": _location_qs(request.tenant),
         "q": request.GET.get("q", "").strip(),
         "uncalculated": sum(1 for rule in rules if rule.last_calculated_at is None),
     })
@@ -95,6 +96,8 @@ def safety_stock_recalculate(request):
     ``reorder_point`` that 4.3's reorder alerts and suggested quantities read. Promoting a
     recommendation is a separate, per-rule decision (see ``safety_stock_apply``).
     """
+    if _need_tenant(request):
+        return redirect("scm:safety_stock_report")
     rules = list(_filtered_rules(request, data=request.POST))
     if not rules:
         messages.info(request, "No active reorder rules match — create one first.")
@@ -111,8 +114,11 @@ def safety_stock_recalculate(request):
     ReorderRule.objects.bulk_update(
         rules, ["avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
                 "computed_safety_stock", "computed_reorder_point", "last_calculated_at"])
-    write_audit_log(request.user, request.tenant, "update",
-                    {"action": "safety_stock_recalculate", "rules": len(rules)})
+    # A batch action has no single target object — `obj=None` + an explicit tenant is the codebase's
+    # shape for one (crm HealthScores.recompute, hrm leave-policy actions).
+    write_audit_log(request.user, None, "update",
+                    {"action": "safety_stock_recalculate", "rules": len(rules)},
+                    tenant=request.tenant)
     messages.success(request, f"Recalculated {len(rules)} rules. Nothing was applied — review the "
                               f"variance and apply the ones you agree with.")
     return redirect(_safety_report_url(request.POST))
