@@ -114,3 +114,20 @@ from .TransportationManagement.FreightInvoices import (  # noqa: F401
     FreightInvoice,
     FreightInvoiceLine,
 )
+
+# 4.7 Demand Planning & Forecasting
+# SeasonalityProfiles FIRST — DemandForecast and 4.3's extended ReorderRule both point at it.
+from .DemandPlanning.SeasonalityProfiles import (  # noqa: F401
+    SeasonalityProfile,
+    SeasonalityIndex,
+)
+from .DemandPlanning.DemandForecasts import (  # noqa: F401
+    DemandForecast,
+    DemandForecastPeriod,
+)
+from .DemandPlanning.DemandSignals import (  # noqa: F401
+    DemandSignal,
+)
+from .DemandPlanning.ForecastAdjustments import (  # noqa: F401
+    ForecastAdjustment,
+)
