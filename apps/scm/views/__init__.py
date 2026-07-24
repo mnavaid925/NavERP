@@ -184,3 +184,27 @@ from .TransportationManagement.FreightInvoices import (  # noqa: F401
     freightinvoice_delete, freightinvoice_run_audit, freightinvoice_dispute,
     freightinvoice_approve, freightinvoice_reject, freightinvoice_handoff,
 )
+
+# 4.7 Demand Planning & Forecasting
+from .DemandPlanning.SeasonalityProfiles import (  # noqa: F401
+    seasonalityprofile_list, seasonalityprofile_create, seasonalityprofile_detail,
+    seasonalityprofile_edit, seasonalityprofile_delete, seasonalityprofile_derive,
+)
+from .DemandPlanning.DemandForecasts import (  # noqa: F401
+    demandforecast_list, demandforecast_create, demandforecast_detail, demandforecast_edit,
+    demandforecast_delete, demandforecast_generate, demandforecast_submit_review,
+    demandforecast_approve, demandforecast_archive, demandforecast_revise,
+)
+from .DemandPlanning.DemandSignals import (  # noqa: F401
+    demandsignal_list, demandsignal_create, demandsignal_detail, demandsignal_edit,
+    demandsignal_delete, demandsignal_detect, demandsignal_review, demandsignal_apply,
+    demandsignal_dismiss,
+)
+from .DemandPlanning.ForecastAdjustments import (  # noqa: F401
+    forecastadjustment_list, forecastadjustment_create, forecastadjustment_detail,
+    forecastadjustment_edit, forecastadjustment_delete, forecastadjustment_accept,
+    forecastadjustment_reject,
+)
+from .DemandPlanning.Reports import (  # noqa: F401
+    safety_stock_report, safety_stock_recalculate, safety_stock_apply, forecast_accuracy_report,
+)
