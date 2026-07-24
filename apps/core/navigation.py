@@ -840,7 +840,10 @@ LIVE_LINKS = {
         "Sales Forecasting": "scm:demandforecast_list",          # bullet (statistical forecast + period grid)
         "Seasonality Analysis": "scm:seasonalityprofile_list",   # bullet (seasonal curves AND promo events)
         "Demand Sensing": "scm:demandsignal_list",               # bullet (short-horizon signal triage log)
-        "Collaborative Planning": "scm:forecastadjustment_list", # bullet (consensus queue, ?status=proposed)
+        # Deliberately the FULL list, not `?status=proposed`: the sidebar entry is the sub-module's
+        # home, and the queue is one chip on that page. Filtering here would hide the accepted and
+        # rejected history behind a link labelled "Collaborative Planning".
+        "Collaborative Planning": "scm:forecastadjustment_list", # bullet (consensus + its review queue)
         "Safety Stock Calculation": "scm:safety_stock_report",   # bullet (computed policy over ReorderRule)
     },
 }
