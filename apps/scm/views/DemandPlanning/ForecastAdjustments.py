@@ -125,6 +125,14 @@ def _review(request, pk, *, to_status, verb):
     if not obj.is_reviewable:
         messages.error(request, "This adjustment has already been reviewed.")
         return redirect("scm:forecastadjustment_detail", pk=pk)
+    # The parent's status is checked HERE, not only on the form: an adjustment can outlive the
+    # status it was proposed under (the forecast may have been archived in between), and accepting
+    # it would then rewrite a plan that `demandforecast_edit`/`_generate`/`_delete` all refuse to
+    # touch. A draft has no period grid at all, so the delta would silently vanish.
+    if obj.forecast.status not in DemandForecast.ADJUSTABLE_STATUSES:
+        messages.error(request, "That forecast is no longer open to consensus adjustments — it is "
+                                "still a draft, or it has been archived.")
+        return redirect("scm:forecastadjustment_detail", pk=pk)
     form = ForecastAdjustmentReviewForm(request.POST)
     note = form.cleaned_data.get("review_note", "") if form.is_valid() else ""
     with transaction.atomic():
