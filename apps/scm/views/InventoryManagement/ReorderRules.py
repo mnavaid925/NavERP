@@ -11,7 +11,11 @@ def reorderrule_list(request):
     return crud_list(
         request, qs, "scm/inventory/reorderrule/list.html",
         search_fields=["item__sku", "item__name", "location__code"],
-        filters=[("is_active", "is_active", False)],
+        filters=[("is_active", "is_active", False),
+                 # 4.7 added the safety-stock policy to this rule; the list filters on it so a
+                 # planner can see which rules are still on the hand-entered `fixed` method.
+                 ("safety_stock_method", "safety_stock_method", False)],
+        extra_context={"method_choices": ReorderRule.SAFETY_STOCK_METHOD_CHOICES},
     )
 
 
