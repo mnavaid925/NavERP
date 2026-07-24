@@ -19,9 +19,30 @@
           </div>
         {% endfor %}
       </div>
+      <p class="text-muted">"Fixed" keeps the safety stock you type above. Any other method has the Safety Stock page calculate a recommendation from demand variability and lead time — nothing is applied until you accept it there.</p>
     </div></div>
+
+    {% if is_edit %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Calculated Policy</h2></div>
+        <div class="card-body">
+          <div class="detail-grid">
+            <div><span class="detail-label">Avg daily demand</span><span class="detail-value">{{ obj.avg_daily_demand|floatformat:2 }}</span></div>
+            <div><span class="detail-label">Demand σ</span><span class="detail-value">{{ obj.demand_std_dev|floatformat:2 }}</span></div>
+            <div><span class="detail-label">ABC (revenue)</span><span class="detail-value">{{ obj.abc_class|default:"—" }}</span></div>
+            <div><span class="detail-label">XYZ (variability)</span><span class="detail-value">{{ obj.xyz_class|default:"—" }}</span></div>
+            <div><span class="detail-label">Calculated safety stock</span><span class="detail-value fw-600">{{ obj.computed_safety_stock|floatformat:2 }}</span></div>
+            <div><span class="detail-label">Calculated reorder point</span><span class="detail-value fw-600">{{ obj.computed_reorder_point|floatformat:2 }}</span></div>
+            <div><span class="detail-label">Last calculated</span><span class="detail-value">{{ obj.last_calculated_at|date:"M d, Y H:i"|default:"Never" }}</span></div>
+          </div>
+          <p class="text-muted">Read-only — produced by the Safety Stock calculation, promoted into the live figures above only by its Apply action.</p>
+        </div>
+      </div>
+    {% endif %}
+
     <div class="form-actions">
       <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline"><i data-lucide="shield"></i> Safety stock</a>
       <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline">Cancel</a>
     </div>
   </form>
