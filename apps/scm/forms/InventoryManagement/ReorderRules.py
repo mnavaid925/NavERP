@@ -13,6 +13,12 @@ class ReorderRuleForm(TenantUniqueMixin, TenantModelForm):
     masquerade as a calculated one.
     """
 
+    #: Fields that ARE the buying decision — 4.3's reorder alerts and suggested quantities read
+    #: these two, so writing them is the same privileged act `safety_stock_apply` gates on tenant
+    #: admin. Without this, a non-admin could read the calculated numbers off the safety-stock
+    #: report and type them straight in here, one click away, defeating that gate entirely.
+    ADMIN_ONLY_FIELDS = ("safety_stock", "reorder_point")
+
     class Meta:
         model = ReorderRule
         # item, location, seasonality_profile and demand_forecast all carry their own tenant, so the
@@ -23,3 +29,20 @@ class ReorderRuleForm(TenantUniqueMixin, TenantModelForm):
                   "safety_stock_method", "service_level_pct", "lead_time_days",
                   "lead_time_variability_days", "review_period_days", "seasonality_profile",
                   "demand_forecast"]
+
+    def __init__(self, *args, is_tenant_admin=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not is_tenant_admin:
+            for name in self.ADMIN_ONLY_FIELDS:
+                if name in self.fields:
+                    # `disabled` (not readonly): Django ignores the SUBMITTED value entirely and
+                    # keeps the instance's, so a crafted POST cannot set it either.
+                    self.fields[name].disabled = True
+                    self.fields[name].help_text = (
+                        "Set by a workspace admin, or by applying a calculated policy on the Safety "
+                        "Stock page.")
+        # `demand_forecast` sizes THIS rule's buffer from a forecast's error — it has to be a
+        # forecast for the same item, or the rule would be sized from a different product's plan.
+        if "demand_forecast" in self.fields and self.instance.item_id:
+            self.fields["demand_forecast"].queryset = (
+                self.fields["demand_forecast"].queryset.filter(item_id=self.instance.item_id))
