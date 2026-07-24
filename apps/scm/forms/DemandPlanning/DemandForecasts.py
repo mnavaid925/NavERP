@@ -52,10 +52,34 @@ class DemandForecastPeriodForm(TenantModelForm):
         }
 
 
+class BaseDemandForecastPeriodFormSet(forms.BaseInlineFormSet):
+    """Validates ``sequence`` against the periods ALREADY on the forecast.
+
+    The built-in cross-form uniqueness check only compares the forms in this POST, and each form's
+    own check excludes the inline FK — so a crafted POST that raises ``TOTAL_FORMS`` and reuses an
+    existing sequence would pass validation and hit the ``unique_together`` as an IntegrityError
+    (a 500) inside the atomic save.
+    """
+
+    def clean(self):
+        super().clean()
+        if not self.instance.pk:
+            return
+        editing = [form.instance.pk for form in self.forms if form.instance.pk]
+        taken = set(self.instance.periods.exclude(pk__in=editing)
+                    .values_list("sequence", flat=True))
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
+                continue
+            if form.cleaned_data.get("sequence") in taken:
+                form.add_error("sequence", "That period sequence already exists on this forecast.")
+
+
 #: extra=0 — the grid is BUILT by the generate action from the derived history, so an edit screen
 #: offering blank rows would invite a hand-typed period that the next regenerate silently renumbers.
 DemandForecastPeriodFormSet = inlineformset_factory(
-    DemandForecast, DemandForecastPeriod, form=DemandForecastPeriodForm, extra=0, can_delete=True,
+    DemandForecast, DemandForecastPeriod, form=DemandForecastPeriodForm,
+    formset=BaseDemandForecastPeriodFormSet, extra=0, can_delete=True,
 )
 
 
