@@ -164,6 +164,16 @@ class DemandForecast(TenantNumbered):
         """What actually produced the numbers — the chosen method, or best_fit's winner."""
         return self.selected_method or self.method
 
+    @property
+    def effective_method_display(self):
+        """The human label for ``effective_method``.
+
+        ``selected_method`` is a plain CharField, so Django generates no ``get_..._display`` for it
+        and a template would otherwise print the raw ``weighted_moving_average`` slug next to a
+        properly-labelled sibling column.
+        """
+        return dict(self.METHOD_CHOICES).get(self.effective_method, self.effective_method)
+
     # ---------------------------------------------------------------- derived history + generation
     def history_window(self):
         """``(start, end)`` of the history the fit reads — everything before the horizon opens."""
