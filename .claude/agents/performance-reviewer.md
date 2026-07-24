@@ -2,7 +2,7 @@
 name: performance-reviewer
 description: Reviews NavERP Django code for ORM/query efficiency — N+1 queries (including chained __str__/property FK hops), missing select_related/prefetch_related, count vs len, pagination, aggregates for derived balances, and unindexed tenant-scoped filters. Use after adding or changing list/detail views, querysets, or templates that loop over related objects.
 tools: Read, Grep, Glob, Bash(git diff:*), Bash(git status:*)
-model: sonnet
+model: opus
 ---
 
 You are a senior Django performance engineer reviewing NavERP (multi-tenant ERP; every queryset is filtered by

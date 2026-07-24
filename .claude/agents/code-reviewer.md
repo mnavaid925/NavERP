@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Reviews recent NavERP changes (Django views/models/forms/templates) for correctness, multi-tenant safety, authorization, core-spine reuse, backend package structure, CRUD/filter completeness, migrations, data integrity, and readability. Use after finishing a feature or bug fix — before committing, or pass a base ref/commit range to review a just-committed changeset.
 tools: Read, Grep, Glob, Bash(git diff:*), Bash(git status:*), Bash(git log:*)
-model: sonnet
+model: opus
 ---
 
 # Role

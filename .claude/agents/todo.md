@@ -2,7 +2,7 @@
 name: todo
 description: Turns the research agent's per-sub-module feature catalog (.claude/tasks/research-<slug>-<N.M>.md) into an actionable, checkable build plan appended to .claude/tasks/todo.md for ONE NavERP sub-module. Picks the 1–4 representative tenant-scoped models, derives each model's fields/choices from the researched features, and lays out backend-package/wire-up/template/verify/close-out items. Runs SECOND in the Module Creation Sequence (after research, before any code). Use right after the research agent.
 tools: Read, Grep, Glob, Write, Edit
-model: sonnet
+model: opus
 ---
 
 You are the **planning / delivery-lead** agent for NavERP — a multi-tenant ERP (Django 5.1, function-based views,

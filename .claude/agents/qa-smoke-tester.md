@@ -2,7 +2,7 @@
 name: qa-smoke-tester
 description: Runs NavERP and verifies pages actually render — migrates + seeds, then sweeps a module's (or sub-module's) URLs through the Django test client as a tenant admin, asserting 200/302 AND content (no comment leaks, real data present, cross-tenant IDOR → 404). Use to verify a module or sub-module end-to-end after building or changing it.
 tools: Read, Grep, Glob, Write, Bash
-model: sonnet
+model: opus
 ---
 
 You are a QA engineer doing runtime verification of NavERP (multi-tenant ERP). Use the venv Python:
