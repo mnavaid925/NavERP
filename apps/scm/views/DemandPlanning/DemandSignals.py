@@ -1,9 +1,9 @@
 """SCM 4.7 Demand Planning — DemandSignal views (demand sensing triage)."""
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _need_tenant
-from apps.scm.models import DemandSignal, Item, ItemCategory, Location
-from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+from apps.scm.views._helpers import _item_qs, _location_qs, _need_tenant
+from apps.scm.models import DemandSignal
+from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge, expire_stale_signals
 from apps.scm.forms import DemandSignalApplyForm, DemandSignalDismissForm, DemandSignalForm
 
 ZERO = Decimal("0")
@@ -24,8 +24,8 @@ def demandsignal_list(request):
             "type_choices": DemandSignal.SIGNAL_TYPE_CHOICES,
             "source_choices": DemandSignal.SOURCE_CHOICES,
             "direction_choices": DemandSignal.DIRECTION_CHOICES,
-            "items": Item.objects.filter(tenant=request.tenant),
-            "locations": Location.objects.filter(tenant=request.tenant),
+            "items": _item_qs(request.tenant),
+            "locations": _location_qs(request.tenant),
         },
     )
 
@@ -85,18 +85,29 @@ def demandsignal_delete(request, pk):
 @login_required
 @require_POST
 def demandsignal_detect(request):
-    """Run the internal order-surge detector over this tenant's approved forecasts."""
+    """Run the internal order-surge detector, and retire signals whose window has passed.
+
+    The detector run doubles as the sweep: an open signal whose effective window has already ended
+    was never acted on and is no longer actionable, so it moves to ``expired`` rather than sitting in
+    the triage queue forever.
+    """
     if _need_tenant(request):
         return redirect("scm:demandsignal_list")
+    expired = expire_stale_signals(request.tenant)
     created = detect_order_surge(request.tenant)
-    write_audit_log(request.user, request.tenant, "update",
-                    {"action": "detect_order_surge", "created": len(created)})
+    # Batch actions have no single target object — `obj=None` + an explicit tenant is how the
+    # codebase records them (crm HealthScores.recompute, hrm leave-policy actions).
+    write_audit_log(request.user, None, "update",
+                    {"action": "detect_order_surge", "created": len(created), "expired": expired},
+                    tenant=request.tenant)
     if created:
         messages.success(request, f"Detected {len(created)} order-pattern signals from live sales "
                                   f"orders.")
     else:
         messages.info(request, "No order-pattern deviations beyond the threshold — needs an approved "
                                "forecast covering today with orders running against it.")
+    if expired:
+        messages.info(request, f"{expired} signal(s) whose window has passed were marked expired.")
     return redirect("scm:demandsignal_list")
 
 
