@@ -184,8 +184,10 @@ class DemandForecast(TenantNumbered):
         """The derived demand series this forecast is fitted on — NEVER stored (see _history.py)."""
         from apps.scm.models.DemandPlanning._history import demand_series
         start, end = self.history_window()
+        # tenant_ID, not tenant: demand_series only ever filters on it, and dereferencing the FK
+        # costs a SELECT on core_tenant every time these run — once per row wherever they run in a loop.
         return demand_series(
-            self.tenant, item=item or self.item, location=self.location, customer=self.customer,
+            self.tenant_id, item=item or self.item, location=self.location, customer=self.customer,
             source=self.demand_source, start=start, end=end, bucket=self.bucket,
             exclude_outliers=self.exclude_outliers, sigma=self.outlier_threshold_sigma)
 
@@ -196,9 +198,9 @@ class DemandForecast(TenantNumbered):
         one aggregate per row, and the league-table report would multiply that by every forecast.
         """
         from apps.scm.models.DemandPlanning._history import demand_series
-        rows = demand_series(self.tenant, item=self.item, location=self.location, customer=self.customer,
-                             source=self.demand_source, start=self.horizon_start, end=self.horizon_end,
-                             bucket=self.bucket)
+        rows = demand_series(self.tenant_id, item=self.item, location=self.location,
+                             customer=self.customer, source=self.demand_source,
+                             start=self.horizon_start, end=self.horizon_end, bucket=self.bucket)
         return {period_start: qty for period_start, qty in rows}
 
     @transaction.atomic
