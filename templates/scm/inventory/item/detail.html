@@ -88,19 +88,56 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2 class="card-title">Reorder rules</h2></div>
+    <div class="card-header">
+      <h2 class="card-title">Reorder rules</h2>
+      <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline"><i data-lucide="shield"></i> Safety stock</a>
+    </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Location</th><th>Reorder Point</th><th>Safety Stock</th></tr></thead>
+        <thead><tr><th>Location</th><th>Method</th><th>Reorder Point</th><th>Safety Stock</th><th>Calculated SS</th><th>Calculated ROP</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for r in reorder_rules %}
             <tr>
               <td>{{ r.location.code }}</td>
+              <td><span class="badge badge-{% if r.safety_stock_method == 'fixed' %}muted{% else %}info{% endif %}">{{ r.get_safety_stock_method_display }}</span></td>
               <td>{{ r.reorder_point|floatformat:2 }}</td>
               <td>{{ r.safety_stock|floatformat:2 }}</td>
+              <td>{% if r.last_calculated_at %}{{ r.computed_safety_stock|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if r.last_calculated_at %}{{ r.computed_reorder_point|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:reorderrule_edit' r.pk %}" class="btn-icon" title="Edit policy"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
             </tr>
           {% empty %}
-            <tr><td colspan="3"><div class="empty-state"><i data-lucide="bell"></i><p>No reorder rules for this item.</p></div></td></tr>
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="bell"></i><p>No reorder rules for this item.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Demand forecasts</h2>
+      <a href="{% url 'scm:demandforecast_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> New forecast</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Location</th><th>Bucket</th><th>Horizon</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for f in demand_forecasts %}
+            <tr>
+              <td><a href="{% url 'scm:demandforecast_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+              <td>{{ f.name }}</td>
+              <td>{% if f.location %}{{ f.location.code }}{% else %}<span class="text-muted">Network</span>{% endif %}</td>
+              <td>{{ f.get_bucket_display }}</td>
+              <td>{{ f.horizon_start|date:"M Y" }} – {{ f.horizon_end|date:"M Y" }}</td>
+              <td><span class="badge badge-{% if f.status == 'approved' %}green{% elif f.status == 'statistical' %}info{% elif f.status == 'in_review' %}amber{% elif f.status == 'archived' %}slate{% else %}muted{% endif %}">{{ f.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="line-chart"></i><p>No demand forecasts for this item.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
