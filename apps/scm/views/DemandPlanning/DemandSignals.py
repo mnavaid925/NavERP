@@ -60,7 +60,7 @@ def demandsignal_detail(request, pk):
         "obj": obj,
         "window_from": window_from,
         "window_to": window_to,
-        "apply_form": DemandSignalApplyForm(tenant=request.tenant),
+        "apply_form": DemandSignalApplyForm(tenant=request.tenant, signal=obj),
         "dismiss_form": DemandSignalDismissForm(),
     })
 
@@ -137,7 +137,7 @@ def demandsignal_apply(request, pk):
     if obj.status not in DemandSignal.APPLICABLE_STATUSES:
         messages.error(request, "This signal has already been applied or dismissed.")
         return redirect("scm:demandsignal_detail", pk=pk)
-    form = DemandSignalApplyForm(request.POST, tenant=request.tenant)
+    form = DemandSignalApplyForm(request.POST, tenant=request.tenant, signal=obj)
     if not form.is_valid():
         messages.error(request, "Pick a forecast to apply this signal to.")
         return redirect("scm:demandsignal_detail", pk=pk)
