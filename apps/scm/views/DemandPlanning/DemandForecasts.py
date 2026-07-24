@@ -167,21 +167,24 @@ def demandforecast_approve(request, pk):
                                 to_status="approved", verb="approved", stamp_user=True)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def demandforecast_archive(request, pk):
+    """Retiring the plan of record is as privileged as approving it — same gate as
+    ``salesorder_cancel`` / ``purchaseorder_cancel``, which close a live commitment."""
     return _forecast_transition(request, pk, from_statuses=("draft", "statistical", "in_review",
                                                             "approved"),
                                 to_status="archived", verb="archived")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def demandforecast_revise(request, pk):
     """Clone the forecast as the next revision and archive the original.
 
     An approved plan is never edited in place — the version that was agreed has to stay readable, so
-    a revision is a new row pointing back at what it supersedes.
+    a revision is a new row pointing back at what it supersedes. Admin-gated because it ARCHIVES the
+    original: the same retirement of the plan of record that ``demandforecast_archive`` performs.
     """
     obj = get_object_or_404(DemandForecast, pk=pk, tenant=request.tenant)
     if obj.status == "archived":
