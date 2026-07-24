@@ -25,8 +25,13 @@ class ForecastAdjustmentForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, forecast=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # Scoped to the tenant AND to the statuses whose periods may still move: an archived plan is
+        # the immutable record `revise` exists to preserve, and a draft has no grid for a delta to
+        # roll into. The sibling signal-apply form scopes the same way.
         forecasts = (DemandForecast.objects.none() if self.tenant is None else
-                     DemandForecast.objects.filter(tenant=self.tenant).select_related("item"))
+                     DemandForecast.objects
+                     .filter(tenant=self.tenant, status__in=DemandForecast.ADJUSTABLE_STATUSES)
+                     .select_related("item"))
         self.fields["forecast"].queryset = forecasts
         parent = forecast or (self.instance.forecast if self.instance.pk else None)
         if self.is_bound:
