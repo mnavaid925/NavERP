@@ -26,15 +26,15 @@
       <div class="card">
         <div class="card-header"><h2 class="card-title">Calculated Policy</h2></div>
         <div class="card-body">
-          <div class="detail-grid">
-            <div><span class="detail-label">Avg daily demand</span><span class="detail-value">{{ obj.avg_daily_demand|floatformat:2 }}</span></div>
-            <div><span class="detail-label">Demand σ</span><span class="detail-value">{{ obj.demand_std_dev|floatformat:2 }}</span></div>
-            <div><span class="detail-label">ABC (revenue)</span><span class="detail-value">{{ obj.abc_class|default:"—" }}</span></div>
-            <div><span class="detail-label">XYZ (variability)</span><span class="detail-value">{{ obj.xyz_class|default:"—" }}</span></div>
-            <div><span class="detail-label">Calculated safety stock</span><span class="detail-value fw-600">{{ obj.computed_safety_stock|floatformat:2 }}</span></div>
-            <div><span class="detail-label">Calculated reorder point</span><span class="detail-value fw-600">{{ obj.computed_reorder_point|floatformat:2 }}</span></div>
-            <div><span class="detail-label">Last calculated</span><span class="detail-value">{{ obj.last_calculated_at|date:"M d, Y H:i"|default:"Never" }}</span></div>
-          </div>
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Avg daily demand</dt><dd>{{ obj.avg_daily_demand|floatformat:2 }}</dd></div>
+            <div class="detail-item"><dt>Demand σ</dt><dd>{{ obj.demand_std_dev|floatformat:2 }}</dd></div>
+            <div class="detail-item"><dt>ABC (revenue)</dt><dd>{{ obj.abc_class|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>XYZ (variability)</dt><dd>{{ obj.xyz_class|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Calculated safety stock</dt><dd class="fw-600">{{ obj.computed_safety_stock|floatformat:2 }}</dd></div>
+            <div class="detail-item"><dt>Calculated reorder point</dt><dd class="fw-600">{{ obj.computed_reorder_point|floatformat:2 }}</dd></div>
+            <div class="detail-item"><dt>Last calculated</dt><dd>{{ obj.last_calculated_at|date:"M d, Y H:i"|default:"Never" }}</dd></div>
+          </dl>
           <p class="text-muted">Read-only — produced by the Safety Stock calculation, promoted into the live figures above only by its Apply action.</p>
         </div>
       </div>
