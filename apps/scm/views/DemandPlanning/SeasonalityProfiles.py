@@ -3,8 +3,8 @@ from datetime import timedelta
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _need_tenant
-from apps.scm.models import Item, ItemCategory, Location, SeasonalityIndex, SeasonalityProfile
+from apps.scm.views._helpers import _item_qs, _location_qs, _need_tenant
+from apps.scm.models import ItemCategory, SeasonalityIndex, SeasonalityProfile
 from apps.scm.models.DemandPlanning._history import demand_series
 from apps.scm.forms import SeasonalityIndexFormSet, SeasonalityProfileForm
 
@@ -26,9 +26,9 @@ def seasonalityprofile_list(request):
             "type_choices": SeasonalityProfile.PROFILE_TYPE_CHOICES,
             "scope_choices": SeasonalityProfile.SCOPE_CHOICES,
             "bucket_choices": SeasonalityProfile.BUCKET_CHOICES,
-            "items": Item.objects.filter(tenant=request.tenant),
+            "items": _item_qs(request.tenant),
             "categories": ItemCategory.objects.filter(tenant=request.tenant),
-            "locations": Location.objects.filter(tenant=request.tenant),
+            "locations": _location_qs(request.tenant),
         },
     )
 
