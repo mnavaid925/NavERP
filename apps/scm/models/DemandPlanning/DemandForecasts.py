@@ -242,18 +242,26 @@ class DemandForecast(TenantNumbered):
                 history_map.get(_same_period_last_year(period_start, self.bucket), ZERO))
             if projected is not None:
                 row.baseline_quantity = _q4(projected[index - 1])
-            if profile is not None:
-                seasonal, uplift = profile.apply_to(row.baseline_quantity, period_start, index_map)
-                row.seasonal_index_applied, row.event_uplift_quantity = _q4(seasonal), _q4(uplift)
-            row.final_quantity = _q4(row.pre_adjustment_quantity + (row.consensus_quantity or ZERO))
+                if profile is not None:
+                    seasonal, uplift = profile.apply_to(row.baseline_quantity, period_start, index_map)
+                    row.seasonal_index_applied, row.event_uplift_quantity = _q4(seasonal), _q4(uplift)
+                else:
+                    # A profile that was cleared or deactivated must RESET these columns. Leaving
+                    # them would keep applying a curve the planner removed, silently, forever.
+                    row.seasonal_index_applied, row.event_uplift_quantity = Decimal("1"), ZERO
+                row.final_quantity = _q4(row.pre_adjustment_quantity + (row.consensus_quantity or ZERO))
             (updated if row.pk else created).append(row)
 
         DemandForecastPeriod.objects.bulk_create(created)
         if updated:
-            DemandForecastPeriod.objects.bulk_update(
-                updated, ["period_start", "period_end", "period_label", "historical_quantity",
-                          "baseline_quantity", "seasonal_index_applied", "event_uplift_quantity",
-                          "final_quantity"])
+            # `manual` writes NO quantities — the planner typed them, and a regenerate that reset
+            # them to zero would delete the only input the method has. It still refreshes the grid's
+            # dates, labels and the history snapshot, which are derived either way.
+            fields = ["period_start", "period_end", "period_label", "historical_quantity"]
+            if projected is not None:
+                fields += ["baseline_quantity", "seasonal_index_applied", "event_uplift_quantity",
+                           "final_quantity"]
+            DemandForecastPeriod.objects.bulk_update(updated, fields)
         # A shortened horizon leaves orphan rows behind; locked ones are the planner's, so they stay.
         self.periods.filter(sequence__gt=horizon, is_locked=False).delete()
 
@@ -269,35 +277,55 @@ class DemandForecast(TenantNumbered):
     def recompute_consensus(self):
         """Roll ACCEPTED adjustments up into each period's ``consensus_quantity`` and refresh ``final``.
 
+        Rebuilt from scratch over every accepted adjustment, oldest first, so a reject after an
+        accept correctly backs its delta out again.
+
+        Each adjustment is **re-resolved against the number as it stands when its turn comes**, not
+        against the base that existed the day it was accepted. That matters for the non-``delta``
+        types: two accepted "absolute 40" proposals on one period both mean *the period should be
+        40*, so replaying a stale delta twice would land on 80; and after a regenerate moves the
+        baseline, a stale absolute/percent delta would be measured against a number that no longer
+        exists. ``resolved_quantity`` is written back so the screens show what was actually applied.
+
         An adjustment aimed at one period lands there; a horizon-wide one is disaggregated PRO-RATA
         across the periods (evenly when the pre-adjustment total is zero), which is the standard
         top-down split — spreading it evenly over a seasonal horizon would quietly flatten the curve.
+
+        Locked periods are excluded entirely: a lock means "this number is committed", so it takes no
+        share of a horizon-wide adjustment and its consensus column is left alone rather than showing
+        a delta that its ``final_quantity`` does not include.
         """
-        periods = list(self.periods.all())
+        periods = [row for row in self.periods.all() if not row.is_locked]
         if not periods:
             return 0
         pre = {row.pk: row.pre_adjustment_quantity for row in periods}
-        total_pre = sum(pre.values(), ZERO)
         consensus = {row.pk: ZERO for row in periods}
-        for adjustment in self.adjustments.filter(status="accepted"):
-            delta = adjustment.resolved_quantity or ZERO
+        resolved = []
+        for adjustment in self.adjustments.filter(status="accepted").order_by("created_at", "id"):
             if adjustment.period_id in consensus:
+                base = pre[adjustment.period_id] + consensus[adjustment.period_id]
+                delta = adjustment.delta_against(base)
                 consensus[adjustment.period_id] += delta
-            elif total_pre > ZERO:
-                for row in periods:
-                    consensus[row.pk] += delta * pre[row.pk] / total_pre
+            elif adjustment.period_id is not None:
+                continue  # aimed at a locked (or foreign) period — it takes no effect here
             else:
-                share = delta / Decimal(len(periods))
+                base = sum(pre.values(), ZERO) + sum(consensus.values(), ZERO)
+                delta = adjustment.delta_against(base)
+                weights = {row.pk: pre[row.pk] for row in periods}
+                weight_total = sum(weights.values(), ZERO)
                 for row in periods:
-                    consensus[row.pk] += share
-        changed = []
+                    consensus[row.pk] += (delta * weights[row.pk] / weight_total
+                                          if weight_total > ZERO else delta / Decimal(len(periods)))
+            if adjustment.resolved_quantity != _q4(delta):
+                adjustment.resolved_quantity = _q4(delta)
+                resolved.append(adjustment)
         for row in periods:
             row.consensus_quantity = _q4(consensus[row.pk])
-            if not row.is_locked:
-                row.final_quantity = _q4(pre[row.pk] + row.consensus_quantity)
-            changed.append(row)
-        DemandForecastPeriod.objects.bulk_update(changed, ["consensus_quantity", "final_quantity"])
-        return len(changed)
+            row.final_quantity = _q4(pre[row.pk] + row.consensus_quantity)
+        DemandForecastPeriod.objects.bulk_update(periods, ["consensus_quantity", "final_quantity"])
+        if resolved:
+            self.adjustments.model.objects.bulk_update(resolved, ["resolved_quantity"])
+        return len(periods)
 
     # ---------------------------------------------------------------- accuracy (all derived)
     def accuracy_metrics(self, periods=None, actuals=None):
