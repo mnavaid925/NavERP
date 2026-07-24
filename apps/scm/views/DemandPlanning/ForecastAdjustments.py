@@ -100,6 +100,19 @@ def forecastadjustment_detail(request, pk):
 @login_required
 @require_POST
 def forecastadjustment_delete(request, pk):
+    """Only an UNREVIEWED proposal may be deleted.
+
+    An accepted adjustment's delta is already baked into the forecast's ``consensus_quantity`` and
+    ``final_quantity``. Deleting the row would leave that number in the approved plan with nothing
+    explaining it — and the next accept or reject, which rebuilds the roll-up from scratch, would
+    then silently drop it back out. A reviewed decision is part of the consensus record; reverse it
+    with a new proposal, not by erasing the evidence.
+    """
+    obj = get_object_or_404(ForecastAdjustment, pk=pk, tenant=request.tenant)
+    if not obj.is_reviewable:
+        messages.error(request, "A reviewed adjustment is part of the consensus record and can't be "
+                                "deleted — propose a reversing adjustment instead.")
+        return redirect("scm:forecastadjustment_detail", pk=pk)
     return crud_delete(request, model=ForecastAdjustment, pk=pk,
                        success_url="scm:forecastadjustment_list")
 
