@@ -203,4 +203,30 @@
       </div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Transportation</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:carrier_list' %}" class="btn btn-outline"><i data-lucide="truck"></i> Carriers</a>
+        <a href="{% url 'scm:load_list' %}" class="btn btn-outline"><i data-lucide="route"></i> Loads &amp; Routes</a>
+        <a href="{% url 'scm:shipment_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Shipments</a>
+        <a href="{% url 'scm:freightinvoice_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Freight Audit</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Demand Planning</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:demandforecast_list' %}" class="btn btn-outline"><i data-lucide="line-chart"></i> Forecasts</a>
+        <a href="{% url 'scm:seasonalityprofile_list' %}" class="btn btn-outline"><i data-lucide="calendar-range"></i> Seasonality</a>
+        <a href="{% url 'scm:demandsignal_list' %}" class="btn btn-outline"><i data-lucide="radio"></i> Demand Signals</a>
+        <a href="{% url 'scm:forecastadjustment_list' %}?status=proposed" class="btn btn-outline"><i data-lucide="users"></i> Consensus Queue</a>
+        <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline"><i data-lucide="shield"></i> Safety Stock</a>
+        <a href="{% url 'scm:forecast_accuracy_report' %}" class="btn btn-outline"><i data-lucide="target"></i> Forecast Accuracy</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
