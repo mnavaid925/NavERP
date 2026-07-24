@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.profile_type == 'seasonal' %}info{% elif obj.profile_type == 'promotion' %}amber{% elif obj.profile_type == 'event' %}green{% else %}slate{% endif %}">{{ obj.get_profile_type_display }}</span>
+        {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:seasonalityprofile_list' %}">Seasonality</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><span class="detail-label">Scope</span><span class="detail-value">{{ obj.get_scope_display }}</span></div>
+        <div><span class="detail-label">Item</span><span class="detail-value">{% if obj.item %}{{ obj.item.sku }} · {{ obj.item.name }}{% else %}—{% endif %}</span></div>
+        <div><span class="detail-label">Category</span><span class="detail-value">{{ obj.category.name|default:"—" }}</span></div>
+        <div><span class="detail-label">Location</span><span class="detail-value">{{ obj.location.code|default:"—" }}</span></div>
+        <div><span class="detail-label">Bucket</span><span class="detail-value">{{ obj.get_bucket_display }}</span></div>
+        <div><span class="detail-label">Derived from</span><span class="detail-value">{{ obj.derived_from_years }} year(s) of history</span></div>
+        <div><span class="detail-label">Last derived</span><span class="detail-value">{{ obj.last_derived_at|date:"M d, Y H:i"|default:"Never — indices typed by hand" }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  {% if obj.event_start or obj.uplift_pct or obj.cannibalization_pct %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Promotion / Event</h2></div>
+      <div class="card-body">
+        <div class="detail-grid">
+          <div><span class="detail-label">Window</span><span class="detail-value">{% if obj.event_start %}{{ obj.event_start|date:"M d, Y" }} – {{ obj.event_end|date:"M d, Y" }}{% else %}Recurring (no window){% endif %}</span></div>
+          <div><span class="detail-label">Mechanic</span><span class="detail-value">{{ obj.get_promotion_mechanic_display|default:"—" }}</span></div>
+          <div><span class="detail-label">Uplift</span><span class="detail-value fw-600">{{ obj.uplift_pct|floatformat:1 }}%</span></div>
+          <div><span class="detail-label">Cannibalization</span><span class="detail-value">{{ obj.cannibalization_pct|floatformat:1 }}%{% if obj.cannibalized_category %} of {{ obj.cannibalized_category.name }}{% endif %}</span></div>
+        </div>
+        <p class="text-muted">A windowed profile contributes its uplift as a separate event column on the forecast, so the seasonal curve and the promotion never get collapsed into one number. Cannibalization is entered by hand — automatic detection is a later pass.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Index Curve</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Period</th><th>Label</th><th>Factor</th><th>Variance</th><th>Curve</th><th>Sample</th></tr></thead>
+        <tbody>
+          {% for row in indices %}
+            <tr>
+              <td class="fw-600">{{ row.period_number }}</td>
+              <td>{{ row.period_label|default:"—" }}</td>
+              <td>{{ row.index_factor|floatformat:4 }}</td>
+              <td>
+                <span class="badge badge-{% if row.variance_pct > 0 %}green{% elif row.variance_pct < 0 %}amber{% else %}muted{% endif %}">{{ row.variance_pct|floatformat:1 }}%</span>
+              </td>
+              <td style="min-width:160px;">
+                <div class="progress"><div class="progress-bar" style="width:{% widthratio row.index_factor peak_factor 100 %}%;"></div></div>
+              </td>
+              <td>{% if row.sample_size %}{{ row.sample_size }} obs{% else %}<span class="text-muted">Typed</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No index periods</h3><p>Type the multipliers on the edit form, or derive them from sales history below.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">1.0000 is neutral. Bars are drawn relative to this profile's tallest period. "Sample" is how many history observations each derived factor averaged — a one-observation factor is a guess, not a fitted curve.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Forecasts Using This Profile</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Name</th><th>Item</th><th>Horizon</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for f in forecasts %}
+            <tr>
+              <td><a href="{% url 'scm:demandforecast_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+              <td>{{ f.name }}</td>
+              <td>{{ f.item.sku }}</td>
+              <td>{{ f.horizon_start|date:"M Y" }} – {{ f.horizon_end|date:"M Y" }}</td>
+              <td><span class="badge badge-{% if f.status == 'approved' %}green{% elif f.status == 'statistical' %}info{% elif f.status == 'in_review' %}amber{% elif f.status == 'archived' %}slate{% else %}muted{% endif %}">{{ f.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="line-chart"></i><h3>Not used yet</h3><p>Pick this profile on a forecast to apply its curve.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <form method="post" action="{% url 'scm:seasonalityprofile_derive' obj.pk %}" onsubmit="return confirm('Recalculate the index factors from sales history?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="wand-2"></i> Derive from history</button></form>
+        <a href="{% url 'scm:seasonalityprofile_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:seasonalityprofile_delete' obj.pk %}" onsubmit="return confirm('Delete this seasonality profile and its index rows?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        <a href="{% url 'scm:seasonalityprofile_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
