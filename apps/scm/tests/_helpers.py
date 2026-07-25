@@ -1,4 +1,4 @@
-"""POST-payload builders for SCM's real Django inline formsets.
+"""POST-payload builders for SCM's real Django inline formsets, plus calendar helpers.
 
 SCM 4.1 is the first NavERP app whose test suite drives ``BaseInlineFormSet``
 subclasses through both direct instantiation and the Django test client, so the
@@ -37,3 +37,23 @@ def formset_data(prefix, rows, initial=0):
         for field, value in row.items():
             data[f"{prefix}-{i}-{field}"] = "" if value is None else str(value)
     return data
+
+
+# --------------------------------------------------------------------------------- calendar
+# SCM 4.7 Demand Planning buckets a horizon by month, so its fixtures and tests need month
+# arithmetic. Lesson L16: EVERY reference date here is derived from the caller's
+# ``timezone.localdate()`` basis (the same basis ``generate_periods`` / ``detect_order_surge`` /
+# ``expire_stale_signals`` use), NEVER ``datetime.date.today()`` — otherwise exact-date assertions
+# flake for the hours around local midnight.
+def month_start(value):
+    """First day of ``value``'s month."""
+    import datetime
+    return datetime.date(value.year, value.month, 1)
+
+
+def add_months(value, months):
+    """First day of the month ``months`` after ``value``'s month (negative goes back)."""
+    import datetime
+    total = value.year * 12 + (value.month - 1) + int(months)
+    year, month = divmod(total, 12)
+    return datetime.date(year, month + 1, 1)
