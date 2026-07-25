@@ -1618,3 +1618,514 @@ class TestTMSCSRFEnforcement:
         assert resp.status_code == 403
         freight_invoice_a.refresh_from_db()
         assert freight_invoice_a.approval_status == "pending"
+
+
+# ================================================================================================
+# SCM 4.7 Demand Planning & Forecasting
+# ================================================================================================
+
+# ================================================================ Anonymous -> login redirect
+class TestDemandPlanningAnonymousRedirect:
+    ROUTES = ("scm:seasonalityprofile_list", "scm:seasonalityprofile_create",
+              "scm:demandforecast_list", "scm:demandforecast_create",
+              "scm:demandsignal_list", "scm:demandsignal_create",
+              "scm:forecastadjustment_list", "scm:forecastadjustment_create",
+              "scm:safety_stock_report", "scm:forecast_accuracy_report")
+
+    def test_every_landing_route_redirects_to_login(self):
+        c = Client()
+        for name in self.ROUTES:
+            resp = c.get(reverse(name))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+    def test_detail_routes_redirect_to_login(self, demand_forecast_a, demand_signal_a,
+                                             seasonality_profile_a, forecast_adjustment_a):
+        c = Client()
+        for name, obj in (("scm:demandforecast_detail", demand_forecast_a),
+                          ("scm:demandsignal_detail", demand_signal_a),
+                          ("scm:seasonalityprofile_detail", seasonality_profile_a),
+                          ("scm:forecastadjustment_detail", forecast_adjustment_a)):
+            resp = c.get(reverse(name, args=[obj.pk]))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+    def test_post_actions_redirect_to_login(self, demand_forecast_a, demand_signal_a,
+                                            reorder_rule_a):
+        c = Client()
+        for name, args in (("scm:demandforecast_generate", [demand_forecast_a.pk]),
+                           ("scm:demandforecast_approve", [demand_forecast_a.pk]),
+                           ("scm:demandsignal_detect", []),
+                           ("scm:safety_stock_recalculate", []),
+                           ("scm:safety_stock_apply", [reorder_rule_a.pk])):
+            resp = c.post(reverse(name, args=args))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+
+# ================================================================ @tenant_admin_required gates
+class TestDemandPlanningAdminRequiredGates:
+    def test_forecast_approve_is_admin_only(self, member_client, forecast_with_periods_a):
+        resp = member_client.post(reverse("scm:demandforecast_approve",
+                                          args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 403
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "statistical"
+
+    def test_forecast_archive_is_admin_only(self, member_client, forecast_with_periods_a):
+        resp = member_client.post(reverse("scm:demandforecast_archive",
+                                          args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 403
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "statistical"
+
+    def test_forecast_revise_is_admin_only(self, member_client, approved_forecast_a):
+        from apps.scm.models import DemandForecast
+        resp = member_client.post(reverse("scm:demandforecast_revise",
+                                          args=[approved_forecast_a.pk]))
+        assert resp.status_code == 403
+        assert not DemandForecast.objects.filter(supersedes=approved_forecast_a).exists()
+
+    def test_safety_stock_apply_is_admin_only(self, member_client, reorder_rule_service_level_a):
+        from django.utils import timezone
+        reorder_rule_service_level_a.computed_safety_stock = Decimal("42.00")
+        reorder_rule_service_level_a.last_calculated_at = timezone.now()
+        reorder_rule_service_level_a.save(update_fields=["computed_safety_stock",
+                                                          "last_calculated_at"])
+        resp = member_client.post(reverse("scm:safety_stock_apply",
+                                          args=[reorder_rule_service_level_a.pk]))
+        assert resp.status_code == 403
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_service_level_a.safety_stock == Decimal("5.00")
+
+    def test_an_admin_may_approve(self, client_a, forecast_with_periods_a):
+        resp = client_a.post(reverse("scm:demandforecast_approve",
+                                     args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 302
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "approved"
+
+    def test_an_admin_may_apply_a_calculated_policy(self, client_a,
+                                                    reorder_rule_service_level_a):
+        from django.utils import timezone
+        reorder_rule_service_level_a.computed_safety_stock = Decimal("42.00")
+        reorder_rule_service_level_a.computed_reorder_point = Decimal("77.00")
+        reorder_rule_service_level_a.last_calculated_at = timezone.now()
+        reorder_rule_service_level_a.save(update_fields=["computed_safety_stock",
+                                                          "computed_reorder_point",
+                                                          "last_calculated_at"])
+        resp = client_a.post(reverse("scm:safety_stock_apply",
+                                     args=[reorder_rule_service_level_a.pk]))
+        assert resp.status_code == 302
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_service_level_a.safety_stock == Decimal("42.00")
+
+
+# ================================================================ Plain @login_required actions work for a member
+class TestDemandPlanningOrdinaryActionsAllowNonAdmin:
+    def test_a_member_may_generate_a_forecast(self, member_client, demand_forecast_a):
+        resp = member_client.post(reverse("scm:demandforecast_generate",
+                                          args=[demand_forecast_a.pk]))
+        assert resp.status_code != 403
+        assert demand_forecast_a.periods.count() == 3
+
+    def test_a_member_may_submit_for_review(self, member_client, forecast_with_periods_a):
+        resp = member_client.post(reverse("scm:demandforecast_submit_review",
+                                          args=[forecast_with_periods_a.pk]))
+        assert resp.status_code != 403
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "in_review"
+
+    def test_a_member_may_triage_a_signal(self, member_client, demand_signal_a):
+        assert member_client.post(reverse("scm:demandsignal_review",
+                                          args=[demand_signal_a.pk])).status_code != 403
+
+    def test_a_member_may_run_the_detector(self, member_client):
+        assert member_client.post(reverse("scm:demandsignal_detect")).status_code != 403
+
+    def test_a_member_may_review_an_adjustment(self, member_client, forecast_adjustment_a):
+        assert member_client.post(reverse("scm:forecastadjustment_accept",
+                                          args=[forecast_adjustment_a.pk])).status_code != 403
+
+    def test_a_member_may_recalculate_the_safety_stock_proposals(self, member_client,
+                                                                  reorder_rule_service_level_a):
+        resp = member_client.post(reverse("scm:safety_stock_recalculate"))
+        assert resp.status_code != 403
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_service_level_a.safety_stock == Decimal("5.00")  # proposal only
+
+    def test_a_member_cannot_type_the_live_columns_on_the_reorder_rule_form(
+        self, member_client, reorder_rule_a,
+    ):
+        """The safety_stock_apply admin gate would be decoration if this page were open."""
+        data = {
+            "item": str(reorder_rule_a.item_id), "location": str(reorder_rule_a.location_id),
+            "reorder_point": "88888", "safety_stock": "99999", "reorder_quantity": "20",
+            "is_active": "on", "safety_stock_method": "fixed", "service_level_pct": "95",
+            "lead_time_days": "0", "lead_time_variability_days": "0", "review_period_days": "0",
+            "seasonality_profile": "", "demand_forecast": "",
+        }
+        resp = member_client.post(reverse("scm:reorderrule_edit", args=[reorder_rule_a.pk]), data)
+        assert resp.status_code == 302
+        reorder_rule_a.refresh_from_db()
+        assert reorder_rule_a.safety_stock == Decimal("5.00")
+        assert reorder_rule_a.reorder_point == Decimal("10.00")
+
+
+# ================================================================ Cross-tenant IDOR -> 404 (mandatory)
+class TestDemandPlanningCrossTenantIDOR:
+    def test_seasonalityprofile_detail_cross_tenant_404(self, client_a, seasonality_profile_b):
+        assert client_a.get(reverse("scm:seasonalityprofile_detail",
+                                    args=[seasonality_profile_b.pk])).status_code == 404
+
+    def test_seasonalityprofile_edit_cross_tenant_404(self, client_a, seasonality_profile_b):
+        assert client_a.get(reverse("scm:seasonalityprofile_edit",
+                                    args=[seasonality_profile_b.pk])).status_code == 404
+
+    def test_seasonalityprofile_delete_cross_tenant_404(self, client_a, seasonality_profile_b):
+        assert client_a.post(reverse("scm:seasonalityprofile_delete",
+                                     args=[seasonality_profile_b.pk])).status_code == 404
+
+    def test_seasonalityprofile_derive_cross_tenant_404(self, client_a, seasonality_profile_b):
+        assert client_a.post(reverse("scm:seasonalityprofile_derive",
+                                     args=[seasonality_profile_b.pk])).status_code == 404
+
+    def test_demandforecast_detail_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.get(reverse("scm:demandforecast_detail",
+                                    args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_edit_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.get(reverse("scm:demandforecast_edit",
+                                    args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_delete_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.post(reverse("scm:demandforecast_delete",
+                                     args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_generate_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.post(reverse("scm:demandforecast_generate",
+                                     args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_submit_review_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.post(reverse("scm:demandforecast_submit_review",
+                                     args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_approve_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.post(reverse("scm:demandforecast_approve",
+                                     args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_archive_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.post(reverse("scm:demandforecast_archive",
+                                     args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandforecast_revise_cross_tenant_404(self, client_a, demand_forecast_b):
+        assert client_a.post(reverse("scm:demandforecast_revise",
+                                     args=[demand_forecast_b.pk])).status_code == 404
+
+    def test_demandsignal_detail_cross_tenant_404(self, client_a, demand_signal_b):
+        assert client_a.get(reverse("scm:demandsignal_detail",
+                                    args=[demand_signal_b.pk])).status_code == 404
+
+    def test_demandsignal_edit_cross_tenant_404(self, client_a, demand_signal_b):
+        assert client_a.get(reverse("scm:demandsignal_edit",
+                                    args=[demand_signal_b.pk])).status_code == 404
+
+    def test_demandsignal_delete_cross_tenant_404(self, client_a, demand_signal_b):
+        assert client_a.post(reverse("scm:demandsignal_delete",
+                                     args=[demand_signal_b.pk])).status_code == 404
+
+    def test_demandsignal_review_cross_tenant_404(self, client_a, demand_signal_b):
+        assert client_a.post(reverse("scm:demandsignal_review",
+                                     args=[demand_signal_b.pk])).status_code == 404
+
+    def test_demandsignal_apply_cross_tenant_404(self, client_a, demand_signal_b):
+        assert client_a.post(reverse("scm:demandsignal_apply",
+                                     args=[demand_signal_b.pk]), {}).status_code == 404
+
+    def test_demandsignal_dismiss_cross_tenant_404(self, client_a, demand_signal_b):
+        assert client_a.post(reverse("scm:demandsignal_dismiss",
+                                     args=[demand_signal_b.pk])).status_code == 404
+
+    def test_forecastadjustment_detail_cross_tenant_404(self, client_a, forecast_adjustment_b):
+        assert client_a.get(reverse("scm:forecastadjustment_detail",
+                                    args=[forecast_adjustment_b.pk])).status_code == 404
+
+    def test_forecastadjustment_edit_cross_tenant_404(self, client_a, forecast_adjustment_b):
+        assert client_a.get(reverse("scm:forecastadjustment_edit",
+                                    args=[forecast_adjustment_b.pk])).status_code == 404
+
+    def test_forecastadjustment_delete_cross_tenant_404(self, client_a, forecast_adjustment_b):
+        assert client_a.post(reverse("scm:forecastadjustment_delete",
+                                     args=[forecast_adjustment_b.pk])).status_code == 404
+
+    def test_forecastadjustment_accept_cross_tenant_404(self, client_a, forecast_adjustment_b):
+        assert client_a.post(reverse("scm:forecastadjustment_accept",
+                                     args=[forecast_adjustment_b.pk])).status_code == 404
+
+    def test_forecastadjustment_reject_cross_tenant_404(self, client_a, forecast_adjustment_b):
+        assert client_a.post(reverse("scm:forecastadjustment_reject",
+                                     args=[forecast_adjustment_b.pk])).status_code == 404
+
+    def test_safety_stock_apply_cross_tenant_404(self, client_a, reorder_rule_b):
+        assert client_a.post(reverse("scm:safety_stock_apply",
+                                     args=[reorder_rule_b.pk])).status_code == 404
+
+
+# ================================================================ Cross-tenant FORM binding + IDOR list
+class TestDemandPlanningCrossTenantFormScoping:
+    def test_seasonality_list_never_contains_other_tenant_rows(self, client_a,
+                                                               seasonality_profile_a,
+                                                               seasonality_profile_b):
+        resp = client_a.get(reverse("scm:seasonalityprofile_list"))
+        assert seasonality_profile_b not in resp.context["object_list"]
+
+    def test_forecast_list_never_contains_other_tenant_rows(self, client_a, demand_forecast_a,
+                                                            demand_forecast_b):
+        resp = client_a.get(reverse("scm:demandforecast_list"))
+        assert demand_forecast_b not in resp.context["object_list"]
+
+    def test_signal_list_never_contains_other_tenant_rows(self, client_a, demand_signal_a,
+                                                          demand_signal_b):
+        resp = client_a.get(reverse("scm:demandsignal_list"))
+        assert demand_signal_b not in resp.context["object_list"]
+
+    def test_adjustment_list_never_contains_other_tenant_rows(self, client_a,
+                                                              forecast_adjustment_a,
+                                                              forecast_adjustment_b):
+        resp = client_a.get(reverse("scm:forecastadjustment_list"))
+        assert forecast_adjustment_b not in resp.context["object_list"]
+
+    def test_safety_stock_report_never_contains_other_tenant_rules(self, client_a,
+                                                                   reorder_rule_a,
+                                                                   reorder_rule_b):
+        resp = client_a.get(reverse("scm:safety_stock_report"))
+        assert reorder_rule_b not in [row["rule"] for row in resp.context["rows"]]
+
+    def test_accuracy_report_never_contains_other_tenant_forecasts(self, client_a,
+                                                                   forecast_with_periods_a,
+                                                                   forecast_with_periods_b):
+        resp = client_a.get(reverse("scm:forecast_accuracy_report"))
+        assert forecast_with_periods_b not in [row["forecast"] for row in resp.context["rows"]]
+
+    def test_a_crafted_forecast_post_with_another_tenants_item_is_rejected(self, client_a,
+                                                                            tenant_a, item_b):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        data = {
+            "name": "Crafted", "item": str(item_b.pk), "location": "", "customer": "",
+            "demand_source": "sales_orders", "bucket": "month",
+            "horizon_start": start.isoformat(),
+            "horizon_end": (add_months(start, 3) - datetime.timedelta(days=1)).isoformat(),
+            "history_months": "24", "method": "moving_average", "method_parameter": "3",
+            "seasonality_profile": "", "reference_item": "", "reference_scale_pct": "100",
+            "exclude_outliers": "", "outlier_threshold_sigma": "3", "currency": "",
+            "scenario": "baseline", "notes": "", **formset_data("periods", []),
+        }
+        resp = client_a.post(reverse("scm:demandforecast_create"), data)
+        assert resp.status_code == 200  # re-rendered form, not saved
+        assert not DemandForecast.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_signal_post_with_another_tenants_item_is_rejected(self, client_a,
+                                                                         tenant_a, item_b):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        data = {
+            "signal_type": "order_surge", "source": "manual", "source_reference": "crafted",
+            "item": str(item_b.pk), "category": "", "location": "", "customer": "",
+            "observed_at": timezone.now().strftime("%Y-%m-%dT%H:%M"), "effective_from": "",
+            "effective_to": "", "horizon_days": "28", "signal_value": "0", "baseline_value": "0",
+            "impact_direction": "increase", "impact_pct": "0", "impact_quantity": "0",
+            "confidence": "medium", "notes": "",
+        }
+        resp = client_a.post(reverse("scm:demandsignal_create"), data)
+        assert resp.status_code == 200
+        assert not DemandSignal.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_adjustment_post_with_another_tenants_forecast_is_rejected(
+        self, client_a, tenant_a, forecast_with_periods_b,
+    ):
+        from apps.scm.models import ForecastAdjustment
+        data = {
+            "forecast": str(forecast_with_periods_b.pk), "period": "",
+            "contributor_function": "sales", "org_unit": "", "adjustment_type": "absolute",
+            "proposed_quantity": "140", "adjustment_pct": "0", "reason_code": "promotion",
+            "rationale": "crafted", "confidence": "medium",
+        }
+        resp = client_a.post(reverse("scm:forecastadjustment_create"), data)
+        assert resp.status_code == 200
+        assert not ForecastAdjustment.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_adjustment_post_with_another_tenants_period_is_rejected(
+        self, client_a, tenant_a, forecast_with_periods_a, forecast_with_periods_b,
+    ):
+        from apps.scm.models import ForecastAdjustment
+        data = {
+            "forecast": str(forecast_with_periods_a.pk),
+            "period": str(forecast_with_periods_b.periods.first().pk),
+            "contributor_function": "sales", "org_unit": "", "adjustment_type": "absolute",
+            "proposed_quantity": "140", "adjustment_pct": "0", "reason_code": "promotion",
+            "rationale": "crafted", "confidence": "medium",
+        }
+        resp = client_a.post(reverse("scm:forecastadjustment_create"), data)
+        assert resp.status_code == 200
+        assert not ForecastAdjustment.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_signal_apply_post_cannot_move_another_tenants_forecast(
+        self, client_a, demand_signal_a, forecast_with_periods_b,
+    ):
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": str(forecast_with_periods_b.pk)}, follow=True)
+        assert resp.status_code == 200
+        assert any("Pick a forecast" in str(m) for m in resp.context["messages"])
+        assert forecast_with_periods_b.periods.first().signal_adjustment_quantity == Decimal("0.0000")
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "new"
+
+    def test_a_crafted_profile_post_with_another_tenants_category_is_rejected(self, client_a,
+                                                                               tenant_a,
+                                                                               category_b):
+        from apps.scm.models import SeasonalityProfile
+        data = {
+            "name": "Crafted curve", "profile_type": "seasonal", "bucket": "month",
+            "scope": "category", "item": "", "category": str(category_b.pk), "location": "",
+            "event_start": "", "event_end": "", "uplift_pct": "0", "cannibalization_pct": "0",
+            "cannibalized_category": "", "promotion_mechanic": "", "derived_from_years": "2",
+            "is_active": "on", "notes": "", **formset_data("indices", []),
+        }
+        resp = client_a.post(reverse("scm:seasonalityprofile_create"), data)
+        assert resp.status_code == 200
+        assert not SeasonalityProfile.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_reorderrule_post_with_another_tenants_forecast_is_rejected(
+        self, client_a, tenant_a, item_a, location_a, forecast_with_periods_b,
+    ):
+        from apps.scm.models import ReorderRule
+        data = {
+            "item": str(item_a.pk), "location": str(location_a.pk), "reorder_point": "10",
+            "safety_stock": "5", "reorder_quantity": "20", "is_active": "on",
+            "safety_stock_method": "forecast_error", "service_level_pct": "95",
+            "lead_time_days": "5", "lead_time_variability_days": "0", "review_period_days": "0",
+            "seasonality_profile": "", "demand_forecast": str(forecast_with_periods_b.pk),
+        }
+        resp = client_a.post(reverse("scm:reorderrule_create"), data)
+        assert resp.status_code == 200
+        assert not ReorderRule.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestDemandPlanningPostOnlyActions:
+    def test_get_on_every_forecast_action_returns_405(self, client_a, forecast_with_periods_a):
+        for name in ("demandforecast_delete", "demandforecast_generate",
+                     "demandforecast_submit_review", "demandforecast_approve",
+                     "demandforecast_archive", "demandforecast_revise"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[forecast_with_periods_a.pk])).status_code == 405, name
+
+    def test_get_on_every_signal_action_returns_405(self, client_a, demand_signal_a):
+        for name in ("demandsignal_delete", "demandsignal_review", "demandsignal_apply",
+                     "demandsignal_dismiss"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[demand_signal_a.pk])).status_code == 405, name
+
+    def test_get_on_the_detector_returns_405(self, client_a):
+        assert client_a.get(reverse("scm:demandsignal_detect")).status_code == 405
+
+    def test_get_on_every_adjustment_action_returns_405(self, client_a, forecast_adjustment_a):
+        for name in ("forecastadjustment_delete", "forecastadjustment_accept",
+                     "forecastadjustment_reject"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[forecast_adjustment_a.pk])).status_code == 405, name
+
+    def test_get_on_the_seasonality_actions_returns_405(self, client_a, seasonality_profile_a):
+        for name in ("seasonalityprofile_delete", "seasonalityprofile_derive"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[seasonality_profile_a.pk])).status_code == 405, name
+
+    def test_get_on_the_report_actions_returns_405(self, client_a, reorder_rule_a):
+        assert client_a.get(reverse("scm:safety_stock_recalculate")).status_code == 405
+        assert client_a.get(reverse("scm:safety_stock_apply",
+                                    args=[reorder_rule_a.pk])).status_code == 405
+
+    def test_a_get_never_deletes(self, client_a, demand_forecast_a, demand_signal_a,
+                                 seasonality_profile_a, forecast_adjustment_a):
+        from apps.scm.models import (DemandForecast, DemandSignal, ForecastAdjustment,
+                                     SeasonalityProfile)
+        client_a.get(reverse("scm:demandforecast_delete", args=[demand_forecast_a.pk]))
+        client_a.get(reverse("scm:demandsignal_delete", args=[demand_signal_a.pk]))
+        client_a.get(reverse("scm:seasonalityprofile_delete", args=[seasonality_profile_a.pk]))
+        client_a.get(reverse("scm:forecastadjustment_delete", args=[forecast_adjustment_a.pk]))
+        assert DemandForecast.objects.filter(pk=demand_forecast_a.pk).exists()
+        assert DemandSignal.objects.filter(pk=demand_signal_a.pk).exists()
+        assert SeasonalityProfile.objects.filter(pk=seasonality_profile_a.pk).exists()
+        assert ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).exists()
+
+
+# ================================================================ CSRF enforcement
+class TestDemandPlanningCSRFEnforcement:
+    def test_post_without_csrf_is_rejected_on_forecast_generate(self, admin_user,
+                                                                demand_forecast_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:demandforecast_generate",
+                              args=[demand_forecast_a.pk])).status_code == 403
+        assert demand_forecast_a.periods.count() == 0
+
+    def test_post_without_csrf_is_rejected_on_forecast_approve(self, admin_user,
+                                                               forecast_with_periods_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:demandforecast_approve",
+                              args=[forecast_with_periods_a.pk])).status_code == 403
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "statistical"
+
+    def test_post_without_csrf_is_rejected_on_signal_apply(self, admin_user, demand_signal_a,
+                                                           forecast_with_periods_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        resp = c.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                      {"forecast": str(forecast_with_periods_a.pk)})
+        assert resp.status_code == 403
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "new"
+
+    def test_post_without_csrf_is_rejected_on_adjustment_accept(self, admin_user,
+                                                                forecast_adjustment_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:forecastadjustment_accept",
+                              args=[forecast_adjustment_a.pk])).status_code == 403
+        forecast_adjustment_a.refresh_from_db()
+        assert forecast_adjustment_a.status == "proposed"
+
+    def test_post_without_csrf_is_rejected_on_safety_stock_recalculate(self, admin_user,
+                                                                        reorder_rule_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:safety_stock_recalculate")).status_code == 403
+        reorder_rule_a.refresh_from_db()
+        assert reorder_rule_a.last_calculated_at is None
+
+    def test_post_without_csrf_is_rejected_on_safety_stock_apply(self, admin_user,
+                                                                 reorder_rule_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:safety_stock_apply",
+                              args=[reorder_rule_a.pk])).status_code == 403
+
+    def test_post_without_csrf_is_rejected_on_seasonality_derive(self, admin_user,
+                                                                 category_profile_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:seasonalityprofile_derive",
+                              args=[category_profile_a.pk])).status_code == 403
+        assert not category_profile_a.indices.exists()
+
+    def test_post_without_csrf_is_rejected_on_signal_detect(self, admin_user, tenant_a):
+        from apps.scm.models import DemandSignal
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:demandsignal_detect")).status_code == 403
+        assert not DemandSignal.objects.filter(tenant=tenant_a).exists()
