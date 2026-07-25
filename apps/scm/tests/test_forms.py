@@ -1437,3 +1437,651 @@ class TestTMSCrossTenantFormScoping:
         }, tenant=tenant_a)
         assert not form.is_valid()
         assert "party" in form.errors
+
+
+# ================================================================================================
+# SCM 4.7 Demand Planning & Forecasting
+# ================================================================================================
+
+# ================================================================ Mass-assignment exclusions
+class TestDemandPlanningMassAssignmentExclusions:
+    def test_demandforecast_form_excludes_every_system_field(self):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(tenant=None)
+        for field in ("number", "status", "selected_method", "revision", "supersedes",
+                      "generated_at", "approved_by", "approved_at", "tenant"):
+            assert field not in form.fields, field
+
+    def test_demandforecast_period_form_excludes_the_derived_columns(self):
+        from apps.scm.forms import DemandForecastPeriodForm
+        form = DemandForecastPeriodForm(tenant=None)
+        for field in ("historical_quantity", "signal_adjustment_quantity", "consensus_quantity",
+                      "forecast"):
+            assert field not in form.fields, field
+
+    def test_seasonalityprofile_form_excludes_number_and_the_derive_stamp(self):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(tenant=None)
+        for field in ("number", "last_derived_at", "tenant"):
+            assert field not in form.fields, field
+        assert "derived_from_years" in form.fields  # an INPUT to derive, not a result of it
+
+    def test_seasonalityindex_form_excludes_the_sample_size(self):
+        from apps.scm.forms import SeasonalityIndexForm
+        form = SeasonalityIndexForm(tenant=None)
+        assert "sample_size" not in form.fields
+        assert "profile" not in form.fields
+
+    def test_demandsignal_form_excludes_the_triage_fields(self):
+        from apps.scm.forms import DemandSignalForm
+        form = DemandSignalForm(tenant=None)
+        for field in ("number", "status", "applied_to_forecast", "reviewed_by", "reviewed_at",
+                      "tenant"):
+            assert field not in form.fields, field
+
+    def test_forecastadjustment_form_excludes_the_review_gate_fields(self):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(tenant=None)
+        for field in ("number", "status", "submitted_by", "resolved_quantity", "reviewed_by",
+                      "reviewed_at", "review_note", "tenant"):
+            assert field not in form.fields, field
+
+    def test_reorderrule_form_excludes_the_seven_calculated_columns(self):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(tenant=None, is_tenant_admin=True)
+        for field in ("avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
+                      "computed_safety_stock", "computed_reorder_point", "last_calculated_at"):
+            assert field not in form.fields, field
+
+    def test_reorderrule_form_still_offers_the_policy_inputs(self):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(tenant=None, is_tenant_admin=True)
+        for field in ("safety_stock_method", "service_level_pct", "lead_time_days",
+                      "lead_time_variability_days", "review_period_days", "seasonality_profile",
+                      "demand_forecast"):
+            assert field in form.fields, field
+
+
+# ================================================================ DemandForecastForm.clean()
+class TestDemandForecastFormValidation:
+    def _payload(self, item, **overrides):
+        from django.utils import timezone
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        data = {
+            "name": "Widget plan", "item": str(item.pk), "location": "", "customer": "",
+            "demand_source": "sales_orders", "bucket": "month",
+            "horizon_start": start.isoformat(),
+            "horizon_end": (add_months(start, 3) - datetime.timedelta(days=1)).isoformat(),
+            "history_months": "24", "method": "moving_average", "method_parameter": "3",
+            "seasonality_profile": "", "reference_item": "", "reference_scale_pct": "100",
+            "exclude_outliers": "", "outlier_threshold_sigma": "3", "currency": "",
+            "scenario": "baseline", "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_a_valid_payload_is_accepted(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(self._payload(item_a), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_name_and_item_and_the_horizon_are_required(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm({}, tenant=tenant_a)
+        assert not form.is_valid()
+        for field in ("name", "item", "horizon_start", "horizon_end"):
+            assert field in form.errors, field
+
+    def test_a_horizon_that_ends_before_it_starts_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        from django.utils import timezone
+        from apps.scm.tests._helpers import month_start
+        start = month_start(timezone.localdate())
+        form = DemandForecastForm(
+            self._payload(item_a, horizon_start=start.isoformat(),
+                          horizon_end=(start - datetime.timedelta(days=1)).isoformat()),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "horizon_end" in form.errors
+
+    def test_a_horizon_beyond_the_period_cap_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        from apps.scm.models import DemandForecast
+        form = DemandForecastForm(
+            self._payload(item_a, bucket="day", horizon_start="2026-01-01",
+                          horizon_end="2030-01-01"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert str(DemandForecast.MAX_HORIZON_PERIODS) in str(form.errors["horizon_end"])
+
+    def test_a_horizon_before_the_minimum_year_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(
+            self._payload(item_a, horizon_start="1800-01-01", horizon_end="1800-06-30"),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "horizon_start" in form.errors
+
+    def test_a_like_item_forecast_without_a_reference_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(self._payload(item_a, method="like_item"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "reference_item" in form.errors
+
+    def test_a_reference_item_pointing_at_itself_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(self._payload(item_a, reference_item=str(item_a.pk)),
+                                  tenant=tenant_a)
+        assert not form.is_valid()
+        assert "reference_item" in form.errors
+
+    def test_history_months_is_bounded(self, tenant_a, item_a):
+        from apps.scm.forms import DemandForecastForm
+        assert not DemandForecastForm(self._payload(item_a, history_months="0"),
+                                      tenant=tenant_a).is_valid()
+        assert not DemandForecastForm(self._payload(item_a, history_months="999"),
+                                      tenant=tenant_a).is_valid()
+
+    def test_the_customer_dropdown_only_offers_customer_parties(self, tenant_a, customer_a,
+                                                                supplier_a):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(tenant=tenant_a)
+        parties = list(form.fields["customer"].queryset)
+        assert customer_a in parties
+        assert supplier_a not in parties
+
+    def test_the_currency_dropdown_only_offers_active_currencies(self, tenant_a, usd):
+        from apps.accounting.models import Currency
+        from apps.scm.forms import DemandForecastForm
+        retired = Currency.objects.create(code="ZWD", name="Old Dollar", is_active=False)
+        form = DemandForecastForm(tenant=tenant_a)
+        currencies = list(form.fields["currency"].queryset)
+        assert usd in currencies
+        assert retired not in currencies
+
+    def test_another_tenants_item_is_never_accepted(self, tenant_a, item_b):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(self._payload(item_b), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_another_tenants_seasonality_profile_is_never_accepted(self, tenant_a, item_a,
+                                                                    seasonality_profile_b):
+        from apps.scm.forms import DemandForecastForm
+        form = DemandForecastForm(
+            self._payload(item_a, seasonality_profile=str(seasonality_profile_b.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "seasonality_profile" in form.errors
+
+
+# ================================================================ The period formset guard
+class TestDemandForecastPeriodFormSetSequenceGuard:
+    def test_reusing_an_existing_sequence_is_a_validation_error_not_an_integrityerror(
+        self, forecast_with_periods_a,
+    ):
+        from apps.scm.forms import DemandForecastPeriodFormSet
+        existing = forecast_with_periods_a.periods.first()
+        data = formset_data("periods", [
+            {"id": "", "sequence": str(existing.sequence),
+             "period_start": existing.period_start.isoformat(),
+             "period_end": existing.period_end.isoformat(), "period_label": "dupe",
+             "baseline_quantity": "1", "seasonal_index_applied": "1",
+             "event_uplift_quantity": "0", "final_quantity": "1", "unit_price": "0",
+             "is_locked": ""},
+        ])
+        formset = DemandForecastPeriodFormSet(data, instance=forecast_with_periods_a,
+                                              form_kwargs={"tenant": forecast_with_periods_a.tenant})
+        assert not formset.is_valid()
+        assert "sequence" in formset.forms[0].errors
+
+    def test_editing_a_row_in_place_keeps_its_own_sequence(self, forecast_with_periods_a):
+        from apps.scm.forms import DemandForecastPeriodFormSet
+        existing = forecast_with_periods_a.periods.first()
+        data = formset_data("periods", [
+            {"id": str(existing.pk), "sequence": str(existing.sequence),
+             "period_start": existing.period_start.isoformat(),
+             "period_end": existing.period_end.isoformat(), "period_label": existing.period_label,
+             "baseline_quantity": "111", "seasonal_index_applied": "1",
+             "event_uplift_quantity": "0", "final_quantity": "111", "unit_price": "0",
+             "is_locked": ""},
+        ], initial=1)
+        formset = DemandForecastPeriodFormSet(data, instance=forecast_with_periods_a,
+                                              form_kwargs={"tenant": forecast_with_periods_a.tenant})
+        assert formset.is_valid(), formset.errors
+
+    def test_an_unsaved_parent_skips_the_cross_row_check(self, tenant_a):
+        from apps.scm.forms import DemandForecastPeriodFormSet
+        from apps.scm.models import DemandForecast
+        formset = DemandForecastPeriodFormSet(formset_data("periods", []),
+                                              instance=DemandForecast(),
+                                              form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid()
+
+
+# ================================================================ SeasonalityProfileForm.clean()
+class TestSeasonalityProfileFormValidation:
+    def _payload(self, **overrides):
+        data = {
+            "name": "Curve", "profile_type": "seasonal", "bucket": "month", "scope": "global",
+            "item": "", "category": "", "location": "", "event_start": "", "event_end": "",
+            "uplift_pct": "0", "cannibalization_pct": "0", "cannibalized_category": "",
+            "promotion_mechanic": "", "derived_from_years": "2", "is_active": "on", "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_a_valid_payload_is_accepted(self, tenant_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(self._payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_name_is_required(self, tenant_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(self._payload(name=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "name" in form.errors
+
+    def test_a_promotion_with_no_window_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(
+            self._payload(profile_type="promotion", scope="item", item=str(item_a.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "event_start" in form.errors
+
+    def test_an_inverted_event_window_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(
+            self._payload(profile_type="event", scope="item", item=str(item_a.pk),
+                          event_start="2026-06-01", event_end="2026-05-01"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "event_end" in form.errors
+
+    def test_an_item_scoped_profile_needs_an_item(self, tenant_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(self._payload(scope="item"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_a_category_scoped_profile_needs_a_category(self, tenant_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(self._payload(scope="category"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "category" in form.errors
+
+    def test_a_location_scoped_profile_needs_a_location(self, tenant_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(self._payload(scope="location"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "location" in form.errors
+
+    def test_derived_from_years_is_bounded(self, tenant_a):
+        from apps.scm.forms import SeasonalityProfileForm
+        assert not SeasonalityProfileForm(self._payload(derived_from_years="0"),
+                                          tenant=tenant_a).is_valid()
+        assert not SeasonalityProfileForm(self._payload(derived_from_years="50"),
+                                          tenant=tenant_a).is_valid()
+
+    def test_another_tenants_item_is_never_accepted(self, tenant_a, item_b):
+        from apps.scm.forms import SeasonalityProfileForm
+        form = SeasonalityProfileForm(self._payload(scope="item", item=str(item_b.pk)),
+                                      tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_a_negative_index_factor_is_rejected(self, tenant_a):
+        from apps.scm.forms import SeasonalityIndexForm
+        form = SeasonalityIndexForm({"period_number": "1", "period_label": "",
+                                     "index_factor": "-1"}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "index_factor" in form.errors
+
+    def test_an_out_of_range_period_number_is_rejected(self, tenant_a):
+        from apps.scm.forms import SeasonalityIndexForm
+        for value in ("0", "400"):
+            form = SeasonalityIndexForm({"period_number": value, "period_label": "",
+                                         "index_factor": "1"}, tenant=tenant_a)
+            assert not form.is_valid(), value
+
+
+# ================================================================ DemandSignalForm
+class TestDemandSignalFormValidation:
+    def _payload(self, **overrides):
+        from django.utils import timezone
+        data = {
+            "signal_type": "order_surge", "source": "manual", "source_reference": "",
+            "item": "", "category": "", "location": "", "customer": "",
+            "observed_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+            "effective_from": "", "effective_to": "", "horizon_days": "28",
+            "signal_value": "0", "baseline_value": "0", "impact_direction": "increase",
+            "impact_pct": "0", "impact_quantity": "0", "confidence": "medium", "notes": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_a_valid_payload_is_accepted(self, tenant_a):
+        from apps.scm.forms import DemandSignalForm
+        form = DemandSignalForm(self._payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_observed_at_is_required(self, tenant_a):
+        from apps.scm.forms import DemandSignalForm
+        form = DemandSignalForm(self._payload(observed_at=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "observed_at" in form.errors
+
+    def test_an_inverted_effective_window_is_rejected(self, tenant_a):
+        from apps.scm.forms import DemandSignalForm
+        form = DemandSignalForm(self._payload(effective_from="2026-06-01",
+                                              effective_to="2026-05-01"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "effective_to" in form.errors
+
+    def test_horizon_days_is_bounded(self, tenant_a):
+        from apps.scm.forms import DemandSignalForm
+        assert not DemandSignalForm(self._payload(horizon_days="0"), tenant=tenant_a).is_valid()
+        assert not DemandSignalForm(self._payload(horizon_days="999"), tenant=tenant_a).is_valid()
+
+    def test_the_customer_dropdown_only_offers_customer_parties(self, tenant_a, customer_a,
+                                                                supplier_a):
+        from apps.scm.forms import DemandSignalForm
+        parties = list(DemandSignalForm(tenant=tenant_a).fields["customer"].queryset)
+        assert customer_a in parties and supplier_a not in parties
+
+    def test_another_tenants_item_is_never_accepted(self, tenant_a, item_b):
+        from apps.scm.forms import DemandSignalForm
+        form = DemandSignalForm(self._payload(item=str(item_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+
+# ================================================================ DemandSignalApplyForm scoping
+class TestDemandSignalApplyFormScoping:
+    def test_the_forecast_dropdown_is_scoped_to_the_adjustable_statuses(self, tenant_a,
+                                                                        demand_signal_a,
+                                                                        forecast_with_periods_a):
+        from apps.scm.forms import DemandSignalApplyForm
+        from apps.scm.models import DemandForecast
+        draft = DemandForecast.objects.create(
+            tenant=tenant_a, name="Still a draft", item=forecast_with_periods_a.item,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=forecast_with_periods_a.horizon_end)
+        form = DemandSignalApplyForm(tenant=tenant_a, signal=demand_signal_a)
+        offered = list(form.fields["forecast"].queryset)
+        assert forecast_with_periods_a in offered  # statistical
+        assert draft not in offered                # a draft has no grid to move
+
+    def test_an_archived_forecast_is_not_offered(self, tenant_a, demand_signal_a,
+                                                 forecast_with_periods_a):
+        from apps.scm.forms import DemandSignalApplyForm
+        forecast_with_periods_a.status = "archived"
+        forecast_with_periods_a.save(update_fields=["status"])
+        form = DemandSignalApplyForm(tenant=tenant_a, signal=demand_signal_a)
+        assert forecast_with_periods_a not in list(form.fields["forecast"].queryset)
+
+    def test_a_signal_naming_an_item_only_offers_that_items_forecasts(self, tenant_a, item_lot_a,
+                                                                       demand_signal_a,
+                                                                       forecast_with_periods_a):
+        from apps.scm.forms import DemandSignalApplyForm
+        from apps.scm.models import DemandForecast
+        other = DemandForecast.objects.create(
+            tenant=tenant_a, name="Other item", item=item_lot_a,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=forecast_with_periods_a.horizon_end, status="statistical")
+        form = DemandSignalApplyForm(tenant=tenant_a, signal=demand_signal_a)
+        offered = list(form.fields["forecast"].queryset)
+        assert forecast_with_periods_a in offered
+        assert other not in offered  # A's units must never be written into B's plan
+
+    def test_a_network_wide_signal_is_deliberately_unnarrowed(self, tenant_a, item_lot_a,
+                                                              forecast_with_periods_a):
+        from django.utils import timezone
+        from apps.scm.forms import DemandSignalApplyForm
+        from apps.scm.models import DemandSignal
+        signal = DemandSignal.objects.create(tenant=tenant_a, observed_at=timezone.now())
+        form = DemandSignalApplyForm(tenant=tenant_a, signal=signal)
+        assert forecast_with_periods_a in list(form.fields["forecast"].queryset)
+
+    def test_another_tenants_forecast_is_never_offered_or_accepted(self, tenant_a, demand_signal_a,
+                                                                    forecast_with_periods_b):
+        from apps.scm.forms import DemandSignalApplyForm
+        form = DemandSignalApplyForm({"forecast": str(forecast_with_periods_b.pk)},
+                                     tenant=tenant_a, signal=demand_signal_a)
+        assert not form.is_valid()
+        assert "forecast" in form.errors
+
+    def test_a_tenant_less_form_offers_nothing(self, demand_signal_a):
+        from apps.scm.forms import DemandSignalApplyForm
+        form = DemandSignalApplyForm(tenant=None, signal=demand_signal_a)
+        assert list(form.fields["forecast"].queryset) == []
+
+    def test_the_forecast_is_required(self, tenant_a, demand_signal_a):
+        from apps.scm.forms import DemandSignalApplyForm
+        form = DemandSignalApplyForm({}, tenant=tenant_a, signal=demand_signal_a)
+        assert not form.is_valid()
+        assert "forecast" in form.errors
+
+
+# ================================================================ ForecastAdjustmentForm
+class TestForecastAdjustmentFormValidation:
+    def _payload(self, forecast, **overrides):
+        data = {
+            "forecast": str(forecast.pk), "period": "", "contributor_function": "sales",
+            "org_unit": "", "adjustment_type": "absolute", "proposed_quantity": "140",
+            "adjustment_pct": "0", "reason_code": "promotion",
+            "rationale": "Spring campaign.", "confidence": "medium",
+        }
+        data.update(overrides)
+        return data
+
+    def test_a_valid_payload_is_accepted(self, tenant_a, forecast_with_periods_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(self._payload(forecast_with_periods_a), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_a_blank_rationale_is_rejected(self, tenant_a, forecast_with_periods_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(self._payload(forecast_with_periods_a, rationale="   "),
+                                      tenant=tenant_a)
+        assert not form.is_valid()
+        assert "rationale" in form.errors
+
+    def test_the_forecast_dropdown_is_scoped_to_the_adjustable_statuses(self, tenant_a,
+                                                                        forecast_with_periods_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        from apps.scm.models import DemandForecast
+        draft = DemandForecast.objects.create(
+            tenant=tenant_a, name="Still a draft", item=forecast_with_periods_a.item,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=forecast_with_periods_a.horizon_end)
+        offered = list(ForecastAdjustmentForm(tenant=tenant_a).fields["forecast"].queryset)
+        assert forecast_with_periods_a in offered
+        assert draft not in offered  # a draft has no grid for a delta to roll into
+
+    def test_a_draft_forecast_is_refused_on_a_bound_form(self, tenant_a, demand_forecast_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(self._payload(demand_forecast_a), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "forecast" in form.errors
+
+    def test_the_period_dropdown_is_scoped_to_the_parent_forecast(self, tenant_a, item_a,
+                                                                   forecast_with_periods_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months
+        other = DemandForecast.objects.create(
+            tenant=tenant_a, name="Other", item=item_a,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=add_months(forecast_with_periods_a.horizon_start,
+                                   3) - datetime.timedelta(days=1))
+        other.generate_periods()
+        form = ForecastAdjustmentForm(tenant=tenant_a, forecast=forecast_with_periods_a)
+        offered = list(form.fields["period"].queryset)
+        assert set(offered) == set(forecast_with_periods_a.periods.all())
+        assert not any(row in offered for row in other.periods.all())
+
+    def test_the_period_dropdown_is_empty_without_a_parent(self, tenant_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        assert list(ForecastAdjustmentForm(tenant=tenant_a).fields["period"].queryset) == []
+
+    def test_a_bound_post_resolves_the_period_scope_from_its_own_forecast(
+        self, tenant_a, forecast_with_periods_a, forecast_period_a,
+    ):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(
+            self._payload(forecast_with_periods_a, period=str(forecast_period_a.pk)),
+            tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["period"] == forecast_period_a
+
+    def test_a_period_belonging_to_another_forecast_is_rejected(self, tenant_a, item_a,
+                                                                forecast_with_periods_a):
+        from apps.scm.forms import ForecastAdjustmentForm
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months
+        other = DemandForecast.objects.create(
+            tenant=tenant_a, name="Other", item=item_a,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=add_months(forecast_with_periods_a.horizon_start,
+                                   3) - datetime.timedelta(days=1))
+        other.generate_periods()
+        form = ForecastAdjustmentForm(
+            self._payload(forecast_with_periods_a, period=str(other.periods.first().pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "period" in form.errors
+
+    def test_another_tenants_forecast_is_never_accepted(self, tenant_a, forecast_with_periods_b):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(self._payload(forecast_with_periods_b), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "forecast" in form.errors
+
+    def test_another_tenants_period_is_never_accepted(self, tenant_a, forecast_with_periods_a,
+                                                       forecast_with_periods_b):
+        from apps.scm.forms import ForecastAdjustmentForm
+        form = ForecastAdjustmentForm(
+            self._payload(forecast_with_periods_a,
+                          period=str(forecast_with_periods_b.periods.first().pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "period" in form.errors
+
+    def test_a_tenant_less_form_offers_no_forecasts(self):
+        from apps.scm.forms import ForecastAdjustmentForm
+        assert list(ForecastAdjustmentForm(tenant=None).fields["forecast"].queryset) == []
+
+
+# ================================================================================================
+# ReorderRuleForm — the admin gate on the two columns that ARE the buying decision
+# ================================================================================================
+class TestReorderRuleFormAdminGate:
+    def _payload(self, item, location, **overrides):
+        data = {
+            "item": str(item.pk), "location": str(location.pk), "reorder_point": "10",
+            "safety_stock": "5", "reorder_quantity": "20", "is_active": "on",
+            "safety_stock_method": "fixed", "service_level_pct": "95", "lead_time_days": "0",
+            "lead_time_variability_days": "0", "review_period_days": "0",
+            "seasonality_profile": "", "demand_forecast": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_a_non_admin_gets_the_two_live_columns_disabled(self, tenant_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(tenant=tenant_a, is_tenant_admin=False)
+        for name in ReorderRuleForm.ADMIN_ONLY_FIELDS:
+            assert form.fields[name].disabled is True, name
+
+    def test_an_admin_keeps_them_editable(self, tenant_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(tenant=tenant_a, is_tenant_admin=True)
+        for name in ReorderRuleForm.ADMIN_ONLY_FIELDS:
+            assert form.fields[name].disabled is False, name
+
+    def test_a_crafted_non_admin_post_cannot_write_the_live_columns(self, tenant_a,
+                                                                     reorder_rule_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(
+            self._payload(reorder_rule_a.item, reorder_rule_a.location,
+                          safety_stock="99999", reorder_point="88888"),
+            instance=reorder_rule_a, tenant=tenant_a, is_tenant_admin=False)
+        assert form.is_valid(), form.errors
+        rule = form.save()
+        assert rule.safety_stock == Decimal("5.00")   # the instance's value stood
+        assert rule.reorder_point == Decimal("10.00")
+
+    def test_an_admin_post_does_write_them(self, tenant_a, reorder_rule_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(
+            self._payload(reorder_rule_a.item, reorder_rule_a.location, safety_stock="42"),
+            instance=reorder_rule_a, tenant=tenant_a, is_tenant_admin=True)
+        assert form.is_valid(), form.errors
+        assert form.save().safety_stock == Decimal("42")
+
+    def test_a_non_admin_can_still_set_the_policy_inputs(self, tenant_a, reorder_rule_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(
+            self._payload(reorder_rule_a.item, reorder_rule_a.location,
+                          safety_stock_method="service_level", lead_time_days="14"),
+            instance=reorder_rule_a, tenant=tenant_a, is_tenant_admin=False)
+        assert form.is_valid(), form.errors
+        rule = form.save()
+        assert rule.safety_stock_method == "service_level"
+        assert rule.lead_time_days == 14
+
+    def test_the_demand_forecast_dropdown_is_narrowed_to_the_rules_own_item(
+        self, tenant_a, item_lot_a, location_a, reorder_rule_a, forecast_with_periods_a,
+    ):
+        from apps.scm.forms import ReorderRuleForm
+        from apps.scm.models import DemandForecast
+        other = DemandForecast.objects.create(
+            tenant=tenant_a, name="Other item plan", item=item_lot_a,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=forecast_with_periods_a.horizon_end)
+        form = ReorderRuleForm(instance=reorder_rule_a, tenant=tenant_a, is_tenant_admin=True)
+        offered = list(form.fields["demand_forecast"].queryset)
+        assert forecast_with_periods_a in offered  # same item as the rule
+        assert other not in offered
+
+    def test_another_tenants_forecast_is_never_accepted(self, tenant_a, reorder_rule_a,
+                                                         forecast_with_periods_b):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(
+            self._payload(reorder_rule_a.item, reorder_rule_a.location,
+                          demand_forecast=str(forecast_with_periods_b.pk)),
+            instance=reorder_rule_a, tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "demand_forecast" in form.errors
+
+    def test_another_tenants_seasonality_profile_is_never_accepted(self, tenant_a, reorder_rule_a,
+                                                                    seasonality_profile_b):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(
+            self._payload(reorder_rule_a.item, reorder_rule_a.location,
+                          seasonality_profile=str(seasonality_profile_b.pk)),
+            instance=reorder_rule_a, tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "seasonality_profile" in form.errors
+
+    def test_a_negative_service_level_is_rejected(self, tenant_a, item_a, location_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(self._payload(item_a, location_a, service_level_pct="-1"),
+                               tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "service_level_pct" in form.errors
+
+    def test_a_service_level_above_100_is_rejected(self, tenant_a, item_a, location_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(self._payload(item_a, location_a, service_level_pct="150"),
+                               tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "service_level_pct" in form.errors
+
+    def test_a_duplicate_item_location_pair_is_a_validation_error_not_a_500(self, tenant_a,
+                                                                            reorder_rule_a):
+        from apps.scm.forms import ReorderRuleForm
+        form = ReorderRuleForm(self._payload(reorder_rule_a.item, reorder_rule_a.location),
+                               tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()  # TenantUniqueMixin catches the unique_together
