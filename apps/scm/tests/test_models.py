@@ -2841,3 +2841,1930 @@ class TestFreightInvoiceRunAudit:
         freight_invoice_a.save(update_fields=["match_status", "dispute_reason"])
         status = freight_invoice_a.run_audit()
         assert status == "disputed"
+
+
+# ================================================================================================
+# SCM 4.7 Demand Planning & Forecasting
+# ================================================================================================
+
+# ================================================================ Auto-numbering
+class TestDemandPlanningAutoNumbering:
+    def test_seasonality_profile_numbers_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import SeasonalityProfile
+        p1 = SeasonalityProfile.objects.create(tenant=tenant_a, name="One")
+        p2 = SeasonalityProfile.objects.create(tenant=tenant_a, name="Two")
+        p3 = SeasonalityProfile.objects.create(tenant=tenant_b, name="Globex one")
+        assert (p1.number, p2.number, p3.number) == ("SEA-00001", "SEA-00002", "SEA-00001")
+
+    def test_demand_forecast_numbers_prefixed_df(self, tenant_a, demand_forecast_a):
+        assert demand_forecast_a.number == "DF-00001"
+
+    def test_demand_signal_numbers_prefixed_ds(self, tenant_a, demand_signal_a):
+        assert demand_signal_a.number == "DS-00001"
+
+    def test_forecast_adjustment_numbers_prefixed_fa(self, tenant_a, forecast_adjustment_a):
+        assert forecast_adjustment_a.number == "FA-00001"
+
+    def test_demand_forecast_number_unique_together_with_tenant(self, tenant_a, demand_forecast_a):
+        from apps.scm.models import DemandForecast
+        with pytest.raises(IntegrityError):
+            DemandForecast.objects.create(
+                tenant=tenant_a, name="Dup", item=demand_forecast_a.item,
+                horizon_start=demand_forecast_a.horizon_start,
+                horizon_end=demand_forecast_a.horizon_end, number=demand_forecast_a.number,
+            )
+
+    def test_seasonality_index_unique_together_with_profile(self, seasonality_profile_a):
+        from apps.scm.models import SeasonalityIndex
+        with pytest.raises(IntegrityError):
+            SeasonalityIndex.objects.create(profile=seasonality_profile_a, period_number=1)
+
+    def test_forecast_period_unique_together_with_forecast(self, forecast_with_periods_a):
+        from apps.scm.models import DemandForecastPeriod
+        row = forecast_with_periods_a.periods.first()
+        with pytest.raises(IntegrityError):
+            DemandForecastPeriod.objects.create(
+                forecast=forecast_with_periods_a, sequence=row.sequence,
+                period_start=row.period_start, period_end=row.period_end,
+            )
+
+
+# ================================================================ __str__
+class TestDemandPlanningStrRepresentations:
+    def test_seasonality_profile_str(self, seasonality_profile_a):
+        assert str(seasonality_profile_a) == "SEA-00001 · Widget seasonality"
+
+    def test_seasonality_index_str(self, seasonality_profile_a):
+        row = seasonality_profile_a.indices.get(period_number=12)
+        assert str(row) == "P12 × 1.5000"
+
+    def test_demand_forecast_str_carries_the_item_sku(self, demand_forecast_a, item_a):
+        assert str(demand_forecast_a) == f"DF-00001 · {item_a.sku}"
+
+    def test_demand_forecast_str_survives_a_missing_item(self, tenant_a):
+        from apps.scm.models import DemandForecast
+        obj = DemandForecast(tenant=tenant_a, name="No item", number="DF-00099",
+                             horizon_start=datetime.date(2026, 1, 1),
+                             horizon_end=datetime.date(2026, 3, 31))
+        assert str(obj) == "DF-00099 · ?"
+
+    def test_forecast_period_str(self, forecast_period_a):
+        assert forecast_period_a.period_label in str(forecast_period_a)
+
+    def test_demand_signal_str_names_the_item(self, demand_signal_a, item_a):
+        assert str(demand_signal_a) == f"DS-00001 · Order Surge · {item_a.sku}"
+
+    def test_demand_signal_str_falls_back_to_category_then_network(self, tenant_a, category_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        by_category = DemandSignal.objects.create(tenant=tenant_a, category=category_a,
+                                                  observed_at=timezone.now())
+        network = DemandSignal.objects.create(tenant=tenant_a, observed_at=timezone.now())
+        assert str(by_category).endswith(category_a.name)
+        assert str(network).endswith("network")
+
+    def test_forecast_adjustment_str(self, forecast_adjustment_a):
+        assert str(forecast_adjustment_a) == "FA-00001 · Sales"
+
+
+# ================================================================================================
+# _forecasting.py — the pure Decimal statistical library (zero ORM)
+# ================================================================================================
+class TestForecastingEngineContracts:
+    """Every engine returns EXACTLY ``horizon`` values and degrades safely on a short/empty series."""
+
+    ENGINES = ("naive", "seasonal_naive", "moving_average", "weighted_moving_average",
+               "exponential_smoothing", "holt_linear", "holt_winters")
+
+    def test_every_engine_returns_exactly_horizon_values(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (10, 12, 14, 20, 30, 40, 50, 45, 30, 20, 15, 12)]
+        for name in self.ENGINES:
+            values = fx.run_method(name, series, 5)
+            assert len(values) == 5, name
+            assert all(isinstance(v, Decimal) for v in values), name
+
+    def test_every_engine_survives_an_empty_series(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        for name in self.ENGINES:
+            assert fx.run_method(name, [], 4) == [Decimal("0")] * 4, name
+
+    def test_every_engine_survives_a_one_point_series(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        for name in self.ENGINES:
+            assert len(fx.run_method(name, [Decimal("7")], 3)) == 3, name
+
+    def test_run_method_with_a_zero_horizon_returns_an_empty_list(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.run_method("naive", [Decimal("5")], 0) == []
+
+    def test_unknown_method_falls_back_to_moving_average(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (1, 2, 3, 4)]
+        assert fx.run_method("no_such_engine", series, 2) == fx.moving_average(series, 2, 3)
+
+    def test_naive_repeats_the_last_observation(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.naive([Decimal(1), Decimal(9)], 3) == [Decimal(9)] * 3
+
+    def test_seasonal_naive_repeats_one_full_season_back(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (1, 2, 3, 4)]
+        assert fx.seasonal_naive(series, 4, period=4) == series
+
+    def test_moving_average_is_the_mean_of_the_last_window(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (1, 2, 3, 4)]
+        assert fx.moving_average(series, 2, window=3) == [Decimal(3), Decimal(3)]
+
+    def test_weighted_moving_average_leans_on_the_most_recent_point(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (1, 2, 3)]
+        # (1*1 + 2*2 + 3*3) / 6 = 2.333... — above the flat mean of 2.
+        assert fx.weighted_moving_average(series, 1, window=3)[0] > fx.mean(series)
+
+    def test_exponential_smoothing_clamps_an_out_of_range_alpha_to_the_default(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(1), Decimal(10)]
+        default = fx.exponential_smoothing(series, 1, Decimal("0.3"))
+        assert fx.exponential_smoothing(series, 1, Decimal("0")) == default
+        assert fx.exponential_smoothing(series, 1, Decimal("7")) == default
+        assert fx.exponential_smoothing(series, 1, Decimal("1")) == [Decimal(10)]
+
+    def test_holt_linear_falls_back_to_naive_below_two_points(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.holt_linear([Decimal(5)], 3) == fx.naive([Decimal(5)], 3)
+
+    def test_holt_linear_slopes_on_a_trending_series(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        values = fx.holt_linear([Decimal(v) for v in (10, 20, 30, 40)], 3)
+        assert values[0] < values[1] < values[2]
+
+    def test_holt_winters_falls_back_to_holt_linear_under_two_seasons(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in range(1, 13)]  # 12 points = one season of 12
+        assert fx.holt_winters(series, 4, period=12) == fx.holt_linear(series, 4)
+
+    def test_holt_winters_fits_a_season_with_two_full_seasons(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        season = [10, 12, 14, 20, 30, 40, 50, 45, 30, 20, 15, 12]
+        values = fx.holt_winters([Decimal(v) for v in season * 2], 12, period=12)
+        assert len(values) == 12
+        assert len(set(values)) > 1  # a seasonal fit is NOT a flat line
+
+    def test_std_dev_needs_two_points(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.std_dev([Decimal(5)]) == Decimal("0")
+        assert fx.std_dev([Decimal(1), Decimal(3)]) > Decimal("0")
+
+    def test_junk_values_coerce_to_zero_rather_than_raising(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.mean(["NaN-ish", None, Decimal(3)]) == Decimal(1)
+
+
+class TestClipOutliers:
+    def test_preserves_the_series_length(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (10, 10, 10, 1000)]
+        assert len(fx.clip_outliers(series, Decimal("1"))) == len(series)
+
+    def test_clamps_a_spike_back_to_the_boundary(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (10, 10, 10, 1000)]
+        clipped = fx.clip_outliers(series, Decimal("1"))
+        assert clipped[3] < Decimal("1000")
+        assert clipped[:3] == series[:3]
+
+    def test_a_short_series_is_returned_untouched(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(1), Decimal(500)]
+        assert fx.clip_outliers(series) == series
+
+    def test_a_non_positive_sigma_is_a_no_op(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (10, 10, 10, 1000)]
+        assert fx.clip_outliers(series, Decimal("0")) == series
+
+    def test_a_flat_series_has_no_outliers_to_clip(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(10)] * 5
+        assert fx.clip_outliers(series) == series
+
+
+class TestBestFit:
+    def test_returns_the_engine_with_the_lowest_out_of_sample_error(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)]
+        name, values = fx.best_fit(series, 3)
+        # A clean linear ramp: only the trend engines reproduce the held-out tail exactly.
+        assert name == "holt_linear"
+        assert len(values) == 3
+        assert values[0] > series[-1]  # the trend keeps climbing past the history
+
+    def test_the_winner_is_scored_on_the_holdout_not_on_the_full_series(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        series = [Decimal(v) for v in (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)]
+        holdout = min(max(len(series) // 4, 1), 6)
+        train, actual = series[:-holdout], series[-holdout:]
+        scores = {name: fx.mape(actual, fx.run_method(name, train, holdout))
+                  for name in fx._FITTABLE}
+        expected = min((n for n, e in scores.items() if e is not None), key=lambda n: scores[n])
+        assert fx.best_fit(series, 3)[0] == expected
+
+    def test_falls_back_to_moving_average_with_too_little_history(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        short = [Decimal(1), Decimal(2), Decimal(3)]
+        name, values = fx.best_fit(short, 3)
+        assert name == "moving_average"
+        assert values == fx.moving_average(short, 3)
+
+    def test_falls_back_to_moving_average_on_an_empty_series(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.best_fit([], 3) == ("moving_average", [Decimal("0")] * 3)
+
+    def test_falls_back_when_every_engine_scores_undefined(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        # An all-zero holdout makes MAPE undefined for every engine, so nothing can win.
+        name, values = fx.best_fit([Decimal("0")] * 8, 3)
+        assert name == "moving_average"
+        assert values == [Decimal("0")] * 3
+
+
+class TestAccuracyMetricFunctions:
+    def test_mape_is_none_when_every_actual_is_zero(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.mape([Decimal(0), Decimal(0)], [Decimal(1), Decimal(2)]) is None
+
+    def test_mape_ignores_the_zero_actual_periods(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.mape([Decimal(100), Decimal(0)], [Decimal(80), Decimal(50)]) == Decimal(20)
+
+    def test_wmape_is_none_when_the_denominator_is_zero(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.wmape([Decimal(0)], [Decimal(5)]) is None
+
+    def test_wmape_survives_a_zero_demand_period(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        # Sum|a-f| = 20 + 50, Sum|a| = 100 -> 70 %.
+        assert fx.wmape([Decimal(100), Decimal(0)], [Decimal(80), Decimal(50)]) == Decimal(70)
+
+    def test_bias_pct_is_positive_when_the_forecast_ran_high(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.bias_pct([Decimal(100)], [Decimal(120)]) == Decimal(20)
+
+    def test_bias_pct_is_none_when_actual_sums_to_zero(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.bias_pct([Decimal(0), Decimal(0)], [Decimal(5), Decimal(5)]) is None
+
+    def test_tracking_signal_is_none_with_no_pairs(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.tracking_signal([], []) is None
+        assert fx.tracking_signal([Decimal(5)], []) is None
+
+    def test_tracking_signal_is_zero_when_the_forecast_was_exact(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.tracking_signal([Decimal(5)], [Decimal(5)]) == Decimal("0")
+
+    def test_tracking_signal_flags_a_persistent_over_forecast(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.tracking_signal([Decimal(100)] * 5, [Decimal(120)] * 5) == Decimal(5)
+
+    def test_forecast_value_added_is_positive_when_the_override_helped(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        # 100 % baseline error - 10 % final error = +90 points removed.
+        assert fx.forecast_value_added([Decimal(10)], [Decimal(20)], [Decimal(11)]) == Decimal(90)
+
+    def test_forecast_value_added_is_negative_when_the_override_hurt(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.forecast_value_added([Decimal(10)], [Decimal(11)], [Decimal(20)]) < Decimal(0)
+
+    def test_forecast_value_added_is_none_when_either_side_is_undefined(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.forecast_value_added([Decimal(0)], [Decimal(1)], [Decimal(1)]) is None
+
+
+class TestServiceLevelZTable:
+    def test_maps_the_tabulated_levels(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.z_for_service_level(Decimal("50")) == Decimal("0.00")
+        assert fx.z_for_service_level(Decimal("90")) == Decimal("1.28")
+        assert fx.z_for_service_level(Decimal("95")) == Decimal("1.65")
+        assert fx.z_for_service_level(Decimal("97.5")) == Decimal("1.96")
+        assert fx.z_for_service_level(Decimal("99.9")) == Decimal("3.09")
+
+    def test_an_untabulated_level_takes_the_nearest_level_at_or_below(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.z_for_service_level(Decimal("94")) == Decimal("1.41")  # the 92 row
+
+    def test_below_the_table_and_above_it_both_stay_in_range(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.z_for_service_level(Decimal("10")) == Decimal("0.00")
+        assert fx.z_for_service_level(Decimal("100")) == Decimal("3.09")
+
+    def test_junk_input_degrades_to_the_floor_rather_than_raising(self):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        assert fx.z_for_service_level("not-a-number") == Decimal("0.00")
+
+
+# ================================================================================================
+# _history.py — the DERIVED demand series (there is deliberately NO stored history table)
+# ================================================================================================
+class TestPeriodCalendar:
+    BUCKETS = ("day", "week", "month", "quarter")
+
+    def test_period_count_matches_len_period_range_for_every_bucket(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        start, end = datetime.date(2026, 1, 15), datetime.date(2026, 7, 4)
+        for bucket in self.BUCKETS:
+            assert hist.period_count(start, end, bucket) == len(
+                hist.period_range(start, end, bucket)), bucket
+
+    def test_period_count_matches_len_period_range_across_a_year_boundary(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        start, end = datetime.date(2025, 11, 3), datetime.date(2026, 2, 27)
+        for bucket in self.BUCKETS:
+            assert hist.period_count(start, end, bucket) == len(
+                hist.period_range(start, end, bucket)), bucket
+
+    def test_an_inverted_span_is_zero_periods(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        assert hist.period_count(datetime.date(2026, 5, 1), datetime.date(2026, 1, 1), "month") == 0
+        assert hist.period_range(datetime.date(2026, 5, 1), datetime.date(2026, 1, 1), "month") == []
+
+    def test_missing_endpoints_are_zero_periods(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        assert hist.period_count(None, datetime.date(2026, 1, 1), "month") == 0
+        assert hist.period_range(datetime.date(2026, 1, 1), None, "month") == []
+
+    def test_period_range_limit_stops_the_walk(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        rows = hist.period_range(datetime.date(2026, 1, 1), datetime.date(2030, 1, 1), "month",
+                                 limit=5)
+        assert len(rows) == 5
+
+    def test_period_end_is_the_last_day_inside_the_bucket(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        rows = hist.period_range(datetime.date(2026, 1, 1), datetime.date(2026, 2, 28), "month")
+        assert rows[0] == (datetime.date(2026, 1, 1), datetime.date(2026, 1, 31))
+
+    def test_bucket_start_normalises_to_the_grid(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        value = datetime.date(2026, 5, 20)  # a Wednesday
+        assert hist.bucket_start(value, "week") == datetime.date(2026, 5, 18)  # Monday
+        assert hist.bucket_start(value, "month") == datetime.date(2026, 5, 1)
+        assert hist.bucket_start(value, "quarter") == datetime.date(2026, 4, 1)
+        assert hist.bucket_start(value, "day") == value
+
+    def test_next_bucket_rolls_the_year_over(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        assert hist.next_bucket(datetime.date(2026, 12, 1), "month") == datetime.date(2027, 1, 1)
+        assert hist.next_bucket(datetime.date(2026, 10, 1), "quarter") == datetime.date(2027, 1, 1)
+
+    def test_period_labels_read_the_way_a_planner_writes_them(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        assert hist.period_label(datetime.date(2026, 3, 1), "month") == "Mar 2026"
+        assert hist.period_label(datetime.date(2026, 4, 1), "quarter") == "Q2 2026"
+        assert hist.period_label(datetime.date(2026, 5, 18), "week").startswith("W")
+
+    def test_periods_per_year_defaults_to_months(self):
+        from apps.scm.models.DemandPlanning import _history as hist
+        assert hist.periods_per_year("week") == 52
+        assert hist.periods_per_year("quarter") == 4
+        assert hist.periods_per_year("nonsense") == 12
+
+
+def _history_window():
+    """The 12 whole months before this one — derived from timezone.localdate() (L16)."""
+    from django.utils import timezone
+    from apps.scm.tests._helpers import add_months, month_start
+    this_month = month_start(timezone.localdate())
+    return add_months(this_month, -12), this_month - datetime.timedelta(days=1)
+
+
+class TestDemandSeries:
+    def test_series_is_dense_and_zero_filled(self, tenant_a, item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning._history import demand_series
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=add_months(this_month, -2), status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("40"), unit_price=Decimal("1"))
+        start, end = _history_window()
+        rows = demand_series(tenant_a.pk, item=item_a, start=start, end=end, bucket="month")
+        assert len(rows) == 12  # every bucket present, not only the one that sold
+        assert dict(rows)[add_months(this_month, -2)] == Decimal("40")
+        assert dict(rows)[add_months(this_month, -5)] == Decimal("0")
+
+    def test_draft_and_cancelled_orders_are_not_demand(self, tenant_a, item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning._history import demand_series
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        when = add_months(this_month, -1)
+        for status in ("draft", "cancelled", "submitted"):
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=when, status=status)
+            SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                          quantity_ordered=Decimal("10"), unit_price=Decimal("1"))
+        start, end = _history_window()
+        rows = dict(demand_series(tenant_a.pk, item=item_a, start=start, end=end, bucket="month"))
+        assert rows[when] == Decimal("10")  # only the submitted order counted
+
+    def test_stock_issues_are_negated_to_read_as_demand(self, tenant_a, item_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        from apps.scm.models.DemandPlanning._history import demand_series
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        when = add_months(this_month, -1)
+        StockMove.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a, quantity=Decimal("-25"),
+            move_type="issue",
+            moved_at=timezone.make_aware(datetime.datetime.combine(
+                when + datetime.timedelta(days=3), datetime.time(12, 0))),
+        )
+        start, end = _history_window()
+        rows = dict(demand_series(tenant_a.pk, item=item_a, source="stock_issues",
+                                  start=start, end=end, bucket="month"))
+        assert rows[when] == Decimal("25")  # the ledger stores -25; demand reads +25
+
+    def test_manual_source_derives_nothing(self, tenant_a, item_a, demand_history_a):
+        from apps.scm.models.DemandPlanning._history import demand_series
+        start, end = _history_window()
+        rows = demand_series(tenant_a.pk, item=item_a, source="manual", start=start, end=end,
+                             bucket="month")
+        assert len(rows) == 12
+        assert all(qty == Decimal("0") for _, qty in rows)
+
+    def test_a_customer_filter_narrows_the_series(self, tenant_a, item_a, customer_a,
+                                                  demand_history_a):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models.DemandPlanning._history import demand_series
+        other = Party.objects.create(tenant=tenant_a, name="Second customer", kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=other, role="customer")
+        start, end = _history_window()
+        mine = demand_series(tenant_a.pk, item=item_a, customer=customer_a, start=start, end=end,
+                             bucket="month")
+        theirs = demand_series(tenant_a.pk, item=item_a, customer=other, start=start, end=end,
+                               bucket="month")
+        assert sum((q for _, q in mine), Decimal("0")) > Decimal("0")
+        assert sum((q for _, q in theirs), Decimal("0")) == Decimal("0")
+
+    def test_outlier_clipping_keeps_the_series_length(self, tenant_a, item_a, customer_a,
+                                                      demand_history_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning._history import demand_series
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        spike = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=add_months(this_month, -3), status="submitted")
+        SalesOrderLine.objects.create(sales_order=spike, item=item_a,
+                                      quantity_ordered=Decimal("5000"), unit_price=Decimal("1"))
+        start, end = _history_window()
+        raw = demand_series(tenant_a.pk, item=item_a, start=start, end=end, bucket="month")
+        clipped = demand_series(tenant_a.pk, item=item_a, start=start, end=end, bucket="month",
+                                exclude_outliers=True, sigma=Decimal("1"))
+        assert len(clipped) == len(raw)
+        assert max(q for _, q in clipped) < max(q for _, q in raw)
+
+    def test_missing_tenant_or_item_returns_nothing(self, item_a):
+        from apps.scm.models.DemandPlanning._history import demand_series
+        start, end = _history_window()
+        assert demand_series(None, item=item_a, start=start, end=end) == []
+        assert demand_series(1, item=None, start=start, end=end) == []
+
+    def test_an_unknown_bucket_degrades_to_months(self, tenant_a, item_a, demand_history_a):
+        from apps.scm.models.DemandPlanning._history import demand_series
+        start, end = _history_window()
+        rows = demand_series(tenant_a.pk, item=item_a, start=start, end=end, bucket="fortnight")
+        assert len(rows) == 12
+
+    def test_another_tenants_orders_never_leak_in(self, tenant_a, item_a, sales_order_b):
+        from apps.scm.models.DemandPlanning._history import demand_series
+        start, end = _history_window()
+        rows = demand_series(tenant_a.pk, item=item_a, start=start, end=end, bucket="month")
+        assert sum((q for _, q in rows), Decimal("0")) == Decimal("0")
+
+
+class TestDemandSeriesMap:
+    def test_batch_map_returns_the_same_numbers_as_the_per_item_form(
+        self, tenant_a, item_a, item_lot_a, customer_a, demand_history_a,
+    ):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning._history import demand_series, demand_series_map
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=add_months(this_month, -4), status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_lot_a,
+                                      quantity_ordered=Decimal("7"), unit_price=Decimal("1"))
+        start, end = _history_window()
+        batch = demand_series_map(tenant_a.pk, [item_a, item_lot_a], start=start, end=end,
+                                  bucket="month")
+        for item in (item_a, item_lot_a):
+            single = demand_series(tenant_a.pk, item=item, start=start, end=end, bucket="month")
+            assert batch[item.pk] == single, item.sku
+
+    def test_batch_map_is_dense_for_an_item_with_no_history(self, tenant_a, item_a, item_lot_a,
+                                                            demand_history_a):
+        from apps.scm.models.DemandPlanning._history import demand_series_map
+        start, end = _history_window()
+        batch = demand_series_map(tenant_a.pk, [item_a.pk, item_lot_a.pk], start=start, end=end,
+                                  bucket="month")
+        assert len(batch[item_lot_a.pk]) == 12
+        assert all(q == Decimal("0") for _, q in batch[item_lot_a.pk])
+
+    def test_batch_map_runs_in_one_grouped_query(self, tenant_a, item_a, item_lot_a,
+                                                 demand_history_a, django_assert_max_num_queries):
+        from apps.scm.models.DemandPlanning._history import demand_series_map
+        start, end = _history_window()
+        with django_assert_max_num_queries(1):
+            demand_series_map(tenant_a.pk, [item_a.pk, item_lot_a.pk], start=start, end=end,
+                              bucket="month")
+
+    def test_batch_map_negates_stock_issues_too(self, tenant_a, item_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        from apps.scm.models.DemandPlanning._history import demand_series_map
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        when = add_months(this_month, -1)
+        StockMove.objects.create(
+            tenant=tenant_a, item=item_a, location=location_a, quantity=Decimal("-12"),
+            move_type="issue",
+            moved_at=timezone.make_aware(datetime.datetime.combine(
+                when + datetime.timedelta(days=2), datetime.time(9, 0))),
+        )
+        start, end = _history_window()
+        batch = demand_series_map(tenant_a.pk, [item_a.pk], start=start, end=end, bucket="month",
+                                  source="stock_issues")
+        assert dict(batch[item_a.pk])[when] == Decimal("12")
+
+    def test_manual_source_yields_a_zero_filled_map(self, tenant_a, item_a, demand_history_a):
+        from apps.scm.models.DemandPlanning._history import demand_series_map
+        start, end = _history_window()
+        batch = demand_series_map(tenant_a.pk, [item_a.pk], start=start, end=end, bucket="month",
+                                  source="manual")
+        assert all(q == Decimal("0") for _, q in batch[item_a.pk])
+
+    def test_empty_inputs_return_an_empty_map(self, tenant_a, item_a):
+        from apps.scm.models.DemandPlanning._history import demand_series_map
+        start, end = datetime.date(2026, 1, 1), datetime.date(2026, 3, 31)
+        assert demand_series_map(tenant_a.pk, [], start=start, end=end) == {}
+        assert demand_series_map(None, [item_a], start=start, end=end) == {}
+        assert demand_series_map(tenant_a.pk, [item_a], start=end, end=start) == {}
+
+
+# ================================================================================================
+# SeasonalityProfile / SeasonalityIndex
+# ================================================================================================
+def _flat_profile(tenant, item, factor="2.0000", **kwargs):
+    """A monthly seasonal profile whose every month carries the SAME index.
+
+    Month-independent on purpose: an assertion that keyed off "December is 1.5" would only exercise
+    the seasonal path for the weeks of the year the horizon happens to cover December.
+    """
+    from apps.scm.models import SeasonalityIndex, SeasonalityProfile
+    profile = SeasonalityProfile.objects.create(
+        tenant=tenant, name="Flat curve", profile_type="seasonal", bucket="month", scope="item",
+        item=item, **kwargs)
+    for month in range(1, 13):
+        SeasonalityIndex.objects.create(profile=profile, period_number=month,
+                                        index_factor=Decimal(factor))
+    return profile
+
+
+class TestSeasonalityProfileIndexing:
+    def test_index_for_period_reads_the_matching_index_row(self, seasonality_profile_a):
+        assert seasonality_profile_a.index_for_period(datetime.date(2026, 12, 5)) == Decimal("1.5000")
+        assert seasonality_profile_a.index_for_period(datetime.date(2026, 6, 5)) == Decimal("1.0000")
+
+    def test_a_period_with_no_index_row_is_neutral(self, tenant_a, item_a):
+        from apps.scm.models import SeasonalityIndex, SeasonalityProfile
+        profile = SeasonalityProfile.objects.create(tenant=tenant_a, name="Sparse", scope="item",
+                                                    item=item_a)
+        SeasonalityIndex.objects.create(profile=profile, period_number=1,
+                                        index_factor=Decimal("3.0000"))
+        assert profile.index_for_period(datetime.date(2026, 7, 1)) == Decimal("1")
+
+    def test_index_map_is_keyed_by_period_number(self, seasonality_profile_a):
+        assert seasonality_profile_a.index_map()[12] == Decimal("1.5000")
+        assert len(seasonality_profile_a.index_map()) == 12
+
+    def test_a_windowed_promotion_only_lifts_inside_its_window(self, promotion_profile_a):
+        inside = promotion_profile_a.event_start
+        after = promotion_profile_a.event_end + datetime.timedelta(days=1)
+        assert promotion_profile_a.index_for_period(inside) == Decimal("1.25")
+        assert promotion_profile_a.index_for_period(after) == Decimal("1")
+
+    def test_apply_to_splits_a_seasonal_curve_into_the_index_column(self, seasonality_profile_a):
+        seasonal, uplift = seasonality_profile_a.apply_to(Decimal("100"), datetime.date(2026, 12, 1))
+        assert seasonal == Decimal("1.5000")
+        assert uplift == Decimal("0")
+
+    def test_apply_to_splits_a_promotion_into_the_uplift_column(self, promotion_profile_a):
+        seasonal, uplift = promotion_profile_a.apply_to(Decimal("100"),
+                                                        promotion_profile_a.event_start)
+        assert seasonal == Decimal("1")
+        assert uplift == Decimal("25.00")
+
+    def test_period_number_for_each_bucket(self, tenant_a, item_a):
+        from apps.scm.models import SeasonalityProfile
+        value = datetime.date(2026, 5, 18)
+        month = SeasonalityProfile(tenant=tenant_a, bucket="month")
+        week = SeasonalityProfile(tenant=tenant_a, bucket="week")
+        quarter = SeasonalityProfile(tenant=tenant_a, bucket="quarter")
+        assert month.period_number_for(value) == 5
+        assert quarter.period_number_for(value) == 2
+        assert week.period_number_for(value) == value.isocalendar()[1]
+
+    def test_period_from_launch_counts_months_from_the_launch_date(self, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        profile = SeasonalityProfile(tenant=tenant_a, bucket="period_from_launch",
+                                     event_start=datetime.date(2026, 1, 1))
+        assert profile.period_number_for(datetime.date(2026, 1, 15)) == 1  # 1-based: the launch month
+        assert profile.period_number_for(datetime.date(2026, 4, 1)) == 4
+        assert profile.period_number_for(datetime.date(2025, 12, 1)) == 1  # never below 1
+
+    def test_period_from_launch_without_a_launch_date_is_period_one(self, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        profile = SeasonalityProfile(tenant=tenant_a, bucket="period_from_launch")
+        assert profile.period_number_for(datetime.date(2026, 4, 1)) == 1
+
+    def test_expected_period_count_per_bucket(self, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        assert SeasonalityProfile(bucket="month").expected_period_count == 12
+        assert SeasonalityProfile(bucket="week").expected_period_count == 53
+        assert SeasonalityProfile(bucket="quarter").expected_period_count == 4
+        assert SeasonalityProfile(bucket="period_from_launch").expected_period_count is None
+
+    def test_variance_pct_reads_as_percentage_points_around_neutral(self, seasonality_profile_a):
+        assert seasonality_profile_a.indices.get(period_number=12).variance_pct == Decimal("50.0000")
+        assert seasonality_profile_a.indices.get(period_number=1).variance_pct == Decimal("0.0000")
+
+    def test_clean_requires_a_window_on_a_promotion(self, tenant_a, item_a):
+        from apps.scm.models import SeasonalityProfile
+        profile = SeasonalityProfile(tenant=tenant_a, name="Promo", profile_type="promotion",
+                                     scope="item", item=item_a)
+        with pytest.raises(ValidationError) as excinfo:
+            profile.clean()
+        assert "event_start" in excinfo.value.message_dict
+
+    def test_clean_rejects_an_inverted_event_window(self, tenant_a, item_a):
+        from apps.scm.models import SeasonalityProfile
+        profile = SeasonalityProfile(tenant=tenant_a, name="Promo", profile_type="event",
+                                     scope="item", item=item_a,
+                                     event_start=datetime.date(2026, 6, 1),
+                                     event_end=datetime.date(2026, 5, 1))
+        with pytest.raises(ValidationError) as excinfo:
+            profile.clean()
+        assert "event_end" in excinfo.value.message_dict
+
+    def test_clean_requires_the_scope_target(self, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        for scope in ("item", "category", "location"):
+            with pytest.raises(ValidationError) as excinfo:
+                SeasonalityProfile(tenant=tenant_a, name="X", scope=scope).clean()
+            assert scope in excinfo.value.message_dict
+
+    def test_global_scope_needs_no_target(self, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        SeasonalityProfile(tenant=tenant_a, name="X", scope="global").clean()  # must not raise
+
+
+# ================================================================================================
+# DemandForecast.generate_periods — the period grid
+# ================================================================================================
+class TestGeneratePeriods:
+    def test_builds_the_grid_from_the_horizon(self, demand_forecast_a, demand_history_a):
+        from apps.scm.tests._helpers import add_months
+        written = demand_forecast_a.generate_periods()
+        rows = list(demand_forecast_a.periods.all())
+        assert written == 3
+        assert [row.sequence for row in rows] == [1, 2, 3]
+        start = demand_forecast_a.horizon_start
+        assert [row.period_start for row in rows] == [start, add_months(start, 1), add_months(start, 2)]
+        assert rows[0].period_end == add_months(start, 1) - datetime.timedelta(days=1)
+        assert rows[0].period_label == start.strftime("%b %Y")
+
+    def test_baseline_comes_from_the_derived_history(self, demand_forecast_a, demand_history_a):
+        demand_forecast_a.generate_periods()
+        # moving_average(window 3) over a flat 100/month history.
+        assert all(row.baseline_quantity == Decimal("100.0000")
+                   for row in demand_forecast_a.periods.all())
+
+    def test_historical_quantity_snapshots_the_same_period_last_year(self, demand_forecast_a,
+                                                                     demand_history_a):
+        demand_forecast_a.generate_periods()
+        assert demand_forecast_a.periods.first().historical_quantity == Decimal("100.0000")
+
+    def test_generate_advances_a_draft_to_statistical_and_stamps_generated_at(self,
+                                                                              demand_forecast_a):
+        assert demand_forecast_a.status == "draft"
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.refresh_from_db()
+        assert demand_forecast_a.status == "statistical"
+        assert demand_forecast_a.generated_at is not None
+
+    def test_regenerating_updates_in_place_rather_than_duplicating(self, demand_forecast_a,
+                                                                    demand_history_a):
+        demand_forecast_a.generate_periods()
+        pks = set(demand_forecast_a.periods.values_list("pk", flat=True))
+        demand_forecast_a.generate_periods()
+        assert demand_forecast_a.periods.count() == 3
+        assert set(demand_forecast_a.periods.values_list("pk", flat=True)) == pks
+
+    def test_a_locked_period_survives_a_regenerate_untouched(self, demand_forecast_a,
+                                                             demand_history_a):
+        demand_forecast_a.generate_periods()
+        row = demand_forecast_a.periods.first()
+        row.is_locked, row.baseline_quantity, row.final_quantity = True, Decimal("999"), Decimal("999")
+        row.save(update_fields=["is_locked", "baseline_quantity", "final_quantity"])
+        demand_forecast_a.generate_periods()
+        row.refresh_from_db()
+        assert row.baseline_quantity == Decimal("999.0000")
+        assert row.final_quantity == Decimal("999.0000")
+
+    def test_regenerate_locked_overwrites_a_locked_period_on_request(self, demand_forecast_a,
+                                                                     demand_history_a):
+        demand_forecast_a.generate_periods()
+        row = demand_forecast_a.periods.first()
+        row.is_locked, row.baseline_quantity = True, Decimal("999")
+        row.save(update_fields=["is_locked", "baseline_quantity"])
+        demand_forecast_a.generate_periods(regenerate_locked=True)
+        row.refresh_from_db()
+        assert row.baseline_quantity == Decimal("100.0000")
+
+    def test_a_seasonal_profile_multiplies_the_baseline(self, tenant_a, item_a, demand_forecast_a,
+                                                        demand_history_a):
+        demand_forecast_a.seasonality_profile = _flat_profile(tenant_a, item_a, "2.0000")
+        demand_forecast_a.save(update_fields=["seasonality_profile"])
+        demand_forecast_a.generate_periods()
+        row = demand_forecast_a.periods.first()
+        assert row.seasonal_index_applied == Decimal("2.0000")
+        assert row.event_uplift_quantity == Decimal("0.0000")
+        assert row.final_quantity == Decimal("200.0000")
+
+    def test_clearing_the_profile_resets_the_seasonal_and_uplift_columns(
+        self, tenant_a, item_a, demand_forecast_a, demand_history_a,
+    ):
+        demand_forecast_a.seasonality_profile = _flat_profile(tenant_a, item_a, "2.0000")
+        demand_forecast_a.save(update_fields=["seasonality_profile"])
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.seasonality_profile = None
+        demand_forecast_a.save(update_fields=["seasonality_profile"])
+        demand_forecast_a.generate_periods()
+        row = demand_forecast_a.periods.first()
+        assert row.seasonal_index_applied == Decimal("1.0000")
+        assert row.event_uplift_quantity == Decimal("0.0000")
+        assert row.final_quantity == Decimal("100.0000")
+
+    def test_deactivating_the_profile_also_resets_the_columns(self, tenant_a, item_a,
+                                                              demand_forecast_a, demand_history_a):
+        profile = _flat_profile(tenant_a, item_a, "2.0000")
+        demand_forecast_a.seasonality_profile = profile
+        demand_forecast_a.save(update_fields=["seasonality_profile"])
+        demand_forecast_a.generate_periods()
+        profile.is_active = False
+        profile.save(update_fields=["is_active"])
+        demand_forecast_a.refresh_from_db()
+        demand_forecast_a.generate_periods()
+        assert demand_forecast_a.periods.first().seasonal_index_applied == Decimal("1.0000")
+
+    def test_a_promotion_profile_lands_in_the_uplift_column_only(self, demand_forecast_a,
+                                                                 promotion_profile_a,
+                                                                 demand_history_a):
+        demand_forecast_a.seasonality_profile = promotion_profile_a
+        demand_forecast_a.save(update_fields=["seasonality_profile"])
+        demand_forecast_a.generate_periods()
+        rows = list(demand_forecast_a.periods.all())
+        assert rows[0].seasonal_index_applied == Decimal("1.0000")
+        assert rows[0].event_uplift_quantity == Decimal("25.0000")  # 25 % of a 100 baseline
+        assert rows[0].final_quantity == Decimal("125.0000")
+        assert rows[1].event_uplift_quantity == Decimal("0.0000")  # outside the promo window
+
+    def test_manual_method_does_not_overwrite_the_typed_quantities(self, demand_forecast_a,
+                                                                    demand_history_a):
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.method = "manual"
+        demand_forecast_a.save(update_fields=["method"])
+        row = demand_forecast_a.periods.first()
+        row.baseline_quantity, row.final_quantity = Decimal("555"), Decimal("555")
+        row.save(update_fields=["baseline_quantity", "final_quantity"])
+        demand_forecast_a.generate_periods()
+        row.refresh_from_db()
+        assert row.baseline_quantity == Decimal("555.0000")
+        assert row.final_quantity == Decimal("555.0000")
+
+    def test_manual_method_still_refreshes_the_derived_dates_and_labels(self, demand_forecast_a,
+                                                                        demand_history_a):
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.method = "manual"
+        demand_forecast_a.save(update_fields=["method"])
+        row = demand_forecast_a.periods.first()
+        row.period_label = "clobbered"
+        row.save(update_fields=["period_label"])
+        demand_forecast_a.generate_periods()
+        row.refresh_from_db()
+        assert row.period_label == demand_forecast_a.horizon_start.strftime("%b %Y")
+
+    def test_best_fit_stamps_the_engine_it_picked(self, demand_forecast_a, demand_history_a):
+        from apps.scm.models import DemandForecast
+        demand_forecast_a.method = "best_fit"
+        demand_forecast_a.save(update_fields=["method"])
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.refresh_from_db()
+        assert demand_forecast_a.selected_method in dict(DemandForecast.METHOD_CHOICES)
+        assert demand_forecast_a.effective_method == demand_forecast_a.selected_method
+
+    def test_switching_off_best_fit_clears_the_stamped_engine(self, demand_forecast_a,
+                                                              demand_history_a):
+        demand_forecast_a.method = "best_fit"
+        demand_forecast_a.save(update_fields=["method"])
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.method = "moving_average"
+        demand_forecast_a.save(update_fields=["method"])
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.refresh_from_db()
+        assert demand_forecast_a.selected_method == ""
+        assert demand_forecast_a.effective_method == "moving_average"
+
+    def test_like_item_copies_the_reference_items_history_scaled(self, tenant_a, item_a,
+                                                                  item_lot_a, customer_a,
+                                                                  demand_forecast_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        for back in range(12, 0, -1):  # history on the REFERENCE item only
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=add_months(this_month, -back),
+                                              status="submitted")
+            SalesOrderLine.objects.create(sales_order=order, item=item_lot_a,
+                                          quantity_ordered=Decimal("200"), unit_price=Decimal("1"))
+        demand_forecast_a.method = "like_item"
+        demand_forecast_a.reference_item = item_lot_a
+        demand_forecast_a.reference_scale_pct = Decimal("50")
+        demand_forecast_a.save(update_fields=["method", "reference_item", "reference_scale_pct"])
+        demand_forecast_a.generate_periods()
+        assert demand_forecast_a.periods.first().baseline_quantity == Decimal("100.0000")
+
+    def test_a_shortened_horizon_drops_the_orphan_periods(self, demand_forecast_a,
+                                                          demand_history_a):
+        from apps.scm.tests._helpers import add_months
+        demand_forecast_a.generate_periods()
+        demand_forecast_a.horizon_end = add_months(demand_forecast_a.horizon_start,
+                                                   1) - datetime.timedelta(days=1)
+        demand_forecast_a.save(update_fields=["horizon_end"])
+        demand_forecast_a.generate_periods()
+        assert demand_forecast_a.periods.count() == 1
+
+    def test_a_shortened_horizon_keeps_a_locked_orphan(self, demand_forecast_a, demand_history_a):
+        from apps.scm.tests._helpers import add_months
+        demand_forecast_a.generate_periods()
+        last = demand_forecast_a.periods.last()
+        last.is_locked = True
+        last.save(update_fields=["is_locked"])
+        demand_forecast_a.horizon_end = add_months(demand_forecast_a.horizon_start,
+                                                   1) - datetime.timedelta(days=1)
+        demand_forecast_a.save(update_fields=["horizon_end"])
+        demand_forecast_a.generate_periods()
+        assert demand_forecast_a.periods.filter(pk=last.pk).exists()
+
+    def test_an_empty_horizon_writes_nothing(self, demand_forecast_a):
+        demand_forecast_a.horizon_end = demand_forecast_a.horizon_start - datetime.timedelta(days=1)
+        demand_forecast_a.save(update_fields=["horizon_end"])
+        assert demand_forecast_a.generate_periods() == 0
+        assert demand_forecast_a.periods.count() == 0
+
+    def test_generate_never_writes_more_than_max_horizon_periods_rows(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import month_start
+        from django.utils import timezone
+        start = month_start(timezone.localdate())
+        # A daily horizon far past the cap — clean() would reject it, but generate() is also
+        # reachable on rows written before the cap existed, so the walk is capped too.
+        forecast = DemandForecast.objects.create(
+            tenant=tenant_a, name="Runaway", item=item_a, bucket="day", horizon_start=start,
+            horizon_end=start + datetime.timedelta(days=5000), history_months=1)
+        forecast.generate_periods()
+        assert forecast.periods.count() == DemandForecast.MAX_HORIZON_PERIODS
+
+
+# ================================================================================================
+# DemandForecast.recompute_consensus — the collaborative roll-up
+# ================================================================================================
+def _accept(adjustment):
+    """Flip an adjustment to accepted WITHOUT going through save() — arranging state, not acting."""
+    from apps.scm.models import ForecastAdjustment
+    ForecastAdjustment.objects.filter(pk=adjustment.pk).update(status="accepted")
+    adjustment.refresh_from_db()
+    return adjustment
+
+
+def _propose(forecast, tenant, **kwargs):
+    from apps.scm.models import ForecastAdjustment
+    payload = {"adjustment_type": "absolute", "proposed_quantity": Decimal("0"),
+               "rationale": "test"}
+    payload.update(kwargs)
+    return ForecastAdjustment.objects.create(tenant=tenant, forecast=forecast, **payload)
+
+
+class TestRecomputeConsensus:
+    def test_one_accepted_absolute_moves_the_period_to_the_target(self, tenant_a,
+                                                                   forecast_with_periods_a,
+                                                                   forecast_period_a):
+        _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                         adjustment_type="absolute", proposed_quantity=Decimal("140")))
+        forecast_with_periods_a.recompute_consensus()
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.consensus_quantity == Decimal("40.0000")
+        assert forecast_period_a.final_quantity == Decimal("140.0000")
+
+    def test_two_accepted_absolutes_land_on_the_target_not_on_double_it(self, tenant_a,
+                                                                        forecast_with_periods_a,
+                                                                        forecast_period_a):
+        """Each adjustment is RE-resolved against the number as it stands when its turn comes."""
+        for _ in range(2):
+            _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                             adjustment_type="absolute", proposed_quantity=Decimal("140")))
+        forecast_with_periods_a.recompute_consensus()
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.final_quantity == Decimal("140.0000")  # not 180
+
+    def test_two_accepted_deltas_do_stack(self, tenant_a, forecast_with_periods_a,
+                                          forecast_period_a):
+        for _ in range(2):
+            _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                             adjustment_type="delta", proposed_quantity=Decimal("10")))
+        forecast_with_periods_a.recompute_consensus()
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.final_quantity == Decimal("120.0000")
+
+    def test_a_percent_adjustment_resolves_against_the_live_base(self, tenant_a,
+                                                                 forecast_with_periods_a,
+                                                                 forecast_period_a):
+        _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                         adjustment_type="percent", adjustment_pct=Decimal("10")))
+        forecast_with_periods_a.recompute_consensus()
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.final_quantity == Decimal("110.0000")
+
+    def test_rejecting_an_accepted_adjustment_backs_its_delta_out(self, tenant_a,
+                                                                  forecast_with_periods_a,
+                                                                  forecast_period_a):
+        from apps.scm.models import ForecastAdjustment
+        adjustment = _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                                      adjustment_type="delta", proposed_quantity=Decimal("40")))
+        forecast_with_periods_a.recompute_consensus()
+        ForecastAdjustment.objects.filter(pk=adjustment.pk).update(status="rejected")
+        forecast_with_periods_a.recompute_consensus()
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.consensus_quantity == Decimal("0.0000")
+        assert forecast_period_a.final_quantity == Decimal("100.0000")
+
+    def test_a_proposed_adjustment_never_moves_the_plan(self, tenant_a, forecast_with_periods_a,
+                                                        forecast_period_a):
+        _propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                 adjustment_type="delta", proposed_quantity=Decimal("40"))
+        forecast_with_periods_a.recompute_consensus()
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.final_quantity == Decimal("100.0000")
+
+    def test_a_horizon_wide_adjustment_is_split_pro_rata(self, tenant_a, forecast_with_periods_a):
+        rows = list(forecast_with_periods_a.periods.all())
+        rows[1].baseline_quantity = Decimal("300")
+        rows[1].save(update_fields=["baseline_quantity"])
+        _accept(_propose(forecast_with_periods_a, tenant_a, adjustment_type="delta",
+                         proposed_quantity=Decimal("50")))
+        forecast_with_periods_a.recompute_consensus()
+        rows = list(forecast_with_periods_a.periods.all())
+        # Weights 100 / 300 / 100 = 500 total -> 10 / 30 / 10.
+        assert [row.consensus_quantity for row in rows] == [
+            Decimal("10.0000"), Decimal("30.0000"), Decimal("10.0000")]
+
+    def test_a_horizon_wide_adjustment_splits_evenly_when_the_base_is_zero(
+        self, tenant_a, forecast_with_periods_a,
+    ):
+        forecast_with_periods_a.periods.update(baseline_quantity=Decimal("0"))
+        _accept(_propose(forecast_with_periods_a, tenant_a, adjustment_type="delta",
+                         proposed_quantity=Decimal("30")))
+        forecast_with_periods_a.recompute_consensus()
+        assert [row.consensus_quantity for row in forecast_with_periods_a.periods.all()] == [
+            Decimal("10.0000")] * 3
+
+    def test_a_locked_period_takes_no_share_of_a_horizon_wide_adjustment(
+        self, tenant_a, forecast_with_periods_a,
+    ):
+        locked = forecast_with_periods_a.periods.all()[1]
+        locked.is_locked = True
+        locked.save(update_fields=["is_locked"])
+        _accept(_propose(forecast_with_periods_a, tenant_a, adjustment_type="delta",
+                         proposed_quantity=Decimal("40")))
+        forecast_with_periods_a.recompute_consensus()
+        rows = list(forecast_with_periods_a.periods.all())
+        assert rows[1].consensus_quantity == Decimal("0.0000")
+        assert [rows[0].consensus_quantity, rows[2].consensus_quantity] == [
+            Decimal("20.0000"), Decimal("20.0000")]
+
+    def test_an_adjustment_aimed_at_a_locked_period_takes_no_effect(self, tenant_a,
+                                                                    forecast_with_periods_a,
+                                                                    forecast_period_a):
+        forecast_period_a.is_locked = True
+        forecast_period_a.save(update_fields=["is_locked"])
+        _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                         adjustment_type="delta", proposed_quantity=Decimal("40")))
+        forecast_with_periods_a.recompute_consensus()
+        assert all(row.consensus_quantity == Decimal("0.0000")
+                   for row in forecast_with_periods_a.periods.all())
+
+    def test_the_resolved_quantity_is_written_back_for_the_screens(self, tenant_a,
+                                                                    forecast_with_periods_a,
+                                                                    forecast_period_a):
+        adjustment = _accept(_propose(forecast_with_periods_a, tenant_a, period=forecast_period_a,
+                                      adjustment_type="absolute",
+                                      proposed_quantity=Decimal("175")))
+        forecast_with_periods_a.recompute_consensus()
+        adjustment.refresh_from_db()
+        assert adjustment.resolved_quantity == Decimal("75.0000")
+
+    def test_recompute_on_a_forecast_with_no_periods_is_a_no_op(self, demand_forecast_a):
+        assert demand_forecast_a.recompute_consensus() == 0
+
+    def test_recompute_on_an_all_locked_grid_is_a_no_op(self, forecast_with_periods_a):
+        forecast_with_periods_a.periods.update(is_locked=True)
+        assert forecast_with_periods_a.recompute_consensus() == 0
+
+
+# ================================================================================================
+# DemandSignal — sensing, apply, the live detector and the staleness sweep
+# ================================================================================================
+class TestDemandSignalProperties:
+    def test_signed_impact_quantity_carries_the_direction(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        base = dict(tenant=tenant_a, observed_at=timezone.now(), impact_quantity=Decimal("30"))
+        up = DemandSignal(impact_direction="increase", **base)
+        down = DemandSignal(impact_direction="decrease", **base)
+        flat = DemandSignal(impact_direction="neutral", **base)
+        assert up.signed_impact_quantity == Decimal("30")
+        assert down.signed_impact_quantity == Decimal("-30")
+        assert flat.signed_impact_quantity == Decimal("0")
+
+    def test_a_negative_magnitude_is_still_read_through_the_direction(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        signal = DemandSignal(tenant=tenant_a, observed_at=timezone.now(),
+                              impact_quantity=Decimal("-30"), impact_direction="increase")
+        assert signal.signed_impact_quantity == Decimal("30")
+
+    def test_is_open_tracks_the_triage_statuses(self, demand_signal_a):
+        assert demand_signal_a.is_open
+        demand_signal_a.status = "applied"
+        assert not demand_signal_a.is_open
+
+    def test_effective_window_falls_back_to_observed_at_plus_horizon(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        signal = DemandSignal.objects.create(tenant=tenant_a, observed_at=timezone.now(),
+                                             horizon_days=7)
+        start, end = signal.effective_window()
+        assert start == timezone.localdate()
+        assert end == start + datetime.timedelta(days=6)
+
+    def test_effective_window_prefers_the_stated_dates(self, demand_signal_a):
+        start, end = demand_signal_a.effective_window()
+        assert (start, end) == (demand_signal_a.effective_from, demand_signal_a.effective_to)
+
+    def test_clean_rejects_an_inverted_window(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        signal = DemandSignal(tenant=tenant_a, observed_at=timezone.now(),
+                              effective_from=datetime.date(2026, 6, 1),
+                              effective_to=datetime.date(2026, 5, 1))
+        with pytest.raises(ValidationError) as excinfo:
+            signal.clean()
+        assert "effective_to" in excinfo.value.message_dict
+
+
+class TestDemandSignalApplyToForecast:
+    def test_only_overlapping_periods_move(self, demand_signal_a, forecast_with_periods_a):
+        moved = demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        rows = list(forecast_with_periods_a.periods.all())
+        assert moved == 1  # the signal window covers the first bucket only
+        assert rows[0].signal_adjustment_quantity == Decimal("30.0000")
+        assert rows[1].signal_adjustment_quantity == Decimal("0.0000")
+        assert rows[2].signal_adjustment_quantity == Decimal("0.0000")
+
+    def test_the_impact_is_disaggregated_pro_rata_across_the_window(self, demand_signal_a,
+                                                                    forecast_with_periods_a):
+        from apps.scm.tests._helpers import add_months
+        rows = list(forecast_with_periods_a.periods.all())
+        rows[1].baseline_quantity = Decimal("200")
+        rows[1].save(update_fields=["baseline_quantity"])
+        demand_signal_a.effective_to = add_months(demand_signal_a.effective_from,
+                                                  2) - datetime.timedelta(days=1)
+        demand_signal_a.save(update_fields=["effective_to"])
+        assert demand_signal_a.apply_to_forecast(forecast_with_periods_a) == 2
+        rows = list(forecast_with_periods_a.periods.all())
+        # Weights 100 / 200 -> 30 splits 10 / 20, NOT 15 / 15.
+        assert rows[0].signal_adjustment_quantity == Decimal("10.0000")
+        assert rows[1].signal_adjustment_quantity == Decimal("20.0000")
+
+    def test_an_even_split_when_the_seasonalised_baseline_is_zero(self, demand_signal_a,
+                                                                  forecast_with_periods_a):
+        from apps.scm.tests._helpers import add_months
+        forecast_with_periods_a.periods.update(baseline_quantity=Decimal("0"))
+        demand_signal_a.effective_to = add_months(demand_signal_a.effective_from,
+                                                  2) - datetime.timedelta(days=1)
+        demand_signal_a.save(update_fields=["effective_to"])
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        assert [row.signal_adjustment_quantity
+                for row in forecast_with_periods_a.periods.all()[:2]] == [Decimal("15.0000")] * 2
+
+    def test_the_final_quantity_follows_the_waterfall(self, demand_signal_a,
+                                                      forecast_with_periods_a):
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        assert forecast_with_periods_a.periods.first().final_quantity == Decimal("130.0000")
+
+    def test_a_decrease_signal_pulls_the_forecast_down(self, demand_signal_a,
+                                                       forecast_with_periods_a):
+        demand_signal_a.impact_direction = "decrease"
+        demand_signal_a.save(update_fields=["impact_direction"])
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        assert forecast_with_periods_a.periods.first().final_quantity == Decimal("70.0000")
+
+    def test_an_explicit_quantity_overrides_the_signals_own_impact(self, demand_signal_a,
+                                                                    forecast_with_periods_a):
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a, quantity=Decimal("-5"))
+        assert forecast_with_periods_a.periods.first().signal_adjustment_quantity == Decimal("-5.0000")
+
+    def test_a_locked_periods_final_quantity_is_left_alone(self, demand_signal_a,
+                                                           forecast_with_periods_a,
+                                                           forecast_period_a):
+        forecast_period_a.is_locked = True
+        forecast_period_a.save(update_fields=["is_locked"])
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.final_quantity == Decimal("100.0000")
+
+    def test_applying_marks_the_signal_applied_and_records_the_forecast(self, demand_signal_a,
+                                                                        forecast_with_periods_a):
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "applied"
+        assert demand_signal_a.applied_to_forecast_id == forecast_with_periods_a.pk
+
+    def test_no_overlapping_period_leaves_the_signal_untouched(self, demand_signal_a,
+                                                               forecast_with_periods_a):
+        from apps.scm.tests._helpers import add_months
+        demand_signal_a.effective_from = add_months(demand_signal_a.effective_from, -6)
+        demand_signal_a.effective_to = add_months(demand_signal_a.effective_from, 1)
+        demand_signal_a.save(update_fields=["effective_from", "effective_to"])
+        assert demand_signal_a.apply_to_forecast(forecast_with_periods_a) == 0
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "new"
+
+    def test_applying_a_second_time_double_counts_which_is_why_the_view_guards_it(
+        self, demand_signal_a, forecast_with_periods_a,
+    ):
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        assert forecast_with_periods_a.periods.first().signal_adjustment_quantity == Decimal("60.0000")
+
+
+class TestDetectOrderSurge:
+    def test_a_dropoff_is_raised_when_nothing_has_been_ordered(self, tenant_a,
+                                                               approved_forecast_a):
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        created = detect_order_surge(tenant_a)
+        assert len(created) == 1
+        signal = created[0]
+        assert signal.signal_type == "order_dropoff"
+        assert signal.impact_direction == "decrease"
+        assert signal.source == "internal_orders"
+
+    def test_the_dedupe_key_is_the_forecast_number_and_period_sequence(self, tenant_a,
+                                                                       approved_forecast_a):
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        signal = detect_order_surge(tenant_a)[0]
+        assert signal.source_reference == f"{approved_forecast_a.number}:1"
+
+    def test_running_the_detector_twice_creates_nothing_new(self, tenant_a, approved_forecast_a):
+        from apps.scm.models import DemandSignal
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        detect_order_surge(tenant_a)
+        assert detect_order_surge(tenant_a) == []
+        assert DemandSignal.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_a_dismissed_signal_still_suppresses_a_repeat(self, tenant_a, approved_forecast_a):
+        from apps.scm.models import DemandSignal
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        signal = detect_order_surge(tenant_a)[0]
+        DemandSignal.objects.filter(pk=signal.pk).update(status="dismissed")
+        assert detect_order_surge(tenant_a) == []
+
+    def test_a_surge_is_raised_when_orders_run_hot(self, tenant_a, approved_forecast_a,
+                                                   customer_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=timezone.localdate(), status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("10000"), unit_price=Decimal("1"))
+        created = detect_order_surge(tenant_a)
+        assert len(created) == 1
+        assert created[0].signal_type == "order_surge"
+        assert created[0].impact_direction == "increase"
+        assert created[0].confidence == "high"
+
+    def test_a_five_figure_deviation_is_clamped_to_the_column_ceiling(self, tenant_a,
+                                                                      approved_forecast_a,
+                                                                      customer_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=timezone.localdate(), status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("1000000"), unit_price=Decimal("1"))
+        signal = detect_order_surge(tenant_a)[0]
+        assert signal.impact_pct == Decimal("9999.99")  # DecimalField(6, 2) ceiling, not a DataError
+
+    def test_a_forecast_that_is_not_approved_is_never_sensed(self, tenant_a,
+                                                             forecast_with_periods_a):
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        assert forecast_with_periods_a.status == "statistical"
+        assert detect_order_surge(tenant_a) == []
+
+    def test_a_period_forecast_at_zero_is_skipped(self, tenant_a, approved_forecast_a):
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        approved_forecast_a.periods.update(final_quantity=Decimal("0"))
+        assert detect_order_surge(tenant_a) == []
+
+    def test_a_deviation_inside_the_threshold_raises_nothing(self, tenant_a, approved_forecast_a,
+                                                             customer_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        # Book exactly the run rate the current period expects, so the deviation is 0 %.
+        period = approved_forecast_a.periods.first()
+        today = timezone.localdate()
+        elapsed = Decimal((today - period.period_start).days + 1)
+        total_days = Decimal((period.period_end - period.period_start).days + 1)
+        on_plan = (period.final_quantity * elapsed / total_days).quantize(Decimal("0.0001"))
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a, order_date=today,
+                                          status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_a, quantity_ordered=on_plan,
+                                      unit_price=Decimal("1"))
+        assert detect_order_surge(tenant_a) == []
+
+    def test_a_tenant_less_call_is_a_no_op(self):
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        assert detect_order_surge(None) == []
+
+    def test_another_tenants_forecast_is_never_sensed(self, tenant_b, approved_forecast_a):
+        from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge
+        assert detect_order_surge(tenant_b) == []
+
+
+class TestExpireStaleSignals:
+    def _signal(self, tenant, item, **kwargs):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        payload = {"tenant": tenant, "item": item, "observed_at": timezone.now()}
+        payload.update(kwargs)
+        return DemandSignal.objects.create(**payload)
+
+    def test_an_open_signal_whose_window_has_passed_is_retired(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        today = timezone.localdate()
+        signal = self._signal(tenant_a, item_a, effective_from=today - datetime.timedelta(days=30),
+                              effective_to=today - datetime.timedelta(days=1))
+        assert expire_stale_signals(tenant_a) == 1
+        signal.refresh_from_db()
+        assert signal.status == "expired"
+
+    def test_a_signal_still_inside_its_window_is_left_alone(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        today = timezone.localdate()
+        signal = self._signal(tenant_a, item_a, effective_from=today,
+                              effective_to=today + datetime.timedelta(days=10))
+        assert expire_stale_signals(tenant_a) == 0
+        signal.refresh_from_db()
+        assert signal.status == "new"
+
+    def test_a_signal_with_no_stated_end_is_resolved_through_its_horizon(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        stale = self._signal(tenant_a, item_a, horizon_days=7,
+                             observed_at=timezone.now() - datetime.timedelta(days=60))
+        fresh = self._signal(tenant_a, item_a, horizon_days=90)
+        assert expire_stale_signals(tenant_a) == 1
+        stale.refresh_from_db()
+        fresh.refresh_from_db()
+        assert (stale.status, fresh.status) == ("expired", "new")
+
+    def test_an_already_actioned_signal_is_never_retired(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        today = timezone.localdate()
+        signal = self._signal(tenant_a, item_a, effective_from=today - datetime.timedelta(days=30),
+                              effective_to=today - datetime.timedelta(days=1))
+        DemandSignal.objects.filter(pk=signal.pk).update(status="applied")
+        assert expire_stale_signals(tenant_a) == 0
+
+    def test_an_under_review_signal_is_retired_too(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        today = timezone.localdate()
+        signal = self._signal(tenant_a, item_a, effective_to=today - datetime.timedelta(days=1))
+        DemandSignal.objects.filter(pk=signal.pk).update(status="under_review")
+        assert expire_stale_signals(tenant_a) == 1
+
+    def test_another_tenants_stale_signal_is_not_touched(self, tenant_a, tenant_b, item_b):
+        from django.utils import timezone
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        today = timezone.localdate()
+        self._signal(tenant_b, item_b, effective_to=today - datetime.timedelta(days=1))
+        assert expire_stale_signals(tenant_a) == 0
+
+    def test_a_tenant_less_call_is_a_no_op(self):
+        from apps.scm.models.DemandPlanning.DemandSignals import expire_stale_signals
+        assert expire_stale_signals(None) == 0
+
+
+# ================================================================================================
+# ForecastAdjustment
+# ================================================================================================
+class TestForecastAdjustmentModel:
+    def test_delta_against_reduces_every_type_to_a_signed_delta(self, tenant_a,
+                                                                forecast_with_periods_a):
+        from apps.scm.models import ForecastAdjustment
+        absolute = ForecastAdjustment(adjustment_type="absolute", proposed_quantity=Decimal("140"))
+        delta = ForecastAdjustment(adjustment_type="delta", proposed_quantity=Decimal("-15"))
+        percent = ForecastAdjustment(adjustment_type="percent", adjustment_pct=Decimal("25"))
+        assert absolute.delta_against(Decimal("100")) == Decimal("40")
+        assert delta.delta_against(Decimal("100")) == Decimal("-15")
+        assert percent.delta_against(Decimal("100")) == Decimal("25")
+
+    def test_resolved_quantity_is_derived_in_save(self, forecast_adjustment_a):
+        assert forecast_adjustment_a.resolved_quantity == Decimal("40.0000")  # 140 target - 100 base
+
+    def test_resolved_quantity_is_re_derived_even_on_a_narrow_update_fields_save(
+        self, forecast_adjustment_a, forecast_period_a,
+    ):
+        forecast_period_a.baseline_quantity = Decimal("50")
+        forecast_period_a.save(update_fields=["baseline_quantity"])
+        forecast_adjustment_a.period.refresh_from_db()
+        forecast_adjustment_a.save(update_fields=["confidence"])
+        forecast_adjustment_a.refresh_from_db()
+        assert forecast_adjustment_a.resolved_quantity == Decimal("90.0000")
+
+    def test_base_quantity_is_the_period_when_one_is_named(self, forecast_adjustment_a):
+        assert forecast_adjustment_a.base_quantity() == Decimal("100.0000")
+
+    def test_base_quantity_is_the_whole_horizon_when_no_period_is_named(self, tenant_a,
+                                                                        forecast_with_periods_a):
+        from apps.scm.models import ForecastAdjustment
+        adjustment = ForecastAdjustment.objects.create(
+            tenant=tenant_a, forecast=forecast_with_periods_a, adjustment_type="delta",
+            proposed_quantity=Decimal("1"), rationale="whole horizon")
+        assert adjustment.base_quantity() == Decimal("300.0000")
+
+    def test_base_quantity_is_zero_without_a_forecast(self):
+        from apps.scm.models import ForecastAdjustment
+        assert ForecastAdjustment().base_quantity() == Decimal("0")
+
+    def test_clean_rejects_a_period_belonging_to_another_forecast(self, tenant_a,
+                                                                  forecast_with_periods_a,
+                                                                  item_a):
+        from apps.scm.models import DemandForecast, ForecastAdjustment
+        from apps.scm.tests._helpers import add_months
+        other = DemandForecast.objects.create(
+            tenant=tenant_a, name="Other", item=item_a,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=add_months(forecast_with_periods_a.horizon_start,
+                                   3) - datetime.timedelta(days=1))
+        other.generate_periods()
+        adjustment = ForecastAdjustment(tenant=tenant_a, forecast=forecast_with_periods_a,
+                                        period=other.periods.first(), rationale="crafted")
+        with pytest.raises(ValidationError) as excinfo:
+            adjustment.clean()
+        assert "period" in excinfo.value.message_dict
+
+    def test_clean_accepts_a_period_of_its_own_forecast(self, forecast_adjustment_a):
+        forecast_adjustment_a.clean()  # must not raise
+
+    def test_is_reviewable_only_while_proposed(self, forecast_adjustment_a):
+        assert forecast_adjustment_a.is_reviewable
+        forecast_adjustment_a.status = "accepted"
+        assert not forecast_adjustment_a.is_reviewable
+
+
+# ================================================================================================
+# DemandForecast / DemandForecastPeriod properties + clean()
+# ================================================================================================
+class TestDemandForecastProperties:
+    def test_is_editable_tracks_the_open_statuses(self, demand_forecast_a):
+        for status, editable in (("draft", True), ("statistical", True), ("in_review", True),
+                                 ("approved", False), ("archived", False)):
+            demand_forecast_a.status = status
+            assert demand_forecast_a.is_editable is editable, status
+
+    def test_effective_method_prefers_what_best_fit_actually_picked(self, demand_forecast_a):
+        assert demand_forecast_a.effective_method == "moving_average"
+        demand_forecast_a.selected_method = "holt_winters"
+        assert demand_forecast_a.effective_method == "holt_winters"
+        assert demand_forecast_a.effective_method_display == "Holt-Winters"
+
+    def test_effective_method_display_falls_back_to_the_raw_slug(self, demand_forecast_a):
+        demand_forecast_a.selected_method = "not_a_choice"
+        assert demand_forecast_a.effective_method_display == "not_a_choice"
+
+    def test_history_window_ends_the_day_before_the_horizon_opens(self, demand_forecast_a):
+        from apps.scm.tests._helpers import add_months
+        start, end = demand_forecast_a.history_window()
+        assert end == demand_forecast_a.horizon_start - datetime.timedelta(days=1)
+        assert start == add_months(demand_forecast_a.horizon_start, -24)
+
+    def test_total_forecast_quantity_is_an_aggregate_not_a_stored_column(self,
+                                                                         forecast_with_periods_a):
+        assert forecast_with_periods_a.total_forecast_quantity() == Decimal("300.0000")
+
+    def test_period_actuals_map_is_keyed_by_period_start(self, forecast_with_periods_a):
+        actuals = forecast_with_periods_a.period_actuals_map()
+        assert set(actuals) == {row.period_start for row in forecast_with_periods_a.periods.all()}
+
+    def test_accuracy_metrics_are_all_none_before_anything_has_elapsed(self,
+                                                                       forecast_with_periods_a):
+        metrics = forecast_with_periods_a.accuracy_metrics()
+        assert metrics["points"] == 0
+        assert metrics["mape"] is None and metrics["wmape"] is None
+        assert metrics["bias_pct"] is None and metrics["tracking_signal"] is None
+
+    def test_accuracy_metrics_score_the_elapsed_periods(self, tenant_a, item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast, SalesOrder, SalesOrderLine
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        start = add_months(this_month, -3)
+        forecast = DemandForecast.objects.create(
+            tenant=tenant_a, name="Elapsed plan", item=item_a, bucket="month", horizon_start=start,
+            horizon_end=this_month - datetime.timedelta(days=1))
+        forecast.generate_periods()
+        for row in forecast.periods.all():
+            row.baseline_quantity, row.final_quantity = Decimal("100"), Decimal("100")
+            row.save(update_fields=["baseline_quantity", "final_quantity"])
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a, order_date=start,
+                                          status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("80"), unit_price=Decimal("1"))
+        metrics = forecast.accuracy_metrics()
+        assert metrics["points"] == 3
+        assert metrics["mape"] == Decimal("25")  # |80-100|/80 over the only non-zero actual
+        assert metrics["bias_pct"] > Decimal("0")  # the plan ran high
+
+    def test_clean_rejects_a_horizon_that_ends_before_it_starts(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        forecast = DemandForecast(tenant=tenant_a, name="X", item=item_a,
+                                  horizon_start=datetime.date(2026, 6, 1),
+                                  horizon_end=datetime.date(2026, 1, 1))
+        with pytest.raises(ValidationError) as excinfo:
+            forecast.clean()
+        assert "horizon_end" in excinfo.value.message_dict
+
+    def test_clean_rejects_a_horizon_starting_before_the_minimum_year(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        forecast = DemandForecast(tenant=tenant_a, name="X", item=item_a,
+                                  horizon_start=datetime.date(1800, 1, 1),
+                                  horizon_end=datetime.date(1800, 3, 31))
+        with pytest.raises(ValidationError) as excinfo:
+            forecast.clean()
+        assert "horizon_start" in excinfo.value.message_dict
+
+    def test_clean_rejects_a_span_beyond_the_period_cap(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        forecast = DemandForecast(tenant=tenant_a, name="X", item=item_a, bucket="day",
+                                  horizon_start=datetime.date(2026, 1, 1),
+                                  horizon_end=datetime.date(2030, 1, 1))
+        with pytest.raises(ValidationError) as excinfo:
+            forecast.clean()
+        assert "horizon_end" in excinfo.value.message_dict
+        assert str(DemandForecast.MAX_HORIZON_PERIODS) in str(excinfo.value.message_dict)
+
+    def test_clean_accepts_a_span_exactly_at_the_cap(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        start = datetime.date(2026, 1, 1)
+        forecast = DemandForecast(
+            tenant=tenant_a, name="X", item=item_a, bucket="day", horizon_start=start,
+            horizon_end=start + datetime.timedelta(days=DemandForecast.MAX_HORIZON_PERIODS - 1))
+        forecast.clean()  # must not raise
+
+    def test_clean_requires_a_reference_item_for_a_like_item_forecast(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        forecast = DemandForecast(tenant=tenant_a, name="X", item=item_a, method="like_item",
+                                  horizon_start=datetime.date(2026, 1, 1),
+                                  horizon_end=datetime.date(2026, 3, 31))
+        with pytest.raises(ValidationError) as excinfo:
+            forecast.clean()
+        assert "reference_item" in excinfo.value.message_dict
+
+    def test_clean_rejects_a_reference_item_that_is_the_forecast_item(self, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        forecast = DemandForecast(tenant=tenant_a, name="X", item=item_a, reference_item=item_a,
+                                  horizon_start=datetime.date(2026, 1, 1),
+                                  horizon_end=datetime.date(2026, 3, 31))
+        with pytest.raises(ValidationError) as excinfo:
+            forecast.clean()
+        assert "reference_item" in excinfo.value.message_dict
+
+
+class TestDemandForecastPeriodProperties:
+    def test_pre_adjustment_quantity_is_the_waterfall_up_to_consensus(self):
+        from apps.scm.models import DemandForecastPeriod
+        row = DemandForecastPeriod(baseline_quantity=Decimal("100"),
+                                   seasonal_index_applied=Decimal("1.2"),
+                                   event_uplift_quantity=Decimal("10"),
+                                   signal_adjustment_quantity=Decimal("5"),
+                                   consensus_quantity=Decimal("50"))
+        assert row.pre_adjustment_quantity == Decimal("135.0")  # consensus deliberately excluded
+
+    def test_seasonal_quantity_is_the_middle_step(self):
+        from apps.scm.models import DemandForecastPeriod
+        row = DemandForecastPeriod(baseline_quantity=Decimal("100"),
+                                   seasonal_index_applied=Decimal("1.5"))
+        assert row.seasonal_quantity == Decimal("150.0")
+
+    def test_a_null_index_reads_as_neutral(self):
+        from apps.scm.models import DemandForecastPeriod
+        row = DemandForecastPeriod(baseline_quantity=Decimal("100"), seasonal_index_applied=None)
+        assert row.seasonal_quantity == Decimal("100")
+
+    def test_forecast_value_prices_the_units(self):
+        from apps.scm.models import DemandForecastPeriod
+        row = DemandForecastPeriod(final_quantity=Decimal("10"), unit_price=Decimal("2.50"))
+        assert row.forecast_value == Decimal("25.00")
+
+
+class TestQuantityClamping:
+    def test_q4_clamps_to_what_the_column_holds(self):
+        from apps.scm.models.DemandPlanning.DemandForecasts import _q4
+        assert _q4(Decimal("1E+20")) == Decimal("9999999999.9999")
+        assert _q4(Decimal("-1E+20")) == Decimal("-9999999999.9999")
+        assert _q4(Decimal("1.23456")) == Decimal("1.2346")
+        assert _q4(None) == Decimal("0.0000")
+
+
+# ================================================================================================
+# ReorderRule — the 4.7 safety-stock calculation extension (4.3's rule, extended in place)
+# ================================================================================================
+def _flat_history(months=12, qty="100"):
+    """A flat monthly demand series, anchored on timezone.localdate() (L16)."""
+    from django.utils import timezone
+    from apps.scm.tests._helpers import add_months, month_start
+    start = month_start(timezone.localdate())
+    return [(add_months(start, -m), Decimal(qty)) for m in range(months, 0, -1)]
+
+
+def _lumpy_history(values):
+    from django.utils import timezone
+    from apps.scm.tests._helpers import add_months, month_start
+    start = month_start(timezone.localdate())
+    return [(add_months(start, -(len(values) - i)), Decimal(v)) for i, v in enumerate(values)]
+
+
+PER_DAY = Decimal("30.4375")  # the mean-days-per-month constant calculate() converts with
+
+
+class TestReorderRuleSafetyStockCalculation:
+    def test_calculate_writes_only_the_computed_columns(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        rule.save()
+        rule.refresh_from_db()
+        assert rule.safety_stock == Decimal("5.00")      # the buyer's number, untouched
+        assert rule.reorder_point == Decimal("10.00")
+        assert rule.computed_safety_stock > Decimal("0")
+        assert rule.computed_reorder_point > Decimal("0")
+        assert rule.last_calculated_at is not None
+
+    def test_calculate_returns_the_pair_it_computed(self, reorder_rule_service_level_a):
+        safety, point = reorder_rule_service_level_a.calculate(series=_flat_history())
+        assert (safety, point) == (reorder_rule_service_level_a.computed_safety_stock,
+                                   reorder_rule_service_level_a.computed_reorder_point)
+
+    def test_average_daily_demand_converts_the_monthly_bucket(self, reorder_rule_service_level_a):
+        reorder_rule_service_level_a.calculate(series=_flat_history(qty="100"))
+        expected = (Decimal("100") / PER_DAY).quantize(Decimal("0.0001"))
+        assert reorder_rule_service_level_a.avg_daily_demand == expected
+
+    def test_service_level_counts_lead_time_variability(self, reorder_rule_service_level_a):
+        """Ignoring sigma_L is the usual way a 'correct' formula still stocks out."""
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())  # flat demand -> sigma_d == 0
+        with_variability = rule.computed_safety_stock
+        rule.lead_time_variability_days = Decimal("0")
+        rule.calculate(series=_flat_history())
+        assert with_variability > Decimal("0")
+        assert rule.computed_safety_stock == Decimal("0.00")
+
+    def test_service_level_scales_with_the_z_factor(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        at_95 = rule.computed_safety_stock
+        rule.service_level_pct = Decimal("99")
+        rule.calculate(series=_flat_history())
+        assert rule.computed_safety_stock > at_95
+
+    def test_the_reorder_point_is_lead_time_demand_plus_the_buffer(self,
+                                                                   reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        expected = ((Decimal("100") / PER_DAY) * Decimal(rule.lead_time_days)
+                    + rule.computed_safety_stock)
+        assert abs(rule.computed_reorder_point - expected) <= Decimal("0.01")
+
+    def test_fixed_keeps_the_hand_entered_safety_stock(self, reorder_rule_a):
+        assert reorder_rule_a.safety_stock_method == "fixed"
+        reorder_rule_a.lead_time_days = 10
+        reorder_rule_a.calculate(series=_flat_history())
+        assert reorder_rule_a.computed_safety_stock == Decimal("5.00")
+
+    def test_periodic_review_covers_a_longer_window_than_the_lead_time_alone(
+        self, reorder_rule_service_level_a,
+    ):
+        rule = reorder_rule_service_level_a
+        series = _lumpy_history([50, 150, 60, 200, 40, 180, 70, 120, 90, 160, 30, 210])
+        rule.calculate(series=series)
+        service_level = rule.computed_safety_stock
+        rule.safety_stock_method, rule.review_period_days = "periodic_review", 30
+        rule.calculate(series=series)
+        assert rule.computed_safety_stock > service_level
+
+    def test_avg_max_needs_no_statistics(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.safety_stock_method = "avg_max"
+        rule.calculate(series=_flat_history())
+        # Flat demand: max_daily == avg_daily, so safety = avg x (L + sigma_L) - avg x L.
+        expected = ((Decimal("100") / PER_DAY) * rule.lead_time_variability_days)
+        assert abs(rule.computed_safety_stock - expected) <= Decimal("0.01")
+
+    def test_avg_max_on_an_empty_series_is_zero(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.safety_stock_method = "avg_max"
+        rule.calculate(series=[])
+        assert rule.computed_safety_stock == Decimal("0.00")
+
+    def test_forecast_error_sizes_the_buffer_from_the_measured_error(
+        self, reorder_rule_service_level_a, forecast_with_periods_a,
+    ):
+        from apps.scm.models.DemandPlanning import _forecasting as fx
+        rule = reorder_rule_service_level_a
+        rule.safety_stock_method = "forecast_error"
+        rule.demand_forecast = forecast_with_periods_a
+        rule.calculate(series=_flat_history(), forecast_error_pct=Decimal("30"))
+        avg = Decimal("100") / PER_DAY
+        expected = (fx.z_for_service_level(Decimal("95")) * avg * Decimal("0.30")
+                    * Decimal(rule.lead_time_days).sqrt())
+        assert abs(rule.computed_safety_stock - expected) <= Decimal("0.01")
+
+    def test_forecast_error_without_a_linked_forecast_falls_back_to_service_level(
+        self, reorder_rule_service_level_a,
+    ):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        service_level = rule.computed_safety_stock
+        rule.safety_stock_method = "forecast_error"  # no demand_forecast attached
+        rule.calculate(series=_flat_history())
+        assert rule.computed_safety_stock == service_level
+
+    def test_forecast_error_falls_back_when_the_forecast_has_no_measurable_error(
+        self, reorder_rule_service_level_a, forecast_with_periods_a,
+    ):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        service_level = rule.computed_safety_stock
+        rule.safety_stock_method = "forecast_error"
+        rule.demand_forecast = forecast_with_periods_a  # nothing elapsed -> WMAPE is None
+        rule.calculate(series=_flat_history())
+        assert rule.computed_safety_stock == service_level
+
+    def test_a_seasonal_profile_scales_the_buffer(self, tenant_a, item_a,
+                                                  reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        plain = rule.computed_safety_stock
+        rule.seasonality_profile = _flat_profile(tenant_a, item_a, "2.0000")
+        rule.calculate(series=_flat_history())
+        assert rule.computed_safety_stock == (plain * Decimal("2")).quantize(Decimal("0.01"))
+
+    def test_an_inactive_seasonal_profile_does_not_scale(self, tenant_a, item_a,
+                                                          reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        plain = rule.computed_safety_stock
+        rule.seasonality_profile = _flat_profile(tenant_a, item_a, "2.0000", is_active=False)
+        rule.calculate(series=_flat_history())
+        assert rule.computed_safety_stock == plain
+
+    def test_xyz_class_reads_the_coefficient_of_variation(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        assert rule.xyz_class == "X"  # perfectly steady
+        rule.calculate(series=_lumpy_history([0, 0, 0, 500, 0, 0, 0, 600, 0, 0, 0, 400]))
+        assert rule.xyz_class == "Z"  # erratic
+
+    def test_xyz_class_is_blank_without_demand(self, reorder_rule_service_level_a):
+        reorder_rule_service_level_a.calculate(series=_flat_history(qty="0"))
+        assert reorder_rule_service_level_a.xyz_class == ""
+
+    def test_a_negative_result_is_floored_at_zero(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.safety_stock_method = "avg_max"
+        rule.lead_time_days, rule.lead_time_variability_days = 30, Decimal("0")
+        rule.calculate(series=_lumpy_history([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]))
+        assert rule.computed_safety_stock >= Decimal("0")
+
+    def test_demand_history_passes_an_injected_series_straight_through(self,
+                                                                       reorder_rule_service_level_a):
+        series = _flat_history()
+        assert reorder_rule_service_level_a.demand_history(series) is series
+
+    def test_demand_history_derives_from_the_live_orders_when_none_is_injected(
+        self, reorder_rule_service_level_a, demand_history_a,
+    ):
+        rows = reorder_rule_service_level_a.demand_history()
+        assert sum((q for _, q in rows), Decimal("0")) > Decimal("0")
+
+
+class TestReorderRuleApplyComputed:
+    def test_apply_computed_is_the_only_promoter(self, reorder_rule_service_level_a):
+        rule = reorder_rule_service_level_a
+        rule.calculate(series=_flat_history())
+        rule.save()
+        computed_safety, computed_point = rule.computed_safety_stock, rule.computed_reorder_point
+        assert rule.safety_stock == Decimal("5.00")  # calculate() alone changed nothing live
+        rule.apply_computed()
+        rule.refresh_from_db()
+        assert rule.safety_stock == computed_safety
+        assert rule.reorder_point == computed_point
+
+    def test_apply_computed_returns_the_before_after_diff_for_the_audit_log(
+        self, reorder_rule_service_level_a,
+    ):
+        rule = reorder_rule_service_level_a
+        rule.refresh_from_db()
+        before = str(rule.safety_stock)
+        rule.calculate(series=_flat_history())
+        rule.save()
+        changes = rule.apply_computed()
+        assert changes["safety_stock"][0] == before
+        assert changes["safety_stock"][1] == str(rule.computed_safety_stock)
+        assert set(changes) == {"safety_stock", "reorder_point"}
+
+    def test_safety_stock_variance_is_computed_minus_live(self, reorder_rule_a):
+        reorder_rule_a.computed_safety_stock = Decimal("20.00")
+        assert reorder_rule_a.safety_stock_variance == Decimal("15.00")
+        assert reorder_rule_a.safety_stock_variance_pct == Decimal("300")
+
+    def test_variance_pct_is_none_when_there_is_nothing_to_compare_against(self, reorder_rule_b):
+        reorder_rule_b.computed_safety_stock = Decimal("20.00")
+        assert reorder_rule_b.safety_stock_variance_pct is None
+
+
+class TestAssignAbcClasses:
+    def _rule(self, tenant, location, sku, revenue, customer):
+        from apps.scm.models import Item, ReorderRule, SalesOrder, SalesOrderLine
+        item = Item.objects.create(tenant=tenant, sku=sku, name=sku)
+        if revenue:
+            order = SalesOrder.objects.create(tenant=tenant, customer=customer,
+                                              order_date=datetime.date(2026, 1, 5),
+                                              status="submitted")
+            SalesOrderLine.objects.create(sales_order=order, item=item,
+                                          quantity_ordered=Decimal("1"),
+                                          unit_price=Decimal(revenue))
+        return ReorderRule.objects.create(tenant=tenant, item=item, location=location)
+
+    def test_the_top_earner_lands_in_a(self, tenant_a, location_a, customer_a):
+        from apps.scm.models import ReorderRule
+        top = self._rule(tenant_a, location_a, "TOP", "1000", customer_a)
+        middle = self._rule(tenant_a, location_a, "MID", "100", customer_a)
+        tail = self._rule(tenant_a, location_a, "TAIL", "10", customer_a)
+        classes = ReorderRule.assign_abc_classes(tenant_a, [tail, middle, top])
+        assert classes[top.pk] == "A"
+        assert classes[middle.pk] == "B"
+        assert classes[tail.pk] == "C"
+
+    def test_a_single_rule_is_a_not_c(self, tenant_a, location_a, customer_a):
+        """The band is decided by where the item STARTS on the Pareto curve, not where it ends."""
+        from apps.scm.models import ReorderRule
+        only = self._rule(tenant_a, location_a, "ONLY", "5000", customer_a)
+        assert ReorderRule.assign_abc_classes(tenant_a, [only])[only.pk] == "A"
+
+    def test_no_revenue_leaves_every_class_blank(self, tenant_a, location_a, customer_a):
+        from apps.scm.models import ReorderRule
+        rule = self._rule(tenant_a, location_a, "NOSALES", None, customer_a)
+        assert ReorderRule.assign_abc_classes(tenant_a, [rule])[rule.pk] == ""
+
+    def test_draft_and_cancelled_orders_do_not_count_as_revenue(self, tenant_a, location_a,
+                                                                 customer_a):
+        from apps.scm.models import Item, ReorderRule, SalesOrder, SalesOrderLine
+        item = Item.objects.create(tenant=tenant_a, sku="DRAFTONLY", name="Draft only")
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=datetime.date(2026, 1, 5), status="draft")
+        SalesOrderLine.objects.create(sales_order=order, item=item, quantity_ordered=Decimal("1"),
+                                      unit_price=Decimal("9999"))
+        rule = ReorderRule.objects.create(tenant=tenant_a, item=item, location=location_a)
+        assert ReorderRule.assign_abc_classes(tenant_a, [rule])[rule.pk] == ""
+
+    def test_an_empty_rule_set_returns_an_empty_map(self, tenant_a):
+        from apps.scm.models import ReorderRule
+        assert ReorderRule.assign_abc_classes(tenant_a, []) == {}
+
+    def test_the_ranking_runs_in_one_grouped_query(self, tenant_a, location_a, customer_a,
+                                                   django_assert_max_num_queries):
+        from apps.scm.models import ReorderRule
+        rules = [self._rule(tenant_a, location_a, f"SKU-{i}", str(100 - i), customer_a)
+                 for i in range(6)]
+        with django_assert_max_num_queries(1):
+            ReorderRule.assign_abc_classes(tenant_a, rules)
+
+
+# ================================================================ Bucket-aware year-back alignment
+class TestSamePeriodLastYear:
+    def test_a_weekly_bucket_steps_back_52_whole_weeks(self):
+        from apps.scm.models.DemandPlanning.DemandForecasts import _same_period_last_year
+        monday = datetime.date(2026, 5, 18)
+        back = _same_period_last_year(monday, "week")
+        assert back == monday - datetime.timedelta(days=364)
+        assert back.weekday() == 0  # still a Monday, so the grid stays aligned
+
+    def test_a_daily_bucket_steps_back_365_days(self):
+        from apps.scm.models.DemandPlanning.DemandForecasts import _same_period_last_year
+        assert _same_period_last_year(datetime.date(2026, 5, 18), "day") == datetime.date(2025, 5, 18)
+
+    def test_a_monthly_bucket_keeps_the_calendar_day(self):
+        from apps.scm.models.DemandPlanning.DemandForecasts import _same_period_last_year
+        assert _same_period_last_year(datetime.date(2026, 5, 1), "month") == datetime.date(2025, 5, 1)
+
+    def test_a_leap_day_falls_back_to_the_28th(self):
+        from apps.scm.models.DemandPlanning.DemandForecasts import _same_period_last_year
+        assert _same_period_last_year(datetime.date(2024, 2, 29), "month") == datetime.date(2023, 2, 28)
+
+    def test_months_before_never_underflows_below_year_one(self):
+        from apps.scm.models.DemandPlanning.DemandForecasts import _months_before
+        assert _months_before(datetime.date(2026, 3, 15), 2) == datetime.date(2026, 1, 1)
+        assert _months_before(datetime.date(2026, 3, 15), 15) == datetime.date(2024, 12, 1)
+
+
+class TestWeeklyBucketForecast:
+    def test_a_weekly_horizon_builds_weekly_buckets(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.models.DemandPlanning._history import bucket_start
+        start = bucket_start(timezone.localdate(), "week")
+        forecast = DemandForecast.objects.create(
+            tenant=tenant_a, name="Weekly plan", item=item_a, bucket="week", horizon_start=start,
+            horizon_end=start + datetime.timedelta(days=27))
+        assert forecast.generate_periods() == 4
+        rows = list(forecast.periods.all())
+        assert rows[0].period_start == start
+        assert rows[0].period_end == start + datetime.timedelta(days=6)
+        assert rows[1].period_start == start + datetime.timedelta(days=7)
+        assert rows[0].period_label.startswith("W")
+
+
+class TestDemandSeriesLocationScope:
+    def test_stock_issues_are_narrowed_to_one_location(self, tenant_a, item_a, location_a,
+                                                       location_a2):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        from apps.scm.models.DemandPlanning._history import demand_series
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        when = add_months(this_month, -1)
+        for location, qty in ((location_a, "-10"), (location_a2, "-40")):
+            StockMove.objects.create(
+                tenant=tenant_a, item=item_a, location=location, quantity=Decimal(qty),
+                move_type="issue",
+                moved_at=timezone.make_aware(datetime.datetime.combine(
+                    when + datetime.timedelta(days=4), datetime.time(10, 0))))
+        start, end = add_months(this_month, -12), this_month - datetime.timedelta(days=1)
+        network = dict(demand_series(tenant_a.pk, item=item_a, source="stock_issues", start=start,
+                                     end=end, bucket="month"))
+        one_site = dict(demand_series(tenant_a.pk, item=item_a, location=location_a,
+                                      source="stock_issues", start=start, end=end, bucket="month"))
+        assert network[when] == Decimal("50")
+        assert one_site[when] == Decimal("10")
