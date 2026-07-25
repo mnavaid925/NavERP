@@ -1767,22 +1767,45 @@ class TestReorderRuleCRUD:
         resp = client_a.get(reverse("scm:reorderrule_list"))
         assert reorder_rule_b not in resp.context["object_list"]
 
+    #: The five 4.7 safety-stock POLICY inputs. They carry model defaults but are NOT `blank=True`,
+    #: so ReorderRuleForm renders them required — a POST that omits them is rejected. The browser
+    #: form always posts them (the template renders every field with its initial), so this is the
+    #: real wire format for this page since 4.7.
+    POLICY_FIELDS = {"safety_stock_method": "fixed", "service_level_pct": "95",
+                     "lead_time_days": "0", "lead_time_variability_days": "0",
+                     "review_period_days": "0", "seasonality_profile": "", "demand_forecast": ""}
+
     def test_create_saves_with_request_tenant(self, client_a, tenant_a, item_a, location_a2):
         from apps.scm.models import ReorderRule
         data = {"item": str(item_a.pk), "location": str(location_a2.pk), "reorder_point": "5",
-                "safety_stock": "2", "reorder_quantity": "10", "is_active": "on"}
+                "safety_stock": "2", "reorder_quantity": "10", "is_active": "on",
+                **self.POLICY_FIELDS}
         resp = client_a.post(reverse("scm:reorderrule_create"), data)
         assert resp.status_code == 302
         rule = ReorderRule.objects.get(item=item_a, location=location_a2)
         assert rule.tenant_id == tenant_a.pk
+        assert rule.safety_stock_method == "fixed"  # 4.7 default reproduces pre-4.7 behaviour
 
     def test_edit_updates_fields(self, client_a, reorder_rule_a, item_a, location_a):
         data = {"item": str(item_a.pk), "location": str(location_a.pk), "reorder_point": "99",
-                "safety_stock": "5", "reorder_quantity": "20", "is_active": "on"}
+                "safety_stock": "5", "reorder_quantity": "20", "is_active": "on",
+                **self.POLICY_FIELDS}
         resp = client_a.post(reverse("scm:reorderrule_edit", args=[reorder_rule_a.pk]), data)
         assert resp.status_code == 302
         reorder_rule_a.refresh_from_db()
         assert reorder_rule_a.reorder_point == Decimal("99.00")
+
+    def test_a_post_omitting_the_4_7_policy_fields_is_rejected_not_500ed(self, client_a, item_a,
+                                                                         location_a2):
+        """Regression guard for the stale-payload break above: the refusal must be a re-rendered
+        form with field errors, never an exception."""
+        from apps.scm.models import ReorderRule
+        data = {"item": str(item_a.pk), "location": str(location_a2.pk), "reorder_point": "5",
+                "safety_stock": "2", "reorder_quantity": "10", "is_active": "on"}
+        resp = client_a.post(reverse("scm:reorderrule_create"), data)
+        assert resp.status_code == 200
+        assert "safety_stock_method" in resp.context["form"].errors
+        assert not ReorderRule.objects.filter(item=item_a, location=location_a2).exists()
 
     def test_delete_removes_it(self, client_a, reorder_rule_a):
         pk = reorder_rule_a.pk
@@ -5292,3 +5315,1535 @@ class TestTMSCreateWithoutTenantWorkspace:
         resp = c.get(reverse("scm:freightinvoice_create"))
         assert resp.status_code == 302
         assert FreightInvoice.objects.count() == 0
+
+
+# ================================================================================================
+# SCM 4.7 Demand Planning & Forecasting
+# ================================================================================================
+
+def _forecast_payload(item, start, end, **overrides):
+    data = {
+        "name": "New widget plan", "item": str(item.pk), "location": "", "customer": "",
+        "demand_source": "sales_orders", "bucket": "month", "horizon_start": start.isoformat(),
+        "horizon_end": end.isoformat(), "history_months": "24", "method": "moving_average",
+        "method_parameter": "3", "seasonality_profile": "", "reference_item": "",
+        "reference_scale_pct": "100", "exclude_outliers": "", "outlier_threshold_sigma": "3",
+        "currency": "", "scenario": "baseline", "notes": "",
+        **formset_data("periods", []),
+    }
+    data.update(overrides)
+    return data
+
+
+def _profile_payload(**overrides):
+    data = {
+        "name": "New curve", "profile_type": "seasonal", "bucket": "month", "scope": "global",
+        "item": "", "category": "", "location": "", "event_start": "", "event_end": "",
+        "uplift_pct": "0", "cannibalization_pct": "0", "cannibalized_category": "",
+        "promotion_mechanic": "", "derived_from_years": "2", "is_active": "on", "notes": "",
+        **formset_data("indices", []),
+    }
+    data.update(overrides)
+    return data
+
+
+def _signal_payload(**overrides):
+    from django.utils import timezone
+    data = {
+        "signal_type": "pos_sell_through", "source": "retailer_pos", "source_reference": "",
+        "item": "", "category": "", "location": "", "customer": "",
+        "observed_at": timezone.now().strftime("%Y-%m-%dT%H:%M"), "effective_from": "",
+        "effective_to": "", "horizon_days": "28", "signal_value": "0", "baseline_value": "0",
+        "impact_direction": "increase", "impact_pct": "0", "impact_quantity": "0",
+        "confidence": "medium", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _adjustment_payload(forecast, **overrides):
+    data = {
+        "forecast": str(forecast.pk), "period": "", "contributor_function": "sales",
+        "org_unit": "", "adjustment_type": "absolute", "proposed_quantity": "140",
+        "adjustment_pct": "0", "reason_code": "promotion", "rationale": "Spring campaign.",
+        "confidence": "medium",
+    }
+    data.update(overrides)
+    return data
+
+
+# ================================================================ SeasonalityProfile CRUD
+class TestSeasonalityProfileCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, seasonality_profile_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_list"))
+        assert resp.status_code == 200
+        assert seasonality_profile_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, seasonality_profile_a,
+                                             seasonality_profile_b):
+        resp = client_a.get(reverse("scm:seasonalityprofile_list"))
+        assert seasonality_profile_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, seasonality_profile_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_list"))
+        assert "scm/demandplanning/seasonalityprofile/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "type_choices", "scope_choices",
+                    "bucket_choices", "items", "categories", "locations"):
+            assert key in resp.context, key
+
+    def test_list_search_by_name(self, client_a, seasonality_profile_a):
+        found = client_a.get(reverse("scm:seasonalityprofile_list"), {"q": "Widget seasonality"})
+        missed = client_a.get(reverse("scm:seasonalityprofile_list"), {"q": "no such curve"})
+        assert seasonality_profile_a in found.context["object_list"]
+        assert seasonality_profile_a not in missed.context["object_list"]
+
+    def test_list_filter_by_profile_type(self, client_a, seasonality_profile_a,
+                                         promotion_profile_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_list"), {"profile_type": "promotion"})
+        rows = list(resp.context["object_list"])
+        assert promotion_profile_a in rows
+        assert seasonality_profile_a not in rows
+
+    def test_list_filter_by_item(self, client_a, seasonality_profile_a, item_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_list"), {"item": str(item_a.pk)})
+        assert seasonality_profile_a in resp.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        resp = client_a.post(reverse("scm:seasonalityprofile_create"), _profile_payload())
+        assert resp.status_code == 302
+        profile = SeasonalityProfile.objects.get(name="New curve")
+        assert profile.tenant_id == tenant_a.pk
+        assert profile.number == "SEA-00001"
+
+    def test_create_saves_the_index_rows_in_the_same_transaction(self, client_a, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        data = _profile_payload(**formset_data("indices", [
+            {"id": "", "period_number": "1", "period_label": "Jan", "index_factor": "0.8"},
+            {"id": "", "period_number": "2", "period_label": "Feb", "index_factor": "1.2"},
+        ]))
+        client_a.post(reverse("scm:seasonalityprofile_create"), data)
+        profile = SeasonalityProfile.objects.get(name="New curve")
+        assert profile.indices.count() == 2
+
+    def test_create_rejects_an_invalid_payload_without_saving(self, client_a, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        resp = client_a.post(reverse("scm:seasonalityprofile_create"),
+                             _profile_payload(profile_type="promotion", scope="global"))
+        assert resp.status_code == 200
+        assert not SeasonalityProfile.objects.filter(tenant=tenant_a).exists()
+
+    def test_detail_returns_200_with_the_index_rows(self, client_a, seasonality_profile_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_detail",
+                                    args=[seasonality_profile_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == seasonality_profile_a
+        assert len(resp.context["indices"]) == 12
+        assert resp.context["peak_factor"] == Decimal("1.5000")
+
+    def test_detail_peak_factor_never_divides_by_zero(self, client_a, category_profile_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_detail", args=[category_profile_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["peak_factor"] == Decimal("1")
+
+    def test_edit_updates_the_row(self, client_a, seasonality_profile_a):
+        resp = client_a.post(reverse("scm:seasonalityprofile_edit", args=[seasonality_profile_a.pk]),
+                             _profile_payload(name="Renamed curve", scope="item",
+                                              item=str(seasonality_profile_a.item_id)))
+        assert resp.status_code == 302
+        seasonality_profile_a.refresh_from_db()
+        assert seasonality_profile_a.name == "Renamed curve"
+
+    def test_delete_is_post_only(self, client_a, seasonality_profile_a):
+        from apps.scm.models import SeasonalityProfile
+        assert client_a.get(reverse("scm:seasonalityprofile_delete",
+                                    args=[seasonality_profile_a.pk])).status_code == 405
+        assert SeasonalityProfile.objects.filter(pk=seasonality_profile_a.pk).exists()
+
+    def test_delete_removes_the_row_and_its_indices(self, client_a, seasonality_profile_a):
+        from apps.scm.models import SeasonalityIndex, SeasonalityProfile
+        resp = client_a.post(reverse("scm:seasonalityprofile_delete",
+                                     args=[seasonality_profile_a.pk]))
+        assert resp.status_code == 302
+        assert not SeasonalityProfile.objects.filter(pk=seasonality_profile_a.pk).exists()
+        assert not SeasonalityIndex.objects.filter(profile_id=seasonality_profile_a.pk).exists()
+
+
+class TestSeasonalityProfileDerive:
+    def test_derive_fills_the_index_rows_from_history(self, client_a, category_profile_a,
+                                                      demand_history_a):
+        resp = client_a.post(reverse("scm:seasonalityprofile_derive",
+                                     args=[category_profile_a.pk]))
+        assert resp.status_code == 302
+        category_profile_a.refresh_from_db()
+        assert category_profile_a.indices.exists()
+        assert category_profile_a.last_derived_at is not None
+
+    def test_a_flat_history_derives_a_neutral_curve(self, client_a, tenant_a, category_a,
+                                                    customer_a, category_profile_a):
+        """Each factor is the period's mean / the overall mean, so a flat history MUST give 1.0000.
+
+        The history has to cover the whole derive window (derived_from_years x 365 days back to
+        today) — a partly-filled window is a genuinely uneven curve, not a flat one.
+        """
+        from django.utils import timezone
+        from apps.scm.models import Item, SalesOrder, SalesOrderLine
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        item = Item.objects.create(tenant=tenant_a, sku="FLAT-1", name="Flat seller",
+                                   category=category_a)
+        for back in range(25, -1, -1):
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=add_months(this_month, -back),
+                                              status="submitted")
+            SalesOrderLine.objects.create(sales_order=order, item=item,
+                                          quantity_ordered=Decimal("100"),
+                                          unit_price=Decimal("1"))
+        client_a.post(reverse("scm:seasonalityprofile_derive", args=[category_profile_a.pk]))
+        factors = {row.index_factor for row in category_profile_a.indices.all()}
+        assert factors == {Decimal("1.0000")}
+
+    def test_a_seasonal_history_derives_a_peak_above_neutral(self, client_a, tenant_a, category_a,
+                                                             customer_a, category_profile_a):
+        from django.utils import timezone
+        from apps.scm.models import Item, SalesOrder, SalesOrderLine
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        item = Item.objects.create(tenant=tenant_a, sku="PEAKY-1", name="Peaky seller",
+                                   category=category_a)
+        peak_month = add_months(this_month, -3).month
+        for back in range(25, -1, -1):
+            when = add_months(this_month, -back)
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=when, status="submitted")
+            SalesOrderLine.objects.create(
+                sales_order=order, item=item,
+                quantity_ordered=Decimal("300") if when.month == peak_month else Decimal("100"),
+                unit_price=Decimal("1"))
+        client_a.post(reverse("scm:seasonalityprofile_derive", args=[category_profile_a.pk]))
+        peak = category_profile_a.indices.get(period_number=peak_month)
+        trough = category_profile_a.indices.exclude(period_number=peak_month).first()
+        assert peak.index_factor > Decimal("1")
+        assert trough.index_factor < peak.index_factor
+
+    def test_derive_records_the_sample_size(self, client_a, category_profile_a, demand_history_a):
+        client_a.post(reverse("scm:seasonalityprofile_derive", args=[category_profile_a.pk]))
+        assert all(row.sample_size >= 1 for row in category_profile_a.indices.all())
+
+    def test_derive_is_idempotent_and_updates_in_place(self, client_a, category_profile_a,
+                                                       demand_history_a):
+        client_a.post(reverse("scm:seasonalityprofile_derive", args=[category_profile_a.pk]))
+        first = set(category_profile_a.indices.values_list("pk", flat=True))
+        client_a.post(reverse("scm:seasonalityprofile_derive", args=[category_profile_a.pk]))
+        assert set(category_profile_a.indices.values_list("pk", flat=True)) == first
+
+    def test_derive_refuses_an_item_with_no_orders_at_all(self, client_a, seasonality_profile_a):
+        """The item-scoped series is DENSE, so an item that never sold yields zero-filled buckets
+        rather than an empty list — the zero-total guard is what refuses here."""
+        resp = client_a.post(reverse("scm:seasonalityprofile_derive",
+                                     args=[seasonality_profile_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("No sales history" in str(m) for m in resp.context["messages"])
+        assert not seasonality_profile_a.indices.filter(sample_size__gt=0).exists()
+
+    def test_derive_refuses_on_a_location_scoped_profile(self, client_a, tenant_a, location_a,
+                                                         demand_history_a):
+        from apps.scm.models import SeasonalityProfile
+        profile = SeasonalityProfile.objects.create(tenant=tenant_a, name="Site curve",
+                                                    scope="location", location=location_a)
+        resp = client_a.post(reverse("scm:seasonalityprofile_derive", args=[profile.pk]),
+                             follow=True)
+        assert not profile.indices.exists()
+        assert any("Nothing to derive from" in str(m) for m in resp.context["messages"])
+
+    def test_derive_refuses_when_the_history_totals_zero(self, client_a, tenant_a, category_a,
+                                                        item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine, SeasonalityProfile
+        from apps.scm.tests._helpers import add_months, month_start
+        order = SalesOrder.objects.create(
+            tenant=tenant_a, customer=customer_a, status="submitted",
+            order_date=add_months(month_start(timezone.localdate()), -2))
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("0"), unit_price=Decimal("1"))
+        profile = SeasonalityProfile.objects.create(tenant=tenant_a, name="Zero curve",
+                                                    scope="category", category=category_a)
+        resp = client_a.post(reverse("scm:seasonalityprofile_derive", args=[profile.pk]),
+                             follow=True)
+        assert any("No sales history" in str(m) for m in resp.context["messages"])
+
+    def test_derive_is_post_only(self, client_a, category_profile_a):
+        assert client_a.get(reverse("scm:seasonalityprofile_derive",
+                                    args=[category_profile_a.pk])).status_code == 405
+
+
+# ================================================================ DemandForecast CRUD
+class TestDemandForecastCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, demand_forecast_a):
+        resp = client_a.get(reverse("scm:demandforecast_list"))
+        assert resp.status_code == 200
+        assert demand_forecast_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, demand_forecast_a, demand_forecast_b):
+        resp = client_a.get(reverse("scm:demandforecast_list"))
+        assert demand_forecast_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, demand_forecast_a):
+        resp = client_a.get(reverse("scm:demandforecast_list"))
+        assert "scm/demandplanning/demandforecast/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "method_choices",
+                    "bucket_choices", "scenario_choices", "items", "locations"):
+            assert key in resp.context, key
+
+    def test_list_search_by_number(self, client_a, demand_forecast_a):
+        resp = client_a.get(reverse("scm:demandforecast_list"), {"q": demand_forecast_a.number})
+        assert demand_forecast_a in resp.context["object_list"]
+
+    def test_list_filter_by_status(self, client_a, tenant_a, forecast_with_periods_a):
+        from apps.scm.models import DemandForecast
+        draft = DemandForecast.objects.create(
+            tenant=tenant_a, name="Still a draft", item=forecast_with_periods_a.item,
+            horizon_start=forecast_with_periods_a.horizon_start,
+            horizon_end=forecast_with_periods_a.horizon_end)
+        resp = client_a.get(reverse("scm:demandforecast_list"), {"status": "statistical"})
+        rows = list(resp.context["object_list"])
+        assert forecast_with_periods_a in rows
+        assert draft not in rows
+
+    def test_list_filter_by_item(self, client_a, demand_forecast_a, item_a):
+        resp = client_a.get(reverse("scm:demandforecast_list"), {"item": str(item_a.pk)})
+        assert demand_forecast_a in resp.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        end = add_months(start, 3) - datetime.timedelta(days=1)
+        resp = client_a.post(reverse("scm:demandforecast_create"),
+                             _forecast_payload(item_a, start, end))
+        assert resp.status_code == 302
+        forecast = DemandForecast.objects.get(name="New widget plan")
+        assert forecast.tenant_id == tenant_a.pk
+        assert forecast.number == "DF-00001"
+        assert forecast.status == "draft"  # the grid is built by Generate, not by Save
+
+    def test_create_ignores_a_status_posted_in_the_body(self, client_a, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        end = add_months(start, 3) - datetime.timedelta(days=1)
+        client_a.post(reverse("scm:demandforecast_create"),
+                      _forecast_payload(item_a, start, end, status="approved",
+                                        number="DF-99999", selected_method="holt_winters",
+                                        revision="9"))
+        forecast = DemandForecast.objects.get(name="New widget plan")
+        assert forecast.status == "draft"
+        assert forecast.number == "DF-00001"
+        assert forecast.selected_method == ""
+        assert forecast.revision == 1
+
+    def test_create_rejects_an_over_long_horizon(self, client_a, tenant_a, item_a):
+        from apps.scm.models import DemandForecast
+        resp = client_a.post(reverse("scm:demandforecast_create"),
+                             _forecast_payload(item_a, datetime.date(2026, 1, 1),
+                                               datetime.date(2030, 1, 1), bucket="day"))
+        assert resp.status_code == 200
+        assert not DemandForecast.objects.filter(tenant=tenant_a).exists()
+
+    def test_detail_returns_200_with_the_waterfall_context(self, client_a, forecast_with_periods_a):
+        resp = client_a.get(reverse("scm:demandforecast_detail",
+                                    args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/demandforecast/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "rows", "accuracy", "total_quantity", "total_value", "generate_form",
+                    "signals", "adjustments"):
+            assert key in resp.context, key
+        assert len(resp.context["rows"]) == 3
+        assert resp.context["total_quantity"] == Decimal("300.0000")
+
+    def test_edit_updates_an_open_forecast(self, client_a, demand_forecast_a):
+        from django.utils import timezone
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        end = add_months(start, 3) - datetime.timedelta(days=1)
+        resp = client_a.post(reverse("scm:demandforecast_edit", args=[demand_forecast_a.pk]),
+                             _forecast_payload(demand_forecast_a.item, start, end,
+                                               name="Renamed plan"))
+        assert resp.status_code == 302
+        demand_forecast_a.refresh_from_db()
+        assert demand_forecast_a.name == "Renamed plan"
+
+    def test_edit_is_refused_once_approved(self, client_a, approved_forecast_a):
+        resp = client_a.get(reverse("scm:demandforecast_edit", args=[approved_forecast_a.pk]),
+                            follow=True)
+        assert any("revise it" in str(m) for m in resp.context["messages"])
+
+    def test_edit_is_refused_once_archived(self, client_a, forecast_with_periods_a):
+        forecast_with_periods_a.status = "archived"
+        forecast_with_periods_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:demandforecast_edit", args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 302
+
+    def test_delete_is_post_only(self, client_a, demand_forecast_a):
+        from apps.scm.models import DemandForecast
+        assert client_a.get(reverse("scm:demandforecast_delete",
+                                    args=[demand_forecast_a.pk])).status_code == 405
+        assert DemandForecast.objects.filter(pk=demand_forecast_a.pk).exists()
+
+    def test_delete_removes_an_open_forecast(self, client_a, demand_forecast_a):
+        from apps.scm.models import DemandForecast
+        resp = client_a.post(reverse("scm:demandforecast_delete", args=[demand_forecast_a.pk]))
+        assert resp.status_code == 302
+        assert not DemandForecast.objects.filter(pk=demand_forecast_a.pk).exists()
+
+    def test_delete_is_refused_once_approved(self, client_a, approved_forecast_a):
+        from apps.scm.models import DemandForecast
+        resp = client_a.post(reverse("scm:demandforecast_delete", args=[approved_forecast_a.pk]),
+                             follow=True)
+        assert DemandForecast.objects.filter(pk=approved_forecast_a.pk).exists()
+        assert any("archive it" in str(m) for m in resp.context["messages"])
+
+
+class TestDemandForecastGenerateAction:
+    def test_generate_builds_the_grid(self, client_a, demand_forecast_a, demand_history_a):
+        resp = client_a.post(reverse("scm:demandforecast_generate", args=[demand_forecast_a.pk]))
+        assert resp.status_code == 302
+        demand_forecast_a.refresh_from_db()
+        assert demand_forecast_a.periods.count() == 3
+        assert demand_forecast_a.status == "statistical"
+
+    def test_generate_leaves_locked_periods_alone_by_default(self, client_a,
+                                                             forecast_with_periods_a,
+                                                             forecast_period_a, demand_history_a):
+        forecast_period_a.is_locked, forecast_period_a.baseline_quantity = True, Decimal("999")
+        forecast_period_a.save(update_fields=["is_locked", "baseline_quantity"])
+        client_a.post(reverse("scm:demandforecast_generate", args=[forecast_with_periods_a.pk]))
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.baseline_quantity == Decimal("999.0000")
+
+    def test_generate_can_be_asked_to_overwrite_locked_periods(self, client_a,
+                                                               forecast_with_periods_a,
+                                                               forecast_period_a,
+                                                               demand_history_a):
+        forecast_period_a.is_locked, forecast_period_a.baseline_quantity = True, Decimal("999")
+        forecast_period_a.save(update_fields=["is_locked", "baseline_quantity"])
+        client_a.post(reverse("scm:demandforecast_generate", args=[forecast_with_periods_a.pk]),
+                      {"regenerate_locked": "on"})
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.baseline_quantity == Decimal("100.0000")
+
+    def test_generate_is_refused_on_an_approved_plan(self, client_a, approved_forecast_a):
+        resp = client_a.post(reverse("scm:demandforecast_generate",
+                                     args=[approved_forecast_a.pk]), follow=True)
+        assert any("revise an approved plan" in str(m) for m in resp.context["messages"])
+
+    def test_generate_reports_an_empty_horizon_rather_than_500ing(self, client_a,
+                                                                   demand_forecast_a):
+        demand_forecast_a.horizon_end = demand_forecast_a.horizon_start - datetime.timedelta(days=1)
+        demand_forecast_a.save(update_fields=["horizon_end"])
+        resp = client_a.post(reverse("scm:demandforecast_generate", args=[demand_forecast_a.pk]),
+                             follow=True)
+        assert resp.status_code == 200
+        assert any("Nothing to generate" in str(m) for m in resp.context["messages"])
+
+    def test_generate_is_post_only(self, client_a, demand_forecast_a):
+        assert client_a.get(reverse("scm:demandforecast_generate",
+                                    args=[demand_forecast_a.pk])).status_code == 405
+
+
+class TestDemandForecastLifecycle:
+    def test_submit_for_review_moves_a_statistical_plan(self, client_a, forecast_with_periods_a):
+        resp = client_a.post(reverse("scm:demandforecast_submit_review",
+                                     args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 302
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "in_review"
+
+    def test_submit_for_review_is_refused_from_approved(self, client_a, approved_forecast_a):
+        client_a.post(reverse("scm:demandforecast_submit_review", args=[approved_forecast_a.pk]))
+        approved_forecast_a.refresh_from_db()
+        assert approved_forecast_a.status == "approved"
+
+    def test_approve_stamps_the_approver(self, client_a, admin_user, forecast_with_periods_a):
+        client_a.post(reverse("scm:demandforecast_approve", args=[forecast_with_periods_a.pk]))
+        forecast_with_periods_a.refresh_from_db()
+        assert forecast_with_periods_a.status == "approved"
+        assert forecast_with_periods_a.approved_by_id == admin_user.pk
+        assert forecast_with_periods_a.approved_at is not None
+
+    def test_approve_is_refused_from_draft(self, client_a, demand_forecast_a):
+        client_a.post(reverse("scm:demandforecast_approve", args=[demand_forecast_a.pk]))
+        demand_forecast_a.refresh_from_db()
+        assert demand_forecast_a.status == "draft"
+
+    def test_archive_retires_the_plan(self, client_a, approved_forecast_a):
+        client_a.post(reverse("scm:demandforecast_archive", args=[approved_forecast_a.pk]))
+        approved_forecast_a.refresh_from_db()
+        assert approved_forecast_a.status == "archived"
+
+    def test_archive_is_refused_on_an_already_archived_plan(self, client_a,
+                                                            forecast_with_periods_a):
+        forecast_with_periods_a.status = "archived"
+        forecast_with_periods_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:demandforecast_archive",
+                                     args=[forecast_with_periods_a.pk]), follow=True)
+        assert any("can't be archived" in str(m) for m in resp.context["messages"])
+
+    def test_revise_clones_the_plan_and_archives_the_original(self, client_a,
+                                                              approved_forecast_a):
+        from apps.scm.models import DemandForecast
+        resp = client_a.post(reverse("scm:demandforecast_revise", args=[approved_forecast_a.pk]))
+        assert resp.status_code == 302
+        approved_forecast_a.refresh_from_db()
+        assert approved_forecast_a.status == "archived"
+        revision = DemandForecast.objects.get(supersedes=approved_forecast_a)
+        assert revision.revision == 2
+        assert revision.status == "statistical"
+        assert revision.approved_by_id is None
+        assert revision.number != approved_forecast_a.number
+
+    def test_revise_copies_the_period_grid(self, client_a, approved_forecast_a):
+        from apps.scm.models import DemandForecast
+        client_a.post(reverse("scm:demandforecast_revise", args=[approved_forecast_a.pk]))
+        revision = DemandForecast.objects.get(supersedes=approved_forecast_a)
+        assert revision.periods.count() == approved_forecast_a.periods.count()
+        assert revision.periods.first().final_quantity == Decimal("100.0000")
+
+    def test_revise_is_refused_on_an_archived_plan(self, client_a, forecast_with_periods_a):
+        from apps.scm.models import DemandForecast
+        forecast_with_periods_a.status = "archived"
+        forecast_with_periods_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:demandforecast_revise",
+                                     args=[forecast_with_periods_a.pk]), follow=True)
+        assert any("already archived" in str(m) for m in resp.context["messages"])
+        assert not DemandForecast.objects.filter(supersedes=forecast_with_periods_a).exists()
+
+    def test_the_lifecycle_actions_are_post_only(self, client_a, forecast_with_periods_a):
+        for name in ("demandforecast_submit_review", "demandforecast_approve",
+                     "demandforecast_archive", "demandforecast_revise"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[forecast_with_periods_a.pk])).status_code == 405, name
+
+
+# ================================================================ DemandSignal CRUD + triage
+class TestDemandSignalCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, demand_signal_a):
+        resp = client_a.get(reverse("scm:demandsignal_list"))
+        assert resp.status_code == 200
+        assert demand_signal_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, demand_signal_a, demand_signal_b):
+        resp = client_a.get(reverse("scm:demandsignal_list"))
+        assert demand_signal_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, demand_signal_a):
+        resp = client_a.get(reverse("scm:demandsignal_list"))
+        assert "scm/demandplanning/demandsignal/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "type_choices",
+                    "source_choices", "direction_choices", "items", "locations"):
+            assert key in resp.context, key
+
+    def test_list_filter_by_signal_type(self, client_a, tenant_a, demand_signal_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        weather = DemandSignal.objects.create(tenant=tenant_a, signal_type="weather",
+                                              observed_at=timezone.now())
+        resp = client_a.get(reverse("scm:demandsignal_list"), {"signal_type": "weather"})
+        rows = list(resp.context["object_list"])
+        assert weather in rows
+        assert demand_signal_a not in rows
+
+    def test_list_search_by_source_reference(self, client_a, demand_signal_a):
+        demand_signal_a.source_reference = "POS-FEED-42"
+        demand_signal_a.save(update_fields=["source_reference"])
+        resp = client_a.get(reverse("scm:demandsignal_list"), {"q": "POS-FEED-42"})
+        assert demand_signal_a in resp.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import DemandSignal
+        resp = client_a.post(reverse("scm:demandsignal_create"),
+                             _signal_payload(source_reference="POS-1"))
+        assert resp.status_code == 302
+        signal = DemandSignal.objects.get(source_reference="POS-1")
+        assert signal.tenant_id == tenant_a.pk
+        assert signal.status == "new"
+
+    def test_create_ignores_a_status_posted_in_the_body(self, client_a, tenant_a):
+        from apps.scm.models import DemandSignal
+        client_a.post(reverse("scm:demandsignal_create"),
+                      _signal_payload(source_reference="POS-2", status="applied",
+                                      number="DS-99999"))
+        signal = DemandSignal.objects.get(source_reference="POS-2")
+        assert signal.status == "new"
+        assert signal.number == "DS-00001"
+
+    def test_detail_returns_200_with_the_window_and_action_forms(self, client_a, demand_signal_a):
+        resp = client_a.get(reverse("scm:demandsignal_detail", args=[demand_signal_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/demandsignal/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "window_from", "window_to", "apply_form", "dismiss_form"):
+            assert key in resp.context, key
+
+    def test_edit_updates_an_open_signal(self, client_a, demand_signal_a):
+        resp = client_a.post(reverse("scm:demandsignal_edit", args=[demand_signal_a.pk]),
+                             _signal_payload(item=str(demand_signal_a.item_id),
+                                             source_reference="edited",
+                                             effective_from=demand_signal_a.effective_from.isoformat(),
+                                             effective_to=demand_signal_a.effective_to.isoformat()))
+        assert resp.status_code == 302
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.source_reference == "edited"
+
+    def test_edit_is_refused_once_the_signal_is_closed(self, client_a, demand_signal_a):
+        from apps.scm.models import DemandSignal
+        DemandSignal.objects.filter(pk=demand_signal_a.pk).update(status="dismissed")
+        resp = client_a.get(reverse("scm:demandsignal_edit", args=[demand_signal_a.pk]),
+                            follow=True)
+        assert any("closed observation" in str(m) for m in resp.context["messages"])
+
+    def test_delete_is_post_only(self, client_a, demand_signal_a):
+        from apps.scm.models import DemandSignal
+        assert client_a.get(reverse("scm:demandsignal_delete",
+                                    args=[demand_signal_a.pk])).status_code == 405
+        assert DemandSignal.objects.filter(pk=demand_signal_a.pk).exists()
+
+    def test_delete_removes_an_open_signal(self, client_a, demand_signal_a):
+        from apps.scm.models import DemandSignal
+        client_a.post(reverse("scm:demandsignal_delete", args=[demand_signal_a.pk]))
+        assert not DemandSignal.objects.filter(pk=demand_signal_a.pk).exists()
+
+    def test_delete_is_refused_on_an_applied_signal(self, client_a, demand_signal_a,
+                                                    forecast_with_periods_a):
+        from apps.scm.models import DemandSignal
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        resp = client_a.post(reverse("scm:demandsignal_delete", args=[demand_signal_a.pk]),
+                             follow=True)
+        assert DemandSignal.objects.filter(pk=demand_signal_a.pk).exists()
+        assert any("part of the record" in str(m) for m in resp.context["messages"])
+
+
+class TestDemandSignalTriageActions:
+    def test_review_moves_a_new_signal_under_review(self, client_a, admin_user, demand_signal_a):
+        resp = client_a.post(reverse("scm:demandsignal_review", args=[demand_signal_a.pk]))
+        assert resp.status_code == 302
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "under_review"
+        assert demand_signal_a.reviewed_by_id == admin_user.pk
+
+    def test_review_is_refused_twice(self, client_a, demand_signal_a):
+        client_a.post(reverse("scm:demandsignal_review", args=[demand_signal_a.pk]))
+        resp = client_a.post(reverse("scm:demandsignal_review", args=[demand_signal_a.pk]),
+                             follow=True)
+        assert any("Only a new signal" in str(m) for m in resp.context["messages"])
+
+    def test_apply_moves_the_forecast_periods(self, client_a, demand_signal_a,
+                                              forecast_with_periods_a):
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": str(forecast_with_periods_a.pk), "impact_quantity": ""})
+        assert resp.status_code == 302
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "applied"
+        assert forecast_with_periods_a.periods.first().final_quantity == Decimal("130.0000")
+
+    def test_apply_honours_an_explicit_quantity(self, client_a, demand_signal_a,
+                                                forecast_with_periods_a):
+        client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                      {"forecast": str(forecast_with_periods_a.pk), "impact_quantity": "-20"})
+        assert forecast_with_periods_a.periods.first().final_quantity == Decimal("80.0000")
+
+    def test_re_applying_is_refused(self, client_a, demand_signal_a, forecast_with_periods_a):
+        client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                      {"forecast": str(forecast_with_periods_a.pk)})
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": str(forecast_with_periods_a.pk)}, follow=True)
+        assert any("already been applied" in str(m) for m in resp.context["messages"])
+        # The impact must not be double-counted into signal_adjustment_quantity.
+        assert forecast_with_periods_a.periods.first().signal_adjustment_quantity == Decimal("30.0000")
+
+    def test_apply_without_a_forecast_is_a_friendly_error(self, client_a, demand_signal_a):
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]), {},
+                             follow=True)
+        assert resp.status_code == 200
+        assert any("Pick a forecast" in str(m) for m in resp.context["messages"])
+
+    def test_apply_with_a_junk_forecast_id_is_a_friendly_error(self, client_a, demand_signal_a):
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": "not-a-pk"}, follow=True)
+        assert resp.status_code == 200
+        assert any("Pick a forecast" in str(m) for m in resp.context["messages"])
+
+    def test_apply_reports_a_forecast_with_no_overlapping_periods(self, client_a, tenant_a,
+                                                                   item_a, demand_signal_a):
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months
+        far = DemandForecast.objects.create(
+            tenant=tenant_a, name="Next year", item=item_a, status="statistical",
+            horizon_start=add_months(demand_signal_a.effective_from, 12),
+            horizon_end=add_months(demand_signal_a.effective_from, 15) - datetime.timedelta(days=1))
+        far.generate_periods()
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": str(far.pk)}, follow=True)
+        assert any("no periods inside" in str(m) for m in resp.context["messages"])
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "new"
+
+    def test_dismiss_closes_the_signal_and_appends_the_note(self, client_a, demand_signal_a):
+        demand_signal_a.notes = "Observer note."
+        demand_signal_a.save(update_fields=["notes"])
+        client_a.post(reverse("scm:demandsignal_dismiss", args=[demand_signal_a.pk]),
+                      {"notes": "Known one-off."})
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "dismissed"
+        assert "Observer note." in demand_signal_a.notes
+        assert "Known one-off." in demand_signal_a.notes
+
+    def test_dismiss_is_refused_after_apply(self, client_a, demand_signal_a,
+                                            forecast_with_periods_a):
+        demand_signal_a.apply_to_forecast(forecast_with_periods_a)
+        resp = client_a.post(reverse("scm:demandsignal_dismiss", args=[demand_signal_a.pk]),
+                             follow=True)
+        assert any("already been applied" in str(m) for m in resp.context["messages"])
+
+    def test_detect_runs_the_internal_detector(self, client_a, tenant_a, approved_forecast_a):
+        from apps.scm.models import DemandSignal
+        resp = client_a.post(reverse("scm:demandsignal_detect"), follow=True)
+        assert resp.status_code == 200
+        assert DemandSignal.objects.filter(tenant=tenant_a, source="internal_orders").count() == 1
+
+    def test_detect_reports_nothing_found_rather_than_failing(self, client_a, tenant_a):
+        resp = client_a.post(reverse("scm:demandsignal_detect"), follow=True)
+        assert resp.status_code == 200
+        assert any("No order-pattern deviations" in str(m) for m in resp.context["messages"])
+
+    def test_detect_also_expires_stale_open_signals(self, client_a, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        stale = DemandSignal.objects.create(
+            tenant=tenant_a, item=item_a, observed_at=timezone.now(),
+            effective_to=timezone.localdate() - datetime.timedelta(days=1))
+        client_a.post(reverse("scm:demandsignal_detect"))
+        stale.refresh_from_db()
+        assert stale.status == "expired"
+
+    def test_the_triage_actions_are_post_only(self, client_a, demand_signal_a):
+        for name in ("demandsignal_review", "demandsignal_apply", "demandsignal_dismiss"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[demand_signal_a.pk])).status_code == 405, name
+        assert client_a.get(reverse("scm:demandsignal_detect")).status_code == 405
+
+
+# ================================================================ ForecastAdjustment CRUD + review
+class TestForecastAdjustmentCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, forecast_adjustment_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_list"))
+        assert resp.status_code == 200
+        assert forecast_adjustment_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, forecast_adjustment_a,
+                                             forecast_adjustment_b):
+        resp = client_a.get(reverse("scm:forecastadjustment_list"))
+        assert forecast_adjustment_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, forecast_adjustment_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_list"))
+        assert "scm/demandplanning/forecastadjustment/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "function_choices",
+                    "reason_choices", "type_choices", "forecasts", "proposed_count"):
+            assert key in resp.context, key
+        assert resp.context["proposed_count"] == 1
+
+    def test_list_filter_by_status_is_the_review_queue(self, client_a, tenant_a,
+                                                       forecast_adjustment_a):
+        from apps.scm.models import ForecastAdjustment
+        ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).update(status="accepted")
+        resp = client_a.get(reverse("scm:forecastadjustment_list"), {"status": "proposed"})
+        assert forecast_adjustment_a not in resp.context["object_list"]
+
+    def test_list_search_by_rationale(self, client_a, forecast_adjustment_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_list"), {"q": "Spring campaign"})
+        assert forecast_adjustment_a in resp.context["object_list"]
+
+    def test_create_stamps_the_submitter_from_the_session(self, client_a, admin_user, tenant_a,
+                                                          forecast_with_periods_a):
+        from apps.scm.models import ForecastAdjustment
+        resp = client_a.post(reverse("scm:forecastadjustment_create"),
+                             _adjustment_payload(forecast_with_periods_a))
+        assert resp.status_code == 302
+        adjustment = ForecastAdjustment.objects.get(rationale="Spring campaign.")
+        assert adjustment.tenant_id == tenant_a.pk
+        assert adjustment.submitted_by_id == admin_user.pk
+        assert adjustment.status == "proposed"
+
+    def test_create_ignores_a_submitter_and_status_posted_in_the_body(self, client_a, admin_user,
+                                                                      admin_b,
+                                                                      forecast_with_periods_a):
+        from apps.scm.models import ForecastAdjustment
+        client_a.post(reverse("scm:forecastadjustment_create"),
+                      _adjustment_payload(forecast_with_periods_a, submitted_by=str(admin_b.pk),
+                                          status="accepted", resolved_quantity="9999"))
+        adjustment = ForecastAdjustment.objects.get(rationale="Spring campaign.")
+        assert adjustment.submitted_by_id == admin_user.pk
+        assert adjustment.status == "proposed"
+        # Derived in save() from the live base, never taken from the POST: the payload names no
+        # period, so "absolute 140" is measured against the whole 300-unit horizon.
+        assert adjustment.resolved_quantity == Decimal("-160.0000")
+
+    def test_create_prefills_from_a_forecast_query_param(self, client_a, forecast_with_periods_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_create"),
+                            {"forecast": str(forecast_with_periods_a.pk)})
+        assert resp.status_code == 200
+        periods = list(resp.context["form"].fields["period"].queryset)
+        assert set(periods) == set(forecast_with_periods_a.periods.all())
+
+    def test_a_junk_forecast_query_param_is_ignored(self, client_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_create"), {"forecast": "abc"})
+        assert resp.status_code == 200
+        assert list(resp.context["form"].fields["period"].queryset) == []
+
+    def test_another_tenants_forecast_query_param_is_ignored(self, client_a,
+                                                             forecast_with_periods_b):
+        resp = client_a.get(reverse("scm:forecastadjustment_create"),
+                            {"forecast": str(forecast_with_periods_b.pk)})
+        assert resp.status_code == 200
+        assert list(resp.context["form"].fields["period"].queryset) == []
+
+    def test_detail_returns_200_with_the_resolved_base(self, client_a, forecast_adjustment_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_detail",
+                                    args=[forecast_adjustment_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/forecastadjustment/detail.html" in [t.name for t in resp.templates]
+        assert resp.context["base_quantity"] == Decimal("100.0000")
+        assert "review_form" in resp.context
+
+    def test_edit_updates_a_proposal(self, client_a, forecast_adjustment_a,
+                                     forecast_with_periods_a):
+        resp = client_a.post(reverse("scm:forecastadjustment_edit",
+                                     args=[forecast_adjustment_a.pk]),
+                             _adjustment_payload(forecast_with_periods_a,
+                                                 rationale="Revised rationale."))
+        assert resp.status_code == 302
+        forecast_adjustment_a.refresh_from_db()
+        assert forecast_adjustment_a.rationale == "Revised rationale."
+
+    def test_edit_is_refused_once_reviewed(self, client_a, forecast_adjustment_a):
+        from apps.scm.models import ForecastAdjustment
+        ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).update(status="accepted")
+        resp = client_a.get(reverse("scm:forecastadjustment_edit",
+                                    args=[forecast_adjustment_a.pk]), follow=True)
+        assert any("consensus record" in str(m) for m in resp.context["messages"])
+
+    def test_delete_is_post_only(self, client_a, forecast_adjustment_a):
+        from apps.scm.models import ForecastAdjustment
+        assert client_a.get(reverse("scm:forecastadjustment_delete",
+                                    args=[forecast_adjustment_a.pk])).status_code == 405
+        assert ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).exists()
+
+    def test_delete_removes_an_unreviewed_proposal(self, client_a, forecast_adjustment_a):
+        from apps.scm.models import ForecastAdjustment
+        client_a.post(reverse("scm:forecastadjustment_delete", args=[forecast_adjustment_a.pk]))
+        assert not ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).exists()
+
+    def test_delete_is_refused_on_a_reviewed_adjustment(self, client_a, forecast_adjustment_a):
+        from apps.scm.models import ForecastAdjustment
+        ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).update(status="accepted")
+        resp = client_a.post(reverse("scm:forecastadjustment_delete",
+                                     args=[forecast_adjustment_a.pk]), follow=True)
+        assert ForecastAdjustment.objects.filter(pk=forecast_adjustment_a.pk).exists()
+        assert any("reversing adjustment" in str(m) for m in resp.context["messages"])
+
+
+class TestForecastAdjustmentReview:
+    def test_accept_rolls_the_delta_into_the_consensus_column(self, client_a, admin_user,
+                                                              forecast_adjustment_a,
+                                                              forecast_period_a):
+        resp = client_a.post(reverse("scm:forecastadjustment_accept",
+                                     args=[forecast_adjustment_a.pk]),
+                             {"review_note": "Agreed with sales."})
+        assert resp.status_code == 302
+        forecast_adjustment_a.refresh_from_db()
+        forecast_period_a.refresh_from_db()
+        assert forecast_adjustment_a.status == "accepted"
+        assert forecast_adjustment_a.reviewed_by_id == admin_user.pk
+        assert forecast_adjustment_a.review_note == "Agreed with sales."
+        assert forecast_period_a.consensus_quantity == Decimal("40.0000")
+        assert forecast_period_a.final_quantity == Decimal("140.0000")
+
+    def test_a_second_accept_is_refused(self, client_a, forecast_adjustment_a,
+                                        forecast_period_a):
+        client_a.post(reverse("scm:forecastadjustment_accept", args=[forecast_adjustment_a.pk]))
+        resp = client_a.post(reverse("scm:forecastadjustment_accept",
+                                     args=[forecast_adjustment_a.pk]), follow=True)
+        assert any("already been reviewed" in str(m) for m in resp.context["messages"])
+        forecast_period_a.refresh_from_db()
+        assert forecast_period_a.final_quantity == Decimal("140.0000")  # not double-counted
+
+    def test_reject_after_accept_is_refused_so_the_rollup_stays_honest(self, client_a,
+                                                                       forecast_adjustment_a):
+        client_a.post(reverse("scm:forecastadjustment_accept", args=[forecast_adjustment_a.pk]))
+        client_a.post(reverse("scm:forecastadjustment_reject", args=[forecast_adjustment_a.pk]))
+        forecast_adjustment_a.refresh_from_db()
+        assert forecast_adjustment_a.status == "accepted"
+
+    def test_reject_leaves_the_plan_where_it_was(self, client_a, forecast_adjustment_a,
+                                                 forecast_period_a):
+        client_a.post(reverse("scm:forecastadjustment_reject", args=[forecast_adjustment_a.pk]),
+                      {"review_note": "Not supported by the pipeline."})
+        forecast_adjustment_a.refresh_from_db()
+        forecast_period_a.refresh_from_db()
+        assert forecast_adjustment_a.status == "rejected"
+        assert forecast_period_a.final_quantity == Decimal("100.0000")
+
+    def test_accepting_against_an_archived_forecast_is_refused(self, client_a,
+                                                               forecast_adjustment_a,
+                                                               forecast_with_periods_a):
+        from apps.scm.models import DemandForecast
+        DemandForecast.objects.filter(pk=forecast_with_periods_a.pk).update(status="archived")
+        resp = client_a.post(reverse("scm:forecastadjustment_accept",
+                                     args=[forecast_adjustment_a.pk]), follow=True)
+        assert any("no longer open to consensus" in str(m) for m in resp.context["messages"])
+        forecast_adjustment_a.refresh_from_db()
+        assert forecast_adjustment_a.status == "proposed"
+
+    def test_accepting_against_a_draft_forecast_is_refused(self, client_a, forecast_adjustment_a,
+                                                           forecast_with_periods_a):
+        from apps.scm.models import DemandForecast
+        DemandForecast.objects.filter(pk=forecast_with_periods_a.pk).update(status="draft")
+        resp = client_a.post(reverse("scm:forecastadjustment_accept",
+                                     args=[forecast_adjustment_a.pk]), follow=True)
+        assert any("still a draft" in str(m) for m in resp.context["messages"])
+        forecast_adjustment_a.refresh_from_db()
+        assert forecast_adjustment_a.status == "proposed"
+
+    def test_the_review_actions_are_post_only(self, client_a, forecast_adjustment_a):
+        for name in ("forecastadjustment_accept", "forecastadjustment_reject"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[forecast_adjustment_a.pk])).status_code == 405, name
+
+
+# ================================================================ Safety-stock + accuracy reports
+class TestSafetyStockReport:
+    def test_report_returns_200_with_the_documented_context(self, client_a,
+                                                            reorder_rule_service_level_a):
+        resp = client_a.get(reverse("scm:safety_stock_report"))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/safety_stock_report.html" in [t.name for t in resp.templates]
+        for key in ("rows", "page_obj", "total_rules", "method_choices", "items", "locations",
+                    "q", "uncalculated"):
+            assert key in resp.context, key
+        assert resp.context["total_rules"] == 1
+        assert resp.context["uncalculated"] == 1
+
+    def test_report_only_lists_active_rules(self, client_a, reorder_rule_a):
+        reorder_rule_a.is_active = False
+        reorder_rule_a.save(update_fields=["is_active"])
+        resp = client_a.get(reverse("scm:safety_stock_report"))
+        assert resp.context["total_rules"] == 0
+
+    def test_report_never_lists_another_tenants_rules(self, client_a, reorder_rule_a,
+                                                      reorder_rule_b):
+        resp = client_a.get(reverse("scm:safety_stock_report"))
+        assert [row["rule"] for row in resp.context["rows"]] == [reorder_rule_a]
+
+    def test_report_filters_by_method(self, client_a, reorder_rule_a,
+                                      reorder_rule_service_level_a):
+        resp = client_a.get(reverse("scm:safety_stock_report"),
+                            {"safety_stock_method": "service_level"})
+        assert [row["rule"] for row in resp.context["rows"]] == [reorder_rule_service_level_a]
+
+    def test_report_search_matches_the_item_sku(self, client_a, reorder_rule_a):
+        found = client_a.get(reverse("scm:safety_stock_report"), {"q": "WIDGET-1"})
+        missed = client_a.get(reverse("scm:safety_stock_report"), {"q": "nothing-here"})
+        assert found.context["total_rules"] == 1
+        assert missed.context["total_rules"] == 0
+
+    def test_recalculate_writes_only_the_computed_columns(self, client_a,
+                                                          reorder_rule_service_level_a,
+                                                          demand_history_a):
+        resp = client_a.post(reverse("scm:safety_stock_recalculate"))
+        assert resp.status_code == 302
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_service_level_a.last_calculated_at is not None
+        assert reorder_rule_service_level_a.computed_safety_stock > Decimal("0")
+        assert reorder_rule_service_level_a.safety_stock == Decimal("5.00")   # untouched
+        assert reorder_rule_service_level_a.reorder_point == Decimal("10.00")  # untouched
+
+    def test_recalculate_reports_an_empty_rule_set(self, client_a, tenant_a):
+        resp = client_a.post(reverse("scm:safety_stock_recalculate"), follow=True)
+        assert any("No active reorder rules" in str(m) for m in resp.context["messages"])
+
+    def test_recalculate_carries_the_filters_into_the_redirect(self, client_a,
+                                                               reorder_rule_service_level_a):
+        resp = client_a.post(reverse("scm:safety_stock_recalculate"),
+                             {"safety_stock_method": "service_level", "q": "WIDGET"})
+        assert "safety_stock_method=service_level" in resp["Location"]
+        assert "csrf" not in resp["Location"].lower()
+
+    def test_recalculate_only_touches_the_filtered_rules(self, client_a, reorder_rule_a,
+                                                         reorder_rule_service_level_a):
+        client_a.post(reverse("scm:safety_stock_recalculate"),
+                      {"safety_stock_method": "service_level"})
+        reorder_rule_a.refresh_from_db()
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_a.last_calculated_at is None
+        assert reorder_rule_service_level_a.last_calculated_at is not None
+
+    def test_recalculate_ranks_abc_over_every_active_rule_not_just_the_filtered_ones(
+        self, client_a, tenant_a, location_a, customer_a, reorder_rule_a,
+    ):
+        """A Pareto class computed against a one-item filter would call that item 'A' by definition."""
+        from apps.scm.models import Item, ReorderRule, SalesOrder, SalesOrderLine
+        big = Item.objects.create(tenant=tenant_a, sku="BIG", name="Big earner")
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                          order_date=datetime.date(2026, 1, 5), status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=big, quantity_ordered=Decimal("1"),
+                                      unit_price=Decimal("100000"))
+        ReorderRule.objects.create(tenant=tenant_a, item=big, location=location_a)
+        client_a.post(reverse("scm:safety_stock_recalculate"), {"q": "WIDGET-1"})
+        reorder_rule_a.refresh_from_db()
+        assert reorder_rule_a.abc_class == "C"  # ranked against BIG, not against itself alone
+
+    def test_recalculate_is_post_only(self, client_a):
+        assert client_a.get(reverse("scm:safety_stock_recalculate")).status_code == 405
+
+    def test_apply_promotes_the_calculated_policy(self, client_a, reorder_rule_service_level_a,
+                                                  demand_history_a):
+        client_a.post(reverse("scm:safety_stock_recalculate"))
+        reorder_rule_service_level_a.refresh_from_db()
+        computed = reorder_rule_service_level_a.computed_safety_stock
+        resp = client_a.post(reverse("scm:safety_stock_apply",
+                                     args=[reorder_rule_service_level_a.pk]))
+        assert resp.status_code == 302
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_service_level_a.safety_stock == computed
+
+    def test_apply_is_refused_before_a_recalculation(self, client_a,
+                                                     reorder_rule_service_level_a):
+        resp = client_a.post(reverse("scm:safety_stock_apply",
+                                     args=[reorder_rule_service_level_a.pk]), follow=True)
+        assert any("Recalculate this rule" in str(m) for m in resp.context["messages"])
+        reorder_rule_service_level_a.refresh_from_db()
+        assert reorder_rule_service_level_a.safety_stock == Decimal("5.00")
+
+    def test_apply_is_post_only(self, client_a, reorder_rule_a):
+        assert client_a.get(reverse("scm:safety_stock_apply",
+                                    args=[reorder_rule_a.pk])).status_code == 405
+
+
+class TestForecastAccuracyReport:
+    def test_report_returns_200_with_the_documented_context(self, client_a,
+                                                            forecast_with_periods_a):
+        resp = client_a.get(reverse("scm:forecast_accuracy_report"))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/forecast_accuracy_report.html" in [t.name for t in resp.templates]
+        for key in ("rows", "scored", "exceptions", "bias_threshold", "signal_threshold"):
+            assert key in resp.context, key
+
+    def test_draft_forecasts_are_excluded(self, client_a, demand_forecast_a):
+        resp = client_a.get(reverse("scm:forecast_accuracy_report"))
+        assert resp.context["rows"] == []
+
+    def test_another_tenants_forecast_never_appears(self, client_a, forecast_with_periods_a,
+                                                    forecast_with_periods_b):
+        resp = client_a.get(reverse("scm:forecast_accuracy_report"))
+        assert [row["forecast"] for row in resp.context["rows"]] == [forecast_with_periods_a]
+
+    def test_an_elapsed_plan_that_ran_high_is_flagged_as_an_exception(self, client_a, tenant_a,
+                                                                       item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast, SalesOrder, SalesOrderLine
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        start = add_months(this_month, -3)
+        forecast = DemandForecast.objects.create(
+            tenant=tenant_a, name="Over-forecast", item=item_a, status="approved",
+            horizon_start=start, horizon_end=this_month - datetime.timedelta(days=1))
+        forecast.generate_periods()
+        forecast.periods.update(baseline_quantity=Decimal("100"), final_quantity=Decimal("100"))
+        order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a, order_date=start,
+                                          status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("10"), unit_price=Decimal("1"))
+        resp = client_a.get(reverse("scm:forecast_accuracy_report"))
+        row = next(r for r in resp.context["rows"] if r["forecast"].pk == forecast.pk)
+        assert row["metrics"]["points"] == 3
+        assert row["is_exception"] is True
+        assert resp.context["exceptions"] == 1
+
+    def test_a_customer_scoped_forecast_is_graded_on_its_own_channel(self, client_a, tenant_a,
+                                                                      item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        start = add_months(this_month, -3)
+        forecast = DemandForecast.objects.create(
+            tenant=tenant_a, name="Channel plan", item=item_a, customer=customer_a,
+            status="approved", horizon_start=start,
+            horizon_end=this_month - datetime.timedelta(days=1))
+        forecast.generate_periods()
+        resp = client_a.get(reverse("scm:forecast_accuracy_report"))
+        assert resp.status_code == 200
+        assert any(r["forecast"].pk == forecast.pk for r in resp.context["rows"])
+
+
+# ================================================================================================
+# Negative-input hardening (L11 junk FK filters / L9 pagination) — 200, never a 500.
+# ================================================================================================
+class TestDemandPlanningNegativeInputHardening:
+    LIST_ROUTES = ("scm:seasonalityprofile_list", "scm:demandforecast_list",
+                   "scm:demandsignal_list", "scm:forecastadjustment_list")
+
+    def test_every_list_survives_a_junk_item_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"item": "abc"}).status_code == 200, name
+
+    def test_every_list_survives_a_junk_status_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"status": "nonsense"}).status_code == 200, name
+
+    def test_every_list_survives_a_page_past_the_end(self, client_a, demand_forecast_a,
+                                                     demand_signal_a, seasonality_profile_a,
+                                                     forecast_adjustment_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"page": "999"}).status_code == 200, name
+
+    def test_every_list_survives_a_non_numeric_page(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"page": "abc"}).status_code == 200, name
+
+    def test_forecast_list_survives_a_junk_location_filter(self, client_a):
+        assert client_a.get(reverse("scm:demandforecast_list"),
+                            {"location": "-1"}).status_code == 200
+
+    def test_seasonality_list_survives_a_junk_is_active_filter(self, client_a):
+        assert client_a.get(reverse("scm:seasonalityprofile_list"),
+                            {"is_active": "abc"}).status_code == 200
+
+    def test_seasonality_list_survives_a_junk_category_filter(self, client_a):
+        assert client_a.get(reverse("scm:seasonalityprofile_list"),
+                            {"category": "not-a-pk"}).status_code == 200
+
+    def test_adjustment_list_survives_a_junk_forecast_filter(self, client_a):
+        assert client_a.get(reverse("scm:forecastadjustment_list"),
+                            {"forecast": "abc"}).status_code == 200
+
+    def test_forecast_list_page_2_returns_200_when_rows_exceed_the_page_size(self, client_a,
+                                                                             tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        for i in range(20):
+            DemandForecast.objects.create(
+                tenant=tenant_a, name=f"Plan {i}", item=item_a, horizon_start=start,
+                horizon_end=add_months(start, 3) - datetime.timedelta(days=1))
+        resp = client_a.get(reverse("scm:demandforecast_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert len(resp.context["object_list"]) == 5
+
+    def test_signal_list_page_2_returns_200_when_rows_exceed_the_page_size(self, client_a,
+                                                                           tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        for _ in range(20):
+            DemandSignal.objects.create(tenant=tenant_a, observed_at=timezone.now())
+        resp = client_a.get(reverse("scm:demandsignal_list"), {"page": "2"})
+        assert resp.status_code == 200
+
+    def test_safety_stock_report_survives_junk_filters(self, client_a, reorder_rule_a):
+        for params in ({"item": "abc"}, {"location": "-1"}, {"safety_stock_method": "nonsense"},
+                       {"page": "999"}, {"page": "abc"}):
+            assert client_a.get(reverse("scm:safety_stock_report"),
+                                params).status_code == 200, params
+
+    def test_safety_stock_report_page_2_returns_200_beyond_the_page_size(self, client_a, tenant_a,
+                                                                         location_a):
+        from apps.scm.models import Item, ReorderRule
+        for i in range(35):
+            item = Item.objects.create(tenant=tenant_a, sku=f"BULK-{i}", name=f"Bulk {i}")
+            ReorderRule.objects.create(tenant=tenant_a, item=item, location=location_a)
+        resp = client_a.get(reverse("scm:safety_stock_report"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+
+    def test_safety_stock_recalculate_survives_junk_post_filters(self, client_a,
+                                                                  reorder_rule_a):
+        resp = client_a.post(reverse("scm:safety_stock_recalculate"),
+                             {"item": "abc", "location": "NaN", "safety_stock_method": "junk"})
+        assert resp.status_code == 302
+
+    def test_the_apply_signal_form_rejects_nan_and_infinity_quantities(self, client_a,
+                                                                        demand_signal_a,
+                                                                        forecast_with_periods_a):
+        for junk in ("NaN", "Infinity", "-Infinity", "not-a-number", "1e400"):
+            resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                                 {"forecast": str(forecast_with_periods_a.pk),
+                                  "impact_quantity": junk}, follow=True)
+            assert resp.status_code == 200, junk
+            assert any("Pick a forecast" in str(m) for m in resp.context["messages"]), junk
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "new"  # nothing was applied
+
+    def test_the_apply_signal_form_rejects_an_over_max_digits_quantity(self, client_a,
+                                                                        demand_signal_a,
+                                                                        forecast_with_periods_a):
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": str(forecast_with_periods_a.pk),
+                              "impact_quantity": "9" * 20}, follow=True)
+        assert resp.status_code == 200
+        demand_signal_a.refresh_from_db()
+        assert demand_signal_a.status == "new"
+
+    def test_a_negative_apply_quantity_is_accepted_as_a_signed_override(self, client_a,
+                                                                         demand_signal_a,
+                                                                         forecast_with_periods_a):
+        resp = client_a.post(reverse("scm:demandsignal_apply", args=[demand_signal_a.pk]),
+                             {"forecast": str(forecast_with_periods_a.pk),
+                              "impact_quantity": "-10"})
+        assert resp.status_code == 302
+        assert forecast_with_periods_a.periods.first().final_quantity == Decimal("90.0000")
+
+    def test_the_forecast_form_rejects_junk_decimals_without_500ing(self, client_a, tenant_a,
+                                                                     item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        end = add_months(start, 3) - datetime.timedelta(days=1)
+        for junk in ("NaN", "Infinity", "abc", "9" * 20):
+            resp = client_a.post(reverse("scm:demandforecast_create"),
+                                 _forecast_payload(item_a, start, end, method_parameter=junk))
+            assert resp.status_code == 200, junk
+        assert not DemandForecast.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_forecast_form_rejects_a_negative_reference_scale(self, client_a, tenant_a,
+                                                                   item_a):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        resp = client_a.post(
+            reverse("scm:demandforecast_create"),
+            _forecast_payload(item_a, start, add_months(start, 3) - datetime.timedelta(days=1),
+                              reference_scale_pct="-5"))
+        assert resp.status_code == 200
+        assert not DemandForecast.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_adjustment_form_rejects_junk_quantities(self, client_a, tenant_a,
+                                                         forecast_with_periods_a):
+        from apps.scm.models import ForecastAdjustment
+        for junk in ("NaN", "Infinity", "abc", "9" * 20):
+            resp = client_a.post(reverse("scm:forecastadjustment_create"),
+                                 _adjustment_payload(forecast_with_periods_a,
+                                                     proposed_quantity=junk))
+            assert resp.status_code == 200, junk
+        assert not ForecastAdjustment.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_signal_form_rejects_junk_impact_values(self, client_a, tenant_a):
+        from apps.scm.models import DemandSignal
+        for junk in ("NaN", "Infinity", "abc", "9" * 20):
+            resp = client_a.post(reverse("scm:demandsignal_create"),
+                                 _signal_payload(source_reference="junk", impact_quantity=junk))
+            assert resp.status_code == 200, junk
+        assert not DemandSignal.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_seasonality_index_formset_rejects_a_junk_factor(self, client_a, tenant_a):
+        from apps.scm.models import SeasonalityProfile
+        data = _profile_payload(**formset_data("indices", [
+            {"id": "", "period_number": "1", "period_label": "", "index_factor": "NaN"},
+        ]))
+        resp = client_a.post(reverse("scm:seasonalityprofile_create"), data)
+        assert resp.status_code == 200
+        assert not SeasonalityProfile.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================================================
+# Query-count regression guards (locks in the batching the performance review added)
+# ================================================================================================
+class TestDemandPlanningQueryCounts:
+    def test_seasonality_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, category_a,
+                                                location_a, django_assert_max_num_queries):
+        from apps.scm.models import SeasonalityProfile
+        for i in range(8):
+            SeasonalityProfile.objects.create(tenant=tenant_a, name=f"Curve {i}", scope="item",
+                                              item=item_a, category=category_a,
+                                              location=location_a)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:seasonalityprofile_list")).status_code == 200
+
+    def test_forecast_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, location_a,
+                                             customer_a, seasonality_profile_a,
+                                             django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        for i in range(8):
+            DemandForecast.objects.create(
+                tenant=tenant_a, name=f"Plan {i}", item=item_a, location=location_a,
+                customer=customer_a, seasonality_profile=seasonality_profile_a,
+                horizon_start=start,
+                horizon_end=add_months(start, 3) - datetime.timedelta(days=1))
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:demandforecast_list")).status_code == 200
+
+    def test_signal_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, category_a,
+                                           location_a, customer_a,
+                                           django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import DemandSignal
+        for _ in range(8):
+            DemandSignal.objects.create(tenant=tenant_a, item=item_a, category=category_a,
+                                        location=location_a, customer=customer_a,
+                                        observed_at=timezone.now())
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:demandsignal_list")).status_code == 200
+
+    def test_adjustment_list_has_no_n_plus_one(self, client_a, tenant_a, org_unit_a, admin_user,
+                                               forecast_with_periods_a, forecast_period_a,
+                                               django_assert_max_num_queries):
+        from apps.scm.models import ForecastAdjustment
+        for _ in range(8):
+            ForecastAdjustment.objects.create(
+                tenant=tenant_a, forecast=forecast_with_periods_a, period=forecast_period_a,
+                submitted_by=admin_user, org_unit=org_unit_a, rationale="bulk")
+        with django_assert_max_num_queries(16):
+            assert client_a.get(reverse("scm:forecastadjustment_list")).status_code == 200
+
+    def test_item_detail_stays_flat_with_the_4_7_forecast_panel(self, client_a, tenant_a, item_a,
+                                                                location_a,
+                                                                django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        for i in range(6):
+            DemandForecast.objects.create(
+                tenant=tenant_a, name=f"Item plan {i}", item=item_a, location=location_a,
+                horizon_start=start,
+                horizon_end=add_months(start, 3) - datetime.timedelta(days=1))
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:item_detail", args=[item_a.pk])).status_code == 200
+
+    def test_safety_stock_report_stays_flat_as_rules_grow(self, client_a, tenant_a, location_a,
+                                                          django_assert_max_num_queries):
+        from apps.scm.models import Item, ReorderRule
+        for i in range(10):
+            item = Item.objects.create(tenant=tenant_a, sku=f"RPT-{i}", name=f"Reported {i}")
+            ReorderRule.objects.create(tenant=tenant_a, item=item, location=location_a)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:safety_stock_report")).status_code == 200
+
+    def test_safety_stock_recalculate_stays_flat_with_ten_profiled_rules(
+        self, client_a, tenant_a, item_a, location_a, customer_a, demand_history_a,
+        django_assert_max_num_queries,
+    ):
+        """10 rules, 5 of them sized from a forecast's error, all sharing 2 forecasts and a profile.
+
+        The batching that has to hold: ONE grouped history query, ONE ABC ranking query, ONE WMAPE
+        pass per DISTINCT forecast (not per rule) and ONE bulk_update.
+        """
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast, Item, ReorderRule
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        profile = _flat_profile_view(tenant_a, item_a)
+        forecasts = [
+            DemandForecast.objects.create(
+                tenant=tenant_a, name=f"Shared plan {i}", item=item_a, horizon_start=start,
+                horizon_end=add_months(start, 3) - datetime.timedelta(days=1))
+            for i in range(2)]
+        for forecast in forecasts:
+            forecast.generate_periods()
+        for i in range(10):
+            item = Item.objects.create(tenant=tenant_a, sku=f"CALC-{i}", name=f"Calc {i}")
+            ReorderRule.objects.create(
+                tenant=tenant_a, item=item, location=location_a, lead_time_days=10,
+                lead_time_variability_days=Decimal("2"), seasonality_profile=profile,
+                safety_stock_method="forecast_error" if i < 5 else "service_level",
+                demand_forecast=forecasts[i % 2] if i < 5 else None)
+        with django_assert_max_num_queries(30):
+            resp = client_a.post(reverse("scm:safety_stock_recalculate"))
+        assert resp.status_code == 302
+
+    def test_demandsignal_detect_stays_flat_with_five_approved_forecasts(
+        self, client_a, tenant_a, location_a, customer_a, django_assert_max_num_queries,
+    ):
+        from django.utils import timezone
+        from apps.scm.models import DemandForecast, Item
+        from apps.scm.tests._helpers import add_months, month_start
+        start = month_start(timezone.localdate())
+        for i in range(5):
+            item = Item.objects.create(tenant=tenant_a, sku=f"DET-{i}", name=f"Detected {i}")
+            forecast = DemandForecast.objects.create(
+                tenant=tenant_a, name=f"Approved {i}", item=item, location=location_a,
+                customer=customer_a, horizon_start=start,
+                horizon_end=add_months(start, 3) - datetime.timedelta(days=1))
+            forecast.generate_periods()
+            forecast.periods.update(baseline_quantity=Decimal("100"),
+                                    final_quantity=Decimal("100"))
+            DemandForecast.objects.filter(pk=forecast.pk).update(status="approved")
+        with django_assert_max_num_queries(40):
+            resp = client_a.post(reverse("scm:demandsignal_detect"))
+        assert resp.status_code == 302
+
+    def test_seasonalityprofile_derive_stays_flat_on_a_ten_item_category(
+        self, client_a, tenant_a, category_a, customer_a, category_profile_a,
+        django_assert_max_num_queries,
+    ):
+        """A 300-SKU category must not become 300 aggregates inside one synchronous POST."""
+        from django.utils import timezone
+        from apps.scm.models import Item, SalesOrder, SalesOrderLine
+        from apps.scm.tests._helpers import add_months, month_start
+        this_month = month_start(timezone.localdate())
+        for i in range(10):
+            item = Item.objects.create(tenant=tenant_a, sku=f"CAT-{i}", name=f"Cat {i}",
+                                       category=category_a)
+            order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a,
+                                              order_date=add_months(this_month, -(i % 12) - 1),
+                                              status="submitted")
+            SalesOrderLine.objects.create(sales_order=order, item=item,
+                                          quantity_ordered=Decimal("50"), unit_price=Decimal("1"))
+        with django_assert_max_num_queries(25):
+            resp = client_a.post(reverse("scm:seasonalityprofile_derive",
+                                         args=[category_profile_a.pk]))
+        assert resp.status_code == 302
+
+    def test_forecast_detail_derives_its_history_once(self, client_a, forecast_with_periods_a,
+                                                      demand_history_a,
+                                                      django_assert_max_num_queries):
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:demandforecast_detail",
+                                        args=[forecast_with_periods_a.pk])).status_code == 200
+
+
+def _flat_profile_view(tenant, item, factor="1.2000"):
+    from apps.scm.models import SeasonalityIndex, SeasonalityProfile
+    profile = SeasonalityProfile.objects.create(tenant=tenant, name="View curve", scope="item",
+                                                item=item)
+    for month in range(1, 13):
+        SeasonalityIndex.objects.create(profile=profile, period_number=month,
+                                        index_factor=Decimal(factor))
+    return profile
+
+
+# ================================================================ Create guarded when the user has no tenant
+class TestDemandPlanningCreateWithoutTenantWorkspace:
+    def _orphan_client(self, suffix):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email=f"orphan-dp{suffix}@example.com",
+                                        username=f"orphan_dp{suffix}", password="x", tenant=None)
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def test_forecast_create_redirects(self, db):
+        from apps.scm.models import DemandForecast
+        resp = self._orphan_client("1").get(reverse("scm:demandforecast_create"))
+        assert resp.status_code == 302
+        assert DemandForecast.objects.count() == 0
+
+    def test_seasonality_create_redirects(self, db):
+        from apps.scm.models import SeasonalityProfile
+        resp = self._orphan_client("2").get(reverse("scm:seasonalityprofile_create"))
+        assert resp.status_code == 302
+        assert SeasonalityProfile.objects.count() == 0
+
+    def test_signal_create_redirects(self, db):
+        from apps.scm.models import DemandSignal
+        resp = self._orphan_client("3").get(reverse("scm:demandsignal_create"))
+        assert resp.status_code == 302
+        assert DemandSignal.objects.count() == 0
+
+    def test_adjustment_create_redirects(self, db):
+        from apps.scm.models import ForecastAdjustment
+        resp = self._orphan_client("4").get(reverse("scm:forecastadjustment_create"))
+        assert resp.status_code == 302
+        assert ForecastAdjustment.objects.count() == 0
+
+    def test_signal_detect_redirects(self, db):
+        from apps.scm.models import DemandSignal
+        resp = self._orphan_client("5").post(reverse("scm:demandsignal_detect"))
+        assert resp.status_code == 302
+        assert DemandSignal.objects.count() == 0
+
+    def test_safety_stock_recalculate_redirects(self, db):
+        resp = self._orphan_client("6").post(reverse("scm:safety_stock_recalculate"))
+        assert resp.status_code == 302
+
+
+# ================================================================ The form PAGES themselves (GET)
+class TestDemandPlanningFormPagesRender:
+    def test_forecast_create_page_renders_the_form_and_empty_grid(self, client_a):
+        resp = client_a.get(reverse("scm:demandforecast_create"))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/demandforecast/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+        assert resp.context["obj"] is None
+        assert resp.context["formset"].total_form_count() == 0  # extra=0: Generate builds the grid
+
+    def test_forecast_edit_page_renders_the_existing_periods(self, client_a,
+                                                              forecast_with_periods_a):
+        resp = client_a.get(reverse("scm:demandforecast_edit",
+                                    args=[forecast_with_periods_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+        assert resp.context["obj"] == forecast_with_periods_a
+        assert resp.context["formset"].total_form_count() == 3
+
+    def test_seasonality_create_page_renders_the_index_formset(self, client_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_create"))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/seasonalityprofile/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+        assert resp.context["formset"].total_form_count() == 3  # extra=3 blank index rows
+
+    def test_seasonality_edit_page_renders_the_existing_indices(self, client_a,
+                                                                seasonality_profile_a):
+        resp = client_a.get(reverse("scm:seasonalityprofile_edit",
+                                    args=[seasonality_profile_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+        assert resp.context["formset"].total_form_count() == 15  # 12 saved + 3 extra
+
+    def test_signal_create_page_renders(self, client_a):
+        resp = client_a.get(reverse("scm:demandsignal_create"))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/demandsignal/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+
+    def test_signal_edit_page_renders(self, client_a, demand_signal_a):
+        resp = client_a.get(reverse("scm:demandsignal_edit", args=[demand_signal_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["obj"] == demand_signal_a
+
+    def test_adjustment_create_page_renders(self, client_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_create"))
+        assert resp.status_code == 200
+        assert "scm/demandplanning/forecastadjustment/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+
+    def test_adjustment_edit_page_renders(self, client_a, forecast_adjustment_a):
+        resp = client_a.get(reverse("scm:forecastadjustment_edit",
+                                    args=[forecast_adjustment_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+        assert resp.context["obj"] == forecast_adjustment_a
+
+
+# ================================================================ Report FK filters (the int guard's happy path)
+class TestSafetyStockReportFkFilters:
+    def test_filter_by_item_pk(self, client_a, tenant_a, location_a, reorder_rule_a, item_a):
+        from apps.scm.models import Item, ReorderRule
+        other = Item.objects.create(tenant=tenant_a, sku="OTHER-1", name="Other")
+        ReorderRule.objects.create(tenant=tenant_a, item=other, location=location_a)
+        resp = client_a.get(reverse("scm:safety_stock_report"), {"item": str(item_a.pk)})
+        assert [row["rule"] for row in resp.context["rows"]] == [reorder_rule_a]
+
+    def test_filter_by_location_pk(self, client_a, reorder_rule_a, location_a,
+                                   reorder_rule_service_level_a):
+        resp = client_a.get(reverse("scm:safety_stock_report"), {"location": str(location_a.pk)})
+        assert [row["rule"] for row in resp.context["rows"]] == [reorder_rule_a]
