@@ -39,13 +39,18 @@ class DemandForecastPeriodForm(TenantModelForm):
     `historical_quantity`, `signal_adjustment_quantity` and `consensus_quantity` are NOT editable
     here — they are a snapshot, the signal engine's output and the consensus roll-up respectively.
     The detail page shows all three; letting them be typed would break the waterfall's meaning.
+
+    `final_quantity` is off the form too, and that is the same rule rather than an omission: final is
+    the BOTTOM of the waterfall (`baseline × index + uplift + signal + consensus`), recomputed on
+    every generate and every accept/reject. Offering it would invite a planner to type the one number
+    the app is guaranteed to overwrite. On a `manual` forecast the input is `baseline_quantity`,
+    which generate deliberately preserves.
     """
 
     class Meta:
         model = DemandForecastPeriod
         fields = ["sequence", "period_start", "period_end", "period_label", "baseline_quantity",
-                  "seasonal_index_applied", "event_uplift_quantity", "final_quantity",
-                  "unit_price", "is_locked"]
+                  "seasonal_index_applied", "event_uplift_quantity", "unit_price", "is_locked"]
         widgets = {
             "period_start": forms.DateInput(attrs={"type": "date"}),
             "period_end": forms.DateInput(attrs={"type": "date"}),
