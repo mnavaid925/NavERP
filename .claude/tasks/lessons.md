@@ -563,3 +563,46 @@ Also worth keeping: this round ran five reviewers with an adversarial verify pas
 findings, and one that was real but whose query-count arithmetic was ~2x overstated (the verifier
 corrected the number while confirming the defect). Single-reviewer output is not a work list; making
 each finding survive a skeptic is what turns it into one. See [[next-builds-one-submodule]].
+
+
+## L40 — A bound that computes the thing it is bounding is not a bound; and `.detail-label`/`.detail-value` are the 4th recurrence of L33
+
+**Context:** SCM 4.7 Demand Planning. Two of the seven review agents found defects in code I had just
+written *in response to another agent's finding*.
+
+**1. The cap that triggered the DoS it was preventing.** The security review flagged an unbounded
+forecast horizon: `bucket="day"`, `1900-01-01 → 9999-12-31` is a ~3-million-row `bulk_create` any
+logged-in planner could fire by pressing Generate. I added a `MAX_HORIZON_PERIODS` check to `clean()`
+— written as `len(period_range(start, end, bucket)) > MAX`. My own verification script then raised
+`OverflowError` from *inside the check*: measuring the span builds the three-million-tuple list first.
+The fix is a separate `period_count()` that computes the span **arithmetically**, plus a `limit=` on
+`period_range` for the callers that turn buckets into rows.
+
+**Rule:** when you add a guard against "too big", the guard must be O(1) in the thing it is guarding.
+`len(build_the_whole_thing())` is not a guard, it is the payload. Test the guard with the *actual*
+attack input, not a merely-large one — a 100-year horizon would have passed and looked like proof.
+
+**2. `.detail-label` / `.detail-value` do not exist in `theme.css`.** L33 says badge classes are
+colour-named; the same trap has now bitten the *layout* classes. The real shape is
+`<dl class="detail-grid"><div class="detail-item"><dt>Label</dt><dd>Value</dd></div></dl>` — and
+`.detail-item` is what supplies `flex-direction: column`, so without it the two spans render as one
+run-together string (`BucketMonth`). It shipped in 4.5 and 4.6 and I copied it into 6 more files
+before the frontend reviewer caught it. **Nothing catches this**: no 500, no test failure, 200 OK — it
+is purely cosmetic, which is exactly why it survives.
+
+**Rule (sharpening L33):** before using ANY `theme.css` class — layout or badge — `grep` it. Copying
+a sibling template is not verification when the sibling is where the bug came from. The one-liner:
+`grep -c "detail-item\|detail-label" static/css/theme.css` — a zero is the answer.
+
+**3. Two smaller ones worth the same shape of attention:**
+- **A computed-vs-live column pair needs an explicit, reviewed apply.** 4.7 calculates safety stock
+  into `computed_*` and promotes it into the live `safety_stock`/`reorder_point` only via an
+  admin-gated action — because those two columns are what 4.3's alerts and 4.1's purchasing already
+  buy against. But the gate was **bypassable one click away**: the ungated 4.3 `reorderrule_edit`
+  writes the same two columns. *Gating the new path is not gating the column.* Grep for every writer
+  of a field before calling it protected.
+- **Same tenant is not the same subject.** A `DemandSignal` about item A could be applied to item B's
+  forecast — tenant-scoped, status-scoped, and still wrong. Whenever two records are joined by an
+  action, ask what they must agree on *besides* the tenant.
+
+See [[commit-workflow]], [[next-builds-one-submodule]].
