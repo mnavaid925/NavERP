@@ -739,3 +739,211 @@ def freight_invoice_a(db, tenant_a, carrier_a):
 def freight_invoice_b(db, tenant_b, carrier_b):
     from apps.scm.models import FreightInvoice
     return FreightInvoice.objects.create(tenant=tenant_b, carrier=carrier_b)
+
+
+# ------------------------------------------------------------------ SCM 4.7 Demand Planning & Forecasting
+# Every horizon/window below is derived from ``timezone.localdate()`` — the SAME basis
+# generate_periods / detect_order_surge / expire_stale_signals / calculate() read (lesson L16).
+# Hard-coded 2026 dates would drift out of "covers today" the moment the clock passed them.
+@pytest.fixture
+def seasonality_profile_a(db, tenant_a, item_a):
+    """An active, item-scoped MONTHLY seasonal curve on item_a: neutral all year, December x1.5."""
+    from apps.scm.models import SeasonalityIndex, SeasonalityProfile
+    profile = SeasonalityProfile.objects.create(
+        tenant=tenant_a, name="Widget seasonality", profile_type="seasonal", bucket="month",
+        scope="item", item=item_a,
+    )
+    for month in range(1, 13):
+        SeasonalityIndex.objects.create(
+            profile=profile, period_number=month,
+            index_factor=Decimal("1.5000") if month == 12 else Decimal("1.0000"),
+        )
+    return profile
+
+
+@pytest.fixture
+def seasonality_profile_b(db, tenant_b, item_b):
+    from apps.scm.models import SeasonalityProfile
+    return SeasonalityProfile.objects.create(
+        tenant=tenant_b, name="Globex seasonality", profile_type="seasonal", bucket="month",
+        scope="item", item=item_b,
+    )
+
+
+@pytest.fixture
+def promotion_profile_a(db, tenant_a, item_a):
+    """A windowed promotion (+25 %) covering the CURRENT month — exercises WINDOWED_TYPES."""
+    from django.utils import timezone
+    from apps.scm.models import SeasonalityProfile
+    from apps.scm.tests._helpers import add_months, month_start
+    start = month_start(timezone.localdate())
+    return SeasonalityProfile.objects.create(
+        tenant=tenant_a, name="Spring promo", profile_type="promotion", bucket="month",
+        scope="item", item=item_a, event_start=start,
+        event_end=add_months(start, 1) - datetime.timedelta(days=1),
+        uplift_pct=Decimal("25.00"), promotion_mechanic="price_discount",
+    )
+
+
+@pytest.fixture
+def category_profile_a(db, tenant_a, category_a):
+    """A category-scoped seasonal profile with NO index rows yet — the derive action's input."""
+    from apps.scm.models import SeasonalityProfile
+    return SeasonalityProfile.objects.create(
+        tenant=tenant_a, name="Widgets category curve", profile_type="seasonal", bucket="month",
+        scope="category", category=category_a, derived_from_years=2,
+    )
+
+
+@pytest.fixture
+def demand_history_a(db, tenant_a, customer_a, item_a):
+    """12 consecutive monthly SUBMITTED sales orders of 100 x item_a, ending LAST month.
+
+    The derived demand series every 4.7 consumer reads (there is no stored history table). Anchored
+    on the current month so it always sits inside a default 24-month history window.
+    """
+    from django.utils import timezone
+    from apps.scm.models import SalesOrder, SalesOrderLine
+    from apps.scm.tests._helpers import add_months, month_start
+    this_month = month_start(timezone.localdate())
+    orders = []
+    for back in range(12, 0, -1):
+        order = SalesOrder.objects.create(
+            tenant=tenant_a, customer=customer_a, order_date=add_months(this_month, -back),
+            status="submitted",
+        )
+        SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                      quantity_ordered=Decimal("100"), unit_price=Decimal("15.00"))
+        order.recalc_totals()
+        orders.append(order)
+    return orders
+
+
+@pytest.fixture
+def demand_forecast_a(db, tenant_a, item_a):
+    """A DRAFT monthly forecast on item_a covering THIS month + the next two (3 periods)."""
+    from django.utils import timezone
+    from apps.scm.models import DemandForecast
+    from apps.scm.tests._helpers import add_months, month_start
+    start = month_start(timezone.localdate())
+    return DemandForecast.objects.create(
+        tenant=tenant_a, name="Widget Q plan", item=item_a, bucket="month",
+        horizon_start=start, horizon_end=add_months(start, 3) - datetime.timedelta(days=1),
+        method="moving_average", method_parameter=Decimal("3"),
+    )
+
+
+@pytest.fixture
+def demand_forecast_b(db, tenant_b, item_b):
+    from django.utils import timezone
+    from apps.scm.models import DemandForecast
+    from apps.scm.tests._helpers import add_months, month_start
+    start = month_start(timezone.localdate())
+    return DemandForecast.objects.create(
+        tenant=tenant_b, name="Globex plan", item=item_b, bucket="month",
+        horizon_start=start, horizon_end=add_months(start, 3) - datetime.timedelta(days=1),
+    )
+
+
+def _seed_baselines(forecast, baseline=Decimal("100")):
+    """Give a generated grid a non-zero, flat baseline.
+
+    ``generate_periods`` legitimately produces zeros when the item has no order history, and every
+    pro-rata/consensus assertion needs a base to move. Written straight onto the period rows (not
+    through a form) because ``baseline_quantity`` is the statistical output.
+    """
+    for row in forecast.periods.all():
+        row.baseline_quantity = baseline
+        row.final_quantity = baseline
+        row.save(update_fields=["baseline_quantity", "final_quantity"])
+    return forecast
+
+
+@pytest.fixture
+def forecast_with_periods_a(db, demand_forecast_a):
+    """demand_forecast_a with its 3-period grid generated (status -> statistical), baselines 100."""
+    demand_forecast_a.generate_periods()
+    return _seed_baselines(demand_forecast_a)
+
+
+@pytest.fixture
+def forecast_with_periods_b(db, demand_forecast_b):
+    demand_forecast_b.generate_periods()
+    return _seed_baselines(demand_forecast_b)
+
+
+@pytest.fixture
+def forecast_period_a(db, forecast_with_periods_a):
+    """The first bucket of forecast_with_periods_a's horizon (the current month)."""
+    return forecast_with_periods_a.periods.first()
+
+
+@pytest.fixture
+def approved_forecast_a(db, forecast_with_periods_a):
+    """forecast_with_periods_a promoted to the plan of record — what detect_order_surge reads."""
+    forecast_with_periods_a.status = "approved"
+    forecast_with_periods_a.save(update_fields=["status", "updated_at"])
+    return forecast_with_periods_a
+
+
+@pytest.fixture
+def demand_signal_a(db, tenant_a, item_a):
+    """A NEW order-surge signal on item_a worth +30 units across the current month."""
+    from django.utils import timezone
+    from apps.scm.models import DemandSignal
+    from apps.scm.tests._helpers import add_months, month_start
+    start = month_start(timezone.localdate())
+    return DemandSignal.objects.create(
+        tenant=tenant_a, signal_type="order_surge", source="internal_orders", item=item_a,
+        observed_at=timezone.now(), effective_from=start,
+        effective_to=add_months(start, 1) - datetime.timedelta(days=1),
+        impact_direction="increase", impact_pct=Decimal("30.00"),
+        impact_quantity=Decimal("30.0000"),
+    )
+
+
+@pytest.fixture
+def demand_signal_b(db, tenant_b, item_b):
+    from django.utils import timezone
+    from apps.scm.models import DemandSignal
+    return DemandSignal.objects.create(
+        tenant=tenant_b, signal_type="order_surge", source="manual", item=item_b,
+        observed_at=timezone.now(), impact_quantity=Decimal("10.0000"),
+    )
+
+
+@pytest.fixture
+def forecast_adjustment_a(db, tenant_a, forecast_with_periods_a, forecast_period_a, admin_user):
+    """A PROPOSED 'absolute 140' override from Sales on the forecast's first period."""
+    from apps.scm.models import ForecastAdjustment
+    return ForecastAdjustment.objects.create(
+        tenant=tenant_a, forecast=forecast_with_periods_a, period=forecast_period_a,
+        contributor_function="sales", submitted_by=admin_user, adjustment_type="absolute",
+        proposed_quantity=Decimal("140"), reason_code="promotion",
+        rationale="Spring campaign lands in this period.",
+    )
+
+
+@pytest.fixture
+def forecast_adjustment_b(db, tenant_b, forecast_with_periods_b):
+    from apps.scm.models import ForecastAdjustment
+    return ForecastAdjustment.objects.create(
+        tenant=tenant_b, forecast=forecast_with_periods_b, adjustment_type="delta",
+        proposed_quantity=Decimal("10"), rationale="Globex proposal.",
+    )
+
+
+@pytest.fixture
+def reorder_rule_service_level_a(db, tenant_a, item_a, location_a2):
+    """A tenant_a rule on the SERVICE-LEVEL safety-stock policy — the calculator's main branch.
+
+    Sited at WH2 so it can co-exist with ``reorder_rule_a`` (same item, WH1) — the pair shares an
+    item deliberately, since ``demand_series`` ignores location for the ``sales_orders`` source.
+    """
+    from apps.scm.models import ReorderRule
+    return ReorderRule.objects.create(
+        tenant=tenant_a, item=item_a, location=location_a2,
+        reorder_point=Decimal("10"), safety_stock=Decimal("5"), reorder_quantity=Decimal("20"),
+        safety_stock_method="service_level", service_level_pct=Decimal("95"),
+        lead_time_days=10, lead_time_variability_days=Decimal("2"),
+    )
