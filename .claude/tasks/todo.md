@@ -13716,6 +13716,65 @@ the colour-named theme.css classes (`badge-green/red/amber/info/muted/slate` —
 - Promotion budget/spend and campaign execution → **CRM 1.3**; 4.7 models only a promotion's demand-uplift
   window
 
-## Review notes
+## Review notes  (delivered 2026-07-25)
 
-(filled in at the end)
+**Built as planned, with four deviations, all deliberate:**
+
+1. **`abc_class`/`xyz_class` were NOT trimmed** (they were trim #1) — the pass had room, and `assign_abc_classes`
+   turned out to be a single grouped revenue query rather than a ranking service.
+2. **`forecast_accuracy_report` shipped** (trim #2) — not a NavERP bullet, but it is where the module's exception
+   management lives and the metrics already existed on the model.
+3. **The seeder back-dates 24 months of closed `SalesOrder`s per item.** Not in the plan, and load-bearing: 4.5 only
+   seeds *today's* orders, so with derived-only history the forecast, the seasonality derivation and the safety-stock
+   calculator would all have correctly computed ZERO and every 4.7 page would have demoed nothing. They are ordinary
+   closed orders, so they flush with 4.5's rows and no 4.7-only history table was introduced. The approved forecast's
+   horizon opens **three months ago** so the accuracy panel scores real elapsed periods and the order-surge detector
+   has a live current period to compare against.
+4. **The 4.6 Transportation nav card was added to `templates/scm/overview.html` alongside 4.7's.** Out of scope
+   strictly, but 4.6 had broken the one-card-per-sub-module convention and 4.7 was about to continue it.
+
+**Verify results:** migration `0009` (6 tables + 14 additive `ReorderRule` AddFields) and `0010` (the
+`(tenant, source_reference)` index); `makemigrations --check` clean; `manage.py check` clean; `seed_scm` idempotent
+(second run skips all 7 sub-modules for both tenants); the `temp/smoke_scm_47.py` sweep is **88/88**; the
+`apps/scm` pytest suite is **1,881 passing** (537 of them new for 4.7, 99% line coverage on the new code).
+
+**What the review agents changed (each applied + committed in sequence):**
+
+* **code-reviewer** — 1 critical + 6 important. The critical one: deleting an *accepted* `ForecastAdjustment` left
+  its delta baked into `consensus_quantity` with no source row, and the next roll-up silently dropped it back out.
+  Also fixed: the seasonal columns were never reset when a profile was cleared; the accuracy league table scored
+  every forecast against sales orders regardless of its own `demand_source`; `archive`/`revise` were ungated while
+  `approve` was admin-gated; an applied signal could be deleted; `impact_pct` could overflow its column. It also
+  drove the **consensus re-resolution** rewrite — two accepted "absolute 40" proposals used to land on 80.
+* **explorer** — the seams, not the internals: no nav card, no reciprocal link from `reorder_alerts`, nothing on the
+  item page, the ERD still listing `DemandForecast` as future (L36), a stale seeder help string. All closed.
+* **frontend-reviewer** — **`.detail-label`/`.detail-value` do not exist in `theme.css`** (L33, 4th recurrence); the
+  real shape is `.detail-item` + `<dt>/<dd>`. 73 rows across 6 files were rendering as run-together text. Fixed here;
+  the 7 pre-existing 4.5/4.6 files with the same bug were spun off as a separate task rather than widened into this one.
+* **performance-reviewer** — measured, not estimated. `safety_stock_recalculate` fired 1–6 queries *per rule* inside
+  its "batched" loop (`select_related` on an FK leaves every hop past it lazy). After the fix, **6 extra rules cost 1
+  extra query in total**. Also batched `detect_order_surge`'s de-dupe, the category derive, and added the
+  `(tenant, source_reference)` index.
+* **qa-smoke-tester** — 163 further runtime assertions through the UI, **0 defects**.
+* **security-reviewer** — 2 high + 3 medium + 1 low, all fixed. The two that mattered: an **unbounded horizon**
+  (`bucket="day"`, 1900→9999) was a ~3-million-row `bulk_create` any planner could trigger, and `ADJUSTABLE_STATUSES`
+  was unenforced on the adjustment path so a member could rewrite an **archived** plan of record by
+  propose-then-self-accept. Writing the fix for the first one exposed a second bug in my own fix — measuring the span
+  with `len(period_range(...))` builds the very list the cap exists to prevent — which is why `period_count()` exists.
+  Also: the admin gate on `safety_stock_apply` was bypassable one click away via the ungated 4.3 `reorderrule_edit`,
+  which writes the same two live columns.
+* **test-writer** — 537 tests, and it found a real bug the other six missed: the seasonality derive window ran
+  `today - 365xN … today`, landing **mid-bucket at both ends**, so a perfectly flat history derived `0.6944` for the
+  opening month instead of `1.0000`. It also reported three things rather than weakening an assertion; all three were
+  then fixed (the typed `final_quantity` that silently reverted, naive datetime window bounds, a misleading message).
+
+**The three contracts this sub-module rests on — do not break them:**
+
+1. **History is derived, never stored.** `demand_series()` reads `SalesOrderLine`/`StockMove` on demand. There is no
+   history table, and adding one would guarantee drift from the orders it was copied from.
+2. **The decomposition is the feature.** Each period keeps `historical → baseline × seasonal_index + event_uplift +
+   signal_adjustment + consensus = final` in SEPARATE columns. Collapsing them into one `quantity` would throw away
+   the only thing that explains *why* a number moved.
+3. **Compute, then apply — never a silent overwrite.** `ReorderRule.calculate()` writes only `computed_*`;
+   `apply_computed()` (tenant-admin gated) is the sole promoter into the live `safety_stock`/`reorder_point` that
+   4.3's alerts and 4.1's purchasing read.
