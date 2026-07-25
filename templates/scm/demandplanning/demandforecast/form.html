@@ -44,7 +44,7 @@
                 <td>{{ pf.event_uplift_quantity }}</td>
                 <td class="text-muted">{{ pf.instance.signal_adjustment_quantity|floatformat:2 }}</td>
                 <td class="text-muted">{{ pf.instance.consensus_quantity|floatformat:2 }}</td>
-                <td>{{ pf.final_quantity }}</td>
+                <td class="text-muted fw-600">{{ pf.instance.final_quantity|floatformat:2 }}</td>
                 <td>{{ pf.unit_price }}</td>
                 <td>{{ pf.is_locked }}</td>
                 <td>{% if pf.instance.pk %}{{ pf.DELETE }}{% endif %}</td>
@@ -55,7 +55,7 @@
           </tbody>
         </table>
       </div>
-      <div class="card-body text-muted">Last year, signal and consensus are shown read-only — they are a history snapshot, the demand-sensing engine's output and the accepted-adjustment roll-up respectively.</div>
+      <div class="card-body text-muted">Last year, signal, consensus and final are shown read-only — a history snapshot, the demand-sensing engine's output, the accepted-adjustment roll-up, and the bottom of the waterfall that is recomputed from the others on every generate. On a manual forecast, type into <strong>Baseline</strong>: that is the input generate preserves.</div>
     </div>
 
     <div class="form-actions">
