@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), and 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.7+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.8+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,8 +9,9 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management.** 4.7–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest
-`4.M` without a `LIVE_LINKS["4.M"]` entry — **4.7 Demand Planning & Forecasting** is next) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting.** 4.8–4.19 are roadmap. Build the next one with
+`/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry — **4.8 Manufacturing / Production**
+is next) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -328,6 +329,71 @@ SalesOrder/PurchaseOrder; carriers reuse `self._supplier(...)` parties; events g
 and the invoice through the real `run_audit` (derived state, not hand-set). Idempotent via a `Carrier` guard; `_flush`
 deletes freight-linked draft bills → FreightInvoice → Shipment → Load → Carrier (FreightInvoice.carrier is PROTECT).
 
+## 4.7 Demand Planning & Forecasting  (`apps/scm/*/DemandPlanning/`, templates `templates/scm/demandplanning/`)
+
+Realizes 4.7's five bullets. The organising rule: **demand history is DERIVED, never stored.**
+`models/DemandPlanning/_history.py::demand_series()` aggregates 4.5's `SalesOrderLine` (bucketed by
+`sales_order__order_date`, excluding `draft`/`cancelled`) or 4.3's `StockMove` `issue` rows (negated — issues are
+signed negative), returning a **dense, zero-filled** `[(period_start, qty)]`. A fourth copy of sales history would
+drift from the orders it was copied from, so there is no history table — the same rule as `Item.on_hand()`.
+`demand_series_map()` is the batched many-item form; `period_count()` measures a span **arithmetically** (never
+`len(period_range(...))` — that builds the list the cap exists to prevent).
+
+**Models**
+- **`SeasonalityProfile`** [`SEA-`] + tenant-less child **`SeasonalityIndex`** — ONE table for a recurring seasonal
+  curve, a windowed `promotion`/`event` (uplift + cannibalization) AND a `period_from_launch` lifecycle ramp; they are
+  the same object at different `profile_type`s. `apply_to()` splits the effect into `(seasonal_index, event_uplift)`
+  so the two land in SEPARATE waterfall columns. `seasonalityprofile_derive` fills the factors from history
+  (period mean ÷ overall mean) over **whole, closed buckets** — a mid-bucket window biases the two end periods down.
+- **`DemandForecast`** [`DF-`] + tenant-less child **`DemandForecastPeriod`** — item × optional location × optional
+  customer over a bucketed horizon. `_forecasting.py` holds the engines (naive, seasonal_naive, moving/weighted MA,
+  exponential smoothing, Holt linear, Holt-Winters, like-item, manual, `best_fit` on an out-of-sample hold-out) as
+  **pure Decimal, zero ORM, no numpy/pandas**. **The decomposition IS the feature**: `historical → baseline ×
+  seasonal_index + event_uplift + signal_adjustment + consensus = final`, each its own column.
+  `generate_periods()` rebuilds the grid (skips `is_locked` rows; **writes no quantities for `method="manual"`**),
+  `recompute_consensus()` re-resolves every accepted adjustment against the LIVE base, and
+  `accuracy_metrics()` returns MAPE/WMAPE/bias/tracking-signal/**FVA** over ELAPSED periods only.
+- **`DemandSignal`** [`DS-`] — short-horizon sensing log, `new → under_review → applied|dismissed|expired`. Most
+  types await an external feed, but **`detect_order_surge()` works today with zero integration** (live sales-order
+  run rate vs. the approved forecast, de-duped on `source_reference = "<DF number>:<period sequence>"`);
+  `expire_stale_signals()` retires past-window rows on the same button.
+- **`ForecastAdjustment`** [`FA-`] — consensus input by `contributor_function` with a mandatory reason code +
+  rationale. `absolute`/`delta`/`percent` all reduce to ONE signed delta via `delta_against(base)`; only `accepted`
+  ones roll up.
+- **`ReorderRule` EXTENDED IN PLACE** (4.3's model, no second policy table) — `safety_stock_method`
+  (fixed/service_level/periodic_review/avg_max/forecast_error), service level, lead time + variability, review
+  period, seasonality/forecast links, plus seven `editable=False` computed columns.
+
+**The compute-then-apply contract (do not break it):** `ReorderRule.calculate()` writes ONLY `computed_*` /
+`avg_daily_demand` / `demand_std_dev` / `abc_class` / `xyz_class` / `last_calculated_at`. `apply_computed()` — reached
+only from the **tenant-admin-gated** `scm:safety_stock_apply` — is the sole promoter into the live
+`safety_stock`/`reorder_point` that 4.3's `reorder_alerts` and 4.1's suggested quantities buy against. For the same
+reason `ReorderRuleForm` **disables those two fields for a non-admin** (`ADMIN_ONLY_FIELDS`), or the gate would be
+one click away on the 4.3 edit page.
+
+**URLs**: `forecasts/` (+ `generate/ submit-review/ approve/ archive/ revise/`), `seasonality/` (+ `derive/`),
+`demand-signals/` (+ the literal `detect/` **above** the pk route, `review/ apply/ dismiss/`),
+`forecast-adjustments/` (+ `accept/ reject/`), and the two reports `safety-stock/` (+ `recalculate/`,
+`<pk>/apply/`) + `forecast-accuracy/`.
+
+**Authorization**: `@tenant_admin_required` on `demandforecast_approve`, `demandforecast_archive`,
+`demandforecast_revise` (it archives the original) and `safety_stock_apply`. An archived/draft forecast is closed to
+signals and adjustments (`ADJUSTABLE_STATUSES`, enforced on BOTH the form queryset and in `_review`). A signal that
+names an item may only be applied to THAT item's forecast. Reviewed adjustments and applied/dismissed signals cannot
+be deleted — the roll-up would keep their number with no source row.
+
+**Guards worth knowing**: `MAX_HORIZON_PERIODS = 520` + a year-1900 floor (an unbounded horizon is an unbounded
+`bulk_create`); `_q2`/`_q4` **clamp** to the column ceiling so one poisoned row cannot `DataError` a whole
+`bulk_update`; `final_quantity` is deliberately OFF the period form (it is recomputed every generate — on a manual
+forecast you type `baseline_quantity`).
+
+**Seeder**: `_seed_demand_planning_tenant` runs LAST. It back-dates 24 months of closed `SalesOrder`s per item
+(4.5 only seeds today's, and without history every 4.7 page would correctly compute zero), then drives the REAL code
+paths — `generate_periods()`, `detect_order_surge()`, `apply_to_forecast()`, `recompute_consensus()`, `calculate()`.
+The approved forecast's horizon opens **three months ago** so accuracy scores real elapsed periods and the detector
+has a live period. Reorder rules are calculated but deliberately **NOT applied**, so the report has a real variance.
+`_flush` deletes the 4.7 tree FIRST (`DemandForecast.item` is `PROTECT`).
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -354,7 +420,7 @@ deletes freight-linked draft bills → FreightInvoice → Shipment → Load → 
   `(param, lookup, is_int)` tuple to `filters=`; in the template reflect `request.GET` (pk filters use
   `|stringformat:"d"`).
 - **Extend the seeder**: add rows inside the per-tenant guard in `seed_scm.py`, reusing existing Party/OrgUnit rows.
-- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (1,343 tests). Ad-hoc smoke scripts live in `temp/`.
+- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (1,881 tests). Ad-hoc smoke scripts live in `temp/`.
 
 ## Sidebar wiring  (`apps/core/navigation.py`)
 
@@ -362,8 +428,13 @@ deletes freight-linked draft bills → FreightInvoice → Shipment → Load → 
 Purchase Requisition→`scm:requisition_list`, Request for Quotation→`scm:rfq_list`,
 Purchase Order Management→`scm:purchaseorder_list`, Vendor Portal→`scm:purchaseorder_list?status=sent`
 (staff-side, no vendor login — L32), Invoice Reconciliation→`scm:goodsreceipt_list`.
-`LIVE_LINKS["4.2"]`–`["4.6"]` map each of those sub-modules' bullets the same way; **`LIVE_LINKS["4.6"]`** →
+`LIVE_LINKS["4.2"]`–`["4.7"]` map each of those sub-modules' bullets the same way; **`LIVE_LINKS["4.6"]`** →
 Route Planning + Load Optimization both `scm:load_list` (two facets of the load, they co-highlight),
 Freight Audit & Payment `scm:freightinvoice_list`, Carrier Management `scm:carrier_list`,
-Shipment Tracking `scm:shipment_list`.
+Shipment Tracking `scm:shipment_list`. **`LIVE_LINKS["4.7"]`** → Sales Forecasting
+`scm:demandforecast_list`, Seasonality Analysis `scm:seasonalityprofile_list`, Demand Sensing
+`scm:demandsignal_list`, Collaborative Planning `scm:forecastadjustment_list` (the FULL list, not
+`?status=proposed` — the queue is a chip on that page and filtering the nav entry would hide the
+accepted/rejected history), Safety Stock Calculation **`scm:safety_stock_report`** (a computed REPORT,
+the `scm:reorder_alerts`/`scm:valuation_report` precedent that a bullet need not be a CRUD list).
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
