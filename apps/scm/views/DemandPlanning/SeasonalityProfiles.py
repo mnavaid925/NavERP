@@ -106,12 +106,21 @@ def _derive_source_series(profile, years):
 
     A location- or global-scoped profile has no single demand stream to fit, so it returns nothing
     and the caller says so rather than inventing a curve.
+
+    The window covers WHOLE, CLOSED buckets only. ``today - 365 x years`` lands mid-bucket and the
+    current bucket is by definition still running, so both ends would otherwise contribute a
+    TRUNCATED period to their index's average and bias exactly those two periods down — a perfectly
+    flat two-year history derived an index of 0.6944 for the month at the start of the window
+    instead of the correct 1.0000, and the in-progress month sagged further the earlier in the month
+    the button was pressed. Snapping to the bucket grid (the same whole-period discipline
+    ``DemandForecast.history_window()`` already uses) is what makes a flat history read as flat.
     """
     from apps.scm.models import Item as ItemModel
-    end = timezone.localdate()
-    start = end - timedelta(days=365 * max(int(years or 2), 1))
+    from apps.scm.models.DemandPlanning._history import bucket_start
     # period_from_launch is a lifecycle grain, not a calendar one — derive it monthly.
     bucket = profile.bucket if profile.bucket in ("week", "month", "quarter") else "month"
+    end = bucket_start(timezone.localdate(), bucket) - timedelta(days=1)  # last CLOSED bucket
+    start = bucket_start(end - timedelta(days=365 * max(int(years or 2), 1)), bucket)
     if profile.item_id:
         item_ids = [profile.item_id]
     elif profile.category_id:
@@ -140,15 +149,20 @@ def seasonalityprofile_derive(request, pk):
     profile = get_object_or_404(SeasonalityProfile, pk=pk, tenant=request.tenant)
     series, _bucket = _derive_source_series(profile, profile.derived_from_years)
     if not series:
-        messages.error(request, "No demand history to derive from — this profile needs an item or a "
-                                "category with sales history.")
+        messages.error(request, "Nothing to derive from — a seasonality curve needs an item- or "
+                                "category-scoped profile. A location- or global-scoped profile has "
+                                "no single demand stream to fit.")
         return redirect("scm:seasonalityprofile_detail", pk=pk)
     grouped = {}
     for period_start, qty in series:
         grouped.setdefault(profile.period_number_for(period_start), []).append(qty)
     overall = sum((qty for _, qty in series), ZERO) / Decimal(len(series))
     if overall <= ZERO:
-        messages.error(request, "Demand history exists but totals zero — nothing to index.")
+        # The derived series is dense/zero-filled, so an item that has never sold reaches HERE
+        # rather than the empty-series branch above — say so plainly instead of implying the
+        # history is present but flat.
+        messages.error(request, "No sales history for this profile's scope in the last "
+                                f"{profile.derived_from_years} year(s) — nothing to index.")
         return redirect("scm:seasonalityprofile_detail", pk=pk)
 
     from apps.scm.models.DemandPlanning._history import period_label as label_for
