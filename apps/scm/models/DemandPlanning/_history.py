@@ -13,11 +13,12 @@ Model imports are made INSIDE the functions (the ``ReorderRule.on_hand_map()`` p
 module is reached from ``InventoryManagement/ReorderRules.py``, which ``models/__init__.py`` loads
 BEFORE ``DemandPlanning``, so a module-level import would be a cycle.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.db.models import DateField, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncQuarter, TruncWeek
+from django.utils import timezone
 
 ZERO = Decimal("0")
 
@@ -108,6 +109,17 @@ def periods_per_year(bucket):
     return PERIODS_PER_YEAR.get(bucket, 12)
 
 
+def _moment(value, *, end_of_day=False):
+    """A tz-aware datetime for a date boundary on a DateTimeField lookup.
+
+    Passing a bare `date` works but Django warns ("received a naive datetime while time zone support
+    is active") and interprets it as UTC — so under any project timezone other than UTC the whole
+    window silently shifts by the offset.
+    """
+    moment = datetime.combine(value, time.min) + (timedelta(days=1) if end_of_day else timedelta())
+    return timezone.make_aware(moment) if timezone.is_naive(moment) else moment
+
+
 # ----------------------------------------------------------------------------- the history series
 def demand_series(tenant, *, item, location=None, customer=None, source="sales_orders",
                   start, end, bucket="month", exclude_outliers=False, sigma=3):
@@ -141,8 +153,8 @@ def demand_series(tenant, *, item, location=None, customer=None, source="sales_o
         # in CAST(CONVERT_TZ(...)), which makes scm_move_tnt_movedat_idx unusable on the module's
         # fastest-growing table.
         moves = StockMove.objects.filter(tenant=tenant, item=item, move_type="issue",
-                                         moved_at__gte=start,
-                                         moved_at__lt=end + timedelta(days=1))
+                                         moved_at__gte=_moment(start),
+                                         moved_at__lt=_moment(end, end_of_day=True))
         if location is not None:
             moves = moves.filter(location=location)
         # Filters BEFORE .values()/.annotate() — a .filter() after the grouping becomes a HAVING
@@ -203,7 +215,8 @@ def demand_series_map(tenant, items, *, start, end, bucket="month", source="sale
     elif source == "stock_issues":
         rows = (StockMove.objects
                 .filter(tenant=tenant, item_id__in=item_ids, move_type="issue",
-                        moved_at__gte=start, moved_at__lt=end + timedelta(days=1))
+                        moved_at__gte=_moment(start),
+                        moved_at__lt=_moment(end, end_of_day=True))
                 .annotate(period=trunc("moved_at", output_field=DateField()))
                 .values("item_id", "period").annotate(total=Sum("quantity")))
         for row in rows:
