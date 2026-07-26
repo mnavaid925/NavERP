@@ -65,6 +65,27 @@ def _reorderrule_form(request, instance):
 
 
 @login_required
+def reorderrule_detail(request, pk):
+    """Read-only view of the rule and its 4.7 calculated policy.
+
+    4.7 took this model from 6 fields to ~20, seven of them computed. Until now the only place those
+    were readable was the EDIT form's panel — a read surface that existed solely on a write page —
+    and the list had no View action at all, against the project's CRUD-completeness rule.
+    """
+    obj = get_object_or_404(
+        ReorderRule.objects.select_related("item", "location", "seasonality_profile",
+                                           "demand_forecast", "demand_forecast__item"),
+        pk=pk, tenant=request.tenant)
+    on_hand = obj.current_on_hand()
+    return render(request, "scm/inventory/reorderrule/detail.html", {
+        "obj": obj,
+        "on_hand": on_hand,
+        "is_below_point": obj.is_below_point(on_hand=on_hand),
+        "suggested": obj.suggested_quantity(on_hand=on_hand),
+    })
+
+
+@login_required
 @require_POST
 def reorderrule_delete(request, pk):
     return crud_delete(request, model=ReorderRule, pk=pk, success_url="scm:reorderrule_list")
