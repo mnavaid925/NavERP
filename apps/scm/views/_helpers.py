@@ -23,6 +23,33 @@ def _need_tenant(request):
     return False
 
 
+def _is_tenant_admin(user):
+    """The same test ``@tenant_admin_required`` and the templates use, as a plain predicate.
+
+    Needed where the gate depends on the TARGET rather than the route: moving an *approved* demand
+    plan is privileged, moving a draft one is ordinary planner work, so the check has to happen after
+    the object is fetched.
+    """
+    return bool(getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False))
+
+
+def _guard_plan_of_record(request, forecast, what):
+    """Refuse a non-admin any write that moves an APPROVED forecast. Returns a message or "".
+
+    `demandforecast_approve`/`_archive`/`_revise` are all `@tenant_admin_required` because they touch
+    the plan of record. Accepting an adjustment and applying a demand signal move the very same
+    numbers on the very same row, so leaving them at `@login_required` let any member do through the
+    side door what the front door refuses — a member who is 403'd from archiving an approved plan
+    could still move its quantities. Gating on the TARGET's status (not the route) keeps ordinary
+    work on draft/statistical/in-review plans open to every planner, and a one-planner workspace is
+    unaffected because that planner is the tenant admin.
+    """
+    if forecast is not None and forecast.status == "approved" and not _is_tenant_admin(request.user):
+        return (f"{what} on an approved forecast is a change to the plan of record — ask a workspace "
+                f"administrator.")
+    return ""
+
+
 def _item_qs(tenant):
     """4.3 item master, scoped to the tenant — the queryset every list page's item filter shares.
 
