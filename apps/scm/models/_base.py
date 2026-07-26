@@ -22,6 +22,26 @@ from apps.core.utils import next_number
 
 ZERO = Decimal("0")
 
+#: Ceilings of the two money/quantity column shapes this app uses — DecimalField(max_digits=14,
+#: decimal_places=2) and (14, 4).
+MAX_Q2 = Decimal("9999999999.99")
+MAX_Q4 = Decimal("9999999999.9999")
+
+
+def q2(value):
+    """Quantize to 2dp AND clamp to what a DecimalField(14, 2) holds.
+
+    Both halves matter. A long Decimal fails to save; an OVER-RANGE one raises ``DataError`` inside
+    ``bulk_update``, which fails the whole batch rather than the one offending row. Every writer of
+    a computed quantity goes through here so a single poisoned figure can only degrade its own row.
+    """
+    return min(max(Decimal(value or ZERO), -MAX_Q2), MAX_Q2).quantize(Decimal("0.01"))
+
+
+def q4(value):
+    """The 4dp sibling of :func:`q2` — see there for why clamping, not just quantizing, is required."""
+    return min(max(Decimal(value or ZERO), -MAX_Q4), MAX_Q4).quantize(Decimal("0.0001"))
+
 
 class TenantOwned(models.Model):
     """Tenant FK + created/updated timestamps. ``related_name="+"`` — views always filter
