@@ -36,21 +36,28 @@ class DemandForecastForm(TenantUniqueMixin, TenantModelForm):
 class DemandForecastPeriodForm(TenantModelForm):
     """One horizon bucket.
 
-    `historical_quantity`, `signal_adjustment_quantity` and `consensus_quantity` are NOT editable
-    here — they are a snapshot, the signal engine's output and the consensus roll-up respectively.
-    The detail page shows all three; letting them be typed would break the waterfall's meaning.
+    **Exactly three things on a period are typed: `baseline_quantity`, `unit_price` and `is_locked`**
+    (plus the grid's own dates/label/sequence). Every other column is a COMPUTED step of the
+    waterfall and is `editable=False` on the model, so neither this form nor the admin inline can
+    offer it:
 
-    `final_quantity` is off the form too, and that is the same rule rather than an omission: final is
-    the BOTTOM of the waterfall (`baseline × index + uplift + signal + consensus`), recomputed on
-    every generate and every accept/reject. Offering it would invite a planner to type the one number
-    the app is guaranteed to overwrite. On a `manual` forecast the input is `baseline_quantity`,
-    which generate deliberately preserves.
+    * `historical_quantity` — a snapshot of what the fit read;
+    * `seasonal_index_applied` / `event_uplift_quantity` — outputs of the seasonality PROFILE (the
+      profile is the input; a regenerate correctly resets these, so anything typed here is erased);
+    * `signal_adjustment_quantity` — written by the demand-sensing apply;
+    * `consensus_quantity` — the accepted-adjustment roll-up;
+    * `final_quantity` — the BOTTOM of the waterfall, recomputed on every generate, every grid save
+      and every accept/reject.
+
+    Offering any of them would invite a planner to type a number the app is guaranteed to overwrite.
+    On a `manual` forecast the input is `baseline_quantity`, which generate deliberately preserves
+    and which the grid save immediately turns into `final_quantity`.
     """
 
     class Meta:
         model = DemandForecastPeriod
         fields = ["sequence", "period_start", "period_end", "period_label", "baseline_quantity",
-                  "seasonal_index_applied", "event_uplift_quantity", "unit_price", "is_locked"]
+                  "unit_price", "is_locked"]
         widgets = {
             "period_start": forms.DateInput(attrs={"type": "date"}),
             "period_end": forms.DateInput(attrs={"type": "date"}),
