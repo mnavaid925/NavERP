@@ -1,7 +1,7 @@
 """SCM 4.7 Demand Planning — ForecastAdjustment views (collaborative / consensus planning)."""
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _need_tenant
+from apps.scm.views._helpers import _guard_plan_of_record, _need_tenant
 from apps.scm.models import DemandForecast, ForecastAdjustment
 from apps.scm.forms import ForecastAdjustmentForm, ForecastAdjustmentReviewForm
 
@@ -120,7 +120,8 @@ def forecastadjustment_delete(request, pk):
 def _review(request, pk, *, to_status, verb):
     """Shared accept/reject gate. Proposed-only: a second accept would double-count the delta into
     ``consensus_quantity``, and re-rejecting an accepted one would leave the roll-up stale."""
-    obj = get_object_or_404(ForecastAdjustment.objects.select_related("forecast"),
+    # select_related("period") too: save() -> resolve_quantity() -> base_quantity() dereferences it.
+    obj = get_object_or_404(ForecastAdjustment.objects.select_related("forecast", "period"),
                             pk=pk, tenant=request.tenant)
     if not obj.is_reviewable:
         messages.error(request, "This adjustment has already been reviewed.")
@@ -132,6 +133,10 @@ def _review(request, pk, *, to_status, verb):
     if obj.forecast.status not in DemandForecast.ADJUSTABLE_STATUSES:
         messages.error(request, "That forecast is no longer open to consensus adjustments — it is "
                                 "still a draft, or it has been archived.")
+        return redirect("scm:forecastadjustment_detail", pk=pk)
+    blocked = _guard_plan_of_record(request, obj.forecast, "Reviewing an adjustment")
+    if blocked:
+        messages.error(request, blocked)
         return redirect("scm:forecastadjustment_detail", pk=pk)
     form = ForecastAdjustmentReviewForm(request.POST)
     note = form.cleaned_data.get("review_note", "") if form.is_valid() else ""
