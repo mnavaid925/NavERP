@@ -153,12 +153,20 @@ class DemandSignal(TenantNumbered):
         seasonalised baseline (evenly when that total is zero) — the same top-down split
         ``recompute_consensus`` uses, so a seasonal horizon is not quietly flattened.
 
+        LOCKED periods are excluded outright, exactly as ``recompute_consensus`` excludes them.
+        Giving a locked row a share and then declining to move its ``final_quantity`` — the
+        obvious-looking alternative — silently swallowed that share: a 90-unit signal across three
+        periods, one of them locked, moved the plan by 60 while the page reported it applied across
+        all three, and the locked row rendered "+ Signal 30" beside an unchanged Final. That is the
+        very mismatch a lock exists to prevent. A lock means the number is committed, so the impact
+        lands on the periods that can still move.
+
         Returns how many periods moved. Callers guard the status; this method does the arithmetic.
         """
         from apps.scm.models import DemandForecastPeriod
         start, end = self.effective_window()
         periods = [row for row in forecast.periods.all()
-                   if row.period_end >= start and row.period_start <= end]
+                   if not row.is_locked and row.period_end >= start and row.period_start <= end]
         if not periods:
             return 0
         total = Decimal(quantity if quantity is not None else self.signed_impact_quantity)
@@ -167,11 +175,10 @@ class DemandSignal(TenantNumbered):
         for row in periods:
             share = (total * weights[row.pk] / weight_total) if weight_total > ZERO \
                 else (total / Decimal(len(periods)))
-            row.signal_adjustment_quantity = (
-                (row.signal_adjustment_quantity or ZERO) + share).quantize(Decimal("0.0001"))
-            if not row.is_locked:
-                row.final_quantity = (row.pre_adjustment_quantity
-                                      + (row.consensus_quantity or ZERO)).quantize(Decimal("0.0001"))
+            # q4, not a bare quantize: an over-range value raises DataError inside the bulk_update
+            # below, failing the whole grid rather than the one row.
+            row.signal_adjustment_quantity = q4((row.signal_adjustment_quantity or ZERO) + share)
+            row.final_quantity = q4(row.pre_adjustment_quantity + (row.consensus_quantity or ZERO))
         DemandForecastPeriod.objects.bulk_update(
             periods, ["signal_adjustment_quantity", "final_quantity"])
         self.applied_to_forecast = forecast
@@ -280,16 +287,14 @@ def detect_order_surge(tenant, threshold_pct=SURGE_THRESHOLD_PCT):
             observed_at=timezone.now(),
             effective_from=today, effective_to=period.period_end,
             horizon_days=max((period.period_end - today).days + 1, 1),
-            signal_value=min(max(run_rate, Decimal("-9999999999.9999")),
-                             Decimal("9999999999.9999")).quantize(Decimal("0.0001")),
+            signal_value=q4(run_rate),
             baseline_value=expected,
             impact_direction="increase" if deviation_pct > ZERO else "decrease",
             # Clamped to what the DecimalField(6, 2) column holds. A tiny forecast against a real
             # order (2 planned, 250 ordered) yields a five-figure percentage, and an overflow here
             # would take the whole detection batch down with a DataError.
             impact_pct=min(abs(deviation_pct), Decimal("9999.99")).quantize(Decimal("0.01")),
-            impact_quantity=min(abs(run_rate - expected),
-                                Decimal("9999999999.9999")).quantize(Decimal("0.0001")),
+            impact_quantity=q4(abs(run_rate - expected)),
             confidence="high" if abs(deviation_pct) >= threshold_pct * 2 else "medium",
             notes=(f"Detected from live sales orders: {actual} ordered in "
                    f"{elapsed} of {total_days} days against a forecast of {expected}."),
