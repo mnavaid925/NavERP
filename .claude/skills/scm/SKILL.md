@@ -382,10 +382,21 @@ signals and adjustments (`ADJUSTABLE_STATUSES`, enforced on BOTH the form querys
 names an item may only be applied to THAT item's forecast. Reviewed adjustments and applied/dismissed signals cannot
 be deleted — the roll-up would keep their number with no source row.
 
-**Guards worth knowing**: `MAX_HORIZON_PERIODS = 520` + a year-1900 floor (an unbounded horizon is an unbounded
-`bulk_create`); `_q2`/`_q4` **clamp** to the column ceiling so one poisoned row cannot `DataError` a whole
-`bulk_update`; `final_quantity` is deliberately OFF the period form (it is recomputed every generate — on a manual
-forecast you type `baseline_quantity`).
+**Guards worth knowing**:
+- `MAX_HORIZON_PERIODS = 520` + a year-1900 floor. Test a span with **`period_count()`** (arithmetic), never
+  `len(period_range(...))` — building the range to measure it IS the runaway the cap prevents.
+- **`q2`/`q4` in `models/_base.py` clamp as well as quantize.** Every writer of a quantity column uses them; an
+  unclamped sibling can still `DataError` a whole `bulk_update` and fail the batch instead of the one bad row.
+- **A `DemandForecastPeriod` has exactly three typed fields: `baseline_quantity`, `unit_price`, `is_locked`.**
+  Everything else is a computed waterfall step and is `editable=False`, so no form and no admin inline can offer
+  it. On a `manual` forecast you type `baseline_quantity`; the grid save calls `recompute_consensus()` so `final`
+  updates immediately (generate and accept/reject are not the only things that must derive it).
+- **A LOCKED period is excluded from BOTH roll-ups** — `recompute_consensus` and `apply_to_forecast`. Giving a
+  locked row a share and then declining to move its `final_quantity` silently swallows that share.
+- **Moving an APPROVED plan is admin-only, whichever door you use.** `approve`/`archive`/`revise` are
+  `@tenant_admin_required`; accepting an adjustment and applying a signal touch the same numbers, so they go
+  through `_guard_plan_of_record()` (gated on the TARGET's status, so draft/in-review work stays open to every
+  planner). Gating the new path is not gating the column — see also `ReorderRuleForm.ADMIN_ONLY_FIELDS`.
 
 **Seeder**: `_seed_demand_planning_tenant` runs LAST. It back-dates 24 months of closed `SalesOrder`s per item
 (4.5 only seeds today's, and without history every 4.7 page would correctly compute zero), then drives the REAL code
