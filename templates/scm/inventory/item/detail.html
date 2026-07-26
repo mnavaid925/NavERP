@@ -106,6 +106,7 @@
               <td>{% if r.last_calculated_at %}{{ r.computed_reorder_point|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
+                  <a href="{% url 'scm:reorderrule_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'scm:reorderrule_edit' r.pk %}" class="btn-icon" title="Edit policy"><i data-lucide="pencil"></i></a>
                 </div>
               </td>
