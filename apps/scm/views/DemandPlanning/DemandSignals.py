@@ -1,7 +1,7 @@
 """SCM 4.7 Demand Planning — DemandSignal views (demand sensing triage)."""
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _item_qs, _location_qs, _need_tenant
+from apps.scm.views._helpers import _guard_plan_of_record, _item_qs, _location_qs, _need_tenant
 from apps.scm.models import DemandSignal
 from apps.scm.models.DemandPlanning.DemandSignals import detect_order_surge, expire_stale_signals
 from apps.scm.forms import DemandSignalApplyForm, DemandSignalDismissForm, DemandSignalForm
@@ -142,6 +142,10 @@ def demandsignal_apply(request, pk):
         messages.error(request, "Pick a forecast to apply this signal to.")
         return redirect("scm:demandsignal_detail", pk=pk)
     forecast = form.cleaned_data["forecast"]
+    blocked = _guard_plan_of_record(request, forecast, "Applying a signal")
+    if blocked:
+        messages.error(request, blocked)
+        return redirect("scm:demandsignal_detail", pk=pk)
     quantity = form.cleaned_data.get("impact_quantity")
     with transaction.atomic():
         moved = obj.apply_to_forecast(forecast, quantity=quantity)
