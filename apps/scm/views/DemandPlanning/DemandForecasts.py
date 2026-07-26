@@ -61,6 +61,12 @@ def _demandforecast_form(request, instance):
                 forecast.save()
                 formset.instance = forecast
                 formset.save()
+                # `final_quantity` is derived, so SOMETHING has to derive it after the grid is
+                # typed. Generate and accept/reject both do; an edit is neither, and an edit is
+                # exactly where `baseline_quantity` is entered on a manual forecast — without this
+                # the planner's number sat in Baseline while Final (and the page's headline total)
+                # stayed at zero until Generate was pressed.
+                forecast.recompute_consensus()
             write_audit_log(request.user, forecast, "update" if is_edit else "create", _changed(form))
             messages.success(request, f"Forecast {forecast.number} saved. "
                                       f"Run Generate to build the period grid from history.")
