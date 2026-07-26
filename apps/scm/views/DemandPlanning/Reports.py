@@ -134,8 +134,10 @@ def safety_stock_recalculate(request):
             error_map[rule.demand_forecast_id] = rule.demand_forecast.accuracy_metrics().get("wmape")
     for rule in rules:
         rule.abc_class = classes.get(rule.pk, rule.abc_class)
-        rule.calculate(series=series_map.get(rule.item_id, []),
-                       forecast_error_pct=error_map.get(rule.demand_forecast_id))
+        # Hand over the whole MAP: a missing key means "not computed", a present None means "no
+        # measurable error yet". Passing `error_map.get(...)` collapsed the two, so every forecast
+        # without elapsed periods fell back to a per-rule aggregate — the N+1 this batching removed.
+        rule.calculate(series=series_map.get(rule.item_id, []), forecast_errors=error_map)
     ReorderRule.objects.bulk_update(
         rules, ["avg_daily_demand", "demand_std_dev", "abc_class", "xyz_class",
                 "computed_safety_stock", "computed_reorder_point", "last_calculated_at"])
@@ -193,10 +195,15 @@ def forecast_accuracy_report(request):
         series_map = demand_series_map(request.tenant, {f.item_id for f in group},
                                        start=start, end=end, bucket=bucket, source=source)
         for forecast in group:
-            # The batch map is item-level. A customer-scoped forecast must not be graded against
-            # every channel's demand, so it pays for its own exact series — rare enough that one
-            # extra query beats a wrong number on a league table.
-            actuals = (forecast.period_actuals_map() if forecast.customer_id
+            # The batch map is ITEM-level: it narrows by neither customer nor location. Either
+            # narrowing being set means this forecast's own detail page grades it on a SMALLER slice
+            # of demand than the batch does — the two-different-WMAPEs symptom this grouping exists
+            # to remove. Those forecasts pay for their own exact series; rare enough that the extra
+            # query beats a wrong number on a league table. Location is escalated only for
+            # `stock_issues`, because a SalesOrderLine has no location for it to narrow.
+            needs_exact = forecast.customer_id or (
+                forecast.location_id and forecast.demand_source == "stock_issues")
+            actuals = (forecast.period_actuals_map() if needs_exact
                        else dict(series_map.get(forecast.item_id, [])))
             periods = list(forecast.periods.all())
             metrics = forecast.accuracy_metrics(periods=periods, actuals=actuals)
