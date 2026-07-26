@@ -4534,11 +4534,29 @@ class TestReorderRuleSafetyStockCalculation:
         rule = reorder_rule_service_level_a
         rule.safety_stock_method = "forecast_error"
         rule.demand_forecast = forecast_with_periods_a
-        rule.calculate(series=_flat_history(), forecast_error_pct=Decimal("30"))
+        rule.calculate(series=_flat_history(),
+                       forecast_errors={forecast_with_periods_a.pk: Decimal("30")})
         avg = Decimal("100") / PER_DAY
         expected = (fx.z_for_service_level(Decimal("95")) * avg * Decimal("0.30")
                     * Decimal(rule.lead_time_days).sqrt())
         assert abs(rule.computed_safety_stock - expected) <= Decimal("0.01")
+
+    def test_a_supplied_none_error_is_honoured_and_not_recomputed(
+        self, reorder_rule_service_level_a, forecast_with_periods_a, django_assert_num_queries,
+    ):
+        """A PRESENT None means "this forecast has no measurable error yet" and must be believed.
+
+        The batch caller passes a map, not a bare value, precisely so a supplied None can be told
+        apart from "the caller supplied nothing". When they were conflated, every forecast without
+        elapsed periods fell back to `accuracy_metrics()` — one aggregate per rule, which is the
+        N+1 the batching exists to remove.
+        """
+        rule = reorder_rule_service_level_a
+        rule.safety_stock_method = "forecast_error"
+        rule.demand_forecast = forecast_with_periods_a
+        with django_assert_num_queries(0):
+            rule.calculate(series=_flat_history(),
+                           forecast_errors={forecast_with_periods_a.pk: None})
 
     def test_forecast_error_without_a_linked_forecast_falls_back_to_service_level(
         self, reorder_rule_service_level_a,
