@@ -402,7 +402,10 @@ class DemandForecastPeriodInline(admin.TabularInline):
     extra = 0
     # The waterfall columns the app owns: a history snapshot, the signal engine's output and the
     # consensus roll-up. Typing them here would make the decomposition lie.
-    readonly_fields = ("historical_quantity", "signal_adjustment_quantity", "consensus_quantity")
+    # Every computed step of the waterfall. All are editable=False on the model now, so the admin
+    # cannot offer them either — typing any of them here would make the decomposition lie.
+    readonly_fields = ("historical_quantity", "seasonal_index_applied", "event_uplift_quantity",
+                       "signal_adjustment_quantity", "consensus_quantity", "final_quantity")
 
 
 @admin.register(DemandForecast)
