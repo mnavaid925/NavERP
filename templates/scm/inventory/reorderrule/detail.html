@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Reorder Rule — {{ obj.item.sku }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.item.sku }} @ {{ obj.location.code }}
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+        {% if is_below_point %}<span class="badge badge-red">Below reorder point</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:reorderrule_list' %}">Reorder Rules</a><span class="sep">›</span><span>{{ obj.item.sku }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline"><i data-lucide="shield"></i> Safety stock</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="box"></i></div>
+      <div class="stat-value">{{ on_hand|floatformat:2 }}</div>
+      <div class="stat-label">On hand at {{ obj.location.code }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="bell"></i></div>
+      <div class="stat-value">{{ obj.reorder_point|floatformat:2 }}</div>
+      <div class="stat-label">Reorder point (live)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-plus"></i></div>
+      <div class="stat-value">{{ suggested|floatformat:2 }}</div>
+      <div class="stat-label">Suggested order quantity</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rule</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a> · {{ obj.item.name }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{{ obj.location.code }} · {{ obj.location.name }}</dd></div>
+        <div class="detail-item"><dt>Reorder point (live)</dt><dd class="fw-600">{{ obj.reorder_point|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Safety stock (live)</dt><dd class="fw-600">{{ obj.safety_stock|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Reorder quantity</dt><dd>{{ obj.reorder_quantity|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}Yes{% else %}No{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Safety Stock Policy</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Method</dt><dd><span class="badge badge-{% if obj.safety_stock_method == 'fixed' %}muted{% else %}info{% endif %}">{{ obj.get_safety_stock_method_display }}</span></dd></div>
+        <div class="detail-item"><dt>Service level</dt><dd>{{ obj.service_level_pct|floatformat:1 }}%</dd></div>
+        <div class="detail-item"><dt>Lead time</dt><dd>{{ obj.lead_time_days }} days ± {{ obj.lead_time_variability_days|floatformat:1 }}</dd></div>
+        <div class="detail-item"><dt>Review period</dt><dd>{{ obj.review_period_days }} days</dd></div>
+        <div class="detail-item"><dt>Seasonality profile</dt><dd>{% if obj.seasonality_profile %}<a href="{% url 'scm:seasonalityprofile_detail' obj.seasonality_profile.pk %}">{{ obj.seasonality_profile.name }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Demand forecast</dt><dd>{% if obj.demand_forecast %}<a href="{% url 'scm:demandforecast_detail' obj.demand_forecast.pk %}">{{ obj.demand_forecast.number }}</a> · {{ obj.demand_forecast.name }}{% else %}—{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted">"Fixed" keeps the hand-entered safety stock. Any other method has the Safety Stock page compute a recommendation from demand variability and lead time.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Calculated Policy</h2></div>
+    <div class="card-body">
+      {% if obj.last_calculated_at %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Avg daily demand</dt><dd>{{ obj.avg_daily_demand|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Demand σ</dt><dd>{{ obj.demand_std_dev|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>ABC (revenue)</dt><dd>{% if obj.abc_class %}<span class="badge badge-slate">{{ obj.abc_class }}</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>XYZ (variability)</dt><dd>{% if obj.xyz_class %}<span class="badge badge-slate">{{ obj.xyz_class }}</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Calculated safety stock</dt><dd class="fw-600">{{ obj.computed_safety_stock|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Calculated reorder point</dt><dd class="fw-600">{{ obj.computed_reorder_point|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Variance vs live</dt><dd>
+            {% if obj.safety_stock_variance_pct is None %}
+              <span class="badge badge-muted">{{ obj.safety_stock_variance|floatformat:2 }}</span>
+            {% elif obj.safety_stock_variance_pct <= 5 and obj.safety_stock_variance_pct >= -5 %}
+              <span class="badge badge-green">{{ obj.safety_stock_variance_pct|floatformat:1 }}%</span>
+            {% elif obj.safety_stock_variance_pct <= 25 and obj.safety_stock_variance_pct >= -25 %}
+              <span class="badge badge-amber">{{ obj.safety_stock_variance_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="badge badge-red">{{ obj.safety_stock_variance_pct|floatformat:1 }}%</span>
+            {% endif %}
+          </dd></div>
+          <div class="detail-item"><dt>Last calculated</dt><dd>{{ obj.last_calculated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+        <p class="text-muted">These are recommendations. Promoting one into the live safety stock and reorder point above is a separate, confirmed action on the Safety Stock page — 4.1 purchasing reorders against the live figures.</p>
+      {% else %}
+        <div class="empty-state"><i data-lucide="calculator"></i><h3>Never calculated</h3><p>Run Recalculate on the Safety Stock page to size this rule from demand variability and lead time.</p><a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline">Go to Safety Stock</a></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:reorderrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> Reorder alerts</a>
+        <form method="post" action="{% url 'scm:reorderrule_delete' obj.pk %}" onsubmit="return confirm('Delete this reorder rule?');">{% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+        <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
