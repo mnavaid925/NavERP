@@ -141,7 +141,9 @@ class ForecastAdjustment(TenantNumbered):
         return self.status in self.REVIEWABLE_STATUSES
 
     def save(self, *args, **kwargs):
-        self.resolved_quantity = Decimal(self.resolve_quantity()).quantize(Decimal("0.0001"))
+        # q4 clamps as well as quantizes. The roll-up writer (recompute_consensus) already does,
+        # and an unclamped sibling writer of the same column could still poison a bulk_update.
+        self.resolved_quantity = q4(self.resolve_quantity())
         update_fields = kwargs.get("update_fields")
         if update_fields is not None and "resolved_quantity" not in update_fields:
             kwargs["update_fields"] = list(update_fields) + ["resolved_quantity"]
