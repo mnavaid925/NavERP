@@ -174,6 +174,12 @@ class DemandForecast(TenantNumbered):
             errors["reference_item"] = "A like-item forecast needs a reference item to copy from."
         if self.reference_item_id and self.reference_item_id == self.item_id:
             errors["reference_item"] = "The reference item must be a different item."
+        # `customer` narrows the derived history only on the sales_orders path — a StockMove has no
+        # customer. Allowing the pair would fit and grade the forecast across ALL channels while its
+        # header claimed one, which is worse than refusing it.
+        if self.customer_id and self.demand_source == "stock_issues":
+            errors["customer"] = ("Stock issues carry no customer — pick the Sales Orders source to "
+                                  "forecast one channel, or clear the customer.")
         if errors:
             raise ValidationError(errors)
 
@@ -414,15 +420,24 @@ class DemandForecastPeriod(models.Model):
     # waterfall still explains itself after the underlying orders change.
     historical_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0, editable=False)
     baseline_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0,
-                                            help_text="Statistical output before any adjustment")
-    seasonal_index_applied = models.DecimalField(max_digits=8, decimal_places=4, default=1)
-    event_uplift_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+                                            help_text="Statistical output before any adjustment — "
+                                                      "and the INPUT on a manual forecast")
+    # Outputs of the seasonality PROFILE, not planner inputs. They were briefly editable, which made
+    # them unusable end to end: a regenerate correctly resets them (a cleared profile must not keep
+    # applying its curve), so anything typed here was erased by the next Generate. The profile is
+    # the input; these two are what it produced.
+    seasonal_index_applied = models.DecimalField(max_digits=8, decimal_places=4, default=1,
+                                                 editable=False)
+    event_uplift_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0,
+                                                editable=False)
     # Written by demandsignal_apply, not typed.
     signal_adjustment_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0,
                                                      editable=False)
     # Rolled up from ACCEPTED ForecastAdjustments by recompute_consensus(), not typed.
     consensus_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0, editable=False)
-    final_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    # The bottom of the waterfall, recomputed by generate, by the grid save and by every
+    # accept/reject. Never typed — see the class docstring.
+    final_quantity = models.DecimalField(max_digits=14, decimal_places=4, default=0, editable=False)
     unit_price = models.DecimalField(max_digits=14, decimal_places=2, default=0,
                                      validators=[MinValueValidator(ZERO)],
                                      help_text="Values the forecast in money alongside units")
@@ -454,14 +469,6 @@ class DemandForecastPeriod(models.Model):
         return f"{self.period_label or self.period_start} · {self.final_quantity}"
 
 
-#: Ceiling of the DecimalField(max_digits=14, decimal_places=4) quantity columns.
-_MAX_Q4 = Decimal("9999999999.9999")
-
-
-def _q4(value):
-    """Quantize to the 4dp the quantity columns store, and CLAMP to what they hold.
-
-    Both the length and the magnitude matter: a long Decimal fails to save, and an over-range one
-    raises DataError inside `bulk_update` — which would fail the whole period grid, not one row.
-    """
-    return min(max(Decimal(value or ZERO), -_MAX_Q4), _MAX_Q4).quantize(Decimal("0.0001"))
+#: The clamped quantizer every quantity write in this module goes through — defined once in
+#: ``models/_base.py`` so the signal and adjustment writers cannot drift from it.
+_q4 = q4
