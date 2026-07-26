@@ -90,6 +90,19 @@ class ReorderRule(TenantOwned):
         unique_together = ("tenant", "item", "location")
         indexes = [models.Index(fields=["tenant", "is_active"], name="scm_reorder_tnt_active_idx")]
 
+    def clean(self):
+        """The linked forecast must be about THIS rule's item.
+
+        Form-level queryset narrowing is not enough on its own: on CREATE there is no item yet, so the
+        filter is skipped entirely, and on EDIT ``item`` is itself editable, so a POST that switches
+        the item while keeping the old forecast slips through. Without this,
+        ``_forecast_error_safety`` would size item A's buffer from item B's forecast error.
+        """
+        if self.demand_forecast_id and self.item_id                 and self.demand_forecast.item_id != self.item_id:
+            raise ValidationError({
+                "demand_forecast": "That forecast is for a different item — forecast-error sizing "
+                                   "has to read this item's own plan."})
+
     @staticmethod
     def on_hand_map(tenant, rules):
         """``{(item_id, location_id): qty}`` for every rule in ONE grouped query.
@@ -153,7 +166,7 @@ class ReorderRule(TenantOwned):
         return demand_series(self.tenant_id, item=self.item, location=self.location,
                              source="sales_orders", start=start, end=end, bucket="month")
 
-    def calculate(self, series=None, forecast_error_pct=None):
+    def calculate(self, series=None, forecast_errors=None):
         """Compute the safety stock and reorder point this rule's policy implies.
 
         Writes ONLY the ``computed_*``/statistics columns — never ``safety_stock``/``reorder_point``,
@@ -193,7 +206,7 @@ class ReorderRule(TenantOwned):
             safety = max(max_daily * max_lead - avg_daily * lead, ZERO)
         elif self.safety_stock_method == "forecast_error":
             safety = self._forecast_error_safety(avg_daily, sigma_daily, lead, sigma_lead,
-                                                 forecast_error_pct)
+                                                 forecast_errors)
         else:  # fixed — the buyer's number stands, exactly as it did before 4.7
             safety = self.safety_stock or ZERO
 
@@ -216,20 +229,26 @@ class ReorderRule(TenantOwned):
         return z * variance.sqrt()
 
     def _forecast_error_safety(self, avg_daily, sigma_daily, lead, sigma_lead,
-                               forecast_error_pct=None):
+                               forecast_errors=None):
         """Size the buffer from the linked forecast's measured error, falling back to σ of history.
 
         A plan that has been running 30 % wrong needs a buffer built on 30 %, not on how noisy the
         raw history looked — that is the whole point of tying safety stock to the forecast.
 
-        ``forecast_error_pct`` lets a batch caller pass the WMAPE it already computed. Many rules
-        share one forecast, and ``accuracy_metrics()`` costs several queries, so recomputing it per
-        rule is the difference between one query and five per row.
+        ``forecast_errors`` is a ``{forecast_id: wmape_or_None}`` map a batch caller has already
+        built. Many rules share one forecast and ``accuracy_metrics()`` costs several queries, so
+        recomputing it per rule is the difference between one query and five per row. It is a MAP
+        rather than a bare value on purpose: ``None`` is a legitimate answer (nothing has elapsed
+        yet, or the actuals sum to zero), so a bare ``None`` could not be told apart from "the caller
+        didn't supply one" — and that ambiguity silently reintroduced one aggregate per rule for
+        exactly the forecasts with no history.
         """
         from apps.scm.models.DemandPlanning import _forecasting as fx
         if self.demand_forecast_id:
-            error_pct = (forecast_error_pct if forecast_error_pct is not None
-                         else self.demand_forecast.accuracy_metrics().get("wmape"))
+            if forecast_errors is not None and self.demand_forecast_id in forecast_errors:
+                error_pct = forecast_errors[self.demand_forecast_id]
+            else:
+                error_pct = self.demand_forecast.accuracy_metrics().get("wmape")
             if error_pct is not None:
                 z = fx.z_for_service_level(self.service_level_pct)
                 lead_window = lead if lead > ZERO else Decimal("1")
@@ -327,20 +346,7 @@ class ReorderRule(TenantOwned):
         return f"Reorder {self.item_id and self.item.sku} @ {self.location_id and self.location.code}"
 
 
-#: Column ceilings — DecimalField(max_digits=14, decimal_places=2 / 4).
-_MAX_Q2 = Decimal("9999999999.99")
-_MAX_Q4 = Decimal("9999999999.9999")
-
-
-def _q2(value):
-    """Quantize AND clamp to what the column holds.
-
-    An overflow here raises DataError inside `bulk_update`, which takes the ENTIRE batch
-    recalculation down — one item with an absurd order quantity would break safety stock for every
-    other rule in the tenant. Clamping degrades that one row instead.
-    """
-    return min(max(Decimal(value or ZERO), -_MAX_Q2), _MAX_Q2).quantize(Decimal("0.01"))
-
-
-def _q4(value):
-    return min(max(Decimal(value or ZERO), -_MAX_Q4), _MAX_Q4).quantize(Decimal("0.0001"))
+#: The clamped quantizers, defined once in ``models/_base.py`` so every writer of these columns
+#: shares them (an unclamped sibling would still be able to DataError a bulk_update).
+_q2 = q2
+_q4 = q4
