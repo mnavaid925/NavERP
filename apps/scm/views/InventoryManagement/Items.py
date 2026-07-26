@@ -67,6 +67,13 @@ def item_delete(request, pk):
     if obj.stock_moves.exists():
         messages.error(request, "This item has stock movements and cannot be deleted — deactivate it instead.")
         return redirect("scm:item_detail", pk=pk)
+    # 4.7's DemandForecast.item is PROTECT, so an item with only a PLAN against it — no stock, no
+    # transactions — now hits a ProtectedError that crud_delete does not catch (a 500). Refuse it
+    # with a message that says where to look, the same way the stock-movement guard does.
+    if obj.demand_forecasts.exists():
+        messages.error(request, "This item has demand forecasts and cannot be deleted — archive or "
+                                "delete them first, or deactivate the item instead.")
+        return redirect("scm:item_detail", pk=pk)
     return crud_delete(request, model=Item, pk=pk, success_url="scm:item_list")
 
 
