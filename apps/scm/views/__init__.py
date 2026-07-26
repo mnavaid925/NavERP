@@ -129,7 +129,7 @@ from .InventoryManagement.StockAdjustments import (  # noqa: F401
     stockadjustment_delete, stockadjustment_post, stockadjustment_cancel,
 )
 from .InventoryManagement.ReorderRules import (  # noqa: F401
-    reorderrule_list, reorderrule_create, reorderrule_edit, reorderrule_delete,
+    reorderrule_list, reorderrule_create, reorderrule_detail, reorderrule_edit, reorderrule_delete,
 )
 from .InventoryManagement.Reports import (  # noqa: F401
     valuation_report, reorder_alerts, stock_ledger, on_hand_by_location,
