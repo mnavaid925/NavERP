@@ -39,6 +39,11 @@ from .DemandPlanning.DemandForecasts import urlpatterns as _dp_forecasts
 from .DemandPlanning.DemandSignals import urlpatterns as _dp_signals
 from .DemandPlanning.ForecastAdjustments import urlpatterns as _dp_adjustments
 from .DemandPlanning.Reports import urlpatterns as _dp_reports
+from .Manufacturing.WorkCenters import urlpatterns as _mf_workcenters
+from .Manufacturing.BillsOfMaterials import urlpatterns as _mf_boms
+from .Manufacturing.WorkOrders import urlpatterns as _mf_workorders
+from .Manufacturing.ProductionTimeLogs import urlpatterns as _mf_timelogs
+from .Manufacturing.Reports import urlpatterns as _mf_reports
 
 
 app_name = "scm"
@@ -85,4 +90,13 @@ urlpatterns = [
     *_dp_signals,                        # DemandPlanning/DemandSignals
     *_dp_adjustments,                    # DemandPlanning/ForecastAdjustments
     *_dp_reports,                        # DemandPlanning/Reports (safety stock + accuracy)
+    # 4.8 prefixes (work-centers/ boms/ work-orders/ time-logs/ mrp/ production-schedule/) are all
+    # first-segment-unique against everything above — `work-orders/` is a separate segment from
+    # 4.1's `orders/` and 4.5's `sales-orders/`, so no pk route can swallow it, and every 4.8 verb
+    # route sits under its own `<int:pk>/`.
+    *_mf_workcenters,                    # Manufacturing/WorkCenters
+    *_mf_boms,                           # Manufacturing/BillsOfMaterials
+    *_mf_workorders,                     # Manufacturing/WorkOrders
+    *_mf_timelogs,                       # Manufacturing/ProductionTimeLogs
+    *_mf_reports,                        # Manufacturing/Reports (MRP + production schedule)
 ]
