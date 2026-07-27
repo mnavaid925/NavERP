@@ -32,6 +32,11 @@ class BillOfMaterials(TenantNumbered):
     #: Depth ceiling for a multi-level explosion. Paired with the visited-set guard below: the set
     #: stops a true cycle, the cap stops a legal-but-absurd nesting from running away.
     MAX_EXPLODE_DEPTH = 5
+    #: Row ceiling for one explosion. Depth alone does NOT bound the output — the result is the
+    #: PRODUCT of the branch factors, so five chained 50-line recipes emit 50^4 = 6.25M rows and
+    #: OOM a worker shared by every tenant. Any logged-in member can author that, so this is a
+    #: denial-of-service bound, not a tidiness one.
+    MAX_EXPLODE_ROWS = 5000
 
     BOM_TYPE_CHOICES = [
         ("manufacture", "Manufacture"),   # produces a stocked good via a work order
@@ -204,7 +209,8 @@ class BillOfMaterials(TenantNumbered):
     def component_count(self):
         return self.lines.count()
 
-    def explode(self, quantity, depth_cap=None, index=None, _visited=None, _level=1):
+    def explode(self, quantity, depth_cap=None, index=None, _visited=None, _level=1,
+                _budget=None):
         """Flatten this recipe into the raw components needed to build ``quantity``.
 
         Returns ``[{"item", "quantity", "level", "source_bom"}]``. A component that has its own
@@ -226,20 +232,30 @@ class BillOfMaterials(TenantNumbered):
         visited.add(self.item_id)
         quantity = Decimal(quantity or ZERO)
         output = self.output_quantity or Decimal("1")
+        # A one-element list so every frame of the recursion shares one counter.
+        budget = [self.MAX_EXPLODE_ROWS] if _budget is None else _budget
         rows = []
         for line in self._explode_lines():
+            if budget[0] <= 0:
+                break
             required = q4(quantity * line.effective_quantity_per / output)
             child = None
             if _level < depth_cap and line.component_id not in visited:
                 child = index.get(line.component_id)
             if child is None:
+                budget[0] -= 1
                 rows.append({"item": line.component, "quantity": required, "level": _level,
                              "source_bom": self, "issue_method": line.issue_method,
                              "uom": line.uom or line.component.uom})
             else:
                 rows.extend(child.explode(required, depth_cap=depth_cap, index=index,
-                                          _visited=visited, _level=_level + 1))
+                                          _visited=visited, _level=_level + 1, _budget=budget))
         return rows
+
+    def explode_was_truncated(self, rows):
+        """True when ``rows`` hit :attr:`MAX_EXPLODE_ROWS` — the page must say so rather than
+        quietly present a short list as complete."""
+        return len(rows) >= self.MAX_EXPLODE_ROWS
 
     def estimated_unit_cost(self, rows=None):
         """Standard cost of one output unit, rolled up from the exploded leaves.
