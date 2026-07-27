@@ -73,7 +73,7 @@
           {% for m in recent_moves %}
             <tr>
               <td>{{ m.moved_at|date:"M d, Y" }}</td>
-              <td><span class="badge badge-{% if m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}red{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'adjustment' %}amber{% else %}muted{% endif %}">{{ m.get_move_type_display }}</span></td>
+              <td><span class="badge badge-{% if m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}red{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'adjustment' %}amber{% elif m.move_type == 'production' %}green{% elif m.move_type == 'consumption' %}amber{% else %}muted{% endif %}">{{ m.get_move_type_display }}</span></td>
               <td>{{ m.location.code }}</td>
               <td>{{ m.quantity|floatformat:2 }}</td>
               <td>{{ m.unit_cost|floatformat:2 }}</td>
