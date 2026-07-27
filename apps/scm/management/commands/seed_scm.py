@@ -98,10 +98,13 @@ class Command(BaseCommand):
             # that derived history, and recalculates 4.3's reorder rules — so every one of those
             # must already exist.
             self._seed_demand_planning_tenant(tenant)
+            # 4.8 LAST: it builds a BOM over 4.3's items and CONSUMES their on-hand stock through
+            # the real posting path, so every one of those rows must already exist.
+            self._seed_manufacturing_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation + 4.7 demand planning seed complete."))
+            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -874,6 +877,21 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
+        # 4.8 Manufacturing first (newest module). BillOfMaterials.item, BOMLine.component and
+        # WorkOrderComponent.item are all PROTECT against 4.3's items below, and WorkOrder.
+        # work_center / ProductionTimeLog.work_center are PROTECT against WorkCenter — so the order
+        # here is forced: logs and components (children) → orders → BOMs → centres. The WS-KIT item
+        # this seeder created is removed with them; 4.3's own items are cleared further down.
+        from apps.scm.models import (BillOfMaterials, BOMLine, Item as _Item, ProductionTimeLog,
+                                     WorkCenter, WorkOrder, WorkOrderComponent)
+        ProductionTimeLog.objects.all().delete()
+        WorkOrderComponent.objects.all().delete()
+        WorkOrder.objects.all().delete()
+        BOMLine.objects.all().delete()
+        BillOfMaterials.objects.all().delete()
+        WorkCenter.objects.all().delete()
+        _Item.objects.filter(sku="WS-KIT").delete()
+
         # 4.7 Demand Planning first (newest module). DemandForecast.item is PROTECT, so the whole
         # forecast tree has to clear before 4.3's items below; ForecastAdjustment.forecast and
         # DemandSignal.applied_to_forecast point AT the forecast, so they go first. ReorderRule's
@@ -956,7 +974,120 @@ class Command(BaseCommand):
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
-            f"demand planning rows (+{bill_count + freight_bill_count} linked accounting bill(s))."))
+            f"demand planning + manufacturing rows "
+            f"(+{bill_count + freight_bill_count} linked accounting bill(s))."))
+
+    def _seed_manufacturing_tenant(self, tenant):
+        """4.8 Manufacturing demo: two work centres, a two-level BOM for an assembled bundle, and a
+        work order driven through the REAL release → issue → report path so the ledger, the costs
+        and the status all come out of the same code the views run.
+
+        Idempotent via a BillOfMaterials guard. Runs last — it needs 4.3's items, locations and
+        UOMs to exist, and it consumes their on-hand stock.
+        """
+        from apps.scm.models import (BillOfMaterials, BOMLine, Item, ItemCategory, Location,
+                                     ProductionTimeLog, UOM, WorkCenter, WorkOrder)
+        from apps.scm.views.Manufacturing.WorkOrders import _issue_components
+        from apps.scm.views._helpers import _post_stock_move
+        if BillOfMaterials.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: manufacturing data already exists — skipping.")
+            return
+
+        ws16 = Item.objects.filter(tenant=tenant, sku="WS-16").first()
+        mon27 = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        dock = Item.objects.filter(tenant=tenant, sku="DOCK-C").first()
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        if not all([ws16, mon27, dock, main]):
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no seeded items/locations — skipping manufacturing seed."))
+            return
+
+        each = UOM.objects.filter(tenant=tenant, code="EA").first()
+        category = ItemCategory.objects.filter(tenant=tenant).first()
+        admin = self._admin(tenant)
+
+        assembly = WorkCenter.objects.create(
+            tenant=tenant, code="WC-ASM", name="Bench Assembly", center_type="assembly",
+            location=main, org_unit=self._org_unit(tenant), capacity_hours_per_day=Decimal("8"),
+            efficiency_pct=Decimal("92"), setup_minutes=15,
+            machine_cost_per_hour=Decimal("0"), labor_cost_per_hour=Decimal("38"))
+        WorkCenter.objects.create(
+            tenant=tenant, code="WC-QC", name="Inspection Bench", center_type="inspection",
+            location=main, org_unit=self._org_unit(tenant), capacity_hours_per_day=Decimal("6"),
+            efficiency_pct=Decimal("100"), machine_cost_per_hour=Decimal("0"),
+            labor_cost_per_hour=Decimal("30"))
+
+        # The produced good — a new finished item, so the BOM has a real output to receive into
+        # stock rather than reusing a purchased one.
+        bundle = Item.objects.create(
+            tenant=tenant, sku="WS-KIT", name="Workstation bundle (laptop + monitor + dock)",
+            category=category, uom=each, costing_method="weighted_avg",
+            standard_cost=Decimal("1700"),
+            description="Assembled from stocked components — see its bill of materials.")
+
+        bom = BillOfMaterials.objects.create(
+            tenant=tenant, item=bundle, name="Workstation bundle", version="1",
+            bom_type="manufacture", output_quantity=Decimal("1"), uom=each, lead_time_days=2,
+            default_work_center=assembly, status="active", is_default=True,
+            effective_from=timezone.localdate() - datetime.timedelta(days=30),
+            notes="Demo recipe — one laptop, one monitor and one dock per bundle.")
+        BOMLine.objects.create(bom=bom, sequence=10, component=ws16, quantity_per=Decimal("1"),
+                               uom=each, issue_method="manual")
+        BOMLine.objects.create(bom=bom, sequence=20, component=mon27, quantity_per=Decimal("1"),
+                               uom=each, scrap_pct=Decimal("2"), issue_method="manual")
+        BOMLine.objects.create(bom=bom, sequence=30, component=dock, quantity_per=Decimal("1"),
+                               uom=each, issue_method="backflush")
+
+        order = WorkOrder.objects.create(
+            tenant=tenant, item=bundle, uom=each, bom=bom, quantity_planned=Decimal("5"),
+            order_policy="make_to_stock", work_center=assembly, priority="normal",
+            planned_start=timezone.now() - datetime.timedelta(days=2),
+            planned_end=timezone.now() + datetime.timedelta(days=1),
+            due_date=timezone.localdate() + datetime.timedelta(days=5),
+            component_location=main, output_location=main,
+            notes="Demo run — released, part-issued and part-reported through the real actions.")
+        order.explode_components()
+        order.status = "released"
+        order.released_by = admin
+        order.save(update_fields=["status", "released_by", "updated_at"])
+
+        # Drive the real posting path so the demo ledger is what the app would have written.
+        components = [c for c in order.components.select_related("item", "lot_serial").all()
+                      if c.issue_method == "manual"]
+        _issue_components(order, components, {c.pk: c.quantity_outstanding for c in components},
+                          admin)
+        order.status = "in_progress"
+        order.actual_start = timezone.now() - datetime.timedelta(days=1)
+        order.save(update_fields=["status", "actual_start", "updated_at"])
+
+        ProductionTimeLog.objects.create(
+            tenant=tenant, work_order=order, work_center=assembly, operation="Assemble & cable",
+            entry_type="setup", started_at=timezone.now() - datetime.timedelta(hours=9),
+            ended_at=timezone.now() - datetime.timedelta(hours=8, minutes=45))
+        ProductionTimeLog.objects.create(
+            tenant=tenant, work_order=order, work_center=assembly, operation="Assemble & cable",
+            entry_type="labor", started_at=timezone.now() - datetime.timedelta(hours=8, minutes=45),
+            ended_at=timezone.now() - datetime.timedelta(hours=5), quantity_completed=Decimal("3"))
+        ProductionTimeLog.objects.create(
+            tenant=tenant, work_order=order, work_center=assembly, operation="Assemble & cable",
+            entry_type="downtime", downtime_reason="material_shortage",
+            started_at=timezone.now() - datetime.timedelta(hours=5),
+            ended_at=timezone.now() - datetime.timedelta(hours=4, minutes=20),
+            notes="Waiting on dock stock.")
+
+        # Report 3 good units at the cost the run has actually absorbed — the same figure
+        # report_production computes, through the same helper.
+        good = Decimal("3")
+        unit_cost = order.computed_unit_cost(good)
+        _post_stock_move(tenant, item=bundle, location=main, quantity=good,
+                         move_type="production", unit_cost=unit_cost, reference=order.number,
+                         reason=f"Produced by {order.number}")
+        order.quantity_produced = good
+        order.produced_unit_cost = unit_cost
+        order.save(update_fields=["quantity_produced", "produced_unit_cost", "updated_at"])
+
+        self.stdout.write(f"{tenant.name}: manufacturing — 2 work centres, BOM {bom.number}, "
+                          f"work order {order.number} ({good} of 5 reported).")
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
