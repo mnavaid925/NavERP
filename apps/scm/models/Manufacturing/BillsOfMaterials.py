@@ -164,12 +164,46 @@ class BillOfMaterials(TenantNumbered):
         """Single-row convenience wrapper — replaces an ``Item.is_manufactured`` flag entirely."""
         return cls.active_for(tenant, item) is not None
 
+    @classmethod
+    def explosion_index(cls, tenant_id, on=None):
+        """``{item_id: BillOfMaterials}`` for every active, effective BOM — lines prefetched, TWO queries.
+
+        The batched form of :meth:`active_for`, and the only sane way to explode more than one item.
+        ``explode()`` otherwise asks ``active_for`` whether each component has its own recipe, which
+        is a query per line per level; run inside MRP's loop over every demanded item that reached
+        ~2,300 queries for one page on a realistic tenant.
+
+        Selection is deliberately identical to ``active_for``: same ordering, first effective BOM per
+        item wins — so the batched and single-row paths can never disagree about which recipe is
+        current.
+        """
+        if tenant_id is None:
+            return {}
+        on = on or timezone.localdate()
+        boms = (cls.objects.filter(tenant_id=tenant_id, status="active")
+                .select_related("tenant", "item", "uom")
+                .prefetch_related(models.Prefetch(
+                    "lines", queryset=BOMLine.objects.select_related(
+                        "component", "component__uom", "uom")))
+                .order_by("item_id", "-is_default", "-version", "-id"))
+        index = {}
+        for bom in boms:
+            if bom.item_id not in index and bom.is_effective(on):
+                index[bom.item_id] = bom
+        return index
+
+    def _explode_lines(self):
+        """This BOM's lines, reusing the prefetch when it came from :meth:`explosion_index`."""
+        if "lines" in getattr(self, "_prefetched_objects_cache", {}):
+            return self._prefetched_objects_cache["lines"]
+        return self.lines.select_related("component", "component__uom", "uom").all()
+
     # --- explosion -------------------------------------------------------------------------------
     @property
     def component_count(self):
         return self.lines.count()
 
-    def explode(self, quantity, depth_cap=None, _visited=None, _level=1):
+    def explode(self, quantity, depth_cap=None, index=None, _visited=None, _level=1):
         """Flatten this recipe into the raw components needed to build ``quantity``.
 
         Returns ``[{"item", "quantity", "level", "source_bom"}]``. A component that has its own
@@ -182,35 +216,43 @@ class BillOfMaterials(TenantNumbered):
         requirement would understate the shortage, which is the more dangerous failure.
         """
         depth_cap = self.MAX_EXPLODE_DEPTH if depth_cap is None else depth_cap
+        # Build the index once at the top of the recursion (and reuse a caller-supplied one, which
+        # is how MRP shares a single index across every item it explodes). `tenant_id`, never
+        # `self.tenant` — the latter is a FK deref that costs a query per recursion level.
+        if index is None:
+            index = self.explosion_index(self.tenant_id)
         visited = set(_visited or ())
         visited.add(self.item_id)
         quantity = Decimal(quantity or ZERO)
         output = self.output_quantity or Decimal("1")
         rows = []
-        for line in self.lines.select_related("component", "uom").all():
+        for line in self._explode_lines():
             required = q4(quantity * line.effective_quantity_per / output)
             child = None
             if _level < depth_cap and line.component_id not in visited:
-                child = BillOfMaterials.active_for(self.tenant, line.component)
+                child = index.get(line.component_id)
             if child is None:
                 rows.append({"item": line.component, "quantity": required, "level": _level,
                              "source_bom": self, "issue_method": line.issue_method,
                              "uom": line.uom or line.component.uom})
             else:
-                rows.extend(child.explode(required, depth_cap=depth_cap, _visited=visited,
-                                          _level=_level + 1))
+                rows.extend(child.explode(required, depth_cap=depth_cap, index=index,
+                                          _visited=visited, _level=_level + 1))
         return rows
 
-    def estimated_unit_cost(self):
+    def estimated_unit_cost(self, rows=None):
         """Standard cost of one output unit, rolled up from the exploded leaves.
 
         Uses each component's ``standard_cost`` and falls back to its ledger-derived
         ``average_cost`` — an estimating figure for the BOM page, NOT the cost a work order posts.
         The posted cost is always what the StockMoves actually carried.
+
+        Pass ``rows`` when the caller has already exploded at ``output_quantity`` — the detail page
+        does, and re-exploding there doubled the whole cost of rendering it.
         """
         output = self.output_quantity or Decimal("1")
         total = ZERO
-        for row in self.explode(output):
+        for row in (self.explode(output) if rows is None else rows):
             item = row["item"]
             unit = item.standard_cost or item.average_cost or ZERO
             total += row["quantity"] * unit
