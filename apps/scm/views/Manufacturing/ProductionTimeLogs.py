@@ -38,8 +38,13 @@ def productiontimelog_list(request):
             "type_choices": ProductionTimeLog.ENTRY_TYPE_CHOICES,
             "reason_choices": ProductionTimeLog.DOWNTIME_REASON_CHOICES,
             "work_centers": WorkCenter.objects.filter(tenant=request.tenant, is_active=True),
+            # Every run, not just open ones. This populates the FILTER dropdown, and a closed run's
+            # logs are exactly the rows this page is careful to still show (badged "Frozen") — an
+            # open-only list left them filterable by URL but unreachable from the select, and made
+            # the deep-link from a finished work order silently reset to "All work orders".
+            # The FORM's work-order choices stay open-only; that restriction belongs there.
             "work_orders": WorkOrder.objects.filter(
-                tenant=request.tenant, status__in=WorkOrder.OPEN_STATUSES).select_related("item"),
+                tenant=request.tenant).select_related("item"),
         },
     )
 
