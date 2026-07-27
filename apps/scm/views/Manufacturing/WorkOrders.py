@@ -275,8 +275,14 @@ def _issue_components(order, components, quantities, user, moved_at=None):
                          quantity=-quantity, move_type="consumption", unit_cost=cost,
                          lot_serial=component.lot_serial, reference=order.number,
                          reason=f"Consumed by {order.number}", moved_at=moved_at)
-        component.quantity_issued = q4((component.quantity_issued or ZERO) + quantity)
-        component.unit_cost = cost
+        # Roll the snapshot cost as a weighted average across partial issues. Overwriting it would
+        # re-value the earlier issue at today's rate, so `issued_value` would disagree with the
+        # ledger rows it is meant to summarise.
+        already = component.quantity_issued or ZERO
+        total = already + quantity
+        component.unit_cost = q4(
+            ((already * (component.unit_cost or ZERO)) + (quantity * cost)) / total)
+        component.quantity_issued = q4(total)
         component.save(update_fields=["quantity_issued", "unit_cost"])
         posted += 1
     return posted
@@ -297,11 +303,16 @@ def workorder_issue_components(request, pk):
             if obj.component_location_id is None:
                 messages.error(request, "This work order has no component source location.")
                 return redirect("scm:workorder_detail", pk=pk)
-            components = list(obj.components.select_related("item", "lot_serial").all())
+            # Manual lines only. A backflush line is consumed automatically in proportion to
+            # reported output, so issuing it here would pre-consume it and make the issue-method
+            # distinction inert — the planner would have no way to keep a line on backflush.
+            components = [c for c in obj.components.select_related("item", "lot_serial").all()
+                          if c.issue_method != "backflush"]
             quantities = {c.pk: c.quantity_outstanding for c in components}
             posted = _issue_components(obj, components, quantities, request.user)
             if not posted:
-                messages.info(request, "Every component is already fully issued.")
+                messages.info(request, "Every manually-issued component is already fully issued "
+                                       "(backflush lines are consumed when output is reported).")
                 return redirect("scm:workorder_detail", pk=pk)
             if obj.status == "released":
                 obj.status = "in_progress"
@@ -362,7 +373,10 @@ def workorder_report_production(request, pk):
                 _issue_components(obj, components, quantities, request.user)
 
             cumulative_good = q4((obj.quantity_produced or ZERO) + good)
-            unit_cost = obj.computed_unit_cost(cumulative_good) if cumulative_good > ZERO else ZERO
+            # THIS layer's quantity, not the cumulative one — computed_unit_cost divides the
+            # unabsorbed pool, so passing the cumulative figure would re-charge cost an earlier
+            # layer already carried and over-value the move.
+            unit_cost = obj.computed_unit_cost(good)
             if good > ZERO:
                 _post_stock_move(obj.tenant, item=obj.item, location=obj.output_location,
                                  quantity=good, move_type="production", unit_cost=unit_cost,
