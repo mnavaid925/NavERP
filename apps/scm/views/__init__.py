@@ -208,3 +208,24 @@ from .DemandPlanning.ForecastAdjustments import (  # noqa: F401
 from .DemandPlanning.Reports import (  # noqa: F401
     safety_stock_report, safety_stock_recalculate, safety_stock_apply, forecast_accuracy_report,
 )
+
+# 4.8 Manufacturing / Production
+from .Manufacturing.WorkCenters import (  # noqa: F401
+    workcenter_list, workcenter_create, workcenter_detail, workcenter_edit, workcenter_delete,
+)
+from .Manufacturing.BillsOfMaterials import (  # noqa: F401
+    billofmaterials_list, billofmaterials_create, billofmaterials_detail, billofmaterials_edit,
+    billofmaterials_delete,
+)
+from .Manufacturing.WorkOrders import (  # noqa: F401
+    workorder_list, workorder_create, workorder_detail, workorder_edit, workorder_delete,
+    workorder_plan, workorder_release, workorder_close, workorder_cancel, workorder_schedule,
+    workorder_issue_components, workorder_report_production,
+)
+from .Manufacturing.ProductionTimeLogs import (  # noqa: F401
+    productiontimelog_list, productiontimelog_create, productiontimelog_detail,
+    productiontimelog_edit, productiontimelog_delete,
+)
+from .Manufacturing.Reports import (  # noqa: F401
+    mrp_report, production_schedule,
+)
