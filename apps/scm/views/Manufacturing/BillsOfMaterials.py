@@ -56,7 +56,16 @@ def _billofmaterials_form(request, instance):
         form = BillOfMaterialsForm(request.POST, instance=instance, tenant=request.tenant)
         formset = BOMLineFormSet(request.POST, instance=instance,
                                  form_kwargs={"tenant": request.tenant})
-        if form.is_valid() and formset.is_valid():
+        form_ok = form.is_valid()
+        if form_ok:
+            # Attach the cleaned header BEFORE validating the formset. On create the view passes
+            # instance=None, so BaseInlineFormSet substitutes an empty BillOfMaterials() whose
+            # item_id is None — and the self-reference guard, which compares each line's component
+            # against the parent's item, silently no-opped on exactly the path it exists for. A BOM
+            # saying "to build one WS-16 you need one WS-16" was creatable, and a work order built
+            # from it would consume the very item it produces.
+            formset.instance = form.instance
+        if form_ok and formset.is_valid():
             with transaction.atomic():
                 bom = form.save(commit=False)
                 bom.tenant = request.tenant
