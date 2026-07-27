@@ -53,7 +53,7 @@
               <td>{{ obj.moved_at|date:"M d, Y" }}</td>
               <td><a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a></td>
               <td>{{ obj.location.code }}</td>
-              <td><span class="badge badge-{% if obj.move_type == 'receipt' %}green{% elif obj.move_type == 'issue' %}red{% elif obj.move_type == 'transfer' %}info{% elif obj.move_type == 'adjustment' %}amber{% else %}muted{% endif %}">{{ obj.get_move_type_display }}</span></td>
+              <td><span class="badge badge-{% if obj.move_type == 'receipt' %}green{% elif obj.move_type == 'issue' %}red{% elif obj.move_type == 'transfer' %}info{% elif obj.move_type == 'adjustment' %}amber{% elif obj.move_type == 'production' %}green{% elif obj.move_type == 'consumption' %}amber{% else %}muted{% endif %}">{{ obj.get_move_type_display }}</span></td>
               <td>{% if obj.lot_serial %}{{ obj.lot_serial.number }}{% else %}—{% endif %}</td>
               <td>{{ obj.quantity|floatformat:2 }}</td>
               <td>{{ obj.unit_cost|floatformat:2 }}</td>
