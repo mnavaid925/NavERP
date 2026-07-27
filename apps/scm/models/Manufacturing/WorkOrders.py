@@ -125,6 +125,12 @@ class WorkOrder(TenantNumbered):
         if self.order_policy == "make_to_order" and self.sales_order_id is None:
             raise ValidationError({"sales_order": "A make-to-order run must name the sales order "
                                                   "it is pegged to."})
+        # The recipe must actually make the thing being built. The create form offers every active
+        # BOM in the tenant (the item isn't known until the form binds), so without this a
+        # mis-picked recipe explodes the wrong components onto a run that then consumes real stock.
+        if self.bom_id and self.item_id and self.bom.item_id != self.item_id:
+            raise ValidationError({"bom": f"{self.bom.number} produces {self.bom.item}, not "
+                                          f"{self.item} — pick a BOM for the item being built."})
 
     # --- state -----------------------------------------------------------------------------------
     @property
@@ -200,25 +206,37 @@ class WorkOrder(TenantNumbered):
         # ``consumed`` is already returned sign-flipped to a positive cost — see _move_totals.
         return q4(consumed + labor + machine - produced)
 
-    def computed_unit_cost(self, cumulative_good_qty):
-        """Cost of one good unit given ``cumulative_good_qty`` produced so far.
+    def computed_unit_cost(self, good_quantity):
+        """Cost of one good unit in the layer being posted RIGHT NOW.
 
-        Three choices worth knowing:
+        Divides the **unabsorbed** pool — cost put in, less the value earlier production layers
+        already took out — by *this* layer's good quantity. Three choices worth knowing:
 
         1. ``setup`` and ``labor`` logs cost at the centre's labour rate, ``machine`` at its machine
            rate; ``downtime`` is excluded entirely.
         2. The pool divides by the GOOD quantity, so scrapped units' cost is absorbed by the units
            that survived — standard practice, and the reason a scrappy run reports a higher unit
            cost rather than hiding the loss.
-        3. A partial report re-estimates as more cost lands, but the ledger is append-only: earlier
-           output layers keep the cost that was known when they were posted and are never restated.
+        3. It is the UNABSORBED pool, not the whole pool over cumulative output. Dividing the whole
+           pool by the cumulative good quantity re-charges cost an earlier layer already carried:
+           on a 3-then-2 split of a run costing C that posts ``3 × C/3 = C`` then ``2 × C/5 = 0.4C``
+           — banking 1.4C of stock value against C of real cost, and driving ``wip_value`` negative,
+           which is the proof the two disagreed. The ledger is append-only, so an over-valued layer
+           can never be corrected in place; it has to be right when it is posted.
+
+        A sub-quantum residual can still remain in ``wip_value``: a 4dp unit cost multiplied by a
+        quantity cannot represent every pool exactly. That is rounding, bounded by one quantum per
+        unit posted — not the systematic overage described in (3).
         """
-        cumulative_good_qty = Decimal(cumulative_good_qty or ZERO)
-        if cumulative_good_qty <= ZERO:
+        good_quantity = Decimal(good_quantity or ZERO)
+        if good_quantity <= ZERO:
             return ZERO
-        consumed, _produced = self._move_totals()
+        consumed, produced = self._move_totals()
         labor, machine = self._time_costs()
-        return q4((consumed + labor + machine) / cumulative_good_qty)
+        unabsorbed = consumed + labor + machine - produced
+        if unabsorbed <= ZERO:
+            return ZERO
+        return q4(unabsorbed / good_quantity)
 
     # --- hours -----------------------------------------------------------------------------------
     @property
