@@ -23,6 +23,9 @@ class ProductionTimeLog(TenantNumbered):
 
     NUMBER_PREFIX = "PRD"
 
+    #: Longest single booked interval — 31 days. See clean() for why the length is bounded.
+    MAX_LOG_MINUTES = 60 * 24 * 31
+
     ENTRY_TYPE_CHOICES = [
         ("setup", "Setup"),
         ("labor", "Labour"),
@@ -80,6 +83,17 @@ class ProductionTimeLog(TenantNumbered):
         super().clean()
         if self.ended_at and self.started_at and self.ended_at <= self.started_at:
             raise ValidationError({"ended_at": "End time must be after the start time."})
+        # Bound the LENGTH, not just the order. duration_minutes is editable=False so it never sees
+        # form validation, and the hours it yields are multiplied by the work-centre rate into the
+        # cost pool that values a production move. A 1000-01-01 → 9999-12-31 interval also derives
+        # ~4.7e9 minutes, past what the PositiveIntegerField column holds — a 500 rather than a
+        # rejection. A booked interval is a shift, not a geological era.
+        if self.started_at and self.ended_at:
+            minutes = (self.ended_at - self.started_at).total_seconds() // 60
+            if minutes > self.MAX_LOG_MINUTES:
+                raise ValidationError({
+                    "ended_at": "A single booked interval cannot exceed 31 days — split it into "
+                                "per-shift entries."})
         if self.entry_type == "downtime" and not self.downtime_reason:
             raise ValidationError({"downtime_reason": "A downtime entry needs a reason."})
         if self.entry_type != "downtime" and self.downtime_reason:
