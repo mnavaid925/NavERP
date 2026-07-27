@@ -153,3 +153,24 @@ from .DemandPlanning.ForecastAdjustments import (  # noqa: F401
     ForecastAdjustmentForm,
     ForecastAdjustmentReviewForm,
 )
+
+# 4.8 Manufacturing / Production
+from .Manufacturing.WorkCenters import (  # noqa: F401
+    WorkCenterForm,
+)
+from .Manufacturing.BillsOfMaterials import (  # noqa: F401
+    BillOfMaterialsForm,
+    BOMLineForm,
+    BaseBOMLineFormSet,
+    BOMLineFormSet,
+)
+from .Manufacturing.WorkOrders import (  # noqa: F401
+    WorkOrderForm,
+    WorkOrderComponentForm,
+    WorkOrderComponentFormSet,
+    WorkOrderScheduleForm,
+    WorkOrderReportForm,
+)
+from .Manufacturing.ProductionTimeLogs import (  # noqa: F401
+    ProductionTimeLogForm,
+)
