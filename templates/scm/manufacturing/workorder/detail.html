@@ -57,8 +57,13 @@
         <div class="detail-item"><dt>Due date</dt><dd>{{ obj.due_date|date:"M d, Y"|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Actual window</dt><dd>{% if obj.actual_start %}{{ obj.actual_start|date:"M d, Y H:i" }} → {{ obj.actual_end|date:"M d, Y H:i"|default:"in progress" }}{% else %}<span class="text-muted">Not started</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Planned hours</dt><dd>{{ obj.planned_hours|floatformat:2 }} h</dd></div>
-        <div class="detail-item"><dt>Actual hours</dt><dd>{{ obj.actual_hours|floatformat:2 }} h</dd></div>
-        <div class="detail-item"><dt>Duration variance</dt><dd>{% if obj.duration_variance_hours > 0 %}<span class="badge badge-amber">+{{ obj.duration_variance_hours|floatformat:2 }} h</span>{% else %}<span class="badge badge-green">{{ obj.duration_variance_hours|floatformat:2 }} h</span>{% endif %}</dd></div>
+        {% comment %}
+          Read from the context, not from obj.* — both properties run their own Sum over the time
+          logs, and duration_variance_hours calls actual_hours again, so rendering them here cost
+          two more scans of a table the view had already aggregated.
+        {% endcomment %}
+        <div class="detail-item"><dt>Actual hours</dt><dd>{{ actual_hours|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Duration variance</dt><dd>{% if duration_variance_hours > 0 %}<span class="badge badge-amber">+{{ duration_variance_hours|floatformat:2 }} h</span>{% else %}<span class="badge badge-green">{{ duration_variance_hours|floatformat:2 }} h</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Released by</dt><dd>{{ obj.released_by|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
       </dl>
