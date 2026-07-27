@@ -436,3 +436,61 @@ class ForecastAdjustmentAdmin(admin.ModelAdmin):
     search_fields = ("number", "rationale", "forecast__number")
     readonly_fields = ("submitted_by", "resolved_quantity", "reviewed_by", "reviewed_at",
                        "review_note")
+
+
+# ============================================================ 4.8 Manufacturing / Production
+from apps.scm.models import (  # noqa: E402
+    WorkCenter, BillOfMaterials, BOMLine, WorkOrder, WorkOrderComponent, ProductionTimeLog,
+)
+
+
+@admin.register(WorkCenter)
+class WorkCenterAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "tenant", "center_type", "location",
+                    "capacity_hours_per_day", "efficiency_pct", "is_active")
+    list_filter = ("tenant", "center_type", "is_active")
+    search_fields = ("number", "code", "name", "supervisor__name")
+
+
+class BOMLineInline(admin.TabularInline):
+    model = BOMLine
+    extra = 0
+
+
+@admin.register(BillOfMaterials)
+class BillOfMaterialsAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "tenant", "item", "version", "bom_type", "status",
+                    "output_quantity", "is_default")
+    list_filter = ("tenant", "status", "bom_type", "is_default")
+    search_fields = ("number", "name", "version", "item__sku", "item__name")
+    inlines = [BOMLineInline]
+
+
+class WorkOrderComponentInline(admin.TabularInline):
+    model = WorkOrderComponent
+    extra = 0
+    # quantity_issued is written only by the issue action — an admin edit would claim a consumption
+    # the StockMove ledger never recorded.
+    readonly_fields = ("quantity_issued",)
+
+
+@admin.register(WorkOrder)
+class WorkOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "item", "quantity_planned", "quantity_produced",
+                    "status", "priority", "work_center", "planned_start", "due_date")
+    list_filter = ("tenant", "status", "priority", "order_policy", "work_center")
+    search_fields = ("number", "item__sku", "item__name", "bom__number", "sales_order__number")
+    # Every field below is written by a posting or lifecycle action. Leaving any of them editable
+    # would make the admin a second writer of a figure the stock ledger is the authority for.
+    readonly_fields = ("status", "actual_start", "actual_end", "quantity_produced",
+                       "quantity_scrapped", "produced_unit_cost", "released_by")
+    inlines = [WorkOrderComponentInline]
+
+
+@admin.register(ProductionTimeLog)
+class ProductionTimeLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "work_order", "work_center", "entry_type", "operator",
+                    "started_at", "duration_minutes", "quantity_completed")
+    list_filter = ("tenant", "entry_type", "downtime_reason", "work_center")
+    search_fields = ("number", "operation", "work_order__number", "operator__name")
+    readonly_fields = ("duration_minutes",)
