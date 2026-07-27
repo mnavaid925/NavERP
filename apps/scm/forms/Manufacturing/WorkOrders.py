@@ -1,4 +1,8 @@
 """SCM 4.8 Manufacturing — WorkOrder form, component formset and the two action forms."""
+from datetime import date
+
+from django.core.validators import MaxValueValidator, MinValueValidator
+
 from apps.scm.forms._common import *  # noqa: F401,F403
 from apps.scm.forms._common import TenantUniqueMixin
 from apps.scm.models import BillOfMaterials, WorkOrder, WorkOrderComponent
@@ -51,6 +55,18 @@ class WorkOrderForm(TenantUniqueMixin, TenantModelForm):
                 scope |= Q(pk=current_id)
             self.fields["bom"].queryset = base.filter(scope).select_related("item")
 
+    def clean(self):
+        cleaned = super().clean()
+        # A lot belongs to exactly one item. Scoping the dropdown to the tenant is not enough — a
+        # crafted POST could pair item A with item B's lot, and report_production would write that
+        # into an append-only production move, permanently reporting A's units under B's lot.
+        item = cleaned.get("item")
+        lot = cleaned.get("output_lot_serial")
+        if item and lot and lot.item_id != item.pk:
+            self.add_error("output_lot_serial",
+                           f"{lot.number} belongs to {lot.item.sku}, not {item.sku}.")
+        return cleaned
+
 
 class WorkOrderComponentForm(TenantModelForm):
     """One snapshotted material line.
@@ -73,6 +89,17 @@ class WorkOrderComponentForm(TenantModelForm):
             self.fields["lot_serial"].queryset = (
                 self.fields["lot_serial"].queryset.select_related("item"))
 
+    def clean(self):
+        cleaned = super().clean()
+        # Same rule as the header's output lot — the consumption move carries both, so a mismatched
+        # pair would write item A's draw against item B's lot in the append-only ledger.
+        item = cleaned.get("item")
+        lot = cleaned.get("lot_serial")
+        if item and lot and lot.item_id != item.pk:
+            self.add_error("lot_serial",
+                           f"{lot.number} belongs to {lot.item.sku}, not {item.sku}.")
+        return cleaned
+
 
 # extra=3, matching BOMLineFormSet. With extra=0 a component line could never be hand-added or
 # re-added after deletion, which made the "no BOM, hand-entered components" path unreachable — and
@@ -92,8 +119,13 @@ class WorkOrderScheduleForm(forms.Form):
     """
 
     direction = forms.ChoiceField(choices=WorkOrder.SCHEDULE_DIRECTION_CHOICES)
+    # Bounded: the view adds/subtracts a lead time from this, and an unbounded 9999-12-31 (or
+    # 0001-01-01 scheduling backward) raises an uncaught OverflowError — an ordinary POST turning
+    # into a 500. Bounding the input beats catching the arithmetic.
     anchor_date = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date"}),
+        validators=[MinValueValidator(date(2000, 1, 1)),
+                    MaxValueValidator(date(2100, 12, 31))],
         help_text="Start date when scheduling forward; due date when scheduling backward")
     lead_time_days = forms.IntegerField(
         min_value=0, max_value=3650, required=False,
