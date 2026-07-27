@@ -14,7 +14,7 @@ from apps.scm.views._helpers import (_insufficient_stock, _item_qs, _need_tenant
                                      _post_stock_move, _shared_items)
 # The clamped quantizer the models write every computed quantity through — a raw Decimal division
 # here could exceed what DecimalField(14, 4) holds and fail the whole atomic block.
-from apps.scm.models._base import q4
+from apps.scm.models._base import q2, q4
 from apps.scm.models import BillOfMaterials, WorkCenter, WorkOrder, WorkOrderComponent
 from apps.scm.forms import (WorkOrderComponentFormSet, WorkOrderForm, WorkOrderReportForm,
                             WorkOrderScheduleForm)
@@ -103,21 +103,29 @@ def workorder_detail(request, pk):
                                          "output_lot_serial", "released_by"),
         pk=pk, tenant=request.tenant)
     from apps.scm.models import StockMove
-    components = obj.components.select_related("item", "uom", "lot_serial").all()
+    components = list(obj.components.select_related("item", "uom", "lot_serial").all())
+    # Both pools resolved ONCE here. material_cost / labor_cost / machine_cost / wip_value are
+    # separate properties that each re-run their own aggregate, so reading four of them off the
+    # model would scan the ledger twice and the time logs twice. actual_hours and its variance go
+    # through the context for the same reason — the template calling them re-aggregates again.
+    consumed, produced = obj._move_totals()
     labor_cost, machine_cost = obj._time_costs()
+    actual_hours = obj.actual_hours
     return render(request, "scm/manufacturing/workorder/detail.html", {
         "obj": obj,
         "components": components,
-        "shortfalls": obj.material_shortfalls(),
+        "shortfalls": obj.material_shortfalls(components=components),
         "time_logs": obj.time_logs.select_related("work_center", "operator")[:20],
         # The ledger rows this run wrote — reference is the only link StockMove keeps to its source
         # document, exactly as the transfer and GRN detail pages do it.
         "moves": (StockMove.objects.filter(tenant=request.tenant, reference=obj.number)
                   .select_related("item", "location")[:50]),
-        "material_cost": obj.material_cost,
+        "material_cost": q4(consumed),
         "labor_cost": labor_cost,
         "machine_cost": machine_cost,
-        "wip_value": obj.wip_value,
+        "wip_value": q4(consumed + labor_cost + machine_cost - produced),
+        "actual_hours": actual_hours,
+        "duration_variance_hours": q2(actual_hours - obj.planned_hours),
         "schedule_form": WorkOrderScheduleForm(initial={
             "direction": obj.schedule_direction,
             "lead_time_days": obj.bom.lead_time_days if obj.bom_id else 0,
