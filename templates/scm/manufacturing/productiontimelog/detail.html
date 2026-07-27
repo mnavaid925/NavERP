@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.entry_type == 'setup' %}amber{% elif obj.entry_type == 'labor' %}info{% elif obj.entry_type == 'machine' %}green{% elif obj.entry_type == 'downtime' %}red{% else %}slate{% endif %}">{{ obj.get_entry_type_display }}</span>
+        {% if is_frozen %}<span class="badge badge-muted">Frozen</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:productiontimelog_list' %}">Time Logs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:workorder_detail' obj.work_order.pk %}" class="btn btn-outline"><i data-lucide="hammer"></i> {{ obj.work_order.number }}</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="timer"></i></div>
+      <div class="stat-value">{{ obj.duration_hours|floatformat:2 }}</div>
+      <div class="stat-label">Booked hours ({{ obj.duration_minutes }} min)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{{ obj.quantity_completed|floatformat:2 }}</div>
+      <div class="stat-label">Completed (advisory progress)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trash-2"></i></div>
+      <div class="stat-value">{{ obj.quantity_scrapped|floatformat:2 }}</div>
+      <div class="stat-label">Scrapped</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="coins"></i></div>
+      {% comment %}
+        Exactly one of the two rates ever applies to an entry — machine entries cost at the machine
+        rate, setup and labour at the labour rate, downtime at neither — so this picks the live one
+        rather than summing. The `add` filter would coerce a Decimal through int() and truncate it.
+      {% endcomment %}
+      <div class="stat-value">{% if obj.entry_type == 'machine' %}{{ obj.machine_cost|floatformat:4 }}{% else %}{{ obj.labor_cost|floatformat:4 }}{% endif %}</div>
+      <div class="stat-label">Cost absorbed by the run</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.operation|default:"Booked interval" }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Work order</dt><dd><a href="{% url 'scm:workorder_detail' obj.work_order.pk %}" class="fw-600">{{ obj.work_order.number }}</a> · {{ obj.work_order.item.sku }}</dd></div>
+        <div class="detail-item"><dt>Run status</dt><dd><span class="badge badge-{% if obj.work_order.status == 'completed' %}green{% elif obj.work_order.status == 'in_progress' %}info{% elif obj.work_order.status == 'released' %}amber{% elif obj.work_order.status == 'planned' %}info{% elif obj.work_order.status == 'draft' %}slate{% elif obj.work_order.status == 'closed' %}muted{% elif obj.work_order.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ obj.work_order.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Work centre</dt><dd><a href="{% url 'scm:workcenter_detail' obj.work_center.pk %}" class="fw-600">{{ obj.work_center.code }}</a> · {{ obj.work_center.name }}</dd></div>
+        <div class="detail-item"><dt>Operation</dt><dd>{{ obj.operation|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Entry type</dt><dd>{{ obj.get_entry_type_display }}</dd></div>
+        <div class="detail-item"><dt>Operator</dt><dd>{{ obj.operator.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{{ obj.started_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Ended</dt><dd>{{ obj.ended_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Duration</dt><dd class="fw-600">{{ obj.duration_minutes }} min · {{ obj.duration_hours|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Downtime reason</dt><dd>{% if obj.downtime_reason %}<span class="badge badge-red">{{ obj.get_downtime_reason_display }}</span>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Labour cost</dt><dd>{{ obj.labor_cost|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Machine cost</dt><dd>{{ obj.machine_cost|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      <p class="text-muted">
+        Setup and labour entries absorb at the centre's labour rate, machine entries at its machine rate. A downtime entry absorbs nothing — idle time is a loss metric, not a cost the good units pay for.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if not is_frozen %}
+          <a href="{% url 'scm:productiontimelog_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:productiontimelog_delete' obj.pk %}" onsubmit="return confirm('Delete this time log?');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:productiontimelog_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      {% if is_frozen %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          Work order {{ obj.work_order.number }} is {{ obj.work_order.get_status_display|lower }}, so this entry is frozen — the audit-trail rule the stock ledger sets, softened only while the run is live.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
