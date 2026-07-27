@@ -56,11 +56,20 @@ def mrp_report(request):
         requirements[item_id] = requirements.get(item_id, ZERO) + quantity
         sources.setdefault(item_id, set()).add(source)
 
-    # --- 1. independent demand: open sales-order lines in the horizon ------------------------------
+    # --- 1. independent demand: open sales-order lines needed inside the horizon -------------------
+    # Filtered on requested_date (when the customer NEEDS it), not order_date (when they placed it)
+    # — the horizon control means nothing against the latter. A NULL requested_date is INCLUDED
+    # rather than dropped: an undated commitment is still demand, and silently excluding it would
+    # understate the shortage, which is the more dangerous direction to be wrong in.
+    #
+    # `fulfilled` and `invoiced` are excluded alongside draft/cancelled/closed: their stock has
+    # already left, so counting quantity_ordered again would double-count it as outstanding demand.
     demand_lines = (SalesOrderLine.objects
-                    .filter(sales_order__tenant=tenant,
-                            sales_order__order_date__lte=until)
-                    .exclude(sales_order__status__in=("draft", "cancelled", "closed"))
+                    .filter(sales_order__tenant=tenant)
+                    .filter(Q(sales_order__requested_date__lte=until)
+                            | Q(sales_order__requested_date__isnull=True))
+                    .exclude(sales_order__status__in=("draft", "cancelled", "closed",
+                                                      "fulfilled", "invoiced"))
                     .select_related("item"))
     for line in demand_lines:
         if line.item_id:
@@ -78,38 +87,61 @@ def mrp_report(request):
             _add(component.item_id, component.quantity_outstanding, "Work orders")
 
     # --- 3. explode anything that is made, so the requirement lands on the raw materials -----------
+    def _on_hand_for(ids):
+        """``{item_id: qty}`` from the append-only ledger — ONE grouped query per call."""
+        if not ids:
+            return {}
+        moves = StockMove.objects.filter(tenant=tenant, item_id__in=ids)
+        if location_id.isdigit():
+            moves = moves.filter(location_id=int(location_id))
+        return {row["item_id"]: (row["q"] or ZERO)
+                for row in moves.values("item_id").annotate(q=Sum("quantity"))}
+
+    def _safety_for(ids):
+        if not ids:
+            return {}
+        return {rule.item_id: (rule.safety_stock or ZERO)
+                for rule in ReorderRule.objects.filter(tenant=tenant, item_id__in=ids,
+                                                       is_active=True)}
+
+    def _items_for(ids):
+        """Resolved in ONE query — a per-id lookup inside the explosion loop would be an N+1."""
+        return {item.pk: item for item in Item.objects.filter(tenant=tenant, pk__in=ids)
+                .select_related("uom", "category")}
+
+    # --- 3. supply for the demanded parents, so the explosion carries the NET requirement ---------
+    parent_ids = set(requirements)
+    on_hand = _on_hand_for(parent_ids)
+    safety = _safety_for(parent_ids)
+    items = _items_for(parent_ids)
     manufactured = BillOfMaterials.manufactured_item_ids(tenant)
-    # Resolve every demanded item in ONE query before the explosion loop. Calling
-    # Item.objects.get(pk=...) inside the loop would be a query per demanded item — the exact N+1
-    # manufactured_item_ids() exists to avoid one line above.
-    demanded_items = {item.pk: item for item in
-                      Item.objects.filter(tenant=tenant, pk__in=set(requirements))}
+
     exploded_requirements = {}
     for item_id, quantity in requirements.items():
         # The parent still needs making or buying — keep it either way.
         exploded_requirements[item_id] = exploded_requirements.get(item_id, ZERO) + quantity
         if item_id not in manufactured:
             continue
-        bom = BillOfMaterials.active_for(tenant, demanded_items.get(item_id))
+        # Explode the NET requirement, not the gross one. A parent with 100 on hand and 100 demanded
+        # needs nothing built, so pushing 100 units of raw material down its BOM would invent a
+        # component shortage that does not exist — and MRP output is what a planner converts into
+        # real purchase requisitions.
+        net_parent = quantity + safety.get(item_id, ZERO) - on_hand.get(item_id, ZERO)
+        if net_parent <= ZERO:
+            continue
+        bom = BillOfMaterials.active_for(tenant, items.get(item_id))
         if bom is None:
             continue
-        for row in bom.explode(quantity):
+        for row in bom.explode(net_parent):
             child_id = row["item"].pk
             exploded_requirements[child_id] = exploded_requirements.get(child_id, ZERO) + row["quantity"]
             sources.setdefault(child_id, set()).add(f"BOM {bom.number}")
 
-    # --- 4. supply + netting ----------------------------------------------------------------------
-    item_ids = set(exploded_requirements)
-    on_hand_qs = StockMove.objects.filter(tenant=tenant, item_id__in=item_ids)
-    if location_id.isdigit():
-        on_hand_qs = on_hand_qs.filter(location_id=int(location_id))
-    on_hand = {row["item_id"]: (row["q"] or ZERO)
-               for row in on_hand_qs.values("item_id").annotate(q=Sum("quantity"))}
-    items = {item.pk: item for item in Item.objects.filter(tenant=tenant, pk__in=item_ids)
-             .select_related("uom", "category")}
-    safety = {rule.item_id: (rule.safety_stock or ZERO)
-              for rule in ReorderRule.objects.filter(tenant=tenant, item_id__in=item_ids,
-                                                     is_active=True)}
+    # --- 4. supply for the components the explosion added, then net everything ---------------------
+    child_ids = set(exploded_requirements) - parent_ids
+    on_hand.update(_on_hand_for(child_ids))
+    safety.update(_safety_for(child_ids))
+    items.update(_items_for(child_ids))
 
     rows = []
     for item_id, required in exploded_requirements.items():
