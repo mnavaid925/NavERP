@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Production Schedule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Production Schedule</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Production Schedule</span></div>
+      <p class="text-muted">Infinite-capacity load board — planned hours per work centre against effective capacity, {{ start|date:"M d" }} → {{ end|date:"M d, Y" }}.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:workcenter_list' %}" class="btn btn-outline"><i data-lucide="factory"></i> Work centres</a>
+      <a href="{% url 'scm:workorder_list' %}" class="btn btn-outline"><i data-lucide="hammer"></i> Work orders</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-range"></i></div>
+      <div class="stat-value">{{ days }}</div>
+      <div class="stat-label">Day window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="factory"></i></div>
+      <div class="stat-value">{{ rows|length }}</div>
+      <div class="stat-label">Active work centres</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ overloaded_count }}</div>
+      <div class="stat-label">Centres over capacity</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="calendar-x"></i></div>
+      <div class="stat-value">{{ unscheduled_count }}</div>
+      <div class="stat-label">Live runs with no planned window</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="sched-days">Window (days)</label>
+          <input type="number" id="sched-days" name="days" value="{{ days }}" min="1" max="90" class="form-input" placeholder="14">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Rebuild board</button>
+        <a href="{% url 'scm:production_schedule' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Work centre</th><th>Type</th><th>Location</th><th>Scheduled hours</th><th>Effective capacity</th><th>Load</th><th style="min-width:180px;">Utilization</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:workcenter_detail' row.centre.pk %}" class="fw-600">{{ row.centre.code }}</a> · {{ row.centre.name }}</td>
+              <td>
+                <span class="badge badge-{% if row.centre.center_type == 'machine' %}info{% elif row.centre.center_type == 'assembly' %}green{% elif row.centre.center_type == 'manual' %}slate{% elif row.centre.center_type == 'inspection' %}amber{% elif row.centre.center_type == 'outsourced' %}muted{% else %}slate{% endif %}">{{ row.centre.get_center_type_display }}</span>
+              </td>
+              <td>{% if row.centre.location %}{{ row.centre.location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ row.scheduled_hours|floatformat:2 }} h</td>
+              <td>{{ row.capacity_hours|floatformat:2 }} h</td>
+              <td>
+                {% if row.is_overloaded %}
+                  <span class="badge badge-red">{{ row.load_pct|floatformat:1 }}% — over</span>
+                {% elif row.load_pct >= 85 %}
+                  <span class="badge badge-amber">{{ row.load_pct|floatformat:1 }}%</span>
+                {% else %}
+                  <span class="badge badge-green">{{ row.load_pct|floatformat:1 }}%</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  The bar is clamped at 100% of its track because a 240%-loaded centre would
+                  otherwise draw a bar three times the width of its column. The real figure is the
+                  badge next to it, which is never clamped.
+                {% endcomment %}
+                <div class="progress">
+                  <div class="progress-bar" style="width:{% if row.load_pct > 100 %}100{% else %}{{ row.load_pct|floatformat:0 }}{% endif %}%;{% if row.is_overloaded %} background: var(--bad);{% endif %}"></div>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="factory"></i><h3>No active work centres</h3><p>Add a work centre with a daily capacity and the board can net planned run hours against it.</p><a href="{% url 'scm:workcenter_create' %}" class="btn btn-outline">New work centre</a></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Infinite-capacity on purpose: the board shows <span class="fw-600">where</span> the plan exceeds capacity and by how much, without pretending to resolve it. A finite-capacity scheduler that levels and re-sequences across centres is a genuine solver and a later pass — showing a fabricated feasible plan would be worse than showing an honest overload. A run whose planned window merely overlaps the edge of this window still consumes capacity inside it, so it is counted.
+    </div>
+  </div>
+
+  {% if unscheduled %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Unscheduled runs <span class="badge badge-amber">{{ unscheduled_count }}</span></h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Item</th><th>Planned qty</th><th>Work centre</th><th>Due</th><th>Priority</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for wo in unscheduled %}
+              <tr>
+                <td><a href="{% url 'scm:workorder_detail' wo.pk %}" class="fw-600">{{ wo.number }}</a></td>
+                <td>{{ wo.item.sku }} · {{ wo.item.name }}</td>
+                <td>{{ wo.quantity_planned|floatformat:2 }}</td>
+                <td>{% if wo.work_center %}{{ wo.work_center.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ wo.due_date|date:"M d, Y"|default:"—" }}</td>
+                <td>
+                  <span class="badge badge-{% if wo.priority == 'urgent' %}red{% elif wo.priority == 'high' %}amber{% elif wo.priority == 'normal' %}info{% elif wo.priority == 'low' %}muted{% else %}slate{% endif %}">{{ wo.get_priority_display }}</span>
+                </td>
+                <td>
+                  <span class="badge badge-{% if wo.status == 'completed' %}green{% elif wo.status == 'in_progress' %}info{% elif wo.status == 'released' %}amber{% elif wo.status == 'planned' %}info{% elif wo.status == 'draft' %}slate{% elif wo.status == 'closed' %}muted{% elif wo.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ wo.get_status_display }}</span>
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:workorder_detail' wo.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">These runs consume no capacity on the board because they carry no planned window. Open one and use its Schedule panel to fill the window from a start or due date.</div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Scheduled Runs</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Item</th><th>Planned qty</th><th>Produced</th><th>Work centre</th><th>Planned window</th><th>Planned hours</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for wo in orders %}
+            <tr>
+              <td><a href="{% url 'scm:workorder_detail' wo.pk %}" class="fw-600">{{ wo.number }}</a></td>
+              <td>{{ wo.item.sku }} · {{ wo.item.name }}</td>
+              <td>{{ wo.quantity_planned|floatformat:2 }}</td>
+              <td>{{ wo.quantity_produced|floatformat:2 }}</td>
+              <td>{% if wo.work_center %}<a href="{% url 'scm:workcenter_detail' wo.work_center.pk %}">{{ wo.work_center.code }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if wo.planned_start %}{{ wo.planned_start|date:"M d, H:i" }} → {{ wo.planned_end|date:"M d, H:i" }}{% else %}<span class="badge badge-amber">Unscheduled</span>{% endif %}</td>
+              <td>{{ wo.planned_hours|floatformat:2 }} h</td>
+              <td>{{ wo.due_date|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if wo.priority == 'urgent' %}red{% elif wo.priority == 'high' %}amber{% elif wo.priority == 'normal' %}info{% elif wo.priority == 'low' %}muted{% else %}slate{% endif %}">{{ wo.get_priority_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if wo.status == 'completed' %}green{% elif wo.status == 'in_progress' %}info{% elif wo.status == 'released' %}amber{% elif wo.status == 'planned' %}info{% elif wo.status == 'draft' %}slate{% elif wo.status == 'closed' %}muted{% elif wo.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ wo.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>Nothing in the plan</h3><p>Planned, released and in-progress runs appear here, oldest planned start first. Draft runs are not on the board — plan one to put it into the schedule.</p><a href="{% url 'scm:workorder_create' %}" class="btn btn-outline">New work order</a></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
