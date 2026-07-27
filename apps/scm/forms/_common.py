@@ -66,6 +66,18 @@ def _carrier_parties(tenant):
         tenant=tenant, roles__role__in=("supplier", "vendor", "partner")).distinct()
 
 
+def _employee_parties(tenant):
+    """Parties this tenant can staff a work centre with (4.8 supervisors and machine operators).
+
+    Single role, like ``_customer_parties`` — ``employee`` has no second spelling in
+    ``PartyRole.ROLE_CHOICES``. Without this the supervisor/operator dropdowns offer the entire
+    party book, customers and carriers included.
+    """
+    if tenant is None:
+        return Party.objects.none()
+    return Party.objects.filter(tenant=tenant, roles__role="employee").distinct()
+
+
 class TenantUniqueMixin:
     """Makes a model's ``unique_together`` that INCLUDES ``tenant`` actually validate on a form.
 
