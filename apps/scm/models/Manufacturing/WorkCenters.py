@@ -15,6 +15,10 @@ leak work-in-progress into 4.5's available-to-promise.
 """
 from apps.scm.models._base import *  # noqa: F401,F403
 
+#: Ceiling for an hourly cost rate. Generous for any real machine or crew, but finite — see the
+#: field comments for why an unbounded rate is a valuation-integrity hole rather than a typo risk.
+MAX_HOURLY_RATE = Decimal("100000")
+
 
 class WorkCenter(TenantNumbered):
     """A machine, cell or manual station that work orders are scheduled against [WC-]."""
@@ -53,10 +57,17 @@ class WorkCenter(TenantNumbered):
         default=0, validators=[MaxValueValidator(10080)],
         help_text="Changeover time consumed before a run starts")
 
-    machine_cost_per_hour = models.DecimalField(max_digits=14, decimal_places=4, default=0,
-                                                validators=[MinValueValidator(ZERO)])
-    labor_cost_per_hour = models.DecimalField(max_digits=14, decimal_places=4, default=0,
-                                              validators=[MinValueValidator(ZERO)])
+    # Capped, not just floored. These rates flow through WorkOrder.computed_unit_cost() into the
+    # unit_cost of a production StockMove, which Item.apply_receipt() rolls into the finished good's
+    # tenant-wide average_cost. Editing a work centre is only @login_required, and q4() CLAMPS
+    # rather than errors — so without a ceiling a plain member could silently corrupt the valuation
+    # of an item every other module reads.
+    machine_cost_per_hour = models.DecimalField(
+        max_digits=14, decimal_places=4, default=0,
+        validators=[MinValueValidator(ZERO), MaxValueValidator(MAX_HOURLY_RATE)])
+    labor_cost_per_hour = models.DecimalField(
+        max_digits=14, decimal_places=4, default=0,
+        validators=[MinValueValidator(ZERO), MaxValueValidator(MAX_HOURLY_RATE)])
 
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
