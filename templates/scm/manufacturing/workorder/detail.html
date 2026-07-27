@@ -202,7 +202,13 @@
         <div class="detail-item"><dt>Material cost</dt><dd class="fw-600">{{ material_cost|floatformat:4 }}</dd></div>
         <div class="detail-item"><dt>Labour cost</dt><dd>{{ labor_cost|floatformat:4 }}</dd></div>
         <div class="detail-item"><dt>Machine cost</dt><dd>{{ machine_cost|floatformat:4 }}</dd></div>
-        <div class="detail-item"><dt>WIP value</dt><dd>{% if wip_value > 0 %}<span class="badge badge-amber">{{ wip_value|floatformat:4 }}</span>{% else %}<span class="badge badge-green">{{ wip_value|floatformat:4 }}</span>{% endif %}</dd></div>
+        {% comment %}
+          Three branches, not two. A NEGATIVE wip_value means more stock value has been banked than
+          the run absorbed in cost — the model's own error signal, and the exact symptom the
+          unabsorbed-pool fix was made for. Painting it the same green as a healthy zero would hide
+          the one state that means something is wrong.
+        {% endcomment %}
+        <div class="detail-item"><dt>WIP value</dt><dd>{% if wip_value < 0 %}<span class="badge badge-red" title="More value posted out than cost absorbed — check the production postings">{{ wip_value|floatformat:4 }}</span>{% elif wip_value > 0 %}<span class="badge badge-amber">{{ wip_value|floatformat:4 }}</span>{% else %}<span class="badge badge-green">{{ wip_value|floatformat:4 }}</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Produced unit cost</dt><dd class="fw-600">{{ obj.produced_unit_cost|floatformat:4 }}</dd></div>
       </dl>
       <p class="text-muted">
