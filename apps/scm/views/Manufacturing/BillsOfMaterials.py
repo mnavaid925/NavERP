@@ -12,7 +12,11 @@ ZERO = Decimal("0")
 def billofmaterials_list(request):
     qs = (BillOfMaterials.objects.filter(tenant=request.tenant)
           .select_related("item", "uom", "default_work_center")
-          .annotate(line_count=Count("lines", distinct=True)))
+          # Explicit order_by: the annotate() sets a GROUP BY, which makes QuerySet.ordered report
+          # False even though Meta.ordering still reaches the SQL — enough for the paginator to
+          # emit UnorderedObjectListWarning on every page load.
+          .annotate(line_count=Count("lines", distinct=True))
+          .order_by("item__sku", "version"))
     return crud_list(
         request, qs, "scm/manufacturing/billofmaterials/list.html",
         search_fields=["number", "name", "version", "notes", "item__sku", "item__name"],
